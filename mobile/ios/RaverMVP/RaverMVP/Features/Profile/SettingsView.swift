@@ -139,12 +139,14 @@ struct SettingsView: View {
 
 #if DEBUG
                 Section(LT("开发", "Development", "Development")) {
-                    Toggle(isOn: realNameEnforcementBinding) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label(LT("实名认证限制", "Real-name verification limits", "本人確認制限"), systemImage: "person.text.rectangle")
-                            Text(LT("关闭后，开发环境会绕过实名认证拦截；开启后恢复真实限制。", "Turn this off to bypass real-name verification in development. Turn it on to restore the real limits.", "オフにすると開発環境では本人確認の制限を回避します。オンにすると実際の制限に戻ります。"))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
+                    if AppConfig.shouldExposeRealNameControls {
+                        Toggle(isOn: realNameEnforcementBinding) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Label(LT("实名认证限制", "Real-name verification limits", "本人確認制限"), systemImage: "person.text.rectangle")
+                                Text(LT("关闭后，开发环境会绕过实名认证拦截；开启后恢复真实限制。", "Turn this off to bypass real-name verification in development. Turn it on to restore the real limits.", "オフにすると開発環境では本人確認の制限を回避します。オンにすると実際の制限に戻ります。"))
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
                         }
                     }
 
@@ -429,15 +431,36 @@ private struct LoginDevicesSettingsView: View {
 
 private struct PrivacySettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.appPush) private var appPush
     @State private var reports: [ContentReport] = []
     @State private var blockedUsers: [UserBlockListItem] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var unblockingUserID: String?
+    @State private var profile: UserProfile?
+    @State private var isSavingVisibility = false
 
     var body: some View {
         List {
+            Section {
+                Toggle(
+                    LT("允许他人查看我的粉丝列表", "Allow others to see my followers", "他の人にフォロワー一覧を表示する"),
+                    isOn: followersVisibilityBinding
+                )
+                .disabled(profile == nil || isSavingVisibility)
+
+                Toggle(
+                    LT("允许他人查看我的关注列表", "Allow others to see who I follow", "他の人にフォロー一覧を表示する"),
+                    isOn: followingVisibilityBinding
+                )
+                .disabled(profile == nil || isSavingVisibility)
+            } header: {
+                Text(LT("隐私保护", "Privacy Protection", "プライバシー保護"))
+            } footer: {
+                Text(LT("关闭后，其他用户将无法查看你的粉丝列表和关注列表。", "When turned off, other users will not be able to view your followers and following lists.", "オフにすると、他のユーザーはあなたのフォロワー一覧とフォロー一覧を閲覧できません。"))
+            }
+
             Section {
                 if reports.isEmpty && !isLoading {
                     Text(LT("暂无举报记录。", "No reports yet.", "通報履歴はありません。"))
@@ -601,8 +624,10 @@ private struct PrivacySettingsView: View {
         do {
             async let reportsTask = appState.service.fetchMyContentReports(limit: 50)
             async let blocksTask = appState.service.fetchBlockedUsers(limit: 100)
+            async let profileTask = appContainer.profileUserRepository.fetchMyProfile()
             reports = try await reportsTask
             blockedUsers = try await blocksTask
+            profile = try await profileTask
         } catch {
             errorMessage = error.userFacingMessage ?? LT("隐私设置加载失败，请稍后重试。", "Failed to load privacy settings. Please try again.", "プライバシー設定の読み込みに失敗しました。後でもう一度お試しください。")
         }
@@ -637,6 +662,56 @@ private struct PrivacySettingsView: View {
 
     private static func formatDate(_ date: Date) -> String {
         date.appLocalizedYMDHMText()
+    }
+
+    private var followersVisibilityBinding: Binding<Bool> {
+        Binding(
+            get: { profile?.isFollowersListPublic ?? false },
+            set: { updateVisibility(isFollowersListPublic: $0, isFollowingListPublic: profile?.isFollowingListPublic ?? false) }
+        )
+    }
+
+    private var followingVisibilityBinding: Binding<Bool> {
+        Binding(
+            get: { profile?.isFollowingListPublic ?? false },
+            set: { updateVisibility(isFollowersListPublic: profile?.isFollowersListPublic ?? false, isFollowingListPublic: $0) }
+        )
+    }
+
+    private func updateVisibility(isFollowersListPublic: Bool, isFollowingListPublic: Bool) {
+        guard var profile else { return }
+        profile.isFollowersListPublic = isFollowersListPublic
+        profile.isFollowingListPublic = isFollowingListPublic
+        self.profile = profile
+
+        Task { @MainActor in
+            await saveVisibility(profile: profile)
+        }
+    }
+
+    @MainActor
+    private func saveVisibility(profile: UserProfile) async {
+        guard !isSavingVisibility else { return }
+        isSavingVisibility = true
+        defer { isSavingVisibility = false }
+
+        do {
+            let updated = try await appContainer.profileUserRepository.updateMyProfile(
+                input: UpdateMyProfileInput(
+                    displayName: profile.displayName,
+                    bio: profile.bio,
+                    location: profile.location,
+                    tags: profile.tags,
+                    isFollowersListPublic: profile.isFollowersListPublic,
+                    isFollowingListPublic: profile.isFollowingListPublic
+                )
+            )
+            self.profile = updated
+            NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
+        } catch {
+            self.profile = try? await appContainer.profileUserRepository.fetchMyProfile()
+            errorMessage = error.userFacingMessage ?? LT("隐私设置保存失败，请稍后重试。", "Failed to save privacy settings. Please try again.", "プライバシー設定の保存に失敗しました。後でもう一度お試しください。")
+        }
     }
 }
 

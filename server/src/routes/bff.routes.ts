@@ -500,6 +500,30 @@ const denyForMinorRegionalRestriction = async (
   return false;
 };
 
+const denyForForumAgeRestriction = async (
+  userId: string,
+  res: Response
+): Promise<boolean> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { birthYear: true, ageBand: true },
+  });
+  const ageBand = user?.birthYear
+    ? regionalCompliance.ageBandForBirthYear(user.birthYear)
+    : user?.ageBand;
+
+  if (ageBand === 'adult') {
+    return false;
+  }
+
+  res.status(403).json({
+    error: 'forum_age_restricted',
+    code: 'FORUM_AGE_RESTRICTED',
+    minimumAge: 18,
+  });
+  return true;
+};
+
 const normalizeComplianceText = (value: unknown, maxLength: number): string | null => {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().replace(/\s+/g, ' ');
@@ -6233,6 +6257,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
     if (await denyForEnforcement(userId, 'comment_create', res)) return;
+    if (await denyForForumAgeRestriction(userId, res)) return;
 
     const eventID = String(req.params.id || '').trim();
     const body = (req.body ?? {}) as {
@@ -6854,6 +6879,7 @@ router.post('/news/:id/comments', optionalAuth, async (req: Request, res: Respon
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
     if (await denyForEnforcement(userId, 'comment_create', res)) return;
+    if (await denyForForumAgeRestriction(userId, res)) return;
 
     const articleId = String(req.params.id || '').trim();
     const body = (req.body ?? {}) as {
@@ -7036,6 +7062,7 @@ router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<
     const userId = requireAuth(authReq, res);
     if (!userId) return;
     if (await denyForEnforcement(userId, 'post_create', res)) return;
+    if (await denyForForumAgeRestriction(userId, res)) return;
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const draft = normalizeNewsDraft(body);
@@ -9686,6 +9713,7 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
     const userId = requireAuth(authReq, res);
     if (!userId) return;
     if (await denyForEnforcement(userId, 'post_create', res)) return;
+    if (await denyForForumAgeRestriction(userId, res)) return;
     const viewerRole = authReq.user?.role ?? null;
 
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -10468,6 +10496,7 @@ router.post('/feed/posts/:id/comments', optionalAuth, async (req: Request, res: 
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
     if (await denyForEnforcement(userId, 'comment_create', res)) return;
+    if (await denyForForumAgeRestriction(userId, res)) return;
 
     const postId = req.params.id as string;
     const body = (req.body ?? {}) as {

@@ -254,7 +254,7 @@ private struct FeedScreen: View {
     private func requireRealNameForSocialAction(messageTarget: inout String?) -> Bool {
         guard appState.canUseSocialFeatures else {
             messageTarget = appState.socialFeatureUnavailableMessage
-            if appState.session != nil {
+            if appState.session != nil && appState.shouldPresentRealNameVerificationUI {
                 isShowingRealNameSheet = true
             }
             return false

@@ -17,7 +17,7 @@ struct AppCoordinatorView: View {
             handleIncomingURL(url)
         }
         .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-            get: { appState.errorMessage != nil },
+            get: { appState.errorMessage != nil && !appState.suppressGlobalErrorAlert },
             set: { newValue in
                 if !newValue { appState.errorMessage = nil }
             }

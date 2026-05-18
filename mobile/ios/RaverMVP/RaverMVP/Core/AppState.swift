@@ -868,6 +868,7 @@ final class AppState: ObservableObject {
         }
     }
     @Published var errorMessage: String?
+    @Published var suppressGlobalErrorAlert: Bool = false
     @Published var isAuthBootstrapping: Bool = true
     @Published var isRegistrationOnboardingActive: Bool = false
     @Published var shouldPresentPostRegistrationRecommendGuide: Bool = false
@@ -1010,23 +1011,34 @@ final class AppState: ObservableObject {
     }
 
     private func bootstrapSessionIfPossible() async {
-        defer { isAuthBootstrapping = false }
-
         guard let restored = await service.restoreSession() else {
+            isAuthBootstrapping = false
             return
         }
 
         session = restored
-        await refreshTencentIMBootstrap(source: "bootstrap-restore-session")
-        await refreshAccountEnforcements()
-        await refreshUnreadMessages()
-        await uploadPushTokenIfPossible()
         flushPendingSystemNotificationPayloadIfPossible(trigger: "bootstrap-restore-session")
         errorMessage = nil
 
         if uiTestForceSessionExpiredOnBootstrap && !hasAppliedUITestForcedExpiry {
             hasAppliedUITestForcedExpiry = true
             NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
+            isAuthBootstrapping = false
+            return
+        }
+
+        isAuthBootstrapping = false
+        refreshSessionSideEffectsInBackground(source: "bootstrap-restore-session")
+    }
+
+    private func refreshSessionSideEffectsInBackground(source: String) {
+        Task { @MainActor [weak self] in
+            guard let self, self.session != nil else { return }
+            async let tencentBootstrap: Void = self.refreshTencentIMBootstrap(source: source)
+            async let accountEnforcements: Void = self.refreshAccountEnforcements()
+            async let unreadMessages: Void = self.refreshUnreadMessages()
+            async let pushTokenUpload: Void = self.uploadPushTokenIfPossible()
+            _ = await (tencentBootstrap, accountEnforcements, unreadMessages, pushTokenUpload)
         }
     }
 

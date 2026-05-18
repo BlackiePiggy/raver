@@ -84,13 +84,11 @@ struct ProfileView: View {
                             ProfileHeaderCard(
                                 profile: profile,
                                 appearance: viewModel.appearance,
-                                realNameStatus: appState.realNameVerificationStatus,
+                                realNameStatus: profileRealNameStatus,
                                 onAvatarTap: {
                                     profilePush(.avatarFullscreen)
                                 },
-                                onRealNameTap: {
-                                    isShowingRealNameSheet = true
-                                },
+                                onRealNameTap: profileRealNameTapAction,
                                 onFollowersTap: {
                                     profilePush(.followList(userID: currentUserID, kind: .followers))
                                 },
@@ -136,9 +134,11 @@ struct ProfileView: View {
             await viewModel.load()
         }
         .sheet(isPresented: $isShowingRealNameSheet) {
-            RealNameVerificationSheet()
-                .environmentObject(appState)
-                .presentationDetents([.large])
+            if appState.shouldPresentRealNameVerificationUI {
+                RealNameVerificationSheet()
+                    .environmentObject(appState)
+                    .presentationDetents([.large])
+            }
         }
         .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.error != nil },
@@ -171,6 +171,17 @@ struct ProfileView: View {
                 }
             }
             .frame(height: 36)
+        }
+    }
+
+    private var profileRealNameStatus: RealNameVerificationStatus? {
+        appState.shouldPresentRealNameVerificationUI ? appState.realNameVerificationStatus : nil
+    }
+
+    private var profileRealNameTapAction: (() -> Void)? {
+        guard appState.shouldPresentRealNameVerificationUI else { return nil }
+        return {
+            isShowingRealNameSheet = true
         }
     }
 

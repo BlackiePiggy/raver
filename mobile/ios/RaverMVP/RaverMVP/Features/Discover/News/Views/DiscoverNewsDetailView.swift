@@ -552,7 +552,7 @@ struct DiscoverNewsDetailView: View {
                 Button(LT("发送", "Send", "送信")) {
                     Task { await submitComment() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(CompactPrimaryButtonStyle())
                 .disabled(isSendingComment || commentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.top, 2)

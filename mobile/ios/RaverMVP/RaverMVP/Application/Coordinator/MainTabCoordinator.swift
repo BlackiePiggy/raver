@@ -447,6 +447,9 @@ struct MainTabCoordinatorView: View {
                 isLoginPresented = false
             }
         }
+        .onChange(of: isLoginPresented) { _, isPresented in
+            appState.suppressGlobalErrorAlert = isPresented
+        }
         .onChange(of: appState.session?.user.id) { _, userID in
             guard userID == nil else { return }
             router.resetToLoggedOutRoot()
@@ -1001,6 +1004,7 @@ struct MainTabCoordinatorView: View {
 
     private func presentLoginGate() {
         guard !isLoginPresented else { return }
+        appState.suppressGlobalErrorAlert = true
         isLoginPresented = true
     }
 

@@ -4,7 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { requireAdminOrOperator } from '../modules/admin/admin-auth.policy';
 import { notificationCenterService } from '../modules/notifications';
-import { DEFAULT_EVENT_TIME_ZONE, normalizeEventTimeZone, parseEventDateInput, startOfEventDay } from '../utils/event-timezone';
+import { isValidEventTimeZone, normalizeEventTimeZone, parseEventDateInput, startOfEventDay } from '../utils/event-timezone';
 import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText, triTextToJson } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
 
@@ -260,7 +260,11 @@ const dateOrUndefined = (value: unknown): Date | undefined => dateFromPayload(va
 
 const createEventFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
   const name = cleanText(payload.name);
-  const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
+  const rawTimeZone = payload.timeZone ?? payload.timezone ?? payload.eventTimeZone;
+  if (!isValidEventTimeZone(rawTimeZone)) {
+    throw new Error('活动时区不能为空或格式不正确');
+  }
+  const timeZone = normalizeEventTimeZone(rawTimeZone);
   const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
   const endDateRaw = parseEventDateInput(payload.endDate, timeZone, 'end', payload.endTime);
   const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;

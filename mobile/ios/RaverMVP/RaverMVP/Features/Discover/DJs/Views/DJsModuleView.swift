@@ -2606,6 +2606,11 @@ struct DJDetailView: View {
     @State private var didLoadEvents = false
     @State private var didLoadRatings = false
     @State private var didLoadRelatedArticles = false
+    @State private var visibleRelatedArticleCount = 5
+    @State private var visibleSetCount = 10
+    @State private var visibleUpcomingEventCount = 8
+    @State private var visibleEndedEventCount = 8
+    @State private var visibleRatingCount = 10
     @State private var historyEventSearchText = ""
     @State private var historyEventRegionFilter: DJEventRegionFilter = .all
     @State private var historyEventStartDate: Date?
@@ -2712,6 +2717,8 @@ struct DJDetailView: View {
         return formatter
     }()
 
+    private static let djEventPageSize = 8
+
     var body: some View {
         detailBody
         .ignoresSafeArea(edges: .top)
@@ -2757,6 +2764,7 @@ struct DJDetailView: View {
             Task { await loadDJEditPhoto(item, target: .banner) }
         }
         .onChange(of: selectedTab) { _, tab in
+            resetVisibleCounts(for: tab)
             Task { await loadContentIfNeeded(for: tab) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverRatingUnitDidUpdate)) { _ in
@@ -3042,6 +3050,22 @@ struct DJDetailView: View {
             await loadEventsIfNeeded(force: false)
         case .ratings:
             await loadRatingsIfNeeded(force: false)
+        }
+    }
+
+    private func resetVisibleCounts(for tab: DJDetailTab) {
+        switch tab {
+        case .intro:
+            return
+        case .posts:
+            visibleRelatedArticleCount = 5
+        case .sets:
+            visibleSetCount = 10
+        case .events:
+            visibleUpcomingEventCount = Self.djEventPageSize
+            visibleEndedEventCount = Self.djEventPageSize
+        case .ratings:
+            visibleRatingCount = 10
         }
     }
 
@@ -4597,6 +4621,11 @@ struct DJDetailView: View {
         .coordinateSpace(name: chrome.coordinateSpaceName(tab))
         .scrollBounceBehavior(.always)
         .contentShape(Rectangle())
+        .task(id: Int(pageProgress.rounded())) {
+            let activeIndex = Int(pageProgress.rounded())
+            guard activeIndex == selectedIndex(for: tab) || selectedTab == tab else { return }
+            await loadContentIfNeeded(for: tab)
+        }
     }
 
     private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
@@ -4631,13 +4660,18 @@ struct DJDetailView: View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
             ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
                 .padding(.vertical, 8)
+        } else if relatedArticles.isEmpty && !didLoadRelatedArticles {
+            ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedArticlesIfNeeded(force: false) }
         } else if relatedArticles.isEmpty {
             Text(LT("暂无相关资讯", "暂无相关资讯", "関連ニュースはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else {
-            ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
+            let visibleArticles = Array(relatedArticles.prefix(visibleRelatedArticleCount))
+            ForEach(Array(visibleArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
                     discoverPush(.newsDetail(articleID: article.id))
                 } label: {
@@ -4646,10 +4680,18 @@ struct DJDetailView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
 
-                if index < relatedArticles.count - 1 {
+                if index < visibleArticles.count - 1 {
                     Divider()
                         .padding(.leading, 16)
                 }
+            }
+
+            listLoadMoreButton(
+                shownCount: visibleArticles.count,
+                totalCount: relatedArticles.count,
+                title: LT("加载更多资讯", "Load More News", "ニュースをさらに表示")
+            ) {
+                visibleRelatedArticleCount += 5
             }
         }
     }
@@ -4866,12 +4908,20 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private var setsTabContent: some View {
-        if sets.isEmpty {
+        if isLoadingSets && sets.isEmpty {
+            ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
+                .padding(.vertical, 8)
+        } else if sets.isEmpty && !didLoadSets {
+            ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadSetsIfNeeded(force: false) }
+        } else if sets.isEmpty {
             Text(LT("暂无内容", "暂无内容", "コンテンツはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            ForEach(sets) { set in
+            let visibleSets = Array(sets.prefix(visibleSetCount))
+            ForEach(visibleSets) { set in
                 Button {
                     discoverPush(.setDetail(setID: set.id))
                 } label: {
@@ -4879,12 +4929,27 @@ struct DJDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            listLoadMoreButton(
+                shownCount: visibleSets.count,
+                totalCount: sets.count,
+                title: LT("加载更多 Sets", "Load More Sets", "Setをさらに表示")
+            ) {
+                visibleSetCount += 10
+            }
         }
     }
 
     @ViewBuilder
     private var eventsTabContent: some View {
-        if djEvents.isEmpty {
+        if isLoadingEvents && djEvents.isEmpty {
+            ProgressView(LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."))
+                .padding(.vertical, 8)
+        } else if djEvents.isEmpty && !didLoadEvents {
+            ProgressView(LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadEventsIfNeeded(force: false) }
+        } else if djEvents.isEmpty {
             Text(LT("暂无历史活动", "暂无历史活动", "過去イベントはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
@@ -4904,20 +4969,35 @@ struct DJDetailView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 6)
             } else {
-                ForEach(Array(filteredEvents.enumerated()), id: \.element.id) { index, event in
-                    Button {
-                        appPush(.eventDetail(eventID: event.id))
-                    } label: {
-                        historyEventRow(event)
-                    }
-                    .buttonStyle(.plain)
+                let upcomingEvents = filteredUpcomingDJEvents
+                let endedEvents = filteredEndedDJEvents
 
-                    if index < filteredEvents.count - 1 {
-                        Rectangle()
-                            .fill(RaverTheme.secondaryText.opacity(0.16))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 1)
-                    }
+                if !upcomingEvents.isEmpty {
+                    djEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
+                    pagedDJEventSection(
+                        events: upcomingEvents,
+                        visibleCount: visibleUpcomingEventCount,
+                        onLoadMore: {
+                            visibleUpcomingEventCount = min(
+                                upcomingEvents.count,
+                                visibleUpcomingEventCount + Self.djEventPageSize
+                            )
+                        }
+                    )
+                }
+
+                if !endedEvents.isEmpty {
+                    djEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
+                    pagedDJEventSection(
+                        events: endedEvents,
+                        visibleCount: visibleEndedEventCount,
+                        onLoadMore: {
+                            visibleEndedEventCount = min(
+                                endedEvents.count,
+                                visibleEndedEventCount + Self.djEventPageSize
+                            )
+                        }
+                    )
                 }
             }
         }
@@ -5088,6 +5168,24 @@ struct DJDetailView: View {
         }
     }
 
+    private var filteredUpcomingDJEvents: [WebEvent] {
+        filteredDJEvents
+            .filter {
+                let status = EventVisualStatus.resolve(event: $0)
+                return status != .ended && status != .cancelled
+            }
+            .sorted(by: { $0.startDate < $1.startDate })
+    }
+
+    private var filteredEndedDJEvents: [WebEvent] {
+        filteredDJEvents
+            .filter {
+                let status = EventVisualStatus.resolve(event: $0)
+                return status == .ended || status == .cancelled
+            }
+            .sorted(by: { $0.startDate > $1.startDate })
+    }
+
     private var historyEventStartDateToggleBinding: Binding<Bool> {
         Binding(
             get: { historyEventStartDate != nil },
@@ -5256,12 +5354,20 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private var ratingsTabContent: some View {
-        if ratingUnits.isEmpty {
+        if isLoadingRatings && ratingUnits.isEmpty {
+            ProgressView(LT("正在加载关联打分...", "Loading ratings...", "関連評価を読み込み中..."))
+                .padding(.vertical, 8)
+        } else if ratingUnits.isEmpty && !didLoadRatings {
+            ProgressView(LT("正在加载关联打分...", "Loading ratings...", "関連評価を読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRatingsIfNeeded(force: false) }
+        } else if ratingUnits.isEmpty {
             Text(LT("暂无关联打分", "暂无关联打分", "関連評価はまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            ForEach(ratingUnits) { unit in
+            let visibleRatings = Array(ratingUnits.prefix(visibleRatingCount))
+            ForEach(visibleRatings) { unit in
                 Button {
                     appPush(.ratingUnitDetail(unitID: unit.id))
                 } label: {
@@ -5269,6 +5375,89 @@ struct DJDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            listLoadMoreButton(
+                shownCount: visibleRatings.count,
+                totalCount: ratingUnits.count,
+                title: LT("加载更多打分", "Load More Ratings", "評価をさらに表示")
+            ) {
+                visibleRatingCount += 10
+            }
+        }
+    }
+
+    private func djEventsSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(RaverTheme.primaryText)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+    }
+
+    @ViewBuilder
+    private func pagedDJEventSection(
+        events: [WebEvent],
+        visibleCount: Int,
+        onLoadMore: @escaping () -> Void
+    ) -> some View {
+        let visibleEvents = Array(events.prefix(visibleCount))
+        ForEach(Array(visibleEvents.enumerated()), id: \.element.id) { index, event in
+            Button {
+                appPush(.eventDetail(eventID: event.id))
+            } label: {
+                historyEventRow(event)
+            }
+            .buttonStyle(.plain)
+
+            if index < visibleEvents.count - 1 {
+                Rectangle()
+                    .fill(RaverTheme.secondaryText.opacity(0.16))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 1)
+            }
+        }
+
+        eventAutoLoadMoreSentinel(
+            shownCount: visibleEvents.count,
+            totalCount: events.count,
+            action: onLoadMore
+        )
+    }
+
+    @ViewBuilder
+    private func eventAutoLoadMoreSentinel(
+        shownCount: Int,
+        totalCount: Int,
+        action: @escaping () -> Void
+    ) -> some View {
+        if shownCount < totalCount {
+            HStack {
+                Spacer()
+                ProgressView()
+                    .scaleEffect(0.82)
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .onAppear(perform: action)
+        }
+    }
+
+    @ViewBuilder
+    private func listLoadMoreButton(
+        shownCount: Int,
+        totalCount: Int,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        if shownCount < totalCount {
+            Button(action: action) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 8)
         }
     }
 

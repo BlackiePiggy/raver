@@ -32,11 +32,44 @@ extension Date {
             return LT("北京时间", "Asia/Shanghai", "北京時間")
         case "Asia/Tokyo":
             return LT("东京时间", "Tokyo time", "東京時間")
+        case "Asia/Hong_Kong":
+            return LT("香港时间", "Hong Kong time", "香港時間")
+        case "Asia/Taipei":
+            return LT("台北时间", "Taipei time", "台北時間")
+        case "Asia/Macau":
+            return LT("澳门时间", "Macau time", "マカオ時間")
         case "America/Los_Angeles":
             return LT("洛杉矶时间", "Los Angeles time", "ロサンゼルス時間")
         case "America/New_York":
             return LT("纽约时间", "New York time", "ニューヨーク時間")
+        case "America/Chicago":
+            return LT("芝加哥时间", "Chicago time", "シカゴ時間")
+        case "America/Mexico_City":
+            return LT("墨西哥城时间", "Mexico City time", "メキシコシティ時間")
+        case "America/Sao_Paulo":
+            return LT("圣保罗时间", "Sao Paulo time", "サンパウロ時間")
+        case "America/Santiago":
+            return LT("圣地亚哥时间", "Santiago time", "サンティアゴ時間")
+        case "America/Argentina/Buenos_Aires":
+            return LT("布宜诺斯艾利斯时间", "Buenos Aires time", "ブエノスアイレス時間")
+        case "Australia/Melbourne":
+            return LT("墨尔本时间", "Melbourne time", "メルボルン時間")
+        case "Australia/Brisbane":
+            return LT("布里斯班时间", "Brisbane time", "ブリスベン時間")
+        case "Europe/Berlin":
+            return LT("柏林时间", "Berlin time", "ベルリン時間")
+        case "Europe/Madrid":
+            return LT("马德里时间", "Madrid time", "マドリード時間")
+        case "Pacific/Auckland":
+            return LT("奥克兰时间", "Auckland time", "オークランド時間")
         default:
+            if timeZone.identifier == "UTC" {
+                return "UTC"
+            }
+            if let cityName = timeZone.identifier.split(separator: "/").last {
+                let readableName = cityName.replacingOccurrences(of: "_", with: " ")
+                return LT("\(readableName)时间", "\(readableName) time", "\(readableName)時間")
+            }
             return timeZone.identifier
         }
     }

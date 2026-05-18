@@ -4534,6 +4534,13 @@ struct LearnFestivalDetailView: View {
     @State private var relatedEvents: [WebEvent] = []
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedContent = false
+    @State private var isLoadingRelatedEvents = false
+    @State private var isLoadingRelatedArticles = false
+    @State private var didLoadRelatedEvents = false
+    @State private var didLoadRelatedArticles = false
+    @State private var visibleUpcomingRelatedEventCount = 10
+    @State private var visibleEndedRelatedEventCount = 10
+    @State private var visibleRelatedArticleCount = 5
     @State private var errorMessage: String?
     @State private var showCreateEventSheet = false
     @State private var showFestivalEditSheet = false
@@ -4646,15 +4653,18 @@ struct LearnFestivalDetailView: View {
         }
         .task(id: currentFestival.id) {
             prepareFestivalEditDraft()
-            await loadRelatedContent()
             await hydrateFestivalContributorsIfNeeded()
             await refreshFollowedBrandUpdatePreference()
         }
         .task(id: currentFestival.avatarUrl ?? "") {
             await resolveAvatarLuminance()
         }
+        .onChange(of: selectedTab) { _, tab in
+            resetFestivalVisibleCounts(for: tab)
+            Task { await loadFestivalTabContentIfNeeded(for: tab) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
-            Task { await loadRelatedContent() }
+            Task { await loadRelatedContent(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { notification in
             let savedFestivalID = notification.object as? String
@@ -5127,9 +5137,11 @@ struct LearnFestivalDetailView: View {
             selection: $selectedTab,
             progress: pageProgress,
             onSelect: { tab in
+                resetFestivalVisibleCounts(for: tab)
                 withAnimation(.snappy(duration: 0.28, extraBounce: 0.06)) {
                     selectedTab = tab
                 }
+                Task { await loadFestivalTabContentIfNeeded(for: tab) }
             },
             tabSpacing: 24,
             tabHorizontalPadding: 16,
@@ -5192,6 +5204,11 @@ struct LearnFestivalDetailView: View {
             .coordinateSpace(name: chrome.coordinateSpaceName(tab))
             .scrollBounceBehavior(.always)
             .contentShape(Rectangle())
+            .task(id: Int(pageProgress.rounded())) {
+                let activeIndex = Int(pageProgress.rounded())
+                guard activeIndex == selectedIndex(for: tab) || selectedTab == tab else { return }
+                await loadFestivalTabContentIfNeeded(for: tab)
+            }
             .background(RaverTheme.background)
         }
     }
@@ -5364,6 +5381,10 @@ struct LearnFestivalDetailView: View {
             if isLoadingRelatedContent && relatedEvents.isEmpty {
                 ProgressView(LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."))
                     .padding(.vertical, 8)
+            } else if relatedEvents.isEmpty && !didLoadRelatedEvents {
+                ProgressView(LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."))
+                    .padding(.vertical, 8)
+                    .task { await loadRelatedEventsIfNeeded(force: false) }
             } else if upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty {
                 Text(LT("暂无关联活动", "暂无关联活动", "関連イベントはまだありません"))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -5371,26 +5392,22 @@ struct LearnFestivalDetailView: View {
             } else {
                 if !upcomingRelatedEvents.isEmpty {
                     festivalEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
-                    ForEach(upcomingRelatedEvents) { event in
-                        Button {
-                            appPush(.eventDetail(eventID: event.id))
-                        } label: {
-                            festivalEventRow(event)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    pagedFestivalEventSection(
+                        events: upcomingRelatedEvents,
+                        visibleCount: visibleUpcomingRelatedEventCount,
+                        loadMoreTitle: LT("加载更多即将开始的活动", "Load More Upcoming Events", "今後のイベントをさらに表示"),
+                        onLoadMore: { visibleUpcomingRelatedEventCount += 10 }
+                    )
                 }
 
                 if !endedRelatedEvents.isEmpty {
                     festivalEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
-                    ForEach(endedRelatedEvents) { event in
-                        Button {
-                            appPush(.eventDetail(eventID: event.id))
-                        } label: {
-                            festivalEventRow(event)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    pagedFestivalEventSection(
+                        events: endedRelatedEvents,
+                        visibleCount: visibleEndedRelatedEventCount,
+                        loadMoreTitle: LT("加载更多已结束活动", "Load More Ended Events", "終了したイベントをさらに表示"),
+                        onLoadMore: { visibleEndedRelatedEventCount += 10 }
+                    )
                 }
             }
         }
@@ -5424,15 +5441,20 @@ struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private var postsTabContent: some View {
-        if isLoadingRelatedContent && relatedArticles.isEmpty {
+        if (isLoadingRelatedContent || isLoadingRelatedArticles) && relatedArticles.isEmpty {
             ProgressView(LT("正在加载品牌动态...", "正在加载品牌动态...", "ブランド投稿を読み込み中..."))
                 .padding(.vertical, 8)
+        } else if relatedArticles.isEmpty && !didLoadRelatedArticles {
+            ProgressView(LT("正在加载品牌动态...", "正在加载品牌动态...", "ブランド投稿を読み込み中..."))
+                .padding(.vertical, 8)
+                .task { await loadRelatedArticlesIfNeeded(force: false) }
         } else if relatedArticles.isEmpty {
             Text(LT("暂无相关动态", "暂无相关动态", "関連投稿はまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else {
-            ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
+            let visibleArticles = Array(relatedArticles.prefix(visibleRelatedArticleCount))
+            ForEach(Array(visibleArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
                     discoverPush(.newsDetail(articleID: article.id))
                 } label: {
@@ -5441,11 +5463,63 @@ struct LearnFestivalDetailView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
 
-                if index < relatedArticles.count - 1 {
+                if index < visibleArticles.count - 1 {
                     Divider()
                         .padding(.leading, 16)
                 }
             }
+
+            festivalLoadMoreButton(
+                shownCount: visibleArticles.count,
+                totalCount: relatedArticles.count,
+                title: LT("加载更多动态", "Load More Posts", "投稿をさらに表示")
+            ) {
+                visibleRelatedArticleCount += 5
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pagedFestivalEventSection(
+        events: [WebEvent],
+        visibleCount: Int,
+        loadMoreTitle: String,
+        onLoadMore: @escaping () -> Void
+    ) -> some View {
+        let visibleEvents = Array(events.prefix(visibleCount))
+        ForEach(visibleEvents) { event in
+            Button {
+                appPush(.eventDetail(eventID: event.id))
+            } label: {
+                festivalEventRow(event)
+            }
+            .buttonStyle(.plain)
+        }
+
+        festivalLoadMoreButton(
+            shownCount: visibleEvents.count,
+            totalCount: events.count,
+            title: loadMoreTitle,
+            action: onLoadMore
+        )
+    }
+
+    @ViewBuilder
+    private func festivalLoadMoreButton(
+        shownCount: Int,
+        totalCount: Int,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        if shownCount < totalCount {
+            Button(action: action) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 8)
         }
     }
 
@@ -5937,7 +6011,7 @@ struct LearnFestivalDetailView: View {
             currentFestival = hydrated
             onFestivalUpdated?(hydrated)
             showFestivalEditSheet = false
-            await loadRelatedContent()
+            await loadRelatedContent(force: true)
             errorMessage = LT("电音节信息已更新", "Festival info updated.", "フェス情報を更新しました。")
         } catch {
             errorMessage = LT("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")", "保存に失敗しました: \(error.userFacingMessage ?? "")")
@@ -6036,15 +6110,73 @@ struct LearnFestivalDetailView: View {
     }
 
     @MainActor
-    private func loadRelatedContent() async {
+    private func loadFestivalTabContentIfNeeded(for tab: LearnFestivalDetailTab) async {
+        switch tab {
+        case .basic:
+            return
+        case .events:
+            await loadRelatedEventsIfNeeded(force: false)
+        case .posts:
+            await loadRelatedArticlesIfNeeded(force: false)
+        }
+    }
+
+    private func resetFestivalVisibleCounts(for tab: LearnFestivalDetailTab) {
+        switch tab {
+        case .basic:
+            return
+        case .events:
+            visibleUpcomingRelatedEventCount = 10
+            visibleEndedRelatedEventCount = 10
+        case .posts:
+            visibleRelatedArticleCount = 5
+        }
+    }
+
+    @MainActor
+    private func loadRelatedContent(force: Bool = false) async {
         isLoadingRelatedContent = true
         defer { isLoadingRelatedContent = false }
 
+        if force || didLoadRelatedEvents || selectedTab == .events {
+            await loadRelatedEventsIfNeeded(force: force)
+        }
+        if force || didLoadRelatedArticles || selectedTab == .posts {
+            await loadRelatedArticlesIfNeeded(force: force)
+        }
+    }
+
+    @MainActor
+    private func loadRelatedEventsIfNeeded(force: Bool) async {
+        if isLoadingRelatedEvents || (!force && didLoadRelatedEvents) { return }
+        isLoadingRelatedEvents = true
+        isLoadingRelatedContent = true
+        defer {
+            isLoadingRelatedEvents = false
+            isLoadingRelatedContent = isLoadingRelatedArticles || isLoadingRelatedEvents
+        }
+
         do {
-            async let eventsTask = fetchRelatedEvents()
-            async let postsTask = fetchRelatedPosts()
-            relatedEvents = try await eventsTask
-            relatedArticles = try await postsTask
+            relatedEvents = try await fetchRelatedEvents()
+            didLoadRelatedEvents = true
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    @MainActor
+    private func loadRelatedArticlesIfNeeded(force: Bool) async {
+        if isLoadingRelatedArticles || (!force && didLoadRelatedArticles) { return }
+        isLoadingRelatedArticles = true
+        isLoadingRelatedContent = true
+        defer {
+            isLoadingRelatedArticles = false
+            isLoadingRelatedContent = isLoadingRelatedArticles || isLoadingRelatedEvents
+        }
+
+        do {
+            relatedArticles = try await fetchRelatedPosts()
+            didLoadRelatedArticles = true
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -6109,7 +6241,7 @@ struct LearnFestivalDetailView: View {
                 currentFestival = hydrated
                 onFestivalUpdated?(hydrated)
             }
-            await loadRelatedContent()
+            await loadRelatedContent(force: true)
         } catch {
             errorMessage = error.userFacingMessage
         }

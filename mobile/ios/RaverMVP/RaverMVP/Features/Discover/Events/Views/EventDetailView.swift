@@ -1367,6 +1367,10 @@ struct EventDetailView: View {
     @State private var didLoadRelatedRatingEvents = false
     @State private var isLoadingRelatedEventSets = false
     @State private var didLoadRelatedEventSets = false
+    @State private var visibleEventDiscussionCount = 10
+    @State private var visibleRelatedArticleCount = 5
+    @State private var visibleRelatedRatingCount = 10
+    @State private var visibleRelatedSetCount = 10
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
     @State private var lineupSortMode: LineupSortMode = .alphabetical
@@ -1391,6 +1395,9 @@ struct EventDetailView: View {
     @State private var eventDiscussionNextCursor: String?
     @State private var showEventDetailTabsGuide = false
     @State private var eventDetailGuideStep: EventDetailGuidanceStep = .lineupTab
+    @State private var scheduleViewMode: EventScheduleViewMode = .timeline
+    @State private var selectedScheduleDayID: String?
+    @State private var selectedScheduleStageKey: String?
     @State private var routeActionFrame: CGRect = .zero
     @State private var showEventWidgetGuide = false
     @State private var eventWidgetGuideStep: EventWidgetGuidanceStep = .moreButton
@@ -1454,6 +1461,33 @@ struct EventDetailView: View {
         case moreButton
         case widgetAction
         case managementInfo
+    }
+
+    private enum EventScheduleViewMode: String, CaseIterable, Identifiable {
+        case timeline
+        case stageList
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .timeline: return LT("课程表", "Schedule Grid", "タイムテーブル")
+            case .stageList: return LT("DJ 列表", "DJ List", "DJリスト")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .timeline: return "square.grid.2x2.fill"
+            case .stageList: return "list.bullet"
+            }
+        }
+    }
+
+    private struct EventScheduleStageSection: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let slots: [WebEventLineupSlot]
     }
 
     private struct EventLiveStageAct: Identifiable, Hashable {
@@ -2542,6 +2576,11 @@ struct EventDetailView: View {
         .coordinateSpace(name: chrome.coordinateSpaceName(tab))
         .scrollBounceBehavior(.always)
         .contentShape(Rectangle())
+        .task(id: Int(pageProgress.rounded())) {
+            let activeIndex = Int(pageProgress.rounded())
+            guard activeIndex == selectedIndex(for: tab) || selectedTab == tab else { return }
+            await loadEventTabDataIfNeeded(for: tab)
+        }
     }
 
     private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
@@ -2598,7 +2637,8 @@ struct EventDetailView: View {
             )
             .padding(.vertical, 10)
         case .success:
-            ForEach(Array(eventDiscussionPosts.enumerated()), id: \.element.id) { index, post in
+            let visiblePosts = Array(eventDiscussionPosts.prefix(visibleEventDiscussionCount))
+            ForEach(Array(visiblePosts.enumerated()), id: \.element.id) { index, post in
                 PostCardView(
                     post: post,
                     currentUserId: appState.session?.user.id,
@@ -2629,7 +2669,18 @@ struct EventDetailView: View {
                 }
             }
 
-            if isLoadingEventDiscussion {
+            if visiblePosts.count < eventDiscussionPosts.count {
+                Button {
+                    visibleEventDiscussionCount += 10
+                } label: {
+                    Text(LT("加载更多动态", "Load More Posts", "投稿をさらに表示"))
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.bordered)
+                .padding(.vertical, 8)
+            } else if isLoadingEventDiscussion {
                 HStack {
                     Spacer()
                     ProgressView(LT("加载更多...", "Loading more...", "さらに読み込み中..."))
@@ -2666,7 +2717,8 @@ struct EventDetailView: View {
                 .padding(.vertical, 8)
                 .task { await loadRelatedArticlesIfNeeded() }
         } else {
-            ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
+            let visibleArticles = Array(relatedArticles.prefix(visibleRelatedArticleCount))
+            ForEach(Array(visibleArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
                     discoverPush(.newsDetail(articleID: article.id))
                 } label: {
@@ -2675,10 +2727,18 @@ struct EventDetailView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
 
-                if index < relatedArticles.count - 1 {
+                if index < visibleArticles.count - 1 {
                     Divider()
                         .padding(.leading, 16)
                 }
+            }
+
+            eventLoadMoreButton(
+                shownCount: visibleArticles.count,
+                totalCount: relatedArticles.count,
+                title: LT("加载更多资讯", "Load More News", "ニュースをさらに表示")
+            ) {
+                visibleRelatedArticleCount += 5
             }
         }
     }
@@ -2889,7 +2949,7 @@ struct EventDetailView: View {
 
     @MainActor
     private func loadEventDiscussionPosts(force: Bool) async {
-        guard selectedTab == .posts else { return }
+        guard selectedTab == .posts || tabVisualState(for: .posts) else { return }
         guard !isLoadingEventDiscussion else { return }
         if !force, eventDiscussionPhase == .success || eventDiscussionPhase == .empty {
             return
@@ -2905,6 +2965,7 @@ struct EventDetailView: View {
             let page = try await feedStreamRepository.fetchFeed(cursor: nil, mode: .latest, eventID: eventID)
             let discussionPosts = page.posts.filter { !$0.isRaverNews }
             eventDiscussionPosts = discussionPosts
+            visibleEventDiscussionCount = 10
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = discussionPosts.isEmpty ? .empty : .success
         } catch {
@@ -2914,7 +2975,7 @@ struct EventDetailView: View {
 
     @MainActor
     private func loadMoreEventDiscussionPostsIfNeeded() async {
-        guard selectedTab == .posts else { return }
+        guard selectedTab == .posts || tabVisualState(for: .posts) else { return }
         guard let cursor = eventDiscussionNextCursor, !isLoadingEventDiscussion else { return }
         isLoadingEventDiscussion = true
         defer { isLoadingEventDiscussion = false }
@@ -2923,6 +2984,7 @@ struct EventDetailView: View {
             let page = try await feedStreamRepository.fetchFeed(cursor: cursor, mode: .latest, eventID: eventID)
             let existing = Set(eventDiscussionPosts.map(\.id))
             eventDiscussionPosts.append(contentsOf: page.posts.filter { !existing.contains($0.id) && !$0.isRaverNews })
+            visibleEventDiscussionCount = min(eventDiscussionPosts.count, visibleEventDiscussionCount + 10)
             eventDiscussionNextCursor = page.nextCursor
             eventDiscussionPhase = eventDiscussionPosts.isEmpty ? .empty : .success
         } catch {
@@ -2988,15 +3050,17 @@ struct EventDetailView: View {
                     }
                 }
 
-                eventInfoRow(
+                eventInfoDateRow(
                     icon: "calendar",
                     title: LT("开始时间", "Start Time", "開始時間"),
-                    value: eventInfoDateText(event.startDate, event: event)
+                    date: event.startDate,
+                    event: event
                 )
-                eventInfoRow(
+                eventInfoDateRow(
                     icon: "clock",
                     title: LT("结束时间", "End Time", "終了時間"),
-                    value: eventInfoDateText(event.endDate, event: event)
+                    date: event.endDate,
+                    event: event
                 )
                 if !unifiedAddress.isEmpty {
                     eventInfoRow(icon: "mappin.and.ellipse", title: LT("活动地址", "Address", "住所"), value: unifiedAddress)
@@ -3210,14 +3274,297 @@ struct EventDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else {
-            EventRoutineView(
-                event: event,
-                scheduledSlots: scheduledSlots,
-                presentationStyle: .embedded,
-                onRouteActionGlobalFrameChange: { frame in
-                    routeActionFrame = frame
+            VStack(alignment: .leading, spacing: 12) {
+                scheduleViewModePicker
+
+                if scheduleViewMode == .timeline {
+                    EventRoutineView(
+                        event: event,
+                        scheduledSlots: scheduledSlots,
+                        presentationStyle: .embedded,
+                        onRouteActionGlobalFrameChange: { frame in
+                            routeActionFrame = frame
+                        }
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                } else {
+                    eventScheduleStageList(event: event, scheduledSlots: scheduledSlots)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
+            }
+            .animation(.spring(response: 0.28, dampingFraction: 0.88), value: scheduleViewMode)
+        }
+    }
+
+    private var scheduleViewModePicker: some View {
+        HStack(spacing: 8) {
+            ForEach(EventScheduleViewMode.allCases) { mode in
+                Button {
+                    withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                        scheduleViewMode = mode
+                    }
+                } label: {
+                    Image(systemName: mode.iconName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(scheduleViewMode == mode ? RaverTheme.background : RaverTheme.primaryText)
+                        .frame(width: 38, height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(scheduleViewMode == mode ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.white.opacity(scheduleViewMode == mode ? 0.0 : 0.10), lineWidth: 0.8)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(mode.title)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func eventScheduleStageList(event: WebEvent, scheduledSlots: [WebEventLineupSlot]) -> some View {
+        let usesWeekMode = EventWeekScheduleMode.isEnabled(in: event.description)
+        let days = EventScheduleDay.build(
+            from: scheduledSlots,
+            anchorDate: event.startDate,
+            useWeekMode: usesWeekMode,
+            dayRolloverHour: event.dayRolloverHour
+        )
+        let selectedDay = days.first { $0.id == selectedScheduleDayID } ?? days.first
+
+        if let selectedDay {
+            VStack(alignment: .leading, spacing: 12) {
+                if days.count > 1 {
+                    eventScheduleDayTabs(days)
+                }
+
+                let sections = eventScheduleStageSections(for: selectedDay, event: event)
+                let activeStageID: String? = {
+                    guard let selectedScheduleStageKey,
+                          sections.contains(where: { $0.id == selectedScheduleStageKey }) else {
+                        return nil
+                    }
+                    return selectedScheduleStageKey
+                }()
+
+                if sections.count > 1 {
+                    eventScheduleStageTabs(sections: sections, activeStageID: activeStageID)
+                }
+
+                let visibleSections = activeStageID.flatMap { activeID in
+                    sections.first { $0.id == activeID }.map { [$0] }
+                } ?? sections
+
+                ForEach(visibleSections) { section in
+                    eventScheduleStageSectionCard(section, event: event)
+                }
+            }
+            .onAppear {
+                if selectedScheduleDayID == nil {
+                    selectedScheduleDayID = selectedDay.id
+                }
+            }
+        }
+    }
+
+    private func eventScheduleDayTabs(_ days: [EventScheduleDay]) -> some View {
+        HorizontalAxisLockedScrollView(showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(days) { day in
+                    let isSelected = (selectedScheduleDayID ?? days.first?.id) == day.id
+                    Button {
+                        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                            selectedScheduleDayID = day.id
+                            selectedScheduleStageKey = nil
+                        }
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text(day.title)
+                                .font(.caption.weight(.bold))
+                            Text(day.date.appLocalizedMDText())
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(isSelected ? RaverTheme.background : RaverTheme.primaryText)
+                        .multilineTextAlignment(.center)
+                        .frame(minWidth: 66)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isSelected ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private func eventScheduleStageTabs(sections: [EventScheduleStageSection], activeStageID: String?) -> some View {
+        HorizontalAxisLockedScrollView(showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                        selectedScheduleStageKey = nil
+                    }
+                } label: {
+                    Text(LT("全部舞台", "All stages", "すべてのステージ"))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(activeStageID == nil ? RaverTheme.background : RaverTheme.primaryText)
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(activeStageID == nil ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                ForEach(sections) { section in
+                    let isSelected = activeStageID == section.id
+                    Button {
+                        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                            selectedScheduleStageKey = section.id
+                        }
+                    } label: {
+                        Text(section.name)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(isSelected ? RaverTheme.background : RaverTheme.primaryText)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(isSelected ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private func eventScheduleStageSectionCard(_ section: EventScheduleStageSection, event: WebEvent) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(section.name)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                Text(LT("\(section.slots.count) 组 DJ", "\(section.slots.count) DJs", "\(section.slots.count) 組"))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 2)
+
+            VStack(spacing: 0) {
+                ForEach(Array(section.slots.enumerated()), id: \.element.id) { index, slot in
+                    eventScheduleStageActRow(slot, event: event)
+                        .overlay(alignment: .bottom) {
+                            if index < section.slots.count - 1 {
+                                Divider().opacity(0.36)
+                            }
+                        }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(RaverTheme.card.opacity(0.72))
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+            )
+        }
+    }
+
+    private func eventScheduleStageActRow(_ slot: WebEventLineupSlot, event: WebEvent) -> some View {
+        let act = EventLineupActCodec.parse(slot: slot)
+        let content = HStack(spacing: 12) {
+            lineupActAvatars(act)
+                .frame(width: 58, height: 50, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(act.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(2)
+                    if act.type != .solo {
+                        lineupActTag(act.type)
+                    }
+                }
+
+                Text(EventTimeZoneDisplay.slotTimeRange(slot, event: event))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText.opacity(0.72))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+
+        return Button {
+            if act.type == .solo, let performer = act.performers.first {
+                selectLineupPerformer(performer)
+            } else {
+                pendingCollaborativeLineupEntry = EventLineupDJEntry(
+                    id: "schedule-\(slot.id)",
+                    act: act
+                )
+            }
+        } label: {
+            content
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func eventScheduleStageSections(for day: EventScheduleDay, event: WebEvent) -> [EventScheduleStageSection] {
+        var grouped: [String: [WebEventLineupSlot]] = [:]
+        var displayNameByKey: [String: String] = [:]
+
+        for slot in day.slots {
+            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let displayName = trimmed.isEmpty ? LT("未知舞台", "Unknown Stage", "不明なステージ") : trimmed
+            let key = trimmed.isEmpty ? "__unknown_stage__" : trimmed.lowercased()
+            grouped[key, default: []].append(slot)
+            displayNameByKey[key] = displayName
+        }
+
+        return grouped.keys.map { key in
+            let slots = (grouped[key] ?? []).sorted {
+                if $0.startTime == $1.startTime { return $0.sortOrder < $1.sortOrder }
+                return $0.startTime < $1.startTime
+            }
+            return EventScheduleStageSection(
+                id: key,
+                name: displayNameByKey[key] ?? LT("未知舞台", "Unknown Stage", "不明なステージ"),
+                slots: slots
+            )
+        }
+        .sorted { lhs, rhs in
+            let lhsIndex = stageSortIndex(lhs.name, event: event)
+            let rhsIndex = stageSortIndex(rhs.name, event: event)
+            if lhsIndex != rhsIndex { return lhsIndex < rhsIndex }
+            let lhsStart = lhs.slots.first?.startTime ?? .distantFuture
+            let rhsStart = rhs.slots.first?.startTime ?? .distantFuture
+            if lhsStart != rhsStart { return lhsStart < rhsStart }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 
@@ -3237,7 +3584,8 @@ struct EventDetailView: View {
                 .padding(.vertical, 8)
                 .task { await loadRelatedRatingsIfNeeded() }
         } else {
-            ForEach(relatedRatingEvents) { ratingEvent in
+            let visibleRatings = Array(relatedRatingEvents.prefix(visibleRelatedRatingCount))
+            ForEach(visibleRatings) { ratingEvent in
                 Button {
                     selectedRatingEventID = ratingEvent.id
                 } label: {
@@ -3268,6 +3616,14 @@ struct EventDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            eventLoadMoreButton(
+                shownCount: visibleRatings.count,
+                totalCount: relatedRatingEvents.count,
+                title: LT("加载更多打分", "Load More Ratings", "評価をさらに表示")
+            ) {
+                visibleRelatedRatingCount += 10
+            }
         }
     }
 
@@ -3287,7 +3643,8 @@ struct EventDetailView: View {
                 .padding(.vertical, 8)
                 .task { await loadRelatedSetsIfNeeded() }
         } else {
-            ForEach(relatedEventSets) { set in
+            let visibleSets = Array(relatedEventSets.prefix(visibleRelatedSetCount))
+            ForEach(visibleSets) { set in
                 Button {
                     discoverPush(.setDetail(setID: set.id))
                 } label: {
@@ -3324,6 +3681,33 @@ struct EventDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            eventLoadMoreButton(
+                shownCount: visibleSets.count,
+                totalCount: relatedEventSets.count,
+                title: LT("加载更多 Sets", "Load More Sets", "Setをさらに表示")
+            ) {
+                visibleRelatedSetCount += 10
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func eventLoadMoreButton(
+        shownCount: Int,
+        totalCount: Int,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        if shownCount < totalCount {
+            Button(action: action) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 8)
         }
     }
 
@@ -3890,19 +4274,6 @@ struct EventDetailView: View {
             )
         }
 
-        let isMarked = eventFavoriteID != nil
-        actions.append(
-            SharePanelQuickAction(
-                title: isTogglingMarkedEvent
-                    ? LT("处理中", "Working", "処理中")
-                    : (isMarked ? LT("取消收藏", "Unfavorite", "お気に入り解除") : LT("收藏活动", "Favorite", "お気に入り")),
-                systemImage: isMarked ? "star.fill" : "star",
-                accentColor: Color(red: 0.99, green: 0.82, blue: 0.22)
-            ) {
-                guard let event else { return }
-                Task { await toggleMarkedEvent(event) }
-            }
-        )
         actions.append(
             SharePanelQuickAction(
                 title: LT("复制链接", "Copy Link", "リンクをコピー"),
@@ -4619,6 +4990,40 @@ struct EventDetailView: View {
         }
     }
 
+    private func eventInfoDateRow(icon: String, title: String, date: Date, event: WebEvent) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(RaverTheme.card)
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText.opacity(0.88))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(eventInfoDateTexts(date, event: event), id: \.self) { value in
+                        eventInfoDateLine(value)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func eventInfoDateLine(_ value: String) -> some View {
+        Text(value)
+            .font(.subheadline)
+            .foregroundStyle(RaverTheme.primaryText)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private func eventBrandInfoRow(_ brand: WebEventFestivalLite) -> some View {
         Button {
             appPush(.festivalDetail(festivalID: brand.id))
@@ -4666,8 +5071,51 @@ struct EventDetailView: View {
         }
     }
 
-    private func eventInfoDateText(_ date: Date, event: WebEvent) -> String {
-        date.appLocalizedYMDText()
+    private func eventInfoDateText(_ date: Date, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = timeZone
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh, .system:
+            formatter.dateFormat = "yyyy年M月d日"
+        case .en:
+            formatter.dateFormat = "MMM d, yyyy"
+        case .ja:
+            formatter.dateFormat = "yyyy年M月d日"
+        }
+        return "\(formatter.string(from: date)) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
+    }
+
+    private func eventInfoDateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh, .system:
+            formatter.dateFormat = "yyyy年M月d日"
+        case .en:
+            formatter.dateFormat = "MMM d, yyyy"
+        case .ja:
+            formatter.dateFormat = "yyyy年M月d日"
+        }
+        return formatter.string(from: date)
+    }
+
+    private func eventInfoDateTexts(_ date: Date, event: WebEvent) -> [String] {
+        let deviceTimeZone = TimeZone.current
+        guard let eventTimeZone = EventTimeZoneDisplay.eventTimeZone(for: event) else {
+            return [eventInfoDateText(date)]
+        }
+
+        let deviceText = eventInfoDateText(date, timeZone: deviceTimeZone)
+
+        guard deviceTimeZone.secondsFromGMT(for: date) != eventTimeZone.secondsFromGMT(for: date) else {
+            return [deviceText]
+        }
+
+        return [
+            deviceText,
+            eventInfoDateText(date, timeZone: eventTimeZone)
+        ]
     }
 
     private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
@@ -4796,15 +5244,24 @@ struct EventDetailView: View {
 
     @MainActor
     private func loadSelectedTabDataIfNeeded() async {
+        await loadEventTabDataIfNeeded(for: selectedTab)
+    }
+
+    @MainActor
+    private func loadEventTabDataIfNeeded(for tab: EventDetailTab) async {
         guard event != nil else { return }
-        switch selectedTab {
+        switch tab {
         case .posts:
+            visibleEventDiscussionCount = 10
             await loadEventDiscussionPosts(force: false)
         case .news:
+            visibleRelatedArticleCount = 5
             await loadRelatedArticlesIfNeeded()
         case .ratings:
+            visibleRelatedRatingCount = 10
             await loadRelatedRatingsIfNeeded()
         case .sets:
+            visibleRelatedSetCount = 10
             await loadRelatedSetsIfNeeded()
         case .info, .lineup, .schedule:
             return
@@ -5356,7 +5813,7 @@ struct EventDetailView: View {
     @MainActor
     private func toggleMarkedEvent(_ event: WebEvent) async {
         guard appState.session != nil else {
-            errorMessage = LT("请先登录再收藏活动", "Please log in before saving events.", "イベントを保存するにはログインしてください。")
+            errorMessage = LT("请先登录再关注活动", "Please log in before following events.", "イベントをフォローするにはログインしてください。")
             return
         }
         guard !isTogglingMarkedEvent else { return }
@@ -5368,16 +5825,16 @@ struct EventDetailView: View {
             if eventFavoriteID != nil {
                 try await eventCheckinRepository.unfavoriteEvent(eventID: event.id)
                 eventFavoriteID = nil
-                showEventFavoriteSuccessBanner(message: LT("已取消收藏活动", "Event removed from favorites.", "イベントのお気に入りを解除しました。"))
+                showEventFavoriteSuccessBanner(message: LT("已取消关注活动", "Event unfollowed.", "イベントのフォローを解除しました。"))
             } else {
                 let favorite = try await eventCheckinRepository.favoriteEvent(eventID: event.id)
                 eventFavoriteID = favorite.id ?? event.id
-                showEventFavoriteSuccessBanner(message: LT("已收藏活动", "Event added to favorites.", "イベントをお気に入りに追加しました。"))
+                showEventFavoriteSuccessBanner(message: LT("已关注活动", "Event followed.", "イベントをフォローしました。"))
             }
 
             NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
         } catch {
-            errorMessage = error.userFacingMessage ?? LT("收藏活动失败，请稍后重试", "Failed to update favorite. Please try again later.", "お気に入りを更新できませんでした。時間をおいて再試行してください。")
+            errorMessage = error.userFacingMessage ?? LT("关注活动失败，请稍后重试", "Failed to update follow status. Please try again later.", "フォロー状態を更新できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -5622,6 +6079,23 @@ private struct EventScheduleDay: Identifiable, Hashable {
     }
 
     var subtitle: String { "\(title) · \(date.appLocalizedYMDText())" }
+
+    var subtitleWithoutTimeZone: String { "\(title) · \(localizedDateTextWithoutTimeZone)" }
+
+    private var localizedDateTextWithoutTimeZone: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = .current
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh, .system:
+            formatter.dateFormat = "yyyy年M月d日"
+        case .en:
+            formatter.dateFormat = "MMM d, yyyy"
+        case .ja:
+            formatter.dateFormat = "yyyy年M月d日"
+        }
+        return formatter.string(from: date)
+    }
 
     static func build(
         from slots: [WebEventLineupSlot],
@@ -6559,7 +7033,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
             HStack(spacing: 10) {
                 ForEach(days) { day in
                     let selected = day.id == selectedDayID
-                    Text(day.subtitle)
+                    Text(day.subtitleWithoutTimeZone)
                         .font(EventScheduleTypography.semibold(15))
                         .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
                         .padding(.horizontal, 12)
@@ -7114,7 +7588,7 @@ private struct EventRoutePlannerView: View {
                     Button {
                         selectedDayID = day.id
                     } label: {
-                        Text(day.subtitle)
+                        Text(day.subtitleWithoutTimeZone)
                             .font(EventScheduleTypography.semibold(15))
                             .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
                             .padding(.horizontal, 12)
@@ -7596,7 +8070,7 @@ private struct EventRoutineView: View {
                     Button {
                         selectedDayID = day.id
                     } label: {
-                        Text(day.subtitle)
+                        Text(day.subtitleWithoutTimeZone)
                             .font(EventScheduleTypography.semibold(15))
                             .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
                             .padding(.horizontal, 12)

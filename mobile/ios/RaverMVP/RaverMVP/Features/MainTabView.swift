@@ -1666,7 +1666,7 @@ private struct CircleIDDetailView: View {
                         Button(LT("发送", "Send", "送信")) {
                             addComment()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(CompactPrimaryButtonStyle())
                         .disabled(commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
 
@@ -4362,11 +4362,14 @@ struct CircleRatingUnitDetailView: View {
                                     await addComment()
                                 }
                             }
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(canSendComment ? RaverTheme.accent : RaverTheme.secondaryText)
-                            .buttonStyle(.plain)
+                            .buttonStyle(
+                                CompactPrimaryButtonStyle(
+                                    horizontalPadding: 12,
+                                    verticalPadding: 7,
+                                    cornerRadius: 10
+                                )
+                            )
                             .disabled(!canSendComment)
-                            .opacity(canSendComment ? 1 : 0.45)
                         }
 
                         if let actionErrorMessage {

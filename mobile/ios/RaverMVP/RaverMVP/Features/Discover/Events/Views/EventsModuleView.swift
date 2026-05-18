@@ -42,7 +42,7 @@ struct EventsModuleView: View {
         var title: String {
             switch self {
             case .all: return LT("全部活动", "All Events", "すべてのイベント")
-            case .mine: return LT("收藏活动", "Favorites", "お気に入り")
+            case .mine: return LT("关注活动", "Following", "フォロー中")
             }
         }
     }
@@ -450,7 +450,7 @@ struct EventsModuleView: View {
             Text(
                 selectedScope == .all
                     ? LT("正在加载活动", "Loading events", "イベントを読み込み中")
-                    : LT("正在加载收藏活动", "Loading favorite events", "お気に入りイベントを読み込み中")
+                    : LT("正在加载关注活动", "Loading followed events", "フォロー中のイベントを読み込み中")
             )
             .font(.subheadline)
             .foregroundStyle(RaverTheme.secondaryText)
@@ -479,10 +479,10 @@ struct EventsModuleView: View {
 
     private var emptyStateTitle: String {
         if selectedScope == .mine && appState.session == nil {
-            return LT("登录后查看收藏活动", "Sign in to view favorite events", "ログインしてお気に入りイベントを見る")
+            return LT("登录后查看关注活动", "Sign in to view followed events", "ログインしてフォロー中のイベントを見る")
         }
         if selectedScope == .mine {
-            return LT("暂无收藏活动", "No favorite events yet", "お気に入りイベントはまだありません")
+            return LT("暂无关注活动", "No followed events yet", "フォロー中のイベントはまだありません")
         }
         return LT("没有匹配的活动", "No matching events", "一致するイベントがありません")
     }
@@ -739,7 +739,6 @@ struct EventsModuleView: View {
     }
 
     private func eventActionButtons(for event: WebEvent) -> some View {
-        let starYellow = Color(red: 0.99, green: 0.82, blue: 0.22)
         let isMarked = viewModel.markedCheckinIDsByEventID[event.id] != nil
 
         return HStack(spacing: 8) {
@@ -748,40 +747,26 @@ struct EventsModuleView: View {
                     await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
                 }
             } label: {
-                Text(isMarked ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, 12)
-                    .frame(height: 34)
-                    .background(
-                        Capsule()
-                            .fill(
-                                isMarked
-                                ? Color(red: 0.20, green: 0.56, blue: 0.98).opacity(0.45)
-                                : Color(red: 0.20, green: 0.56, blue: 0.98)
-                            )
-                    )
+                Label(
+                    isMarked ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"),
+                    systemImage: isMarked ? "bell.fill" : "bell"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(
+                    Capsule()
+                        .fill(
+                            isMarked
+                            ? Color(red: 0.20, green: 0.56, blue: 0.98).opacity(0.45)
+                            : Color(red: 0.20, green: 0.56, blue: 0.98)
+                        )
+                )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isMarked ? LT("已关注活动", "Following event", "イベントをフォロー中") : LT("关注活动", "Follow event", "イベントをフォロー"))
-
-            Button {
-                Task {
-                    await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
-                }
-            } label: {
-                Image(systemName: isMarked ? "star.fill" : "star")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(isMarked ? .white : RaverTheme.secondaryText)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle()
-                            .fill(isMarked ? starYellow : RaverTheme.card.opacity(0.92))
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isMarked ? LT("取消收藏活动", "Unfavorite event", "イベントのお気に入り解除") : LT("收藏活动", "Favorite event", "イベントをお気に入り"))
         }
     }
 

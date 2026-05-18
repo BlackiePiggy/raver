@@ -177,7 +177,8 @@ struct PostDetailView: View {
                     Button(LT("发送", "Send", "送信")) {
                         submitComment()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(CompactPrimaryButtonStyle())
+                    .disabled(commentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .padding(12)
@@ -396,7 +397,7 @@ struct PostDetailView: View {
     private func requireRealNameForSocialAction() -> Bool {
         guard appState.canUseSocialFeatures else {
             error = appState.socialFeatureUnavailableMessage
-            if appState.session != nil {
+            if appState.session != nil && appState.shouldPresentRealNameVerificationUI {
                 isShowingRealNameSheet = true
             }
             return false
@@ -406,7 +407,7 @@ struct PostDetailView: View {
 
     private func requireRealNameForThrowingSocialAction() throws {
         guard appState.canUseSocialFeatures else {
-            if appState.session != nil {
+            if appState.session != nil && appState.shouldPresentRealNameVerificationUI {
                 isShowingRealNameSheet = true
             }
             throw ServiceError.message(appState.socialFeatureUnavailableMessage)

@@ -2834,7 +2834,7 @@ struct DJSetDetailView: View {
             Button(LT("发送评论", "发送评论", "コメントを送信")) {
                 Task { await sendComment() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(CompactPrimaryButtonStyle())
             .disabled(inputComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }

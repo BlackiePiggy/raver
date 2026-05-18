@@ -490,7 +490,7 @@ final class EventsModuleViewModel: ObservableObject {
     private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
     private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
     private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
-    private let pageSize = 10
+    private let pageSize = 5
 
     private var currentAllQuery = AllQuery(search: "", eventTypeKey: "")
     private var nextAllPage = 1

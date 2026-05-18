@@ -14,6 +14,7 @@ import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
   getEventHour,
+  isValidEventTimeZone,
   normalizeEventTimeZone,
   parseEventDateInput,
   setEventDayAndKeepTime,
@@ -529,6 +530,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    if (!isValidEventTimeZone(timeZone)) {
+      res.status(400).json({ error: 'Valid event timeZone is required' });
+      return;
+    }
+
     if (role !== 'admin' && role !== 'operator') {
       const submission = await prisma.contentSubmission.create({
         data: {
@@ -731,6 +737,10 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    if (timeZone !== undefined && !isValidEventTimeZone(timeZone)) {
+      res.status(400).json({ error: 'Valid event timeZone is required' });
+      return;
+    }
     const nextTimeZone = timeZone !== undefined
       ? normalizeEventTimeZone(timeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
       : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);

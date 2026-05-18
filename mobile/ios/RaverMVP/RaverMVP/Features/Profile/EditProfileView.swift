@@ -12,15 +12,10 @@ struct SaveProfileUseCase {
     func execute(
         displayName: String,
         bio: String,
-        tagsText: String,
+        tags: [String],
         isFollowersListPublic: Bool,
         isFollowingListPublic: Bool
     ) async throws -> UserProfile {
-        let tags = tagsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
         return try await repository.updateMyProfile(input: UpdateMyProfileInput(
             displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -45,7 +40,7 @@ final class EditProfileViewModel: ObservableObject {
     func saveProfile(
         displayName: String,
         bio: String,
-        tagsText: String,
+        tags: [String],
         isFollowersListPublic: Bool,
         isFollowingListPublic: Bool,
     ) async -> UserProfile? {
@@ -56,7 +51,7 @@ final class EditProfileViewModel: ObservableObject {
             let updated = try await saveProfileUseCase.execute(
                 displayName: displayName,
                 bio: bio,
-                tagsText: tagsText,
+                tags: tags,
                 isFollowersListPublic: isFollowersListPublic,
                 isFollowingListPublic: isFollowingListPublic
             )
@@ -85,6 +80,7 @@ private extension UIImage {
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
 
     @StateObject private var viewModel: EditProfileViewModel
     private let repository: ProfileUserRepository
@@ -92,11 +88,15 @@ struct EditProfileView: View {
 
     @State private var displayName: String
     @State private var bio: String
-    @State private var tagsText: String
+    @State private var selectedTags: [String]
     @State private var isFollowersListPublic: Bool
     @State private var isFollowingListPublic: Bool
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarData: Data?
+    @State private var availableGenreTags: [String] = []
+    @State private var tagSearchText = ""
+    @State private var isLoadingGenreTags = false
+    @State private var isShowingTagPicker = false
 
     private let currentAvatarURL: String?
 
@@ -111,7 +111,7 @@ struct EditProfileView: View {
         self.currentAvatarURL = profile.avatarURL
         _displayName = State(initialValue: profile.displayName)
         _bio = State(initialValue: profile.bio)
-        _tagsText = State(initialValue: profile.tags.joined(separator: ", "))
+        _selectedTags = State(initialValue: profile.tags)
         _isFollowersListPublic = State(initialValue: profile.isFollowersListPublic)
         _isFollowingListPublic = State(initialValue: profile.isFollowingListPublic)
     }
@@ -167,29 +167,35 @@ struct EditProfileView: View {
                     TextEditor(text: $bio)
                         .frame(minHeight: 120)
                         .padding(8)
+                        .scrollContentBackground(.hidden)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(LT("Tag（逗号分隔）", "Tags (comma separated)", "タグ（カンマ区切り）"))
+                    Text(LT("Tag", "Tags", "タグ"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
-                    TextField(LT("如: Techno, House", "e.g. Techno, House", "例: Techno, House"), text: $tagsText)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            dismissKeyboard()
+                    Button {
+                        isShowingTagPicker = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "tag")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text(selectedTags.isEmpty ? LT("从流派树选择", "Choose from genre tree", "ジャンルツリーから選択") : selectedTags.joined(separator: ", "))
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
                         }
+                        .font(.subheadline)
+                        .foregroundStyle(selectedTags.isEmpty ? RaverTheme.secondaryText : RaverTheme.primaryText)
                         .padding(12)
                         .background(RaverTheme.card)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle(LT("允许他人查看我的粉丝列表", "Allow others to see my followers", "他の人にフォロワー一覧を表示する"), isOn: $isFollowersListPublic)
-                        Toggle(LT("允许他人查看我的关注列表", "Allow others to see who I follow", "他の人にフォロー一覧を表示する"), isOn: $isFollowingListPublic)
                     }
+                    .buttonStyle(.plain)
                 }
 
                 Button {
@@ -225,6 +231,17 @@ struct EditProfileView: View {
                     await applyPickedAvatarData(data)
                 }
             }
+        }
+        .task {
+            await loadGenreTagsIfNeeded()
+        }
+        .sheet(isPresented: $isShowingTagPicker) {
+            GenreTagPickerSheet(
+                tags: availableGenreTags,
+                selectedTags: $selectedTags,
+                searchText: $tagSearchText,
+                isLoading: isLoadingGenreTags
+            )
         }
     }
 
@@ -318,7 +335,7 @@ struct EditProfileView: View {
         if var updated = await viewModel.saveProfile(
             displayName: displayName,
             bio: bio,
-            tagsText: tagsText,
+            tags: selectedTags,
             isFollowersListPublic: isFollowersListPublic,
             isFollowingListPublic: isFollowingListPublic
         ) {
@@ -328,6 +345,106 @@ struct EditProfileView: View {
             }
             onSaved(updated)
             dismiss()
+        }
+    }
+
+    @MainActor
+    private func loadGenreTagsIfNeeded() async {
+        guard availableGenreTags.isEmpty, !isLoadingGenreTags else { return }
+        isLoadingGenreTags = true
+        defer { isLoadingGenreTags = false }
+
+        do {
+            let nodes = try await appContainer.webService.fetchLearnGenres()
+            availableGenreTags = Self.flattenGenreTags(nodes)
+            selectedTags = selectedTags.filter { availableGenreTags.contains($0) }
+        } catch {
+            viewModel.error = error.userFacingMessage ?? LT("流派标签加载失败，请稍后重试。", "Failed to load genre tags. Please try again.", "ジャンルタグの読み込みに失敗しました。後でもう一度お試しください。")
+        }
+    }
+
+    private static func flattenGenreTags(_ nodes: [LearnGenreNode]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        func visit(_ node: LearnGenreNode) {
+            let name = node.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, seen.insert(name.lowercased()).inserted {
+                result.append(name)
+            }
+            node.children?.forEach(visit)
+        }
+
+        nodes.forEach(visit)
+        return result
+    }
+}
+
+private struct GenreTagPickerSheet: View {
+    let tags: [String]
+    @Binding var selectedTags: [String]
+    @Binding var searchText: String
+    let isLoading: Bool
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var filteredTags: [String] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return tags }
+        return tags.filter { $0.localizedCaseInsensitiveContains(keyword) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else if filteredTags.isEmpty {
+                    Text(LT("没有匹配的流派标签", "No matching genre tags", "一致するジャンルタグがありません"))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    ForEach(filteredTags, id: \.self) { tag in
+                        Button {
+                            toggle(tag)
+                        } label: {
+                            HStack {
+                                Text(tag)
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Spacer()
+                                if selectedTags.contains(tag) {
+                                    Image(systemName: "checkmark")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.accent)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .searchable(text: $searchText, prompt: LT("搜索流派 Tag", "Search genre tags", "ジャンルタグを検索"))
+            .scrollContentBackground(.hidden)
+            .background(RaverTheme.background)
+            .navigationTitle(LT("选择 Tag", "Choose Tags", "タグを選択"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(LT("完成", "Done", "完了")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func toggle(_ tag: String) {
+        if selectedTags.contains(tag) {
+            selectedTags.removeAll { $0 == tag }
+        } else {
+            selectedTags.append(tag)
         }
     }
 }

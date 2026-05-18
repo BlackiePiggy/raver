@@ -242,7 +242,7 @@ extension AppState {
     var canUseSocialFeatures: Bool {
         guard session != nil else { return false }
         if !AppConfig.isRealNameEnforcementEnabled {
-            return true
+            return session?.user.ageBand == .adult
         }
         return realNameVerificationStatus == .verified
     }
@@ -251,6 +251,13 @@ extension AppState {
         if session == nil {
             return LT("请先登录后再使用社交功能", "Please sign in before using social features.", "ソーシャル機能を使うにはログインしてください。")
         }
+        if !AppConfig.isRealNameEnforcementEnabled {
+            return LT("年满 18 岁后才可以发言", "You must be 18 or older to post or comment.", "投稿やコメントは18歳以上のみ利用できます。")
+        }
         return LT("请先完成实名认证", "Please complete real-name verification first.", "先に実名認証を完了してください")
+    }
+
+    var shouldPresentRealNameVerificationUI: Bool {
+        AppConfig.isRealNameEnforcementEnabled
     }
 }

@@ -16,6 +16,16 @@ const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const LOCAL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2})(?::(\d{1,2})(?::(\d{1,2})(?:\.(\d{1,3}))?)?)?)?$/;
 const EXPLICIT_ZONE_PATTERN = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
 
+export const isValidEventTimeZone = (value: unknown): value is string => {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value.trim() });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+};
+
 export const normalizeEventTimeZone = (value: unknown, fallback = DEFAULT_EVENT_TIME_ZONE): string => {
   const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback;
   try {

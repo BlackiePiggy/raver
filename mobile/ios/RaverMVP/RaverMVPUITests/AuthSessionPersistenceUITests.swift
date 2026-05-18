@@ -9,7 +9,7 @@ final class AuthSessionPersistenceUITests: XCTestCase {
         let firstLaunch = makeApp(resetSession: true, forceSessionExpireOnBoot: false)
         firstLaunch.launch()
 
-        try loginThroughOneTap(on: firstLaunch)
+        try loginThroughEmail(on: firstLaunch)
         XCTAssertTrue(
             firstLaunch.otherElements["app.authenticatedRoot"].waitForExistence(timeout: 10),
             "Expected authenticated root after first login."
@@ -30,7 +30,7 @@ final class AuthSessionPersistenceUITests: XCTestCase {
         let firstLaunch = makeApp(resetSession: true, forceSessionExpireOnBoot: false)
         firstLaunch.launch()
 
-        try loginThroughOneTap(on: firstLaunch)
+        try loginThroughEmail(on: firstLaunch)
         XCTAssertTrue(
             firstLaunch.otherElements["app.authenticatedRoot"].waitForExistence(timeout: 10),
             "Expected authenticated root after first login."
@@ -55,7 +55,7 @@ final class AuthSessionPersistenceUITests: XCTestCase {
         return app
     }
 
-    private func loginThroughOneTap(on app: XCUIApplication) throws {
+    private func loginThroughEmail(on app: XCUIApplication) throws {
         let loginRoot = app.otherElements["app.loginRoot"]
         XCTAssertTrue(loginRoot.waitForExistence(timeout: 10), "Expected login root to appear.")
 
@@ -70,13 +70,27 @@ final class AuthSessionPersistenceUITests: XCTestCase {
         XCTAssertTrue(agreeControl.waitForExistence(timeout: 5), "Expected terms agreement button.")
         tapElement(agreeControl)
 
-        let oneTapButton = resolveElement(
+        let emailLoginButton = resolveElement(
             in: app,
-            identifiers: ["login.oneTapButton"],
-            buttonLabels: ["一键登录/注册", "One-click login/registration"]
+            identifiers: ["login.showManualButton"],
+            buttonLabels: ["邮箱或账号登录", "Email or Account Sign In"]
         )
-        XCTAssertTrue(oneTapButton.waitForExistence(timeout: 5), "Expected one-tap login button.")
-        tapElement(oneTapButton)
+        XCTAssertTrue(emailLoginButton.waitForExistence(timeout: 5), "Expected email/account login button.")
+        tapElement(emailLoginButton)
+
+        let emailField = app.textFields["login.emailField"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 5), "Expected email field.")
+        tapElement(emailField)
+        emailField.typeText("uitest@example.com")
+
+        let codeField = app.textFields["login.emailCodeField"]
+        XCTAssertTrue(codeField.waitForExistence(timeout: 5), "Expected email code field.")
+        tapElement(codeField)
+        codeField.typeText("123456")
+
+        let submitButton = app.buttons["login.manualSubmitButton"]
+        XCTAssertTrue(submitButton.waitForExistence(timeout: 5), "Expected manual submit button.")
+        tapElement(submitButton)
     }
 
     private func resolveElement(

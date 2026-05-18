@@ -31,6 +31,7 @@ import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
   getEventHour,
+  isValidEventTimeZone,
   normalizeEventTimeZone,
   parseEventDateInput,
   setEventDayAndKeepTime,
@@ -5970,6 +5971,12 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
+    const rawTimeZone = body.timeZone ?? body.timezone ?? body.eventTimeZone;
+    if (!isValidEventTimeZone(rawTimeZone)) {
+      res.status(400).json({ error: 'Valid event timeZone is required' });
+      return;
+    }
+
     if (!canBypassContentReview(viewerRole)) {
       const submission = await createPendingContentSubmission({
         submitterId: userId,
@@ -5981,7 +5988,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    const timeZone = normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
+    const timeZone = normalizeEventTimeZone(rawTimeZone);
     const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
     const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
     const parsedStartDateInput = parseEventDateInput(startDate, timeZone, 'start', startTime);
@@ -6346,6 +6353,10 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       ? (normalizeEventText(nextCountryI18n?.en) || normalizeEventText(nextCountryI18n?.zh))
       : null;
 
+    if (hasTimeZoneField && !isValidEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone)) {
+      res.status(400).json({ error: 'Valid event timeZone is required' });
+      return;
+    }
     const nextTimeZone = hasTimeZoneField
       ? normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
       : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);

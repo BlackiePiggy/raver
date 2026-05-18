@@ -24,6 +24,7 @@ struct LoginView: View {
     @State private var hasAgreedTerms = false
     @State private var showManualLogin = false
     @State private var showRegistrationProfile = false
+    @State private var authNoticeMessage: String?
     @StateObject private var videoController = LoginBackgroundVideoController()
     @FocusState private var focusedField: ManualAuthField?
 
@@ -83,44 +84,63 @@ struct LoginView: View {
                     }
                     .padding(.top, topBarTopPadding(proxy.safeAreaInsets.top))
 
-                    Spacer()
+                    Spacer(minLength: 24)
 
-                    VStack(spacing: 14) {
+                    VStack(spacing: 16) {
                         centerBrandBadge(screenWidth: proxy.size.width)
-
-                        Text(LT("邮箱验证码登录", "Email OTP Sign In", "メール認証でログイン"))
-                            .font(.system(size: 32, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.98))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .padding(.bottom, 6)
 
                         Button {
                             hasAgreedTerms.toggle()
                         } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            HStack(alignment: .top, spacing: 10) {
                                 Image(systemName: hasAgreedTerms ? "checkmark.circle.fill" : "circle")
                                     .font(.system(size: 18, weight: .regular))
                                     .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
+                                    .padding(.top, 1)
                                 Text(LT("我同意《用户服务条款》《用户协议》《隐私政策》", "I agree to the User Terms of Service, User Agreement, and Privacy Policy", "利用規約、ユーザー契約、プライバシーポリシーに同意します"))
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.84))
                                     .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.black.opacity(0.24))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("login.agreeTermsButton")
 
                         Button {
-                            Task { await submitAuth(oneTap: true) }
+                            guard hasAgreedTerms else {
+                                authNoticeMessage = LT("请先勾选并同意用户服务条款、用户协议和隐私政策。", "Please agree to the user terms, user agreement, and privacy policy first.", "先に利用規約、ユーザー契約、プライバシーポリシーに同意してください。")
+                                return
+                            }
+                            authNoticeMessage = nil
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                showManualLogin.toggle()
+                            }
+                            videoController.resumeIfNeeded()
                         } label: {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 30, style: .continuous)
-                                    .fill(Color.black.opacity(0.38))
+                                    .fill(Color.black.opacity(0.44))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    )
                                 if isLoading {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(LT("一键登录", "One-Tap Sign In", "ワンタップでログイン"))
+                                    Text(LT("邮箱或账号登录", "Email or Account Sign In", "メールまたはアカウントでログイン"))
                                         .font(.system(size: 17, weight: .semibold))
                                         .foregroundStyle(.white.opacity(0.96))
                                 }
@@ -128,25 +148,7 @@ struct LoginView: View {
                             .frame(height: 54)
                         }
                         .buttonStyle(.plain)
-                        .disabled(isLoading || !hasAgreedTerms)
-                        .accessibilityIdentifier("login.oneTapButton")
-
-                        Button {
-                            guard hasAgreedTerms else {
-                                appState.errorMessage = LT("请先勾选并同意用户服务条款、用户协议和隐私政策。", "Please agree to the user terms, user agreement, and privacy policy first.", "先に利用規約、ユーザー契約、プライバシーポリシーに同意してください。")
-                                return
-                            }
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                                showManualLogin.toggle()
-                            }
-                            videoController.resumeIfNeeded()
-                        } label: {
-                            Text(LT("邮箱或账号登录", "Email or Account Sign In", "メールまたはアカウントでログイン"))
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.92))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 4)
+                        .disabled(isLoading)
                         .accessibilityIdentifier("login.showManualButton")
 
                         Button {
@@ -163,48 +165,63 @@ struct LoginView: View {
                         if showManualLogin {
                             manualLoginPanel
                                 .transition(.move(edge: .top).combined(with: .opacity))
+                                .padding(.top, 2)
                         }
                     }
+                    .frame(maxWidth: 430)
 
-                    Spacer()
+                    Spacer(minLength: 22)
 
-                    VStack(spacing: 14) {
-                        Text(LT("— 其他登录方式 —", "- Other sign-in methods -", "- その他のログイン方法 -"))
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.82))
+                    VStack(spacing: 16) {
+                        HStack(spacing: 12) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.28))
+                                .frame(height: 1)
 
-                        HStack(spacing: 34) {
-                            thirdPartyButton(
-                                assetName: "WeChatLoginIcon",
-                                style: .assetCircle(
-                                    background: Color(red: 0.18, green: 0.83, blue: 0.39),
-                                    imageScale: 0.84
-                                )
-                            )
-                            thirdPartyButton(assetName: "QQLoginIcon", style: .circle(Color(red: 0.92, green: 0.93, blue: 0.95)))
+                            Text(LT("其他登录方式", "Other sign-in methods", "その他のログイン方法"))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.78))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+
+                            Rectangle()
+                                .fill(Color.white.opacity(0.28))
+                                .frame(height: 1)
+                        }
+
+                        HStack {
+                            Spacer()
                             thirdPartyButton(systemName: "apple.logo", style: .circle(Color.black.opacity(0.88)))
+                            Spacer()
                         }
                     }
+                    .frame(maxWidth: 430)
                     .padding(.bottom, max(proxy.safeAreaInsets.bottom, 22))
                 }
                 .padding(.horizontal, 24)
             }
             .foregroundStyle(.white)
 
-            if let message = appState.errorMessage, !message.isEmpty {
+            if let message = authNoticeMessage, !message.isEmpty {
                 authFloatingNotice(message: message) {
-                    appState.errorMessage = nil
+                    authNoticeMessage = nil
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(10)
             }
         }
         .onAppear {
+            appState.suppressGlobalErrorAlert = true
+            if let message = appState.errorMessage, !message.isEmpty {
+                authNoticeMessage = message
+                appState.errorMessage = nil
+            }
             videoController.start()
         }
         .onDisappear {
             videoController.stop()
             smsCooldownTask?.cancel()
+            appState.errorMessage = nil
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -273,6 +290,7 @@ struct LoginView: View {
                         }
                         .padding(14)
                         .background(inputFieldBackground)
+                        .accessibilityIdentifier("login.emailCodeField")
 
                     Button {
                         Task { await sendEmailCode(scene: "login") }
@@ -366,7 +384,7 @@ struct LoginView: View {
             }
 
             Button {
-                Task { await submitAuth(oneTap: false) }
+                Task { await submitAuth() }
             } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -550,7 +568,11 @@ struct LoginView: View {
         style: ThirdPartyButtonStyle
     ) -> some View {
         Button {
-            appState.errorMessage = LT("第三方登录即将开放，先使用账号登录", "Third-party login is coming soon. Please use account login for now.", "外部ログインは準備中です。先にアカウントログインをご利用ください。")
+            guard hasAgreedTerms else {
+                authNoticeMessage = LT("请先勾选并同意用户服务条款、用户协议和隐私政策。", "Please agree to the user terms, user agreement, and privacy policy first.", "先に利用規約、ユーザー契約、プライバシーポリシーに同意してください。")
+                return
+            }
+            authNoticeMessage = LT("第三方登录即将开放，先使用账号登录", "Third-party login is coming soon. Please use account login for now.", "外部ログインは準備中です。先にアカウントログインをご利用ください。")
             withAnimation(.easeInOut(duration: 0.2)) {
                 showManualLogin = true
             }
@@ -622,6 +644,7 @@ struct LoginView: View {
         focusedField = nil
         dismissKeyboard()
         appState.errorMessage = nil
+        authNoticeMessage = nil
         showRegistrationProfile = true
     }
 
@@ -629,6 +652,9 @@ struct LoginView: View {
         focusedField = nil
         dismissKeyboard()
         if let onContinueBrowsing {
+            appState.errorMessage = nil
+            authNoticeMessage = nil
+            appState.suppressGlobalErrorAlert = false
             onContinueBrowsing()
         } else {
             withAnimation(.easeInOut(duration: 0.22)) {
@@ -659,13 +685,13 @@ struct LoginView: View {
     private func sendSmsCode() async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
-            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
+            authNoticeMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
 
         let normalizedPhone = normalizedPhoneNumber(country: selectedPhoneCountry, phoneNumber: phoneNumber)
         guard !normalizedPhone.isEmpty else {
-            appState.errorMessage = LT("请先输入手机号", "Please enter phone number first.", "電話番号を入力してください。")
+            authNoticeMessage = LT("请先输入手机号", "Please enter phone number first.", "電話番号を入力してください。")
             return
         }
 
@@ -674,9 +700,9 @@ struct LoginView: View {
 
         do {
             firebaseVerificationID = try await sendFirebasePhoneCode(phoneNumber: normalizedPhone)
-            appState.errorMessage = nil
+            authNoticeMessage = nil
         } catch {
-            appState.errorMessage = error.userFacingMessage
+            authNoticeMessage = error.userFacingMessage
             return
         }
         let countdown = 60
@@ -686,13 +712,13 @@ struct LoginView: View {
     private func sendEmailCode(scene: String) async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
-            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
+            authNoticeMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
 
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isValidEmail(normalizedEmail) else {
-            appState.errorMessage = LT("请输入有效邮箱", "Please enter a valid email address.", "有効なメールアドレスを入力してください。")
+            authNoticeMessage = LT("请输入有效邮箱", "Please enter a valid email address.", "有効なメールアドレスを入力してください。")
             return
         }
 
@@ -700,15 +726,18 @@ struct LoginView: View {
         defer { isLoading = false }
 
         guard let expiresInSeconds = await appState.sendEmailAuthCode(email: normalizedEmail, scene: scene) else {
+            authNoticeMessage = appState.errorMessage
+            appState.errorMessage = nil
             return
         }
+        authNoticeMessage = nil
         startSmsCooldown(seconds: min(120, max(1, expiresInSeconds)))
     }
 
-    private func submitAuth(oneTap: Bool) async {
+    private func submitAuth() async {
         guard !isLoading else { return }
         if !hasAgreedTerms {
-            appState.errorMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
+            authNoticeMessage = LT("请先勾选并同意用户协议", "Please agree to the user terms first.", "先に利用規約への同意にチェックしてください。")
             return
         }
 
@@ -720,6 +749,8 @@ struct LoginView: View {
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 code: emailCode.trimmingCharacters(in: .whitespacesAndNewlines)
             )
+            authNoticeMessage = appState.errorMessage
+            appState.errorMessage = nil
             return
         }
 
@@ -732,6 +763,8 @@ struct LoginView: View {
             username: username.trimmingCharacters(in: .whitespacesAndNewlines),
             password: password
         )
+        authNoticeMessage = appState.errorMessage
+        appState.errorMessage = nil
     }
 
     private func sendFirebasePhoneCode(phoneNumber: String) async throws -> String {
@@ -742,11 +775,11 @@ struct LoginView: View {
         let verificationID = firebaseVerificationID.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = smsCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !verificationID.isEmpty else {
-            appState.errorMessage = LT("请先发送验证码", "Please send a verification code first.", "先に認証コードを送信してください。")
+            authNoticeMessage = LT("请先发送验证码", "Please send a verification code first.", "先に認証コードを送信してください。")
             return
         }
         guard !code.isEmpty else {
-            appState.errorMessage = LT("请输入验证码", "Please enter the verification code.", "認証コードを入力してください。")
+            authNoticeMessage = LT("请输入验证码", "Please enter the verification code.", "認証コードを入力してください。")
             return
         }
 
@@ -758,8 +791,10 @@ struct LoginView: View {
             let result = try await Auth.auth().signIn(with: credential)
             let idToken = try await result.user.getIDToken()
             await appState.loginWithFirebasePhoneIdToken(idToken)
+            authNoticeMessage = appState.errorMessage
+            appState.errorMessage = nil
         } catch {
-            appState.errorMessage = error.userFacingMessage
+            authNoticeMessage = error.userFacingMessage
         }
     }
 }
@@ -1829,7 +1864,6 @@ private struct RegisterProfileView: View {
     private var canVerifyEmail: Bool {
         isValidEmail(registerEmail)
             && !registerEmailCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && hasAgreedTerms
     }
 
     private var registerFloatingNoticeMessage: String? {

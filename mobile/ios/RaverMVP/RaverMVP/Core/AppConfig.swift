@@ -203,6 +203,10 @@ enum AppConfig {
 #endif
     }
 
+    static var shouldExposeRealNameControls: Bool {
+        isRealNameEnforcementEnabled
+    }
+
     static var isRealNameEnforcementEnabled: Bool {
 #if DEBUG
         if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_REAL_NAME_ENFORCEMENT_ENABLED"]) {
@@ -216,7 +220,7 @@ enum AppConfig {
 
         return false
 #else
-        true
+        false
 #endif
     }
 
