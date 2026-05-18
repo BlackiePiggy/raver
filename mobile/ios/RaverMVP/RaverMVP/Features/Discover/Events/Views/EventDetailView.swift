@@ -4579,12 +4579,15 @@ struct EventDetailView: View {
 
     private func prefetchManualCacheImages(from snapshot: EventManualCacheSnapshot) {
         let event = snapshot.event
-        let rawURLs = [event.coverAssetURL]
-            + event.lineupAssetURLs
-            + event.timetableAssetURLs
-            + snapshot.relatedEventSets.compactMap(\.thumbnailUrl)
-            + snapshot.relatedArticles.compactMap(\.coverImageURL)
-            + lineupAvatarURLs(for: Array(lineupDJEntries(for: event, sortMode: lineupSortMode).prefix(24)))
+        var rawURLs: [String?] = []
+        rawURLs.append(event.coverAssetURL)
+        rawURLs.append(contentsOf: event.lineupAssetURLs)
+        rawURLs.append(contentsOf: event.timetableAssetURLs)
+        rawURLs.append(contentsOf: snapshot.relatedEventSets.map(\.thumbnailUrl))
+        rawURLs.append(contentsOf: snapshot.relatedArticles.map(\.coverImageURL))
+
+        let lineupEntries = Array(lineupDJEntries(for: event, sortMode: lineupSortMode).prefix(24))
+        rawURLs.append(contentsOf: lineupAvatarURLs(for: lineupEntries))
 
         let urls = rawURLs
             .compactMap(AppConfig.resolvedURLString)

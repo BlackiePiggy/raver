@@ -187,6 +187,7 @@ actor MockSocialService: SocialService {
             username: currentUser.username,
             displayName: currentUser.displayName,
             bio: "",
+            location: nil,
             avatarURL: currentUser.avatarURL,
             tags: [],
             isFollowersListPublic: true,
@@ -2150,6 +2151,7 @@ actor MockSocialService: SocialService {
         usersByID[currentUser.id]?.displayName = displayName
         profilesByID[currentUser.id]?.displayName = displayName
         profilesByID[currentUser.id]?.bio = input.bio.trimmingCharacters(in: .whitespacesAndNewlines)
+        profilesByID[currentUser.id]?.location = input.location?.trimmingCharacters(in: .whitespacesAndNewlines)
         profilesByID[currentUser.id]?.tags = input.tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         profilesByID[currentUser.id]?.isFollowersListPublic = input.isFollowersListPublic
         profilesByID[currentUser.id]?.isFollowingListPublic = input.isFollowingListPublic
@@ -2650,6 +2652,7 @@ actor MockSocialService: SocialService {
                 username: currentUser.username,
                 displayName: currentUser.displayName,
                 bio: "MVP 阶段个人简介，后续由 BFF 聚合 Mastodon 资料和业务字段。",
+                location: "CN:Shanghai",
                 avatarURL: currentUser.avatarURL,
                 tags: ["Techno", "House"],
                 isFollowersListPublic: true,
@@ -2668,6 +2671,7 @@ actor MockSocialService: SocialService {
                 username: alice.username,
                 displayName: alice.displayName,
                 bio: "这是 Anya 的公开主页（Mock 数据）。",
+                location: "JP:Tokyo",
                 avatarURL: alice.avatarURL,
                 tags: ["EDM", "Melodic"],
                 isFollowersListPublic: true,
@@ -2686,6 +2690,7 @@ actor MockSocialService: SocialService {
                 username: bob.username,
                 displayName: bob.displayName,
                 bio: "这是 Hao 的公开主页（Mock 数据）。",
+                location: "CN:Chengdu",
                 avatarURL: bob.avatarURL,
                 tags: ["Trance"],
                 isFollowersListPublic: true,

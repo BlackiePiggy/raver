@@ -14,17 +14,8 @@ struct SaveProfileUseCase {
         bio: String,
         tagsText: String,
         isFollowersListPublic: Bool,
-        isFollowingListPublic: Bool,
-        pendingAvatarData: Data?
+        isFollowingListPublic: Bool
     ) async throws -> UserProfile {
-        if let data = pendingAvatarData {
-            _ = try await repository.uploadMyAvatar(
-                imageData: data,
-                fileName: "avatar.jpg",
-                mimeType: "image/jpeg"
-            )
-        }
-
         let tags = tagsText
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -57,7 +48,6 @@ final class EditProfileViewModel: ObservableObject {
         tagsText: String,
         isFollowersListPublic: Bool,
         isFollowingListPublic: Bool,
-        pendingAvatarData: Data?
     ) async -> UserProfile? {
         isSaving = true
         defer { isSaving = false }
@@ -68,8 +58,7 @@ final class EditProfileViewModel: ObservableObject {
                 bio: bio,
                 tagsText: tagsText,
                 isFollowersListPublic: isFollowersListPublic,
-                isFollowingListPublic: isFollowingListPublic,
-                pendingAvatarData: pendingAvatarData
+                isFollowingListPublic: isFollowingListPublic
             )
             error = nil
             return updated
@@ -80,11 +69,25 @@ final class EditProfileViewModel: ObservableObject {
     }
 }
 
+private extension UIImage {
+    func resizedForProfileAvatar(maxPixel: CGFloat) -> UIImage? {
+        let longest = max(size.width, size.height)
+        guard longest > maxPixel else { return self }
+        let scale = maxPixel / longest
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        return renderer.image {
+            _ in draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+    }
+}
+
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
 
     @StateObject private var viewModel: EditProfileViewModel
+    private let repository: ProfileUserRepository
     private let onSaved: (UserProfile) -> Void
 
     @State private var displayName: String
@@ -103,6 +106,7 @@ struct EditProfileView: View {
         onSaved: @escaping (UserProfile) -> Void
     ) {
         _viewModel = StateObject(wrappedValue: EditProfileViewModel(repository: repository))
+        self.repository = repository
         self.onSaved = onSaved
         self.currentAvatarURL = profile.avatarURL
         _displayName = State(initialValue: profile.displayName)
@@ -125,6 +129,10 @@ struct EditProfileView: View {
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
                     }
+                }
+
+                if let error = viewModel.error, !error.isEmpty {
+                    FormStatusMessage(message: error, style: .error)
                 }
 
                 VStack(spacing: 12) {
@@ -214,18 +222,21 @@ struct EditProfileView: View {
             guard !appState.accountEnforcementStatus.blocks(.mediaUpload) else { return }
             Task {
                 if let data = try? await newItem.loadTransferable(type: Data.self) {
-                    pendingAvatarData = data
+                    await applyPickedAvatarData(data)
                 }
             }
         }
-        .alert(LT("保存失败", "Save Failed", "保存に失敗しました"), isPresented: Binding(
-            get: { viewModel.error != nil },
-            set: { if !$0 { viewModel.error = nil } }
-        )) {
-            Button(LT("确定", "OK", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.error ?? "")
+    }
+
+    private static func preparedAvatarData(from data: Data) -> Data {
+        guard
+            let image = UIImage(data: data),
+            let resized = image.resizedForProfileAvatar(maxPixel: 512),
+            let jpegData = resized.jpegData(compressionQuality: 0.78)
+        else {
+            return data
         }
+        return jpegData
     }
 
     private func dismissKeyboard() {
@@ -259,19 +270,62 @@ struct EditProfileView: View {
     }
 
     @MainActor
+    private func applyPickedAvatarData(_ data: Data) async {
+        let prepared = Self.preparedAvatarData(from: data)
+        pendingAvatarData = prepared
+        guard let userId = appState.session?.user.id else { return }
+        do {
+            let localURL = try LocalProfileAvatarCache.save(imageData: prepared, userId: userId)
+            let localAvatarURL = localURL.absoluteString
+            appState.updateCurrentUserAvatarURL(localAvatarURL)
+            if let snapshot = appState.currentUserProfileSnapshot(avatarURL: localAvatarURL) {
+                NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
+            }
+            Task {
+                await uploadAvatarInBackground(prepared)
+            }
+        } catch {
+            viewModel.error = error.userFacingMessage
+        }
+    }
+
+    private func uploadAvatarInBackground(_ avatarData: Data) async {
+        do {
+            let uploaded = try await repository.uploadMyAvatar(
+                imageData: avatarData,
+                fileName: "avatar.jpg",
+                mimeType: "image/jpeg"
+            )
+            await MainActor.run {
+                appState.updateCurrentUserAvatarURL(uploaded.avatarURL)
+                if let snapshot = appState.currentUserProfileSnapshot(avatarURL: uploaded.avatarURL) {
+                    NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
+                }
+            }
+        } catch {
+            await MainActor.run {
+                viewModel.error = LT("头像正在本地显示，上传失败后可稍后重试。", "Your avatar is shown locally. Upload failed; please retry later.", "アイコンはローカル表示中です。アップロードに失敗したため後でもう一度お試しください。")
+            }
+        }
+    }
+
+    @MainActor
     private func save() async {
         guard !appState.accountEnforcementStatus.blocks(.profileUpdate) else {
             viewModel.error = appState.accountEnforcementStatus.restrictionSummary
             return
         }
-        if let updated = await viewModel.saveProfile(
+        if var updated = await viewModel.saveProfile(
             displayName: displayName,
             bio: bio,
             tagsText: tagsText,
             isFollowersListPublic: isFollowersListPublic,
-            isFollowingListPublic: isFollowingListPublic,
-            pendingAvatarData: pendingAvatarData
+            isFollowingListPublic: isFollowingListPublic
         ) {
+            if let currentAvatarURL = appState.session?.user.avatarURL,
+               URL(string: currentAvatarURL)?.isFileURL == true {
+                updated.avatarURL = currentAvatarURL
+            }
             onSaved(updated)
             dismiss()
         }

@@ -635,6 +635,7 @@ struct UserProfile: Codable, Identifiable {
     var username: String
     var displayName: String
     var bio: String
+    var location: String?
     var avatarURL: String?
     var qrCodeURL: String? = nil
     var tags: [String]
@@ -1321,9 +1322,26 @@ struct UpdatePostInput: Codable {
 struct UpdateMyProfileInput: Codable {
     var displayName: String
     var bio: String
+    var location: String?
     var tags: [String]
     var isFollowersListPublic: Bool
     var isFollowingListPublic: Bool
+
+    init(
+        displayName: String,
+        bio: String,
+        location: String? = nil,
+        tags: [String],
+        isFollowersListPublic: Bool,
+        isFollowingListPublic: Bool
+    ) {
+        self.displayName = displayName
+        self.bio = bio
+        self.location = location
+        self.tags = tags
+        self.isFollowersListPublic = isFollowersListPublic
+        self.isFollowingListPublic = isFollowingListPublic
+    }
 }
 
 struct AvatarUploadResponse: Codable {

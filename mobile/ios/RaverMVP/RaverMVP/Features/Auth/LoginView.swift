@@ -24,7 +24,6 @@ struct LoginView: View {
     @State private var hasAgreedTerms = false
     @State private var showManualLogin = false
     @State private var showRegistrationProfile = false
-    @State private var showTermsRequiredAlert = false
     @StateObject private var videoController = LoginBackgroundVideoController()
     @FocusState private var focusedField: ManualAuthField?
 
@@ -134,7 +133,7 @@ struct LoginView: View {
 
                         Button {
                             guard hasAgreedTerms else {
-                                showTermsRequiredAlert = true
+                                appState.errorMessage = LT("请先勾选并同意用户服务条款、用户协议和隐私政策。", "Please agree to the user terms, user agreement, and privacy policy first.", "先に利用規約、ユーザー契約、プライバシーポリシーに同意してください。")
                                 return
                             }
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
@@ -191,6 +190,14 @@ struct LoginView: View {
                 .padding(.horizontal, 24)
             }
             .foregroundStyle(.white)
+
+            if let message = appState.errorMessage, !message.isEmpty {
+                authFloatingNotice(message: message) {
+                    appState.errorMessage = nil
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(10)
+            }
         }
         .onAppear {
             videoController.start()
@@ -214,14 +221,6 @@ struct LoginView: View {
             RegisterProfileView(hasAgreedTerms: $hasAgreedTerms)
                 .environmentObject(appState)
                 .interactiveDismissDisabled(true)
-        }
-        .alert(
-            LT("请先同意用户条款", "Please Agree to the Terms", "利用規約に同意してください"),
-            isPresented: $showTermsRequiredAlert
-        ) {
-            Button(LT("知道了", "OK", "OK"), role: .cancel) {}
-        } message: {
-            Text(LT("选择其他手机号登录前，需要先勾选并同意用户服务条款、用户协议和隐私政策。", "Please check and agree to the user terms, user agreement, and privacy policy before using another phone number.", "別の電話番号でログインする前に、利用規約、ユーザー契約、プライバシーポリシーに同意してください。"))
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -398,14 +397,6 @@ struct LoginView: View {
             .buttonStyle(.plain)
             .disabled(isLoading)
             .accessibilityIdentifier("login.registerFromManualButton")
-
-            if let error = appState.errorMessage, !error.isEmpty {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.82))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("login.errorText")
-            }
         }
         .padding(14)
         .background(
@@ -449,6 +440,49 @@ struct LoginView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.white.opacity(0.2), lineWidth: 1)
             )
+    }
+
+    private func authFloatingNotice(message: String, onDismiss: @escaping () -> Void) -> some View {
+        VStack {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(red: 1, green: 0.76, blue: 0.42))
+
+                Text(message)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("login.errorText")
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(LT("关闭", "Close", "閉じる"))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.black.opacity(0.76))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.28), radius: 18, y: 8)
+            .padding(.horizontal, 24)
+            .padding(.top, 58)
+
+            Spacer()
+        }
+        .animation(.easeInOut(duration: 0.2), value: message)
     }
 
     private func manualPhoneNumberInput(
@@ -749,6 +783,87 @@ private struct RegisterOnboardingGenreOption: Identifiable, Hashable {
     let level: Int
 }
 
+private struct RegisterCityOption: Identifiable, Hashable {
+    let id: String
+    let zhName: String
+    let enName: String
+    let jaName: String
+
+    var localizedName: String {
+        LT(zhName, enName, jaName)
+    }
+}
+
+private struct RegisterCountryOption: Identifiable, Hashable {
+    let code: String
+    let zhName: String
+    let enName: String
+    let jaName: String
+    let cities: [RegisterCityOption]
+
+    var id: String { code }
+
+    var localizedName: String {
+        LT(zhName, enName, jaName)
+    }
+}
+
+private enum RegisterCityCatalog {
+    static let defaultCountryCode = "CN"
+    static let defaultCityID = "Shanghai"
+
+    static let countries: [RegisterCountryOption] = [
+        RegisterCountryOption(
+            code: "CN",
+            zhName: "中国",
+            enName: "China",
+            jaName: "中国",
+            cities: [
+                RegisterCityOption(id: "Shanghai", zhName: "上海", enName: "Shanghai", jaName: "上海"),
+                RegisterCityOption(id: "Beijing", zhName: "北京", enName: "Beijing", jaName: "北京"),
+                RegisterCityOption(id: "Guangzhou", zhName: "广州", enName: "Guangzhou", jaName: "広州"),
+                RegisterCityOption(id: "Shenzhen", zhName: "深圳", enName: "Shenzhen", jaName: "深セン"),
+                RegisterCityOption(id: "Chengdu", zhName: "成都", enName: "Chengdu", jaName: "成都"),
+                RegisterCityOption(id: "Hangzhou", zhName: "杭州", enName: "Hangzhou", jaName: "杭州"),
+                RegisterCityOption(id: "Wuhan", zhName: "武汉", enName: "Wuhan", jaName: "武漢"),
+                RegisterCityOption(id: "Chongqing", zhName: "重庆", enName: "Chongqing", jaName: "重慶"),
+                RegisterCityOption(id: "Nanjing", zhName: "南京", enName: "Nanjing", jaName: "南京"),
+                RegisterCityOption(id: "Xian", zhName: "西安", enName: "Xi'an", jaName: "西安"),
+                RegisterCityOption(id: "Tianjin", zhName: "天津", enName: "Tianjin", jaName: "天津"),
+                RegisterCityOption(id: "Suzhou", zhName: "苏州", enName: "Suzhou", jaName: "蘇州"),
+                RegisterCityOption(id: "Qingdao", zhName: "青岛", enName: "Qingdao", jaName: "青島"),
+                RegisterCityOption(id: "Xiamen", zhName: "厦门", enName: "Xiamen", jaName: "厦門"),
+                RegisterCityOption(id: "Changsha", zhName: "长沙", enName: "Changsha", jaName: "長沙"),
+            ]
+        ),
+        RegisterCountryOption(
+            code: "JP",
+            zhName: "日本",
+            enName: "Japan",
+            jaName: "日本",
+            cities: [
+                RegisterCityOption(id: "Tokyo", zhName: "东京", enName: "Tokyo", jaName: "東京"),
+                RegisterCityOption(id: "Osaka", zhName: "大阪", enName: "Osaka", jaName: "大阪"),
+                RegisterCityOption(id: "Kyoto", zhName: "京都", enName: "Kyoto", jaName: "京都"),
+                RegisterCityOption(id: "Nagoya", zhName: "名古屋", enName: "Nagoya", jaName: "名古屋"),
+                RegisterCityOption(id: "Fukuoka", zhName: "福冈", enName: "Fukuoka", jaName: "福岡"),
+                RegisterCityOption(id: "Sapporo", zhName: "札幌", enName: "Sapporo", jaName: "札幌"),
+                RegisterCityOption(id: "Yokohama", zhName: "横滨", enName: "Yokohama", jaName: "横浜"),
+                RegisterCityOption(id: "Kobe", zhName: "神户", enName: "Kobe", jaName: "神戸"),
+                RegisterCityOption(id: "Hiroshima", zhName: "广岛", enName: "Hiroshima", jaName: "広島"),
+                RegisterCityOption(id: "Chiba", zhName: "千叶", enName: "Chiba", jaName: "千葉"),
+                RegisterCityOption(id: "Saitama", zhName: "埼玉", enName: "Saitama", jaName: "埼玉"),
+                RegisterCityOption(id: "Sendai", zhName: "仙台", enName: "Sendai", jaName: "仙台"),
+                RegisterCityOption(id: "Naha", zhName: "那霸", enName: "Naha", jaName: "那覇"),
+            ]
+        ),
+    ]
+
+    static func country(for code: String) -> RegisterCountryOption {
+        countries.first(where: { $0.code == code }) ?? countries[0]
+    }
+}
+
 private struct FlexibleWrapLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8
@@ -836,6 +951,8 @@ private struct RegisterProfileView: View {
     @State private var selectedBirthDate = Calendar(identifier: .gregorian).date(
         from: DateComponents(year: Calendar(identifier: .gregorian).component(.year, from: Date()) - 18, month: 1, day: 1)
     ) ?? Date()
+    @State private var selectedRegistrationCountryCode = RegisterCityCatalog.defaultCountryCode
+    @State private var selectedRegistrationCityID = RegisterCityCatalog.defaultCityID
     @State private var displayNameAvailability: DisplayNameAvailabilityState = .idle
     @State private var displayNameAvailabilityTask: Task<Void, Never>?
     @State private var selectedAvatarItem: PhotosPickerItem?
@@ -913,6 +1030,15 @@ private struct RegisterProfileView: View {
                 welcomeOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
+
+            if let notice = registerFloatingNoticeMessage {
+                registerFloatingNotice(message: notice) {
+                    registrationErrorMessage = nil
+                    onboardingErrorMessage = nil
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(10)
+            }
         }
         .foregroundStyle(.white)
         .onChange(of: selectedAvatarItem) { _, newItem in
@@ -944,7 +1070,6 @@ private struct RegisterProfileView: View {
                 emailVerificationFields
                 termsToggle
                 emailVerificationButton
-                errorText
             }
             .padding(.horizontal, 24)
             .padding(.top, 22)
@@ -961,7 +1086,6 @@ private struct RegisterProfileView: View {
                 avatarPicker
                 profileFields
                 submitButton
-                errorText
             }
             .padding(.horizontal, 24)
             .padding(.top, 22)
@@ -985,12 +1109,6 @@ private struct RegisterProfileView: View {
                     onboardingSubmitButton
                 }
 
-                if let error = onboardingErrorMessage, !error.isEmpty {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.82))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 22)
@@ -1065,7 +1183,7 @@ private struct RegisterProfileView: View {
             HStack {
                 Spacer()
                 Button {
-                    enterApp()
+                    presentWelcomeCard()
                 } label: {
                     Text(LT("跳过", "Skip", "スキップ"))
                         .font(.system(size: 15, weight: .semibold))
@@ -1088,6 +1206,19 @@ private struct RegisterProfileView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var selectedRegistrationCountry: RegisterCountryOption {
+        RegisterCityCatalog.country(for: selectedRegistrationCountryCode)
+    }
+
+    private var selectedRegistrationCity: RegisterCityOption {
+        selectedRegistrationCountry.cities.first(where: { $0.id == selectedRegistrationCityID })
+        ?? selectedRegistrationCountry.cities[0]
+    }
+
+    private var selectedRegistrationLocationValue: String {
+        "\(selectedRegistrationCountry.code):\(selectedRegistrationCity.id)"
     }
 
     private var avatarPicker: some View {
@@ -1221,6 +1352,8 @@ private struct RegisterProfileView: View {
             if compliancePolicy.requiresAgeDeclaration {
                 birthDatePicker
             }
+
+            registrationCityPicker
         }
     }
 
@@ -1270,7 +1403,7 @@ private struct RegisterProfileView: View {
     private var birthDatePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             DatePicker(
-                LT("出生年月日", "Date of Birth", "生年月日"),
+                LT("出生日期", "Date of Birth", "生年月日"),
                 selection: $selectedBirthDate,
                 in: birthDateRange,
                 displayedComponents: .date
@@ -1280,11 +1413,76 @@ private struct RegisterProfileView: View {
             .background(fieldBackground)
             .accessibilityIdentifier("register.birthDatePicker")
 
-            Text(LT("出生年月日仅用于年龄分级和未成年人安全保护。", "Date of birth is used only for age rating and minor safety protections.", "生年月日は年齢区分と未成年者保護のためにのみ使用されます。"))
+            Text(LT("出生日期仅用于年龄分级和未成年人安全保护。", "Date of birth is used only for age rating and minor safety protections.", "生年月日は年齢区分と未成年者保護のためにのみ使用されます。"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.58))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var registrationCityPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(LT("常驻城市", "Home City", "居住都市"))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.74))
+
+            HStack(spacing: 10) {
+                Menu {
+                    ForEach(RegisterCityCatalog.countries) { country in
+                        Button(country.localizedName) {
+                            selectedRegistrationCountryCode = country.code
+                            selectedRegistrationCityID = country.cities.first?.id ?? selectedRegistrationCityID
+                        }
+                    }
+                } label: {
+                    registerPickerToken(
+                        title: selectedRegistrationCountry.localizedName,
+                        icon: "globe.asia.australia.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Menu {
+                    ForEach(selectedRegistrationCountry.cities) { city in
+                        Button(city.localizedName) {
+                            selectedRegistrationCityID = city.id
+                        }
+                    }
+                } label: {
+                    registerPickerToken(
+                        title: selectedRegistrationCity.localizedName,
+                        icon: "location.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text(LT("会用于后续优先推荐你附近和同地区的活动。", "Used later to prioritize nearby and regional events.", "今後、近隣や同じ地域のイベント推薦に使われます。"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.58))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func registerPickerToken(title: String, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.94))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.48))
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 50)
+        .frame(maxWidth: .infinity)
+        .background(fieldBackground)
     }
 
     private var termsToggle: some View {
@@ -1307,15 +1505,24 @@ private struct RegisterProfileView: View {
     }
 
     private var onboardingLoadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView().tint(.white)
-            Text(LT("正在准备推荐", "Preparing picks", "おすすめを準備中"))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.68))
+        VStack(alignment: .leading, spacing: 16) {
+            InlineLoadingBadge(title: LT("正在更新偏好选项", "Updating preference options", "好みの候補を更新中"))
+                .tint(.white)
+
+            VStack(spacing: 10) {
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(height: 88)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+                }
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 46)
-        .background(fieldBackground)
+        .padding(.vertical, 8)
     }
 
     private var onboardingGenreSection: some View {
@@ -1367,20 +1574,25 @@ private struct RegisterProfileView: View {
         subtitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.96))
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.56))
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.white.opacity(0.84))
+                    .frame(width: 3, height: 34)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.96))
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.56))
+                }
             }
 
             content()
         }
-        .padding(16)
-        .background(fieldBackground)
+        .padding(.vertical, 6)
     }
 
     private func onboardingChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -1388,16 +1600,16 @@ private struct RegisterProfileView: View {
             HStack(spacing: 0) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.black.opacity(0.88) : Color.white.opacity(0.84))
+                    .foregroundStyle(isSelected ? Color.black.opacity(0.9) : Color.white.opacity(0.88))
                     .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
             .background(
-                Capsule().fill(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.11))
+                Capsule().fill(isSelected ? Color.white.opacity(0.94) : Color.white.opacity(0.16))
             )
             .overlay(
-                Capsule().stroke(Color.white.opacity(isSelected ? 0.0 : 0.18), lineWidth: 1)
+                Capsule().stroke(Color.white.opacity(isSelected ? 0.0 : 0.24), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -1426,13 +1638,40 @@ private struct RegisterProfileView: View {
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isSelected ? .white.opacity(0.94) : .white.opacity(0.42))
+                    .foregroundStyle(isSelected ? Color.black.opacity(0.82) : .white.opacity(0.42))
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(isSelected ? Color.white.opacity(0.9) : Color.clear)
+                    )
             }
-            .padding(10)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.07))
+                UnevenRoundedRectangle(
+                    cornerRadii: RectangleCornerRadii(
+                        topLeading: 4,
+                        bottomLeading: 4,
+                        bottomTrailing: 20,
+                        topTrailing: 20
+                    ),
+                    style: .continuous
+                )
+                .fill(
+                    LinearGradient(
+                        colors: isSelected
+                        ? [Color.white.opacity(0.26), Color.white.opacity(0.12)]
+                        : [Color.white.opacity(0.12), Color.white.opacity(0.06)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
             )
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.28))
+                    .frame(width: 3)
+            }
         }
         .buttonStyle(.plain)
     }
@@ -1442,39 +1681,47 @@ private struct RegisterProfileView: View {
         return Button {
             toggleDJSelection(dj.id)
         } label: {
-            VStack(spacing: 8) {
-                ZStack(alignment: .topTrailing) {
+            VStack(spacing: 9) {
+                ZStack {
+                    if isSelected {
+                        Circle()
+                            .fill(Color.white.opacity(0.18))
+                            .frame(width: 78, height: 78)
+                            .blur(radius: 7)
+                    }
+
                     onboardingRemoteArtwork(
                         urlString: AppConfig.resolvedDJAvatarURLString(dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl, size: .small),
                         fallbackIcon: "music.mic",
-                        size: 58
+                        size: 64
                     )
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? Color.white.opacity(0.96) : Color.white.opacity(0.18), lineWidth: isSelected ? 3 : 1)
+                    )
+                    .shadow(color: isSelected ? Color.white.opacity(0.24) : Color.black.opacity(0.22), radius: isSelected ? 12 : 5, x: 0, y: 6)
 
                     if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
-                            .offset(x: 4, y: -4)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(Color.black.opacity(0.86))
+                            .frame(width: 23, height: 23)
+                            .background(Circle().fill(Color.white.opacity(0.96)))
+                            .offset(x: 24, y: -24)
+                            .shadow(color: .black.opacity(0.28), radius: 5, x: 0, y: 3)
                     }
                 }
+                .frame(width: 86, height: 78)
 
                 Text(dj.name)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(isSelected ? .white.opacity(0.98) : .white.opacity(0.78))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.07))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.white.opacity(isSelected ? 0.34 : 0.1), lineWidth: 1)
-            )
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -1621,17 +1868,6 @@ private struct RegisterProfileView: View {
         .accessibilityIdentifier("register.verifyEmailButton")
     }
 
-    @ViewBuilder
-    private var errorText: some View {
-        if let error = registrationErrorMessage, !error.isEmpty {
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(Color(red: 1, green: 0.82, blue: 0.82))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("register.errorText")
-        }
-    }
-
     private var canSubmit: Bool {
         currentPage == .profile
             && isValidEmail(registerEmail)
@@ -1646,6 +1882,16 @@ private struct RegisterProfileView: View {
         isValidEmail(registerEmail)
             && !registerEmailCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && hasAgreedTerms
+    }
+
+    private var registerFloatingNoticeMessage: String? {
+        if let message = registrationErrorMessage, !message.isEmpty {
+            return message
+        }
+        if let message = onboardingErrorMessage, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     private var birthDateRange: ClosedRange<Date> {
@@ -1675,6 +1921,48 @@ private struct RegisterProfileView: View {
 
     private func registerPlaceholder(_ title: String) -> Text {
         Text(title).foregroundColor(.white.opacity(0.82))
+    }
+
+    private func registerFloatingNotice(message: String, onDismiss: @escaping () -> Void) -> some View {
+        VStack {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(red: 1, green: 0.76, blue: 0.42))
+
+                Text(message)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(LT("关闭", "Close", "閉じる"))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.black.opacity(0.78))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.28), radius: 18, y: 8)
+            .padding(.horizontal, 24)
+            .padding(.top, 58)
+
+            Spacer()
+        }
+        .animation(.easeInOut(duration: 0.2), value: message)
     }
 
     private func ageBand(for birthDate: Date, now: Date = Date()) -> UserAgeBand {
@@ -1809,12 +2097,24 @@ private struct RegisterProfileView: View {
 
         registrationErrorMessage = nil
 
+        Task {
+            await saveRegistrationLocationInBackground(selectedRegistrationLocationValue)
+        }
+
         withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
             currentPage = .preferences
         }
 
         if let selectedAvatarData {
             let avatarData = selectedAvatarData
+            if let userId = appState.session?.user.id,
+               let localURL = try? LocalProfileAvatarCache.save(imageData: avatarData, userId: userId) {
+                let localAvatarURL = localURL.absoluteString
+                appState.updateCurrentUserAvatarURL(localAvatarURL)
+                if let snapshot = appState.currentUserProfileSnapshot(avatarURL: localAvatarURL) {
+                    NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
+                }
+            }
             Task {
                 await uploadRegistrationAvatarInBackground(avatarData)
             }
@@ -1860,6 +2160,27 @@ private struct RegisterProfileView: View {
         }
     }
 
+    private func saveRegistrationLocationInBackground(_ location: String) async {
+        guard !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        do {
+            let profile = try await appContainer.profileUserRepository.fetchMyProfile()
+            let updated = try await appContainer.profileUserRepository.updateMyProfile(
+                input: UpdateMyProfileInput(
+                    displayName: profile.displayName,
+                    bio: profile.bio,
+                    location: location,
+                    tags: profile.tags,
+                    isFollowersListPublic: profile.isFollowersListPublic,
+                    isFollowingListPublic: profile.isFollowingListPublic
+                )
+            )
+            appState.applyCurrentUserProfile(updated)
+            NotificationCenter.default.post(name: .profileDidUpdate, object: updated)
+        } catch {
+            onboardingErrorMessage = LT("城市保存失败，请稍后在个人资料中更新", "Could not save city. Update it from your profile later.", "都市を保存できませんでした。後ほどプロフィールで更新してください。")
+        }
+    }
+
     private func submitOnboardingPreferences() async {
         guard !isSavingOnboarding else { return }
         isSavingOnboarding = true
@@ -1879,6 +2200,7 @@ private struct RegisterProfileView: View {
                     input: UpdateMyProfileInput(
                         displayName: profile.displayName,
                         bio: profile.bio,
+                        location: profile.location,
                         tags: mergedTags,
                         isFollowersListPublic: profile.isFollowersListPublic,
                         isFollowingListPublic: profile.isFollowingListPublic
@@ -1913,9 +2235,7 @@ private struct RegisterProfileView: View {
             }
 
             onboardingErrorMessage = nil
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                showWelcomeCard = true
-            }
+            presentWelcomeCard()
         } catch {
             onboardingErrorMessage = error.userFacingMessage ?? LT("保存失败，请稍后重试。", "Could not save. Please try again later.", "保存できませんでした。時間をおいて再試行してください。")
         }
@@ -1951,6 +2271,12 @@ private struct RegisterProfileView: View {
         }
         appState.finishRegistrationOnboarding()
         dismiss()
+    }
+
+    private func presentWelcomeCard() {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            showWelcomeCard = true
+        }
     }
 
     private static func sampleGenreOptions(from roots: [LearnGenreNode], limit: Int) -> [RegisterOnboardingGenreOption] {
@@ -2048,8 +2374,8 @@ private struct RegisterProfileView: View {
     private static func preparedAvatarData(from data: Data) -> Data {
         guard
             let image = UIImage(data: data),
-            let resized = image.resizedForRegistrationAvatar(maxPixel: 1024),
-            let jpegData = resized.jpegData(compressionQuality: 0.86)
+            let resized = image.resizedForRegistrationAvatar(maxPixel: 512),
+            let jpegData = resized.jpegData(compressionQuality: 0.78)
         else {
             return data
         }

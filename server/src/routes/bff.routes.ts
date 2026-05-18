@@ -197,13 +197,24 @@ const uploadUserAvatarToOss = async (
 
   const ext = extensionForMimeType(file.mimetype);
   const objectKey = `${ossUserAvatarsPrefix}/${userId}/avatar-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+  const putStartedAt = Date.now();
   const result = await ossClient.put(objectKey, file.buffer, {
     headers: {
       'Content-Type': file.mimetype,
       'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Disposition': 'inline',
     },
   });
+  console.info('[perf]', {
+    scope: 'profile.avatar_upload',
+    step: 'oss_put',
+    durationMs: Date.now() - putStartedAt,
+    userId,
+    sizeBytes: file.size,
+    mimeType: file.mimetype,
+  });
   const url = securePublicAssetUrl(result.url, objectKey);
+  const registerStartedAt = Date.now();
   const asset = await mediaAssetService.register({
     ownerType: 'user',
     ownerId: userId,
@@ -218,6 +229,12 @@ const uploadUserAvatarToOss = async (
       originalName: file.originalname,
       source: 'v1/profile/me/avatar',
     },
+  });
+  console.info('[perf]', {
+    scope: 'profile.avatar_upload',
+    step: 'media_asset_register',
+    durationMs: Date.now() - registerStartedAt,
+    userId,
   });
   return {
     assetId: asset.id,
@@ -11228,6 +11245,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
           role: true,
           displayName: true,
           bio: true,
+          location: true,
           avatarUrl: true,
           favoriteGenres: true,
           isFollowersListPublic: true,
@@ -11274,6 +11292,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       role: user.role,
       displayName: user.displayName || user.username,
       bio: user.bio || '',
+      location: user.location || null,
       avatarURL: user.avatarUrl,
       tags: user.favoriteGenres,
       isFollowersListPublic: user.isFollowersListPublic,
@@ -11302,6 +11321,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
     const body = req.body as {
       displayName?: string;
       bio?: string;
+      location?: string | null;
       tags?: unknown;
       isFollowersListPublic?: boolean;
       isFollowingListPublic?: boolean;
@@ -11313,6 +11333,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       displayNameStatus?: string;
       displayNameReviewNote?: string | null;
       bio?: string;
+      location?: string | null;
       favoriteGenres?: string[];
       isFollowersListPublic?: boolean;
       isFollowingListPublic?: boolean;
@@ -11348,6 +11369,13 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
 
     if (typeof body.bio === 'string') {
       data.bio = body.bio.trim();
+    }
+
+    if (typeof body.location === 'string') {
+      const normalizedLocation = body.location.trim().slice(0, 160);
+      data.location = normalizedLocation || null;
+    } else if (body.location === null) {
+      data.location = null;
     }
 
     if (body.tags !== undefined) {
@@ -11389,6 +11417,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
           username: true,
           displayName: true,
           bio: true,
+          location: true,
           avatarUrl: true,
           favoriteGenres: true,
           isFollowersListPublic: true,
@@ -11424,6 +11453,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       username: user.username,
       displayName: user.displayName || user.username,
       bio: user.bio || '',
+      location: user.location || null,
       avatarURL: user.avatarUrl,
       tags: user.favoriteGenres,
       isFollowersListPublic: user.isFollowersListPublic,
@@ -11447,6 +11477,7 @@ router.post(
   optionalAuth,
   avatarUpload.single('avatar'),
   async (req: Request, res: Response): Promise<void> => {
+    const startedAt = Date.now();
     try {
       const userId = requireAuth(req as BFFAuthRequest, res);
       if (!userId) return;
@@ -11457,14 +11488,30 @@ router.post(
         res.status(400).json({ error: 'No file uploaded' });
         return;
       }
+      console.info('[perf]', {
+        scope: 'profile.avatar_upload',
+        step: 'request_received',
+        durationMs: Date.now() - startedAt,
+        userId,
+        sizeBytes: file.size,
+        mimeType: file.mimetype,
+      });
 
+      const previousStartedAt = Date.now();
       const previousUser = await prisma.user.findUnique({
         where: { id: userId },
         select: { avatarUrl: true },
       });
+      console.info('[perf]', {
+        scope: 'profile.avatar_upload',
+        step: 'load_previous_user',
+        durationMs: Date.now() - previousStartedAt,
+        userId,
+      });
 
       const upload = await uploadUserAvatarToOss(userId, file);
       const avatarUrl = upload.url;
+      const updateStartedAt = Date.now();
       await prisma.user.update({
         where: { id: userId },
         data: {
@@ -11474,20 +11521,47 @@ router.post(
         },
         select: { id: true },
       });
+      console.info('[perf]', {
+        scope: 'profile.avatar_upload',
+        step: 'user_update',
+        durationMs: Date.now() - updateStartedAt,
+        userId,
+      });
 
       if (previousUser?.avatarUrl && previousUser.avatarUrl !== avatarUrl) {
+        const replacedStartedAt = Date.now();
         await mediaAssetService.markReplacedByUrl(previousUser.avatarUrl);
+        console.info('[perf]', {
+          scope: 'profile.avatar_upload',
+          step: 'mark_previous_replaced',
+          durationMs: Date.now() - replacedStartedAt,
+          userId,
+        });
       }
 
+      const moderationStartedAt = Date.now();
       await createProfileModerationJob(
         userId,
         'avatar',
         avatarUrl,
         upload.objectKey
       );
+      console.info('[perf]', {
+        scope: 'profile.avatar_upload',
+        step: 'moderation_job',
+        durationMs: Date.now() - moderationStartedAt,
+        userId,
+      });
 
-      await syncTencentIMUserBestEffort(userId, 'bff-profile-avatar');
+      scheduleTencentIMUserSyncBestEffort(userId, 'bff-profile-avatar');
 
+      console.info('[perf]', {
+        scope: 'profile.avatar_upload',
+        step: 'total_before_response',
+        durationMs: Date.now() - startedAt,
+        userId,
+        sizeBytes: file.size,
+      });
       res.status(201).json({ avatarURL: avatarUrl, assetId: upload.assetId });
     } catch (error) {
       console.error('BFF upload avatar error:', error);

@@ -1040,6 +1040,15 @@ private struct ProfileAvatarImage: View {
 
     var body: some View {
         Group {
+            if let avatarURL = profile.avatarURL,
+               let url = URL(string: avatarURL),
+               url.isFileURL,
+               let image = UIImage(contentsOfFile: url.path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .background(fallbackAvatar)
+            } else
             if let resolved = AppConfig.resolvedURLString(profile.avatarURL),
                URL(string: resolved) != nil,
                resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
@@ -1112,6 +1121,15 @@ private struct ProfileAvatarSquareImage: View {
 
     var body: some View {
         Group {
+            if let avatarURL = profile.avatarURL,
+               let url = URL(string: avatarURL),
+               url.isFileURL,
+               let image = UIImage(contentsOfFile: url.path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .background(fallbackAvatar)
+            } else
             if let resolved = AppConfig.resolvedURLString(profile.avatarURL),
                URL(string: resolved) != nil,
                resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {

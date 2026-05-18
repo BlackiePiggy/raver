@@ -79,6 +79,7 @@
 		40DF4B13976013D3C21275ED /* SkeletonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA79F30AEFED7B93AA3310FB /* SkeletonViews.swift */; };
 		41CB9B3BAC790CF7BCF7CAF4 /* DemoAlignedChatViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E4DC2C3FBF429A857DE5513 /* DemoAlignedChatViewController.swift */; };
 		430044327A0BB460A375D3DE /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC843EFC9D73D6230383E286 /* AppConfig.swift */; };
+		ABCD10000000000000000001 /* LocalProfileAvatarCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD10000000000000000002 /* LocalProfileAvatarCache.swift */; };
 		45452C970F2DEDE67834FB2B /* DJsModuleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C424F23B1C4AAD37E21CA78 /* DJsModuleViewModel.swift */; };
 		4648B1AE4E9DD9D110EC7668 /* SquadOfflineActivityBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55145297EC4BB8826B80F3BC /* SquadOfflineActivityBanner.swift */; };
 		46A1C2B9B370620A0364B6C9 /* ChatItemAlignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 593206FEE83459667A0A3851 /* ChatItemAlignment.swift */; };
@@ -504,6 +505,7 @@
 		B9EE9C1CC1953BCD2CE3D07A /* DemoAlignedChatScreenAssemblyConfigurationExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenAssemblyConfigurationExecutor.swift; sourceTree = "<group>"; };
 		BC543D5452CE84A829F88272 /* ChatLayoutAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLayoutAttributes.swift; sourceTree = "<group>"; };
 		BC843EFC9D73D6230383E286 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		ABCD10000000000000000002 /* LocalProfileAvatarCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalProfileAvatarCache.swift; sourceTree = "<group>"; };
 		BEC23F3353BC4547694231A0 /* ImageCacheBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheBootstrap.swift; sourceTree = "<group>"; };
 		C0B72680D6A119DEDC285359 /* SquadProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquadProfileView.swift; sourceTree = "<group>"; };
 		C194ABE02C3044FD290C8708 /* ChatMediaTempFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMediaTempFileStore.swift; sourceTree = "<group>"; };
@@ -1428,6 +1430,7 @@
 				C313C382D0F686C910F91FAE /* AppState.swift */,
 				65BB3130C75701FCEA9E70AA /* Date+Formatting.swift */,
 				BEC23F3353BC4547694231A0 /* ImageCacheBootstrap.swift */,
+				ABCD10000000000000000002 /* LocalProfileAvatarCache.swift */,
 				76E16068958F9015F96D65E5 /* LiveSocialService.swift */,
 				0AAC35F9B28761A61B44E06D /* LiveWebFeatureService.swift */,
 				3E10177408B284AD6125716B /* MockSocialService.swift */,
@@ -1768,6 +1771,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				430044327A0BB460A375D3DE /* AppConfig.swift in Sources */,
+				ABCD10000000000000000001 /* LocalProfileAvatarCache.swift in Sources */,
 				49A4B0896C1C41C009E788CD /* AppContainer.swift in Sources */,
 				50B6DF916DBBBAF3F6DA0A5B /* AppCoordinator.swift in Sources */,
 				1C90A0077163435CBEB4F876 /* AppEnvironment.swift in Sources */,
