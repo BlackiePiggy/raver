@@ -187,9 +187,9 @@ struct AppGuidanceOverlay: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.34),
-                    Color.black.opacity(0.52),
-                    Color.black.opacity(0.38)
+                    Color.black.opacity(0.48),
+                    Color.black.opacity(0.66),
+                    Color.black.opacity(0.54)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -261,24 +261,6 @@ struct AppGuidanceOverlay: View {
 
     private var guideVisual: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.18),
-                            Color.white.opacity(0.05)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
-                )
-                .frame(width: 154, height: 102)
-
             switch step.visualKind {
             case .tap:
                 Circle()
@@ -320,6 +302,7 @@ struct AppGuidanceOverlay: View {
                 .shadow(color: Color(red: 0.16, green: 0.95, blue: 0.92).opacity(0.38), radius: 14, x: 0, y: 0)
                 .shadow(color: Color.black.opacity(0.30), radius: 10, x: 0, y: 5)
         }
+        .frame(width: 154, height: 102)
     }
 }
 

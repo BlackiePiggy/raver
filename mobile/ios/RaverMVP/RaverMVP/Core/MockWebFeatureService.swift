@@ -1284,6 +1284,26 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func fetchOnboardingPreferenceOptions() async throws -> OnboardingPreferenceOptions {
+        OnboardingPreferenceOptions(
+            genres: [
+                OnboardingGenreOption(id: "house", name: "House", level: 0),
+                OnboardingGenreOption(id: "techno", name: "Techno", level: 0),
+                OnboardingGenreOption(id: "trance", name: "Trance", level: 0),
+                OnboardingGenreOption(id: "dubstep", name: "Dubstep", level: 0),
+                OnboardingGenreOption(id: "drum-and-bass", name: "Drum & Bass", level: 0),
+                OnboardingGenreOption(id: "hardstyle", name: "Hardstyle", level: 0)
+            ],
+            brands: Array(learnFestivals.shuffled().prefix(10)),
+            djs: Array(
+                djs
+                    .filter { ($0.soundCloudFollowers ?? 0) > 0 }
+                    .shuffled()
+                    .prefix(18)
+            )
+        )
+    }
+
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage {
         let pageNum = max(1, page)
         let pageLimit = max(1, min(100, limit))

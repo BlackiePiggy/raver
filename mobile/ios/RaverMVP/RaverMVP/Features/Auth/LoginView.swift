@@ -777,12 +777,6 @@ private extension UIImage {
     }
 }
 
-private struct RegisterOnboardingGenreOption: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let level: Int
-}
-
 private struct FlexibleWrapLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8
@@ -884,7 +878,7 @@ private struct RegisterProfileView: View {
     @State private var isSavingOnboarding = false
     @State private var registrationErrorMessage: String?
     @State private var onboardingErrorMessage: String?
-    @State private var onboardingGenres: [RegisterOnboardingGenreOption] = []
+    @State private var onboardingGenres: [OnboardingGenreOption] = []
     @State private var onboardingBrands: [WebLearnFestival] = []
     @State private var onboardingDJs: [WebDJ] = []
     @State private var selectedGenreIDs: Set<String> = []
@@ -2083,14 +2077,10 @@ private struct RegisterProfileView: View {
         defer { isLoadingOnboardingOptions = false }
 
         do {
-            async let genresTask = appContainer.webService.fetchLearnGenres()
-            async let brandsTask = appContainer.webService.fetchLearnFestivals(search: nil)
-            async let djsTask = appContainer.webService.fetchOnboardingDJCandidates(limit: 100)
-
-            let (genreTree, brands, topDJs) = try await (genresTask, brandsTask, djsTask)
-            onboardingGenres = Self.sampleGenreOptions(from: genreTree, limit: 24)
-            onboardingBrands = Array(brands.shuffled().prefix(10))
-            onboardingDJs = Array(topDJs.shuffled().prefix(18))
+            let options = try await appContainer.webService.fetchOnboardingPreferenceOptions()
+            onboardingGenres = options.genres
+            onboardingBrands = options.brands
+            onboardingDJs = options.djs
             onboardingErrorMessage = nil
         } catch {
             onboardingErrorMessage = error.userFacingMessage ?? LT("推荐选项加载失败，请稍后重试。", "Could not load picks. Please try again later.", "おすすめを読み込めませんでした。時間をおいて再試行してください。")
@@ -2188,6 +2178,13 @@ private struct RegisterProfileView: View {
                 NotificationCenter.default.post(name: .raverFollowedBrandsDidMutate, object: nil)
             }
 
+            await RecommendEventsViewModel.prewarmDailyRecommendations(
+                sessionUserID: appState.session?.user.id,
+                recommendationRepository: appContainer.eventRecommendationRepository,
+                listRepository: appContainer.eventListRepository,
+                checkinRepository: appContainer.eventCheckinRepository
+            )
+
             onboardingErrorMessage = nil
             presentWelcomeCard()
         } catch {
@@ -2230,32 +2227,6 @@ private struct RegisterProfileView: View {
     private func presentWelcomeCard() {
         withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
             showWelcomeCard = true
-        }
-    }
-
-    private static func sampleGenreOptions(from roots: [LearnGenreNode], limit: Int) -> [RegisterOnboardingGenreOption] {
-        let flattened = flattenGenreOptions(roots, level: 0)
-        let grouped = Dictionary(grouping: flattened, by: \.level)
-        var sampled: [RegisterOnboardingGenreOption] = []
-        for level in grouped.keys.sorted() {
-            sampled.append(contentsOf: Array((grouped[level] ?? []).shuffled().prefix(8)))
-        }
-        return Array(uniqueGenreOptions(sampled.shuffled() + flattened.shuffled()).prefix(limit))
-    }
-
-    private static func flattenGenreOptions(_ nodes: [LearnGenreNode], level: Int) -> [RegisterOnboardingGenreOption] {
-        nodes.flatMap { node -> [RegisterOnboardingGenreOption] in
-            let current = RegisterOnboardingGenreOption(id: node.id, name: node.name, level: level)
-            return [current] + flattenGenreOptions(node.children ?? [], level: level + 1)
-        }
-    }
-
-    private static func uniqueGenreOptions(_ items: [RegisterOnboardingGenreOption]) -> [RegisterOnboardingGenreOption] {
-        var seen = Set<String>()
-        return items.filter { item in
-            guard !seen.contains(item.id) else { return false }
-            seen.insert(item.id)
-            return true
         }
     }
 

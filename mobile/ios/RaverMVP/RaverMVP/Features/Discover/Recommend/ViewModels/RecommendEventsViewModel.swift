@@ -35,6 +35,20 @@ final class RecommendEventsViewModel: ObservableObject {
         self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: checkinRepository)
     }
 
+    static func prewarmDailyRecommendations(
+        sessionUserID: String?,
+        recommendationRepository: EventRecommendationRepository,
+        listRepository: EventListRepository,
+        checkinRepository: EventCheckinRepository
+    ) async {
+        let viewModel = RecommendEventsViewModel(
+            recommendationRepository: recommendationRepository,
+            listRepository: listRepository,
+            checkinRepository: checkinRepository
+        )
+        await viewModel.loadRecommendations(sessionUserID: sessionUserID, force: true)
+    }
+
     func loadIfNeeded(sessionUserID: String?) async {
         applyCachedRecommendationsIfAvailable(sessionUserID: sessionUserID)
         if hasLoadedRecommendations {
@@ -92,6 +106,25 @@ final class RecommendEventsViewModel: ObservableObject {
         }
         defer { isLoading = false }
         defer { isRefreshing = false }
+
+        if sessionUserID == nil {
+            do {
+                events = try await loadGuestDefaultRecommendations()
+                cacheRecommendations(events, sessionUserID: sessionUserID)
+                hasLoadedRecommendations = true
+                phase = events.isEmpty ? .empty : .success
+                bannerMessage = nil
+            } catch {
+                let message = error.userFacingMessage ?? LT("活动加载失败，请稍后重试", "Failed to load events. Please try again later.", "イベントを読み込めませんでした。時間をおいて再試行してください。")
+                if hadContent {
+                    bannerMessage = message
+                    phase = .success
+                } else {
+                    phase = .failure(message: message)
+                }
+            }
+            return
+        }
 
         do {
             let recommended = try await fetchRecommendedEventsUseCase.execute(
@@ -166,6 +199,28 @@ final class RecommendEventsViewModel: ObservableObject {
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: now)
+    }
+
+    private func loadGuestDefaultRecommendations() async throws -> [WebEvent] {
+        let page = try await fetchEventsPageUseCase.execute(
+            DiscoverEventsPageRequest(
+                page: 1,
+                limit: 10,
+                search: nil,
+                eventType: nil,
+                status: "upcoming"
+            )
+        )
+        return page.items
+            .filter { EventVisualStatus.resolve(event: $0) != .cancelled }
+            .sorted { lhs, rhs in
+                if lhs.startDate == rhs.startDate {
+                    return lhs.endDate < rhs.endDate
+                }
+                return lhs.startDate < rhs.startDate
+            }
+            .prefix(10)
+            .map { $0 }
     }
 
     private func loadRecommendationsLegacy() async throws -> [WebEvent] {

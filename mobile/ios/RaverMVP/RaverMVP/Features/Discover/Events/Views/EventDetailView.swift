@@ -2478,11 +2478,15 @@ struct EventDetailView: View {
 
     private var contentSpotlightFrame: CGRect {
         let screen = UIScreen.main.bounds
+        let tabBottomY = tabFrames.values.map(\.maxY).max()
+        let topY = max(150, (tabBottomY ?? screen.height * 0.34) + 10)
+        let bottomInset: CGFloat = 28
+        let availableHeight = max(140, screen.height - topY - bottomInset)
         return CGRect(
             x: 16,
-            y: max(150, screen.height * 0.34),
+            y: topY,
             width: max(120, screen.width - 32),
-            height: min(320, max(180, screen.height * 0.36))
+            height: min(320, max(180, availableHeight))
         )
     }
 

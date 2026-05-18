@@ -277,6 +277,17 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items.map(localizedDJ)
     }
 
+    func fetchOnboardingPreferenceOptions() async throws -> OnboardingPreferenceOptions {
+        let response: BFFEnvelope<OnboardingPreferenceOptions> = try await request(
+            path: "/v1/onboarding/preferences/options",
+            method: "GET"
+        )
+        var options = response.data
+        options.brands = options.brands.map(localizedLearnFestival)
+        options.djs = options.djs.map(localizedDJ)
+        return options
+    }
+
     func fetchDJ(id: String) async throws -> WebDJ {
         let response: BFFEnvelope<WebDJ> = try await request(path: "/v1/djs/\(id)", method: "GET")
         return localizedDJ(response.data)

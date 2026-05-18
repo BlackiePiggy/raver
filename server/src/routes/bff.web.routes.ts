@@ -1205,6 +1205,65 @@ const includeEventForWeb = {
   },
 };
 
+const selectEventRecommendationCardForWeb = {
+  id: true,
+  name: true,
+  nameI18n: true,
+  wikiFestivalId: true,
+  slug: true,
+  archiveFestivalId: true,
+  countryI18n: true,
+  cityI18n: true,
+  coverImageUrl: true,
+  lineupImageUrl: true,
+  imageAssets: true,
+  eventType: true,
+  organizerName: true,
+  venueName: true,
+  venueAddress: true,
+  city: true,
+  country: true,
+  manualLocation: true,
+  locationPoint: true,
+  latitude: true,
+  longitude: true,
+  startDate: true,
+  endDate: true,
+  timeZone: true,
+  startTime: true,
+  endTime: true,
+  dayRolloverHour: true,
+  stageOrder: true,
+  ticketUrl: true,
+  ticketPriceMin: true,
+  ticketPriceMax: true,
+  ticketCurrency: true,
+  ticketNotes: true,
+  officialWebsite: true,
+  status: true,
+  isVerified: true,
+  createdAt: true,
+  updatedAt: true,
+  organizer: {
+    select: { id: true, username: true, displayName: true, avatarUrl: true },
+  },
+  wikiFestival: {
+    select: {
+      id: true,
+      name: true,
+      nameI18n: true,
+      abbreviation: true,
+      aliases: true,
+      country: true,
+      countryI18n: true,
+      city: true,
+      cityI18n: true,
+      avatarUrl: true,
+      backgroundUrl: true,
+    },
+  },
+} satisfies Prisma.EventSelect;
+
 const normalizeName = (value: string): string => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
 
 const parseRankingText = (text: string): Array<{ rank: number; name: string }> =>
@@ -3937,6 +3996,31 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
   };
 };
 
+const mapEventRecommendationCard = (row: any, complianceUser?: RegionalComplianceUser | null) => {
+  const event = mapEvent(
+    {
+      ...row,
+      description: null,
+      descriptionI18n: null,
+      referenceLinks: [],
+      socialLinks: null,
+      ticketTiers: [],
+      lineupArtists: [],
+      timetableSlots: [],
+      lineupSlots: [],
+    },
+    complianceUser
+  );
+  return {
+    ...event,
+    imageAssets: null,
+    ticketTiers: [],
+    lineupArtists: [],
+    timetableSlots: [],
+    lineupSlots: [],
+  };
+};
+
 const resolveEventFavoriteIds = async (userId: string | undefined, eventIds: string[]): Promise<Map<string, string>> => {
   if (!userId || eventIds.length === 0) {
     return new Map();
@@ -4637,6 +4721,7 @@ const DAILY_EVENT_RECOMMENDATION_ALGORITHM_VERSION = 'daily-event-recommendation
 const DAILY_EVENT_RECOMMENDATION_SIZE = 10;
 const DAILY_EVENT_RECOMMENDATION_TIME_ZONE = 'Asia/Shanghai';
 const DAILY_EVENT_RECOMMENDATION_MEMORY_TTL_MS = 5 * 60 * 1000;
+const DAILY_EVENT_RECOMMENDATION_CANDIDATE_LIMIT_PER_STATUS = 120;
 const DAILY_DJ_RECOMMENDATION_ALGORITHM_VERSION = 'daily-dj-recommendations-soundcloud-top100-v1';
 const DAILY_DJ_RECOMMENDATION_SIZE = 10;
 const DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT = 100;
@@ -4768,9 +4853,18 @@ const selectEventRecommendationIds = async (
     statuses.map(async (status) => {
       const rows = await prisma.event.findMany({
         where: buildEventStatusWhere(status, now),
+        orderBy:
+          status === 'upcoming'
+            ? [{ startDate: 'asc' }, { id: 'asc' }]
+            : status === 'ongoing'
+              ? [{ endDate: 'asc' }, { startDate: 'asc' }, { id: 'asc' }]
+              : status === 'ended'
+                ? [{ endDate: 'desc' }, { id: 'asc' }]
+                : [{ updatedAt: 'desc' }, { id: 'asc' }],
+        take: DAILY_EVENT_RECOMMENDATION_CANDIDATE_LIMIT_PER_STATUS,
         select: { id: true },
       });
-      return [status, rows.map((row) => row.id)] as const;
+      return [status, shuffleArray(rows.map((row) => row.id))] as const;
     })
   );
 
@@ -5054,7 +5148,7 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
       where: {
         id: { in: selectedIds },
       },
-      include: includeEventForWeb,
+      select: selectEventRecommendationCardForWeb,
     });
     const rowById = new Map(rows.map((row) => [row.id, row]));
     const orderedRows = selectedIds
@@ -5066,7 +5160,7 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
     const complianceUser = await resolveRegionalComplianceUser(userId);
 
     ok(res, {
-      items: rowsWithFavorites.map((row) => mapEvent(row, complianceUser)),
+      items: rowsWithFavorites.map((row) => mapEventRecommendationCard(row, complianceUser)),
       meta: {
         limit,
         selected: orderedRows.length,
@@ -10996,6 +11090,154 @@ const selectGenreDJLite = {
   aliases: true,
   avatarUrl: true,
 } satisfies Prisma.DJSelect;
+
+const ONBOARDING_GENRE_OPTION_LIMIT = 24;
+const ONBOARDING_BRAND_OPTION_LIMIT = 10;
+const ONBOARDING_DJ_OPTION_LIMIT = 18;
+const ONBOARDING_DJ_CANDIDATE_LIMIT = 100;
+
+type OnboardingGenreOption = {
+  id: string;
+  name: string;
+  level: number;
+};
+
+const shuffleArray = <T>(items: T[]): T[] => {
+  const next = [...items];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+};
+
+const uniqueOnboardingGenreOptions = (items: OnboardingGenreOption[]): OnboardingGenreOption[] => {
+  const seen = new Set<string>();
+  const out: OnboardingGenreOption[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+};
+
+const sampleOnboardingGenreOptions = (
+  rows: Array<{ id: string; name: string; parentId: string | null; sortOrder: number }>
+): OnboardingGenreOption[] => {
+  const byParentId = new Map<string | null, typeof rows>();
+  for (const row of rows) {
+    const siblings = byParentId.get(row.parentId) ?? [];
+    siblings.push(row);
+    byParentId.set(row.parentId, siblings);
+  }
+
+  const roots = byParentId.get(null) ?? [];
+  const electronicRoot = roots.find((row) => row.id === 'electronic-music');
+  const flatten = (items: typeof rows, level: number): OnboardingGenreOption[] =>
+    items.flatMap((row) => [
+      { id: row.id, name: row.name, level },
+      ...flatten(byParentId.get(row.id) ?? [], level + 1),
+    ]);
+
+  const flattened = flatten(electronicRoot ? (byParentId.get(electronicRoot.id) ?? []) : roots, 0);
+  const byLevel = new Map<number, OnboardingGenreOption[]>();
+  for (const item of flattened) {
+    const bucket = byLevel.get(item.level) ?? [];
+    bucket.push(item);
+    byLevel.set(item.level, bucket);
+  }
+
+  const sampled: OnboardingGenreOption[] = [];
+  for (const level of Array.from(byLevel.keys()).sort((a, b) => a - b)) {
+    sampled.push(...shuffleArray(byLevel.get(level) ?? []).slice(0, 8));
+  }
+  return uniqueOnboardingGenreOptions([...shuffleArray(sampled), ...shuffleArray(flattened)])
+    .slice(0, ONBOARDING_GENRE_OPTION_LIMIT);
+};
+
+router.get('/onboarding/preferences/options', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId ?? null;
+
+    const [genreRows, brandRows, djRows] = await Promise.all([
+      prisma.genre.findMany({
+        orderBy: [{ parentId: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+          sortOrder: true,
+        },
+      }),
+      prisma.wikiFestival.findMany({
+        where: { isActive: true },
+        orderBy: [{ name: 'asc' }],
+        take: 120,
+        select: {
+          id: true,
+          name: true,
+          nameI18n: true,
+          sourceRowId: true,
+          abbreviation: true,
+          aliases: true,
+          country: true,
+          countryI18n: true,
+          city: true,
+          cityI18n: true,
+          foundedYear: true,
+          frequency: true,
+          frequencyI18n: true,
+          tagline: true,
+          introduction: true,
+          descriptionI18n: true,
+          avatarUrl: true,
+          backgroundUrl: true,
+          links: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.dJ.findMany({
+        where: {
+          soundCloudFollowers: { not: null },
+        },
+        orderBy: [
+          { soundCloudFollowers: 'desc' },
+          { name: 'asc' },
+        ],
+        take: ONBOARDING_DJ_CANDIDATE_LIMIT,
+        select: {
+          id: true,
+          name: true,
+          nameI18n: true,
+          aliases: true,
+          avatarUrl: true,
+          country: true,
+          countryI18n: true,
+          soundCloudFollowers: true,
+        },
+      }),
+    ]);
+
+    const brandOptions = shuffleArray(brandRows)
+      .slice(0, ONBOARDING_BRAND_OPTION_LIMIT)
+      .map((row) => mapWikiFestival({ ...row, contributors: [] }, viewerId, null));
+    const djOptions = shuffleArray(djRows)
+      .slice(0, ONBOARDING_DJ_OPTION_LIMIT)
+      .map((row) => mapDJ(row, false, viewerId, null));
+
+    ok(res, {
+      genres: sampleOnboardingGenreOptions(genreRows),
+      brands: brandOptions,
+      djs: djOptions,
+    });
+  } catch (error) {
+    console.error('BFF web onboarding preference options error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> => {
   try {

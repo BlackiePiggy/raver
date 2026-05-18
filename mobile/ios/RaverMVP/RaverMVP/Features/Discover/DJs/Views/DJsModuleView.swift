@@ -2610,6 +2610,7 @@ struct DJDetailView: View {
     @State private var historyEventRegionFilter: DJEventRegionFilter = .all
     @State private var historyEventStartDate: Date?
     @State private var historyEventEndDate: Date?
+    @State private var isHistoryEventFilterPanelVisible = false
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
     @State private var isHonorListExpanded = false
@@ -4888,7 +4889,12 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            historyEventsFilterPanel
+            historyEventsFilterButton
+
+            if isHistoryEventFilterPanelVisible {
+                historyEventsFilterPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             let filteredEvents = filteredDJEvents
             if filteredEvents.isEmpty {
@@ -4915,6 +4921,44 @@ struct DJDetailView: View {
                 }
             }
         }
+    }
+
+    private var historyEventsFilterButton: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isHistoryEventFilterPanelVisible.toggle()
+                }
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: hasActiveHistoryEventFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .font(.subheadline.weight(.semibold))
+                    Text(historyEventFilterButtonTitle)
+                        .font(.subheadline.weight(.semibold))
+                    Image(systemName: isHistoryEventFilterPanelVisible ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                }
+                .foregroundStyle(hasActiveHistoryEventFilters ? DJDetailTab.events.themeColor : RaverTheme.primaryText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(
+                    Capsule()
+                        .fill(hasActiveHistoryEventFilters ? DJDetailTab.events.themeColor.opacity(0.15) : RaverTheme.card)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(hasActiveHistoryEventFilters ? DJDetailTab.events.themeColor.opacity(0.38) : RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Text(historyEventFilterResultText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+        }
+        .padding(.bottom, isHistoryEventFilterPanelVisible ? 4 : 8)
     }
 
     private var historyEventsFilterPanel: some View {
@@ -5003,6 +5047,22 @@ struct DJDetailView: View {
                 .fill(RaverTheme.card)
         )
         .padding(.bottom, 6)
+    }
+
+    private var historyEventFilterButtonTitle: String {
+        guard activeHistoryEventFilterCount > 0 else {
+            return LT("筛选活动", "Filter Events", "イベントを絞り込み")
+        }
+        return LT("筛选活动 \(activeHistoryEventFilterCount)", "Filter Events \(activeHistoryEventFilterCount)", "イベントを絞り込み \(activeHistoryEventFilterCount)")
+    }
+
+    private var activeHistoryEventFilterCount: Int {
+        var count = 0
+        if !historyEventSearchQuery.isEmpty { count += 1 }
+        if historyEventRegionFilter != .all { count += 1 }
+        if historyEventStartDate != nil { count += 1 }
+        if historyEventEndDate != nil { count += 1 }
+        return count
     }
 
     private var historyEventFilterResultText: String {
@@ -5374,24 +5434,63 @@ struct DJDetailView: View {
     private func historyEventRow(_ event: WebEvent) -> some View {
         let locationText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(event.name)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(RaverTheme.primaryText)
-                .lineLimit(2)
+        return HStack(alignment: .center, spacing: 12) {
+            historyEventCover(event)
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
 
-            Text(djHistoryEventDateText(event))
-                .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
 
-            Text(locationText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : locationText)
-                .font(.caption)
+                Text(djHistoryEventDateText(event))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+
+                Text(locationText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : locationText)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.secondaryText)
-                .lineLimit(1)
+                .padding(.leading, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
+    }
+
+    @ViewBuilder
+    private func historyEventCover(_ event: WebEvent) -> some View {
+        if let cover = AppConfig.resolvedURLString(event.coverAssetURL) {
+            ImageLoaderView(urlString: cover, resizingMode: .fill, showsIndicator: false)
+                .background(historyEventCoverFallback)
+        } else {
+            historyEventCoverFallback
+        }
+    }
+
+    private var historyEventCoverFallback: some View {
+        LinearGradient(
+            colors: [Color(red: 0.18, green: 0.20, blue: 0.24), Color(red: 0.09, green: 0.10, blue: 0.13)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "calendar")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+        )
     }
 
     private func djRatingUnitRow(_ unit: WebRatingUnit) -> some View {

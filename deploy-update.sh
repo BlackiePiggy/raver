@@ -45,7 +45,7 @@ if [ -d "$ROOT_DIR/scrapRave" ] && [ -f "$ROOT_DIR/scrapRave/web_tool/server.py"
   export DJ_SOURCE_CACHE_ROOT="$WEBTOOL_CACHE_ROOT"
   export DJ_SOURCE_CACHE_MAX_BYTES="$WEBTOOL_CACHE_MAX_BYTES"
   pm2 restart "$WEBTOOL_NAME" --update-env \
-    || pm2 start "python3 web_tool/server.py" --name "$WEBTOOL_NAME"
+    || pm2 start web_tool/server.py --name "$WEBTOOL_NAME" --interpreter python3 --update-env
 else
   echo "⚠️  skip festival-viewer: $ROOT_DIR/scrapRave/web_tool/server.py not found"
   echo "   当前 git 仓库没有跟踪 scrapRave 目录；如果线上需要 festival-viewer，需要先把 scrapRave 纳入部署包或单独上传到服务器。"

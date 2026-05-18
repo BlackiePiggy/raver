@@ -208,6 +208,18 @@ struct LearnFestivalLinkPayload: Codable, Hashable {
     var url: String
 }
 
+struct OnboardingPreferenceOptions: Codable, Hashable {
+    var genres: [OnboardingGenreOption]
+    var brands: [WebLearnFestival]
+    var djs: [WebDJ]
+}
+
+struct OnboardingGenreOption: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var level: Int
+}
+
 struct WebLearnFestival: Codable, Identifiable, Hashable {
     let id: String
     var name: String

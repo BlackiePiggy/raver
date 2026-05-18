@@ -47,6 +47,7 @@ protocol WebFeatureService {
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
     func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ]
     func fetchOnboardingDJCandidates(limit: Int) async throws -> [WebDJ]
+    func fetchOnboardingPreferenceOptions() async throws -> OnboardingPreferenceOptions
     func fetchDJ(id: String) async throws -> WebDJ
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
     func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate]
