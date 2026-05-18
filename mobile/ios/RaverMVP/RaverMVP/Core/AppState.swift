@@ -870,6 +870,7 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var isAuthBootstrapping: Bool = true
     @Published var isRegistrationOnboardingActive: Bool = false
+    @Published var shouldPresentPostRegistrationRecommendGuide: Bool = false
     @Published var unreadMessagesCount: Int = 0
     @Published var tencentIMBootstrap: TencentIMBootstrap?
     @Published var tencentIMConnectionState: TencentIMConnectionState = .idle
@@ -1228,10 +1229,15 @@ final class AppState: ObservableObject {
 
     func beginRegistrationOnboarding() {
         isRegistrationOnboardingActive = true
+        shouldPresentPostRegistrationRecommendGuide = true
     }
 
     func finishRegistrationOnboarding() {
         isRegistrationOnboardingActive = false
+    }
+
+    func consumePostRegistrationRecommendGuideRequest() {
+        shouldPresentPostRegistrationRecommendGuide = false
     }
 
     func register(

@@ -10,6 +10,7 @@ struct SharePanelPrimaryAction: Identifiable {
 
 struct SharePanelQuickAction: Identifiable {
     let id = UUID()
+    var guidanceID: String? = nil
     let title: String
     let systemImage: String
     let accentColor: Color
@@ -81,6 +82,7 @@ struct ShareActionPanel: View {
     var panelHeight: CGFloat = 240
     var maxRecentConversations: Int = 8
     var placeholderConversationCount: Int = 5
+    var onQuickActionGlobalFrameChange: ((SharePanelQuickAction, CGRect) -> Void)?
 
     @State private var conversations: [Conversation] = []
     @State private var isLoading = false
@@ -95,7 +97,8 @@ struct ShareActionPanel: View {
     }
 
     private var shareRowSlotCount: Int {
-        max(recentConversations.isEmpty ? placeholderConversationCount : recentConversations.count, 1)
+        guard !recentConversations.isEmpty else { return 0 }
+        return recentConversations.count
     }
 
     private var selectedConversation: Conversation? {
@@ -126,24 +129,17 @@ struct ShareActionPanel: View {
                         }
 
                         ForEach(0..<shareRowSlotCount, id: \.self) { index in
-                            if index < recentConversations.count {
-                                let conversation = recentConversations[index]
-                                SharePanelRecentConversationButton(
-                                    conversation: conversation,
-                                    size: itemSize,
-                                    labelWidth: itemLabelWidth,
-                                    isSelected: selectedConversationID == conversation.id,
-                                    isSending: sendingConversationID == conversation.id
-                                ) {
-                                    toggleSelection(for: conversation)
-                                }
-                                .transition(.opacity)
-                            } else {
-                                SharePanelConversationPlaceholder(
-                                    size: itemSize,
-                                    labelWidth: itemLabelWidth
-                                )
+                            let conversation = recentConversations[index]
+                            SharePanelRecentConversationButton(
+                                conversation: conversation,
+                                size: itemSize,
+                                labelWidth: itemLabelWidth,
+                                isSelected: selectedConversationID == conversation.id,
+                                isSending: sendingConversationID == conversation.id
+                            ) {
+                                toggleSelection(for: conversation)
                             }
+                            .transition(.opacity)
                         }
 
                         SharePanelMoreChatsButton(
@@ -227,6 +223,17 @@ struct ShareActionPanel: View {
                                         item.action()
                                     }
                                 }
+                                .overlay {
+                                    GeometryReader { proxy in
+                                        Color.clear
+                                            .onAppear {
+                                                onQuickActionGlobalFrameChange?(item, proxy.frame(in: .global))
+                                            }
+                                            .onChange(of: proxy.frame(in: .global)) { _, frame in
+                                                onQuickActionGlobalFrameChange?(item, frame)
+                                            }
+                                    }
+                                }
                             }
                         }
                         .padding(.vertical, 2)
@@ -306,6 +313,16 @@ struct ShareActionPanel: View {
         } catch {
             errorMessage = error.userFacingMessage ?? LT("分享失败，请稍后重试", "Share failed. Please try again later.", "共有に失敗しました。時間をおいて再試行してください。")
         }
+    }
+}
+
+extension ShareActionPanel {
+    func onQuickActionGlobalFrameChange(
+        _ handler: @escaping (SharePanelQuickAction, CGRect) -> Void
+    ) -> ShareActionPanel {
+        var panel = self
+        panel.onQuickActionGlobalFrameChange = handler
+        return panel
     }
 }
 

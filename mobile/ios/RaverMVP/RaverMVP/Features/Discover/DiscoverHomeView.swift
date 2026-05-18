@@ -7,7 +7,10 @@ struct DiscoverHomeView: View {
         case news
         case djs
         case sets
-        case learn
+        case rankings
+        case organizers
+        case labels
+        case genres
 
         var id: String { rawValue }
 
@@ -18,7 +21,10 @@ struct DiscoverHomeView: View {
             case .news: return LT("资讯", "News", "ニュース")
             case .djs: return LT("DJ", "DJ", "DJ")
             case .sets: return LT("Sets", "Sets", "Sets")
-            case .learn: return LT("Wiki", "Wiki", "Wiki")
+            case .rankings: return LT("榜单", "Rankings", "ランキング")
+            case .organizers: return LT("主办方", "Organizers", "主催")
+            case .labels: return LT("厂牌", "Labels", "レーベル")
+            case .genres: return LT("流派", "Genres", "ジャンル")
             }
         }
 
@@ -29,7 +35,10 @@ struct DiscoverHomeView: View {
             case .news: return Color(red: 0.98, green: 0.62, blue: 0.22)
             case .djs: return Color(red: 0.44, green: 0.78, blue: 0.33)
             case .sets: return Color(red: 0.30, green: 0.67, blue: 0.97)
-            case .learn: return Color(red: 0.76, green: 0.47, blue: 0.95)
+            case .rankings: return Color(red: 0.76, green: 0.47, blue: 0.95)
+            case .organizers: return Color(red: 0.89, green: 0.39, blue: 0.58)
+            case .labels: return Color(red: 0.42, green: 0.57, blue: 0.96)
+            case .genres: return Color(red: 0.24, green: 0.79, blue: 0.68)
             }
         }
 
@@ -106,8 +115,14 @@ struct DiscoverHomeView: View {
             )
         case .sets:
             SetsModuleView()
-        case .learn:
-            LearnModuleView()
+        case .rankings:
+            LearnModuleView(initialSection: .rankings, showsSectionTabs: false)
+        case .organizers:
+            LearnModuleView(initialSection: .festivals, showsSectionTabs: false)
+        case .labels:
+            LearnModuleView(initialSection: .labels, showsSectionTabs: false)
+        case .genres:
+            LearnModuleView(initialSection: .genres, showsSectionTabs: false)
         }
     }
 

@@ -14,6 +14,14 @@ extension EnvironmentValues {
     }
 }
 
+private struct MainGlobalSearchFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
@@ -24,8 +32,12 @@ struct MainTabView: View {
     @Namespace private var tabBarIndicatorNamespace
     private let tabs: [MainTab] = [.discover, .circle, .messages, .profile]
     @State private var loadedTabs: Set<MainTab> = [.discover]
+    @StateObject private var guidanceCenter = AppGuidanceCenter.shared
     @StateObject private var recentSearchStore = RecentSearchStore()
+    @StateObject private var appLocationProvider = AppLocationProvider()
     @State private var isGlobalSearchPresented = false
+    @State private var showGlobalSearchGuide = false
+    @State private var globalSearchFrame: CGRect = .zero
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -54,11 +66,23 @@ struct MainTabView: View {
                 )
                 .zIndex(3)
             }
+
+            if showGlobalSearchGuide {
+                AppGuidanceSpotlightOverlay(
+                    step: globalSearchSpotlightStep,
+                    onPrimary: openGlobalSearchFromGuide,
+                    onDismiss: dismissGlobalSearchGuide
+                )
+                .transition(.opacity)
+                .zIndex(4)
+            }
         }
         .background(RaverTheme.background.ignoresSafeArea(.all))
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .environmentObject(appLocationProvider)
         .task {
             await appState.refreshUnreadMessages()
+            appLocationProvider.requestOnAppEntryIfNeeded()
         }
         .onChange(of: scenePhase) { _, newValue in
             guard newValue == .active else { return }
@@ -66,6 +90,7 @@ struct MainTabView: View {
         }
         .onAppear {
             loadedTabs.insert(currentTab)
+            presentGlobalSearchGuideIfNeeded()
         }
         .onChange(of: currentTab) { _, newTab in
             loadedTabs.insert(newTab)
@@ -268,6 +293,76 @@ struct MainTabView: View {
         .accessibilityIdentifier("mainTab.action.globalSearch")
         .accessibilityLabel(LT("搜索", "Search", "検索"))
         .accessibilityHint(LT("打开全局聚合搜索", "Opens global aggregated search", "グローバル統合検索を開きます"))
+        .overlay {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(
+                        key: MainGlobalSearchFramePreferenceKey.self,
+                        value: proxy.frame(in: .global)
+                    )
+            }
+        }
+        .onPreferenceChange(MainGlobalSearchFramePreferenceKey.self) { frame in
+            globalSearchFrame = frame
+            presentGlobalSearchGuideIfNeeded()
+        }
+    }
+
+    private func presentGlobalSearchGuideIfNeeded() {
+        guard globalSearchFrame != .zero else { return }
+        guard !showGlobalSearchGuide, !isGlobalSearchPresented else { return }
+        guard guidanceCenter.shouldPresent(
+            .mainGlobalSearchFirstRun,
+            policy: AppGuidanceRuntime.mainGlobalSearchFirstRunPolicy,
+            userID: appState.session?.user.id
+        ) else { return }
+        guidanceCenter.markPresented(
+            .mainGlobalSearchFirstRun,
+            policy: AppGuidanceRuntime.mainGlobalSearchFirstRunPolicy,
+            userID: appState.session?.user.id
+        )
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showGlobalSearchGuide = true
+        }
+    }
+
+    private func dismissGlobalSearchGuide() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showGlobalSearchGuide = false
+        }
+    }
+
+    private func openGlobalSearchFromGuide() {
+        dismissGlobalSearchGuide()
+        guard appState.isLoggedIn else {
+            requestLoginGate()
+            return
+        }
+        GlobalSearchTelemetry.overlayOpened(source: "main_tab_guidance")
+        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+            isGlobalSearchPresented = true
+        }
+    }
+
+    private var globalSearchSpotlightStep: AppGuidanceSpotlightStep {
+        AppGuidanceSpotlightStep(
+            title: LT("全站搜索入口", "Global search", "グローバル検索"),
+            message: LT("点击这里可以搜索历史活动，以及活动相关的 DJ、资讯、Sets、榜单、打分、动态、品牌和厂牌信息。", "Tap here to search historical events plus related DJs, news, sets, rankings, ratings, posts, brands, and labels.", "ここから過去のイベント、関連DJ、ニュース、Sets、ランキング、評価、投稿、ブランド、レーベルを検索できます。"),
+            buttonTitle: LT("开始搜索", "Start searching", "検索する"),
+            targetFrame: globalSearchFrame == .zero ? globalSearchFallbackFrame : globalSearchFrame,
+            cornerRadius: 30,
+            placement: .above
+        )
+    }
+
+    private var globalSearchFallbackFrame: CGRect {
+        let screen = UIScreen.main.bounds
+        return CGRect(
+            x: screen.midX - 28,
+            y: screen.height - max(104, bottomSafeAreaInset + 76),
+            width: 56,
+            height: 56
+        )
     }
 
     private func tabIcon(for tab: MainTab) -> some View {

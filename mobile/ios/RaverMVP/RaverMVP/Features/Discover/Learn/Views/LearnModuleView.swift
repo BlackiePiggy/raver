@@ -31,7 +31,9 @@ struct LearnModuleView: View {
     @State private var festivals: [LearnFestival] = []
     @State private var rankingBoards: [RankingBoard] = []
     @State private var labelsPagination: BFFPagination?
-    @State private var selectedSection: LearnModuleSection = .rankings
+    private let initialSection: LearnModuleSection
+    private let showsSectionTabs: Bool
+    @State private var selectedSection: LearnModuleSection
     @State private var selectedSort: LearnLabelSortOption = .soundcloudFollowers
     @State private var sortOrder: LearnLabelSortOrder = .desc
     @State private var selectedGenreFilters: Set<String> = []
@@ -68,20 +70,30 @@ struct LearnModuleView: View {
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
 
+    init(initialSection: LearnModuleSection = .rankings, showsSectionTabs: Bool = true) {
+        self.initialSection = initialSection
+        self.showsSectionTabs = showsSectionTabs
+        _selectedSection = State(initialValue: initialSection)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            if showsSectionTabs {
                 headerTabs
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
+            }
 
                 if selectedSection == .labels {
                     labelsToolbar
                         .padding(.horizontal, 16)
+                        .padding(.top, showsSectionTabs ? 0 : 12)
                         .padding(.bottom, 6)
                 } else if selectedSection == .festivals {
                     festivalsToolbar
                         .padding(.horizontal, 16)
+                        .padding(.top, showsSectionTabs ? 0 : 12)
                         .padding(.bottom, 6)
                 }
 
@@ -122,7 +134,11 @@ struct LearnModuleView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                await loadInitial()
+                if showsSectionTabs {
+                    await loadInitial()
+                } else {
+                    await refreshSelectedSection()
+                }
             }
             .onChange(of: selectedSort) { _, next in
                 sortOrder = next.defaultOrder
@@ -152,6 +168,7 @@ struct LearnModuleView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { _ in
+                guard selectedSection == .festivals else { return }
                 Task { await loadFestivals() }
             }
             .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
@@ -336,7 +353,7 @@ struct LearnModuleView: View {
     private var festivalsToolbar: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                Text(LT("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个电音节 IP", "Filtered \(festivals.count) / Total \(allFestivals.count) festival IPs", "絞り込み後 \(festivals.count) / 全 \(allFestivals.count) 件のフェスIP"))
+                Text(LT("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个主办方", "Filtered \(festivals.count) / Total \(allFestivals.count) organizers", "絞り込み後 \(festivals.count) / 全 \(allFestivals.count) 件の主催"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
 
@@ -349,7 +366,7 @@ struct LearnModuleView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
                             .font(.caption.weight(.bold))
-                        Text(LT("新增电音节", "新增电音节", "フェスを追加"))
+                        Text(LT("新增主办方", "Add Organizer", "主催を追加"))
                             .font(.caption.weight(.semibold))
                     }
                     .foregroundStyle(Color.white)
@@ -410,7 +427,11 @@ struct LearnModuleView: View {
                 .padding(.bottom, max(0, tabBarReservedHeight) + 12)
             }
             .refreshable {
-                await refreshAll()
+                if showsSectionTabs {
+                    await refreshAll()
+                } else {
+                    await loadRankingBoards()
+                }
             }
         }
     }
@@ -447,7 +468,11 @@ struct LearnModuleView: View {
                 bottomInset: max(0, tabBarReservedHeight) + 14
             )
             .refreshable {
-                await refreshAll()
+                if showsSectionTabs {
+                    await refreshAll()
+                } else {
+                    await loadGenres()
+                }
             }
         }
     }
@@ -494,7 +519,11 @@ struct LearnModuleView: View {
                 .padding(.bottom, max(0, tabBarReservedHeight) + 12)
             }
             .refreshable {
-                await refreshAll()
+                if showsSectionTabs {
+                    await refreshAll()
+                } else {
+                    await loadLabels()
+                }
             }
             .simultaneousGesture(
                 TapGesture().onEnded {
@@ -516,7 +545,7 @@ struct LearnModuleView: View {
                 .padding(.top, 12)
         } else if case .failure(let message) = festivalsPhase {
             ScreenErrorCard(
-                title: LT("电音节加载失败", "Festivals Failed to Load", "フェスの読み込みに失敗しました"),
+                title: LT("主办方加载失败", "Organizers Failed to Load", "主催の読み込みに失敗しました"),
                 message: message
             ) {
                 Task { await loadFestivals() }
@@ -536,7 +565,7 @@ struct LearnModuleView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if festivals.isEmpty {
-                        ContentUnavailableView(LT("暂无匹配电音节", "暂无匹配电音节", "一致するフェスはありません"), systemImage: "music.quarternote.3")
+                        ContentUnavailableView(LT("暂无匹配主办方", "No Matching Organizers", "一致する主催はありません"), systemImage: "music.quarternote.3")
                             .frame(maxWidth: .infinity, minHeight: 220)
                     } else {
                         LazyVStack(spacing: 14) {
@@ -555,7 +584,11 @@ struct LearnModuleView: View {
                 .padding(.bottom, max(0, tabBarReservedHeight) + 12)
             }
             .refreshable {
-                await refreshAll()
+                if showsSectionTabs {
+                    await refreshAll()
+                } else {
+                    await loadFestivals()
+                }
             }
         }
     }
@@ -695,7 +728,7 @@ struct LearnModuleView: View {
             festivalsPhase = festivals.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
-            let message = error.userFacingMessage ?? LT("电音节加载失败，请稍后重试", "Failed to load festivals. Please try again later.", "フェスを読み込めませんでした。時間をおいて再試行してください。")
+            let message = error.userFacingMessage ?? LT("主办方加载失败，请稍后重试", "Failed to load organizers. Please try again later.", "主催を読み込めませんでした。時間をおいて再試行してください。")
             if hadContent {
                 bannerMessage = message
                 festivalsPhase = .success
@@ -2854,7 +2887,7 @@ enum LearnModuleSection: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .rankings: return LT("DJ 榜单", "DJ Rankings", "DJランキング")
-        case .festivals: return LT("电音节", "Festivals", "フェス")
+        case .festivals: return LT("主办方", "Organizers", "主催")
         case .labels: return LT("厂牌", "Labels", "レーベル")
         case .genres: return LT("流派树", "Genre Tree", "ジャンルツリー")
         }

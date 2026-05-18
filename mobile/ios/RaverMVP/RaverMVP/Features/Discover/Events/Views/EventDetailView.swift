@@ -24,6 +24,30 @@ private struct EventCardSharePresentation: Identifiable {
     let payload: EventShareCardPayload
 }
 
+private struct EventRouteActionFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+private struct EventRoutePlannerTimelineFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+private struct EventMoreActionFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
 private enum EventTimeZoneDisplay {
     static func eventTimeZone(for event: WebEvent) -> TimeZone? {
         guard let raw = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -38,14 +62,8 @@ private enum EventTimeZoneDisplay {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
         formatter.timeZone = .current
-        let deviceText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
-        guard let zone = eventTimeZone(for: event),
-              zone.identifier != TimeZone.current.identifier else {
-            return "\(deviceText) · \(Date.appLocalizedTimeZoneLabel())"
-        }
-        formatter.timeZone = zone
         let eventText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
-        return "\(deviceText) · \(Date.appLocalizedTimeZoneLabel()) / \(eventText) · \(Date.appLocalizedTimeZoneLabel(zone))"
+        return "\(eventText) · \(Date.appLocalizedTimeZoneLabel())"
     }
 }
 
@@ -1265,6 +1283,7 @@ struct EventDetailView: View {
     @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
+    @StateObject private var guidanceCenter = AppGuidanceCenter.shared
 
     private var eventReadRepository: EventReadRepository { appContainer.eventReadRepository }
     private var ratingRepository: RatingRepository { appContainer.ratingRepository }
@@ -1370,6 +1389,13 @@ struct EventDetailView: View {
     @State private var eventDiscussionPhase: LoadPhase = .idle
     @State private var isLoadingEventDiscussion = false
     @State private var eventDiscussionNextCursor: String?
+    @State private var showEventDetailTabsGuide = false
+    @State private var eventDetailGuideStep: EventDetailGuidanceStep = .lineupTab
+    @State private var routeActionFrame: CGRect = .zero
+    @State private var showEventWidgetGuide = false
+    @State private var eventWidgetGuideStep: EventWidgetGuidanceStep = .moreButton
+    @State private var moreActionFrame: CGRect = .zero
+    @State private var widgetActionFrame: CGRect = .zero
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
@@ -1405,6 +1431,29 @@ struct EventDetailView: View {
             case .sets: return Color(red: 0.58, green: 0.43, blue: 0.95)
             }
         }
+    }
+
+    private enum EventDetailGuidanceStep: Equatable {
+        case lineupTab
+        case lineupContent
+        case scheduleTab
+        case scheduleContent
+        case routeAction
+
+        var targetTab: EventDetailTab? {
+            switch self {
+            case .lineupTab, .lineupContent:
+                return .lineup
+            case .scheduleTab, .scheduleContent, .routeAction:
+                return .schedule
+            }
+        }
+    }
+
+    private enum EventWidgetGuidanceStep: Equatable {
+        case moreButton
+        case widgetAction
+        case managementInfo
     }
 
     private struct EventLiveStageAct: Identifiable, Hashable {
@@ -1932,6 +1981,26 @@ struct EventDetailView: View {
                             .padding(.top, 100)
                             .animation(.easeOut(duration: 0.25), value: bannerMessage != nil)
                         }
+
+                        if showEventDetailTabsGuide {
+                            AppGuidanceSpotlightOverlay(
+                                step: eventDetailSpotlightStep,
+                                onPrimary: dismissEventDetailTabsGuide,
+                                onDismiss: dismissEventDetailTabsGuide
+                            )
+                            .transition(.opacity)
+                            .zIndex(12)
+                        }
+
+                        if showEventWidgetGuide, eventWidgetGuideStep != .widgetAction {
+                            AppGuidanceSpotlightOverlay(
+                                step: eventWidgetSpotlightStep,
+                                onPrimary: advanceEventWidgetGuide,
+                                onDismiss: advanceEventWidgetGuide
+                            )
+                            .transition(.opacity)
+                            .zIndex(13)
+                        }
                     }
                     .ignoresSafeArea(edges: .top)
                     .sheet(isPresented: $showEventCheckinSheet) {
@@ -2027,6 +2096,12 @@ struct EventDetailView: View {
                 await load()
             }
             await loadSelectedTabDataIfNeeded()
+            presentEventWidgetGuideIfNeeded()
+            presentEventDetailTabsGuideIfNeeded()
+        }
+        .onAppear {
+            presentEventWidgetGuideIfNeeded()
+            presentEventDetailTabsGuideIfNeeded()
         }
         .onChange(of: selectedTab) { _, _ in
             Task {
@@ -2123,12 +2198,27 @@ struct EventDetailView: View {
                                 fullChatSharePresentation = presentation
                             }
                         }
+                        .onQuickActionGlobalFrameChange { action, frame in
+                            guard action.guidanceID == eventWidgetActionGuidanceID else { return }
+                            widgetActionFrame = frame
+                        }
                     }
                     .onAppear {
                         withAnimation(.sharePanelPresentSpring) {
                             isShareMorePanelVisible = true
                         }
                     }
+            }
+        }
+        .overlay {
+            if showEventWidgetGuide, eventWidgetGuideStep == .widgetAction {
+                AppGuidanceSpotlightOverlay(
+                    step: eventWidgetSpotlightStep,
+                    onPrimary: advanceEventWidgetGuide,
+                    onDismiss: advanceEventWidgetGuide
+                )
+                .transition(.opacity)
+                .zIndex(40)
             }
         }
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
@@ -2157,7 +2247,10 @@ struct EventDetailView: View {
             inactiveTextColor: RaverTheme.secondaryText,
             showsDivider: false,
             indicatorHeight: 2.6,
-            tabFont: .system(size: 17, weight: .regular)
+            tabFont: .system(size: 17, weight: .regular),
+            onTabGlobalFrameChange: { tab, frame in
+                tabFrames[tab] = frame
+            }
         )
         .frame(maxWidth: .infinity)
         .frame(height: 40)
@@ -2170,6 +2263,227 @@ struct EventDetailView: View {
         EventDetailTab.allCases.map { tab in
             RaverScrollableTabItem(id: tab, title: tab.title)
         }
+    }
+
+    private func presentEventDetailTabsGuideIfNeeded() {
+        guard event != nil else { return }
+        guard !showEventDetailTabsGuide else { return }
+        guard !showEventWidgetGuide, shareMorePresentation == nil else { return }
+        guard tabFrames[.lineup] != nil else { return }
+        guard guidanceCenter.shouldPresent(
+            .eventDetailTabsFirstRun,
+            policy: AppGuidanceRuntime.eventDetailTabsFirstRunPolicy,
+            userID: appState.session?.user.id
+        ) else { return }
+        guidanceCenter.markPresented(
+            .eventDetailTabsFirstRun,
+            policy: AppGuidanceRuntime.eventDetailTabsFirstRunPolicy,
+            userID: appState.session?.user.id
+        )
+        eventDetailGuideStep = .lineupTab
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showEventDetailTabsGuide = true
+        }
+    }
+
+    private func dismissEventDetailTabsGuide() {
+        advanceEventDetailGuide()
+    }
+
+    private func advanceEventDetailGuide() {
+        switch eventDetailGuideStep {
+        case .lineupTab:
+            selectEventDetailTab(.lineup)
+            eventDetailGuideStep = .lineupContent
+        case .lineupContent:
+            eventDetailGuideStep = .scheduleTab
+        case .scheduleTab:
+            selectEventDetailTab(.schedule)
+            eventDetailGuideStep = .scheduleContent
+        case .scheduleContent:
+            eventDetailGuideStep = .routeAction
+        case .routeAction:
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showEventDetailTabsGuide = false
+            }
+            appPush(
+                .eventRoute(
+                    eventID: eventID,
+                    ownerUserID: nil,
+                    ownerDisplayName: nil,
+                    selectedDayID: nil,
+                    selectedSlotIDs: nil
+                )
+            )
+        }
+    }
+
+    private func presentEventWidgetGuideIfNeeded() {
+        guard event != nil else { return }
+        guard !showEventWidgetGuide, !showEventDetailTabsGuide else { return }
+        guard moreActionFrame != .zero else { return }
+        guard guidanceCenter.shouldPresent(
+            .eventDetailWidgetFirstRun,
+            policy: AppGuidanceRuntime.eventDetailWidgetFirstRunPolicy,
+            userID: appState.session?.user.id
+        ) else { return }
+        guidanceCenter.markPresented(
+            .eventDetailWidgetFirstRun,
+            policy: AppGuidanceRuntime.eventDetailWidgetFirstRunPolicy,
+            userID: appState.session?.user.id
+        )
+        eventWidgetGuideStep = .moreButton
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showEventWidgetGuide = true
+        }
+    }
+
+    private func advanceEventWidgetGuide() {
+        switch eventWidgetGuideStep {
+        case .moreButton:
+            guard let event else {
+                dismissEventWidgetGuide()
+                return
+            }
+            shareMorePresentation = EventCardSharePresentation(
+                payload: makeEventShareCardPayload(from: event)
+            )
+            isShareMorePanelVisible = false
+            eventWidgetGuideStep = .widgetAction
+        case .widgetAction:
+            guard let event else {
+                dismissEventWidgetGuide()
+                return
+            }
+            Task {
+                if !isInWidgetCountdownPool {
+                    await toggleSelectedEventInWidgetPool(event)
+                }
+                await MainActor.run {
+                    dismissShareMorePanel {
+                        eventWidgetGuideStep = .managementInfo
+                    }
+                }
+            }
+        case .managementInfo:
+            dismissEventWidgetGuide()
+            presentEventDetailTabsGuideIfNeeded()
+        }
+    }
+
+    private func dismissEventWidgetGuide() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showEventWidgetGuide = false
+        }
+    }
+
+    private var eventWidgetSpotlightStep: AppGuidanceSpotlightStep {
+        switch eventWidgetGuideStep {
+        case .moreButton:
+            return AppGuidanceSpotlightStep(
+                title: LT("添加到桌面小组件", "Add to Home Screen widget", "ホーム画面ウィジェットに追加"),
+                message: LT("点击右上角的更多按钮，可以找到活动的小组件入口。", "Tap the More button in the top-right to find the widget action for this event.", "右上のその他ボタンから、このイベントのウィジェット操作を見つけられます。"),
+                buttonTitle: LT("打开更多", "Open More", "その他を開く"),
+                targetFrame: moreActionFrame == .zero ? topRightSpotlightFrame : moreActionFrame,
+                cornerRadius: 18,
+                placement: .below
+            )
+        case .widgetAction:
+            return AppGuidanceSpotlightStep(
+                title: LT("点击添加小组件", "Tap Add Widget", "ウィジェットに追加"),
+                message: LT("点击「添加小组件」，这个活动就会加入桌面倒计时小组件的候选列表。", "Tap Add Widget to add this event to the candidates for your home screen countdown widget.", "「ウィジェットに追加」をタップすると、このイベントがカウントダウン候補に入ります。"),
+                buttonTitle: isInWidgetCountdownPool ? LT("下一步", "Next", "次へ") : LT("添加小组件", "Add Widget", "追加する"),
+                targetFrame: widgetActionFrame == .zero ? bottomPanelSpotlightFrame : widgetActionFrame,
+                cornerRadius: 16,
+                placement: .above
+            )
+        case .managementInfo:
+            return AppGuidanceSpotlightStep(
+                title: LT("在个人主页管理", "Manage it from Profile", "プロフィールで管理"),
+                message: LT("之后可以进入「个人主页」里的「小工具」，在「桌面小组件」中管理已添加的活动和展示样式。", "Later, open Tools from your Profile and use Home Screen Widgets to manage added events and display styles.", "あとでプロフィールの「ツール」から「ホーム画面ウィジェット」を開くと、追加したイベントと表示スタイルを管理できます。"),
+                buttonTitle: LT("知道了", "Got it", "了解"),
+                targetFrame: centerSpotlightFrame,
+                cornerRadius: 24,
+                placement: .center
+            )
+        }
+    }
+
+    private var topRightSpotlightFrame: CGRect {
+        let screen = UIScreen.main.bounds
+        return CGRect(x: screen.width - 58, y: max(46, topSafeAreaInset() + 6), width: 44, height: 44)
+    }
+
+    private var bottomPanelSpotlightFrame: CGRect {
+        let screen = UIScreen.main.bounds
+        return CGRect(x: 20, y: max(120, screen.height - 122), width: 88, height: 76)
+    }
+
+    private var centerSpotlightFrame: CGRect {
+        let screen = UIScreen.main.bounds
+        return CGRect(x: 28, y: screen.height * 0.42, width: screen.width - 56, height: 96)
+    }
+
+    private var eventDetailSpotlightStep: AppGuidanceSpotlightStep {
+        switch eventDetailGuideStep {
+        case .lineupTab:
+            return AppGuidanceSpotlightStep(
+                title: LT("先看活动阵容", "Start with the lineup", "まずラインナップを見る"),
+                message: LT("点击「阵容」Tab，可以查看本场活动的完整 DJ 阵容。", "Tap the Lineup tab to see the full DJ lineup for this event.", "「ラインナップ」タブをタップすると、このイベントの出演DJを確認できます。"),
+                buttonTitle: LT("查看阵容", "View lineup", "ラインナップを見る"),
+                targetFrame: tabFrames[.lineup] ?? fallbackSpotlightFrame,
+                placement: .below
+            )
+        case .lineupContent:
+            return AppGuidanceSpotlightStep(
+                title: LT("这里是本场阵容", "This is the lineup", "ここがラインナップ"),
+                message: LT("这里可以看到本场活动的所有阵容，每个 DJ 头像都可以点击进入详情。", "Here you can browse the full lineup. Every DJ avatar can be tapped to open that DJ's detail page.", "ここで全出演者を確認できます。各DJのアイコンをタップすると詳細ページを開けます。"),
+                buttonTitle: LT("下一步", "Next", "次へ"),
+                targetFrame: contentSpotlightFrame,
+                cornerRadius: 24,
+                placement: .above
+            )
+        case .scheduleTab:
+            return AppGuidanceSpotlightStep(
+                title: LT("再看时间表", "Then check the timetable", "次にタイムテーブル"),
+                message: LT("点击「时间表」Tab，可以查看不同舞台和每个时段的艺人信息。", "Tap the Timetable tab to see stages and artists by time slot.", "「タイムテーブル」タブで、各ステージと時間帯ごとの出演者を確認できます。"),
+                buttonTitle: LT("查看时间表", "View timetable", "タイムテーブルを見る"),
+                targetFrame: tabFrames[.schedule] ?? fallbackSpotlightFrame,
+                placement: .below
+            )
+        case .scheduleContent:
+            return AppGuidanceSpotlightStep(
+                title: LT("舞台和时段都在这里", "Stages and time slots", "ステージと時間帯"),
+                message: LT("这里展示了不同舞台信息和每个时段的艺人。每个方块都可以点击进入 DJ 详情。", "This area shows stage information and artists for each time slot. Each block can be tapped to open DJ details.", "ここには各ステージと時間帯ごとの出演者が表示されます。各ブロックをタップするとDJ詳細を開けます。"),
+                buttonTitle: LT("下一步", "Next", "次へ"),
+                targetFrame: contentSpotlightFrame,
+                cornerRadius: 24,
+                placement: .above
+            )
+        case .routeAction:
+            return AppGuidanceSpotlightStep(
+                title: LT("定制你的路线", "Customize your route", "自分のルートを作成"),
+                message: LT("点击右上角「定制路线」进入路线页面，按自己的节奏标注想看的阵容。", "Tap Customize Route to enter route planning and mark the sets you want to see.", "右上の「ルートを作成」から、見たい出演枠を自分のペースで選べます。"),
+                buttonTitle: LT("进入定制路线", "Open route planner", "ルート作成へ"),
+                targetFrame: routeActionFrame == .zero ? contentSpotlightFrame : routeActionFrame,
+                cornerRadius: 14,
+                placement: .below
+            )
+        }
+    }
+
+    private var fallbackSpotlightFrame: CGRect {
+        CGRect(x: 24, y: 120, width: 120, height: 48)
+    }
+
+    private var contentSpotlightFrame: CGRect {
+        let screen = UIScreen.main.bounds
+        return CGRect(
+            x: 16,
+            y: max(150, screen.height * 0.34),
+            width: max(120, screen.width - 32),
+            height: min(320, max(180, screen.height * 0.36))
+        )
     }
 
     @ViewBuilder
@@ -2895,7 +3209,10 @@ struct EventDetailView: View {
             EventRoutineView(
                 event: event,
                 scheduledSlots: scheduledSlots,
-                presentationStyle: .embedded
+                presentationStyle: .embedded,
+                onRouteActionGlobalFrameChange: { frame in
+                    routeActionFrame = frame
+                }
             )
         }
     }
@@ -3177,6 +3494,20 @@ struct EventDetailView: View {
                         Spacer(minLength: 0)
 
                         Button {
+                            Task { await toggleMarkedEvent(event) }
+                        } label: {
+                            eventHeroActionButton(
+                                title: eventFavoriteID == nil ? LT("关注", "Follow", "フォロー") : LT("已关注", "Following", "フォロー中"),
+                                icon: eventFavoriteID == nil ? "bell" : "bell.fill",
+                                fill: eventFavoriteID == nil
+                                    ? Color(red: 0.20, green: 0.56, blue: 0.98)
+                                    : Color(red: 0.20, green: 0.56, blue: 0.98).opacity(0.45)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isTogglingMarkedEvent)
+
+                        Button {
                             Task { await beginEventCheckinFlow(for: event) }
                         } label: {
                             eventHeroActionButton(
@@ -3429,7 +3760,24 @@ struct EventDetailView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .overlay {
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(
+                            key: EventMoreActionFramePreferenceKey.self,
+                            value: proxy.frame(in: .global)
+                        )
+                }
+            }
+            .onPreferenceChange(EventMoreActionFramePreferenceKey.self) { frame in
+                moreActionFrame = frame
+                presentEventWidgetGuideIfNeeded()
+            }
         )
+    }
+
+    private var eventWidgetActionGuidanceID: String {
+        "event-detail-widget-action"
     }
 
     private func dismissShareMorePanel(after: (() -> Void)? = nil) {
@@ -3605,7 +3953,8 @@ struct EventDetailView: View {
         if let event {
             actions.append(
                 SharePanelQuickAction(
-                    title: isInWidgetCountdownPool ? LT("移出倒计时", "Remove Countdown", "カウントダウンから削除") : LT("桌面倒计时", "Widget Countdown", "ウィジェットカウントダウン"),
+                    guidanceID: eventWidgetActionGuidanceID,
+                    title: isInWidgetCountdownPool ? LT("移出小组件", "Remove Widget", "ウィジェットから削除") : LT("添加小组件", "Add Widget", "ウィジェットに追加"),
                     systemImage: isInWidgetCountdownPool ? "minus.circle" : "apps.iphone",
                     accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
                 ) {
@@ -4314,12 +4663,7 @@ struct EventDetailView: View {
     }
 
     private func eventInfoDateText(_ date: Date, event: WebEvent) -> String {
-        let deviceText = date.appLocalizedYMDText()
-        guard let zone = EventTimeZoneDisplay.eventTimeZone(for: event),
-              zone.identifier != TimeZone.current.identifier else {
-            return deviceText
-        }
-        return "\(deviceText)\n\(date.appLocalizedYMDText(in: zone))"
+        date.appLocalizedYMDText()
     }
 
     private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
@@ -6243,6 +6587,7 @@ private struct EventRoutePlannerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var appContainer: AppContainer
     @EnvironmentObject private var appState: AppState
+    @StateObject private var guidanceCenter = AppGuidanceCenter.shared
     @ObservedObject private var routeStore = EventRouteStore.shared
     private var shareMessageRepository: ShareMessageRepository { appContainer.shareMessageRepository }
 
@@ -6254,6 +6599,8 @@ private struct EventRoutePlannerView: View {
     @State private var isSharePanelMounted = false
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: EventRouteSharePresentation?
+    @State private var showRoutePlannerGuide = false
+    @State private var timelineGuideFrame: CGRect = .zero
 
     init(
         event: WebEvent,
@@ -6397,6 +6744,19 @@ private struct EventRoutePlannerView: View {
                             stickyTopInset: routePlannerTimelineStickyTopInset
                         )
                         .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
+                        .overlay {
+                            GeometryReader { proxy in
+                                Color.clear
+                                    .preference(
+                                        key: EventRoutePlannerTimelineFramePreferenceKey.self,
+                                        value: proxy.frame(in: .global)
+                                    )
+                            }
+                        }
+                        .onPreferenceChange(EventRoutePlannerTimelineFramePreferenceKey.self) { frame in
+                            timelineGuideFrame = frame
+                            presentRoutePlannerGuideIfNeeded()
+                        }
                     } else {
                         ContentUnavailableView(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"), systemImage: "calendar.badge.exclamationmark")
                     }
@@ -6477,6 +6837,17 @@ private struct EventRoutePlannerView: View {
                 }
             }
         }
+        .overlay {
+            if showRoutePlannerGuide {
+                AppGuidanceSpotlightOverlay(
+                    step: routePlannerSpotlightStep,
+                    onPrimary: dismissRoutePlannerGuide,
+                    onDismiss: dismissRoutePlannerGuide
+                )
+                .transition(.opacity)
+                .zIndex(20)
+            }
+        }
         .animation(.spring(response: 0.30, dampingFraction: 0.86), value: showRouteSavedToast)
         .raverSystemNavigation(title: navigationTitleText, backgroundColor: RaverTheme.background)
         .operationBannerHost()
@@ -6498,6 +6869,7 @@ private struct EventRoutePlannerView: View {
             if selectedDayID.isEmpty {
                 selectedDayID = days.first?.id ?? ""
             }
+            presentRoutePlannerGuideIfNeeded()
         }
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
@@ -6546,6 +6918,52 @@ private struct EventRoutePlannerView: View {
     private func presentShareMorePanel() {
         isSharePanelMounted = true
         isShareMorePanelVisible = false
+    }
+
+    private func presentRoutePlannerGuideIfNeeded() {
+        guard isViewingOwnRoute else { return }
+        guard !showRoutePlannerGuide else { return }
+        guard timelineGuideFrame != .zero || selectedDay != nil else { return }
+        guard guidanceCenter.shouldPresent(
+            .eventRoutePlannerFirstRun,
+            policy: AppGuidanceRuntime.eventRoutePlannerFirstRunPolicy,
+            userID: appState.session?.user.id
+        ) else { return }
+        guidanceCenter.markPresented(
+            .eventRoutePlannerFirstRun,
+            policy: AppGuidanceRuntime.eventRoutePlannerFirstRunPolicy,
+            userID: appState.session?.user.id
+        )
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showRoutePlannerGuide = true
+        }
+    }
+
+    private func dismissRoutePlannerGuide() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showRoutePlannerGuide = false
+        }
+    }
+
+    private var routePlannerSpotlightStep: AppGuidanceSpotlightStep {
+        AppGuidanceSpotlightStep(
+            title: LT("标注想看的阵容", "Mark your must-see sets", "見たい出演枠を選ぶ"),
+            message: LT("点击任意演出卡片，就能标注为「我想看」。选好后可以保存路线，也可以从右上角一键分享。", "Tap any set card to mark it as something you want to see. Save the route when you're done, or share it from the top-right menu.", "出演カードをタップすると「見たい」にできます。選び終えたら保存し、右上メニューから共有できます。"),
+            buttonTitle: LT("知道了", "Got it", "了解"),
+            targetFrame: timelineGuideFrame == .zero ? routePlannerFallbackFrame : timelineGuideFrame,
+            cornerRadius: 18,
+            placement: .above
+        )
+    }
+
+    private var routePlannerFallbackFrame: CGRect {
+        let screen = UIScreen.main.bounds
+        return CGRect(
+            x: 12,
+            y: max(170, screen.height * 0.30),
+            width: max(140, screen.width - 24),
+            height: min(360, max(220, screen.height * 0.42))
+        )
     }
 
     private func showWidgetStatusBanner(message: String, conversation: Conversation? = nil) {
@@ -6802,6 +7220,7 @@ private struct EventRoutineView: View {
     let event: WebEvent
     let scheduledSlots: [WebEventLineupSlot]
     var presentationStyle: PresentationStyle = .pushed
+    var onRouteActionGlobalFrameChange: ((CGRect) -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appPush) private var appPush
@@ -7018,6 +7437,18 @@ private struct EventRoutineView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(routeActionBackground(isHighlighted: true))
+            .overlay {
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(
+                            key: EventRouteActionFramePreferenceKey.self,
+                            value: proxy.frame(in: .global)
+                        )
+                }
+            }
+            .onPreferenceChange(EventRouteActionFramePreferenceKey.self) { frame in
+                onRouteActionGlobalFrameChange?(frame)
+            }
         }
     }
 

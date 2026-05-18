@@ -158,6 +158,7 @@ struct DJsModuleView: View {
     }
 
     @EnvironmentObject private var appContainer: AppContainer
+    @EnvironmentObject private var appState: AppState
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @Environment(\.dismiss) private var dismiss
@@ -168,6 +169,7 @@ struct DJsModuleView: View {
     private let openImportOnAppear: Bool
     private let dismissAfterSuccessfulImport: Bool
     @StateObject private var viewModel: DJsModuleViewModel
+    @StateObject private var guidanceCenter = AppGuidanceCenter.shared
 
     private var djImportRepository: DJImportRepository {
         appContainer.djImportRepository
@@ -220,6 +222,8 @@ struct DJsModuleView: View {
     @State private var manualBannerData: Data?
     @State private var isImportingDJ = false
     @State private var didOpenInitialImport = false
+    @State private var showDJSpotlightGuide = false
+    @State private var djSpotlightGuideHandOffset: CGFloat = 0
 
     init(
         viewModel: DJsModuleViewModel,
@@ -262,6 +266,17 @@ struct DJsModuleView: View {
                 sectionContent
             }
 
+            if showDJSpotlightGuide && !spotlightCarouselDJs.isEmpty {
+                AppGuidanceOverlay(
+                    step: djSpotlightGuidanceStep,
+                    handOffset: djSpotlightGuideHandOffset,
+                    onPrimary: dismissDJSpotlightGuide,
+                    onDismiss: dismissDJSpotlightGuide
+                )
+                .transition(.opacity)
+                .zIndex(12)
+            }
+
             VStack(alignment: .leading, spacing: 12) {
                 if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                     VStack(alignment: .leading, spacing: 10) {
@@ -296,6 +311,7 @@ struct DJsModuleView: View {
         .task {
             await viewModel.loadIfNeeded()
             openInitialImportIfNeeded()
+            presentDJSpotlightGuideIfNeeded()
         }
         .overlay(alignment: .bottomTrailing) {
             if selectedSection == .hot {
@@ -307,6 +323,9 @@ struct DJsModuleView: View {
         }
         .onDisappear {
             onHorizontalDragStateChanged?(false)
+        }
+        .onChange(of: spotlightCarouselDJs.count) { _, _ in
+            presentDJSpotlightGuideIfNeeded()
         }
         .onChange(of: manualAvatarItem) { _, item in
             Task { await loadManualPhoto(item, target: .avatar) }
@@ -352,6 +371,17 @@ struct DJsModuleView: View {
         viewModel.spotlightCarouselDJs
     }
 
+    private var djSpotlightGuidanceStep: AppGuidanceStep {
+        AppGuidanceStep(
+            title: LT("滑动 DJ 卡片", "Swipe DJ cards", "DJカードをスワイプ"),
+            message: LT("这里的 DJ 头像卡可以左右滑动切换，也可以点击进入 DJ 详情。", "Swipe left or right to browse DJ cards, and tap a card to open the DJ detail page.", "DJカードは左右にスワイプして切り替えられ、タップするとDJ詳細を開けます。"),
+            buttonTitle: LT("知道了", "Got it", "OK"),
+            iconName: "hand.draw.fill",
+            buttonIconName: "sparkles",
+            visualKind: .swipeHorizontal
+        )
+    }
+
     @ViewBuilder
     private var sectionContent: some View {
         if spotlightCarouselDJs.isEmpty {
@@ -368,6 +398,38 @@ struct DJsModuleView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .ignoresSafeArea(edges: .bottom)
         }
+    }
+
+    private func presentDJSpotlightGuideIfNeeded() {
+        guard !spotlightCarouselDJs.isEmpty else { return }
+        guard !showDJSpotlightGuide else { return }
+        guard guidanceCenter.shouldPresent(
+            .djSpotlightFirstRun,
+            policy: AppGuidanceRuntime.djSpotlightFirstRunPolicy,
+            userID: appStateUserID
+        ) else { return }
+        guidanceCenter.markPresented(
+            .djSpotlightFirstRun,
+            policy: AppGuidanceRuntime.djSpotlightFirstRunPolicy,
+            userID: appStateUserID
+        )
+        djSpotlightGuideHandOffset = 48
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showDJSpotlightGuide = true
+        }
+        withAnimation(.easeInOut(duration: 0.92).repeatCount(3, autoreverses: true)) {
+            djSpotlightGuideHandOffset = -48
+        }
+    }
+
+    private func dismissDJSpotlightGuide() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showDJSpotlightGuide = false
+        }
+    }
+
+    private var appStateUserID: String? {
+        appState.session?.user.id
     }
 
     private var marqueeRows: [[WebDJ]] {

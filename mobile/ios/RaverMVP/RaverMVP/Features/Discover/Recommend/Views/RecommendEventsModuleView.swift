@@ -23,13 +23,18 @@ struct RecommendEventsModuleView: View {
     @Environment(\.appPush) private var appPush
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: RecommendEventsViewModel
+    @StateObject private var guidanceCenter = AppGuidanceCenter.shared
 
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
     private let onRequestMoveToNextDiscoverSection: (() -> Void)?
     private let cardCornerRadius: CGFloat = 28
+    private let recommendGuidancePolicy = AppGuidanceRuntime.recommendEventsFirstRunPolicy
 
     @State private var isHorizontalDragging = false
     @State private var scrollPositionID: String?
+    @State private var showRecommendGuide = false
+    @State private var guideStep: RecommendEventsGuidanceStep = .tap
+    @State private var guideHandOffset: CGFloat = 0
 
     init(
         viewModel: RecommendEventsViewModel,
@@ -73,6 +78,17 @@ struct RecommendEventsModuleView: View {
                 }
             }
 
+            if showRecommendGuide && !viewModel.events.isEmpty {
+                AppGuidanceOverlay(
+                    step: guideStep.guidanceStep,
+                    handOffset: guideHandOffset,
+                    onPrimary: advanceGuide,
+                    onDismiss: dismissGuide
+                )
+                .transition(.opacity)
+                .zIndex(12)
+            }
+
             if viewModel.isRefreshing || viewModel.bannerMessage != nil {
                 VStack(alignment: .leading, spacing: 10) {
                     if viewModel.isRefreshing {
@@ -96,8 +112,22 @@ struct RecommendEventsModuleView: View {
         .background(RaverTheme.background)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            presentGuideIfNeeded()
+        }
         .task {
             await viewModel.loadIfNeeded(sessionUserID: appState.session?.user.id)
+            presentGuideIfNeeded()
+        }
+        .onChange(of: viewModel.events.count) { _, _ in
+            presentGuideIfNeeded()
+        }
+        .onChange(of: appState.shouldPresentPostRegistrationRecommendGuide) { _, _ in
+            presentGuideIfNeeded()
+        }
+        .onChange(of: appState.isRegistrationOnboardingActive) { _, isActive in
+            guard !isActive else { return }
+            presentGuideIfNeeded()
         }
         .task(id: appState.session?.user.id) {
             await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil)
@@ -112,8 +142,8 @@ struct RecommendEventsModuleView: View {
             let size = geometry.size
             let horizontalInset: CGFloat = 16  // 从 44 改为 16，卡片更宽
             let cardSpacing: CGFloat = 10
-            let cardWidth = size.width - horizontalInset * 2
-            let cardHeight = size.height          // 直接用全部高度，padding 移到外层处理
+            let cardWidth = max(size.width - horizontalInset * 2, 1)
+            let cardHeight = max(size.height, 1)          // 直接用全部高度，padding 移到外层处理
 
             ScrollView(.horizontal) {
                 HStack(spacing: cardSpacing) {
@@ -127,7 +157,7 @@ struct RecommendEventsModuleView: View {
                                 let parallaxOffset = -minX + 20
 
                                 recommendationCard(event, parallaxOffset: parallaxOffset)
-                                    .frame(width: proxy.size.width, height: proxy.size.height)
+                                    .frame(width: max(proxy.size.width, 1), height: max(proxy.size.height, 1))
                             }
                             .frame(width: cardWidth, height: cardHeight)
                             .scrollTransition(.interactive, axis: .horizontal) { content, phase in
@@ -193,7 +223,7 @@ struct RecommendEventsModuleView: View {
                         showsFallback: false,
                         contentOffset: CGSize(width: parallaxOffset, height: 0)
                     )
-                    .frame(width: proxy.size.width, height: proxy.size.height)  // 父容器锁定可见区域
+                    .frame(width: max(proxy.size.width, 1), height: max(proxy.size.height, 1))  // 父容器锁定可见区域
                     .clipped()                                                    // 裁掉超出部分
                     .allowsHitTesting(false)
                 }
@@ -407,6 +437,9 @@ struct RecommendEventsModuleView: View {
     }
 
     private func handleRecommendationDragEnded(_ value: DragGesture.Value) {
+        if showRecommendGuide {
+            dismissGuide()
+        }
         notifyHorizontalDragging(false)
 
         guard currentIndex == viewModel.events.count - 1 else { return }
@@ -418,6 +451,82 @@ struct RecommendEventsModuleView: View {
 
         if didPullTowardNextDiscoverSection {
             onRequestMoveToNextDiscoverSection?()
+        }
+    }
+
+    private func presentGuideIfNeeded() {
+        guard !appState.isRegistrationOnboardingActive else { return }
+        guard !viewModel.events.isEmpty else { return }
+        guard !showRecommendGuide else { return }
+        let userID = appState.session?.user.id
+        let shouldPresentForPolicy = guidanceCenter.shouldPresent(
+            .recommendEventsFirstRun,
+            policy: recommendGuidancePolicy,
+            userID: userID
+        )
+        guard appState.shouldPresentPostRegistrationRecommendGuide || shouldPresentForPolicy else { return }
+        guidanceCenter.markPresented(.recommendEventsFirstRun, policy: recommendGuidancePolicy, userID: userID)
+        appState.consumePostRegistrationRecommendGuideRequest()
+        guideStep = .tap
+        guideHandOffset = 0
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showRecommendGuide = true
+        }
+    }
+
+    private func advanceGuide() {
+        switch guideStep {
+        case .tap:
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                guideStep = .swipe
+            }
+            startSwipeHintAnimation()
+        case .swipe:
+            dismissGuide()
+        }
+    }
+
+    private func dismissGuide() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showRecommendGuide = false
+        }
+    }
+
+    private func startSwipeHintAnimation() {
+        guideHandOffset = 34
+        withAnimation(
+            .easeInOut(duration: 0.86)
+                .repeatCount(3, autoreverses: true)
+        ) {
+            guideHandOffset = -52
+        }
+    }
+}
+
+private enum RecommendEventsGuidanceStep {
+    case tap
+    case swipe
+
+    var guidanceStep: AppGuidanceStep {
+        switch self {
+        case .tap:
+            return AppGuidanceStep(
+                title: LT("点一下卡片", "Tap a card", "カードをタップ"),
+                message: LT("每张推荐活动卡片都可以点击，进入活动详情。", "Every recommended event card opens its detail page.", "おすすめイベントのカードをタップすると詳細を開けます。"),
+                buttonTitle: LT("知道了，下一步", "Got it, next", "次へ"),
+                iconName: "hand.tap.fill",
+                buttonIconName: "arrow.right",
+                visualKind: .tap
+            )
+        case .swipe:
+            return AppGuidanceStep(
+                title: LT("向左滑动卡片", "Swipe left", "左へスワイプ"),
+                message: LT("在卡片上向左滑，可以查看下一张推荐。", "Swipe left on a card to see the next pick.", "カードを左へスワイプすると次のおすすめを見られます。"),
+                buttonTitle: LT("开始探索", "Start exploring", "探索を始める"),
+                iconName: "hand.draw.fill",
+                buttonIconName: "sparkles",
+                visualKind: .swipeLeft
+            )
         }
     }
 }

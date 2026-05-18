@@ -28,6 +28,7 @@ struct RaverScrollableTabBar<ID: Hashable>: View {
     private let showsDivider: Bool
     private let indicatorHeight: CGFloat
     private let tabFont: Font
+    private let onTabGlobalFrameChange: ((ID, CGRect) -> Void)?
 
     @State private var tabBarScrollState: ID?
     @State private var tabLayouts: [ID: TabLayout] = [:]
@@ -47,7 +48,8 @@ struct RaverScrollableTabBar<ID: Hashable>: View {
         activeTextColorProvider: ((ID) -> Color)? = nil,
         showsDivider: Bool = true,
         indicatorHeight: CGFloat = 1.8,
-        tabFont: Font = .system(size: 18, weight: .regular)
+        tabFont: Font = .system(size: 18, weight: .regular),
+        onTabGlobalFrameChange: ((ID, CGRect) -> Void)? = nil
     ) {
         self.items = items
         self._selection = selection
@@ -64,6 +66,7 @@ struct RaverScrollableTabBar<ID: Hashable>: View {
         self.showsDivider = showsDivider
         self.indicatorHeight = indicatorHeight
         self.tabFont = tabFont
+        self.onTabGlobalFrameChange = onTabGlobalFrameChange
     }
 
     var body: some View {
@@ -92,6 +95,9 @@ struct RaverScrollableTabBar<ID: Hashable>: View {
                         if tabLayouts[item.id]?.size != next.size || tabLayouts[item.id]?.minX != next.minX {
                             tabLayouts[item.id] = next
                         }
+                    }
+                    .raverGlobalRect { rect in
+                        onTabGlobalFrameChange?(item.id, rect)
                     }
                 }
             }
@@ -794,6 +800,14 @@ private struct RaverHorizontalRectPreferenceKey: PreferenceKey {
     }
 }
 
+private struct RaverGlobalRectPreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
 private extension View {
     @ViewBuilder
     func raverHorizontalRect(_ completion: @escaping (CGRect) -> Void) -> some View {
@@ -804,6 +818,19 @@ private extension View {
                     Color.clear
                         .preference(key: RaverHorizontalRectPreferenceKey.self, value: rect)
                         .onPreferenceChange(RaverHorizontalRectPreferenceKey.self, perform: completion)
+                }
+            }
+    }
+
+    @ViewBuilder
+    func raverGlobalRect(_ completion: @escaping (CGRect) -> Void) -> some View {
+        self
+            .overlay {
+                GeometryReader { proxy in
+                    let rect = proxy.frame(in: .global)
+                    Color.clear
+                        .preference(key: RaverGlobalRectPreferenceKey.self, value: rect)
+                        .onPreferenceChange(RaverGlobalRectPreferenceKey.self, perform: completion)
                 }
             }
     }

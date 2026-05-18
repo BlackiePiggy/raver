@@ -155,7 +155,7 @@ struct NewsModuleView: View {
                             Button {
                                 discoverPush(.newsDetail(articleID: article.id))
                             } label: {
-                                DiscoverNewsRow(article: article)
+                                DiscoverNewsRow(article: article, showsSummary: false)
                             }
                             .buttonStyle(.plain)
                             .contentShape(Rectangle())

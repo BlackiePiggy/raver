@@ -783,87 +783,6 @@ private struct RegisterOnboardingGenreOption: Identifiable, Hashable {
     let level: Int
 }
 
-private struct RegisterCityOption: Identifiable, Hashable {
-    let id: String
-    let zhName: String
-    let enName: String
-    let jaName: String
-
-    var localizedName: String {
-        LT(zhName, enName, jaName)
-    }
-}
-
-private struct RegisterCountryOption: Identifiable, Hashable {
-    let code: String
-    let zhName: String
-    let enName: String
-    let jaName: String
-    let cities: [RegisterCityOption]
-
-    var id: String { code }
-
-    var localizedName: String {
-        LT(zhName, enName, jaName)
-    }
-}
-
-private enum RegisterCityCatalog {
-    static let defaultCountryCode = "CN"
-    static let defaultCityID = "Shanghai"
-
-    static let countries: [RegisterCountryOption] = [
-        RegisterCountryOption(
-            code: "CN",
-            zhName: "中国",
-            enName: "China",
-            jaName: "中国",
-            cities: [
-                RegisterCityOption(id: "Shanghai", zhName: "上海", enName: "Shanghai", jaName: "上海"),
-                RegisterCityOption(id: "Beijing", zhName: "北京", enName: "Beijing", jaName: "北京"),
-                RegisterCityOption(id: "Guangzhou", zhName: "广州", enName: "Guangzhou", jaName: "広州"),
-                RegisterCityOption(id: "Shenzhen", zhName: "深圳", enName: "Shenzhen", jaName: "深セン"),
-                RegisterCityOption(id: "Chengdu", zhName: "成都", enName: "Chengdu", jaName: "成都"),
-                RegisterCityOption(id: "Hangzhou", zhName: "杭州", enName: "Hangzhou", jaName: "杭州"),
-                RegisterCityOption(id: "Wuhan", zhName: "武汉", enName: "Wuhan", jaName: "武漢"),
-                RegisterCityOption(id: "Chongqing", zhName: "重庆", enName: "Chongqing", jaName: "重慶"),
-                RegisterCityOption(id: "Nanjing", zhName: "南京", enName: "Nanjing", jaName: "南京"),
-                RegisterCityOption(id: "Xian", zhName: "西安", enName: "Xi'an", jaName: "西安"),
-                RegisterCityOption(id: "Tianjin", zhName: "天津", enName: "Tianjin", jaName: "天津"),
-                RegisterCityOption(id: "Suzhou", zhName: "苏州", enName: "Suzhou", jaName: "蘇州"),
-                RegisterCityOption(id: "Qingdao", zhName: "青岛", enName: "Qingdao", jaName: "青島"),
-                RegisterCityOption(id: "Xiamen", zhName: "厦门", enName: "Xiamen", jaName: "厦門"),
-                RegisterCityOption(id: "Changsha", zhName: "长沙", enName: "Changsha", jaName: "長沙"),
-            ]
-        ),
-        RegisterCountryOption(
-            code: "JP",
-            zhName: "日本",
-            enName: "Japan",
-            jaName: "日本",
-            cities: [
-                RegisterCityOption(id: "Tokyo", zhName: "东京", enName: "Tokyo", jaName: "東京"),
-                RegisterCityOption(id: "Osaka", zhName: "大阪", enName: "Osaka", jaName: "大阪"),
-                RegisterCityOption(id: "Kyoto", zhName: "京都", enName: "Kyoto", jaName: "京都"),
-                RegisterCityOption(id: "Nagoya", zhName: "名古屋", enName: "Nagoya", jaName: "名古屋"),
-                RegisterCityOption(id: "Fukuoka", zhName: "福冈", enName: "Fukuoka", jaName: "福岡"),
-                RegisterCityOption(id: "Sapporo", zhName: "札幌", enName: "Sapporo", jaName: "札幌"),
-                RegisterCityOption(id: "Yokohama", zhName: "横滨", enName: "Yokohama", jaName: "横浜"),
-                RegisterCityOption(id: "Kobe", zhName: "神户", enName: "Kobe", jaName: "神戸"),
-                RegisterCityOption(id: "Hiroshima", zhName: "广岛", enName: "Hiroshima", jaName: "広島"),
-                RegisterCityOption(id: "Chiba", zhName: "千叶", enName: "Chiba", jaName: "千葉"),
-                RegisterCityOption(id: "Saitama", zhName: "埼玉", enName: "Saitama", jaName: "埼玉"),
-                RegisterCityOption(id: "Sendai", zhName: "仙台", enName: "Sendai", jaName: "仙台"),
-                RegisterCityOption(id: "Naha", zhName: "那霸", enName: "Naha", jaName: "那覇"),
-            ]
-        ),
-    ]
-
-    static func country(for code: String) -> RegisterCountryOption {
-        countries.first(where: { $0.code == code }) ?? countries[0]
-    }
-}
-
 private struct FlexibleWrapLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8
@@ -951,8 +870,10 @@ private struct RegisterProfileView: View {
     @State private var selectedBirthDate = Calendar(identifier: .gregorian).date(
         from: DateComponents(year: Calendar(identifier: .gregorian).component(.year, from: Date()) - 18, month: 1, day: 1)
     ) ?? Date()
-    @State private var selectedRegistrationCountryCode = RegisterCityCatalog.defaultCountryCode
-    @State private var selectedRegistrationCityID = RegisterCityCatalog.defaultCityID
+    @State private var registrationRegionCatalog = RegistrationRegionCatalog.load()
+    @State private var selectedRegistrationCountryCode = "CN"
+    @State private var selectedRegistrationRegionCode = "310000"
+    @State private var selectedRegistrationCityCode = "310000"
     @State private var displayNameAvailability: DisplayNameAvailabilityState = .idle
     @State private var displayNameAvailabilityTask: Task<Void, Never>?
     @State private var selectedAvatarItem: PhotosPickerItem?
@@ -1208,17 +1129,33 @@ private struct RegisterProfileView: View {
         }
     }
 
-    private var selectedRegistrationCountry: RegisterCountryOption {
-        RegisterCityCatalog.country(for: selectedRegistrationCountryCode)
+    private var selectedRegistrationCountry: RegistrationCountryRegion {
+        registrationRegionCatalog.country(for: selectedRegistrationCountryCode)
     }
 
-    private var selectedRegistrationCity: RegisterCityOption {
-        selectedRegistrationCountry.cities.first(where: { $0.id == selectedRegistrationCityID })
-        ?? selectedRegistrationCountry.cities[0]
+    private var selectedRegistrationRegion: RegistrationAdministrativeRegion {
+        selectedRegistrationCountry.children.first(where: { $0.code == selectedRegistrationRegionCode })
+        ?? selectedRegistrationCountry.children[0]
+    }
+
+    private var selectedRegistrationCity: RegistrationAdministrativeArea {
+        selectedRegistrationRegion.children.first(where: { $0.code == selectedRegistrationCityCode })
+        ?? selectedRegistrationRegion.children[0]
     }
 
     private var selectedRegistrationLocationValue: String {
-        "\(selectedRegistrationCountry.code):\(selectedRegistrationCity.id)"
+        [
+            selectedRegistrationCountry.code,
+            selectedRegistrationRegion.code,
+            selectedRegistrationCity.code,
+        ].joined(separator: ":")
+    }
+
+    private func resetRegistrationRegionSelection(for country: RegistrationCountryRegion? = nil) {
+        let resolvedCountry = country ?? selectedRegistrationCountry
+        let region = resolvedCountry.children[0]
+        selectedRegistrationRegionCode = region.code
+        selectedRegistrationCityCode = region.children.first?.code ?? region.code
     }
 
     private var avatarPicker: some View {
@@ -1426,35 +1363,52 @@ private struct RegisterProfileView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.74))
 
-            HStack(spacing: 10) {
+            VStack(spacing: 10) {
                 Menu {
-                    ForEach(RegisterCityCatalog.countries) { country in
-                        Button(country.localizedName) {
+                    ForEach(registrationRegionCatalog.countries) { country in
+                        Button(country.displayName) {
                             selectedRegistrationCountryCode = country.code
-                            selectedRegistrationCityID = country.cities.first?.id ?? selectedRegistrationCityID
+                            resetRegistrationRegionSelection(for: country)
                         }
                     }
                 } label: {
                     registerPickerToken(
-                        title: selectedRegistrationCountry.localizedName,
+                        title: selectedRegistrationCountry.displayName,
                         icon: "globe.asia.australia.fill"
                     )
                 }
                 .buttonStyle(.plain)
 
-                Menu {
-                    ForEach(selectedRegistrationCountry.cities) { city in
-                        Button(city.localizedName) {
-                            selectedRegistrationCityID = city.id
+                HStack(spacing: 10) {
+                    Menu {
+                        ForEach(selectedRegistrationCountry.children) { region in
+                            Button(region.displayName) {
+                                selectedRegistrationRegionCode = region.code
+                                selectedRegistrationCityCode = region.children.first?.code ?? region.code
+                            }
                         }
+                    } label: {
+                        registerPickerToken(
+                            title: selectedRegistrationRegion.displayName,
+                            icon: "map.fill"
+                        )
                     }
-                } label: {
-                    registerPickerToken(
-                        title: selectedRegistrationCity.localizedName,
-                        icon: "location.fill"
-                    )
+                    .buttonStyle(.plain)
+
+                    Menu {
+                        ForEach(selectedRegistrationRegion.children) { city in
+                            Button(city.displayName) {
+                                selectedRegistrationCityCode = city.code
+                            }
+                        }
+                    } label: {
+                        registerPickerToken(
+                            title: selectedRegistrationCity.displayName,
+                            icon: "location.fill"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             Text(LT("会用于后续优先推荐你附近和同地区的活动。", "Used later to prioritize nearby and regional events.", "今後、近隣や同じ地域のイベント推薦に使われます。"))

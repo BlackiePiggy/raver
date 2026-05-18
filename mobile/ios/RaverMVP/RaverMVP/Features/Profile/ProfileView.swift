@@ -746,6 +746,20 @@ struct ProfileHeaderCard<Actions: View>: View {
                     .foregroundStyle(RaverTheme.secondaryText)
             }
 
+            if let locationText = profileLocationText {
+                HStack(spacing: 5) {
+                    Image(systemName: "location.fill")
+                        .font(.caption2.weight(.bold))
+                    Text(locationText)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(RaverTheme.secondaryText)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RaverTheme.card, in: Capsule())
+            }
+
             if !profile.tags.isEmpty {
                 tagsFlow(profile.tags)
             }
@@ -852,6 +866,12 @@ struct ProfileHeaderCard<Actions: View>: View {
         }
     }
 
+    private var profileLocationText: String? {
+        let raw = profile.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !raw.isEmpty else { return nil }
+        return RegistrationRegionCatalog.load().displayText(for: raw)
+    }
+
     @ViewBuilder
     private func tagsFlow(_ tags: [String]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -859,8 +879,7 @@ struct ProfileHeaderCard<Actions: View>: View {
                 ForEach(Array(tags.prefix(12).enumerated()), id: \.offset) { _, tag in
                     Text(formattedTagText(tag))
                         .font(.caption)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -883,43 +902,10 @@ struct ProfileHeaderCard<Actions: View>: View {
     }
 
     private func formattedTagText(_ tag: String) -> String {
-        let words = normalizedTagWords(from: tag)
-        guard !words.isEmpty else { return "#\(tag)" }
-
-        if words.count == 1 {
-            return "#\(words[0])"
-        }
-
-        if words.count == 2 {
-            return "#\(words[0])\n\(words[1])"
-        }
-
-        if words.count == 3 {
-            let lengths = words.enumerated().map { ($0.offset, $0.element.count) }
-            guard let longest = lengths.max(by: { $0.1 < $1.1 })?.0 else {
-                return "#\(words[0])\n\(words[1]) \(words[2])"
-            }
-
-            let others = words.enumerated()
-                .filter { $0.offset != longest }
-                .map(\.element)
-                .joined(separator: " ")
-
-            if longest == 2 {
-                return "#\(others)\n\(words[2])"
-            }
-            return "#\(words[longest])\n\(others)"
-        }
-
-        return "#\(words.joined(separator: " "))"
-    }
-
-    private func normalizedTagWords(from tag: String) -> [String] {
         tag
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
             .replacingOccurrences(of: "-", with: " ")
-            .split(whereSeparator: { $0.isWhitespace })
-            .map(String.init)
-            .filter { !$0.isEmpty }
     }
 
     private func stat(_ title: String, value: Int, onTap: (() -> Void)? = nil) -> some View {

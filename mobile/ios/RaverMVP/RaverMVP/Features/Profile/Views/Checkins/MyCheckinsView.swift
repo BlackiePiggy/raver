@@ -151,6 +151,9 @@ final class MyCheckinsViewModel: ObservableObject {
             if !reset {
                 lastRequestedTimelinePage = nil
             }
+            if reset, await recoverEmptyStateAfterInitialLoadFailure() {
+                return
+            }
             let message = error.userFacingMessage ?? LT("打卡记录加载失败，请稍后重试", "Failed to load check-ins. Please try again later.", "チェックイン記録を読み込めませんでした。時間をおいて再試行してください。")
             if reset {
                 phase = .failure(message: message)
@@ -198,6 +201,9 @@ final class MyCheckinsViewModel: ObservableObject {
             galleryEventsPhase = galleryEvents.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
+            if galleryEvents.isEmpty, await recoverEmptyGalleryEventsAfterFailure() {
+                return
+            }
             let message = error.userFacingMessage ?? LT("活动画廊加载失败，请稍后重试", "Failed to load event gallery. Please try again later.", "イベントギャラリーを読み込めませんでした。時間をおいて再試行してください。")
             if galleryEvents.isEmpty {
                 galleryEventsPhase = .failure(message: message)
@@ -230,6 +236,9 @@ final class MyCheckinsViewModel: ObservableObject {
             galleryArtistsPhase = galleryArtists.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
+            if galleryArtists.isEmpty, await recoverEmptyGalleryArtistsAfterFailure() {
+                return
+            }
             let message = error.userFacingMessage ?? LT("DJ 画廊加载失败，请稍后重试", "Failed to load DJ gallery. Please try again later.", "DJギャラリーを読み込めませんでした。時間をおいて再試行してください。")
             if galleryArtists.isEmpty {
                 galleryArtistsPhase = .failure(message: message)
@@ -245,6 +254,92 @@ final class MyCheckinsViewModel: ObservableObject {
             return try await repository.fetchUserCheckinsOverview(userID: targetUserID)
         }
         return try await repository.fetchMyCheckinsOverview()
+    }
+
+    private func recoverEmptyStateAfterInitialLoadFailure() async -> Bool {
+        guard await confirmNoCheckins() else { return false }
+        applyNoCheckinsState()
+        return true
+    }
+
+    private func recoverEmptyGalleryEventsAfterFailure() async -> Bool {
+        guard await confirmNoCheckins() else { return false }
+        galleryEvents = []
+        galleryEventsPage = 1
+        galleryEventsUseOverviewSummary = false
+        galleryEventsPhase = .empty
+        canLoadMoreGalleryEvents = false
+        bannerMessage = nil
+        if timelineItems.isEmpty {
+            phase = .empty
+            stats = MyCheckinsOverviewStats(eventCount: 0, artistCount: stats?.artistCount ?? 0, latestCheckinAt: nil)
+        }
+        return true
+    }
+
+    private func recoverEmptyGalleryArtistsAfterFailure() async -> Bool {
+        guard await confirmNoCheckins() else { return false }
+        galleryArtists = []
+        galleryArtistsPage = 1
+        galleryArtistsUseOverviewSummary = false
+        galleryArtistsPhase = .empty
+        canLoadMoreGalleryArtists = false
+        bannerMessage = nil
+        if timelineItems.isEmpty {
+            phase = .empty
+            stats = MyCheckinsOverviewStats(eventCount: stats?.eventCount ?? 0, artistCount: 0, latestCheckinAt: nil)
+        }
+        return true
+    }
+
+    private func confirmNoCheckins() async -> Bool {
+        do {
+            let checkinPage: CheckinListPage
+            if let targetUserID {
+                checkinPage = try await repository.fetchUserCheckins(
+                    userID: targetUserID,
+                    page: 1,
+                    limit: 1,
+                    type: nil
+                )
+            } else {
+                checkinPage = try await repository.fetchMyCheckins(
+                    page: 1,
+                    limit: 1,
+                    type: nil
+                )
+            }
+            return checkinPage.items.isEmpty
+        } catch {
+            return false
+        }
+    }
+
+    private func applyNoCheckinsState() {
+        page = 1
+        totalPages = 1
+        canLoadMore = false
+        timelineItems = []
+        timelineDJIdentityByName = [:]
+        timelineDJIdentityByID = [:]
+        timelineLocalizedEventByID = [:]
+        stats = MyCheckinsOverviewStats(eventCount: 0, artistCount: 0, latestCheckinAt: nil)
+        galleryEvents = []
+        galleryArtists = []
+        galleryEventsPhase = .empty
+        galleryArtistsPhase = .empty
+        canLoadMoreGalleryEvents = false
+        canLoadMoreGalleryArtists = false
+        galleryEventsPage = 1
+        galleryArtistsPage = 1
+        galleryEventsUseOverviewSummary = false
+        galleryArtistsUseOverviewSummary = false
+        nextPaginationSource = .overviewPrefetched
+        phase = .empty
+        didLoadInitialPage = true
+        timelineLoadToken += 1
+        lastRequestedTimelinePage = nil
+        bannerMessage = nil
     }
 
     private func fetchTimelinePage(page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
@@ -286,12 +381,12 @@ final class MyCheckinsViewModel: ObservableObject {
         galleryArtists = overview.gallerySummary.topArtists
         galleryEventsPage = 1
         galleryArtistsPage = 1
-        galleryEventsUseOverviewSummary = true
-        galleryArtistsUseOverviewSummary = true
+        galleryEventsUseOverviewSummary = overview.stats.eventCount > galleryEvents.count
+        galleryArtistsUseOverviewSummary = overview.stats.artistCount > galleryArtists.count
         canLoadMoreGalleryEvents = overview.stats.eventCount > galleryEvents.count
         canLoadMoreGalleryArtists = overview.stats.artistCount > galleryArtists.count
-        galleryEventsPhase = galleryEvents.isEmpty ? .idle : .success
-        galleryArtistsPhase = galleryArtists.isEmpty ? .idle : .success
+        galleryEventsPhase = overview.stats.eventCount == 0 ? .empty : (galleryEvents.isEmpty ? .idle : .success)
+        galleryArtistsPhase = overview.stats.artistCount == 0 ? .empty : (galleryArtists.isEmpty ? .idle : .success)
     }
 
     private func mergeUniqueGalleryEvents(
@@ -793,38 +888,22 @@ struct MyCheckinsView: View {
 
     private enum DisplayMode: String, CaseIterable {
         case timeline
-        case gallery
+        case events
+        case djs
 
         var title: String {
             switch self {
             case .timeline: return LT("时间轴", "Timeline", "タイムライン")
-            case .gallery: return LT("画廊", "Gallery", "ギャラリー")
+            case .events: return LT("活动", "Events", "イベント")
+            case .djs: return "DJ"
             }
         }
 
         var iconName: String {
             switch self {
             case .timeline: return "waveform.path.ecg"
-            case .gallery: return "square.grid.2x2"
-            }
-        }
-    }
-
-    private enum GalleryMode: String, CaseIterable {
-        case event
-        case dj
-
-        var title: String {
-            switch self {
-            case .event: return LT("活动", "Events", "イベント")
-            case .dj: return "DJ"
-            }
-        }
-
-        var iconName: String {
-            switch self {
-            case .event: return "calendar"
-            case .dj: return "headphones"
+            case .events: return "calendar"
+            case .djs: return "headphones"
             }
         }
     }
@@ -834,7 +913,6 @@ struct MyCheckinsView: View {
     private let ownerDisplayName: String?
 
     @State private var displayMode: DisplayMode = .timeline
-    @State private var galleryMode: GalleryMode = .event
     @State private var shareMorePresentation: MyCheckinsSharePresentation?
     @State private var fullChatSharePresentation: MyCheckinsSharePresentation?
     @State private var reportTarget: ReportSheetTarget?
@@ -890,16 +968,6 @@ struct MyCheckinsView: View {
                     iconName: { $0.iconName }
                 )
 
-                if displayMode == .gallery {
-                    RaverCheckinsSegmentedControl(
-                        items: GalleryMode.allCases,
-                        selection: $galleryMode,
-                        title: { $0.title },
-                        iconName: { $0.iconName }
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
-
                 if viewModel.phase == .idle || viewModel.phase == .initialLoading {
                     FeedSkeletonView(count: 3)
                         .frame(maxWidth: .infinity)
@@ -921,8 +989,12 @@ struct MyCheckinsView: View {
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else if isCurrentViewEmpty {
                     VStack(spacing: 12) {
-                        ContentUnavailableView(LT("还没有观演记录", "No show history yet", "観覧記録はまだありません"), systemImage: "sparkles.tv")
-                        Text(LT("去发现页完成活动或 DJ 打卡，记录会按你选择的观演时间展示。", "Complete an event or DJ check-in from Discover, and records will appear in your selected show-time order.", "発見ページでイベントまたはDJチェックインを完了すると、選択した参加時間順に記録が表示されます。"))
+                        ContentUnavailableView(LT("暂时没有任何打卡记录", "No check-ins yet", "チェックイン記録はまだありません"), systemImage: "sparkles.tv")
+                        Text(LT(
+                            "快去搜索你参加过的活动，并在活动页面打卡你看过的 DJ！\n也可以去 Wiki-音乐节中找到你看过的音乐节。",
+                            "Search for events you attended, then check in the DJs you saw on the event page.\nYou can also find festivals you have been to from Wiki - Festivals.",
+                            "参加したイベントを検索し、イベントページで見たDJをチェックインしましょう。\nWiki - 音楽フェスから参加したフェスを探すこともできます。"
+                        ))
                             .font(.caption)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(RaverTheme.secondaryText)
@@ -932,7 +1004,7 @@ struct MyCheckinsView: View {
                     if displayMode == .timeline {
                         timelineView
                     } else {
-                        galleryView
+                        collectionView
                     }
                     activeAutoLoadMoreSentinel
                 }
@@ -960,9 +1032,6 @@ struct MyCheckinsView: View {
             }
         }
         .task(id: displayMode) {
-            await ensureActiveGalleryLoaded()
-        }
-        .task(id: galleryMode) {
             await ensureActiveGalleryLoaded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .raverCheckinsDidMutate)) { notification in
@@ -1193,23 +1262,23 @@ struct MyCheckinsView: View {
         switch displayMode {
         case .timeline:
             return timelineNodes.isEmpty
-        case .gallery:
+        case .events, .djs:
             if activeGalleryPhase == .initialLoading {
                 return false
             }
             if case .failure = activeGalleryPhase {
                 return false
             }
-            return galleryMode == .event ? viewModel.galleryEvents.isEmpty : viewModel.galleryArtists.isEmpty
+            return displayMode == .events ? viewModel.galleryEvents.isEmpty : viewModel.galleryArtists.isEmpty
         }
     }
 
     private var activeGalleryPhase: LoadPhase {
-        galleryMode == .event ? viewModel.galleryEventsPhase : viewModel.galleryArtistsPhase
+        displayMode == .events ? viewModel.galleryEventsPhase : viewModel.galleryArtistsPhase
     }
 
     private var galleryCanLoadMore: Bool {
-        galleryMode == .event ? viewModel.canLoadMoreGalleryEvents : viewModel.canLoadMoreGalleryArtists
+        displayMode == .events ? viewModel.canLoadMoreGalleryEvents : viewModel.canLoadMoreGalleryArtists
     }
 
     @ViewBuilder
@@ -1217,17 +1286,18 @@ struct MyCheckinsView: View {
         switch displayMode {
         case .timeline:
             timelineAutoLoadMoreSentinel
-        case .gallery:
+        case .events, .djs:
             galleryAutoLoadMoreSentinel
         }
     }
 
     private func ensureActiveGalleryLoaded() async {
-        guard displayMode == .gallery else { return }
-        switch galleryMode {
-        case .event:
+        switch displayMode {
+        case .timeline:
+            return
+        case .events:
             await viewModel.ensureGalleryEventsLoaded()
-        case .dj:
+        case .djs:
             await viewModel.ensureGalleryArtistsLoaded()
         }
     }
@@ -1250,10 +1320,12 @@ struct MyCheckinsView: View {
     }
 
     private func loadMoreActiveGallery() async {
-        switch galleryMode {
-        case .event:
+        switch displayMode {
+        case .timeline:
+            return
+        case .events:
             await viewModel.loadMoreGalleryEvents()
-        case .dj:
+        case .djs:
             await viewModel.loadMoreGalleryArtists()
         }
     }
@@ -1285,10 +1357,12 @@ struct MyCheckinsView: View {
     }
 
     private func reloadActiveGallery() async {
-        switch galleryMode {
-        case .event:
+        switch displayMode {
+        case .timeline:
+            return
+        case .events:
             await viewModel.loadMoreGalleryEvents(reset: true)
-        case .dj:
+        case .djs:
             await viewModel.loadMoreGalleryArtists(reset: true)
         }
     }
@@ -1475,21 +1549,21 @@ struct MyCheckinsView: View {
         .padding(.bottom, 8)
     }
 
-    private var galleryView: some View {
+    private var collectionView: some View {
         Group {
             if activeGalleryPhase == .initialLoading {
                 FeedSkeletonView(count: 3)
                     .frame(maxWidth: .infinity)
             } else if case .failure(let message) = activeGalleryPhase {
                 ScreenErrorCard(
-                    title: LT("画廊加载失败", "Gallery Failed to Load", "ギャラリーの読み込みに失敗しました"),
+                    title: collectionFailureTitle,
                     message: message
                 ) {
                     Task { await reloadActiveGallery() }
                 }
                 .frame(maxWidth: .infinity, minHeight: 260)
             } else {
-                if galleryMode == .event {
+                if displayMode == .events {
                     galleryEventView
                 } else {
                     galleryDJView
@@ -1498,6 +1572,12 @@ struct MyCheckinsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+    }
+
+    private var collectionFailureTitle: String {
+        displayMode == .events
+            ? LT("活动加载失败", "Events Failed to Load", "イベントの読み込みに失敗しました")
+            : LT("DJ 加载失败", "DJs Failed to Load", "DJの読み込みに失敗しました")
     }
 
     @ViewBuilder

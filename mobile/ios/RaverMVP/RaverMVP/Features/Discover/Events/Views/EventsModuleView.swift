@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct DiscoverEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
@@ -22,10 +23,12 @@ struct DiscoverEventsRootView: View {
 
 struct EventsModuleView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appLocationProvider: AppLocationProvider
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: EventsModuleViewModel
+    @StateObject private var guidanceCenter = AppGuidanceCenter.shared
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
@@ -88,6 +91,8 @@ struct EventsModuleView: View {
     @State private var selectedContinentBuckets: Set<ContinentBucket> = []
     @State private var selectedCountries: Set<String> = []
     @State private var isSelectorDragging = false
+    @State private var showEventsListTabsGuide = false
+    @State private var eventsListTabsGuideHandOffset: CGFloat = 0
 
     init(
         viewModel: EventsModuleViewModel,
@@ -117,6 +122,18 @@ struct EventsModuleView: View {
                 .padding(.trailing, 20)
                 .padding(.bottom, max(0, tabBarReservedHeight) + 24)
         }
+        .overlay {
+            if showEventsListTabsGuide {
+                AppGuidanceOverlay(
+                    step: eventsListTabsGuidanceStep,
+                    handOffset: eventsListTabsGuideHandOffset,
+                    onPrimary: dismissEventsListTabsGuide,
+                    onDismiss: dismissEventsListTabsGuide
+                )
+                .transition(.opacity)
+                .zIndex(12)
+            }
+        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showCalendar) {
@@ -137,6 +154,7 @@ struct EventsModuleView: View {
                 selectedAreaBuckets: $selectedAreaBuckets,
                 selectedContinentBuckets: $selectedContinentBuckets,
                 selectedCountries: $selectedCountries,
+                currentLocationText: appLocationProvider.displayLocationText,
                 availableContinents: availableContinentBuckets,
                 availableCountries: availableCountryOptions
             )
@@ -148,6 +166,10 @@ struct EventsModuleView: View {
         .task(id: allQueryTaskKey) {
             guard selectedScope == .all else { return }
             await viewModel.reloadAll(query: allQuery)
+            presentEventsListTabsGuideIfNeeded()
+        }
+        .onAppear {
+            presentEventsListTabsGuideIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
             Task { await refreshAfterCreate() }
@@ -212,6 +234,45 @@ struct EventsModuleView: View {
             ordered.append(value)
         }
         return ordered
+    }
+
+    private var eventsListTabsGuidanceStep: AppGuidanceStep {
+        AppGuidanceStep(
+            title: LT("滑动切换活动类型", "Swipe event tabs", "イベントタブをスワイプ"),
+            message: LT("上方的活动类型栏可以左右滑动，快速切换不同类型的活动。", "Swipe the event type bar left or right to switch between event categories.", "上部のイベント種別バーは左右にスワイプして切り替えられます。"),
+            buttonTitle: LT("知道了", "Got it", "OK"),
+            iconName: "hand.draw.fill",
+            buttonIconName: "sparkles",
+            visualKind: .swipeHorizontal
+        )
+    }
+
+    private func presentEventsListTabsGuideIfNeeded() {
+        guard eventTypeTabs.count > 2 else { return }
+        guard !showEventsListTabsGuide else { return }
+        guard guidanceCenter.shouldPresent(
+            .eventsListTabsFirstRun,
+            policy: AppGuidanceRuntime.eventsListTabsFirstRunPolicy,
+            userID: appState.session?.user.id
+        ) else { return }
+        guidanceCenter.markPresented(
+            .eventsListTabsFirstRun,
+            policy: AppGuidanceRuntime.eventsListTabsFirstRunPolicy,
+            userID: appState.session?.user.id
+        )
+        eventsListTabsGuideHandOffset = 48
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showEventsListTabsGuide = true
+        }
+        withAnimation(.easeInOut(duration: 0.92).repeatCount(3, autoreverses: true)) {
+            eventsListTabsGuideHandOffset = -48
+        }
+    }
+
+    private func dismissEventsListTabsGuide() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showEventsListTabsGuide = false
+        }
     }
 
     private var availableCountryOptions: [String] {
@@ -286,6 +347,15 @@ struct EventsModuleView: View {
 
     private var eventTypeSelectorRow: some View {
         HStack(spacing: 8) {
+            locationFilterButton
+
+            utilityIconButton(
+                systemName: "calendar",
+                accessibilityLabel: LT("日历", "Calendar", "カレンダー")
+            ) {
+                showCalendar = true
+            }
+
             HorizontalAxisLockedScrollView(
                 showsIndicators: false,
                 onDraggingChanged: { isDragging in
@@ -299,40 +369,37 @@ struct EventsModuleView: View {
                         eventTypeSelectorChip(title: EventTypeOption.displayTitle(for: key), value: key)
                     }
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 2)
             }
             .frame(height: 34)
 
-            HStack(spacing: 8) {
-                utilityIconButton(
-                    systemName: selectedScope == .mine ? "star.fill" : "star",
-                    accessibilityLabel: selectedScope == .mine ? LT("仅收藏", "Favorites", "お気に入りのみ") : LT("全部活动", "All Events", "すべてのイベント"),
-                    isActive: selectedScope == .mine
-                ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedScope = selectedScope == .mine ? .all : .mine
-                    }
-                }
-
-                utilityIconButton(
-                    systemName: isCountryFilterActive
-                        ? "line.3.horizontal.decrease.circle.fill"
-                        : "line.3.horizontal.decrease.circle",
-                    accessibilityLabel: filterButtonTitle,
-                    isActive: isCountryFilterActive
-                ) {
-                    showCountryFilter = true
-                }
-
-                utilityIconButton(
-                    systemName: "calendar",
-                    accessibilityLabel: LT("日历", "Calendar", "カレンダー")
-                ) {
-                    showCalendar = true
-                }
-            }
             .padding(.trailing, 16)
         }
+    }
+
+    private var locationFilterButton: some View {
+        Button {
+            appLocationProvider.refreshCurrentLocation()
+            showCountryFilter = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "location.fill")
+                    .font(.caption.weight(.bold))
+                Text(appLocationProvider.compactCityName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .frame(maxWidth: 28, alignment: .leading)
+            }
+            .foregroundStyle(isCountryFilterActive ? Color.white : RaverTheme.primaryText)
+            .frame(width: 58, height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isCountryFilterActive ? RaverTheme.accent : RaverTheme.card)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(filterButtonTitle)
+        .padding(.leading, 16)
     }
 
     private func eventTypeSelectorChip(title: String, value: String) -> some View {
@@ -486,7 +553,7 @@ struct EventsModuleView: View {
             }
             .buttonStyle(.plain)
 
-            eventActionButton(for: event)
+            eventActionButtons(for: event)
                 .padding(.bottom, 10)
                 .padding(.trailing, 10)
         }
@@ -671,25 +738,51 @@ struct EventsModuleView: View {
         appPush(.eventDetail(eventID: event.id))
     }
 
-    private func eventActionButton(for event: WebEvent) -> some View {
+    private func eventActionButtons(for event: WebEvent) -> some View {
         let starYellow = Color(red: 0.99, green: 0.82, blue: 0.22)
         let isMarked = viewModel.markedCheckinIDsByEventID[event.id] != nil
 
-        return Button {
-            Task {
-                await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
+        return HStack(spacing: 8) {
+            Button {
+                Task {
+                    await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
+                }
+            } label: {
+                Text(isMarked ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(
+                        Capsule()
+                            .fill(
+                                isMarked
+                                ? Color(red: 0.20, green: 0.56, blue: 0.98).opacity(0.45)
+                                : Color(red: 0.20, green: 0.56, blue: 0.98)
+                            )
+                    )
             }
-        } label: {
-            Image(systemName: isMarked ? "star.fill" : "star")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isMarked ? .white : RaverTheme.secondaryText)
-                .frame(width: 34, height: 34)
-                .background(
-                    Circle()
-                        .fill(isMarked ? starYellow : RaverTheme.card.opacity(0.92))
-                )
+            .buttonStyle(.plain)
+            .accessibilityLabel(isMarked ? LT("已关注活动", "Following event", "イベントをフォロー中") : LT("关注活动", "Follow event", "イベントをフォロー"))
+
+            Button {
+                Task {
+                    await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
+                }
+            } label: {
+                Image(systemName: isMarked ? "star.fill" : "star")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isMarked ? .white : RaverTheme.secondaryText)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(isMarked ? starYellow : RaverTheme.card.opacity(0.92))
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isMarked ? LT("取消收藏活动", "Unfavorite event", "イベントのお気に入り解除") : LT("收藏活动", "Favorite event", "イベントをお気に入り"))
         }
-        .buttonStyle(.plain)
     }
 
     private static let continentBucketByCountryToken: [String: ContinentBucket] = [
@@ -755,6 +848,7 @@ private struct EventCountryFilterSheet: View {
     @Binding var selectedAreaBuckets: Set<EventsModuleView.CountryAreaBucket>
     @Binding var selectedContinentBuckets: Set<EventsModuleView.ContinentBucket>
     @Binding var selectedCountries: Set<String>
+    let currentLocationText: String
     let availableContinents: [EventsModuleView.ContinentBucket]
     let availableCountries: [String]
 
@@ -771,6 +865,8 @@ private struct EventCountryFilterSheet: View {
             VStack(spacing: 12) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        currentLocationSection
+
                         chipSection(title: LT("国家范围", "Area", "範囲")) {
                             LazyVGrid(columns: chipColumns, alignment: .leading, spacing: 8) {
                                 ForEach(EventsModuleView.CountryAreaBucket.allCases) { bucket in
@@ -866,6 +962,30 @@ private struct EventCountryFilterSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .raverEnableCustomSwipeBack(edgeRatio: 0.2)
+    }
+
+    private var currentLocationSection: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "location.fill")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(RaverTheme.accent)
+                .frame(width: 30, height: 30)
+                .background(RaverTheme.accent.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(LT("当前位置", "Current Location", "現在地"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Text(currentLocationText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func chipSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
