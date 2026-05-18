@@ -3000,10 +3000,16 @@ struct DJDetailView: View {
         if isLoadingSets || (!force && didLoadSets) { return }
         isLoadingSets = true
         defer { isLoadingSets = false }
-        let loaded = (try? await djLinkedContentRepository.fetchDJSets(djID: djID)) ?? []
-        sets = loaded
-        didLoadSets = true
-        await persistCurrentDJManualCacheSnapshotIfPossible()
+        do {
+            let loaded = try await djLinkedContentRepository.fetchDJSets(djID: djID)
+            sets = loaded
+            didLoadSets = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
     }
 
     @MainActor
@@ -3011,10 +3017,16 @@ struct DJDetailView: View {
         if isLoadingEvents || (!force && didLoadEvents) { return }
         isLoadingEvents = true
         defer { isLoadingEvents = false }
-        let loaded = (try? await djLinkedContentRepository.fetchDJEvents(djID: djID)) ?? []
-        djEvents = loaded
-        didLoadEvents = true
-        await persistCurrentDJManualCacheSnapshotIfPossible()
+        do {
+            let loaded = try await djLinkedContentRepository.fetchDJEvents(djID: djID)
+            djEvents = loaded
+            didLoadEvents = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
     }
 
     @MainActor
@@ -3022,9 +3034,15 @@ struct DJDetailView: View {
         if isLoadingRatings || (!force && didLoadRatings) { return }
         isLoadingRatings = true
         defer { isLoadingRatings = false }
-        ratingUnits = (try? await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)) ?? []
-        didLoadRatings = true
-        await persistCurrentDJManualCacheSnapshotIfPossible()
+        do {
+            ratingUnits = try await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
+            didLoadRatings = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
     }
 
     @MainActor
@@ -3032,9 +3050,15 @@ struct DJDetailView: View {
         if isLoadingRelatedArticles || (!force && didLoadRelatedArticles) { return }
         isLoadingRelatedArticles = true
         defer { isLoadingRelatedArticles = false }
-        relatedArticles = (try? await fetchRelatedNewsArticlesForDJ(djID: djID)) ?? []
-        didLoadRelatedArticles = true
-        await persistCurrentDJManualCacheSnapshotIfPossible()
+        do {
+            relatedArticles = try await fetchRelatedNewsArticlesForDJ(djID: djID)
+            didLoadRelatedArticles = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
     }
 
     @MainActor

@@ -481,6 +481,15 @@ const createLabelFromSubmission = async (payload: Prisma.JsonObject) => {
 const createRatingFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
   const name = cleanText(payload.name) || cleanText(payload.title);
   if (!name) throw new Error('打分标题不能为空');
+  const rawDjId = cleanText(payload.djId);
+  const rawDjIds = stringArray(payload.djIds ?? payload.djIDs);
+  const djIds = Array.from(new Set([...rawDjIds, ...(rawDjId ? [rawDjId] : [])])).filter(Boolean);
+  if (djIds.length > 0) {
+    const existingDjs = await prisma.dJ.findMany({ where: { id: { in: djIds } }, select: { id: true } });
+    const existingDjIds = new Set(existingDjs.map((dj) => dj.id));
+    const missingDjId = djIds.find((id) => !existingDjIds.has(id));
+    if (missingDjId) throw new Error(`DJ 不存在: ${missingDjId}`);
+  }
   if (cleanText(payload.ratingEventId)) {
     const eventId = cleanText(payload.ratingEventId)!;
     const event = await prisma.ratingEvent.findUnique({ where: { id: eventId }, select: { id: true } });
@@ -489,15 +498,23 @@ const createRatingFromSubmission = async (payload: Prisma.JsonObject, submitterI
       data: {
         eventId,
         createdById: submitterId,
+        djId: rawDjId || djIds[0] || null,
+        djIds,
         name,
         description: cleanText(payload.description) || null,
         imageUrl: cleanText(payload.imageUrl) || null,
       },
     });
   }
+  const sourceEventId = cleanText(payload.sourceEventId ?? payload.eventId ?? payload.eventID);
+  if (sourceEventId) {
+    const sourceEvent = await prisma.event.findUnique({ where: { id: sourceEventId }, select: { id: true } });
+    if (!sourceEvent) throw new Error('关联活动不存在');
+  }
   return prisma.ratingEvent.create({
     data: {
       createdById: submitterId,
+      sourceEventId: sourceEventId || null,
       name,
       description: cleanText(payload.description) || null,
       imageUrl: cleanText(payload.imageUrl) || null,

@@ -1272,6 +1272,8 @@ struct WebRatingUnitEventLite: Codable, Identifiable, Hashable {
 struct WebRatingUnit: Codable, Identifiable, Hashable {
     let id: String
     var eventId: String
+    var djId: String? = nil
+    var djIds: [String] = []
     var name: String
     var description: String?
     var imageUrl: String?
@@ -1307,6 +1309,8 @@ struct CreateRatingUnitInput: Codable {
     var name: String
     var description: String?
     var imageUrl: String?
+    var djId: String? = nil
+    var djIds: [String] = []
 }
 
 struct UpdateRatingEventInput: Codable {
@@ -1319,6 +1323,8 @@ struct UpdateRatingUnitInput: Codable {
     var name: String?
     var description: String?
     var imageUrl: String?
+    var djId: String? = nil
+    var djIds: [String]? = nil
 }
 
 struct CreateRatingCommentInput: Codable {

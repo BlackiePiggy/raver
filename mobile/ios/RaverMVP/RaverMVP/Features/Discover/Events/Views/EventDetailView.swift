@@ -1281,6 +1281,7 @@ struct EventDetailView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     @StateObject private var guidanceCenter = AppGuidanceCenter.shared
@@ -3336,27 +3337,18 @@ struct EventDetailView: View {
         let selectedDay = days.first { $0.id == selectedScheduleDayID } ?? days.first
 
         if let selectedDay {
+            let sections = eventScheduleStageSections(for: selectedDay, event: event)
+            let activeStageID = selectedScheduleStageID(in: sections)
+            let visibleSections = activeStageID.flatMap { activeID in
+                sections.first { $0.id == activeID }.map { [$0] }
+            } ?? Array(sections.prefix(1))
+
             VStack(alignment: .leading, spacing: 12) {
                 if days.count > 1 {
                     eventScheduleDayTabs(days)
                 }
 
-                let sections = eventScheduleStageSections(for: selectedDay, event: event)
-                let activeStageID: String? = {
-                    guard let selectedScheduleStageKey,
-                          sections.contains(where: { $0.id == selectedScheduleStageKey }) else {
-                        return nil
-                    }
-                    return selectedScheduleStageKey
-                }()
-
-                if sections.count > 1 {
-                    eventScheduleStageTabs(sections: sections, activeStageID: activeStageID)
-                }
-
-                let visibleSections = activeStageID.flatMap { activeID in
-                    sections.first { $0.id == activeID }.map { [$0] }
-                } ?? sections
+                eventScheduleStageTabs(sections: sections, activeStageID: activeStageID)
 
                 ForEach(visibleSections) { section in
                     eventScheduleStageSectionCard(section, event: event)
@@ -3366,13 +3358,17 @@ struct EventDetailView: View {
                 if selectedScheduleDayID == nil {
                     selectedScheduleDayID = selectedDay.id
                 }
+                ensureSelectedScheduleStage(in: sections)
+            }
+            .onChange(of: selectedScheduleDayID) { _, _ in
+                selectedScheduleStageKey = nil
             }
         }
     }
 
     private func eventScheduleDayTabs(_ days: [EventScheduleDay]) -> some View {
         HorizontalAxisLockedScrollView(showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ForEach(days) { day in
                     let isSelected = (selectedScheduleDayID ?? days.first?.id) == day.id
                     Button {
@@ -3381,50 +3377,32 @@ struct EventDetailView: View {
                             selectedScheduleStageKey = nil
                         }
                     } label: {
-                        VStack(spacing: 2) {
-                            Text(day.title)
-                                .font(.caption.weight(.bold))
-                            Text(day.date.appLocalizedMDText())
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .foregroundStyle(isSelected ? RaverTheme.background : RaverTheme.primaryText)
-                        .multilineTextAlignment(.center)
-                        .frame(minWidth: 66)
+                        Text(day.subtitleWithoutTimeZone)
+                            .font(EventScheduleTypography.semibold(15))
+                            .foregroundStyle(isSelected ? scheduleSelectorSelectedTextColor : scheduleSelectorUnselectedTextColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.84)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 7)
                         .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
+                            Capsule()
+                                .fill(isSelected ? scheduleSelectorSelectedBackgroundColor : scheduleSelectorUnselectedBackgroundColor)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(scheduleSelectorUnselectedStrokeColor, lineWidth: isSelected ? 0 : 1)
+                                )
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.vertical, 1)
+            .padding(.horizontal, 2)
         }
     }
 
     private func eventScheduleStageTabs(sections: [EventScheduleStageSection], activeStageID: String?) -> some View {
         HorizontalAxisLockedScrollView(showsIndicators: false) {
-            HStack(spacing: 8) {
-                Button {
-                    withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
-                        selectedScheduleStageKey = nil
-                    }
-                } label: {
-                    Text(LT("全部舞台", "All stages", "すべてのステージ"))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(activeStageID == nil ? RaverTheme.background : RaverTheme.primaryText)
-                        .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(activeStageID == nil ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
-                        )
-                }
-                .buttonStyle(.plain)
-
+            HStack(spacing: 10) {
                 ForEach(sections) { section in
                     let isSelected = activeStageID == section.id
                     Button {
@@ -3433,21 +3411,66 @@ struct EventDetailView: View {
                         }
                     } label: {
                         Text(section.name)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(isSelected ? RaverTheme.background : RaverTheme.primaryText)
+                            .font(EventScheduleTypography.semibold(15))
+                            .foregroundStyle(isSelected ? scheduleSelectorSelectedTextColor : scheduleSelectorUnselectedTextColor)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.84)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
+                            .padding(.vertical, 7)
                             .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(isSelected ? RaverTheme.primaryText : RaverTheme.card.opacity(0.86))
+                                Capsule()
+                                    .fill(isSelected ? scheduleSelectorSelectedBackgroundColor : scheduleSelectorUnselectedBackgroundColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(scheduleSelectorUnselectedStrokeColor, lineWidth: isSelected ? 0 : 1)
+                                    )
                             )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.vertical, 1)
+            .padding(.horizontal, 2)
         }
+    }
+
+    private var scheduleSelectorSelectedTextColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.85) : Color.white.opacity(0.97)
+    }
+
+    private var scheduleSelectorSelectedBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.92) : RaverTheme.accent.opacity(0.92)
+    }
+
+    private var scheduleSelectorUnselectedTextColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.88) : RaverTheme.primaryText.opacity(0.86)
+    }
+
+    private var scheduleSelectorUnselectedBackgroundColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.13) : Color.black.opacity(0.06)
+    }
+
+    private var scheduleSelectorUnselectedStrokeColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.10)
+    }
+
+    private func selectedScheduleStageID(in sections: [EventScheduleStageSection]) -> String? {
+        if let selectedScheduleStageKey,
+           sections.contains(where: { $0.id == selectedScheduleStageKey }) {
+            return selectedScheduleStageKey
+        }
+        return sections.first?.id
+    }
+
+    private func ensureSelectedScheduleStage(in sections: [EventScheduleStageSection]) {
+        guard !sections.isEmpty else {
+            selectedScheduleStageKey = nil
+            return
+        }
+        if let selectedScheduleStageKey,
+           sections.contains(where: { $0.id == selectedScheduleStageKey }) {
+            return
+        }
+        selectedScheduleStageKey = sections.first?.id
     }
 
     private func eventScheduleStageSectionCard(_ section: EventScheduleStageSection, event: WebEvent) -> some View {

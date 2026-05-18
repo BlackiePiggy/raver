@@ -976,10 +976,12 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse {
         let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let language = AppLanguagePreference.current.effectiveLanguage
         var queryItems = [
             URLQueryItem(name: "q", value: keyword),
             URLQueryItem(name: "tab", value: tab.rawValue),
-            URLQueryItem(name: "limit", value: "\(max(1, min(80, limit)))")
+            URLQueryItem(name: "limit", value: "\(max(1, min(80, limit)))"),
+            URLQueryItem(name: "locale", value: language.rawValue)
         ]
         if keyword.isEmpty {
             queryItems.removeAll { $0.name == "q" }
@@ -1054,6 +1056,7 @@ final class LiveWebFeatureService: WebFeatureService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        request.setValue(AppLanguagePreference.current.effectiveLanguage.localeIdentifier, forHTTPHeaderField: "Accept-Language")
         if let token = SessionTokenStore.shared.token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

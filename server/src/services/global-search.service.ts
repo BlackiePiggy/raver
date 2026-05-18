@@ -19,6 +19,8 @@ export type GlobalSearchTab =
   | 'genreTree'
   | 'wiki';
 
+export type GlobalSearchLocale = 'zh' | 'en' | 'ja';
+
 export type GlobalSearchItemType =
   | 'event'
   | 'news'
@@ -72,6 +74,7 @@ type SearchParams = {
   tab: GlobalSearchTab;
   limit: number;
   userId: string;
+  locale?: GlobalSearchLocale;
 };
 
 type SearchTask = {
@@ -156,6 +159,53 @@ const containsInsensitive = (query: string) => ({
   contains: query,
   mode: 'insensitive' as const,
 });
+
+export const normalizeSearchLocale = (...values: unknown[]): GlobalSearchLocale => {
+  for (const value of values) {
+    const raw = Array.isArray(value) ? value[0] : value;
+    const normalized = String(raw || '').trim().toLowerCase();
+    if (!normalized) continue;
+    if (normalized.startsWith('zh')) return 'zh';
+    if (normalized.startsWith('ja')) return 'ja';
+    if (normalized.startsWith('en')) return 'en';
+  }
+  return 'zh';
+};
+
+const asRecord = (value: Prisma.JsonValue | null | undefined): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const pickLocalizedText = (
+  value: Prisma.JsonValue | null | undefined,
+  locale: GlobalSearchLocale,
+  fallback?: string | null
+): string => {
+  const record = asRecord(value);
+  const keysByLocale: Record<GlobalSearchLocale, string[]> = {
+    zh: ['zh', 'zh-CN', 'zh-Hans', 'zh_CN', 'zh_Hans'],
+    en: ['enFull', 'en', 'en-US', 'en_US'],
+    ja: ['ja', 'ja-JP', 'ja_JP', 'enFull', 'en'],
+  };
+  const fallbackKeys = ['zh', 'enFull', 'en', 'ja'];
+  for (const key of [...keysByLocale[locale], ...fallbackKeys]) {
+    const text = String(record?.[key] || '').trim();
+    if (text) return text;
+  }
+  return String(fallback || '').trim();
+};
+
+const labelText = (locale: GlobalSearchLocale, zh: string, en: string, ja = en): string => {
+  switch (locale) {
+    case 'zh':
+      return zh;
+    case 'ja':
+      return ja;
+    case 'en':
+      return en;
+  }
+};
 
 const fetchFestivalIDsByAliasContains = async (query: string, options: { excludeIDs?: string[]; limit?: number } = {}) => {
   const rows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -452,7 +502,7 @@ const loadRankingYearEntries = (boardId: string, year: number): RankingEntryReco
   return parseRankingText(fs.readFileSync(txtPath, 'utf8'));
 };
 
-const searchEvents = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchEvents = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const brandAliasIDs = await fetchFestivalIDsByAliasContains(query);
 
   const rows = await prisma.event.findMany({
@@ -482,10 +532,14 @@ const searchEvents = async (query: string, limit: number): Promise<GlobalSearchI
     select: {
       id: true,
       name: true,
+      nameI18n: true,
       description: true,
+      descriptionI18n: true,
       coverImageUrl: true,
       city: true,
+      cityI18n: true,
       country: true,
+      countryI18n: true,
       venueName: true,
       organizerName: true,
       startDate: true,
@@ -496,6 +550,7 @@ const searchEvents = async (query: string, limit: number): Promise<GlobalSearchI
       wikiFestival: {
         select: {
           name: true,
+          nameI18n: true,
           abbreviation: true,
           aliases: true,
         },
@@ -511,24 +566,31 @@ const searchEvents = async (query: string, limit: number): Promise<GlobalSearchI
 
   return sortItems(
     rows.map((row) => {
+      const title = pickLocalizedText(row.nameI18n, locale, row.name);
+      const description = pickLocalizedText(row.descriptionI18n, locale, row.description);
+      const city = pickLocalizedText(row.cityI18n, locale, row.city);
+      const country = pickLocalizedText(row.countryI18n, locale, row.country);
+      const brandName = row.wikiFestival
+        ? pickLocalizedText(row.wikiFestival.nameI18n, locale, row.wikiFestival.name)
+        : null;
       const lineupNames = row.lineupSlots.map((slot) => slot.djName);
       const brandNames = row.wikiFestival
-        ? [row.wikiFestival.name, row.wikiFestival.abbreviation, ...(row.wikiFestival.aliases || [])]
+        ? [brandName, row.wikiFestival.name, row.wikiFestival.abbreviation, ...(row.wikiFestival.aliases || [])]
         : [];
       const score = Math.max(
-        scoreText(query, row.name),
-        scoreTexts(query, [row.venueName, row.city, row.country, row.organizerName], { exact: 78, prefix: 66, contains: 48 }),
+        scoreTexts(query, [row.name, title]),
+        scoreTexts(query, [row.venueName, row.city, city, row.country, country, row.organizerName], { exact: 78, prefix: 66, contains: 48 }),
         scoreTexts(query, brandNames, { exact: 86, prefix: 74, contains: 56 }),
         scoreTexts(query, lineupNames, { exact: 82, prefix: 70, contains: 52 }),
-        scoreText(query, row.description, { exact: 54, prefix: 44, contains: 34 })
+        scoreTexts(query, [row.description, description], { exact: 54, prefix: 44, contains: 34 })
       ) + (row.isVerified ? 4 : 0) + recencyBoost(row.updatedAt, 2);
       return {
         id: `event:${row.id}`,
         type: 'event',
         entityID: row.id,
-        title: row.name,
-        subtitle: compact([compact([row.city, row.country], ', '), row.venueName, row.startDate.toISOString().slice(0, 10)]),
-        summary: truncate(row.description || lineupNames.join(', ')),
+        title,
+        subtitle: compact([compact([city, country], ', '), row.venueName, row.startDate.toISOString().slice(0, 10)]),
+        summary: truncate(description || lineupNames.join(', ')),
         imageUrl: row.coverImageUrl,
         badgeText: row.status,
         deeplink: `raver://event/${row.id}`,
@@ -600,7 +662,7 @@ const searchNews = async (query: string, limit: number, _userId: string, blocked
   return sortItems(items).slice(0, limit);
 };
 
-const searchDJs = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchDJs = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const rows = await prisma.dJ.findMany({
     where: {
       OR: [
@@ -615,12 +677,15 @@ const searchDJs = async (query: string, limit: number): Promise<GlobalSearchItem
     select: {
       id: true,
       name: true,
+      nameI18n: true,
       aliases: true,
       genres: true,
       bio: true,
+      bioI18n: true,
       avatarUrl: true,
       bannerUrl: true,
       country: true,
+      countryI18n: true,
       isVerified: true,
       followerCount: true,
       updatedAt: true,
@@ -631,21 +696,24 @@ const searchDJs = async (query: string, limit: number): Promise<GlobalSearchItem
 
   return sortItems(
     rows.map((row) => {
+      const title = pickLocalizedText(row.nameI18n, locale, row.name);
+      const bio = pickLocalizedText(row.bioI18n, locale, row.bio);
+      const country = pickLocalizedText(row.countryI18n, locale, row.country);
       const score = Math.max(
-        scoreText(query, row.name),
+        scoreTexts(query, [row.name, title]),
         arrayScore(query, row.aliases),
         arrayScore(query, row.genres),
-        scoreTexts(query, [row.country, row.bio], { exact: 60, prefix: 50, contains: 36 })
+        scoreTexts(query, [row.country, country, row.bio, bio], { exact: 60, prefix: 50, contains: 36 })
       ) + (row.isVerified ? 5 : 0) + Math.min(5, Math.log10(Math.max(1, row.followerCount + 1)));
       return {
         id: `dj:${row.id}`,
         type: 'dj',
         entityID: row.id,
-        title: row.name,
-        subtitle: compact([row.genres.slice(0, 3).join(', '), row.country]),
-        summary: truncate(row.bio),
+        title,
+        subtitle: compact([row.genres.slice(0, 3).join(', '), country]),
+        summary: truncate(bio),
         imageUrl: row.avatarUrl || row.bannerUrl,
-        badgeText: row.isVerified ? 'Verified DJ' : 'DJ',
+        badgeText: row.isVerified ? labelText(locale, '认证 DJ', 'Verified DJ', '認証 DJ') : 'DJ',
         deeplink: `raver://dj/${row.id}`,
         relevanceScore: finalizeScore(score),
         publishedAt: null,
@@ -656,7 +724,7 @@ const searchDJs = async (query: string, limit: number): Promise<GlobalSearchItem
   ).slice(0, limit);
 };
 
-const searchSets = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchSets = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const [setRows, trackRows] = await Promise.all([
     prisma.dJSet.findMany({
       where: {
@@ -672,7 +740,9 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
       select: {
         id: true,
         title: true,
+        titleI18n: true,
         description: true,
+        descriptionI18n: true,
         thumbnailUrl: true,
         platform: true,
         duration: true,
@@ -686,7 +756,7 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
         updatedAt: true,
         customDjNames: true,
         dj: {
-          select: { name: true, avatarUrl: true },
+          select: { name: true, nameI18n: true, avatarUrl: true },
         },
       },
       orderBy: [{ recordedAt: 'desc' }, { createdAt: 'desc' }],
@@ -713,7 +783,9 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
               select: {
                 id: true,
                 title: true,
+                titleI18n: true,
                 description: true,
+                descriptionI18n: true,
                 thumbnailUrl: true,
                 platform: true,
                 duration: true,
@@ -727,7 +799,7 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
                 updatedAt: true,
                 customDjNames: true,
                 dj: {
-                  select: { name: true, avatarUrl: true },
+                  select: { name: true, nameI18n: true, avatarUrl: true },
                 },
               },
             },
@@ -740,21 +812,24 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
   ]);
 
   const setItems = setRows.map((row) => {
-    const performerNames = [row.dj?.name, ...row.customDjNames].filter((name): name is string => Boolean(name));
+    const title = pickLocalizedText(row.titleI18n, locale, row.title);
+    const description = pickLocalizedText(row.descriptionI18n, locale, row.description);
+    const djName = row.dj ? pickLocalizedText(row.dj.nameI18n, locale, row.dj.name) : null;
+    const performerNames = [djName, ...row.customDjNames].filter((name): name is string => Boolean(name));
     const durationMinutes = row.duration ? `${Math.round(row.duration / 60)} min` : null;
     const score = Math.max(
-      scoreText(query, row.title),
+      scoreTexts(query, [row.title, title]),
       scoreTexts(query, performerNames, { exact: 84, prefix: 72, contains: 56 }),
       scoreTexts(query, [row.eventName, row.venue], { exact: 72, prefix: 60, contains: 44 }),
-      scoreText(query, row.description, { exact: 56, prefix: 46, contains: 34 })
+      scoreTexts(query, [row.description, description], { exact: 56, prefix: 46, contains: 34 })
     ) + (row.isVerified ? 3 : 0) + Math.min(4, Math.log10(Math.max(1, row.viewCount + row.likeCount + 1)));
     return {
       id: `set:${row.id}`,
       type: 'set',
       entityID: row.id,
-      title: row.title,
+      title,
       subtitle: compact([performerNames.join(', '), row.eventName, durationMinutes]),
-      summary: truncate(row.description || row.venue),
+      summary: truncate(description || row.venue),
       imageUrl: row.thumbnailUrl || row.dj?.avatarUrl || null,
       badgeText: row.platform,
       deeplink: buildSetDeeplink(row.id),
@@ -767,12 +842,14 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
 
   const trackItems = trackRows.map((row) => {
     const set = row.tracklist.set;
-    const performerNames = [set.dj?.name, ...set.customDjNames].filter((name): name is string => Boolean(name));
+    const setTitle = pickLocalizedText(set.titleI18n, locale, set.title);
+    const djName = set.dj ? pickLocalizedText(set.dj.nameI18n, locale, set.dj.name) : null;
+    const performerNames = [djName, ...set.customDjNames].filter((name): name is string => Boolean(name));
     const timeLabel = formatSecondsLabel(row.startTime);
     const score = Math.max(
       scoreText(query, row.title, { exact: 100, prefix: 88, contains: 74 }),
       scoreText(query, row.artist, { exact: 96, prefix: 84, contains: 70 }),
-      scoreText(query, set.title, { exact: 72, prefix: 60, contains: 48 }),
+      scoreTexts(query, [set.title, setTitle], { exact: 72, prefix: 60, contains: 48 }),
       scoreTexts(query, performerNames, { exact: 68, prefix: 56, contains: 42 })
     ) + (set.isVerified ? 2 : 0) + Math.min(4, Math.log10(Math.max(1, set.viewCount + set.likeCount + 1)));
 
@@ -781,14 +858,14 @@ const searchSets = async (query: string, limit: number): Promise<GlobalSearchIte
       type: 'set',
       entityID: set.id,
       title: row.title,
-      subtitle: compact([row.artist, set.title, performerNames.join(', ')]),
+      subtitle: compact([row.artist, setTitle, performerNames.join(', ')]),
       summary: truncate(
         compact(
           [
-            row.tracklist.title ? `Tracklist: ${row.tracklist.title}` : 'Tracklist 命中',
+            row.tracklist.title ? `Tracklist: ${row.tracklist.title}` : labelText(locale, 'Tracklist 命中', 'Tracklist match', 'Tracklist 命中'),
             set.eventName,
             set.venue,
-            timeLabel ? `跳转到 ${timeLabel}` : null,
+            timeLabel ? labelText(locale, `跳转到 ${timeLabel}`, `Jump to ${timeLabel}`, `${timeLabel} に移動`) : null,
           ],
           ' · '
         ),
@@ -1016,7 +1093,7 @@ const searchPosts = async (query: string, limit: number, userId: string, blocked
   ).slice(0, limit);
 };
 
-const searchLabels = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchLabels = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const labels = await prisma.label.findMany({
     where: {
       OR: [
@@ -1032,11 +1109,13 @@ const searchLabels = async (query: string, limit: number): Promise<GlobalSearchI
     select: {
       id: true,
       name: true,
+      nameI18n: true,
       nation: true,
       genres: true,
       genresPreview: true,
       introductionPreview: true,
       introduction: true,
+      descriptionI18n: true,
       logoUrl: true,
       avatarUrl: true,
       likes: true,
@@ -1048,20 +1127,22 @@ const searchLabels = async (query: string, limit: number): Promise<GlobalSearchI
   });
 
   return sortItems(labels.map((row) => {
+    const title = pickLocalizedText(row.nameI18n, locale, row.name);
+    const description = pickLocalizedText(row.descriptionI18n, locale, row.introductionPreview || row.introduction);
     const score = Math.max(
-      scoreText(query, row.name),
+      scoreTexts(query, [row.name, title]),
       arrayScore(query, row.genres),
-      scoreTexts(query, [row.nation, row.genresPreview, row.introductionPreview, row.introduction], { exact: 62, prefix: 50, contains: 36 })
+      scoreTexts(query, [row.nation, row.genresPreview, row.introductionPreview, row.introduction, description], { exact: 62, prefix: 50, contains: 36 })
     ) + Math.min(4, Math.log10(Math.max(1, (row.likes || 0) + (row.soundcloudFollowers || 0) + 1)));
     return {
       id: `label:${row.id}`,
       type: 'label',
       entityID: row.id,
-      title: row.name,
-      subtitle: compact(['Label', row.nation, row.genres.slice(0, 2).join(', ')]),
-      summary: truncate(row.introductionPreview || row.introduction),
+      title,
+      subtitle: compact([labelText(locale, '厂牌', 'Label', 'レーベル'), row.nation, row.genres.slice(0, 2).join(', ')]),
+      summary: truncate(description),
       imageUrl: row.avatarUrl || row.logoUrl,
-      badgeText: 'Label',
+      badgeText: labelText(locale, '厂牌', 'Label', 'レーベル'),
       deeplink: `raver://label/${row.id}`,
       relevanceScore: finalizeScore(score),
       publishedAt: null,
@@ -1071,7 +1152,7 @@ const searchLabels = async (query: string, limit: number): Promise<GlobalSearchI
   })).slice(0, limit);
 };
 
-const searchFestivals = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchFestivals = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const festivals = await prisma.wikiFestival.findMany({
     where: {
       isActive: true,
@@ -1092,12 +1173,16 @@ const searchFestivals = async (query: string, limit: number): Promise<GlobalSear
     select: {
       id: true,
       name: true,
+      nameI18n: true,
       abbreviation: true,
       aliases: true,
       country: true,
+      countryI18n: true,
       city: true,
+      cityI18n: true,
       tagline: true,
       introduction: true,
+      descriptionI18n: true,
       avatarUrl: true,
       backgroundUrl: true,
       updatedAt: true,
@@ -1122,12 +1207,16 @@ const searchFestivals = async (query: string, limit: number): Promise<GlobalSear
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         abbreviation: true,
         aliases: true,
         country: true,
+        countryI18n: true,
         city: true,
+        cityI18n: true,
         tagline: true,
         introduction: true,
+        descriptionI18n: true,
         avatarUrl: true,
         backgroundUrl: true,
         updatedAt: true,
@@ -1140,21 +1229,25 @@ const searchFestivals = async (query: string, limit: number): Promise<GlobalSear
   const festivalRows = [...festivals, ...aliasPartialFestivals];
 
   return sortItems(festivalRows.map((row) => {
+    const title = pickLocalizedText(row.nameI18n, locale, row.name);
+    const country = pickLocalizedText(row.countryI18n, locale, row.country);
+    const city = pickLocalizedText(row.cityI18n, locale, row.city);
+    const description = pickLocalizedText(row.descriptionI18n, locale, row.tagline || row.introduction);
     const score = Math.max(
-      scoreText(query, row.name),
+      scoreTexts(query, [row.name, title]),
       scoreText(query, row.abbreviation, { exact: 90, prefix: 78, contains: 62 }),
       arrayScore(query, row.aliases),
-      scoreTexts(query, [row.country, row.city, row.tagline, row.introduction], { exact: 64, prefix: 52, contains: 38 })
+      scoreTexts(query, [row.country, country, row.city, city, row.tagline, row.introduction, description], { exact: 64, prefix: 52, contains: 38 })
     );
     return {
       id: `festival:${row.id}`,
       type: 'festival',
       entityID: row.id,
-      title: row.name,
-      subtitle: compact(['Festival', compact([row.city, row.country], ', ')]),
-      summary: truncate(row.tagline || row.introduction),
+      title,
+      subtitle: compact([labelText(locale, '音乐节', 'Festival', 'フェス'), compact([city, country], ', ')]),
+      summary: truncate(description),
       imageUrl: row.avatarUrl || row.backgroundUrl,
-      badgeText: 'Festival',
+      badgeText: labelText(locale, '音乐节', 'Festival', 'フェス'),
       deeplink: `raver://festival/${row.id}`,
       relevanceScore: finalizeScore(score),
       publishedAt: null,
@@ -1164,7 +1257,7 @@ const searchFestivals = async (query: string, limit: number): Promise<GlobalSear
   })).slice(0, limit);
 };
 
-const searchGenreTree = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchGenreTree = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const genres = await prisma.genre.findMany({
     where: {
       OR: [
@@ -1178,6 +1271,7 @@ const searchGenreTree = async (query: string, limit: number): Promise<GlobalSear
       name: true,
       slug: true,
       description: true,
+      descriptionI18n: true,
       color: true,
       iconUrl: true,
       createdAt: true,
@@ -1187,20 +1281,21 @@ const searchGenreTree = async (query: string, limit: number): Promise<GlobalSear
   });
 
   return sortItems(genres.map((row) => {
+    const description = pickLocalizedText(row.descriptionI18n, locale, row.description);
     const score = Math.max(
       scoreText(query, row.name),
       scoreText(query, row.slug, { exact: 86, prefix: 74, contains: 58 }),
-      scoreText(query, row.description, { exact: 58, prefix: 46, contains: 34 })
+      scoreTexts(query, [row.description, description], { exact: 58, prefix: 46, contains: 34 })
     );
     return {
       id: `genre:${row.id}`,
       type: 'genre',
       entityID: row.id,
       title: row.name,
-      subtitle: compact(['Genre Tree', row.slug]),
-      summary: truncate(row.description),
+      subtitle: compact([labelText(locale, '风格树', 'Genre Tree', 'ジャンルツリー'), row.slug]),
+      summary: truncate(description),
       imageUrl: row.iconUrl,
-      badgeText: 'Genre',
+      badgeText: labelText(locale, '风格', 'Genre', 'ジャンル'),
       deeplink: `raver://genre/${row.id}`,
       relevanceScore: finalizeScore(score),
       publishedAt: null,
@@ -1210,11 +1305,11 @@ const searchGenreTree = async (query: string, limit: number): Promise<GlobalSear
   })).slice(0, limit);
 };
 
-const searchWiki = async (query: string, limit: number): Promise<GlobalSearchItem[]> => {
+const searchWiki = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
   const [labels, festivals, genres] = await Promise.all([
-    searchLabels(query, limit),
-    searchFestivals(query, limit),
-    searchGenreTree(query, limit),
+    searchLabels(query, limit, locale),
+    searchFestivals(query, limit, locale),
+    searchGenreTree(query, limit, locale),
   ]);
   return sortItems([...labels, ...festivals, ...genres]).slice(0, limit);
 };
@@ -1324,20 +1419,21 @@ export const isGlobalSearchTab = (value: string): value is GlobalSearchTab =>
 export const globalSearchService = {
   async search(params: SearchParams): Promise<GlobalSearchResponse> {
     const query = normalizeQuery(params.query);
+    const locale = params.locale || 'zh';
     const taskLimit = params.tab === 'all' ? params.limit : Math.max(params.limit, 20);
     const blockedRelationUserIds = await buildBlockedRelationUserIds(params.userId);
     const tasks: SearchTask[] = [
-      ...(isTabRequested(params.tab, 'events') ? [{ tab: 'events' as const, run: () => searchEvents(query, taskLimit) }] : []),
+      ...(isTabRequested(params.tab, 'events') ? [{ tab: 'events' as const, run: () => searchEvents(query, taskLimit, locale) }] : []),
       ...(isTabRequested(params.tab, 'news') ? [{ tab: 'news' as const, run: () => searchNews(query, taskLimit, params.userId, blockedRelationUserIds) }] : []),
-      ...(isTabRequested(params.tab, 'djs') ? [{ tab: 'djs' as const, run: () => searchDJs(query, taskLimit) }] : []),
-      ...(isTabRequested(params.tab, 'sets') ? [{ tab: 'sets' as const, run: () => searchSets(query, taskLimit) }] : []),
+      ...(isTabRequested(params.tab, 'djs') ? [{ tab: 'djs' as const, run: () => searchDJs(query, taskLimit, locale) }] : []),
+      ...(isTabRequested(params.tab, 'sets') ? [{ tab: 'sets' as const, run: () => searchSets(query, taskLimit, locale) }] : []),
       ...(isTabRequested(params.tab, 'rankings') ? [{ tab: 'rankings' as const, run: () => searchRankings(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'ratings') ? [{ tab: 'ratings' as const, run: () => searchRatings(query, taskLimit) }] : []),
       ...(isTabRequested(params.tab, 'posts') ? [{ tab: 'posts' as const, run: () => searchPosts(query, taskLimit, params.userId, blockedRelationUserIds) }] : []),
-      ...(isTabRequested(params.tab, 'festivals') ? [{ tab: 'festivals' as const, run: () => searchFestivals(query, taskLimit) }] : []),
-      ...(isTabRequested(params.tab, 'labels') ? [{ tab: 'labels' as const, run: () => searchLabels(query, taskLimit) }] : []),
-      ...(isTabRequested(params.tab, 'genreTree') ? [{ tab: 'genreTree' as const, run: () => searchGenreTree(query, taskLimit) }] : []),
-      ...(isTabRequested(params.tab, 'wiki') ? [{ tab: 'wiki' as const, run: () => searchWiki(query, taskLimit) }] : []),
+      ...(isTabRequested(params.tab, 'festivals') ? [{ tab: 'festivals' as const, run: () => searchFestivals(query, taskLimit, locale) }] : []),
+      ...(isTabRequested(params.tab, 'labels') ? [{ tab: 'labels' as const, run: () => searchLabels(query, taskLimit, locale) }] : []),
+      ...(isTabRequested(params.tab, 'genreTree') ? [{ tab: 'genreTree' as const, run: () => searchGenreTree(query, taskLimit, locale) }] : []),
+      ...(isTabRequested(params.tab, 'wiki') ? [{ tab: 'wiki' as const, run: () => searchWiki(query, taskLimit, locale) }] : []),
       ...(isTabRequested(params.tab, 'peopleSquads')
         ? [{ tab: 'peopleSquads' as const, run: () => searchPeopleSquads(query, taskLimit, params.userId, blockedRelationUserIds) }]
         : []),

@@ -93,28 +93,19 @@ struct LoginView: View {
                         Button {
                             hasAgreedTerms.toggle()
                         } label: {
-                            HStack(alignment: .top, spacing: 10) {
+                            HStack(alignment: .center, spacing: 8) {
                                 Image(systemName: hasAgreedTerms ? "checkmark.circle.fill" : "circle")
                                     .font(.system(size: 18, weight: .regular))
                                     .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
-                                    .padding(.top, 1)
                                 Text(LT("我同意《用户服务条款》《用户协议》《隐私政策》", "I agree to the User Terms of Service, User Agreement, and Privacy Policy", "利用規約、ユーザー契約、プライバシーポリシーに同意します"))
-                                    .font(.system(size: 14, weight: .regular))
+                                    .font(.system(size: 13, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.84))
-                                    .multilineTextAlignment(.leading)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.black.opacity(0.24))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                            )
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("login.agreeTermsButton")
@@ -1477,9 +1468,10 @@ private struct RegisterProfileView: View {
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(hasAgreedTerms ? Color.white.opacity(0.96) : Color.white.opacity(0.56))
                 Text(LT("我同意《用户服务条款》《用户协议》《隐私政策》", "I agree to the User Terms of Service, User Agreement, and Privacy Policy", "利用規約、ユーザー契約、プライバシーポリシーに同意します"))
-                    .font(.system(size: 14, weight: .regular))
+                    .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.white.opacity(0.8))
-                    .multilineTextAlignment(.leading)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

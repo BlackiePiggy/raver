@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import { globalSearchService, isGlobalSearchTab } from '../services/global-search.service';
+import { globalSearchService, isGlobalSearchTab, normalizeSearchLocale } from '../services/global-search.service';
 
 const router: Router = Router();
 
@@ -27,12 +27,14 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
     const rawTab = String(req.query.tab || 'all').trim();
     const tab = isGlobalSearchTab(rawTab) ? rawTab : 'all';
     const limit = normalizeLimit(req.query.limit);
+    const locale = normalizeSearchLocale(req.query.locale, req.headers['accept-language']);
 
     const result = await globalSearchService.search({
       query,
       tab,
       limit,
       userId,
+      locale,
     });
 
     res.json({ data: result });

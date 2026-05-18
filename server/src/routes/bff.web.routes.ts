@@ -4174,6 +4174,8 @@ const mapRatingUnit = (row: any, includeComments = false) => {
   return {
     id: row.id,
     eventId: row.eventId,
+    djId: row.djId ?? null,
+    djIds: Array.isArray(row.djIds) ? row.djIds : [],
     name: row.name,
     description: row.description,
     imageUrl: row.imageUrl,
@@ -4226,75 +4228,6 @@ const parseActPerformerNames = (rawName: string): string[] => {
   return separated.length > 0 ? separated : [trimmed];
 };
 
-const resolveSourceEventIdForRatingEvent = async (row: any): Promise<string | null> => {
-  const explicitSourceEventId = typeof row?.sourceEventId === 'string' ? row.sourceEventId.trim() : '';
-  if (explicitSourceEventId) {
-    return explicitSourceEventId;
-  }
-
-  const ratingEventName = typeof row?.name === 'string' ? row.name.trim() : '';
-  if (!ratingEventName) {
-    return null;
-  }
-
-  const ratingUnitNameKeys = new Set<string>(
-    (Array.isArray(row?.units) ? row.units : [])
-      .map((unit: any) => normalizeTextKey(typeof unit?.name === 'string' ? unit.name : ''))
-      .filter((name: string) => name.length > 0)
-  );
-
-  const candidateEvents = await prisma.event.findMany({
-    where: {
-      name: {
-        equals: ratingEventName,
-        mode: 'insensitive',
-      },
-    },
-    select: {
-      id: true,
-      lineupSlots: {
-        select: { djName: true },
-      },
-    },
-    take: 20,
-  });
-
-  if (candidateEvents.length === 0) {
-    return null;
-  }
-
-  if (ratingUnitNameKeys.size === 0) {
-    return candidateEvents[0]?.id ?? null;
-  }
-
-  let bestMatchedEventId: string | null = null;
-  let bestMatchedScore = 0;
-
-  for (const candidate of candidateEvents) {
-    const lineupNameKeys = new Set<string>(
-      candidate.lineupSlots
-        .map((slot) => normalizeTextKey(slot.djName))
-        .filter((name: string) => name.length > 0)
-    );
-    let overlap = 0;
-    for (const unitNameKey of ratingUnitNameKeys) {
-      if (lineupNameKeys.has(unitNameKey)) {
-        overlap += 1;
-      }
-    }
-    if (overlap > bestMatchedScore) {
-      bestMatchedScore = overlap;
-      bestMatchedEventId = candidate.id;
-    }
-  }
-
-  if (bestMatchedEventId) {
-    return bestMatchedEventId;
-  }
-
-  return candidateEvents.length === 1 ? candidateEvents[0].id : null;
-};
-
 const formatHourMinute = (value: Date): string => {
   const hours = String(value.getHours()).padStart(2, '0');
   const minutes = String(value.getMinutes()).padStart(2, '0');
@@ -4311,37 +4244,33 @@ const buildRatingUnitDescriptionFromLineupSlot = (slot: {
   return stageName ? `${stageName} · ${timeRange}` : timeRange;
 };
 
-const normalizeTextKey = (value: string): string =>
-  value.trim().toLowerCase();
-
 const attachLinkedDJsToRatingUnits = async (units: any[]): Promise<any[]> => {
   if (!Array.isArray(units) || units.length === 0) return [];
 
-  const namesByUnitId = new Map<string, string[]>();
-  const allPerformerNameKeys = new Set<string>();
-
+  const idsByUnitId = new Map<string, string[]>();
+  const allDjIds = new Set<string>();
   for (const unit of units) {
-    const actNames = parseActPerformerNames(typeof unit?.name === 'string' ? unit.name : '');
-    const normalizedNames = actNames.map(normalizeTextKey).filter(Boolean);
-    namesByUnitId.set(unit.id, normalizedNames);
-    for (const key of normalizedNames) {
-      allPerformerNameKeys.add(key);
+    const ids = [
+      ...(Array.isArray(unit?.djIds) ? unit.djIds : []),
+      typeof unit?.djId === 'string' ? unit.djId : '',
+    ]
+      .map((id) => String(id || '').trim())
+      .filter(Boolean);
+    const uniqueIds = Array.from(new Set(ids));
+    idsByUnitId.set(unit.id, uniqueIds);
+    for (const id of uniqueIds) {
+      allDjIds.add(id);
     }
   }
 
-  const performerNames = Array.from(allPerformerNameKeys);
-  if (performerNames.length === 0) {
+  const djIds = Array.from(allDjIds);
+  if (djIds.length === 0) {
     return units.map((unit) => ({ ...unit, linkedDJs: [] }));
   }
 
   const matchedDJs = await prisma.dJ.findMany({
     where: {
-      OR: performerNames.map((name) => ({
-        name: {
-          equals: name,
-          mode: 'insensitive',
-        },
-      })),
+      id: { in: djIds },
     },
     select: {
       id: true,
@@ -4352,21 +4281,46 @@ const attachLinkedDJsToRatingUnits = async (units: any[]): Promise<any[]> => {
     },
   });
 
-  const djByNormalizedName = new Map<string, any>();
+  const djById = new Map<string, any>();
   for (const dj of matchedDJs) {
-    djByNormalizedName.set(normalizeTextKey(dj.name), dj);
+    djById.set(dj.id, dj);
   }
 
   return units.map((unit) => {
-    const names = namesByUnitId.get(unit.id) || [];
-    const linkedDJs = names
-      .map((name) => djByNormalizedName.get(name))
+    const ids = idsByUnitId.get(unit.id) || [];
+    const linkedDJs = ids
+      .map((id) => djById.get(id))
       .filter(Boolean);
     return {
       ...unit,
       linkedDJs,
     };
   });
+};
+
+const normalizeRatingUnitDjIdsFromBody = async (body: Record<string, unknown>): Promise<{ djId: string | null; djIds: string[] }> => {
+  const rawPrimary = typeof body.djId === 'string' ? body.djId.trim() : '';
+  const rawIds = Array.isArray(body.djIds)
+    ? body.djIds
+        .map((id) => (typeof id === 'string' ? id.trim() : ''))
+        .filter(Boolean)
+    : [];
+  const djIds = Array.from(new Set([...rawIds, ...(rawPrimary ? [rawPrimary] : [])])).filter(Boolean);
+  if (djIds.length === 0) {
+    return { djId: null, djIds: [] };
+  }
+
+  const existing = await prisma.dJ.findMany({
+    where: { id: { in: djIds } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((dj) => dj.id));
+  const missingId = djIds.find((id) => !existingIds.has(id));
+  if (missingId) {
+    throw new Error(`DJ not found: ${missingId}`);
+  }
+
+  return { djId: rawPrimary || djIds[0] || null, djIds };
 };
 
 type RankingEntityType = 'dj' | 'festival';
@@ -5885,15 +5839,7 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
     const eventId = req.params.id as string;
     const sourceEvent = await prisma.event.findUnique({
       where: { id: eventId },
-      select: {
-        id: true,
-        name: true,
-        lineupSlots: {
-          select: {
-            djName: true,
-          },
-        },
-      },
+      select: { id: true },
     });
 
     if (!sourceEvent) {
@@ -5901,14 +5847,8 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
       return;
     }
 
-    const sourceEventName = normalizeTextKey(sourceEvent.name);
-    const sourceActNames = new Set(
-      sourceEvent.lineupSlots
-        .map((slot) => normalizeTextKey(slot.djName))
-        .filter(Boolean)
-    );
-
     const rows = await prisma.ratingEvent.findMany({
+      where: { sourceEventId: eventId },
       orderBy: [{ createdAt: 'desc' }],
       include: {
         createdBy: {
@@ -5928,26 +5868,14 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
       },
     });
 
-    const matchedRows: any[] = [];
-    for (const row of rows) {
-      const sameName = normalizeTextKey(row.name) === sourceEventName;
-      if (!sameName) continue;
-
-      const hasMatchingUnit =
-        sourceActNames.size === 0
-          ? true
-          : row.units.some((unit) => sourceActNames.has(normalizeTextKey(unit.name)));
-      if (!hasMatchingUnit) continue;
-
-      const linkedUnits = await attachLinkedDJsToRatingUnits(row.units as any[]);
-      matchedRows.push({
+    const rowsWithLinkedUnits = await Promise.all(
+      rows.map(async (row) => ({
         ...row,
-        sourceEventId: sourceEvent.id,
-        units: linkedUnits,
-      });
-    }
+        units: await attachLinkedDJsToRatingUnits(row.units as any[]),
+      }))
+    );
 
-    ok(res, { items: matchedRows.map(mapRatingEvent) });
+    ok(res, { items: rowsWithLinkedUnits.map(mapRatingEvent) });
   } catch (error) {
     console.error('BFF web event rating events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -9041,15 +8969,20 @@ router.get('/djs/:id/rating-units', optionalAuth, async (req: Request, res: Resp
     const djId = req.params.id as string;
     const sourceDJ = await prisma.dJ.findUnique({
       where: { id: djId },
-      select: { id: true, name: true },
+      select: { id: true },
     });
     if (!sourceDJ) {
       res.status(404).json({ error: 'DJ not found' });
       return;
     }
 
-    const normalizedDJName = normalizeTextKey(sourceDJ.name);
     const rows = await prisma.ratingUnit.findMany({
+      where: {
+        OR: [
+          { djId },
+          { djIds: { has: djId } },
+        ],
+      },
       orderBy: [{ createdAt: 'desc' }],
       include: {
         event: {
@@ -9064,12 +8997,7 @@ router.get('/djs/:id/rating-units', optionalAuth, async (req: Request, res: Resp
       },
     });
 
-    const matchedRows = rows.filter((row) => {
-      const names = parseActPerformerNames(row.name).map(normalizeTextKey);
-      return names.includes(normalizedDJName);
-    });
-
-    const linkedRows = await attachLinkedDJsToRatingUnits(matchedRows as any[]);
+    const linkedRows = await attachLinkedDJsToRatingUnits(rows as any[]);
     ok(res, { items: linkedRows.map((row) => mapRatingUnit(row)) });
   } catch (error) {
     console.error('BFF web dj rating units error:', error);
@@ -10402,7 +10330,6 @@ router.get('/rating-events', optionalAuth, async (_req: Request, res: Response):
     const rowsWithLinkedDJs = await Promise.all(
       rows.map(async (row) => ({
         ...row,
-        sourceEventId: await resolveSourceEventIdForRatingEvent(row),
         units: await attachLinkedDJsToRatingUnits(row.units as any[]),
       }))
     );
@@ -10443,8 +10370,7 @@ router.get('/rating-events/:id', optionalAuth, async (req: Request, res: Respons
     }
 
     const linkedUnits = await attachLinkedDJsToRatingUnits(row.units as any[]);
-    const sourceEventId = await resolveSourceEventIdForRatingEvent({ ...row, units: linkedUnits });
-    ok(res, mapRatingEvent({ ...row, sourceEventId, units: linkedUnits }));
+    ok(res, mapRatingEvent({ ...row, units: linkedUnits }));
   } catch (error) {
     console.error('BFF web rating event detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -10464,6 +10390,22 @@ router.post('/rating-events', optionalAuth, async (req: Request, res: Response):
       res.status(400).json({ error: 'name is required' });
       return;
     }
+    const sourceEventId =
+      typeof body.sourceEventId === 'string'
+        ? body.sourceEventId.trim()
+        : typeof body.eventId === 'string'
+          ? body.eventId.trim()
+          : '';
+    if (sourceEventId) {
+      const sourceEvent = await prisma.event.findUnique({
+        where: { id: sourceEventId },
+        select: { id: true },
+      });
+      if (!sourceEvent) {
+        res.status(404).json({ error: 'Source event not found' });
+        return;
+      }
+    }
 
     if (!canBypassContentReview(viewerRole)) {
       const submission = await createPendingContentSubmission({
@@ -10479,6 +10421,7 @@ router.post('/rating-events', optionalAuth, async (req: Request, res: Response):
     const created = await prisma.ratingEvent.create({
       data: {
         createdById: userId,
+        sourceEventId: sourceEventId || null,
         name,
         description: typeof body.description === 'string' ? body.description.trim() || null : null,
         imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : null,
@@ -10541,6 +10484,7 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
     const createdEvent = await prisma.ratingEvent.create({
       data: {
         createdById: userId,
+        sourceEventId: sourceEvent.id,
         name: sourceEvent.name,
         description: sourceEvent.description ?? null,
         imageUrl: null,
@@ -10601,6 +10545,14 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
         (firstPerformerName
           ? djByNormalizedName.get(firstPerformerName.toLowerCase()) || null
           : null) || fallbackLineupDJ;
+      const boundDjIds = Array.from(new Set([
+        ...(Array.isArray(slot.djIds) ? slot.djIds : []),
+        ...(slot.djId ? [slot.djId] : []),
+        ...(matchedFirstDJ?.id ? [matchedFirstDJ.id] : []),
+      ]
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)));
+      const primaryDjId = boundDjIds[0] || null;
 
       let unitImageUrl: string | null = null;
       const sourceAvatarUrl = matchedFirstDJ?.avatarUrl || null;
@@ -10609,6 +10561,8 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
         data: {
           eventId: createdEvent.id,
           createdById: userId,
+          djId: primaryDjId,
+          djIds: boundDjIds,
           name: slot.djName,
           description: buildRatingUnitDescriptionFromLineupSlot(slot),
           imageUrl: null,
@@ -10672,7 +10626,7 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
     }
 
     const linkedUnits = await attachLinkedDJsToRatingUnits(created.units as any[]);
-    ok(res, mapRatingEvent({ ...created, sourceEventId, units: linkedUnits }));
+    ok(res, mapRatingEvent({ ...created, units: linkedUnits }));
   } catch (error) {
     console.error('BFF web create rating event from event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -10702,6 +10656,13 @@ router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: 
       res.status(400).json({ error: 'name is required' });
       return;
     }
+    let djBinding: { djId: string | null; djIds: string[] };
+    try {
+      djBinding = await normalizeRatingUnitDjIdsFromBody(body);
+    } catch (error) {
+      res.status(404).json({ error: error instanceof Error ? error.message : 'DJ not found' });
+      return;
+    }
 
     if (!canBypassContentReview(viewerRole)) {
       const submission = await createPendingContentSubmission({
@@ -10712,6 +10673,8 @@ router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: 
           ...body,
           name,
           ratingEventId: eventId,
+          djId: djBinding.djId,
+          djIds: djBinding.djIds,
         },
       });
       acceptedSubmission(res, submission, '打分项目已提交审核，管理员审核通过后才会入库');
@@ -10722,6 +10685,8 @@ router.post('/rating-events/:id/units', optionalAuth, async (req: Request, res: 
       data: {
         eventId,
         createdById: userId,
+        djId: djBinding.djId,
+        djIds: djBinding.djIds,
         name,
         description: typeof body.description === 'string' ? body.description.trim() || null : null,
         imageUrl: typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : null,
@@ -10753,7 +10718,7 @@ router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Respo
     const eventId = req.params.id as string;
     const existing = await prisma.ratingEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, createdById: true, imageUrl: true },
+      select: { id: true, createdById: true, imageUrl: true, sourceEventId: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Rating event not found' });
@@ -10766,12 +10731,31 @@ router.patch('/rating-events/:id', optionalAuth, async (req: Request, res: Respo
 
     const body = req.body as Record<string, unknown>;
     const nextImageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined;
+    const nextSourceEventId =
+      typeof body.sourceEventId === 'string'
+        ? body.sourceEventId.trim() || null
+        : typeof body.eventId === 'string'
+          ? body.eventId.trim() || null
+          : body.sourceEventId === null || body.eventId === null
+            ? null
+            : undefined;
+    if (nextSourceEventId) {
+      const sourceEvent = await prisma.event.findUnique({
+        where: { id: nextSourceEventId },
+        select: { id: true },
+      });
+      if (!sourceEvent) {
+        res.status(404).json({ error: 'Source event not found' });
+        return;
+      }
+    }
     const updated = await prisma.ratingEvent.update({
       where: { id: eventId },
       data: {
         name: typeof body.name === 'string' ? body.name.trim() : undefined,
         description: typeof body.description === 'string' ? body.description.trim() || null : undefined,
         imageUrl: nextImageUrl,
+        sourceEventId: nextSourceEventId,
       },
       include: {
         createdBy: {
@@ -10906,12 +10890,24 @@ router.patch('/rating-units/:id', optionalAuth, async (req: Request, res: Respon
 
     const body = req.body as Record<string, unknown>;
     const nextImageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() || null : undefined;
+    const shouldUpdateDjBinding = Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'djIds');
+    let djBinding: { djId: string | null; djIds: string[] } | undefined;
+    if (shouldUpdateDjBinding) {
+      try {
+        djBinding = await normalizeRatingUnitDjIdsFromBody(body);
+      } catch (error) {
+        res.status(404).json({ error: error instanceof Error ? error.message : 'DJ not found' });
+        return;
+      }
+    }
     const updated = await prisma.ratingUnit.update({
       where: { id: unitId },
       data: {
         name: typeof body.name === 'string' ? body.name.trim() : undefined,
         description: typeof body.description === 'string' ? body.description.trim() || null : undefined,
         imageUrl: nextImageUrl,
+        djId: shouldUpdateDjBinding ? djBinding?.djId ?? null : undefined,
+        djIds: shouldUpdateDjBinding ? djBinding?.djIds ?? [] : undefined,
       },
       include: {
         comments: {
