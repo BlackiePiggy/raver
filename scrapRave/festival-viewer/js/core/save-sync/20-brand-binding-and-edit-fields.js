@@ -334,6 +334,76 @@ function eventEditExtractTriTextDraft(value, options = {}) {
   return draft;
 }
 
+const EVENT_MULTILANG_AI_PROMPT_STORAGE_KEY = 'festivalViewer.eventMultiLangAiPrompt';
+const EVENT_MULTILANG_AI_PROMPT_DEFAULT = [
+  '请严格按原 JSON 结构返回翻译结果，只输出合法 JSON，不要添加解释。',
+  '把现有活动多语言字段补充为中文、英文、日文三个版本。',
+  '已经有内容的语言请在原意基础上润色；空字符串表示原数据缺失，除非能从其他语言准确翻译，否则保持空字符串。',
+  '不要新增字段，不要删除字段，保留 enFull。'
+].join('\n');
+
+function eventEditGetAiPromptTemplate() {
+  try {
+    const cached = String(window.localStorage?.getItem(EVENT_MULTILANG_AI_PROMPT_STORAGE_KEY) || '').trim();
+    return cached || EVENT_MULTILANG_AI_PROMPT_DEFAULT;
+  } catch (_error) {
+    return EVENT_MULTILANG_AI_PROMPT_DEFAULT;
+  }
+}
+
+function eventEditSetAiPromptTemplate(value) {
+  const text = String(value || '').trim();
+  try {
+    if (text) window.localStorage?.setItem(EVENT_MULTILANG_AI_PROMPT_STORAGE_KEY, text);
+    else window.localStorage?.removeItem(EVENT_MULTILANG_AI_PROMPT_STORAGE_KEY);
+  } catch (_error) {}
+  return text || EVENT_MULTILANG_AI_PROMPT_DEFAULT;
+}
+
+function eventEditSetMultiLangCopyStatus(panelEl, message, isError = false) {
+  const statusEl = panelEl?.querySelector('[data-multilang-copy-status]');
+  if (!statusEl) return;
+  statusEl.textContent = String(message || '').trim();
+  statusEl.style.color = isError ? '#ff8cae' : 'var(--accent3)';
+}
+
+async function eventEditCopyMultiLangJsonForAi(panelEl) {
+  const textarea = panelEl?.querySelector('.fest-info-edit [data-field="multiLangJson"]');
+  const jsonText = String(textarea?.value || '').trim();
+  if (!jsonText) {
+    eventEditSetMultiLangCopyStatus(panelEl, '没有可复制的 JSON', true);
+    return;
+  }
+  const promptText = eventEditGetAiPromptTemplate();
+  const composed = `${promptText}\n\n待翻译 JSON:\n${jsonText}`;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(composed);
+    } else {
+      const temp = document.createElement('textarea');
+      temp.value = composed;
+      temp.setAttribute('readonly', 'readonly');
+      temp.style.position = 'fixed';
+      temp.style.opacity = '0';
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+    }
+    eventEditSetMultiLangCopyStatus(panelEl, '已复制提示词 + JSON');
+  } catch (error) {
+    eventEditSetMultiLangCopyStatus(panelEl, `复制失败：${String(error?.message || error)}`, true);
+  }
+}
+
+function eventEditOpenAiPromptEditor(panelEl) {
+  const current = eventEditGetAiPromptTemplate();
+  const next = window.prompt('编辑复制给 AI 时附带的提示词：', current);
+  if (next === null) return;
+  eventEditSetAiPromptTemplate(next);
+  eventEditSetMultiLangCopyStatus(panelEl, '提示词已更新');
+}
+
 function eventEditBuildMultiLangDraft(info) {
   const manualLocation = (typeof normalizeFestivalManualLocation === 'function')
     ? normalizeFestivalManualLocation(info?.manualLocation || info?.manual_location || null, null)
@@ -446,6 +516,18 @@ function bindEventMultiLangJsonEditor(panelEl, info = null) {
       if (parsed?.draft) eventEditApplyMultiLangDraftToInputs(panelEl, parsed.draft);
     });
   }
+  panelEl.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
+    if (!target) return;
+    const action = String(target.getAttribute('data-action') || '');
+    if (action === 'multilang-copy-ai') {
+      event.preventDefault();
+      void eventEditCopyMultiLangJsonForAi(panelEl);
+    } else if (action === 'multilang-edit-prompt') {
+      event.preventDefault();
+      eventEditOpenAiPromptEditor(panelEl);
+    }
+  });
 }
 
 function setEditInputs(panelEl, info) {

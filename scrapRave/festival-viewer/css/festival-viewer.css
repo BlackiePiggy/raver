@@ -4789,6 +4789,31 @@
   .event-location-legacy-title { display:none; }
   .edit-field { display:grid; gap:0.22rem; }
   .edit-field label { font-family:'Space Mono',monospace; font-size:0.52rem; letter-spacing:0.12em; color:var(--text-dim); text-transform:uppercase; }
+  .event-multilang-toolbar {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:0.7rem;
+    flex-wrap:wrap;
+  }
+  .event-multilang-toolbar-actions {
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:0.4rem;
+    flex-wrap:wrap;
+  }
+  .event-multilang-toolbar-actions .edit-btn {
+    padding:0.26rem 0.56rem;
+    font-size:0.54rem;
+  }
+  .event-multilang-copy-status {
+    min-height:1rem;
+    font-family:'Space Mono',monospace;
+    font-size:0.52rem;
+    color:var(--accent3);
+    letter-spacing:0.04em;
+  }
   .event-single-translate-field {
     grid-column:3 / 5;
     display:flex;

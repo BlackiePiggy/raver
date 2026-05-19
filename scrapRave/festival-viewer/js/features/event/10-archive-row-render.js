@@ -190,7 +190,14 @@ function buildRow(fest) {
         </div>
         <div class="edit-section-title full">多语言 JSON（中 / 英 / 日）</div>
         <div class="edit-field full">
-          <label>多语言字段 JSON</label>
+          <div class="event-multilang-toolbar">
+            <label>多语言字段 JSON</label>
+            <div class="event-multilang-toolbar-actions">
+              <span class="event-multilang-copy-status" data-multilang-copy-status></span>
+              <button class="edit-btn" type="button" data-action="multilang-edit-prompt">提示词</button>
+              <button class="edit-btn" type="button" data-action="multilang-copy-ai">复制给 AI</button>
+            </div>
+          </div>
           <div class="edit-lineup-hint">复制这段 JSON 给 AI 做翻译后再粘贴回来即可。未填写的语言保持空字符串，不会自动补全。</div>
           <textarea class="edit-lineup-textarea" data-field="multiLangJson" placeholder='{"nameI18n":{"zh":"","en":"","ja":""},"cityI18n":{"zh":"","en":"","ja":""},"countryI18n":{"zh":"","en":"","ja":"","enFull":""},"detailAddressI18n":{"zh":"","en":"","ja":""},"descriptionI18n":{"zh":"","en":"","ja":""}}'></textarea>
         </div>

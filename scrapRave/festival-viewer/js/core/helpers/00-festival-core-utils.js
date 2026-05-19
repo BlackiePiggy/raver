@@ -584,6 +584,35 @@ function normalizeFestivalInfo(raw, fallback) {
   if (Array.isArray(lineupRaw)) lineup = lineupRaw;
   else if (lineupRaw && typeof lineupRaw === 'object' && Array.isArray(lineupRaw.lineup_info)) lineup = lineupRaw.lineup_info;
 
+  let lineupArtists = [];
+  const lineupArtistsRaw = raw.lineupArtists ?? raw.lineup_artists ?? fallback.lineupArtists ?? fallback.lineup_artists ?? [];
+  if (Array.isArray(lineupArtistsRaw)) {
+    lineupArtists = lineupArtistsRaw
+      .map((artist, index) => {
+        if (!artist || typeof artist !== 'object' || Array.isArray(artist)) return null;
+        const djName = String(
+          artist.djName
+          ?? artist.name
+          ?? artist.musician
+          ?? artist.artistName
+          ?? ''
+        ).trim();
+        if (!djName) return null;
+        const rawDjIds = Array.isArray(artist.djIds) ? artist.djIds : [];
+        const djIds = rawDjIds.map((id) => String(id || '').trim()).filter(Boolean);
+        const djId = String(artist.djId || '').trim();
+        const sortOrderNum = Number(artist.sortOrder);
+        return {
+          id: String(artist.id || '').trim() || undefined,
+          djId: djId || undefined,
+          djIds: djIds.length ? djIds : (djId ? [djId] : []),
+          djName,
+          sortOrder: Number.isFinite(sortOrderNum) ? sortOrderNum : index + 1,
+        };
+      })
+      .filter(Boolean);
+  }
+
   const socialRaw = raw.socialLinks ?? raw.social_links ?? raw.social ?? [];
   const socialLinks = normalizeSocialLinks(socialRaw);
   const { refs, social } = splitReferenceLinks(links, socialLinks);
@@ -710,6 +739,7 @@ function normalizeFestivalInfo(raw, fallback) {
     endDate,
     relatedLinks: refs,
     socialLinks: social,
+    lineupArtists,
     lineup,
     festivalId,
     source,
