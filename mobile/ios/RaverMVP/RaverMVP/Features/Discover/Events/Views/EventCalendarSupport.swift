@@ -1,5 +1,14 @@
 import SwiftUI
 
+extension Calendar {
+    static func eventCalendar(timeZone: TimeZone) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        calendar.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        return calendar
+    }
+}
+
 enum EventCalendarViewFilter: String, CaseIterable, Hashable, Identifiable {
     case all
     case marked
@@ -326,7 +335,7 @@ struct EventCalendarSheet: View {
                                                     .font(.subheadline.weight(.semibold))
                                                     .foregroundStyle(RaverTheme.primaryText)
                                                     .lineLimit(2)
-                                                Text(event.startDate.formatted(date: .omitted, time: .shortened))
+                                                Text(Self.eventTimeText(event.startDate, event: event))
                                                     .font(.caption)
                                                     .foregroundStyle(RaverTheme.secondaryText)
                                                 if !event.summaryLocation.isEmpty {
@@ -379,7 +388,9 @@ struct EventCalendarSheet: View {
     }
 
     private var eventsOnSelectedDay: [WebEvent] {
-        filteredEvents.filter { calendar.isDate($0.startDate, inSameDayAs: selectedDate) }
+        filteredEvents.filter { event in
+            Self.eventDayKey(event.startDate, event: event) == Self.deviceDayKey(selectedDate)
+        }
     }
 
     private var monthCells: [Date?] {
@@ -404,7 +415,8 @@ struct EventCalendarSheet: View {
     }
 
     private func dayMarkerColors(for date: Date) -> [Color] {
-        let dayEvents = filteredEvents.filter { calendar.isDate($0.startDate, inSameDayAs: date) }
+        let dateKey = Self.deviceDayKey(date)
+        let dayEvents = filteredEvents.filter { Self.eventDayKey($0.startDate, event: $0) == dateKey }
         guard !dayEvents.isEmpty else { return [] }
         let hasMarked = dayEvents.contains(where: { markedEventIDs.contains($0.id) })
         var markers: [Color] = []
@@ -454,6 +466,31 @@ struct EventCalendarSheet: View {
         if let date = calendar.date(byAdding: .month, value: delta, to: displayedMonth) {
             displayedMonth = calendar.startOfMonth(for: date)
         }
+    }
+
+    private static func deviceDayKey(_ date: Date) -> String {
+        dayKey(date, timeZone: .current)
+    }
+
+    private static func eventDayKey(_ date: Date, event: WebEvent) -> String {
+        dayKey(date, timeZone: event.eventTimeZone)
+    }
+
+    private static func dayKey(_ date: Date, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private static func eventTimeText(_ date: Date, event: WebEvent) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = event.eventTimeZone
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return "\(formatter.string(from: date)) · \(Date.appLocalizedTimeZoneLabel(event.eventTimeZone))"
     }
 
     @ViewBuilder

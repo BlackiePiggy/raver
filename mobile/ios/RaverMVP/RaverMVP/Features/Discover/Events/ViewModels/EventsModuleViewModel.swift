@@ -7,6 +7,16 @@ struct DiscoverEventsPageRequest: Equatable {
     let search: String?
     let eventType: String?
     let status: String?
+    let wikiFestivalId: String?
+
+    init(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String? = nil) {
+        self.page = page
+        self.limit = limit
+        self.search = search
+        self.eventType = eventType
+        self.status = status
+        self.wikiFestivalId = wikiFestivalId
+    }
 }
 
 protocol EventListRepository {
@@ -107,7 +117,8 @@ struct EventListRepositoryAdapter: EventListRepository {
             limit: request.limit,
             search: request.search,
             eventType: request.eventType,
-            status: request.status
+            status: request.status,
+            wikiFestivalId: request.wikiFestivalId
         )
     }
 }

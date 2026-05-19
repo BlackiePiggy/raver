@@ -424,7 +424,7 @@ struct LearnModuleView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-                .padding(.bottom, max(0, tabBarReservedHeight) + 12)
+                .raverTabBarBottomPadding(12)
             }
             .refreshable {
                 if showsSectionTabs {
@@ -516,7 +516,7 @@ struct LearnModuleView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-                .padding(.bottom, max(0, tabBarReservedHeight) + 12)
+                .raverTabBarBottomPadding(12)
             }
             .refreshable {
                 if showsSectionTabs {
@@ -581,7 +581,7 @@ struct LearnModuleView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-                .padding(.bottom, max(0, tabBarReservedHeight) + 12)
+                .raverTabBarBottomPadding(12)
             }
             .refreshable {
                 if showsSectionTabs {
@@ -4538,6 +4538,8 @@ struct LearnFestivalDetailView: View {
     @State private var isLoadingRelatedArticles = false
     @State private var didLoadRelatedEvents = false
     @State private var didLoadRelatedArticles = false
+    @State private var relatedEventsLoadFailed = false
+    @State private var relatedArticlesLoadFailed = false
     @State private var visibleUpcomingRelatedEventCount = 10
     @State private var visibleEndedRelatedEventCount = 10
     @State private var visibleRelatedArticleCount = 5
@@ -5204,11 +5206,6 @@ struct LearnFestivalDetailView: View {
             .coordinateSpace(name: chrome.coordinateSpaceName(tab))
             .scrollBounceBehavior(.always)
             .contentShape(Rectangle())
-            .task(id: Int(pageProgress.rounded())) {
-                let activeIndex = Int(pageProgress.rounded())
-                guard activeIndex == selectedIndex(for: tab) || selectedTab == tab else { return }
-                await loadFestivalTabContentIfNeeded(for: tab)
-            }
             .background(RaverTheme.background)
         }
     }
@@ -5342,6 +5339,37 @@ struct LearnFestivalDetailView: View {
         }
     }
 
+    private func festivalTabLoadPlaceholder(
+        title: String,
+        didFail: Bool,
+        retry: @escaping () async -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if didFail {
+                Text(LT("加载失败，请稍后重试", "Load failed. Please try again.", "読み込みに失敗しました。再試行してください"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Button {
+                    Task { await retry() }
+                } label: {
+                    Text(LT("重试", "Retry", "再試行"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(RaverTheme.card)
+                        )
+                }
+                .buttonStyle(.plain)
+            } else {
+                ProgressView(title)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
     @ViewBuilder
     private var basicInfoTabContent: some View {
         LearnLabelExpandableText(text: currentFestival.introduction, collapsedLineLimit: 6)
@@ -5382,9 +5410,11 @@ struct LearnFestivalDetailView: View {
                 ProgressView(LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."))
                     .padding(.vertical, 8)
             } else if relatedEvents.isEmpty && !didLoadRelatedEvents {
-                ProgressView(LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."))
-                    .padding(.vertical, 8)
-                    .task { await loadRelatedEventsIfNeeded(force: false) }
+                festivalTabLoadPlaceholder(
+                    title: LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."),
+                    didFail: relatedEventsLoadFailed,
+                    retry: { await loadRelatedEventsIfNeeded(force: true) }
+                )
             } else if upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty {
                 Text(LT("暂无关联活动", "暂无关联活动", "関連イベントはまだありません"))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -5445,9 +5475,11 @@ struct LearnFestivalDetailView: View {
             ProgressView(LT("正在加载品牌动态...", "正在加载品牌动态...", "ブランド投稿を読み込み中..."))
                 .padding(.vertical, 8)
         } else if relatedArticles.isEmpty && !didLoadRelatedArticles {
-            ProgressView(LT("正在加载品牌动态...", "正在加载品牌动态...", "ブランド投稿を読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadRelatedArticlesIfNeeded(force: false) }
+            festivalTabLoadPlaceholder(
+                title: LT("正在加载品牌动态...", "正在加载品牌动态...", "ブランド投稿を読み込み中..."),
+                didFail: relatedArticlesLoadFailed,
+                retry: { await loadRelatedArticlesIfNeeded(force: true) }
+            )
         } else if relatedArticles.isEmpty {
             Text(LT("暂无相关动态", "暂无相关动态", "関連投稿はまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -6151,6 +6183,7 @@ struct LearnFestivalDetailView: View {
         if isLoadingRelatedEvents || (!force && didLoadRelatedEvents) { return }
         isLoadingRelatedEvents = true
         isLoadingRelatedContent = true
+        relatedEventsLoadFailed = false
         defer {
             isLoadingRelatedEvents = false
             isLoadingRelatedContent = isLoadingRelatedArticles || isLoadingRelatedEvents
@@ -6159,7 +6192,10 @@ struct LearnFestivalDetailView: View {
         do {
             relatedEvents = try await fetchRelatedEvents()
             didLoadRelatedEvents = true
+        } catch is CancellationError {
+            return
         } catch {
+            relatedEventsLoadFailed = true
             errorMessage = error.userFacingMessage
         }
     }
@@ -6169,6 +6205,7 @@ struct LearnFestivalDetailView: View {
         if isLoadingRelatedArticles || (!force && didLoadRelatedArticles) { return }
         isLoadingRelatedArticles = true
         isLoadingRelatedContent = true
+        relatedArticlesLoadFailed = false
         defer {
             isLoadingRelatedArticles = false
             isLoadingRelatedContent = isLoadingRelatedArticles || isLoadingRelatedEvents
@@ -6177,7 +6214,10 @@ struct LearnFestivalDetailView: View {
         do {
             relatedArticles = try await fetchRelatedPosts()
             didLoadRelatedArticles = true
+        } catch is CancellationError {
+            return
         } catch {
+            relatedArticlesLoadFailed = true
             errorMessage = error.userFacingMessage
         }
     }
@@ -6185,24 +6225,22 @@ struct LearnFestivalDetailView: View {
     private func fetchRelatedEvents() async throws -> [WebEvent] {
         let brandID = currentFestival.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !brandID.isEmpty else { return [] }
-        let queries = [brandID]
         var merged: [WebEvent] = []
         var seen = Set<String>()
 
-        for query in queries {
-            let page = try await eventListRepository.fetchEvents(
-                request: DiscoverEventsPageRequest(
-                    page: 1,
-                    limit: 120,
-                    search: query,
-                    eventType: nil,
-                    status: "all"
-                )
+        let page = try await eventListRepository.fetchEvents(
+            request: DiscoverEventsPageRequest(
+                page: 1,
+                limit: 120,
+                search: nil,
+                eventType: nil,
+                status: "all",
+                wikiFestivalId: brandID
             )
-            for item in page.items where eventMatchesFestival(item) {
-                if seen.insert(item.id).inserted {
-                    merged.append(item)
-                }
+        )
+        for item in page.items where eventMatchesFestival(item) {
+            if seen.insert(item.id).inserted {
+                merged.append(item)
             }
         }
 

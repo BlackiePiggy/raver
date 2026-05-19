@@ -13,7 +13,7 @@ protocol ProfileUserRepository {
 }
 
 protocol ProfileContentRepository {
-    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage
+    func fetchPostsByUser(userID: String, cursor: String?, limit: Int?) async throws -> FeedPage
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
@@ -30,6 +30,12 @@ protocol ProfileContentRepository {
     func deleteEvent(id: String) async throws
     func deleteRatingEvent(id: String) async throws
     func deleteRatingUnit(id: String) async throws
+}
+
+extension ProfileContentRepository {
+    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
+        try await fetchPostsByUser(userID: userID, cursor: cursor, limit: nil)
+    }
 }
 
 protocol ProfileCheckinRepository {
@@ -98,8 +104,8 @@ struct ProfileContentRepositoryAdapter: ProfileContentRepository {
         self.webService = webService
     }
 
-    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
-        try await socialService.fetchPostsByUser(userID: userID, cursor: cursor)
+    func fetchPostsByUser(userID: String, cursor: String?, limit: Int? = nil) async throws -> FeedPage {
+        try await socialService.fetchPostsByUser(userID: userID, cursor: cursor, limit: limit)
     }
 
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage {
@@ -226,9 +232,6 @@ struct ProfileCheckinRepositoryAdapter: ProfileCheckinRepository {
 struct ProfileDashboardSnapshot {
     let profile: UserProfile
     let recentPosts: [Post]
-    let likedItems: [ActivityPostItem]
-    let repostedItems: [ActivityPostItem]
-    let savedItems: [ActivityPostItem]
     let recentCheckins: [WebCheckin]
 }
 
@@ -260,20 +263,13 @@ struct LoadMyProfileDashboardUseCase {
     func execute() async throws -> ProfileDashboardSnapshot {
         let profileValue = try await userRepository.fetchMyProfile()
 
-        async let postsTask = contentRepository.fetchPostsByUser(userID: profileValue.id, cursor: nil)
-        async let likesTask = contentRepository.fetchMyLikeHistory(cursor: nil)
-        async let repostsTask = contentRepository.fetchMyRepostHistory(cursor: nil)
-        async let savesTask = contentRepository.fetchMySaveHistory(cursor: nil)
-
-        let (postsPage, likesPage, repostsPage, savesPage) = try await (postsTask, likesTask, repostsTask, savesTask)
+        async let postsTask = contentRepository.fetchPostsByUser(userID: profileValue.id, cursor: nil, limit: 8)
+        let postsPage = try await postsTask
         let checkins = (try? await checkinRepository.fetchUserCheckins(userID: profileValue.id, page: 1, limit: 6, type: nil))?.items ?? []
 
         return ProfileDashboardSnapshot(
             profile: profileValue,
             recentPosts: postsPage.posts.filter { !$0.isRaverNews },
-            likedItems: likesPage.items,
-            repostedItems: repostsPage.items,
-            savedItems: savesPage.items,
             recentCheckins: checkins
         )
     }
@@ -313,11 +309,13 @@ final class ProfileViewModel: ObservableObject {
     @Published var recentCheckins: [WebCheckin] = []
     @Published var appearance: UserAssetAppearance?
     @Published var selectedSection: Section = .published
+    @Published var loadingSection: Section?
     @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
     @Published var isRefreshing = false
     @Published var bannerMessage: String?
     @Published var error: String?
+    private var loadedSections: Set<Section> = []
 
     private let userRepository: ProfileUserRepository
     private let contentRepository: ProfileContentRepository
@@ -359,10 +357,8 @@ final class ProfileViewModel: ObservableObject {
             let dashboard = try await loadDashboardUseCase.execute()
             profile = dashboard.profile
             recentPosts = dashboard.recentPosts
-            likedItems = dashboard.likedItems
-            repostedItems = dashboard.repostedItems
-            savedItems = dashboard.savedItems
             recentCheckins = dashboard.recentCheckins
+            loadedSections.insert(.published)
             await loadAppearance(for: dashboard.profile.id)
             persistOfflineSnapshot()
             phase = .success
@@ -395,12 +391,13 @@ final class ProfileViewModel: ObservableObject {
         do {
             switch selectedSection {
             case .published:
-                recentPosts = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: nil).posts.filter { !$0.isRaverNews }
+                recentPosts = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: nil, limit: 8).posts.filter { !$0.isRaverNews }
             case .saves:
                 savedItems = try await contentRepository.fetchMySaveHistory(cursor: nil).items
             case .likes:
                 likedItems = try await contentRepository.fetchMyLikeHistory(cursor: nil).items
             }
+            loadedSections.insert(selectedSection)
             if let checkinPage = try? await checkinRepository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
             }
@@ -412,6 +409,43 @@ final class ProfileViewModel: ObservableObject {
         } catch {
             guard !error.isUserInitiatedCancellation else { return }
             bannerMessage = error.userFacingMessage ?? LT("当前内容刷新失败，请稍后重试", "Failed to refresh this section. Please try again later.", "この内容を更新できませんでした。時間をおいて再試行してください。")
+        }
+    }
+
+    func loadSelectedSectionIfNeeded() async {
+        guard !loadedSections.contains(selectedSection) else { return }
+        await loadSection(selectedSection)
+    }
+
+    func hasLoadedSection(_ section: Section) -> Bool {
+        loadedSections.contains(section)
+    }
+
+    func loadSection(_ section: Section) async {
+        guard let profile else {
+            await load()
+            return
+        }
+        guard loadingSection == nil else { return }
+        loadingSection = section
+        defer { loadingSection = nil }
+
+        do {
+            switch section {
+            case .published:
+                recentPosts = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: nil, limit: 8).posts.filter { !$0.isRaverNews }
+            case .saves:
+                savedItems = try await contentRepository.fetchMySaveHistory(cursor: nil).items
+            case .likes:
+                likedItems = try await contentRepository.fetchMyLikeHistory(cursor: nil).items
+            }
+            loadedSections.insert(section)
+            persistOfflineSnapshot()
+            bannerMessage = nil
+            self.error = nil
+        } catch {
+            guard !error.isUserInitiatedCancellation else { return }
+            bannerMessage = error.userFacingMessage ?? LT("当前内容加载失败，请稍后重试", "Failed to load this section. Please try again later.", "この内容を読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 

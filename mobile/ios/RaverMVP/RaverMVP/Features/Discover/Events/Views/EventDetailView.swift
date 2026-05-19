@@ -11,6 +11,49 @@ import CoreText
 import SDWebImageSwiftUI
 import SDWebImage
 
+#if DEBUG
+private enum EventDetailPerfLog {
+    private static var lastLogByKey: [String: CFTimeInterval] = [:]
+    private static var countByKey: [String: Int] = [:]
+    private static let lock = NSLock()
+
+    static func measure<T>(_ label: String, minDurationMS: Double = 2, _ work: () -> T) -> T {
+        let start = CACurrentMediaTime()
+        let value = work()
+        let elapsedMS = (CACurrentMediaTime() - start) * 1000
+        if elapsedMS >= minDurationMS {
+            print("[EventDetailPerf] \(label) took \(String(format: "%.2f", elapsedMS))ms")
+        }
+        return value
+    }
+
+    static func throttled(_ key: String, interval: CFTimeInterval = 1, _ message: () -> String) {
+        let now = CACurrentMediaTime()
+        lock.lock()
+        let previous = lastLogByKey[key] ?? 0
+        if now - previous >= interval {
+            lastLogByKey[key] = now
+            lock.unlock()
+            print("[EventDetailPerf] \(message())")
+        } else {
+            lock.unlock()
+        }
+    }
+
+    static func sampled(_ key: String, every interval: Int = 20, _ message: (Int) -> String) {
+        lock.lock()
+        let next = (countByKey[key] ?? 0) + 1
+        countByKey[key] = next
+        let shouldLog = next == 1 || next % max(1, interval) == 0
+        lock.unlock()
+
+        if shouldLog {
+            print("[EventDetailPerf] \(message(next))")
+        }
+    }
+}
+#endif
+
 private struct EventDetailTabFramePreferenceKey: PreferenceKey {
     static var defaultValue: [EventDetailView.EventDetailTab: CGRect] = [:]
 
@@ -61,9 +104,10 @@ private enum EventTimeZoneDisplay {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
-        formatter.timeZone = .current
+        let timeZone = eventTimeZone(for: event) ?? event.eventTimeZone
+        formatter.timeZone = timeZone
         let eventText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
-        return "\(eventText) · \(Date.appLocalizedTimeZoneLabel())"
+        return "\(eventText) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
     }
 }
 
@@ -793,14 +837,16 @@ struct EventLiveDiscussionView: View {
             let currentDayIndex = EventLogicalDayResolver.dayIndex(
                 for: anchorTime,
                 eventStartDate: event.startDate,
-                dayRolloverHour: event.dayRolloverHour
+                dayRolloverHour: event.dayRolloverHour,
+                timeZone: event.eventTimeZone
             )
             let nextSlot = sortedSlots.first { slot in
                 guard slot.startTime > anchorTime else { return false }
                 return EventLogicalDayResolver.dayIndex(
                     for: slot,
                     eventStartDate: event.startDate,
-                    dayRolloverHour: event.dayRolloverHour
+                    dayRolloverHour: event.dayRolloverHour,
+                    timeZone: event.eventTimeZone
                 ) == currentDayIndex
             }
 
@@ -1308,6 +1354,44 @@ struct EventDetailView: View {
         var djID: String? { act.type == .solo ? act.performers.first?.djID : nil }
     }
 
+    private struct EventLineupEntriesCacheKey: Equatable {
+        let eventID: String
+        let slotCount: Int
+        let slotSignature: Int
+        let sortMode: LineupSortMode
+
+        init(event: WebEvent, sortMode: LineupSortMode) {
+            self.eventID = event.id
+            self.slotCount = event.lineupSlots.count
+            self.slotSignature = event.lineupSlots.reduce(0) { partial, slot in
+                var hasher = Hasher()
+                hasher.combine(partial)
+                hasher.combine(slot.id)
+                hasher.combine(slot.startTime.timeIntervalSinceReferenceDate)
+                hasher.combine(slot.endTime.timeIntervalSinceReferenceDate)
+                hasher.combine(slot.stageName)
+                hasher.combine(slot.sortOrder)
+                return hasher.finalize()
+            }
+            self.sortMode = sortMode
+        }
+    }
+
+    private final class EventLineupEntriesCache {
+        var key: EventLineupEntriesCacheKey?
+        var entries: [EventLineupDJEntry] = []
+
+        func update(key: EventLineupEntriesCacheKey, entries: [EventLineupDJEntry]) {
+            self.key = key
+            self.entries = entries
+        }
+
+        func clear() {
+            key = nil
+            entries = []
+        }
+    }
+
     private enum LineupSortMode: String {
         case alphabetical
         case popularity
@@ -1368,6 +1452,9 @@ struct EventDetailView: View {
     @State private var didLoadRelatedRatingEvents = false
     @State private var isLoadingRelatedEventSets = false
     @State private var didLoadRelatedEventSets = false
+    @State private var relatedArticlesLoadFailed = false
+    @State private var relatedRatingEventsLoadFailed = false
+    @State private var relatedEventSetsLoadFailed = false
     @State private var visibleEventDiscussionCount = 10
     @State private var visibleRelatedArticleCount = 5
     @State private var visibleRelatedRatingCount = 10
@@ -1375,6 +1462,7 @@ struct EventDetailView: View {
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
     @State private var lineupSortMode: LineupSortMode = .alphabetical
+    @State private var lineupEntriesCache = EventLineupEntriesCache()
     @State private var expandedLineupPage = 0
     @State private var prefetchedLineupAvatarPageKeys: Set<String> = []
     @State private var prefetchedLineupOverviewEventIDs: Set<String> = []
@@ -1486,6 +1574,8 @@ struct EventDetailView: View {
     }
 
     private struct EventScheduleStageSection: Identifiable, Hashable {
+        static let allStagesID = "__all_stages__"
+
         let id: String
         let name: String
         let slots: [WebEventLineupSlot]
@@ -2577,11 +2667,6 @@ struct EventDetailView: View {
         .coordinateSpace(name: chrome.coordinateSpaceName(tab))
         .scrollBounceBehavior(.always)
         .contentShape(Rectangle())
-        .task(id: Int(pageProgress.rounded())) {
-            let activeIndex = Int(pageProgress.rounded())
-            guard activeIndex == selectedIndex(for: tab) || selectedTab == tab else { return }
-            await loadEventTabDataIfNeeded(for: tab)
-        }
     }
 
     private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
@@ -2622,7 +2707,6 @@ struct EventDetailView: View {
         switch eventDiscussionPhase {
         case .idle, .initialLoading:
             FeedSkeletonView()
-                .task { await loadEventDiscussionPosts(force: false) }
         case .failure(let message), .offline(let message):
             ScreenErrorCard(
                 title: LT("讨论区加载失败", "Discussion Failed to Load", "ディスカッションの読み込みに失敗しました"),
@@ -2703,6 +2787,37 @@ struct EventDetailView: View {
         }
     }
 
+    private func eventTabLoadPlaceholder(
+        title: String,
+        didFail: Bool,
+        retry: @escaping () async -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if didFail {
+                Text(LT("加载失败，请稍后重试", "Load failed. Please try again.", "読み込みに失敗しました。再試行してください"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Button {
+                    Task { await retry() }
+                } label: {
+                    Text(LT("重试", "Retry", "再試行"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(RaverTheme.card)
+                        )
+                }
+                .buttonStyle(.plain)
+            } else {
+                ProgressView(title)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
     @ViewBuilder
     private var eventNewsTabContent: some View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
@@ -2714,9 +2829,11 @@ struct EventDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else if relatedArticles.isEmpty {
-            ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadRelatedArticlesIfNeeded() }
+            eventTabLoadPlaceholder(
+                title: LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."),
+                didFail: relatedArticlesLoadFailed,
+                retry: { await loadRelatedArticlesIfNeeded(force: true) }
+            )
         } else {
             let visibleArticles = Array(relatedArticles.prefix(visibleRelatedArticleCount))
             ForEach(Array(visibleArticles.enumerated()), id: \.element.id) { index, article in
@@ -3186,6 +3303,14 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventLineupTabContent(_ event: WebEvent, cardWidth: CGFloat) -> some View {
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "lineup-tab-\(event.id)-\(lineupSortMode.rawValue)-\(showExpandedLineupList)",
+            interval: 1
+        ) {
+            "lineup tab body event=\(event.id) slots=\(event.lineupSlots.count) sort=\(lineupSortMode.rawValue) expanded=\(showExpandedLineupList)"
+        }
+#endif
         let lineupImageURLs = event.lineupAssetURLs
         let timetableImageURLs = event.timetableAssetURLs
         let allLineupMediaURLs = lineupImageURLs + timetableImageURLs
@@ -3194,9 +3319,10 @@ struct EventDetailView: View {
         let lineupPreviewItems: [FullscreenMediaItem] = allLineupMediaURLs.enumerated().map { index, raw in
             FullscreenMediaItem(rawURL: raw.trimmingCharacters(in: .whitespacesAndNewlines), index: index)
         }
-        let hasLineupDJs = !lineupDJEntries(for: event, sortMode: lineupSortMode).isEmpty
+        let lineupDJs = lineupDJEntries(for: event, sortMode: lineupSortMode)
+        let hasLineupDJs = !lineupDJs.isEmpty
 
-        lineupDJsStrip(for: event)
+        lineupDJsStrip(event: event, djs: lineupDJs)
 
         if !allLineupMediaURLs.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
@@ -3265,6 +3391,14 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventScheduleTabContent(_ event: WebEvent) -> some View {
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "schedule-tab-\(event.id)-\(scheduleViewMode.rawValue)",
+            interval: 1
+        ) {
+            "schedule tab body event=\(event.id) slots=\(event.lineupSlots.count) mode=\(scheduleViewMode.rawValue)"
+        }
+#endif
         let scheduledSlots = event.lineupSlots
             .filter { $0.endTime > $0.startTime }
             .sorted(by: { $0.startTime < $1.startTime })
@@ -3327,26 +3461,43 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func eventScheduleStageList(event: WebEvent, scheduledSlots: [WebEventLineupSlot]) -> some View {
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "schedule-list-\(event.id)-\(selectedScheduleDayID ?? "nil")-\(selectedScheduleStageKey ?? "nil")",
+            interval: 1
+        ) {
+            "schedule list body event=\(event.id) scheduledSlots=\(scheduledSlots.count) selectedDay=\(selectedScheduleDayID ?? "nil") selectedStage=\(selectedScheduleStageKey ?? "nil")"
+        }
+#endif
         let usesWeekMode = EventWeekScheduleMode.isEnabled(in: event.description)
         let days = EventScheduleDay.build(
             from: scheduledSlots,
             anchorDate: event.startDate,
             useWeekMode: usesWeekMode,
-            dayRolloverHour: event.dayRolloverHour
+            dayRolloverHour: event.dayRolloverHour,
+            timeZone: event.eventTimeZone
         )
         let selectedDay = days.first { $0.id == selectedScheduleDayID } ?? days.first
 
         if let selectedDay {
             let sections = eventScheduleStageSections(for: selectedDay, event: event)
             let activeStageID = selectedScheduleStageID(in: sections)
-            let visibleSections = activeStageID.flatMap { activeID in
-                sections.first { $0.id == activeID }.map { [$0] }
-            } ?? Array(sections.prefix(1))
+            let visibleSections = selectedScheduleStageKey == EventScheduleStageSection.allStagesID
+                ? sections
+                : (activeStageID.flatMap { activeID in
+                    sections.first { $0.id == activeID }.map { [$0] }
+                } ?? Array(sections.prefix(1)))
+#if DEBUG
+            let _ = EventDetailPerfLog.throttled(
+                "schedule-list-summary-\(event.id)-\(selectedDay.id)-\(selectedScheduleStageKey ?? "nil")",
+                interval: 1
+            ) {
+                "schedule list summary event=\(event.id) days=\(days.count) selectedDay=\(selectedDay.id) sections=\(sections.count) visibleSections=\(visibleSections.count) visibleRows=\(visibleSections.reduce(0) { $0 + $1.slots.count })"
+            }
+#endif
 
             VStack(alignment: .leading, spacing: 12) {
-                if days.count > 1 {
-                    eventScheduleDayTabs(days)
-                }
+                eventScheduleDayTabs(days)
 
                 eventScheduleStageTabs(sections: sections, activeStageID: activeStageID)
 
@@ -3367,7 +3518,7 @@ struct EventDetailView: View {
     }
 
     private func eventScheduleDayTabs(_ days: [EventScheduleDay]) -> some View {
-        HorizontalAxisLockedScrollView(showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(days) { day in
                     let isSelected = (selectedScheduleDayID ?? days.first?.id) == day.id
@@ -3398,11 +3549,36 @@ struct EventDetailView: View {
             }
             .padding(.horizontal, 2)
         }
+        .frame(height: 34, alignment: .leading)
     }
 
     private func eventScheduleStageTabs(sections: [EventScheduleStageSection], activeStageID: String?) -> some View {
-        HorizontalAxisLockedScrollView(showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
+                let allStagesSelected = selectedScheduleStageKey == EventScheduleStageSection.allStagesID
+                Button {
+                    withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                        selectedScheduleStageKey = EventScheduleStageSection.allStagesID
+                    }
+                } label: {
+                    Text(LT("全部舞台", "All stages", "すべてのステージ"))
+                        .font(EventScheduleTypography.semibold(15))
+                        .foregroundStyle(allStagesSelected ? scheduleSelectorSelectedTextColor : scheduleSelectorUnselectedTextColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(allStagesSelected ? scheduleSelectorSelectedBackgroundColor : scheduleSelectorUnselectedBackgroundColor)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(scheduleSelectorUnselectedStrokeColor, lineWidth: allStagesSelected ? 0 : 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+
                 ForEach(sections) { section in
                     let isSelected = activeStageID == section.id
                     Button {
@@ -3431,6 +3607,7 @@ struct EventDetailView: View {
             }
             .padding(.horizontal, 2)
         }
+        .frame(height: 34, alignment: .leading)
     }
 
     private var scheduleSelectorSelectedTextColor: Color {
@@ -3454,6 +3631,9 @@ struct EventDetailView: View {
     }
 
     private func selectedScheduleStageID(in sections: [EventScheduleStageSection]) -> String? {
+        if selectedScheduleStageKey == EventScheduleStageSection.allStagesID {
+            return nil
+        }
         if let selectedScheduleStageKey,
            sections.contains(where: { $0.id == selectedScheduleStageKey }) {
             return selectedScheduleStageKey
@@ -3464,6 +3644,9 @@ struct EventDetailView: View {
     private func ensureSelectedScheduleStage(in sections: [EventScheduleStageSection]) {
         guard !sections.isEmpty else {
             selectedScheduleStageKey = nil
+            return
+        }
+        if selectedScheduleStageKey == EventScheduleStageSection.allStagesID {
             return
         }
         if let selectedScheduleStageKey,
@@ -3596,16 +3779,17 @@ struct EventDetailView: View {
         if isLoadingRelatedRatingEvents && relatedRatingEvents.isEmpty {
             ProgressView(LT("正在加载打分事件...", "Loading ratings...", "評価を読み込み中..."))
                 .padding(.vertical, 8)
-                .task { await loadRelatedRatingsIfNeeded() }
         } else if relatedRatingEvents.isEmpty && didLoadRelatedRatingEvents {
             Text(LT("暂无对应打分事件", "暂无对应打分事件", "対応する評価イベントはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else if relatedRatingEvents.isEmpty {
-            ProgressView(LT("正在加载打分事件...", "Loading ratings...", "評価を読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadRelatedRatingsIfNeeded() }
+            eventTabLoadPlaceholder(
+                title: LT("正在加载打分事件...", "Loading ratings...", "評価を読み込み中..."),
+                didFail: relatedRatingEventsLoadFailed,
+                retry: { await loadRelatedRatingsIfNeeded(force: true) }
+            )
         } else {
             let visibleRatings = Array(relatedRatingEvents.prefix(visibleRelatedRatingCount))
             ForEach(visibleRatings) { ratingEvent in
@@ -3655,16 +3839,17 @@ struct EventDetailView: View {
         if isLoadingRelatedEventSets && relatedEventSets.isEmpty {
             ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
                 .padding(.vertical, 8)
-                .task { await loadRelatedSetsIfNeeded() }
         } else if relatedEventSets.isEmpty && didLoadRelatedEventSets {
             Text(LT("暂无对应 Sets", "暂无对应 Sets", "対応するSetはありません"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else if relatedEventSets.isEmpty {
-            ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadRelatedSetsIfNeeded() }
+            eventTabLoadPlaceholder(
+                title: LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."),
+                didFail: relatedEventSetsLoadFailed,
+                retry: { await loadRelatedSetsIfNeeded(force: true) }
+            )
         } else {
             let visibleSets = Array(relatedEventSets.prefix(visibleRelatedSetCount))
             ForEach(visibleSets) { set in
@@ -4558,9 +4743,16 @@ struct EventDetailView: View {
     }
 
     @ViewBuilder
-    private func lineupDJsStrip(for event: WebEvent) -> some View {
-        let djs = lineupDJEntries(for: event, sortMode: lineupSortMode)
+    private func lineupDJsStrip(event: WebEvent, djs: [EventLineupDJEntry]) -> some View {
         let canExpand = djs.count > 8
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "lineup-strip-\(event.id)-\(lineupSortMode.rawValue)-\(showExpandedLineupList)",
+            interval: 1
+        ) {
+            "lineup strip body event=\(event.id) djs=\(djs.count) shownStrip=\(min(djs.count, 24)) canExpand=\(canExpand) expanded=\(showExpandedLineupList)"
+        }
+#endif
         if !djs.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
@@ -4577,6 +4769,7 @@ struct EventDetailView: View {
                     Button {
                         withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
                             lineupSortMode = lineupSortMode == .alphabetical ? .popularity : .alphabetical
+                            invalidateLineupEntriesCache()
                             expandedLineupPage = 0
                         }
                     } label: {
@@ -4625,6 +4818,14 @@ struct EventDetailView: View {
     private func lineupExpandedPager(_ djs: [EventLineupDJEntry]) -> some View {
         let pages = lineupDJPages(djs)
         let pageCount = max(pages.count, 1)
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "lineup-expanded-pager-\(djs.count)-\(expandedLineupPage)",
+            interval: 1
+        ) {
+            "lineup expanded pager body djs=\(djs.count) pages=\(pages.count) currentPage=\(expandedLineupPage)"
+        }
+#endif
 
         return VStack(spacing: 10) {
             TabView(selection: $expandedLineupPage) {
@@ -4699,6 +4900,14 @@ struct EventDetailView: View {
     }
 
     private func lineupExpandedGrid(_ djs: [EventLineupDJEntry]) -> some View {
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "lineup-expanded-grid-\(djs.map(\.id).joined(separator: "|"))",
+            interval: 1
+        ) {
+            "lineup expanded grid body pageItems=\(djs.count)"
+        }
+#endif
         let columns = [
             GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top),
             GridItem(.flexible(minimum: 0), spacing: 12, alignment: .top),
@@ -4815,6 +5024,29 @@ struct EventDetailView: View {
     }
 
     private func lineupDJEntries(for event: WebEvent, sortMode: LineupSortMode) -> [EventLineupDJEntry] {
+        let cacheKey = EventLineupEntriesCacheKey(event: event, sortMode: sortMode)
+        if lineupEntriesCache.key == cacheKey {
+            return lineupEntriesCache.entries
+        }
+#if DEBUG
+        let entries = EventDetailPerfLog.measure(
+            "lineupDJEntries event=\(event.id) slots=\(event.lineupSlots.count) sort=\(sortMode.rawValue)",
+            minDurationMS: 1
+        ) {
+            buildLineupDJEntries(for: event, sortMode: sortMode)
+        }
+#else
+        let entries = buildLineupDJEntries(for: event, sortMode: sortMode)
+#endif
+        lineupEntriesCache.update(key: cacheKey, entries: entries)
+        return entries
+    }
+
+    private func invalidateLineupEntriesCache() {
+        lineupEntriesCache.clear()
+    }
+
+    private func buildLineupDJEntries(for event: WebEvent, sortMode: LineupSortMode) -> [EventLineupDJEntry] {
         var seen = Set<String>()
         var result: [EventLineupDJEntry] = []
 
@@ -5225,6 +5457,7 @@ struct EventDetailView: View {
             let loadedCheckins = await checkinsTask
 
             event = loadedEvent
+            invalidateLineupEntriesCache()
             relatedEventCheckins = loadedCheckins
             eventFavoriteID = loadedFavoriteStatus?.id ?? loadedEvent.favoriteId
             phase = .success
@@ -5292,38 +5525,62 @@ struct EventDetailView: View {
     }
 
     @MainActor
-    private func loadRelatedArticlesIfNeeded() async {
-        guard !didLoadRelatedArticles, !isLoadingRelatedArticles else { return }
+    private func loadRelatedArticlesIfNeeded(force: Bool = false) async {
+        guard force || !didLoadRelatedArticles else { return }
+        guard !isLoadingRelatedArticles else { return }
         isLoadingRelatedArticles = true
+        relatedArticlesLoadFailed = false
         defer { isLoadingRelatedArticles = false }
-        relatedArticles = (try? await fetchRelatedNewsArticlesForEvent(eventID: eventID)) ?? []
-        didLoadRelatedArticles = true
-        await persistCurrentManualCacheSnapshotIfPossible()
+        do {
+            relatedArticles = try await fetchRelatedNewsArticlesForEvent(eventID: eventID)
+            didLoadRelatedArticles = true
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            relatedArticlesLoadFailed = true
+        }
     }
 
     @MainActor
-    private func loadRelatedRatingsIfNeeded() async {
-        guard !didLoadRelatedRatingEvents, !isLoadingRelatedRatingEvents else { return }
+    private func loadRelatedRatingsIfNeeded(force: Bool = false) async {
+        guard force || !didLoadRelatedRatingEvents else { return }
+        guard !isLoadingRelatedRatingEvents else { return }
         isLoadingRelatedRatingEvents = true
+        relatedRatingEventsLoadFailed = false
         defer { isLoadingRelatedRatingEvents = false }
-        relatedRatingEvents = (try? await ratingRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
-        didLoadRelatedRatingEvents = true
-        await persistCurrentManualCacheSnapshotIfPossible()
+        do {
+            relatedRatingEvents = try await ratingRepository.fetchEventRatingEvents(eventID: eventID)
+            didLoadRelatedRatingEvents = true
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            relatedRatingEventsLoadFailed = true
+        }
     }
 
     @MainActor
-    private func loadRelatedSetsIfNeeded() async {
-        guard !didLoadRelatedEventSets, !isLoadingRelatedEventSets else { return }
+    private func loadRelatedSetsIfNeeded(force: Bool = false) async {
+        guard force || !didLoadRelatedEventSets else { return }
+        guard !isLoadingRelatedEventSets else { return }
         guard let event else {
             relatedEventSets = []
             didLoadRelatedEventSets = true
             return
         }
         isLoadingRelatedEventSets = true
+        relatedEventSetsLoadFailed = false
         defer { isLoadingRelatedEventSets = false }
-        relatedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventID: event.id, eventName: event.name)) ?? []
-        didLoadRelatedEventSets = true
-        await persistCurrentManualCacheSnapshotIfPossible()
+        do {
+            relatedEventSets = try await eventRelatedContentRepository.fetchEventDJSets(eventID: event.id, eventName: event.name)
+            didLoadRelatedEventSets = true
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            relatedEventSetsLoadFailed = true
+        }
     }
 
     private func reloadEventRatings() async {
@@ -5382,6 +5639,7 @@ struct EventDetailView: View {
     @MainActor
     private func applyManualCacheSnapshot(_ snapshot: EventManualCacheSnapshot) {
         event = snapshot.event
+        invalidateLineupEntriesCache()
         relatedRatingEvents = snapshot.relatedRatingEvents
         relatedEventSets = snapshot.relatedEventSets
         relatedArticles = snapshot.relatedNewsArticles
@@ -5600,7 +5858,7 @@ struct EventDetailView: View {
     }
 
     private func eventCheckinDayOptions(for event: WebEvent) -> [EventCheckinDayOption] {
-        let calendar = Calendar.current
+        let calendar = Calendar.eventCalendar(timeZone: event.eventTimeZone)
         let usesWeekMode = EventWeekScheduleMode.isEnabled(in: event.description)
         let dayIndexes: [Int] = {
             let lineupDayIndexes = Array(
@@ -5608,7 +5866,8 @@ struct EventDetailView: View {
                     EventLogicalDayResolver.dayIndex(
                         for: slot,
                         eventStartDate: event.startDate,
-                        dayRolloverHour: event.dayRolloverHour
+                        dayRolloverHour: event.dayRolloverHour,
+                        timeZone: event.eventTimeZone
                     )
                 })
             ).sorted()
@@ -5624,12 +5883,13 @@ struct EventDetailView: View {
         }()
 
         return dayIndexes.map { dayIndex in
-            let dayDate = EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: event.startDate)
+            let dayDate = EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: event.startDate, timeZone: event.eventTimeZone)
             let slotsOnDay = event.lineupSlots.filter { slot in
                 EventLogicalDayResolver.dayIndex(
                     for: slot,
                     eventStartDate: event.startDate,
-                    dayRolloverHour: event.dayRolloverHour
+                    dayRolloverHour: event.dayRolloverHour,
+                    timeZone: event.eventTimeZone
                 ) == dayIndex
             }
             let fallback = calendar.date(bySettingHour: 20, minute: 0, second: 0, of: dayDate) ?? dayDate
@@ -5638,7 +5898,7 @@ struct EventDetailView: View {
             let weekDay = usesWeekMode ? EventWeekScheduleMode.weekDayIndex(for: dayDate, anchorDate: event.startDate) : nil
 
             return EventCheckinDayOption(
-                id: Self.eventCheckinDayKey(for: dayDate),
+                id: Self.eventCheckinDayKey(for: dayDate, timeZone: event.eventTimeZone),
                 dayIndex: dayIndex,
                 dayDate: dayDate,
                 attendedAt: attendedAt,
@@ -5658,10 +5918,12 @@ struct EventDetailView: View {
             let dayIndex = EventLogicalDayResolver.dayIndex(
                 for: slot,
                 eventStartDate: event.startDate,
-                dayRolloverHour: event.dayRolloverHour
+                dayRolloverHour: event.dayRolloverHour,
+                timeZone: event.eventTimeZone
             )
             let key = Self.eventCheckinDayKey(
-                for: EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: event.startDate)
+                for: EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: event.startDate, timeZone: event.eventTimeZone),
+                timeZone: event.eventTimeZone
             )
             guard selectedDayIDs.contains(key) else { continue }
 
@@ -5927,12 +6189,14 @@ struct EventDetailView: View {
         let targetDayIndex = EventLogicalDayResolver.dayIndex(
             for: date,
             eventStartDate: event.startDate,
-            dayRolloverHour: event.dayRolloverHour
+            dayRolloverHour: event.dayRolloverHour,
+            timeZone: event.eventTimeZone
         )
         if let exact = options.first(where: { $0.dayIndex == targetDayIndex }) {
             return exact.id
         }
-        return options.first { Calendar.current.isDate($0.dayDate, inSameDayAs: date) }?.id
+        let calendar = Calendar.eventCalendar(timeZone: event.eventTimeZone)
+        return options.first { calendar.isDate($0.dayDate, inSameDayAs: date) }?.id
     }
 
     private func makeAttendanceSelectionPayload(
@@ -6009,17 +6273,13 @@ struct EventDetailView: View {
         return checkin.isEventAttendanceCheckin
     }
 
-    private static func eventCheckinDayKey(for date: Date) -> String {
-        eventCheckinDayFormatter.string(from: date)
-    }
-
-    private static let eventCheckinDayFormatter: DateFormatter = {
+    private static func eventCheckinDayKey(for date: Date, timeZone: TimeZone = .current) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+        return formatter.string(from: date)
+    }
 
     private func deleteEvent() async {
         do {
@@ -6052,7 +6312,11 @@ private enum EventLogicalDayResolver {
     }
 
     static func dayDate(for dayIndex: Int, anchorDate: Date) -> Date {
-        let calendar = Calendar.current
+        dayDate(for: dayIndex, anchorDate: anchorDate, timeZone: .current)
+    }
+
+    static func dayDate(for dayIndex: Int, anchorDate: Date, timeZone: TimeZone) -> Date {
+        let calendar = Calendar.eventCalendar(timeZone: timeZone)
         let anchorDay = calendar.startOfDay(for: anchorDate)
         guard dayIndex > 1 else { return anchorDay }
         return calendar.date(byAdding: .day, value: dayIndex - 1, to: anchorDay) ?? anchorDay
@@ -6061,9 +6325,10 @@ private enum EventLogicalDayResolver {
     static func dayIndex(
         for date: Date,
         eventStartDate: Date,
-        dayRolloverHour: Int?
+        dayRolloverHour: Int?,
+        timeZone: TimeZone = .current
     ) -> Int {
-        let calendar = Calendar.current
+        let calendar = Calendar.eventCalendar(timeZone: timeZone)
         let rolloverHour = normalizeDayRolloverHour(dayRolloverHour)
         let anchorDay = calendar.startOfDay(for: eventStartDate)
         let targetDay = calendar.startOfDay(for: date)
@@ -6077,12 +6342,13 @@ private enum EventLogicalDayResolver {
     static func dayIndex(
         for slot: WebEventLineupSlot,
         eventStartDate: Date,
-        dayRolloverHour: Int?
+        dayRolloverHour: Int?,
+        timeZone: TimeZone = .current
     ) -> Int {
         if let explicitDayIndex = slot.festivalDayIndex, explicitDayIndex > 0 {
             return explicitDayIndex
         }
-        return dayIndex(for: slot.startTime, eventStartDate: eventStartDate, dayRolloverHour: dayRolloverHour)
+        return dayIndex(for: slot.startTime, eventStartDate: eventStartDate, dayRolloverHour: dayRolloverHour, timeZone: timeZone)
     }
 }
 
@@ -6092,6 +6358,7 @@ private struct EventScheduleDay: Identifiable, Hashable {
     let weekIndex: Int?
     let dayInWeek: Int?
     let date: Date
+    let timeZone: TimeZone
     let slots: [WebEventLineupSlot]
 
     var title: String {
@@ -6101,14 +6368,14 @@ private struct EventScheduleDay: Identifiable, Hashable {
         return "Day\(index)"
     }
 
-    var subtitle: String { "\(title) · \(date.appLocalizedYMDText())" }
+    var subtitle: String { "\(title) · \(date.appLocalizedYMDText(in: timeZone))" }
 
     var subtitleWithoutTimeZone: String { "\(title) · \(localizedDateTextWithoutTimeZone)" }
 
     private var localizedDateTextWithoutTimeZone: String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
-        formatter.timeZone = .current
+        formatter.timeZone = timeZone
         switch AppLanguagePreference.current.effectiveLanguage {
         case .zh, .system:
             formatter.dateFormat = "yyyy年M月d日"
@@ -6124,7 +6391,8 @@ private struct EventScheduleDay: Identifiable, Hashable {
         from slots: [WebEventLineupSlot],
         anchorDate: Date,
         useWeekMode: Bool,
-        dayRolloverHour: Int? = nil
+        dayRolloverHour: Int? = nil,
+        timeZone: TimeZone = .current
     ) -> [EventScheduleDay] {
         guard !slots.isEmpty else { return [] }
 
@@ -6133,7 +6401,8 @@ private struct EventScheduleDay: Identifiable, Hashable {
             let dayIndex = EventLogicalDayResolver.dayIndex(
                 for: slot,
                 eventStartDate: anchorDate,
-                dayRolloverHour: dayRolloverHour
+                dayRolloverHour: dayRolloverHour,
+                timeZone: timeZone
             )
             grouped[dayIndex, default: []].append(slot)
         }
@@ -6142,7 +6411,7 @@ private struct EventScheduleDay: Identifiable, Hashable {
             .keys
             .sorted()
             .map { dayIndex in
-                let dayDate = EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: anchorDate)
+                let dayDate = EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: anchorDate, timeZone: timeZone)
                 let items = (grouped[dayIndex] ?? [])
                     .sorted {
                         if $0.startTime == $1.startTime {
@@ -6154,35 +6423,172 @@ private struct EventScheduleDay: Identifiable, Hashable {
                     ? EventWeekScheduleMode.weekDayIndex(for: dayDate, anchorDate: anchorDate)
                     : nil
                 return EventScheduleDay(
-                    id: Self.dayKey(for: dayDate),
+                    id: Self.dayKey(for: dayDate, timeZone: timeZone),
                     index: dayIndex,
                     weekIndex: weekDay?.week,
                     dayInWeek: weekDay?.day,
                     date: dayDate,
+                    timeZone: timeZone,
                     slots: items
                 )
             }
     }
 
-    private static func dayKey(for date: Date) -> String {
-        dayKeyFormatter.string(from: date)
-    }
-
-    private static let dayKeyFormatter: DateFormatter = {
+    private static func dayKey(for date: Date, timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+        return formatter.string(from: date)
+    }
 
 }
 
-private struct EventTimelineCardFrame: Identifiable {
+private struct EventTimelineCardFrame: Identifiable, Equatable {
     let id: String
     let slot: WebEventLineupSlot
     let top: CGFloat
     let height: CGFloat
+    let displayName: String
+    let timeRangeText: String
+
+    static func == (lhs: EventTimelineCardFrame, rhs: EventTimelineCardFrame) -> Bool {
+        lhs.id == rhs.id
+            && lhs.top == rhs.top
+            && lhs.height == rhs.height
+            && lhs.displayName == rhs.displayName
+            && lhs.timeRangeText == rhs.timeRangeText
+    }
+}
+
+private struct EventTimelineBoardLayoutCacheKey: Equatable {
+    let eventID: String
+    let dayID: String
+    let slotCount: Int
+    let slotSignature: Int
+    let stageOrderSignature: Int
+    let width: Int
+    let maxVisibleStages: Int
+    let timeZoneIdentifier: String
+
+    init(event: WebEvent, day: EventScheduleDay, availableWidth: CGFloat, maxVisibleStages: Int) {
+        self.eventID = event.id
+        self.dayID = day.id
+        self.slotCount = day.slots.count
+        self.slotSignature = day.slots.reduce(0) { partial, slot in
+            var hasher = Hasher()
+            hasher.combine(partial)
+            hasher.combine(slot.id)
+            hasher.combine(slot.startTime.timeIntervalSinceReferenceDate)
+            hasher.combine(slot.endTime.timeIntervalSinceReferenceDate)
+            hasher.combine(slot.stageName)
+            hasher.combine(slot.sortOrder)
+            return hasher.finalize()
+        }
+        self.stageOrderSignature = (event.stageOrder ?? []).reduce(0) { partial, stage in
+            var hasher = Hasher()
+            hasher.combine(partial)
+            hasher.combine(stage)
+            return hasher.finalize()
+        }
+        self.width = Int(availableWidth.rounded())
+        self.maxVisibleStages = maxVisibleStages
+        self.timeZoneIdentifier = event.eventTimeZone.identifier
+    }
+}
+
+private final class EventTimelineBoardLayoutCache {
+    private var key: EventTimelineBoardLayoutCacheKey?
+    private var cachedLayout: EventTimelineLayout?
+    private var framesByStage: [String: [EventTimelineCardFrame]] = [:]
+
+    func layout(
+        event: WebEvent,
+        day: EventScheduleDay,
+        availableWidth: CGFloat,
+        maxVisibleStages: Int
+    ) -> EventTimelineLayout {
+        let cacheKey = EventTimelineBoardLayoutCacheKey(
+            event: event,
+            day: day,
+            availableWidth: availableWidth,
+            maxVisibleStages: maxVisibleStages
+        )
+        if key == cacheKey, let cachedLayout {
+            return cachedLayout
+        }
+
+        let layout = EventTimelineLayout(
+            slots: day.slots,
+            stageOrder: event.stageOrder ?? [],
+            availableWidth: availableWidth,
+            maxVisibleStages: maxVisibleStages,
+            timeZone: event.eventTimeZone
+        )
+        key = cacheKey
+        cachedLayout = layout
+        framesByStage = Self.buildFramesByStage(layout: layout, timeZone: event.eventTimeZone)
+        return layout
+    }
+
+    func frames(for stageName: String, layout: EventTimelineLayout) -> [EventTimelineCardFrame] {
+        if let frames = framesByStage[stageName] {
+            return frames
+        }
+        let frames = Self.buildFrames(for: stageName, layout: layout, timeZone: TimeZone(identifier: key?.timeZoneIdentifier ?? "") ?? .current)
+        framesByStage[stageName] = frames
+        return frames
+    }
+
+    private static func buildFramesByStage(layout: EventTimelineLayout, timeZone: TimeZone) -> [String: [EventTimelineCardFrame]] {
+        var result: [String: [EventTimelineCardFrame]] = [:]
+        for stageName in layout.stageNames {
+            result[stageName] = buildFrames(for: stageName, layout: layout, timeZone: timeZone)
+        }
+        return result
+    }
+
+    private static func buildFrames(for stageName: String, layout: EventTimelineLayout, timeZone: TimeZone) -> [EventTimelineCardFrame] {
+        let stageSlots = (layout.slotsByStage[stageName] ?? []).sorted {
+            if $0.startTime == $1.startTime {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.startTime < $1.startTime
+        }
+
+        return stageSlots.map { slot in
+            let startY = layout.yPosition(for: slot.startTime)
+            let endY = layout.yPosition(for: slot.endTime)
+            let act = EventLineupActCodec.parse(slot: slot)
+            return EventTimelineCardFrame(
+                id: slot.id,
+                slot: slot,
+                top: startY,
+                height: max(44, endY - startY),
+                displayName: act.displayName,
+                timeRangeText: EventTimelineBoardView.cardTimeRangeText(for: slot, timeZone: timeZone)
+            )
+        }
+    }
+}
+
+private struct EventTimelineStageColumnModel: Equatable, Identifiable {
+    var id: String { stageName }
+
+    let stageName: String
+    let stageColor: Color
+    let stageWidth: CGFloat
+    let bodyHeight: CGFloat
+    let tickPositions: [CGFloat]
+    let frames: [EventTimelineCardFrame]
+
+    static func == (lhs: EventTimelineStageColumnModel, rhs: EventTimelineStageColumnModel) -> Bool {
+        lhs.stageName == rhs.stageName
+            && lhs.stageWidth == rhs.stageWidth
+            && lhs.bodyHeight == rhs.bodyHeight
+            && lhs.tickPositions == rhs.tickPositions
+            && lhs.frames == rhs.frames
+    }
 }
 
 private enum EventScheduleTypography {
@@ -6234,8 +6640,12 @@ private struct EventTimelineLayout {
         slots: [WebEventLineupSlot],
         stageOrder: [String] = [],
         availableWidth: CGFloat,
-        maxVisibleStages: Int = Self.maxVisibleStageCount
+        maxVisibleStages: Int = Self.maxVisibleStageCount,
+        timeZone: TimeZone = .current
     ) {
+#if DEBUG
+        let layoutStart = CACurrentMediaTime()
+#endif
         let normalizedSlots = slots.sorted {
             if $0.startTime == $1.startTime {
                 return $0.sortOrder < $1.sortOrder
@@ -6281,13 +6691,13 @@ private struct EventTimelineLayout {
             colorMap[stage] = Self.palette[idx % Self.palette.count]
         }
 
-        let bounds = Self.timeBounds(for: normalizedSlots)
+        let bounds = Self.timeBounds(for: normalizedSlots, timeZone: timeZone)
         rangeStart = bounds.start
         rangeEnd = bounds.end
         let totalHours = max(bounds.end.timeIntervalSince(bounds.start) / 3600, 1)
         timelineSpanHeight = max(760, CGFloat(totalHours) * Self.pixelsPerHour)
         bodyHeight = Self.timelineTopInset + timelineSpanHeight + Self.timelineBottomInset
-        tickDates = Self.hourTicks(from: bounds.start, to: bounds.end)
+        tickDates = Self.hourTicks(from: bounds.start, to: bounds.end, timeZone: timeZone)
 
         let stageCount = max(1, orderedStages.count)
         let stageViewport = max(availableWidth - Self.axisWidth, Self.minStageWidth)
@@ -6303,6 +6713,23 @@ private struct EventTimelineLayout {
         stageNames = orderedStages
         slotsByStage = grouped
         stageColorByName = colorMap
+#if DEBUG
+        let elapsedMS = (CACurrentMediaTime() - layoutStart) * 1000
+        EventDetailPerfLog.sampled(
+            "timeline-layout-init-count-\(normalizedSlots.count)-\(orderedStages.count)-\(Int(availableWidth))",
+            every: 20
+        ) { count in
+            "timeline layout init count=\(count) slots=\(normalizedSlots.count) stages=\(orderedStages.count) ticks=\(tickDates.count) width=\(Int(availableWidth)) maxVisibleStages=\(maxVisibleStages) took=\(String(format: "%.2f", elapsedMS))ms"
+        }
+        if elapsedMS >= 1 {
+            EventDetailPerfLog.throttled(
+                "timeline-layout-\(normalizedSlots.count)-\(orderedStages.count)-\(Int(availableWidth))",
+                interval: 1
+            ) {
+                "timeline layout init slots=\(normalizedSlots.count) stages=\(orderedStages.count) ticks=\(tickDates.count) width=\(Int(availableWidth)) took=\(String(format: "%.2f", elapsedMS))ms"
+            }
+        }
+#endif
     }
 
     func yPosition(for date: Date) -> CGFloat {
@@ -6316,8 +6743,8 @@ private struct EventTimelineLayout {
         stageColorByName[stageName] ?? Self.palette[0]
     }
 
-    static func estimatedHeight(for slots: [WebEventLineupSlot]) -> CGFloat {
-        let bounds = timeBounds(for: slots)
+    static func estimatedHeight(for slots: [WebEventLineupSlot], timeZone: TimeZone = .current) -> CGFloat {
+        let bounds = timeBounds(for: slots, timeZone: timeZone)
         let totalHours = max(bounds.end.timeIntervalSince(bounds.start) / 3600, 1)
         let span = max(760, CGFloat(totalHours) * pixelsPerHour)
         return stageHeaderHeight + timelineTopInset + span + timelineBottomInset
@@ -6344,24 +6771,25 @@ private struct EventTimelineLayout {
         return result
     }
 
-    private static func timeBounds(for slots: [WebEventLineupSlot]) -> (start: Date, end: Date) {
+    private static func timeBounds(for slots: [WebEventLineupSlot], timeZone: TimeZone) -> (start: Date, end: Date) {
         let reference = slots.map(\.startTime).min() ?? Date()
         let earliest = slots.map(\.startTime).min() ?? reference
         let latest = slots.map(\.endTime).max() ?? earliest.addingTimeInterval(3600)
-        let roundedStart = floorToHour(earliest)
-        var roundedEnd = ceilToHour(latest)
+        let roundedStart = floorToHour(earliest, timeZone: timeZone)
+        var roundedEnd = ceilToHour(latest, timeZone: timeZone)
         if roundedEnd <= roundedStart {
             roundedEnd = roundedStart.addingTimeInterval(3600)
         }
         return (roundedStart, roundedEnd)
     }
 
-    private static func hourTicks(from start: Date, to end: Date) -> [Date] {
+    private static func hourTicks(from start: Date, to end: Date, timeZone: TimeZone) -> [Date] {
+        let calendar = Calendar.eventCalendar(timeZone: timeZone)
         var result: [Date] = []
         var cursor = start
         while cursor <= end {
             result.append(cursor)
-            guard let next = Calendar.current.date(byAdding: .hour, value: 1, to: cursor) else { break }
+            guard let next = calendar.date(byAdding: .hour, value: 1, to: cursor) else { break }
             cursor = next
         }
         if result.isEmpty {
@@ -6370,16 +6798,16 @@ private struct EventTimelineLayout {
         return result
     }
 
-    private static func floorToHour(_ date: Date) -> Date {
-        let calendar = Calendar.current
+    private static func floorToHour(_ date: Date, timeZone: TimeZone) -> Date {
+        let calendar = Calendar.eventCalendar(timeZone: timeZone)
         let parts = calendar.dateComponents([.year, .month, .day, .hour], from: date)
         return calendar.date(from: parts) ?? date
     }
 
-    private static func ceilToHour(_ date: Date) -> Date {
-        let start = floorToHour(date)
+    private static func ceilToHour(_ date: Date, timeZone: TimeZone) -> Date {
+        let start = floorToHour(date, timeZone: timeZone)
         if start == date { return start }
-        return Calendar.current.date(byAdding: .hour, value: 1, to: start) ?? date
+        return Calendar.eventCalendar(timeZone: timeZone).date(byAdding: .hour, value: 1, to: start) ?? date
     }
 
     private static let palette: [Color] = [
@@ -6407,8 +6835,10 @@ private struct EventTimelineBoardView: View {
     var maxVisibleStages: Int = EventTimelineLayout.maxVisibleStageCount
     var stickyTopInset: CGFloat = 0
 
+    @State private var layoutCache = EventTimelineBoardLayoutCache()
+
     private var boardHeight: CGFloat {
-        EventTimelineLayout.estimatedHeight(for: day.slots)
+        EventTimelineLayout.estimatedHeight(for: day.slots, timeZone: event.eventTimeZone)
     }
 
     private var isDarkMode: Bool {
@@ -6470,13 +6900,36 @@ private struct EventTimelineBoardView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let layout = EventTimelineLayout(
-                slots: day.slots,
-                stageOrder: event.stageOrder ?? [],
+            let containerMinY = geo.frame(in: .global).minY
+#if DEBUG
+            let _ = EventDetailPerfLog.sampled(
+                "timeline-board-body-count-\(event.id)-\(day.id)",
+                every: 20
+            ) { count in
+                "timeline board body count=\(count) event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(geo.size.width)) minY=\(String(format: "%.1f", containerMinY)) maxVisibleStages=\(maxVisibleStages)"
+            }
+            let _ = EventDetailPerfLog.throttled(
+                "timeline-board-body-\(event.id)-\(day.id)",
+                interval: 1
+            ) {
+                "timeline board body event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(geo.size.width)) minY=\(String(format: "%.1f", containerMinY)) maxVisibleStages=\(maxVisibleStages)"
+            }
+#endif
+            let layout = layoutCache.layout(
+                event: event,
+                day: day,
                 availableWidth: max(geo.size.width, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth),
                 maxVisibleStages: maxVisibleStages
             )
-            let stickyHeaderOffset = stickyHeaderOffset(containerMinY: geo.frame(in: .global).minY, layout: layout)
+            let stickyHeaderOffset = stickyHeaderOffset(containerMinY: containerMinY, layout: layout)
+#if DEBUG
+            let _ = EventDetailPerfLog.sampled(
+                "timeline-sticky-offset-count-\(event.id)-\(day.id)",
+                every: 20
+            ) { count in
+                "timeline sticky offset count=\(count) event=\(event.id) day=\(day.id) minY=\(String(format: "%.1f", containerMinY)) stickyTopInset=\(String(format: "%.1f", stickyTopInset)) offset=\(String(format: "%.1f", stickyHeaderOffset)) bodyHeight=\(String(format: "%.1f", layout.bodyHeight))"
+            }
+#endif
 
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -6493,7 +6946,7 @@ private struct EventTimelineBoardView: View {
                     )
 
                 HStack(spacing: 0) {
-                    timelineAxis(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+                    timelineAxis(layout: layout)
                     stageMatrix(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
                 }
                 .padding(.vertical, 10)
@@ -6509,42 +6962,41 @@ private struct EventTimelineBoardView: View {
 
     @ViewBuilder
     private func stageMatrix(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
-        let stageContent = VStack(spacing: 0) {
-            stageHeaderRow(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
-                .offset(y: stickyHeaderOffset)
-                .zIndex(3)
-            stageColumnsRow(layout: layout)
-        }
+        let stageModels = stageColumnModels(layout: layout)
 
         ScrollView(.horizontal, showsIndicators: false) {
-            stageContent
-                .frame(width: layout.stageContentWidth, alignment: .leading)
+            ZStack(alignment: .topLeading) {
+                EventTimelineStageColumnsView(
+                    models: stageModels,
+                    spacing: EventTimelineLayout.stageGap,
+                    selectedSlotIDs: selectedSlotIDs,
+                    selectable: selectable,
+                    normalCardTextColor: normalCardTextColor,
+                    selectedCardFillColor: selectedCardFillColor,
+                    columnFillColor: columnFillColor,
+                    gridLineColor: gridLineColor,
+                    onToggleSlot: onToggleSlot,
+                    onSelectSlot: onSelectSlot
+                )
+                .equatable()
+
+                stageHeaderRow(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+                    .offset(y: stickyHeaderOffset)
+                    .zIndex(3)
+            }
+            .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight + layout.bodyHeight, alignment: .topLeading)
         }
         .frame(width: layout.stageViewportWidth, alignment: .leading)
     }
 
-    private func timelineAxis(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
+    private func timelineAxis(layout: EventTimelineLayout) -> some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .top) {
-                headerBackdrop(width: EventTimelineLayout.axisWidth, topExtension: stickyHeaderOffset)
-
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(headerBackdropColor.opacity(stickyHeaderOffset > 0 ? 1.0 : 0.0))
-                    .overlay(
-                        Text("TIME")
-                            .font(EventScheduleTypography.semibold(12))
-                            .tracking(1.2)
-                            .foregroundStyle(axisHeaderTextColor.opacity(stickyHeaderOffset > 0 ? 1.0 : 0.0))
-                    )
-                    .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
-            }
-            .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight, alignment: .top)
-            .offset(y: stickyHeaderOffset)
-            .zIndex(3)
+            Color.clear
+                .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
 
             ZStack(alignment: .topTrailing) {
                 ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
-                    Text(Self.axisTimeFormatter.string(from: tick))
+                    Text(Self.axisTimeFormatter(timeZone: event.eventTimeZone).string(from: tick))
                         .font(EventScheduleTypography.heavy(12))
                         .foregroundStyle(axisTextColor)
                         .frame(width: EventTimelineLayout.axisWidth - 8, alignment: .trailing)
@@ -6554,6 +7006,21 @@ private struct EventTimelineBoardView: View {
             .frame(width: EventTimelineLayout.axisWidth, height: layout.bodyHeight, alignment: .topTrailing)
         }
         .frame(width: EventTimelineLayout.axisWidth)
+        .overlay(alignment: .top) {
+            timelineAxisStickyHeader()
+        }
+    }
+
+    private func timelineAxisStickyHeader() -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(headerBackdropColor)
+            .overlay(
+                Text("TIME")
+                    .font(EventScheduleTypography.semibold(12))
+                    .tracking(1.2)
+                    .foregroundStyle(axisHeaderTextColor)
+            )
+            .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
     }
 
     private func stageHeaderRow(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
@@ -6630,44 +7097,98 @@ private struct EventTimelineBoardView: View {
         .allowsHitTesting(false)
     }
 
-    private func stageColumnsRow(layout: EventTimelineLayout) -> some View {
-        HStack(spacing: EventTimelineLayout.stageGap) {
-            ForEach(layout.stageNames, id: \.self) { stageName in
-                stageColumn(stageName: stageName, layout: layout)
-            }
-        }
-        .frame(height: layout.bodyHeight)
+    private func stageColumnModels(layout: EventTimelineLayout) -> [EventTimelineStageColumnModel] {
+        layout.stageNames.map { stageColumnModel(stageName: $0, layout: layout) }
     }
 
-    private func stageColumn(stageName: String, layout: EventTimelineLayout) -> some View {
-        let stageColor = layout.color(for: stageName)
-        let frames = cardFrames(for: stageName, layout: layout)
+    private func stageColumnModel(stageName: String, layout: EventTimelineLayout) -> EventTimelineStageColumnModel {
+        let frames = layoutCache.frames(for: stageName, layout: layout)
+#if DEBUG
+        let _ = EventDetailPerfLog.throttled(
+            "timeline-stage-column-\(stageName)-\(frames.count)",
+            interval: 1
+        ) {
+            "timeline stage column body stage=\(stageName) cards=\(frames.count) ticks=\(layout.tickDates.count)"
+        }
+#endif
+        return EventTimelineStageColumnModel(
+            stageName: stageName,
+            stageColor: layout.color(for: stageName),
+            stageWidth: layout.stageWidth,
+            bodyHeight: layout.bodyHeight,
+            tickPositions: layout.tickDates.map { layout.yPosition(for: $0) },
+            frames: frames
+        )
+    }
 
-        return ZStack(alignment: .top) {
+    fileprivate static func cardTimeRangeText(for slot: WebEventLineupSlot, timeZone: TimeZone) -> String {
+        let formatter = cardTimeFormatter(timeZone: timeZone)
+        return "\(formatter.string(from: slot.startTime))-\(formatter.string(from: slot.endTime))"
+    }
+
+    private static func axisTimeFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "h a"
+        return formatter
+    }
+
+    private static func cardTimeFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }
+}
+
+private struct EventTimelineStageColumnView: View, Equatable {
+    let model: EventTimelineStageColumnModel
+    let selectedSlotIDs: Set<String>
+    let selectable: Bool
+    let normalCardTextColor: Color
+    let selectedCardFillColor: Color
+    let columnFillColor: Color
+    let gridLineColor: Color
+    let onToggleSlot: ((WebEventLineupSlot) -> Void)?
+    let onSelectSlot: ((WebEventLineupSlot) -> Void)?
+
+    static func == (lhs: EventTimelineStageColumnView, rhs: EventTimelineStageColumnView) -> Bool {
+        lhs.model == rhs.model
+            && lhs.selectedSlotIDs == rhs.selectedSlotIDs
+            && lhs.selectable == rhs.selectable
+            && lhs.normalCardTextColor == rhs.normalCardTextColor
+            && lhs.selectedCardFillColor == rhs.selectedCardFillColor
+            && lhs.columnFillColor == rhs.columnFillColor
+            && lhs.gridLineColor == rhs.gridLineColor
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(columnFillColor)
 
-            ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
+            ForEach(Array(model.tickPositions.enumerated()), id: \.offset) { _, position in
                 Rectangle()
                     .fill(gridLineColor)
                     .frame(height: 1)
-                    .offset(y: layout.yPosition(for: tick))
+                    .offset(y: position)
             }
 
-            ForEach(frames) { frame in
-                timelineCard(frame: frame, stageColor: stageColor)
-                    .frame(width: layout.stageWidth, height: frame.height, alignment: .top)
+            ForEach(model.frames) { frame in
+                timelineCard(frame: frame)
+                    .frame(width: model.stageWidth, height: frame.height, alignment: .top)
                     .offset(y: frame.top)
             }
         }
-        .frame(width: layout.stageWidth, height: layout.bodyHeight)
+        .frame(width: model.stageWidth, height: model.bodyHeight)
     }
 
-    private func timelineCard(frame: EventTimelineCardFrame, stageColor: Color) -> some View {
+    private func timelineCard(frame: EventTimelineCardFrame) -> some View {
         let isSelected = selectedSlotIDs.contains(frame.slot.id)
-        let displayAct = EventLineupActCodec.parse(slot: frame.slot)
-        let cardFill = isSelected ? selectedCardFillColor : stageColor.opacity(0.95)
-        let textColor = isSelected ? stageColor.opacity(0.98) : normalCardTextColor
+        let cardFill = isSelected ? selectedCardFillColor : model.stageColor.opacity(0.95)
+        let textColor = isSelected ? model.stageColor.opacity(0.98) : normalCardTextColor
         let nameTimeSpacing: CGFloat = 0.2
 
         let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -6676,13 +7197,13 @@ private struct EventTimelineBoardView: View {
                     colors: isSelected
                         ? [
                             Color.black.opacity(0.92),
-                            stageColor.opacity(0.10),
+                            model.stageColor.opacity(0.10),
                             Color.black.opacity(0.95)
                         ]
                         : [
                             cardFill,
-                            stageColor.opacity(0.90),
-                            stageColor.opacity(0.82)
+                            model.stageColor.opacity(0.90),
+                            model.stageColor.opacity(0.82)
                         ],
                     startPoint: .top,
                     endPoint: .bottomTrailing
@@ -6691,7 +7212,7 @@ private struct EventTimelineBoardView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
-                        isSelected ? stageColor.opacity(0.98) : Color.white.opacity(0.92),
+                        isSelected ? model.stageColor.opacity(0.98) : Color.white.opacity(0.92),
                         lineWidth: isSelected ? 2.2 : 1.4
                     )
             )
@@ -6705,11 +7226,11 @@ private struct EventTimelineBoardView: View {
                         lineWidth: 0.8
                     )
             )
-            .shadow(color: stageColor.opacity(isSelected ? 0.82 : 0.58), radius: isSelected ? 16 : 13, x: 0, y: 0)
-            .shadow(color: stageColor.opacity(isSelected ? 0.36 : 0.24), radius: isSelected ? 28 : 22, x: 0, y: 0)
+            .shadow(color: model.stageColor.opacity(isSelected ? 0.82 : 0.58), radius: isSelected ? 16 : 13, x: 0, y: 0)
+            .shadow(color: model.stageColor.opacity(isSelected ? 0.36 : 0.24), radius: isSelected ? 28 : 22, x: 0, y: 0)
             .overlay(alignment: .bottomTrailing) {
                 VStack(alignment: .trailing, spacing: nameTimeSpacing) {
-                    Text(displayAct.displayName)
+                    Text(frame.displayName)
                         .font(EventScheduleTypography.heavy(28))
                         .lineSpacing(-4)
                         .minimumScaleFactor(0.21)
@@ -6718,10 +7239,10 @@ private struct EventTimelineBoardView: View {
                         .foregroundStyle(textColor)
                         .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    Text(Self.cardTimeRangeText(for: frame.slot))
+                    Text(frame.timeRangeText)
                         .font(EventScheduleTypography.heavy(12))
                         .monospacedDigit()
-                        .foregroundStyle(isSelected ? stageColor.opacity(0.88) : textColor.opacity(0.95))
+                        .foregroundStyle(isSelected ? model.stageColor.opacity(0.88) : textColor.opacity(0.95))
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 3)
@@ -6749,52 +7270,50 @@ private struct EventTimelineBoardView: View {
             }
         }
     }
+}
 
-    private func cardFrames(for stageName: String, layout: EventTimelineLayout) -> [EventTimelineCardFrame] {
-        let stageSlots = (layout.slotsByStage[stageName] ?? []).sorted {
-            if $0.startTime == $1.startTime {
-                return $0.sortOrder < $1.sortOrder
+private struct EventTimelineStageColumnsView: View, Equatable {
+    let models: [EventTimelineStageColumnModel]
+    let spacing: CGFloat
+    let selectedSlotIDs: Set<String>
+    let selectable: Bool
+    let normalCardTextColor: Color
+    let selectedCardFillColor: Color
+    let columnFillColor: Color
+    let gridLineColor: Color
+    let onToggleSlot: ((WebEventLineupSlot) -> Void)?
+    let onSelectSlot: ((WebEventLineupSlot) -> Void)?
+
+    static func == (lhs: EventTimelineStageColumnsView, rhs: EventTimelineStageColumnsView) -> Bool {
+        lhs.models == rhs.models
+            && lhs.spacing == rhs.spacing
+            && lhs.selectedSlotIDs == rhs.selectedSlotIDs
+            && lhs.selectable == rhs.selectable
+            && lhs.normalCardTextColor == rhs.normalCardTextColor
+            && lhs.selectedCardFillColor == rhs.selectedCardFillColor
+            && lhs.columnFillColor == rhs.columnFillColor
+            && lhs.gridLineColor == rhs.gridLineColor
+    }
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            ForEach(models) { model in
+                EventTimelineStageColumnView(
+                    model: model,
+                    selectedSlotIDs: selectedSlotIDs,
+                    selectable: selectable,
+                    normalCardTextColor: normalCardTextColor,
+                    selectedCardFillColor: selectedCardFillColor,
+                    columnFillColor: columnFillColor,
+                    gridLineColor: gridLineColor,
+                    onToggleSlot: onToggleSlot,
+                    onSelectSlot: onSelectSlot
+                )
             }
-            return $0.startTime < $1.startTime
         }
-
-        var result: [EventTimelineCardFrame] = []
-
-        for slot in stageSlots {
-            let startY = layout.yPosition(for: slot.startTime)
-            let endY = layout.yPosition(for: slot.endTime)
-            let resolvedHeight = max(44, endY - startY)
-            let frame = EventTimelineCardFrame(
-                id: slot.id,
-                slot: slot,
-                top: startY,
-                height: resolvedHeight
-            )
-            result.append(frame)
-        }
-
-        return result
+        .padding(.top, EventTimelineLayout.stageHeaderHeight)
+        .frame(height: (models.first?.bodyHeight ?? 0) + EventTimelineLayout.stageHeaderHeight, alignment: .top)
     }
-
-    private static func cardTimeRangeText(for slot: WebEventLineupSlot) -> String {
-        "\(cardTimeFormatter.string(from: slot.startTime))-\(cardTimeFormatter.string(from: slot.endTime))"
-    }
-
-    private static let axisTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "h a"
-        return formatter
-    }()
-
-    private static let cardTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 }
 
 private struct EventRouteSharePresentation: Identifiable {
@@ -6916,7 +7435,8 @@ struct EventRoutePlannerLoaderView: View {
                             from: event.lineupSlots,
                             anchorDate: event.startDate,
                             useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
-                            dayRolloverHour: event.dayRolloverHour
+                            dayRolloverHour: event.dayRolloverHour,
+                            timeZone: event.eventTimeZone
                         ),
                         initialDayID: selectedDayID,
                         initialSelectedSlotIDs: selectedSlotIDs.map(Set.init),
@@ -7742,7 +8262,8 @@ private struct EventRoutineView: View {
             from: scheduledSlots,
             anchorDate: event.startDate,
             useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
-            dayRolloverHour: event.dayRolloverHour
+            dayRolloverHour: event.dayRolloverHour,
+            timeZone: event.eventTimeZone
         )
     }
 

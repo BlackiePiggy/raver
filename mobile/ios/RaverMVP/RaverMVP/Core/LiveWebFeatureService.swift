@@ -9,7 +9,7 @@ final class LiveWebFeatureService: WebFeatureService {
         self.session = session
     }
 
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String? = nil) async throws -> EventListPage {
         var queryItems = [
             URLQueryItem(name: "page", value: "\(max(1, page))"),
             URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
@@ -22,6 +22,9 @@ final class LiveWebFeatureService: WebFeatureService {
         }
         if let status, !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             queryItems.append(URLQueryItem(name: "status", value: status))
+        }
+        if let wikiFestivalId, !wikiFestivalId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "wikiFestivalId", value: wikiFestivalId))
         }
         let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/events", method: "GET", queryItems: queryItems)
         return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)

@@ -1871,13 +1871,6 @@ struct EventEditorView: View {
                         Text(slotDisplayTitle(slot.wrappedValue))
                             .font(.footnote.weight(.semibold))
                             .lineLimit(2)
-                        if slot.wrappedValue.actType == .solo,
-                           let soloPerformer,
-                           soloPerformer.djId != nil {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Color.green)
-                        }
                         if slot.wrappedValue.actType != .solo {
                             editorActTag(slot.wrappedValue.actType)
                         }
@@ -1987,11 +1980,6 @@ struct EventEditorView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                             .lineLimit(1)
-                        if performer.djId != nil {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Color.green)
-                        }
                         Spacer(minLength: 0)
                     }
                 } else {
@@ -2005,11 +1993,6 @@ struct EventEditorView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(RaverTheme.primaryText)
                                     .lineLimit(1)
-                                if performer.djId != nil {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(Color.green)
-                                }
                                 Spacer(minLength: 0)
                             }
                         }
@@ -2137,11 +2120,6 @@ struct EventEditorView: View {
                         .lineLimit(1)
                         .frame(width: 144, alignment: .leading)
 
-                    if performer.djId != nil {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.caption)
-                            .foregroundStyle(Color.green)
-                    }
                 }
 
                 if isSearching {

@@ -27,6 +27,16 @@ export const getTimeZoneLabel = (timeZone = getSystemTimeZone()): string =>
 
 export const getSystemTimeZoneLabel = (): string => getTimeZoneLabel(getSystemTimeZone());
 
+export const normalizeDisplayTimeZone = (timeZone: string | null | undefined): string => {
+  if (!timeZone || !timeZone.trim()) return DEFAULT_BUSINESS_TIME_ZONE;
+  try {
+    new Intl.DateTimeFormat('zh-CN', { timeZone: timeZone.trim() });
+    return timeZone.trim();
+  } catch (_error) {
+    return DEFAULT_BUSINESS_TIME_ZONE;
+  }
+};
+
 const toDate = (value: string | Date | null | undefined): Date | null => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -70,6 +80,32 @@ export const formatDateWithSystemTimeZoneLabel = (
   value: string | Date | null | undefined,
   options?: Intl.DateTimeFormatOptions
 ): string => `${formatDateInSystemTimeZone(value, options)} (${getSystemTimeZoneLabel()})`;
+
+export const formatDateInTimeZone = (
+  value: string | Date | null | undefined,
+  timeZone: string | null | undefined,
+  options: Intl.DateTimeFormatOptions = {}
+): string => {
+  const date = toDate(value);
+  if (!date) return '未知时间';
+  const displayTimeZone = normalizeDisplayTimeZone(timeZone);
+  return date.toLocaleDateString('zh-CN', {
+    timeZone: displayTimeZone,
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    ...options,
+  });
+};
+
+export const formatDateWithTimeZoneLabel = (
+  value: string | Date | null | undefined,
+  timeZone: string | null | undefined,
+  options?: Intl.DateTimeFormatOptions
+): string => {
+  const displayTimeZone = normalizeDisplayTimeZone(timeZone);
+  return `${formatDateInTimeZone(value, displayTimeZone, options)} (${getTimeZoneLabel(displayTimeZone)})`;
+};
 
 export const formatDateTimeWithSystemTimeZoneLabel = (
   value: string | Date | null | undefined,

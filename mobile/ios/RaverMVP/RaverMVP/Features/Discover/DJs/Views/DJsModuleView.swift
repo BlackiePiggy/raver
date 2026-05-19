@@ -162,7 +162,6 @@ struct DJsModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let hotDJBatchSize = 25
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
     private let initialImportName: String?
@@ -482,7 +481,7 @@ struct DJsModuleView: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, 16)
-        .padding(.bottom, max(0, tabBarReservedHeight) + 24)
+        .raverTabBarBottomPadding(24)
     }
 
     private var djImportSheet: some View {
@@ -1625,11 +1624,6 @@ private struct DJSpotlightCarouselSection: View {
                         HStack(spacing: 6) {
                             Text(dj.name)
                                 .font(.title3.bold())
-                            if dj.isVerified == true {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(Color(red: 0.30, green: 0.93, blue: 0.82))
-                            }
                         }
                         .multilineTextAlignment(.center)
 
@@ -1702,7 +1696,7 @@ private struct DJSpotlightCarouselSection: View {
     }
 
     private func spotlightEventCountText(for dj: WebDJ) -> String {
-        let eventCount = max(dj.eventCount ?? 0, dj.eventsCount ?? 0, dj.upcomingShows ?? 0)
+        let eventCount = dj.eventCount ?? dj.eventsCount ?? dj.upcomingShows ?? 0
         return LT("\(eventCount) 场活动", "\(eventCount) events", "\(eventCount)件のイベント")
     }
 
@@ -2053,11 +2047,6 @@ private struct DJWebCard: View {
                             .foregroundStyle(RaverTheme.primaryText)
                             .lineLimit(1)
                         Spacer(minLength: 0)
-                        if dj.isVerified == true {
-                            Text("✓")
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(.green)
-                        }
                     }
 
                     if let bio = dj.bio, !bio.isEmpty {
@@ -2606,6 +2595,10 @@ struct DJDetailView: View {
     @State private var didLoadEvents = false
     @State private var didLoadRatings = false
     @State private var didLoadRelatedArticles = false
+    @State private var setsLoadFailed = false
+    @State private var eventsLoadFailed = false
+    @State private var ratingsLoadFailed = false
+    @State private var relatedArticlesLoadFailed = false
     @State private var visibleRelatedArticleCount = 5
     @State private var visibleSetCount = 10
     @State private var visibleUpcomingEventCount = 8
@@ -2999,6 +2992,7 @@ struct DJDetailView: View {
     private func loadSetsIfNeeded(force: Bool) async {
         if isLoadingSets || (!force && didLoadSets) { return }
         isLoadingSets = true
+        setsLoadFailed = false
         defer { isLoadingSets = false }
         do {
             let loaded = try await djLinkedContentRepository.fetchDJSets(djID: djID)
@@ -3008,6 +3002,7 @@ struct DJDetailView: View {
         } catch is CancellationError {
             return
         } catch {
+            setsLoadFailed = true
             return
         }
     }
@@ -3016,6 +3011,7 @@ struct DJDetailView: View {
     private func loadEventsIfNeeded(force: Bool) async {
         if isLoadingEvents || (!force && didLoadEvents) { return }
         isLoadingEvents = true
+        eventsLoadFailed = false
         defer { isLoadingEvents = false }
         do {
             let loaded = try await djLinkedContentRepository.fetchDJEvents(djID: djID)
@@ -3025,6 +3021,7 @@ struct DJDetailView: View {
         } catch is CancellationError {
             return
         } catch {
+            eventsLoadFailed = true
             return
         }
     }
@@ -3033,6 +3030,7 @@ struct DJDetailView: View {
     private func loadRatingsIfNeeded(force: Bool) async {
         if isLoadingRatings || (!force && didLoadRatings) { return }
         isLoadingRatings = true
+        ratingsLoadFailed = false
         defer { isLoadingRatings = false }
         do {
             ratingUnits = try await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
@@ -3041,6 +3039,7 @@ struct DJDetailView: View {
         } catch is CancellationError {
             return
         } catch {
+            ratingsLoadFailed = true
             return
         }
     }
@@ -3049,6 +3048,7 @@ struct DJDetailView: View {
     private func loadRelatedArticlesIfNeeded(force: Bool) async {
         if isLoadingRelatedArticles || (!force && didLoadRelatedArticles) { return }
         isLoadingRelatedArticles = true
+        relatedArticlesLoadFailed = false
         defer { isLoadingRelatedArticles = false }
         do {
             relatedArticles = try await fetchRelatedNewsArticlesForDJ(djID: djID)
@@ -3057,6 +3057,7 @@ struct DJDetailView: View {
         } catch is CancellationError {
             return
         } catch {
+            relatedArticlesLoadFailed = true
             return
         }
     }
@@ -4645,11 +4646,6 @@ struct DJDetailView: View {
         .coordinateSpace(name: chrome.coordinateSpaceName(tab))
         .scrollBounceBehavior(.always)
         .contentShape(Rectangle())
-        .task(id: Int(pageProgress.rounded())) {
-            let activeIndex = Int(pageProgress.rounded())
-            guard activeIndex == selectedIndex(for: tab) || selectedTab == tab else { return }
-            await loadContentIfNeeded(for: tab)
-        }
     }
 
     private var detailChromeConfiguration: RaverImmersiveDetailPagerConfiguration {
@@ -4679,15 +4675,48 @@ struct DJDetailView: View {
         }
     }
 
+    private func tabLoadPlaceholder(
+        title: String,
+        didFail: Bool,
+        retry: @escaping () async -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if didFail {
+                Text(LT("加载失败，请稍后重试", "Load failed. Please try again.", "読み込みに失敗しました。再試行してください"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Button {
+                    Task { await retry() }
+                } label: {
+                    Text(LT("重试", "Retry", "再試行"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(RaverTheme.card)
+                        )
+                }
+                .buttonStyle(.plain)
+            } else {
+                ProgressView(title)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
     @ViewBuilder
     private var relatedNewsTabContent: some View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
             ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
                 .padding(.vertical, 8)
         } else if relatedArticles.isEmpty && !didLoadRelatedArticles {
-            ProgressView(LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadRelatedArticlesIfNeeded(force: false) }
+            tabLoadPlaceholder(
+                title: LT("正在加载相关资讯...", "正在加载相关资讯...", "関連ニュースを読み込み中..."),
+                didFail: relatedArticlesLoadFailed,
+                retry: { await loadRelatedArticlesIfNeeded(force: true) }
+            )
         } else if relatedArticles.isEmpty {
             Text(LT("暂无相关资讯", "暂无相关资讯", "関連ニュースはありません"))
                 .font(.subheadline)
@@ -4728,9 +4757,6 @@ struct DJDetailView: View {
             }
             if let country = dj.country, !country.isEmpty {
                 infoPill(icon: "globe", text: country)
-            }
-            if dj.isVerified == true {
-                infoPill(icon: "checkmark.seal.fill", text: LT("认证", "Verified", "認証済み"))
             }
         }
 
@@ -4936,9 +4962,11 @@ struct DJDetailView: View {
             ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
                 .padding(.vertical, 8)
         } else if sets.isEmpty && !didLoadSets {
-            ProgressView(LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadSetsIfNeeded(force: false) }
+            tabLoadPlaceholder(
+                title: LT("正在加载 Sets...", "Loading sets...", "Setを読み込み中..."),
+                didFail: setsLoadFailed,
+                retry: { await loadSetsIfNeeded(force: true) }
+            )
         } else if sets.isEmpty {
             Text(LT("暂无内容", "暂无内容", "コンテンツはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -4970,9 +4998,11 @@ struct DJDetailView: View {
             ProgressView(LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."))
                 .padding(.vertical, 8)
         } else if djEvents.isEmpty && !didLoadEvents {
-            ProgressView(LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadEventsIfNeeded(force: false) }
+            tabLoadPlaceholder(
+                title: LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."),
+                didFail: eventsLoadFailed,
+                retry: { await loadEventsIfNeeded(force: true) }
+            )
         } else if djEvents.isEmpty {
             Text(LT("暂无历史活动", "暂无历史活动", "過去イベントはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -5382,9 +5412,11 @@ struct DJDetailView: View {
             ProgressView(LT("正在加载关联打分...", "Loading ratings...", "関連評価を読み込み中..."))
                 .padding(.vertical, 8)
         } else if ratingUnits.isEmpty && !didLoadRatings {
-            ProgressView(LT("正在加载关联打分...", "Loading ratings...", "関連評価を読み込み中..."))
-                .padding(.vertical, 8)
-                .task { await loadRatingsIfNeeded(force: false) }
+            tabLoadPlaceholder(
+                title: LT("正在加载关联打分...", "Loading ratings...", "関連評価を読み込み中..."),
+                didFail: ratingsLoadFailed,
+                retry: { await loadRatingsIfNeeded(force: true) }
+            )
         } else if ratingUnits.isEmpty {
             Text(LT("暂无关联打分", "暂无关联打分", "関連評価はまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)

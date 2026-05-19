@@ -1,7 +1,7 @@
 import Foundation
 
 protocol WebFeatureService {
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String?) async throws -> EventListPage
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEvent(id: String) async throws -> WebEvent
     func fetchMyEvents() async throws -> [WebEvent]
@@ -149,6 +149,17 @@ protocol WebFeatureService {
 }
 
 extension WebFeatureService {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
+        try await fetchEvents(
+            page: page,
+            limit: limit,
+            search: search,
+            eventType: eventType,
+            status: status,
+            wikiFestivalId: nil
+        )
+    }
+
     func uploadEventImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
         try await uploadEventImage(
             imageData: imageData,

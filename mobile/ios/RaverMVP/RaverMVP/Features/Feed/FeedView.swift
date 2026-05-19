@@ -154,7 +154,7 @@ private struct FeedScreen: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 10)
-                        .padding(.bottom, 92)
+                        .raverTabBarBottomPadding(50, min: 100)
                     }
                     .refreshable {
                         await viewModel.refresh()

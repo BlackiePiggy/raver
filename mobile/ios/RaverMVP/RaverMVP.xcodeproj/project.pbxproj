@@ -208,6 +208,7 @@
 		BE458AD34A2CB4499C7DE57E /* EventDetailTabBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F344082B0E151F9897120966 /* EventDetailTabBarView.swift */; };
 		BFFDECAA0508516FE35108E8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 22DACDC6883B8B285DE1D62B /* Assets.xcassets */; };
 		C134CDB74A13D2DD14ECE62D /* EventPresentationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BABFFEFC4A5BA1D31A42A73 /* EventPresentationSupport.swift */; };
+		E5C4A901C4A901C4A901C4A9 /* EventScheduleCanvasPrototypeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C4A900C4A900C4A900C4A9 /* EventScheduleCanvasPrototypeView.swift */; };
 		C16D57B43E6A974CFCB264B6 /* DiscoverNewsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2747BF5B7C604B9A922676AF /* DiscoverNewsDetailView.swift */; };
 		C296582A95DA32ED0455BF29 /* GlobalSearchResultsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A1FBDA5A960C7207719A16 /* GlobalSearchResultsViewModel.swift */; };
 		C31C3EA5EF3727077A28E5E9 /* SquadProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E3D0E974E5332D85F2220C /* SquadProfileRepository.swift */; };
@@ -332,6 +333,7 @@
 		0CE4B00E79B922A7713B42E6 /* RaverChatMediaResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatMediaResolver.swift; sourceTree = "<group>"; };
 		0CEDF44FC7F17CFACC902879 /* VirtualAssetChatAppearanceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualAssetChatAppearanceResolver.swift; sourceTree = "<group>"; };
 		0D0B2681E3970FDC8B40D0F5 /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
+		E5C4A900C4A900C4A900C4A9 /* EventScheduleCanvasPrototypeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventScheduleCanvasPrototypeView.swift; sourceTree = "<group>"; };
 		0EDEC675E1E0EDAFFAF7A913 /* DemoAlignedMessageFailureFeedbackCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedMessageFailureFeedbackCoordinatorFactory.swift; sourceTree = "<group>"; };
 		107F667059BB4EB625E82D05 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		114ED8D770D2BFD44A5EA67E /* DemoAlignedFailureFeedbackActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedFailureFeedbackActions.swift; sourceTree = "<group>"; };
@@ -899,6 +901,7 @@
 				98F0C459C7EE8A2A3F7CDB3A /* EventEditorView.swift */,
 				7531809F6C9E27DFA7FCAAE3 /* EventLineupSupport.swift */,
 				7BABFFEFC4A5BA1D31A42A73 /* EventPresentationSupport.swift */,
+				E5C4A900C4A900C4A900C4A9 /* EventScheduleCanvasPrototypeView.swift */,
 				13D46D18F393E271B5237379 /* EventsModuleView.swift */,
 			);
 			path = Views;
@@ -1905,6 +1908,7 @@
 				E8A8BFC0C2E4A86D306DCB74 /* EventEditorView.swift in Sources */,
 				F1ED7697297ABCDDC72D4CB5 /* EventLineupSupport.swift in Sources */,
 				C134CDB74A13D2DD14ECE62D /* EventPresentationSupport.swift in Sources */,
+				E5C4A901C4A901C4A901C4A9 /* EventScheduleCanvasPrototypeView.swift in Sources */,
 				673306312CBE98DDE78B49BE /* EventsModuleView.swift in Sources */,
 				26C4483038B4E3BB9DB40516 /* EventsModuleViewModel.swift in Sources */,
 				097FFF23469EEA1D2FA723A6 /* FeedView.swift in Sources */,

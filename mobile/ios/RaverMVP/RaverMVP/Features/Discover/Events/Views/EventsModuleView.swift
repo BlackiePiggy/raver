@@ -26,7 +26,6 @@ struct EventsModuleView: View {
     @EnvironmentObject private var appLocationProvider: AppLocationProvider
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
-    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     @StateObject private var viewModel: EventsModuleViewModel
     @StateObject private var guidanceCenter = AppGuidanceCenter.shared
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
@@ -120,7 +119,7 @@ struct EventsModuleView: View {
         .overlay(alignment: .bottomTrailing) {
             uploadEventFloatingButton
                 .padding(.trailing, 20)
-                .padding(.bottom, max(0, tabBarReservedHeight) + 24)
+                .raverTabBarBottomPadding(24)
         }
         .overlay {
             if showEventsListTabsGuide {
@@ -537,7 +536,7 @@ struct EventsModuleView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
-            .padding(.bottom, max(0, tabBarReservedHeight) + 24)
+            .raverTabBarBottomPadding(24)
         }
         .refreshable {
             await refreshCurrentScope()

@@ -7,7 +7,11 @@ import { toPng } from 'html-to-image';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Event, EventLineupSlot, eventAPI } from '@/lib/api/event';
-import { formatDateTimeWithSystemTimeZoneLabel, getSystemTimeZone } from '@/lib/timezone';
+import {
+  formatDateTimeWithSystemTimeZoneLabel,
+  getTimeZoneLabel,
+  normalizeDisplayTimeZone,
+} from '@/lib/timezone';
 
 const STORAGE_KEY_PREFIX = 'ravehub:routine:';
 const TIME_COL_WIDTH = 68;
@@ -48,9 +52,9 @@ type SwitchPlan = {
 const slotKey = (slot: EventLineupSlot) =>
   slot.id || `${slot.djName}-${slot.stageName || 'stage'}-${slot.startTime}-${slot.endTime}`;
 
-const getFestivalDayKey = (dateString: string) => {
+const getFestivalDayKey = (dateString: string, timeZone: string) => {
   const localText = new Date(dateString).toLocaleString('sv-SE', {
-    timeZone: getSystemTimeZone(),
+    timeZone,
     hour12: false,
   });
   const [datePart, timePart] = localText.split(' ');
@@ -69,17 +73,17 @@ const getFestivalDayKey = (dateString: string) => {
   }).format(prev);
 };
 
-const formatDayLabel = (dateString: string) =>
+const formatDayLabel = (dateString: string, timeZone: string) =>
   new Date(dateString).toLocaleDateString('zh-CN', {
-    timeZone: getSystemTimeZone(),
+    timeZone,
     month: 'long',
     day: 'numeric',
     weekday: 'long',
   });
 
-const formatSlotTime = (dateString: string) =>
+const formatSlotTime = (dateString: string, timeZone: string) =>
   new Date(dateString).toLocaleTimeString('zh-CN', {
-    timeZone: getSystemTimeZone(),
+    timeZone,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -105,9 +109,9 @@ const ceilToHour = (ms: number) => {
   return d.getTime();
 };
 
-const formatSwitchValue = (ms: number) =>
+const formatSwitchValue = (ms: number, timeZone: string) =>
   new Date(ms).toLocaleString('sv-SE', {
-    timeZone: getSystemTimeZone(),
+    timeZone,
     hour12: false,
   }).replace(' ', 'T').slice(0, 16);
 
@@ -134,6 +138,8 @@ export default function EventRoutinePage() {
   const [planned, setPlanned] = useState<PlannedSlot[]>([]);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const sharePosterRef = useRef<HTMLDivElement | null>(null);
+  const eventTimeZone = normalizeDisplayTimeZone(event?.timeZone);
+  const eventTimeZoneLabel = getTimeZoneLabel(eventTimeZone);
 
   useEffect(() => {
     const load = async () => {
@@ -157,7 +163,7 @@ export default function EventRoutinePage() {
     const sorted = [...event.lineupSlots].sort((a, b) => toMs(a.startTime) - toMs(b.startTime));
     const map = new Map<string, EventLineupSlot[]>();
     for (const slot of sorted) {
-      const key = getFestivalDayKey(slot.startTime);
+      const key = getFestivalDayKey(slot.startTime, eventTimeZone);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(slot);
     }
@@ -171,7 +177,7 @@ export default function EventRoutinePage() {
       }
       return {
         key,
-        label: `Day ${index + 1} · ${formatDayLabel(slots[0].startTime)}`,
+        label: `Day ${index + 1} · ${formatDayLabel(slots[0].startTime, eventTimeZone)}`,
         slots,
         stages: Array.from(stageMap.entries()).map(([stageName, stageSlots]) => ({
           stageName,
@@ -179,7 +185,7 @@ export default function EventRoutinePage() {
         })),
       };
     });
-  }, [event?.lineupSlots]);
+  }, [event?.lineupSlots, eventTimeZone]);
 
   const allSlots = useMemo(
     () =>
@@ -397,12 +403,13 @@ export default function EventRoutinePage() {
     const lines: string[] = [];
     lines.push(`RaveHub 我的电音节路线`);
     lines.push(event?.name || '');
+    lines.push(`活动当地时区：${eventTimeZoneLabel}`);
     lines.push('');
     groupedPlanned.forEach((day) => {
       lines.push(`${day.label}`);
       day.items.forEach((item) => {
         lines.push(
-          `- ${formatSlotTime(item.slot.startTime)}-${formatSlotTime(item.slot.endTime)} ${item.slot.djName || item.slot.dj?.name || 'Unknown DJ'} @ ${item.slot.stageName || '未命名舞台'}`
+          `- ${formatSlotTime(item.slot.startTime, eventTimeZone)}-${formatSlotTime(item.slot.endTime, eventTimeZone)} ${item.slot.djName || item.slot.dj?.name || 'Unknown DJ'} @ ${item.slot.stageName || '未命名舞台'}`
         );
       });
       lines.push('');
@@ -479,6 +486,7 @@ export default function EventRoutinePage() {
             <div>
               <h1 className="text-3xl font-bold text-text-primary">制定我的观演路线</h1>
               <p className="text-text-secondary mt-1">{event.name}</p>
+              <p className="text-xs text-text-tertiary mt-1">时段按活动当地时区显示：{eventTimeZoneLabel}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -605,8 +613,8 @@ export default function EventRoutinePage() {
                               type="datetime-local"
                               value={current.switchAt || ''}
                               onChange={(e) => updateSwitchPlan(cluster.id, { switchAt: e.target.value || undefined })}
-                              min={hasOverlap ? formatSwitchValue(overlapStart) : undefined}
-                              max={hasOverlap ? formatSwitchValue(overlapEnd) : undefined}
+                              min={hasOverlap ? formatSwitchValue(overlapStart, eventTimeZone) : undefined}
+                              max={hasOverlap ? formatSwitchValue(overlapEnd, eventTimeZone) : undefined}
                               className="bg-bg-secondary border border-bg-tertiary rounded-lg px-2 py-2 text-sm text-text-primary"
                             />
                           </div>
@@ -670,7 +678,7 @@ export default function EventRoutinePage() {
                                   style={{ top: Math.max(top - 8, 0) }}
                                 >
                                   {new Date(hourMs).toLocaleTimeString('zh-CN', {
-                                    timeZone: getSystemTimeZone(),
+                                    timeZone: eventTimeZone,
                                     hour: '2-digit',
                                     minute: '2-digit',
                                     hour12: false,
@@ -750,7 +758,7 @@ export default function EventRoutinePage() {
                                     <div className="min-w-0 relative">
                                       <p className="text-sm font-semibold text-white truncate">{djName}</p>
                                       <p className="text-[11px] text-white/80">
-                                        {formatSlotTime(slot.startTime)} - {formatSlotTime(slot.endTime)}
+                                        {formatSlotTime(slot.startTime, eventTimeZone)} - {formatSlotTime(slot.endTime, eventTimeZone)}
                                       </p>
                                       <p className="text-[10px] text-white/75 mt-1">{stageName}</p>
                                     </div>
@@ -783,7 +791,7 @@ export default function EventRoutinePage() {
                               {item.slot.djName || item.slot.dj?.name || 'Unknown DJ'}
                             </p>
                             <p className="text-xs text-text-tertiary">
-                              {formatSlotTime(item.slot.startTime)} - {formatSlotTime(item.slot.endTime)} · {item.slot.stageName || '未命名舞台'}
+                              {formatSlotTime(item.slot.startTime, eventTimeZone)} - {formatSlotTime(item.slot.endTime, eventTimeZone)} · {item.slot.stageName || '未命名舞台'}
                             </p>
                             {item.note && <p className="text-[11px] text-primary-blue mt-1">{item.note}</p>}
                           </div>
@@ -844,7 +852,7 @@ export default function EventRoutinePage() {
                         <div className="relative p-4">
                           <p className="text-base font-semibold leading-tight">{djName}</p>
                           <p className="text-sm text-white/85 mt-1">
-                            {formatSlotTime(item.slot.startTime)} - {formatSlotTime(item.slot.endTime)}
+                            {formatSlotTime(item.slot.startTime, eventTimeZone)} - {formatSlotTime(item.slot.endTime, eventTimeZone)}
                           </p>
                           <p className="text-xs text-white/80 mt-1">{item.slot.stageName || '未命名舞台'}</p>
                           {item.note && <p className="text-xs text-cyan-200 mt-2">{item.note}</p>}

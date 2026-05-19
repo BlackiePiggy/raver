@@ -539,10 +539,17 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/users/\(userID)/profile", method: "GET")
     }
 
-    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
-        var path = "/v1/users/\(userID)/posts"
+    func fetchPostsByUser(userID: String, cursor: String?, limit: Int? = nil) async throws -> FeedPage {
+        var queryItems: [String] = []
+        if let limit {
+            queryItems.append("limit=\(max(1, limit))")
+        }
         if let cursor {
-            path += "?cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor)"
+            queryItems.append("cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor)")
+        }
+        var path = "/v1/users/\(userID)/posts"
+        if !queryItems.isEmpty {
+            path += "?\(queryItems.joined(separator: "&"))"
         }
         return try await request(path: path, method: "GET")
     }

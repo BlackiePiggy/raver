@@ -1739,12 +1739,24 @@ const fetchDJStatsInfoMap = async (djIds: string[]): Promise<Map<string, DJStats
 
   const [eventRows, setRows] = await Promise.all([
     prisma.$queryRaw<Array<{ djId: string; eventCount: number }>>(Prisma.sql`
+      WITH "slot_djs" AS (
+        SELECT
+          "s"."event_id" AS "eventId",
+          "s"."dj_id" AS "djId"
+        FROM "event_lineup_slots" AS "s"
+        WHERE "s"."dj_id" IN (${Prisma.join(validIds)})
+        UNION
+        SELECT
+          "s"."event_id" AS "eventId",
+          unnest("s"."dj_ids") AS "djId"
+        FROM "event_lineup_slots" AS "s"
+        WHERE "s"."dj_ids" && ARRAY[${Prisma.join(validIds)}]::text[]
+      )
       SELECT
-        "s"."dj_id" AS "djId",
-        COUNT(DISTINCT "s"."event_id")::int AS "eventCount"
-      FROM "event_lineup_slots" AS "s"
-      WHERE "s"."dj_id" IN (${Prisma.join(validIds)})
-      GROUP BY "s"."dj_id"
+        "slot_djs"."djId" AS "djId",
+        COUNT(DISTINCT "slot_djs"."eventId")::int AS "eventCount"
+      FROM "slot_djs"
+      GROUP BY "slot_djs"."djId"
     `),
     prisma.$queryRaw<Array<{ djId: string; setCount: number }>>(Prisma.sql`
       SELECT
@@ -3544,14 +3556,7 @@ const mapDJ = (
   const uploadedByUsername = contributorInfo.uploadedByUsername;
   const isContributor = isDJContributorByRow(row, viewerId);
   const canEdit = viewerRole === 'admin' || isContributor;
-  const eventCount = Math.max(
-    Number(row.eventCount ?? 0),
-    Number(row.eventsCount ?? 0),
-    Number(row.upcomingShows ?? 0),
-    Number(row.sourceLineupEventCount ?? 0),
-    Number(row.sourceUpcomingShows ?? 0),
-    Number(statsInfo.eventCount ?? 0)
-  );
+  const eventCount = Number(statsInfo.eventCount ?? 0);
   const setCount = Math.max(
     Number(row.setCount ?? 0),
     Number(row.setsCount ?? 0),
@@ -5149,6 +5154,7 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     const city = typeof req.query.city === 'string' ? req.query.city.trim() : '';
     const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
     const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
+    const wikiFestivalId = typeof req.query.wikiFestivalId === 'string' ? req.query.wikiFestivalId.trim() : '';
     const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : 'upcoming';
     const status = statusRaw.toLowerCase() === 'canceled' ? 'cancelled' : statusRaw.toLowerCase();
 
@@ -5222,6 +5228,7 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     }
     if (city) where.city = city;
     if (country) where.country = country;
+    if (wikiFestivalId) where.wikiFestivalId = wikiFestivalId;
     if (eventType) {
       const eventTypeValues = resolveEventTypeFilterValues(eventType);
       if (eventTypeValues.length <= 1) {

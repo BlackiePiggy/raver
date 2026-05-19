@@ -101,7 +101,6 @@ struct SetsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
-    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
@@ -185,7 +184,7 @@ struct SetsModuleView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
-                        .padding(.bottom, max(0, tabBarReservedHeight) + 16)
+                        .raverTabBarBottomPadding(16)
                     }
                     .refreshable {
                         await reload()

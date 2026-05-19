@@ -3,8 +3,6 @@ import SwiftUI
 struct NewsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
-    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
-
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
     @State private var articles: [DiscoverNewsArticle] = []
@@ -187,7 +185,7 @@ struct NewsModuleView: View {
                     }
                 }
             }
-            .padding(.bottom, max(0, tabBarReservedHeight) + 16)
+            .raverTabBarBottomPadding(16)
         }
         .refreshable {
             await reload()

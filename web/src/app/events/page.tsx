@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { getSystemTimeZone, getSystemTimeZoneLabel } from '@/lib/timezone';
+import { getTimeZoneLabel, normalizeDisplayTimeZone } from '@/lib/timezone';
 
 type EventVisualStatus = 'upcoming' | 'ongoing' | 'ended';
 
@@ -48,9 +48,10 @@ export default function EventsPage() {
     loadEvents();
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const timeZone = getSystemTimeZone();
+  const formatDate = (event: Event) => {
+    const date = new Date(event.startDate);
+    const timeZone = normalizeDisplayTimeZone(event.timeZone);
+    const timeZoneLabel = getTimeZoneLabel(timeZone);
     return {
       month: date.toLocaleDateString('en-US', { timeZone, month: 'short' }).toUpperCase(),
       day: Number(date.toLocaleDateString('en-US', { timeZone, day: 'numeric' })),
@@ -60,7 +61,7 @@ export default function EventsPage() {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-      }) + ` (${getSystemTimeZoneLabel()})`,
+      }) + ` (${timeZoneLabel})`,
     };
   };
 
@@ -182,7 +183,7 @@ export default function EventsPage() {
             <>
               <div className="grid grid-cols-1 gap-8 mb-12">
                 {events.map((event, index) => {
-                  const date = formatDate(event.startDate);
+                  const date = formatDate(event);
                   const currentStatus = resolveEventStatus(event);
                   const currentStatusMeta = statusMeta(currentStatus);
                   return (

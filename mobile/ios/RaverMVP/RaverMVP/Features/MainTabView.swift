@@ -3,17 +3,6 @@ import PhotosUI
 import UIKit
 import AVKit
 
-private struct RaverTabBarReservedHeightKey: EnvironmentKey {
-    static let defaultValue: CGFloat = 0
-}
-
-extension EnvironmentValues {
-    var raverTabBarReservedHeight: CGFloat {
-        get { self[RaverTabBarReservedHeightKey.self] }
-        set { self[RaverTabBarReservedHeightKey.self] = newValue }
-    }
-}
-
 private struct MainGlobalSearchFramePreferenceKey: PreferenceKey {
     static var defaultValue: CGRect = .zero
 
@@ -3421,7 +3410,7 @@ private struct CircleRatingHubView: View {
                     }
                 }
             }
-            .padding(.bottom, 20)
+            .raverTabBarBottomPadding(16)
         }
         .background(RaverTheme.background)
         .task {
@@ -3664,7 +3653,7 @@ struct CircleRatingEventDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.top, 12)
-            .padding(.bottom, 20)
+            .raverTabBarBottomPadding(16)
         }
         .background(RaverTheme.background)
         .raverGradientNavigationChrome(
@@ -4415,7 +4404,7 @@ struct CircleRatingUnitDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .padding(.bottom, 20)
+            .raverTabBarBottomPadding(16)
         }
         .background(RaverTheme.background)
         .raverSystemNavigation(title: LT("评论列表", "Comments", "コメント一覧"))

@@ -348,6 +348,9 @@ const sortItems = (items: GlobalSearchItem[]): GlobalSearchItem[] =>
     return (bDate?.getTime() ?? 0) - (aDate?.getTime() ?? 0);
   });
 
+const dedupeItemsById = (items: GlobalSearchItem[]): GlobalSearchItem[] =>
+  Array.from(new Map(items.map((item) => [item.id, item])).values());
+
 const sanitizeRankingBoardId = (value: string): string => {
   const normalized = String(value || '')
     .trim()
@@ -713,7 +716,7 @@ const searchDJs = async (query: string, limit: number, locale: GlobalSearchLocal
         subtitle: compact([row.genres.slice(0, 3).join(', '), country]),
         summary: truncate(bio),
         imageUrl: row.avatarUrl || row.bannerUrl,
-        badgeText: row.isVerified ? labelText(locale, '认证 DJ', 'Verified DJ', '認証 DJ') : 'DJ',
+        badgeText: 'DJ',
         deeplink: `raver://dj/${row.id}`,
         relevanceScore: finalizeScore(score),
         publishedAt: null,
@@ -1226,7 +1229,9 @@ const searchFestivals = async (query: string, limit: number, locale: GlobalSearc
     });
   }
 
-  const festivalRows = [...festivals, ...aliasPartialFestivals];
+  const festivalRows = Array.from(
+    new Map([...festivals, ...aliasPartialFestivals].map((row) => [row.id, row])).values()
+  );
 
   return sortItems(festivalRows.map((row) => {
     const title = pickLocalizedText(row.nameI18n, locale, row.name);
@@ -1455,18 +1460,19 @@ export const globalSearchService = {
       });
     });
 
-    const sortedItems = sortItems(items).slice(0, params.limit);
+    const uniqueItems = dedupeItemsById(items);
+    const sortedItems = sortItems(uniqueItems).slice(0, params.limit);
     const countsByTab = emptyCounts();
-    for (const item of items) {
+    for (const item of uniqueItems) {
       countsByTab[itemTab(item.type)] += 1;
     }
-    countsByTab.all = items.length;
+    countsByTab.all = uniqueItems.length;
 
     return {
       query,
       tab: params.tab,
       limit: params.limit,
-      totalCount: items.length,
+      totalCount: uniqueItems.length,
       items: sortedItems,
       countsByTab,
       partialErrors,

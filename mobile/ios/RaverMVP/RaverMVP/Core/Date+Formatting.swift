@@ -149,6 +149,11 @@ extension Date {
             .string(from: self)
     }
 
+    func appLocalizedYMText(in timeZone: TimeZone) -> String {
+        Self.appDateFormatter(zhFormat: "yyyy年M月", enFormat: "MMMM yyyy", jaFormat: "yyyy年M月", timeZone: timeZone)
+            .string(from: self)
+    }
+
     func appLocalizedYMDWeekdayText() -> String {
         Self.appDateFormatter(zhFormat: "yyyy年M月d日 EEE", enFormat: "EEE, MMM d, yyyy", jaFormat: "yyyy年M月d日 EEE")
             .string(from: self)
@@ -161,6 +166,16 @@ extension Date {
                 .uppercased()
         }
         return Self.appDateFormatter(zhFormat: "M月", enFormat: "MMM")
+            .string(from: self)
+    }
+
+    func appLocalizedMonthBadgeText(in timeZone: TimeZone) -> String {
+        if Self.appDateLanguage == .en {
+            return Self.appDateFormatter(zhFormat: "M月", enFormat: "MMM", timeZone: timeZone)
+                .string(from: self)
+                .uppercased()
+        }
+        return Self.appDateFormatter(zhFormat: "M月", enFormat: "MMM", timeZone: timeZone)
             .string(from: self)
     }
 

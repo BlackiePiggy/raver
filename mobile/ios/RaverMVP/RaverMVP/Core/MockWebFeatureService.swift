@@ -420,10 +420,11 @@ actor MockWebFeatureService: WebFeatureService {
         ]
     }
 
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String? = nil) async throws -> EventListPage {
         let normalized = search?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         let normalizedType = eventType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let normalizedStatus = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let normalizedWikiFestivalId = wikiFestivalId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let filtered = events.filter { event in
             let matchesSearch =
                 normalized.isEmpty ||
@@ -432,7 +433,8 @@ actor MockWebFeatureService: WebFeatureService {
             let matchesType = normalizedType.isEmpty || event.eventType == normalizedType
             let resolvedStatus = resolveEventStatus(for: event)
             let matchesStatus = normalizedStatus.isEmpty || normalizedStatus == "all" || resolvedStatus == normalizedStatus
-            return matchesSearch && matchesType && matchesStatus
+            let matchesWikiFestival = normalizedWikiFestivalId.isEmpty || event.wikiFestivalId == normalizedWikiFestivalId || event.wikiFestival?.id == normalizedWikiFestivalId
+            return matchesSearch && matchesType && matchesStatus && matchesWikiFestival
         }
         let sorted = filtered.sorted(by: { $0.startDate < $1.startDate })
         return paginateEvents(sorted, page: page, limit: limit)

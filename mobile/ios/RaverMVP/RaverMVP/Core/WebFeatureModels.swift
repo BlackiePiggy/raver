@@ -547,6 +547,15 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var favoriteId: String? = nil
     var isFavorited: Bool? = nil
 
+    var eventTimeZone: TimeZone {
+        guard let raw = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let timeZone = TimeZone(identifier: raw) else {
+            return TimeZone(identifier: "Asia/Shanghai") ?? .current
+        }
+        return timeZone
+    }
+
     var unifiedAddress: String {
         resolveEventUnifiedAddress(
             language: AppLanguagePreference.current.effectiveLanguage,

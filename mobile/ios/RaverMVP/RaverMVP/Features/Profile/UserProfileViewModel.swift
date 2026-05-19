@@ -50,7 +50,7 @@ final class UserProfileViewModel: ObservableObject {
 
         do {
             async let profileTask = userRepository.fetchUserProfile(userID: userID)
-            async let postsTask = contentRepository.fetchPostsByUser(userID: userID, cursor: nil)
+            async let postsTask = contentRepository.fetchPostsByUser(userID: userID, cursor: nil, limit: nil)
             let (profileValue, page) = try await (profileTask, postsTask)
 
             profile = profileValue
@@ -90,7 +90,7 @@ final class UserProfileViewModel: ObservableObject {
         defer { isLoadingMore = false }
 
         do {
-            let page = try await contentRepository.fetchPostsByUser(userID: userID, cursor: cursor)
+            let page = try await contentRepository.fetchPostsByUser(userID: userID, cursor: cursor, limit: nil)
             let existing = Set(posts.map(\.id))
             posts.append(contentsOf: page.posts.filter { !existing.contains($0.id) && !$0.isRaverNews })
             nextCursor = page.nextCursor

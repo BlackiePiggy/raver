@@ -304,10 +304,10 @@ struct EventRow: View {
 
     private var eventDateBadge: some View {
         VStack(spacing: 0) {
-            Text(event.startDate.appLocalizedMonthBadgeText())
+            Text(event.startDate.appLocalizedMonthBadgeText(in: event.eventTimeZone))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(eventDateBadgeTextColor)
-            Text("\(Calendar.current.component(.day, from: event.startDate))")
+            Text("\(Calendar.eventCalendar(timeZone: event.eventTimeZone).component(.day, from: event.startDate))")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(eventDateBadgeTextColor)
         }
@@ -321,7 +321,7 @@ struct EventRow: View {
     }
 
     private var eventDateRangeText: String {
-        event.startDate.appLocalizedDateRangeText(to: event.endDate)
+        event.startDate.appLocalizedDateRangeText(to: event.endDate, timeZone: event.eventTimeZone)
     }
 
     @ViewBuilder

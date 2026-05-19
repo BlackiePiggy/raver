@@ -229,7 +229,13 @@ protocol TracklistRepository {
 }
 
 protocol SetEventLookupRepository {
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String?) async throws -> EventListPage
+}
+
+extension SetEventLookupRepository {
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
+        try await fetchEvents(page: page, limit: limit, search: search, eventType: eventType, status: status, wikiFestivalId: nil)
+    }
 }
 
 protocol SetMediaRepository {
@@ -333,8 +339,8 @@ struct SetEventLookupRepositoryAdapter: SetEventLookupRepository {
         self.service = service
     }
 
-    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?) async throws -> EventListPage {
-        try await service.fetchEvents(page: page, limit: limit, search: search, eventType: eventType, status: status)
+    func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String? = nil) async throws -> EventListPage {
+        try await service.fetchEvents(page: page, limit: limit, search: search, eventType: eventType, status: status, wikiFestivalId: wikiFestivalId)
     }
 }
 

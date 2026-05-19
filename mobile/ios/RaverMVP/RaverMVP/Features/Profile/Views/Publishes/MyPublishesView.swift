@@ -82,7 +82,7 @@ final class MyPublishesViewModel: ObservableObject {
         var seen: Set<String> = []
 
         repeat {
-            let page = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: cursor)
+            let page = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: cursor, limit: nil)
             for post in page.posts where post.isRaverNews && !seen.contains(post.id) {
                 seen.insert(post.id)
                 merged.append(post)

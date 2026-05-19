@@ -1,5 +1,35 @@
 import SwiftUI
 
+struct RaverTabBarReservedHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var raverTabBarReservedHeight: CGFloat {
+        get { self[RaverTabBarReservedHeightKey.self] }
+        set { self[RaverTabBarReservedHeightKey.self] = newValue }
+    }
+}
+
+private struct RaverTabBarBottomPaddingModifier: ViewModifier {
+    @Environment(\.raverTabBarReservedHeight) private var tabBarReservedHeight
+
+    let extra: CGFloat
+    let minBottom: CGFloat?
+
+    func body(content: Content) -> some View {
+        let resolved = max(0, tabBarReservedHeight) + extra
+        let bottom = max(minBottom ?? 0, resolved)
+        content.padding(.bottom, bottom)
+    }
+}
+
+extension View {
+    func raverTabBarBottomPadding(_ extra: CGFloat = 0, min minBottom: CGFloat? = nil) -> some View {
+        modifier(RaverTabBarBottomPaddingModifier(extra: extra, minBottom: minBottom))
+    }
+}
+
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

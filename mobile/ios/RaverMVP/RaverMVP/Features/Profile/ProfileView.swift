@@ -133,6 +133,9 @@ struct ProfileView: View {
         .task {
             await viewModel.load()
         }
+        .onChange(of: viewModel.selectedSection) { _, _ in
+            Task { await viewModel.loadSelectedSectionIfNeeded() }
+        }
         .sheet(isPresented: $isShowingRealNameSheet) {
             if appState.shouldPresentRealNameVerificationUI {
                 RealNameVerificationSheet()
@@ -301,13 +304,19 @@ struct ProfileView: View {
 
             switch viewModel.selectedSection {
             case .published:
-                if viewModel.recentPosts.isEmpty {
+                if viewModel.loadingSection == .published && viewModel.recentPosts.isEmpty {
+                    ProfileSkeletonView()
+                } else if viewModel.recentPosts.isEmpty {
                     ContentUnavailableView(LT("还没有动态", "No posts yet", "投稿はまだありません"), systemImage: "square.and.pencil")
                 } else {
                     feedList(viewModel.recentPosts, actionAt: nil)
                 }
             case .saves:
-                if viewModel.savedItems.isEmpty {
+                if !viewModel.hasLoadedSection(.saves) && viewModel.savedItems.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                } else if viewModel.savedItems.isEmpty {
                     ContentUnavailableView(LT("暂无收藏帖子", "No saved posts yet", "保存済み投稿はまだありません"), systemImage: "star")
                 } else {
                     feedList(
@@ -319,7 +328,11 @@ struct ProfileView: View {
                     )
                 }
             case .likes:
-                if viewModel.likedItems.isEmpty {
+                if !viewModel.hasLoadedSection(.likes) && viewModel.likedItems.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                } else if viewModel.likedItems.isEmpty {
                     ContentUnavailableView(LT("暂无 Like 过的帖子", "No liked posts yet", "いいねした投稿はまだありません"), systemImage: "heart")
                 } else {
                     feedList(

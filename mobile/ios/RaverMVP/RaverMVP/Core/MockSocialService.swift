@@ -889,11 +889,14 @@ actor MockSocialService: SocialService {
         return profile
     }
 
-    func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
+    func fetchPostsByUser(userID: String, cursor: String?, limit: Int? = nil) async throws -> FeedPage {
         _ = cursor
         let filtered = posts
             .filter { $0.author.id == userID }
             .sorted(by: { $0.createdAt > $1.createdAt })
+        if let limit {
+            return FeedPage(posts: Array(filtered.prefix(max(1, limit))), nextCursor: nil)
+        }
         return FeedPage(posts: filtered, nextCursor: nil)
     }
 
