@@ -2540,7 +2540,8 @@ struct DJDetailView: View {
 
     @State private var dj: WebDJ?
     @State private var sets: [WebDJSet] = []
-    @State private var djEvents: [WebEvent] = []
+    @State private var upcomingDJEvents: [WebEvent] = []
+    @State private var endedDJEvents: [WebEvent] = []
     @State private var ratingUnits: [WebRatingUnit] = []
     @State private var rankingHonors: [DJHonorItem] = []
     @State private var watchedSetCount = 0
@@ -2601,9 +2602,13 @@ struct DJDetailView: View {
     @State private var relatedArticlesLoadFailed = false
     @State private var visibleRelatedArticleCount = 5
     @State private var visibleSetCount = 10
-    @State private var visibleUpcomingEventCount = 8
-    @State private var visibleEndedEventCount = 8
     @State private var visibleRatingCount = 10
+    @State private var isLoadingMoreUpcomingEvents = false
+    @State private var isLoadingMoreEndedEvents = false
+    @State private var upcomingEventsPage = 0
+    @State private var upcomingEventsTotalPages = 1
+    @State private var endedEventsPage = 0
+    @State private var endedEventsTotalPages = 1
     @State private var historyEventSearchText = ""
     @State private var historyEventRegionFilter: DJEventRegionFilter = .all
     @State private var historyEventStartDate: Date?
@@ -2952,7 +2957,7 @@ struct DJDetailView: View {
             let snapshot = makeDJManualCacheSnapshot(
                 dj: loadedDJ,
                 sets: sets,
-                djEvents: djEvents,
+                djEvents: combinedDJEvents,
                 ratingUnits: ratingUnits,
                 relatedArticles: relatedArticles
             )
@@ -3014,8 +3019,25 @@ struct DJDetailView: View {
         eventsLoadFailed = false
         defer { isLoadingEvents = false }
         do {
-            let loaded = try await djLinkedContentRepository.fetchDJEvents(djID: djID)
-            djEvents = loaded
+            async let upcomingPageResult = djLinkedContentRepository.fetchDJEvents(
+                djID: djID,
+                page: 1,
+                limit: Self.djEventPageSize,
+                statuses: ["ongoing", "upcoming"]
+            )
+            async let endedPageResult = djLinkedContentRepository.fetchDJEvents(
+                djID: djID,
+                page: 1,
+                limit: Self.djEventPageSize,
+                statuses: ["ended", "cancelled"]
+            )
+            let (upcomingPage, endedPage) = try await (upcomingPageResult, endedPageResult)
+            upcomingDJEvents = upcomingPage.items.sorted(by: { $0.startDate < $1.startDate })
+            endedDJEvents = endedPage.items.sorted(by: { $0.startDate > $1.startDate })
+            upcomingEventsPage = upcomingPage.pagination?.page ?? (upcomingPage.items.isEmpty ? 0 : 1)
+            upcomingEventsTotalPages = max(upcomingPage.pagination?.totalPages ?? 1, 1)
+            endedEventsPage = endedPage.pagination?.page ?? (endedPage.items.isEmpty ? 0 : 1)
+            endedEventsTotalPages = max(endedPage.pagination?.totalPages ?? 1, 1)
             didLoadEvents = true
             await persistCurrentDJManualCacheSnapshotIfPossible()
         } catch is CancellationError {
@@ -3023,6 +3045,96 @@ struct DJDetailView: View {
         } catch {
             eventsLoadFailed = true
             return
+        }
+    }
+
+    private var combinedDJEvents: [WebEvent] {
+        mergeUniqueDJEvents(upcomingDJEvents + endedDJEvents)
+    }
+
+    private func mergeUniqueDJEvents(_ events: [WebEvent]) -> [WebEvent] {
+        var seen = Set<String>()
+        return events.filter { event in
+            seen.insert(event.id).inserted
+        }
+    }
+
+    private func normalizedDJEventStatus(_ event: WebEvent) -> String {
+        event.status?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+    }
+
+    private func splitDJEventsBySection(_ events: [WebEvent]) -> (upcoming: [WebEvent], ended: [WebEvent]) {
+        let uniqueEvents = mergeUniqueDJEvents(events)
+        let upcoming = uniqueEvents
+            .filter { event in
+                let status = normalizedDJEventStatus(event)
+                return status == "ongoing" || status == "upcoming"
+            }
+            .sorted(by: { $0.startDate < $1.startDate })
+        let ended = uniqueEvents
+            .filter { event in
+                let status = normalizedDJEventStatus(event)
+                return status == "ended" || status == "cancelled" || status == "canceled"
+            }
+            .sorted(by: { $0.startDate > $1.startDate })
+        return (upcoming, ended)
+    }
+
+    @MainActor
+    private func loadMoreDJEvents(section: DJEventSection) async {
+        let statuses: [String]
+        let nextPage: Int
+
+        switch section {
+        case .upcoming:
+            guard upcomingEventsPage < upcomingEventsTotalPages else {
+                debugDJEventPagination("skip request section=\(section.debugName) reason=no-more page=\(upcomingEventsPage) totalPages=\(upcomingEventsTotalPages)")
+                return
+            }
+            statuses = ["ongoing", "upcoming"]
+            nextPage = max(upcomingEventsPage, 0) + 1
+        case .ended:
+            guard endedEventsPage < endedEventsTotalPages else {
+                debugDJEventPagination("skip request section=\(section.debugName) reason=no-more page=\(endedEventsPage) totalPages=\(endedEventsTotalPages)")
+                return
+            }
+            statuses = ["ended", "cancelled"]
+            nextPage = max(endedEventsPage, 0) + 1
+        }
+
+        do {
+            debugDJEventPagination("request page section=\(section.debugName) page=\(nextPage)")
+            let page = try await djLinkedContentRepository.fetchDJEvents(
+                djID: djID,
+                page: nextPage,
+                limit: Self.djEventPageSize,
+                statuses: statuses
+            )
+
+            switch section {
+            case .upcoming:
+                upcomingDJEvents = mergeUniqueDJEvents(upcomingDJEvents + page.items)
+                    .sorted(by: { $0.startDate < $1.startDate })
+                upcomingEventsPage = page.pagination?.page ?? nextPage
+                upcomingEventsTotalPages = max(page.pagination?.totalPages ?? upcomingEventsTotalPages, 1)
+                debugDJEventPagination("applied page section=\(section.debugName) loaded=\(upcomingDJEvents.count) page=\(upcomingEventsPage) totalPages=\(upcomingEventsTotalPages)")
+            case .ended:
+                endedDJEvents = mergeUniqueDJEvents(endedDJEvents + page.items)
+                    .sorted(by: { $0.startDate > $1.startDate })
+                endedEventsPage = page.pagination?.page ?? nextPage
+                endedEventsTotalPages = max(page.pagination?.totalPages ?? endedEventsTotalPages, 1)
+                debugDJEventPagination("applied page section=\(section.debugName) loaded=\(endedDJEvents.count) page=\(endedEventsPage) totalPages=\(endedEventsTotalPages)")
+            }
+
+            didLoadEvents = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            eventsLoadFailed = true
+            debugDJEventPagination("request failed section=\(section.debugName) page=\(nextPage) error=\(error.localizedDescription)")
         }
     }
 
@@ -3087,8 +3199,8 @@ struct DJDetailView: View {
         case .sets:
             visibleSetCount = 10
         case .events:
-            visibleUpcomingEventCount = Self.djEventPageSize
-            visibleEndedEventCount = Self.djEventPageSize
+            isLoadingMoreUpcomingEvents = false
+            isLoadingMoreEndedEvents = false
         case .ratings:
             visibleRatingCount = 10
         }
@@ -3149,14 +3261,13 @@ struct DJDetailView: View {
         do {
             let djForCache = try await resolveDJForManualCache()
             async let setsTask = djLinkedContentRepository.fetchDJSets(djID: djID)
-            async let eventsTask = djLinkedContentRepository.fetchDJEvents(djID: djID)
             async let ratingUnitsTask = djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
             async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
 
             let snapshot = makeDJManualCacheSnapshot(
                 dj: djForCache,
                 sets: (try? await setsTask) ?? sets,
-                djEvents: (try? await eventsTask) ?? djEvents,
+                djEvents: combinedDJEvents,
                 ratingUnits: (try? await ratingUnitsTask) ?? ratingUnits,
                 relatedArticles: (try? await relatedArticlesTask) ?? relatedArticles
             )
@@ -3174,16 +3285,23 @@ struct DJDetailView: View {
         dj = snapshot.dj
         prepareDJEditDraft(from: snapshot.dj)
         sets = snapshot.sets
-        djEvents = snapshot.djEvents
+        let splitEvents = splitDJEventsBySection(snapshot.djEvents)
+        upcomingDJEvents = splitEvents.upcoming
+        endedDJEvents = splitEvents.ended
+        upcomingEventsPage = splitEvents.upcoming.isEmpty ? 0 : 1
+        upcomingEventsTotalPages = 1
+        endedEventsPage = splitEvents.ended.isEmpty ? 0 : 1
+        endedEventsTotalPages = 1
         ratingUnits = snapshot.ratingUnits
         Task {
             rankingHonors = []
         }
         relatedArticles = snapshot.relatedNewsArticles
         didLoadSets = !sets.isEmpty
-        didLoadEvents = !djEvents.isEmpty
+        didLoadEvents = !snapshot.djEvents.isEmpty
         didLoadRatings = !ratingUnits.isEmpty
         didLoadRelatedArticles = !relatedArticles.isEmpty
+        isLoadingEvents = false
         isLoadingRelatedArticles = false
         manualCachedAt = snapshot.cachedAt
     }
@@ -3232,7 +3350,7 @@ struct DJDetailView: View {
         let snapshot = makeDJManualCacheSnapshot(
             dj: dj,
             sets: sets,
-            djEvents: djEvents,
+            djEvents: combinedDJEvents,
             ratingUnits: ratingUnits,
             relatedArticles: relatedArticles
         )
@@ -3757,7 +3875,7 @@ struct DJDetailView: View {
         let now = Date()
         var seenEventIDs = Set<String>()
 
-        return djEvents
+        return combinedDJEvents
             .filter { event in
                 guard seenEventIDs.insert(event.id).inserted else { return false }
                 return eventIsOngoing(event, at: now) && eventLineupIncludesDJ(event, dj: dj)
@@ -4994,16 +5112,16 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private var eventsTabContent: some View {
-        if isLoadingEvents && djEvents.isEmpty {
+        if isLoadingEvents && combinedDJEvents.isEmpty {
             ProgressView(LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."))
                 .padding(.vertical, 8)
-        } else if djEvents.isEmpty && !didLoadEvents {
+        } else if combinedDJEvents.isEmpty && !didLoadEvents {
             tabLoadPlaceholder(
                 title: LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."),
                 didFail: eventsLoadFailed,
                 retry: { await loadEventsIfNeeded(force: true) }
             )
-        } else if djEvents.isEmpty {
+        } else if combinedDJEvents.isEmpty {
             Text(LT("暂无历史活动", "暂无历史活动", "過去イベントはまだありません"))
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
@@ -5029,28 +5147,18 @@ struct DJDetailView: View {
                 if !upcomingEvents.isEmpty {
                     djEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
                     pagedDJEventSection(
+                        section: .upcoming,
                         events: upcomingEvents,
-                        visibleCount: visibleUpcomingEventCount,
-                        onLoadMore: {
-                            visibleUpcomingEventCount = min(
-                                upcomingEvents.count,
-                                visibleUpcomingEventCount + Self.djEventPageSize
-                            )
-                        }
+                        hasMore: upcomingEventsPage < upcomingEventsTotalPages
                     )
                 }
 
                 if !endedEvents.isEmpty {
                     djEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
                     pagedDJEventSection(
+                        section: .ended,
                         events: endedEvents,
-                        visibleCount: visibleEndedEventCount,
-                        onLoadMore: {
-                            visibleEndedEventCount = min(
-                                endedEvents.count,
-                                visibleEndedEventCount + Self.djEventPageSize
-                            )
-                        }
+                        hasMore: endedEventsPage < endedEventsTotalPages
                     )
                 }
             }
@@ -5200,7 +5308,7 @@ struct DJDetailView: View {
     }
 
     private var historyEventFilterResultText: String {
-        LT("显示 \(filteredDJEvents.count) / \(djEvents.count) 场", "\(filteredDJEvents.count) of \(djEvents.count) shown", "\(djEvents.count)件中 \(filteredDJEvents.count)件を表示")
+        LT("显示 \(filteredDJEvents.count) / \(combinedDJEvents.count) 场", "\(filteredDJEvents.count) of \(combinedDJEvents.count) shown", "\(combinedDJEvents.count)件中 \(filteredDJEvents.count)件を表示")
     }
 
     private var historyEventSearchQuery: String {
@@ -5215,7 +5323,7 @@ struct DJDetailView: View {
     }
 
     private var filteredDJEvents: [WebEvent] {
-        djEvents.filter { event in
+        combinedDJEvents.filter { event in
             historyEventMatchesSearch(event)
                 && historyEventMatchesRegion(event)
                 && historyEventMatchesDate(event)
@@ -5223,21 +5331,19 @@ struct DJDetailView: View {
     }
 
     private var filteredUpcomingDJEvents: [WebEvent] {
-        filteredDJEvents
-            .filter {
-                let status = EventVisualStatus.resolve(event: $0)
-                return status != .ended && status != .cancelled
-            }
-            .sorted(by: { $0.startDate < $1.startDate })
+        upcomingDJEvents.filter { event in
+            historyEventMatchesSearch(event)
+                && historyEventMatchesRegion(event)
+                && historyEventMatchesDate(event)
+        }
     }
 
     private var filteredEndedDJEvents: [WebEvent] {
-        filteredDJEvents
-            .filter {
-                let status = EventVisualStatus.resolve(event: $0)
-                return status == .ended || status == .cancelled
-            }
-            .sorted(by: { $0.startDate > $1.startDate })
+        endedDJEvents.filter { event in
+            historyEventMatchesSearch(event)
+                && historyEventMatchesRegion(event)
+                && historyEventMatchesDate(event)
+        }
     }
 
     private var historyEventStartDateToggleBinding: Binding<Bool> {
@@ -5281,12 +5387,12 @@ struct DJDetailView: View {
     }
 
     private var fallbackHistoryEventStartDate: Date {
-        let base = djEvents.map(\.startDate).min() ?? Date()
+        let base = combinedDJEvents.map(\.startDate).min() ?? Date()
         return Calendar.current.startOfDay(for: base)
     }
 
     private var fallbackHistoryEventEndDate: Date {
-        let base = djEvents.map(\.startDate).max() ?? Date()
+        let base = combinedDJEvents.map(\.startDate).max() ?? Date()
         return Calendar.current.startOfDay(for: base)
     }
 
@@ -5450,22 +5556,46 @@ struct DJDetailView: View {
             .padding(.bottom, 2)
     }
 
+    private enum DJEventSection {
+        case upcoming
+        case ended
+
+        var debugName: String {
+            switch self {
+            case .upcoming:
+                return "upcoming"
+            case .ended:
+                return "ended"
+            }
+        }
+    }
+
     @ViewBuilder
     private func pagedDJEventSection(
+        section: DJEventSection,
         events: [WebEvent],
-        visibleCount: Int,
-        onLoadMore: @escaping () -> Void
+        hasMore: Bool
     ) -> some View {
-        let visibleEvents = Array(events.prefix(visibleCount))
-        ForEach(Array(visibleEvents.enumerated()), id: \.element.id) { index, event in
+        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
             Button {
                 appPush(.eventDetail(eventID: event.id))
             } label: {
                 historyEventRow(event)
             }
             .buttonStyle(.plain)
+            .onAppear {
+                guard index == events.count - 1 else { return }
+                debugDJEventPagination(
+                    "last-cell onAppear section=\(section.debugName) loaded=\(events.count) hasMore=\(hasMore)"
+                )
+                triggerDJEventAutoLoadMoreIfNeeded(
+                    section: section,
+                    loadedCount: events.count,
+                    hasMore: hasMore
+                )
+            }
 
-            if index < visibleEvents.count - 1 {
+            if index < events.count - 1 {
                 Rectangle()
                     .fill(RaverTheme.secondaryText.opacity(0.16))
                     .frame(maxWidth: .infinity)
@@ -5473,20 +5603,7 @@ struct DJDetailView: View {
             }
         }
 
-        eventAutoLoadMoreSentinel(
-            shownCount: visibleEvents.count,
-            totalCount: events.count,
-            action: onLoadMore
-        )
-    }
-
-    @ViewBuilder
-    private func eventAutoLoadMoreSentinel(
-        shownCount: Int,
-        totalCount: Int,
-        action: @escaping () -> Void
-    ) -> some View {
-        if shownCount < totalCount {
+        if hasMore {
             HStack {
                 Spacer()
                 ProgressView()
@@ -5494,8 +5611,65 @@ struct DJDetailView: View {
                 Spacer()
             }
             .padding(.vertical, 10)
-            .onAppear(perform: action)
         }
+    }
+
+    @MainActor
+    private func triggerDJEventAutoLoadMoreIfNeeded(
+        section: DJEventSection,
+        loadedCount: Int,
+        hasMore: Bool
+    ) {
+        guard hasMore else {
+            debugDJEventPagination(
+                "skip load-more section=\(section.debugName) reason=fully-loaded loaded=\(loadedCount)"
+            )
+            return
+        }
+
+        switch section {
+        case .upcoming:
+            guard !isLoadingMoreUpcomingEvents else {
+                debugDJEventPagination(
+                    "skip load-more section=\(section.debugName) reason=already-loading loaded=\(loadedCount)"
+                )
+                return
+            }
+            isLoadingMoreUpcomingEvents = true
+        case .ended:
+            guard !isLoadingMoreEndedEvents else {
+                debugDJEventPagination(
+                    "skip load-more section=\(section.debugName) reason=already-loading loaded=\(loadedCount)"
+                )
+                return
+            }
+            isLoadingMoreEndedEvents = true
+        }
+
+        debugDJEventPagination(
+            "schedule load-more section=\(section.debugName) loaded=\(loadedCount)"
+        )
+
+        Task { @MainActor in
+            defer {
+                switch section {
+                case .upcoming:
+                    isLoadingMoreUpcomingEvents = false
+                case .ended:
+                    isLoadingMoreEndedEvents = false
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: 180_000_000)
+
+            await loadMoreDJEvents(section: section)
+        }
+    }
+
+    private func debugDJEventPagination(_ message: String) {
+        #if DEBUG
+        print("[DJDetailEventsPagination] \(message)")
+        #endif
     }
 
     @ViewBuilder

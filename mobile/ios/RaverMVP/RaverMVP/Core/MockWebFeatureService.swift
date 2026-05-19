@@ -1250,14 +1250,24 @@ actor MockWebFeatureService: WebFeatureService {
         sets.filter { $0.djId == djID }.sorted(by: { $0.createdAt > $1.createdAt })
     }
 
-    func fetchDJEvents(djID: String) async throws -> [WebEvent] {
-        events
+    func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage {
+        let filtered = events
             .filter { event in
                 event.lineupSlots.contains(where: { slot in
                     slot.djId == djID || (slot.djIds ?? []).contains(djID)
                 })
             }
+            .filter { event in
+                guard let statuses else { return true }
+                let normalized = statuses
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                    .filter { !$0.isEmpty }
+                guard !normalized.isEmpty else { return true }
+                return normalized.contains(event.status.lowercased())
+            }
             .sorted(by: { $0.startDate > $1.startDate })
+
+        return paginateEvents(filtered, page: page, limit: limit)
     }
 
     func fetchDJFollowStatus(djID: String) async throws -> Bool {

@@ -412,9 +412,25 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items.map(localizedDJSet)
     }
 
-    func fetchDJEvents(djID: String) async throws -> [WebEvent] {
-        let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(path: "/v1/djs/\(djID)/events", method: "GET")
-        return response.data.items.map(localizedEvent)
+    func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage {
+        var queryItems = [
+            URLQueryItem(name: "page", value: "\(max(1, page))"),
+            URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
+        ]
+        if let statuses {
+            let normalized = statuses
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+            if !normalized.isEmpty {
+                queryItems.append(URLQueryItem(name: "statuses", value: normalized.joined(separator: ",")))
+            }
+        }
+        let response: BFFEnvelope<BFFItems<WebEvent>> = try await request(
+            path: "/v1/djs/\(djID)/events",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)
     }
 
     func fetchDJFollowStatus(djID: String) async throws -> Bool {

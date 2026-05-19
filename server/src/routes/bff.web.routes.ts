@@ -8899,6 +8899,10 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
     const page = normalizePage(req.query.page, 1);
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const skip = (page - 1) * limit;
+    const statuses = String(req.query.statuses ?? req.query.status ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => value.length > 0);
     const where = {
       OR: [
         {
@@ -8916,6 +8920,7 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
           },
         },
       ],
+      ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
     } satisfies Prisma.EventWhereInput;
     const [rows, total] = await Promise.all([
       prisma.event.findMany({

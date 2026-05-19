@@ -64,7 +64,7 @@ protocol WebFeatureService {
         usage: String
     ) async throws -> UploadMediaResponse
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
-    func fetchDJEvents(djID: String) async throws -> [WebEvent]
+    func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage
     func fetchDJFollowStatus(djID: String) async throws -> Bool
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage

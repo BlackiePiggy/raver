@@ -12,7 +12,7 @@ protocol DJReadRepository {
 
 protocol DJLinkedContentRepository {
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
-    func fetchDJEvents(djID: String) async throws -> [WebEvent]
+    func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit]
     func fetchMyDJCheckinCount(djID: String) async throws -> Int
 }
@@ -92,8 +92,8 @@ struct DJLinkedContentRepositoryAdapter: DJLinkedContentRepository {
         try await service.fetchDJSets(djID: djID)
     }
 
-    func fetchDJEvents(djID: String) async throws -> [WebEvent] {
-        try await service.fetchDJEvents(djID: djID)
+    func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage {
+        try await service.fetchDJEvents(djID: djID, page: page, limit: limit, statuses: statuses)
     }
 
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit] {
