@@ -5,6 +5,7 @@ protocol WebFeatureService {
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEvent(id: String) async throws -> WebEvent
     func fetchMyEvents() async throws -> [WebEvent]
+    func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage
     func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage
     func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus
     func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
@@ -64,6 +65,7 @@ protocol WebFeatureService {
         usage: String
     ) async throws -> UploadMediaResponse
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
+    func fetchDJSets(djID: String, page: Int, limit: Int) async throws -> DJSetListPage
     func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage
     func fetchDJFollowStatus(djID: String) async throws -> Bool
     func toggleDJFollow(djID: String, shouldFollow: Bool) async throws -> WebDJ
@@ -73,11 +75,13 @@ protocol WebFeatureService {
     func fetchEventDJSets(eventID: String, eventName: String) async throws -> [WebDJSet]
     func fetchDJSet(id: String) async throws -> WebDJSet
     func fetchMyDJSets() async throws -> [WebDJSet]
+    func fetchMyDJSets(page: Int, limit: Int) async throws -> DJSetListPage
     func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet>
     func updateDJSet(id: String, input: UpdateDJSetInput) async throws -> WebDJSet
     func deleteDJSet(id: String) async throws
     func replaceTracks(setID: String, tracks: [CreateTrackInput]) async throws -> WebDJSet
     func fetchTracklists(setID: String) async throws -> [WebTracklistSummary]
+    func fetchTracklists(setID: String, page: Int, limit: Int) async throws -> TracklistSummaryPage
     func fetchTracklistDetail(setID: String, tracklistID: String) async throws -> WebTracklistDetail
     func createTracklist(setID: String, input: CreateTracklistInput) async throws -> WebTracklistDetail
     func autoLinkTracks(setID: String) async throws
@@ -86,6 +90,7 @@ protocol WebFeatureService {
     func uploadSetVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
 
     func fetchSetComments(setID: String) async throws -> [WebSetComment]
+    func fetchSetComments(setID: String, page: Int, limit: Int) async throws -> SetCommentListPage
     func addSetComment(setID: String, input: CreateSetCommentInput) async throws -> WebSetComment
     func updateSetComment(commentID: String, content: String) async throws -> WebSetComment
     func deleteSetComment(commentID: String) async throws
@@ -110,9 +115,12 @@ protocol WebFeatureService {
     func deleteCheckin(id: String) async throws
 
     func fetchRatingEvents() async throws -> [WebRatingEvent]
+    func fetchRatingEvents(page: Int, limit: Int) async throws -> RatingEventListPage
     func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
+    func fetchEventRatingEvents(eventID: String, page: Int, limit: Int) async throws -> RatingEventListPage
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit]
+    func fetchDJRatingUnits(djID: String, page: Int, limit: Int) async throws -> RatingUnitListPage
     func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent>
     func createRatingEventFromEvent(eventID: String) async throws -> WebRatingEvent
     func updateRatingEvent(id: String, input: UpdateRatingEventInput) async throws -> WebRatingEvent
@@ -143,6 +151,7 @@ protocol WebFeatureService {
 
     func fetchMyPublishes() async throws -> MyPublishes
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary]
+    func fetchMyContentSubmissions(page: Int, limit: Int) async throws -> ContentSubmissionListPage
     func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail
     func createContentSubmission(entityType: String, payload: [String: ContentSubmissionJSONValue]) async throws -> ContentSubmissionDetail
     func resubmitMyContentSubmission(id: String, payload: [String: ContentSubmissionJSONValue], changeNote: String?) async throws -> ContentSubmissionDetail

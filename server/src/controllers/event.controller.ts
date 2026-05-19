@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import path from 'path';
 import { AuthRequest } from '../middleware/auth';
 import {
@@ -50,6 +50,23 @@ type TicketTierInput = {
   price?: number | string;
   currency?: string;
   sortOrder?: number;
+};
+
+type RawLineupArtistInput = {
+  djId?: string;
+  djIds?: string[];
+  djName?: string;
+  name?: string;
+  musician?: string;
+  artistName?: string;
+  sortOrder?: number;
+};
+
+type LineupArtistInput = {
+  djId: string | null;
+  djIds: string[];
+  djName: string;
+  sortOrder: number;
 };
 
 const slugify = (value: string) =>
@@ -122,6 +139,27 @@ const withDerivedStatus = <T extends { startDate: Date; endDate: Date; status?: 
 
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
+const normalizeTrimmedText = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const text = value.trim();
+  if (!text || /^\[object\s+object\]$/i.test(text)) return '';
+  return text;
+};
+
+const normalizeOptionalTriTextJson = (value: unknown): Prisma.InputJsonValue | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  const zh = normalizeTrimmedText(row.zh ?? row.ZH ?? row.cn ?? row.chinese ?? row['zh-CN']);
+  const en = normalizeTrimmedText(row.en ?? row.EN ?? row.english ?? row['en-US']);
+  const ja = normalizeTrimmedText(row.ja ?? row.JA ?? row.jp ?? row.japanese ?? row['ja-JP']);
+  const enFull = normalizeTrimmedText(row.enFull ?? row.en_full ?? row.englishFull ?? row.country_en_full);
+  if (zh) out.zh = zh;
+  if (en) out.en = en;
+  if (ja) out.ja = ja;
+  if (enFull) out.enFull = enFull;
+  return Object.keys(out).length ? (out as Prisma.InputJsonValue) : undefined;
+};
 const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
   const numeric = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(numeric)) return fallback;
@@ -264,6 +302,59 @@ const normalizeLineupSlots = (
     .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim() || (Array.isArray(slot.djIds) && slot.djIds.length > 0));
 };
 
+const buildLineupArtistsFromSlots = (slots: LineupSlotInput[]): LineupArtistInput[] => {
+  const byKey = new Map<string, LineupArtistInput>();
+  for (const [index, slot] of slots.entries()) {
+    const djName = String(slot.djName || '').trim();
+    if (!djName) continue;
+    const djIds = Array.isArray(slot.djIds) ? slot.djIds.filter((id) => id && !isLineupDjIdPlaceholder(id)) : [];
+    const primaryDjId = slot.djId && !isLineupDjIdPlaceholder(slot.djId) ? slot.djId : (djIds[0] || null);
+    const key = primaryDjId ? `id:${primaryDjId}` : `name:${djName.toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean);
+      if (!existing.djId && primaryDjId) existing.djId = primaryDjId;
+      existing.sortOrder = Math.min(existing.sortOrder, slot.sortOrder || index + 1);
+      continue;
+    }
+    byKey.set(key, {
+      djId: primaryDjId,
+      djIds: Array.from(new Set([...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean),
+      djName,
+      sortOrder: slot.sortOrder || index + 1,
+    });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const normalizeLineupArtists = (artists: unknown, fallbackSlots: LineupSlotInput[] = []): LineupArtistInput[] => {
+  const source = Array.isArray(artists) ? artists : null;
+  if (!source) return buildLineupArtistsFromSlots(fallbackSlots);
+  const byKey = new Map<string, LineupArtistInput>();
+  for (const [index, raw] of source.entries()) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as RawLineupArtistInput;
+    const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
+    if (!djName) continue;
+    const djIds = (Array.isArray(row.djIds) ? row.djIds : [])
+      .map((id) => String(id || '').trim())
+      .filter((id) => id && !isLineupDjIdPlaceholder(id));
+    const primaryRaw = String(row.djId || '').trim();
+    const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (djIds[0] || null);
+    const mergedIds = Array.from(new Set([...djIds, ...(djId ? [djId] : [])])).filter(Boolean);
+    const sortOrder = typeof row.sortOrder === 'number' && Number.isFinite(row.sortOrder) ? row.sortOrder : index + 1;
+    const key = djId ? `id:${djId}` : `name:${djName.toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...mergedIds])).filter(Boolean);
+      existing.sortOrder = Math.min(existing.sortOrder, sortOrder);
+      continue;
+    }
+    byKey.set(key, { djId, djIds: mergedIds, djName, sortOrder });
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
 const normalizeTicketTiers = (tiers: unknown): TicketTierInput[] => {
   if (!Array.isArray(tiers)) {
     return [];
@@ -358,6 +449,14 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
               },
             },
           },
+          lineupArtists: {
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              dj: {
+                select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
+              },
+            },
+          },
           organizer: {
             select: {
               id: true,
@@ -424,6 +523,14 @@ export const getMyEvents = async (req: AuthRequest, res: Response): Promise<void
             },
           },
         },
+        lineupArtists: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
+            },
+          },
+        },
         organizer: {
           select: {
             id: true,
@@ -454,6 +561,14 @@ export const getEvent = async (req: Request, res: Response): Promise<void> => {
         },
         lineupSlots: {
           orderBy: { startTime: 'asc' },
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
+            },
+          },
+        },
+        lineupArtists: {
+          orderBy: { sortOrder: 'asc' },
           include: {
             dj: {
               select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
@@ -576,6 +691,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     const parsedEndDate = normalizeEventEndDate(parsedEndDateInput, normalizedTimeZone);
     const normalizedDayRolloverHour = normalizeDayRolloverHour(dayRolloverHour, 6);
     const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate, normalizedDayRolloverHour, normalizedTimeZone);
+    const normalizedLineupArtists = normalizeLineupArtists(req.body.lineupArtists, normalizedSlots);
+    const normalizedNameI18n = normalizeOptionalTriTextJson(req.body.nameI18n);
+    const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
+    const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
+    const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
 
     const event = await prisma.event.create({
       data: {
@@ -583,14 +703,16 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         name,
         slug: desiredSlug,
         description,
+        nameI18n: normalizedNameI18n,
+        descriptionI18n: normalizedDescriptionI18n,
         coverImageUrl,
         lineupImageUrl,
         eventType,
         organizerName,
         city,
-        cityI18n,
+        cityI18n: normalizedCityI18n,
         country,
-        countryI18n,
+        countryI18n: normalizedCountryI18n,
         manualLocation,
         locationPoint,
         latitude: toNumberOrNull(latitude),
@@ -618,6 +740,16 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
             }
           : undefined,
         officialWebsite,
+        lineupArtists: normalizedLineupArtists.length
+          ? {
+              create: normalizedLineupArtists.map((artist) => ({
+                djId: artist.djId,
+                djIds: artist.djIds,
+                djName: artist.djName,
+                sortOrder: artist.sortOrder,
+              })),
+            }
+          : undefined,
         lineupSlots: normalizedSlots.length
           ? {
               create: normalizedSlots.map((slot, index) => ({
@@ -639,6 +771,14 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         },
         lineupSlots: {
           orderBy: { startTime: 'asc' },
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
+            },
+          },
+        },
+        lineupArtists: {
+          orderBy: { sortOrder: 'asc' },
           include: {
             dj: {
               select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
@@ -768,11 +908,17 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       ? normalizeDayRolloverHour(dayRolloverHour, existing.dayRolloverHour ?? 6)
       : (existing.dayRolloverHour ?? 6);
     const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate, nextDayRolloverHour, nextTimeZone);
+    const normalizedLineupArtists = normalizeLineupArtists(req.body.lineupArtists, normalizedSlots);
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
     const shouldRebaseExistingLineupSlots =
       !Array.isArray(lineupSlots)
       && (startDate !== undefined || dayRolloverHour !== undefined || timeZone !== undefined)
       && existing.lineupSlots.length > 0;
+    const shouldSyncLineupArtists = Array.isArray(req.body.lineupArtists) || Array.isArray(lineupSlots);
+    const normalizedNameI18n = normalizeOptionalTriTextJson(req.body.nameI18n);
+    const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
+    const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
+    const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
 
     await prisma.event.update({
       where: { id: id as string },
@@ -780,14 +926,16 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         name: name ?? undefined,
         slug: slug ?? undefined,
         description: description ?? undefined,
+        nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
+        descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
         coverImageUrl: coverImageUrl ?? undefined,
         lineupImageUrl: lineupImageUrl ?? undefined,
         eventType: eventType ?? undefined,
         organizerName: organizerName ?? undefined,
         city: city ?? undefined,
-        cityI18n: cityI18n ?? undefined,
+        cityI18n: cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
         country: country ?? undefined,
-        countryI18n: countryI18n ?? undefined,
+        countryI18n: countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
         manualLocation: manualLocation ?? undefined,
         locationPoint: locationPoint ?? undefined,
         latitude: latitude !== undefined ? toNumberOrNull(latitude) : undefined,
@@ -820,6 +968,17 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           effectiveEndDate,
           typeof status === 'string' ? status : existing.status
         ),
+        lineupArtists: shouldSyncLineupArtists
+          ? {
+              deleteMany: {},
+              create: normalizedLineupArtists.map((artist) => ({
+                djId: artist.djId,
+                djIds: artist.djIds,
+                djName: artist.djName,
+                sortOrder: artist.sortOrder,
+              })),
+            }
+          : undefined,
         lineupSlots: Array.isArray(lineupSlots)
           ? {
               deleteMany: {},
@@ -869,6 +1028,14 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         },
         lineupSlots: {
           orderBy: { startTime: 'asc' },
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
+            },
+          },
+        },
+        lineupArtists: {
+          orderBy: { sortOrder: 'asc' },
           include: {
             dj: {
               select: { id: true, name: true, avatarUrl: true, bannerUrl: true },

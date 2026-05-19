@@ -311,6 +311,143 @@ function bindEventLineupArtistEditor(panelEl, info = null) {
   renderEventLineupArtistEditor(panelEl, buildEventLineupArtistsFromArchive(info?.lineupArtists || [], info?.lineup || []));
 }
 
+function eventEditExtractTriTextDraft(value, options = {}) {
+  const row = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
+  const draft = {
+    zh: normalizeScalarText(row?.zh ?? row?.ZH ?? row?.cn ?? row?.zh_CN ?? row?.chinese ?? row?.name_zh ?? ''),
+    en: normalizeScalarText(row?.en ?? row?.EN ?? row?.english ?? row?.name_en ?? row?.en_US ?? ''),
+    ja: normalizeScalarText(row?.ja ?? row?.JA ?? row?.jp ?? row?.japanese ?? ''),
+  };
+  if (!row && typeof value === 'string') {
+    draft.en = normalizeScalarText(value);
+  }
+  if (options.includeEnFull) {
+    const enFull = normalizeScalarText(
+      row?.enFull
+      ?? row?.en_full
+      ?? row?.englishFull
+      ?? row?.country_en_full
+      ?? ''
+    );
+    if (enFull) draft.enFull = enFull;
+  }
+  return draft;
+}
+
+function eventEditBuildMultiLangDraft(info) {
+  const manualLocation = (typeof normalizeFestivalManualLocation === 'function')
+    ? normalizeFestivalManualLocation(info?.manualLocation || info?.manual_location || null, null)
+    : (info?.manualLocation || null);
+  return {
+    nameI18n: eventEditExtractTriTextDraft(info?.nameI18n ?? info?.name ?? ''),
+    cityI18n: eventEditExtractTriTextDraft(info?.cityI18n ?? info?.city ?? ''),
+    countryI18n: eventEditExtractTriTextDraft(info?.countryI18n ?? info?.country ?? '', { includeEnFull: true }),
+    detailAddressI18n: eventEditExtractTriTextDraft(manualLocation?.detailAddressI18n ?? ''),
+    descriptionI18n: eventEditExtractTriTextDraft(info?.descriptionI18n ?? info?.description ?? ''),
+  };
+}
+
+function eventEditWriteMultiLangDraft(panelEl, draft) {
+  const textarea = panelEl?.querySelector('.fest-info-edit [data-field="multiLangJson"]');
+  if (!textarea) return;
+  textarea.value = JSON.stringify(draft || {}, null, 2);
+}
+
+function eventEditReadMultiLangDraft(panelEl) {
+  const textarea = panelEl?.querySelector('.fest-info-edit [data-field="multiLangJson"]');
+  const raw = String(textarea?.value || '').trim();
+  if (!raw) return { draft: eventEditBuildMultiLangDraft({}), error: '' };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { draft: null, error: '多语言 JSON 顶层必须是对象' };
+    }
+    return {
+      draft: {
+        nameI18n: eventEditExtractTriTextDraft(parsed.nameI18n ?? ''),
+        cityI18n: eventEditExtractTriTextDraft(parsed.cityI18n ?? ''),
+        countryI18n: eventEditExtractTriTextDraft(parsed.countryI18n ?? '', { includeEnFull: true }),
+        detailAddressI18n: eventEditExtractTriTextDraft(parsed.detailAddressI18n ?? ''),
+        descriptionI18n: eventEditExtractTriTextDraft(parsed.descriptionI18n ?? ''),
+      },
+      error: '',
+    };
+  } catch (error) {
+    return { draft: null, error: String(error?.message || error) };
+  }
+}
+
+function eventEditSyncMultiLangDraftFromInputs(panelEl) {
+  if (!panelEl) return;
+  const current = eventEditReadMultiLangDraft(panelEl);
+  const draft = current?.draft || eventEditBuildMultiLangDraft({});
+  const read = (key) => String(panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`)?.value || '').trim();
+  draft.nameI18n = { ...(draft.nameI18n || {}), en: read('nameEn'), zh: read('nameZh') };
+  draft.cityI18n = { ...(draft.cityI18n || {}), en: read('cityEn'), zh: read('cityZh') };
+  draft.countryI18n = {
+    ...(draft.countryI18n || {}),
+    en: read('countryEn'),
+    zh: read('countryZh'),
+    enFull: read('countryEnFull'),
+  };
+  draft.detailAddressI18n = { ...(draft.detailAddressI18n || {}), en: read('detailAddressEn'), zh: read('detailAddressZh') };
+  eventEditWriteMultiLangDraft(panelEl, draft);
+}
+
+function eventEditApplyMultiLangDraftToInputs(panelEl, draft) {
+  if (!panelEl || !draft || typeof draft !== 'object') return;
+  const set = (key, val) => {
+    const el = panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
+    if (el) el.value = val || '';
+  };
+  set('nameEn', draft?.nameI18n?.en || '');
+  set('nameZh', draft?.nameI18n?.zh || '');
+  set('cityEn', draft?.cityI18n?.en || '');
+  set('cityZh', draft?.cityI18n?.zh || '');
+  set('countryEn', draft?.countryI18n?.en || '');
+  set('countryZh', draft?.countryI18n?.zh || '');
+  set('countryEnFull', draft?.countryI18n?.enFull || '');
+  set('detailAddressEn', draft?.detailAddressI18n?.en || '');
+  set('detailAddressZh', draft?.detailAddressI18n?.zh || '');
+}
+
+function bindEventMultiLangJsonEditor(panelEl, info = null) {
+  if (!panelEl) return;
+  if (info) {
+    eventEditWriteMultiLangDraft(panelEl, eventEditBuildMultiLangDraft(info));
+  }
+  if (panelEl.dataset.multiLangEditorBound === '1') return;
+  panelEl.dataset.multiLangEditorBound = '1';
+  const trackedFields = [
+    'nameEn',
+    'nameZh',
+    'cityEn',
+    'cityZh',
+    'countryEn',
+    'countryZh',
+    'countryEnFull',
+    'detailAddressEn',
+    'detailAddressZh',
+  ];
+  trackedFields.forEach((field) => {
+    const el = panelEl.querySelector(`.fest-info-edit [data-field="${field}"]`);
+    if (!el) return;
+    el.addEventListener('change', () => eventEditSyncMultiLangDraftFromInputs(panelEl));
+    el.addEventListener('blur', () => eventEditSyncMultiLangDraftFromInputs(panelEl));
+  });
+  const textarea = panelEl.querySelector('.fest-info-edit [data-field="multiLangJson"]');
+  if (textarea) {
+    textarea.addEventListener('change', () => {
+      const parsed = eventEditReadMultiLangDraft(panelEl);
+      if (parsed?.draft) eventEditApplyMultiLangDraftToInputs(panelEl, parsed.draft);
+    });
+    textarea.addEventListener('blur', () => {
+      const parsed = eventEditReadMultiLangDraft(panelEl);
+      if (parsed?.draft) eventEditApplyMultiLangDraftToInputs(panelEl, parsed.draft);
+    });
+  }
+}
+
 function setEditInputs(panelEl, info) {
   const set = (key, val) => {
     const el = panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
@@ -328,6 +465,7 @@ function setEditInputs(panelEl, info) {
     selectEl.appendChild(option);
   };
   const nameBi = normalizeBiTextValue(info.nameI18n ?? info.name, info.name);
+  const multiLangDraft = eventEditBuildMultiLangDraft(info);
   const cityBi = normalizeBiTextValue(info.cityI18n ?? info.city, info.city);
   const countryBi = normalizeCountryBiTextValue(info.countryI18n ?? info.country, info.country);
   const manualLocation = (typeof normalizeFestivalManualLocation === 'function')
@@ -335,20 +473,19 @@ function setEditInputs(panelEl, info) {
     : (info?.manualLocation || null);
   const cityRaw = (typeof normalizeScalarText === 'function') ? normalizeScalarText(info?.city) : String(info?.city || '').trim();
   const countryRaw = (typeof normalizeScalarText === 'function') ? normalizeScalarText(info?.country) : String(info?.country || '').trim();
-  const cityEn = String(cityBi.en || cityRaw || '').trim();
-  const cityZh = String(cityBi.zh || cityRaw || '').trim();
-  const countryEn = String(countryBi.en || countryRaw || '').trim();
-  const countryEnFull = String(countryBi.enFull || countryEn || countryRaw || '').trim();
-  const countryZh = String(countryBi.zh || countryRaw || '').trim();
+  const cityEn = String(multiLangDraft?.cityI18n?.en || (!info?.cityI18n ? (cityBi.en || cityRaw || '') : '')).trim();
+  const cityZh = String(multiLangDraft?.cityI18n?.zh || (!info?.cityI18n ? (cityBi.zh || cityRaw || '') : '')).trim();
+  const countryEn = String(multiLangDraft?.countryI18n?.en || (!info?.countryI18n ? (countryBi.en || countryRaw || '') : '')).trim();
+  const countryEnFull = String(multiLangDraft?.countryI18n?.enFull || (!info?.countryI18n ? (countryBi.enFull || countryEn || countryRaw || '') : '')).trim();
+  const countryZh = String(multiLangDraft?.countryI18n?.zh || (!info?.countryI18n ? (countryBi.zh || countryRaw || '') : '')).trim();
   const detailAddressEn = String(
-    manualLocation?.detailAddressI18n?.en
-    || manualLocation?.formattedAddressI18n?.en
+    multiLangDraft?.detailAddressI18n?.en
+    || (!manualLocation?.detailAddressI18n ? (manualLocation?.formattedAddressI18n?.en || '') : '')
     || ''
   ).trim();
   const detailAddressZh = String(
-    manualLocation?.detailAddressI18n?.zh
-    || manualLocation?.formattedAddressI18n?.zh
-    || detailAddressEn
+    multiLangDraft?.detailAddressI18n?.zh
+    || (!manualLocation?.detailAddressI18n ? (manualLocation?.formattedAddressI18n?.zh || '') : '')
   ).trim();
   set('nameEn', nameBi.en);
   set('nameZh', nameBi.zh);
@@ -393,4 +530,5 @@ function setEditInputs(panelEl, info) {
   }
   ensureEventBrandBindingUI(panelEl, info);
   bindEventLineupArtistEditor(panelEl, info);
+  bindEventMultiLangJsonEditor(panelEl, info);
 }

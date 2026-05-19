@@ -498,7 +498,14 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyEvents() async throws -> [WebEvent] {
-        events.filter { $0.organizer?.id == currentUser.id }.sorted(by: { $0.createdAt > $1.createdAt })
+        try await fetchMyEvents(page: 1, limit: max(events.count, 1)).items
+    }
+
+    func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage {
+        let filtered = events
+            .filter { $0.organizer?.id == currentUser.id }
+            .sorted(by: { $0.createdAt > $1.createdAt })
+        return paginateEvents(filtered, page: page, limit: limit)
     }
 
     func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage {
@@ -1247,7 +1254,12 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {
-        sets.filter { $0.djId == djID }.sorted(by: { $0.createdAt > $1.createdAt })
+        try await fetchDJSets(djID: djID, page: 1, limit: max(sets.count, 1)).items
+    }
+
+    func fetchDJSets(djID: String, page: Int, limit: Int) async throws -> DJSetListPage {
+        let filtered = sets.filter { $0.djId == djID }.sorted(by: { $0.createdAt > $1.createdAt })
+        return paginateDJSets(filtered, page: page, limit: limit)
     }
 
     func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage {
@@ -1263,7 +1275,10 @@ actor MockWebFeatureService: WebFeatureService {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
                     .filter { !$0.isEmpty }
                 guard !normalized.isEmpty else { return true }
-                return normalized.contains(event.status.lowercased())
+                let eventStatus = event.status?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased() ?? ""
+                return normalized.contains(eventStatus)
             }
             .sorted(by: { $0.startDate > $1.startDate })
 
@@ -1388,7 +1403,12 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyDJSets() async throws -> [WebDJSet] {
-        sets.filter { $0.uploadedById == currentUser.id }.sorted(by: { $0.createdAt > $1.createdAt })
+        try await fetchMyDJSets(page: 1, limit: max(sets.count, 1)).items
+    }
+
+    func fetchMyDJSets(page: Int, limit: Int) async throws -> DJSetListPage {
+        let filtered = sets.filter { $0.uploadedById == currentUser.id }.sorted(by: { $0.createdAt > $1.createdAt })
+        return paginateDJSets(filtered, page: page, limit: limit)
     }
 
     func createDJSet(input: CreateDJSetInput) async throws -> CreateContentResult<WebDJSet> {
@@ -1519,8 +1539,16 @@ actor MockWebFeatureService: WebFeatureService {
             throw ServiceError.message("Set 不存在")
         }
 
+        return try await fetchTracklists(setID: setID, page: 1, limit: max(tracklistsBySetID[setID, default: []].count, 1)).items
+    }
+
+    func fetchTracklists(setID: String, page: Int, limit: Int) async throws -> TracklistSummaryPage {
+        guard sets.contains(where: { $0.id == setID }) else {
+            throw ServiceError.message("Set 不存在")
+        }
+
         let details = tracklistsBySetID[setID, default: []].sorted(by: { $0.createdAt > $1.createdAt })
-        return details.map { detail in
+        let summaries = details.map { detail in
             WebTracklistSummary(
                 id: detail.id,
                 setId: detail.setId,
@@ -1532,6 +1560,7 @@ actor MockWebFeatureService: WebFeatureService {
                 trackCount: detail.tracks.count
             )
         }
+        return paginateList(summaries, page: page, limit: limit)
     }
 
     func fetchTracklistDetail(setID: String, tracklistID: String) async throws -> WebTracklistDetail {
@@ -1625,7 +1654,12 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchSetComments(setID: String) async throws -> [WebSetComment] {
-        commentsBySetID[setID, default: []].sorted(by: { $0.createdAt > $1.createdAt })
+        try await fetchSetComments(setID: setID, page: 1, limit: max(commentsBySetID[setID, default: []].count, 1)).items
+    }
+
+    func fetchSetComments(setID: String, page: Int, limit: Int) async throws -> SetCommentListPage {
+        let filtered = commentsBySetID[setID, default: []].sorted(by: { $0.createdAt > $1.createdAt })
+        return paginateList(filtered, page: page, limit: limit)
     }
 
     func addSetComment(setID: String, input: CreateSetCommentInput) async throws -> WebSetComment {
@@ -2188,7 +2222,11 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchRatingEvents() async throws -> [WebRatingEvent] {
-        ratingEvents
+        try await fetchRatingEvents(page: 1, limit: max(ratingEvents.count, 1)).items
+    }
+
+    func fetchRatingEvents(page: Int, limit: Int) async throws -> RatingEventListPage {
+        let filtered = ratingEvents
             .sorted(by: { $0.createdAt > $1.createdAt })
             .map { event in
                 var normalized = event
@@ -2196,6 +2234,7 @@ actor MockWebFeatureService: WebFeatureService {
                 normalized.units = event.units.map(normalizeRatingUnit)
                 return normalized
             }
+        return paginateList(filtered, page: page, limit: limit)
     }
 
     private func splitOverviewArtistNames(_ raw: String) -> [String] {
@@ -2319,6 +2358,10 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
+        try await fetchEventRatingEvents(eventID: eventID, page: 1, limit: max(ratingEvents.count, 1)).items
+    }
+
+    func fetchEventRatingEvents(eventID: String, page: Int, limit: Int) async throws -> RatingEventListPage {
         guard let sourceEvent = events.first(where: { $0.id == eventID }) else {
             throw ServiceError.message("活动不存在")
         }
@@ -2327,7 +2370,7 @@ actor MockWebFeatureService: WebFeatureService {
             sourceEvent.lineupSlots.map { normalizedActName($0.djName) }
         )
 
-        return ratingEvents
+        let filtered = ratingEvents
             .filter { ratingEvent in
                 if ratingEvent.name.compare(sourceEvent.name, options: .caseInsensitive) != .orderedSame {
                     return false
@@ -2344,6 +2387,7 @@ actor MockWebFeatureService: WebFeatureService {
                 normalized.units = event.units.map(normalizeRatingUnit)
                 return normalized
             }
+        return paginateList(filtered, page: page, limit: limit)
     }
 
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent {
@@ -2357,12 +2401,16 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit] {
+        try await fetchDJRatingUnits(djID: djID, page: 1, limit: max(ratingEvents.count, 1)).items
+    }
+
+    func fetchDJRatingUnits(djID: String, page: Int, limit: Int) async throws -> RatingUnitListPage {
         guard let sourceDJ = djs.first(where: { $0.id == djID }) else {
             throw ServiceError.message("DJ 不存在")
         }
         let normalizedName = sourceDJ.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        return ratingEvents
+        let filtered = ratingEvents
             .flatMap { event in
                 event.units.compactMap { unit in
                     let performerNames = parseDJActNames(from: unit.name)
@@ -2381,6 +2429,7 @@ actor MockWebFeatureService: WebFeatureService {
                 }
             }
             .sorted(by: { $0.createdAt > $1.createdAt })
+        return paginateList(filtered, page: page, limit: limit)
     }
 
     func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent> {
@@ -3074,7 +3123,11 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {
-        []
+        try await fetchMyContentSubmissions(page: 1, limit: 20).items
+    }
+
+    func fetchMyContentSubmissions(page: Int, limit: Int) async throws -> ContentSubmissionListPage {
+        paginateList([], page: page, limit: limit)
     }
 
     func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail {
@@ -3218,13 +3271,23 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     private func paginateEvents(_ source: [WebEvent], page: Int, limit: Int) -> EventListPage {
+        let result: BFFListPage<WebEvent> = paginateList(source, page: page, limit: limit)
+        return EventListPage(items: result.items, pagination: result.pagination)
+    }
+
+    private func paginateDJSets(_ source: [WebDJSet], page: Int, limit: Int) -> DJSetListPage {
+        let result: BFFListPage<WebDJSet> = paginateList(source, page: page, limit: limit)
+        return DJSetListPage(items: result.items, pagination: result.pagination)
+    }
+
+    private func paginateList<Item>(_ source: [Item], page: Int, limit: Int) -> BFFListPage<Item> {
         let normalizedPage = max(1, page)
         let normalizedLimit = max(1, min(100, limit))
         let start = (normalizedPage - 1) * normalizedLimit
         let end = min(start + normalizedLimit, source.count)
         let slice = start < end ? Array(source[start..<end]) : []
 
-        return EventListPage(
+        return BFFListPage(
             items: slice,
             pagination: BFFPagination(
                 page: normalizedPage,

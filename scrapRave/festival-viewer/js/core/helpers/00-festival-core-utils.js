@@ -213,6 +213,7 @@ function normalizeCountryBiTextValue(value, fallback = '') {
   let enFull = resolveCountryEnglishFull(value);
   if (!enFull) enFull = resolveCountryEnglishFull(bi.en || bi.zh || fallback);
   const out = { en: bi.en || '', zh: bi.zh || '' };
+  if (bi.ja) out.ja = bi.ja;
   if (enFull) out.enFull = enFull;
   return out;
 }
@@ -312,8 +313,25 @@ function normalizeBiTextValue(value, fallback = '') {
     }
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const hasExplicitLocaleKeys =
+      Object.prototype.hasOwnProperty.call(value, 'en')
+      || Object.prototype.hasOwnProperty.call(value, 'EN')
+      || Object.prototype.hasOwnProperty.call(value, 'english')
+      || Object.prototype.hasOwnProperty.call(value, 'name_en')
+      || Object.prototype.hasOwnProperty.call(value, 'en_US')
+      || Object.prototype.hasOwnProperty.call(value, 'zh')
+      || Object.prototype.hasOwnProperty.call(value, 'ZH')
+      || Object.prototype.hasOwnProperty.call(value, 'cn')
+      || Object.prototype.hasOwnProperty.call(value, 'zh_CN')
+      || Object.prototype.hasOwnProperty.call(value, 'chinese')
+      || Object.prototype.hasOwnProperty.call(value, 'name_zh')
+      || Object.prototype.hasOwnProperty.call(value, 'ja')
+      || Object.prototype.hasOwnProperty.call(value, 'JA')
+      || Object.prototype.hasOwnProperty.call(value, 'jp')
+      || Object.prototype.hasOwnProperty.call(value, 'japanese');
     let en = normalizeScalarText(value.en ?? value.EN ?? value.english ?? value.name_en ?? value.en_US ?? '');
     let zh = normalizeScalarText(value.zh ?? value.ZH ?? value.cn ?? value.zh_CN ?? value.chinese ?? value.name_zh ?? '');
+    const ja = normalizeScalarText(value.ja ?? value.JA ?? value.jp ?? value.japanese ?? '');
     const enFull = normalizeScalarText(
       value.enFull
       ?? value.en_full
@@ -321,9 +339,17 @@ function normalizeBiTextValue(value, fallback = '') {
       ?? value.country_en_full
       ?? ''
     );
+    if (hasExplicitLocaleKeys) {
+      if (!en && !zh && !ja && fb) en = fb;
+      const out = { en, zh };
+      if (ja) out.ja = ja;
+      if (enFull) out.enFull = enFull;
+      return out;
+    }
     if (!en) en = zh || fb;
     if (!zh) zh = en || fb;
     const out = { en: en || fb, zh: zh || fb };
+    if (ja) out.ja = ja;
     if (enFull) out.enFull = enFull;
     return out;
   }

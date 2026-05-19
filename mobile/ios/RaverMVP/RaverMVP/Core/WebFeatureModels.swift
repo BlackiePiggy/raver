@@ -8,6 +8,11 @@ struct BFFPagination: Codable {
     let totalPages: Int
 }
 
+struct BFFListPage<Item: Codable>: Codable {
+    var items: [Item]
+    var pagination: BFFPagination?
+}
+
 struct EventListPage: Codable {
     var items: [WebEvent]
     var pagination: BFFPagination?
@@ -169,6 +174,12 @@ struct LearnLabelListPage: Codable {
     var items: [LearnLabel]
     var pagination: BFFPagination?
 }
+
+typealias RatingEventListPage = BFFListPage<WebRatingEvent>
+typealias RatingUnitListPage = BFFListPage<WebRatingUnit>
+typealias TracklistSummaryPage = BFFListPage<WebTracklistSummary>
+typealias SetCommentListPage = BFFListPage<WebSetComment>
+typealias ContentSubmissionListPage = BFFListPage<ContentSubmissionSummary>
 
 struct WebBiText: Codable, Hashable {
     var en: String

@@ -4,6 +4,7 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
   const getVal = key => String(get(key)?.value || '').trim();
   const lineupRaw = String(get('lineup')?.value || '').trim();
   const lineupArtistsRaw = String(get('lineupArtists')?.value || '').trim();
+  const multiLangRaw = String(get('multiLangJson')?.value || '').trim();
 
   let lineup = fest?.info?.lineup || [];
   if (lineupRaw) {
@@ -37,6 +38,15 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
   }
   lineupArtists = buildEventLineupArtistsFromArchive(lineupArtists, lineup);
 
+  let multiLangDraft = eventEditBuildMultiLangDraft(fest?.info || {});
+  if (multiLangRaw) {
+    const parsedMultiLang = eventEditReadMultiLangDraft(panelEl);
+    if (!parsedMultiLang?.draft) {
+      return { error: `⚠ 多语言 JSON 格式错误：${parsedMultiLang?.error || '未知错误'}`, payload: null };
+    }
+    multiLangDraft = parsedMultiLang.draft;
+  }
+
   const nameEn = getVal('nameEn');
   const nameZh = getVal('nameZh');
   const cityEn = getVal('cityEn');
@@ -46,7 +56,13 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
   const countryZh = getVal('countryZh');
   const detailAddressEn = getVal('detailAddressEn');
   const detailAddressZh = getVal('detailAddressZh');
-  const detailAddressSeed = detailAddressZh || detailAddressEn;
+  const detailAddressI18n = normalizeBiTextValue({
+    ...(multiLangDraft?.detailAddressI18n || {}),
+    en: detailAddressEn,
+    zh: detailAddressZh,
+  }, '');
+  const descriptionI18n = normalizeBiTextValue(multiLangDraft?.descriptionI18n || {}, '');
+  const detailAddressSeed = detailAddressZh || detailAddressEn || detailAddressI18n.ja || '';
   const citySeed = cityZh || cityEn;
   const countrySeed = countryZh || countryEnFull || countryEn;
   const wikiFestivalId = getVal('wikiFestivalId');
@@ -62,15 +78,15 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
   const finalStatus = canceled ? 'cancelled' : (statusValue || '');
 
   const payload = {
-    name: nameEn || nameZh,
-    nameI18n: normalizeBiTextValue({ en: nameEn, zh: nameZh }, fest?.info?.name || ''),
+    name: nameEn || nameZh || multiLangDraft?.nameI18n?.ja || '',
+    nameI18n: normalizeBiTextValue({ ...(multiLangDraft?.nameI18n || {}), en: nameEn, zh: nameZh }, ''),
     country: countrySeed,
     countryI18n: normalizeCountryBiTextValue(
-      { en: countryEn, zh: countryZh, enFull: countryEnFull || fest?.info?.countryI18n?.enFull || '' },
-      countrySeed
+      { ...(multiLangDraft?.countryI18n || {}), en: countryEn, zh: countryZh, enFull: countryEnFull || multiLangDraft?.countryI18n?.enFull || '' },
+      ''
     ),
-    city: citySeed || '',
-    cityI18n: normalizeBiTextValue({ en: cityEn, zh: cityZh }, citySeed),
+    city: citySeed || multiLangDraft?.cityI18n?.ja || '',
+    cityI18n: normalizeBiTextValue({ ...(multiLangDraft?.cityI18n || {}), en: cityEn, zh: cityZh }, ''),
     canceled,
     status: finalStatus,
     eventType: String(get('eventType')?.value || fest?.info?.eventType || 'festival').trim() || 'festival',
@@ -86,6 +102,8 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
     ticketCurrency: getVal('ticketCurrency'),
     ticketUrl: getVal('ticketUrl'),
     ticketNotes: String(get('ticketNotes')?.value || '').trim(),
+    description: descriptionI18n.en || descriptionI18n.zh || descriptionI18n.ja || '',
+    descriptionI18n,
     festivalId: String(fest?.info?.festivalId || '').trim(),
     source: mergeSourceMeta(fest?.info?.source)
   };
@@ -95,10 +113,7 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
     const formattedZh = [countryZh || countryDisplayEn || countryEn, cityZh || cityEn, detailAddressZh || detailAddressEn].filter(Boolean).join(' · ');
     const formattedEn = [countryDisplayEn || countryEn || countryZh, cityEn || cityZh, detailAddressEn || detailAddressZh].filter(Boolean).join(' · ');
     payload.manualLocation = {
-      detailAddressI18n: normalizeBiTextValue(
-        { en: detailAddressEn, zh: detailAddressZh },
-        detailAddressSeed
-      ),
+      detailAddressI18n,
       formattedAddressI18n: normalizeBiTextValue(
         { en: formattedEn, zh: formattedZh },
         formattedZh || formattedEn

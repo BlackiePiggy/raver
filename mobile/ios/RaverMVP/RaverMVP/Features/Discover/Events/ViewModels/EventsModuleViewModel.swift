@@ -33,6 +33,7 @@ protocol EventReadRepository {
 
 protocol RatingRepository {
     func fetchRatingEvents() async throws -> [WebRatingEvent]
+    func fetchRatingEvents(page: Int, limit: Int) async throws -> RatingEventListPage
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent
     func fetchRatingUnit(id: String) async throws -> WebRatingUnit
     func createRatingEvent(input: CreateRatingEventInput) async throws -> CreateContentResult<WebRatingEvent>
@@ -43,6 +44,7 @@ protocol RatingRepository {
     func deleteRatingEvent(id: String) async throws
     func deleteRatingUnit(id: String) async throws
     func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent]
+    func fetchEventRatingEvents(eventID: String, page: Int, limit: Int) async throws -> RatingEventListPage
     func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment
     func uploadRatingImage(
         imageData: Data,
@@ -348,6 +350,10 @@ struct RatingRepositoryAdapter: RatingRepository {
         try await service.fetchRatingEvents()
     }
 
+    func fetchRatingEvents(page: Int, limit: Int) async throws -> RatingEventListPage {
+        try await service.fetchRatingEvents(page: page, limit: limit)
+    }
+
     func fetchRatingEvent(id: String) async throws -> WebRatingEvent {
         try await service.fetchRatingEvent(id: id)
     }
@@ -386,6 +392,10 @@ struct RatingRepositoryAdapter: RatingRepository {
 
     func fetchEventRatingEvents(eventID: String) async throws -> [WebRatingEvent] {
         try await service.fetchEventRatingEvents(eventID: eventID)
+    }
+
+    func fetchEventRatingEvents(eventID: String, page: Int, limit: Int) async throws -> RatingEventListPage {
+        try await service.fetchEventRatingEvents(eventID: eventID, page: page, limit: limit)
     }
 
     func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment {

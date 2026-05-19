@@ -20,7 +20,10 @@ protocol ProfileContentRepository {
     func fetchEvent(id: String) async throws -> WebEvent
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
     func fetchMyPublishes() async throws -> MyPublishes
+    func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage
+    func fetchMyDJSets(page: Int, limit: Int) async throws -> DJSetListPage
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary]
+    func fetchMyContentSubmissions(page: Int, limit: Int) async throws -> ContentSubmissionListPage
     func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail
     func resubmitMyContentSubmission(id: String, payload: [String: ContentSubmissionJSONValue], changeNote: String?) async throws -> ContentSubmissionDetail
     func toggleLike(postID: String, shouldLike: Bool) async throws -> Post
@@ -132,8 +135,20 @@ struct ProfileContentRepositoryAdapter: ProfileContentRepository {
         try await webService.fetchMyPublishes()
     }
 
+    func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage {
+        try await webService.fetchMyEvents(page: page, limit: limit)
+    }
+
+    func fetchMyDJSets(page: Int, limit: Int) async throws -> DJSetListPage {
+        try await webService.fetchMyDJSets(page: page, limit: limit)
+    }
+
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {
         try await webService.fetchMyContentSubmissions()
+    }
+
+    func fetchMyContentSubmissions(page: Int, limit: Int) async throws -> ContentSubmissionListPage {
+        try await webService.fetchMyContentSubmissions(page: page, limit: limit)
     }
 
     func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail {

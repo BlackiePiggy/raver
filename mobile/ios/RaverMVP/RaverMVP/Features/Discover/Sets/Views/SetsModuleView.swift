@@ -420,6 +420,9 @@ struct DJSetDetailView: View {
 
     @State private var set: WebDJSet?
     @State private var comments: [WebSetComment] = []
+    @State private var commentsPage = 0
+    @State private var commentsTotalPages = 1
+    @State private var isLoadingMoreComments = false
     @State private var inputComment = ""
     @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
@@ -436,6 +439,9 @@ struct DJSetDetailView: View {
     @StateObject private var nativePlayerSession = NativeVideoSession()
     @State private var isTracklistExpanded = false
     @State private var tracklists: [WebTracklistSummary] = []
+    @State private var tracklistsPage = 0
+    @State private var tracklistsTotalPages = 1
+    @State private var isLoadingMoreTracklists = false
     @State private var selectedTracklistID: String?
     @State private var currentTracklistInfo: WebTracklistDetail?
     @State private var currentTracks: [WebDJSetTrack] = []
@@ -468,6 +474,9 @@ struct DJSetDetailView: View {
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
+
+    private static let commentsPageSize = 20
+    private static let tracklistsPageSize = 20
 
     init(setID: String, playbackMode: PlaybackMode = .video) {
         self.setID = setID
@@ -609,7 +618,12 @@ struct DJSetDetailView: View {
                     TracklistSelectorSheet(
                         set: set,
                         tracklists: tracklists,
-                        selectedTracklistID: selectedTracklistID
+                        selectedTracklistID: selectedTracklistID,
+                        canLoadMore: tracklistsPage < tracklistsTotalPages,
+                        isLoadingMore: isLoadingMoreTracklists,
+                        onLoadMore: {
+                            Task { await loadMoreTracklistsIfNeeded() }
+                        }
                     ) { selectedID in
                         Task {
                             await switchTracklist(selectedID)
@@ -2298,13 +2312,27 @@ struct DJSetDetailView: View {
         do {
             relatedEvent = nil
             async let setTask = setReadRepository.fetchDJSet(id: setID)
-            async let commentsTask = setCommentRepository.fetchSetComments(setID: setID)
-            async let tracklistsTask = tracklistRepository.fetchTracklists(setID: setID)
+            async let commentsTask = setCommentRepository.fetchSetComments(
+                setID: setID,
+                page: 1,
+                limit: Self.commentsPageSize
+            )
+            async let tracklistsTask = tracklistRepository.fetchTracklists(
+                setID: setID,
+                page: 1,
+                limit: Self.tracklistsPageSize
+            )
             let loadedSet = try await setTask
             set = loadedSet
             relatedEvent = try? await resolveRelatedEvent(for: loadedSet)
-            comments = try await commentsTask
-            tracklists = try await tracklistsTask
+            let commentsPageResult = try await commentsTask
+            let tracklistsPageResult = try await tracklistsTask
+            comments = commentsPageResult.items
+            commentsPage = commentsPageResult.pagination?.page ?? (commentsPageResult.items.isEmpty ? 0 : 1)
+            commentsTotalPages = max(commentsPageResult.pagination?.totalPages ?? 1, 1)
+            tracklists = tracklistsPageResult.items
+            tracklistsPage = tracklistsPageResult.pagination?.page ?? (tracklistsPageResult.items.isEmpty ? 0 : 1)
+            tracklistsTotalPages = max(tracklistsPageResult.pagination?.totalPages ?? 1, 1)
             selectedTracklistID = nil
             currentTracklistInfo = nil
             currentTracks = loadedSet.tracks
@@ -2371,11 +2399,39 @@ struct DJSetDetailView: View {
 
     private func refreshTracklists() async {
         do {
-            tracklists = try await tracklistRepository.fetchTracklists(setID: setID)
+            let page = try await tracklistRepository.fetchTracklists(
+                setID: setID,
+                page: 1,
+                limit: Self.tracklistsPageSize
+            )
+            tracklists = page.items
+            tracklistsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            tracklistsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
             if let selectedTracklistID,
                !tracklists.contains(where: { $0.id == selectedTracklistID }) {
                 await switchTracklist(nil)
             }
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func loadMoreTracklistsIfNeeded() async {
+        guard !isLoadingMoreTracklists else { return }
+        guard tracklistsPage < tracklistsTotalPages else { return }
+        isLoadingMoreTracklists = true
+        defer { isLoadingMoreTracklists = false }
+
+        do {
+            let nextPage = max(tracklistsPage, 0) + 1
+            let page = try await tracklistRepository.fetchTracklists(
+                setID: setID,
+                page: nextPage,
+                limit: Self.tracklistsPageSize
+            )
+            tracklists = mergeUniqueTracklists(tracklists + page.items)
+            tracklistsPage = page.pagination?.page ?? nextPage
+            tracklistsTotalPages = max(page.pagination?.totalPages ?? tracklistsTotalPages, 1)
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -2826,6 +2882,27 @@ struct DJSetDetailView: View {
                     }
                     .padding(.vertical, 4)
                 }
+
+                if commentsPage < commentsTotalPages || isLoadingMoreComments {
+                    Button {
+                        Task { await loadMoreCommentsIfNeeded() }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isLoadingMoreComments {
+                                ProgressView()
+                                Text(LT("正在加载更多评论...", "Loading more comments...", "コメントをさらに読み込み中..."))
+                            } else {
+                                Text(LT("加载更多评论", "Load More Comments", "コメントをさらに表示"))
+                            }
+                            Spacer()
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             TextField(LT("写评论...", "写评论...", "コメントを書く..."), text: $inputComment, axis: .vertical)
@@ -2871,9 +2948,51 @@ struct DJSetDetailView: View {
         do {
             _ = try await setCommentRepository.addSetComment(setID: setID, input: CreateSetCommentInput(content: content, parentId: nil))
             inputComment = ""
-            comments = try await setCommentRepository.fetchSetComments(setID: setID)
+            let page = try await setCommentRepository.fetchSetComments(
+                setID: setID,
+                page: 1,
+                limit: Self.commentsPageSize
+            )
+            comments = page.items
+            commentsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            commentsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
         } catch {
             errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func loadMoreCommentsIfNeeded() async {
+        guard !isLoadingMoreComments else { return }
+        guard commentsPage < commentsTotalPages else { return }
+        isLoadingMoreComments = true
+        defer { isLoadingMoreComments = false }
+
+        do {
+            let nextPage = max(commentsPage, 0) + 1
+            let page = try await setCommentRepository.fetchSetComments(
+                setID: setID,
+                page: nextPage,
+                limit: Self.commentsPageSize
+            )
+            comments = mergeUniqueComments(comments + page.items)
+            commentsPage = page.pagination?.page ?? nextPage
+            commentsTotalPages = max(page.pagination?.totalPages ?? commentsTotalPages, 1)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private func mergeUniqueComments(_ comments: [WebSetComment]) -> [WebSetComment] {
+        var seen = Set<String>()
+        return comments.filter { item in
+            seen.insert(item.id).inserted
+        }
+    }
+
+    private func mergeUniqueTracklists(_ tracklists: [WebTracklistSummary]) -> [WebTracklistSummary] {
+        var seen = Set<String>()
+        return tracklists.filter { item in
+            seen.insert(item.id).inserted
         }
     }
 
@@ -4169,6 +4288,9 @@ private struct TracklistSelectorSheet: View {
     let set: WebDJSet
     let tracklists: [WebTracklistSummary]
     let selectedTracklistID: String?
+    let canLoadMore: Bool
+    let isLoadingMore: Bool
+    let onLoadMore: () -> Void
     let onSelect: (String?) -> Void
 
     @State private var query = ""
@@ -4290,6 +4412,26 @@ private struct TracklistSelectorSheet: View {
                         .onTapGesture {
                             onSelect(item.id)
                             dismiss()
+                        }
+                    }
+
+                    if query.isEmpty && (canLoadMore || isLoadingMore) {
+                        Button {
+                            onLoadMore()
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isLoadingMore {
+                                    ProgressView()
+                                    Text(LT("正在加载更多版本...", "Loading more versions...", "バージョンをさらに読み込み中..."))
+                                } else {
+                                    Text(LT("加载更多版本", "Load More Versions", "バージョンをさらに表示"))
+                                }
+                                Spacer()
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .padding(.vertical, 6)
                         }
                     }
                 }

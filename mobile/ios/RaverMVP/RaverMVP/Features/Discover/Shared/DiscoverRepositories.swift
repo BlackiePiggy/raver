@@ -12,8 +12,10 @@ protocol DJReadRepository {
 
 protocol DJLinkedContentRepository {
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
+    func fetchDJSets(djID: String, page: Int, limit: Int) async throws -> DJSetListPage
     func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit]
+    func fetchDJRatingUnits(djID: String, page: Int, limit: Int) async throws -> RatingUnitListPage
     func fetchMyDJCheckinCount(djID: String) async throws -> Int
 }
 
@@ -92,12 +94,20 @@ struct DJLinkedContentRepositoryAdapter: DJLinkedContentRepository {
         try await service.fetchDJSets(djID: djID)
     }
 
+    func fetchDJSets(djID: String, page: Int, limit: Int) async throws -> DJSetListPage {
+        try await service.fetchDJSets(djID: djID, page: page, limit: limit)
+    }
+
     func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage {
         try await service.fetchDJEvents(djID: djID, page: page, limit: limit, statuses: statuses)
     }
 
     func fetchDJRatingUnits(djID: String) async throws -> [WebRatingUnit] {
         try await service.fetchDJRatingUnits(djID: djID)
+    }
+
+    func fetchDJRatingUnits(djID: String, page: Int, limit: Int) async throws -> RatingUnitListPage {
+        try await service.fetchDJRatingUnits(djID: djID, page: page, limit: limit)
     }
 
     func fetchMyDJCheckinCount(djID: String) async throws -> Int {
@@ -211,6 +221,7 @@ protocol SetReadRepository {
 
 protocol SetCommentRepository {
     func fetchSetComments(setID: String) async throws -> [WebSetComment]
+    func fetchSetComments(setID: String, page: Int, limit: Int) async throws -> SetCommentListPage
     func addSetComment(setID: String, input: CreateSetCommentInput) async throws -> WebSetComment
 }
 
@@ -222,6 +233,7 @@ protocol SetCommandRepository {
 
 protocol TracklistRepository {
     func fetchTracklists(setID: String) async throws -> [WebTracklistSummary]
+    func fetchTracklists(setID: String, page: Int, limit: Int) async throws -> TracklistSummaryPage
     func fetchTracklistDetail(setID: String, tracklistID: String) async throws -> WebTracklistDetail
     func createTracklist(setID: String, input: CreateTracklistInput) async throws -> WebTracklistDetail
     func replaceTracks(setID: String, tracks: [CreateTrackInput]) async throws -> WebDJSet
@@ -279,6 +291,10 @@ struct SetCommentRepositoryAdapter: SetCommentRepository {
         try await service.fetchSetComments(setID: setID)
     }
 
+    func fetchSetComments(setID: String, page: Int, limit: Int) async throws -> SetCommentListPage {
+        try await service.fetchSetComments(setID: setID, page: page, limit: limit)
+    }
+
     func addSetComment(setID: String, input: CreateSetCommentInput) async throws -> WebSetComment {
         try await service.addSetComment(setID: setID, input: input)
     }
@@ -313,6 +329,10 @@ struct TracklistRepositoryAdapter: TracklistRepository {
 
     func fetchTracklists(setID: String) async throws -> [WebTracklistSummary] {
         try await service.fetchTracklists(setID: setID)
+    }
+
+    func fetchTracklists(setID: String, page: Int, limit: Int) async throws -> TracklistSummaryPage {
+        try await service.fetchTracklists(setID: setID, page: page, limit: limit)
     }
 
     func fetchTracklistDetail(setID: String, tracklistID: String) async throws -> WebTracklistDetail {

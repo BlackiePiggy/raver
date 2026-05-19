@@ -597,9 +597,9 @@ function buildBackendEventUpsertPayload(fest, payload) {
     payload?.countryI18n ?? payload?.country,
     hasPayloadCountryField ? '' : (fest?.info?.countryI18n ?? fest?.info?.country ?? '')
   );
-  const name = String(payload?.name || nameBi.en || nameBi.zh || '').trim();
-  const city = String(payload?.city || cityBi.zh || cityBi.en || '').trim();
-  const country = String(payload?.country || countryBi.en || countryBi.zh || '').trim();
+  const name = String(payload?.name || nameBi.en || nameBi.zh || nameBi.ja || '').trim();
+  const city = String(payload?.city || cityBi.zh || cityBi.en || cityBi.ja || '').trim();
+  const country = String(payload?.country || countryBi.en || countryBi.zh || countryBi.ja || '').trim();
   const startDate = normalizeArchiveDateTextForSync(payload?.startDate || fest?.info?.startDate || '');
   const endDate = normalizeArchiveDateTextForSync(payload?.endDate || fest?.info?.endDate || '') || startDate;
   const referenceLinks = dedupeStrings(payload?.relatedLinks || []);
@@ -650,6 +650,13 @@ function buildBackendEventUpsertPayload(fest, payload) {
     (hasTicketNotes ? payload?.ticketNotes : fest?.info?.ticketNotes) || ''
   ).trim();
   const locationPoint = normalizeLocationPointForSync(payload?.locationPoint ?? fest?.info?.locationPoint ?? null);
+  const descriptionBi = normalizeBiTextValue(
+    payload?.descriptionI18n ?? fest?.info?.descriptionI18n ?? payload?.description ?? fest?.info?.description ?? '',
+    ''
+  );
+  const description = String(
+    payload?.description || fest?.info?.description || descriptionBi.en || descriptionBi.zh || descriptionBi.ja || ''
+  ).trim();
   const result = {
     name,
     nameI18n: nameBi,
@@ -682,13 +689,9 @@ function buildBackendEventUpsertPayload(fest, payload) {
     ticketNotes: ticketNotes || null,
     locationPoint: locationPoint || null,
   };
-  const description = String(payload?.description || fest?.info?.description || '').trim();
-  if (description) {
+  if (description || String(descriptionBi.en || descriptionBi.zh || descriptionBi.ja || '').trim()) {
     result.description = description;
-    result.descriptionI18n = normalizeBiTextValue(
-      payload?.descriptionI18n ?? fest?.info?.descriptionI18n ?? description,
-      description
-    );
+    result.descriptionI18n = descriptionBi;
   }
   return result;
 }

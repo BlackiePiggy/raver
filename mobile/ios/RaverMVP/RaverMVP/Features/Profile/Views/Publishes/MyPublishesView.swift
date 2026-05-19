@@ -2,11 +2,25 @@ import SwiftUI
 
 @MainActor
 final class MyPublishesViewModel: ObservableObject {
+    private static let pageSize = 20
+
     @Published var publishes = MyPublishes(djSets: [], events: [], ratingEvents: [], ratingUnits: [])
     @Published var contentSubmissions: [ContentSubmissionSummary] = []
     @Published var newsPublishes: [Post] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isLoadingMoreSets = false
+    @Published var isLoadingMoreEvents = false
+    @Published var isLoadingMoreSubmissions = false
+
+    private var setsPage = 0
+    private var setsTotalPages = 1
+    private var eventsPage = 0
+    private var eventsTotalPages = 1
+    private var submissionsPage = 0
+    private var submissionsTotalPages = 1
+    private var didLoadRatings = false
+    private var didLoadNews = false
 
     private let userRepository: ProfileUserRepository
     private let contentRepository: ProfileContentRepository
@@ -25,13 +39,91 @@ final class MyPublishesViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let publishesTask = contentRepository.fetchMyPublishes()
-            async let submissionsTask = contentRepository.fetchMyContentSubmissions()
+            async let setsTask = contentRepository.fetchMyDJSets(page: 1, limit: Self.pageSize)
+            async let eventsTask = contentRepository.fetchMyEvents(page: 1, limit: Self.pageSize)
+            async let submissionsTask = contentRepository.fetchMyContentSubmissions(page: 1, limit: Self.pageSize)
             async let newsTask = loadMyNewsPublishes()
-            publishes = try await publishesTask
-            contentSubmissions = try await submissionsTask
-            newsPublishes = try await newsTask
+            let (setsPageResult, eventsPageResult, submissionsPageResult, loadedNews) = try await (
+                setsTask,
+                eventsTask,
+                submissionsTask,
+                newsTask
+            )
+            publishes.djSets = setsPageResult.items.map(MyPublishSet.init)
+            publishes.events = eventsPageResult.items.map(MyPublishEvent.init)
+            publishes.ratingEvents = []
+            publishes.ratingUnits = []
+            contentSubmissions = submissionsPageResult.items
+            newsPublishes = loadedNews
+            setsPage = setsPageResult.pagination?.page ?? (setsPageResult.items.isEmpty ? 0 : 1)
+            setsTotalPages = max(setsPageResult.pagination?.totalPages ?? 1, 1)
+            eventsPage = eventsPageResult.pagination?.page ?? (eventsPageResult.items.isEmpty ? 0 : 1)
+            eventsTotalPages = max(eventsPageResult.pagination?.totalPages ?? 1, 1)
+            submissionsPage = submissionsPageResult.pagination?.page ?? (submissionsPageResult.items.isEmpty ? 0 : 1)
+            submissionsTotalPages = max(submissionsPageResult.pagination?.totalPages ?? 1, 1)
+            didLoadNews = true
             errorMessage = nil
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    var canLoadMoreSets: Bool { setsPage < setsTotalPages }
+    var canLoadMoreEvents: Bool { eventsPage < eventsTotalPages }
+    var canLoadMoreSubmissions: Bool { submissionsPage < submissionsTotalPages }
+
+    func ensureRatingsLoaded() async {
+        guard !didLoadRatings else { return }
+        do {
+            let loaded = try await contentRepository.fetchMyPublishes()
+            publishes.ratingEvents = loaded.ratingEvents
+            publishes.ratingUnits = loaded.ratingUnits
+            didLoadRatings = true
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func loadMoreSets() async {
+        guard !isLoadingMoreSets, canLoadMoreSets else { return }
+        isLoadingMoreSets = true
+        defer { isLoadingMoreSets = false }
+        do {
+            let nextPage = max(setsPage, 0) + 1
+            let page = try await contentRepository.fetchMyDJSets(page: nextPage, limit: Self.pageSize)
+            publishes.djSets = mergeUniqueByID(publishes.djSets + page.items.map(MyPublishSet.init))
+            setsPage = page.pagination?.page ?? nextPage
+            setsTotalPages = max(page.pagination?.totalPages ?? setsTotalPages, 1)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func loadMoreEvents() async {
+        guard !isLoadingMoreEvents, canLoadMoreEvents else { return }
+        isLoadingMoreEvents = true
+        defer { isLoadingMoreEvents = false }
+        do {
+            let nextPage = max(eventsPage, 0) + 1
+            let page = try await contentRepository.fetchMyEvents(page: nextPage, limit: Self.pageSize)
+            publishes.events = mergeUniqueByID(publishes.events + page.items.map(MyPublishEvent.init))
+            eventsPage = page.pagination?.page ?? nextPage
+            eventsTotalPages = max(page.pagination?.totalPages ?? eventsTotalPages, 1)
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    func loadMoreSubmissions() async {
+        guard !isLoadingMoreSubmissions, canLoadMoreSubmissions else { return }
+        isLoadingMoreSubmissions = true
+        defer { isLoadingMoreSubmissions = false }
+        do {
+            let nextPage = max(submissionsPage, 0) + 1
+            let page = try await contentRepository.fetchMyContentSubmissions(page: nextPage, limit: Self.pageSize)
+            contentSubmissions = mergeUniqueByID(contentSubmissions + page.items)
+            submissionsPage = page.pagination?.page ?? nextPage
+            submissionsTotalPages = max(page.pagination?.totalPages ?? submissionsTotalPages, 1)
         } catch {
             errorMessage = error.userFacingMessage
         }
@@ -92,6 +184,13 @@ final class MyPublishesViewModel: ObservableObject {
         } while cursor != nil && rounds < 6
 
         return merged.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private func mergeUniqueByID<Item: Identifiable>(_ items: [Item]) -> [Item] where Item.ID == String {
+        var seen = Set<String>()
+        return items.filter { item in
+            seen.insert(item.id).inserted
+        }
     }
 }
 
@@ -189,6 +288,15 @@ struct MyPublishesView: View {
                         }
                     }
                     }
+
+                    if viewModel.canLoadMoreSets || viewModel.isLoadingMoreSets {
+                        loadMoreRow(
+                            isLoading: viewModel.isLoadingMoreSets,
+                            title: LT("加载更多 Sets", "Load More Sets", "Setをさらに表示")
+                        ) {
+                            Task { await viewModel.loadMoreSets() }
+                        }
+                    }
                 }
             } else if selectedTab == 1 {
                 if selectedReviewFilter != .approved {
@@ -232,6 +340,15 @@ struct MyPublishesView: View {
                             Label(LT("删除", "Delete", "削除"), systemImage: "trash")
                         }
                     }
+                    }
+
+                    if viewModel.canLoadMoreEvents || viewModel.isLoadingMoreEvents {
+                        loadMoreRow(
+                            isLoading: viewModel.isLoadingMoreEvents,
+                            title: LT("加载更多活动", "Load More Events", "イベントをさらに表示")
+                        ) {
+                            Task { await viewModel.loadMoreEvents() }
+                        }
                     }
                 }
             } else if selectedTab == 2 {
@@ -353,6 +470,11 @@ struct MyPublishesView: View {
         .task {
             await viewModel.load()
         }
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab == 2 {
+                Task { await viewModel.ensureRatingsLoaded() }
+            }
+        }
         .refreshable {
             await viewModel.load()
         }
@@ -416,7 +538,33 @@ struct MyPublishesView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            if viewModel.canLoadMoreSubmissions || viewModel.isLoadingMoreSubmissions {
+                loadMoreRow(
+                    isLoading: viewModel.isLoadingMoreSubmissions,
+                    title: LT("加载更多投稿", "Load More Submissions", "投稿をさらに表示")
+                ) {
+                    Task { await viewModel.loadMoreSubmissions() }
+                }
+            }
         }
+    }
+
+    private func loadMoreRow(isLoading: Bool, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Spacer()
+                if isLoading {
+                    ProgressView()
+                }
+                Text(isLoading ? LT("正在加载...", "Loading...", "読み込み中...") : title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                Spacer()
+            }
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
     }
 
     private func statusTitle(_ status: String) -> String {
@@ -435,6 +583,39 @@ struct MyPublishesView: View {
         case "rejected": return .red
         default: return RaverTheme.secondaryText
         }
+    }
+}
+
+private extension MyPublishSet {
+    init(_ set: WebDJSet) {
+        self.init(
+            id: set.id,
+            title: set.title,
+            thumbnailUrl: set.thumbnailUrl,
+            createdAt: set.createdAt,
+            trackCount: set.trackCount,
+            dj: set.dj
+        )
+    }
+}
+
+private extension MyPublishEvent {
+    init(_ event: WebEvent) {
+        self.init(
+            id: event.id,
+            name: event.name,
+            nameI18n: event.nameI18n,
+            cityI18n: event.cityI18n,
+            countryI18n: event.countryI18n,
+            manualLocation: event.manualLocation,
+            locationPoint: event.locationPoint,
+            coverImageUrl: event.coverImageUrl,
+            city: event.city,
+            country: event.country,
+            startDate: event.startDate,
+            createdAt: event.createdAt,
+            lineupSlotCount: event.lineupSlots.count
+        )
     }
 }
 

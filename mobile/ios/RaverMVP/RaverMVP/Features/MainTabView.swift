@@ -3310,8 +3310,13 @@ private struct CircleRatingHubView: View {
     @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
     @State private var isRefreshing = false
+    @State private var isLoadingMore = false
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
+    @State private var currentPage = 0
+    @State private var totalPages = 1
+
+    private static let pageSize = 12
 
     var body: some View {
         ScrollView {
@@ -3405,6 +3410,27 @@ private struct CircleRatingHubView: View {
                             circlePush(.ratingEventDetail(event.id))
                         } label: {
                             eventCard(event: event)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if currentPage < totalPages || isLoadingMore {
+                        Button {
+                            Task { await loadMoreEventsIfNeeded() }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isLoadingMore {
+                                    ProgressView()
+                                    Text(LT("正在加载更多打分事件...", "Loading more rating events...", "評価イベントをさらに読み込み中..."))
+                                } else {
+                                    Text(LT("加载更多打分事件", "Load More Rating Events", "評価イベントをさらに表示"))
+                                }
+                                Spacer()
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .padding(.vertical, 8)
                         }
                         .buttonStyle(.plain)
                     }
@@ -3507,7 +3533,10 @@ private struct CircleRatingHubView: View {
         defer { isLoading = false }
         defer { isRefreshing = false }
         do {
-            events = try await ratingRepository.fetchRatingEvents()
+            let page = try await ratingRepository.fetchRatingEvents(page: 1, limit: Self.pageSize)
+            events = page.items
+            currentPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            totalPages = max(page.pagination?.totalPages ?? 1, 1)
             phase = events.isEmpty ? .empty : .success
             bannerMessage = nil
             errorMessage = nil
@@ -3519,6 +3548,31 @@ private struct CircleRatingHubView: View {
             } else {
                 phase = .failure(message: message)
             }
+        }
+    }
+
+    @MainActor
+    private func loadMoreEventsIfNeeded() async {
+        if isLoading || isLoadingMore { return }
+        guard currentPage < totalPages else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let nextPage = max(currentPage, 0) + 1
+            let page = try await ratingRepository.fetchRatingEvents(page: nextPage, limit: Self.pageSize)
+            events = mergeUniqueRatingEvents(events + page.items)
+            currentPage = page.pagination?.page ?? nextPage
+            totalPages = max(page.pagination?.totalPages ?? totalPages, 1)
+        } catch {
+            bannerMessage = error.userFacingMessage ?? LT("加载更多打分事件失败，请稍后重试", "Failed to load more rating events. Please try again later.", "評価イベントの追加読み込みに失敗しました。時間をおいて再試行してください。")
+        }
+    }
+
+    private func mergeUniqueRatingEvents(_ events: [WebRatingEvent]) -> [WebRatingEvent] {
+        var seen = Set<String>()
+        return events.filter { event in
+            seen.insert(event.id).inserted
         }
     }
 }

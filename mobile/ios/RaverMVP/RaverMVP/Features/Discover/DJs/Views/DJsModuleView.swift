@@ -2589,9 +2589,12 @@ struct DJDetailView: View {
     @State private var editBannerData: Data?
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
+    @State private var isLoadingMoreRelatedArticles = false
     @State private var isLoadingSets = false
+    @State private var isLoadingMoreSets = false
     @State private var isLoadingEvents = false
     @State private var isLoadingRatings = false
+    @State private var isLoadingMoreRatings = false
     @State private var didLoadSets = false
     @State private var didLoadEvents = false
     @State private var didLoadRatings = false
@@ -2600,9 +2603,11 @@ struct DJDetailView: View {
     @State private var eventsLoadFailed = false
     @State private var ratingsLoadFailed = false
     @State private var relatedArticlesLoadFailed = false
-    @State private var visibleRelatedArticleCount = 5
-    @State private var visibleSetCount = 10
-    @State private var visibleRatingCount = 10
+    @State private var relatedArticlesNextCursor: String?
+    @State private var setsPage = 0
+    @State private var setsTotalPages = 1
+    @State private var ratingsPage = 0
+    @State private var ratingsTotalPages = 1
     @State private var isLoadingMoreUpcomingEvents = false
     @State private var isLoadingMoreEndedEvents = false
     @State private var upcomingEventsPage = 0
@@ -2716,6 +2721,9 @@ struct DJDetailView: View {
     }()
 
     private static let djEventPageSize = 8
+    private static let djSetPageSize = 10
+    private static let djRatingPageSize = 10
+    private static let relatedArticlePageSizeHint = 5
 
     var body: some View {
         detailBody
@@ -3000,8 +3008,14 @@ struct DJDetailView: View {
         setsLoadFailed = false
         defer { isLoadingSets = false }
         do {
-            let loaded = try await djLinkedContentRepository.fetchDJSets(djID: djID)
-            sets = loaded
+            let page = try await djLinkedContentRepository.fetchDJSets(
+                djID: djID,
+                page: 1,
+                limit: Self.djSetPageSize
+            )
+            sets = page.items
+            setsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            setsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
             didLoadSets = true
             await persistCurrentDJManualCacheSnapshotIfPossible()
         } catch is CancellationError {
@@ -3009,6 +3023,31 @@ struct DJDetailView: View {
         } catch {
             setsLoadFailed = true
             return
+        }
+    }
+
+    @MainActor
+    private func loadMoreSetsIfNeeded() async {
+        if isLoadingSets || isLoadingMoreSets { return }
+        guard setsPage < setsTotalPages else { return }
+        isLoadingMoreSets = true
+        defer { isLoadingMoreSets = false }
+        do {
+            let nextPage = max(setsPage, 0) + 1
+            let page = try await djLinkedContentRepository.fetchDJSets(
+                djID: djID,
+                page: nextPage,
+                limit: Self.djSetPageSize
+            )
+            sets = mergeUniqueSets(sets + page.items)
+            setsPage = page.pagination?.page ?? nextPage
+            setsTotalPages = max(page.pagination?.totalPages ?? setsTotalPages, 1)
+            didLoadSets = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            setsLoadFailed = true
         }
     }
 
@@ -3056,6 +3095,27 @@ struct DJDetailView: View {
         var seen = Set<String>()
         return events.filter { event in
             seen.insert(event.id).inserted
+        }
+    }
+
+    private func mergeUniqueSets(_ sets: [WebDJSet]) -> [WebDJSet] {
+        var seen = Set<String>()
+        return sets.filter { item in
+            seen.insert(item.id).inserted
+        }
+    }
+
+    private func mergeUniqueRatingUnits(_ units: [WebRatingUnit]) -> [WebRatingUnit] {
+        var seen = Set<String>()
+        return units.filter { item in
+            seen.insert(item.id).inserted
+        }
+    }
+
+    private func mergeUniqueArticles(_ articles: [DiscoverNewsArticle]) -> [DiscoverNewsArticle] {
+        var seen = Set<String>()
+        return articles.filter { item in
+            seen.insert(item.id).inserted
         }
     }
 
@@ -3145,7 +3205,14 @@ struct DJDetailView: View {
         ratingsLoadFailed = false
         defer { isLoadingRatings = false }
         do {
-            ratingUnits = try await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
+            let page = try await djLinkedContentRepository.fetchDJRatingUnits(
+                djID: djID,
+                page: 1,
+                limit: Self.djRatingPageSize
+            )
+            ratingUnits = page.items
+            ratingsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            ratingsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
             didLoadRatings = true
             await persistCurrentDJManualCacheSnapshotIfPossible()
         } catch is CancellationError {
@@ -3157,13 +3224,40 @@ struct DJDetailView: View {
     }
 
     @MainActor
+    private func loadMoreRatingsIfNeeded() async {
+        if isLoadingRatings || isLoadingMoreRatings { return }
+        guard ratingsPage < ratingsTotalPages else { return }
+        isLoadingMoreRatings = true
+        defer { isLoadingMoreRatings = false }
+        do {
+            let nextPage = max(ratingsPage, 0) + 1
+            let page = try await djLinkedContentRepository.fetchDJRatingUnits(
+                djID: djID,
+                page: nextPage,
+                limit: Self.djRatingPageSize
+            )
+            ratingUnits = mergeUniqueRatingUnits(ratingUnits + page.items)
+            ratingsPage = page.pagination?.page ?? nextPage
+            ratingsTotalPages = max(page.pagination?.totalPages ?? ratingsTotalPages, 1)
+            didLoadRatings = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            ratingsLoadFailed = true
+        }
+    }
+
+    @MainActor
     private func loadRelatedArticlesIfNeeded(force: Bool) async {
         if isLoadingRelatedArticles || (!force && didLoadRelatedArticles) { return }
         isLoadingRelatedArticles = true
         relatedArticlesLoadFailed = false
         defer { isLoadingRelatedArticles = false }
         do {
-            relatedArticles = try await fetchRelatedNewsArticlesForDJ(djID: djID)
+            let page = try await newsRepository.fetchArticlesBoundToDJ(djID: djID, cursor: nil)
+            relatedArticles = page.items
+            relatedArticlesNextCursor = page.nextCursor
             didLoadRelatedArticles = true
             await persistCurrentDJManualCacheSnapshotIfPossible()
         } catch is CancellationError {
@@ -3171,6 +3265,25 @@ struct DJDetailView: View {
         } catch {
             relatedArticlesLoadFailed = true
             return
+        }
+    }
+
+    @MainActor
+    private func loadMoreRelatedArticlesIfNeeded() async {
+        if isLoadingRelatedArticles || isLoadingMoreRelatedArticles { return }
+        guard let cursor = relatedArticlesNextCursor, !cursor.isEmpty else { return }
+        isLoadingMoreRelatedArticles = true
+        defer { isLoadingMoreRelatedArticles = false }
+        do {
+            let page = try await newsRepository.fetchArticlesBoundToDJ(djID: djID, cursor: cursor)
+            relatedArticles = mergeUniqueArticles(relatedArticles + page.items)
+            relatedArticlesNextCursor = page.nextCursor
+            didLoadRelatedArticles = true
+            await persistCurrentDJManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            relatedArticlesLoadFailed = true
         }
     }
 
@@ -3194,15 +3307,11 @@ struct DJDetailView: View {
         switch tab {
         case .intro:
             return
-        case .posts:
-            visibleRelatedArticleCount = 5
-        case .sets:
-            visibleSetCount = 10
         case .events:
             isLoadingMoreUpcomingEvents = false
             isLoadingMoreEndedEvents = false
-        case .ratings:
-            visibleRatingCount = 10
+        case .posts, .sets, .ratings:
+            return
         }
     }
 
@@ -3231,12 +3340,20 @@ struct DJDetailView: View {
         }
     }
 
-    private func fetchRelatedNewsArticlesForDJ(djID: String) async throws -> [DiscoverNewsArticle] {
-        try await newsRepository.fetchArticlesBoundToDJ(djID: djID, maxPages: 8)
-    }
-
     private func reloadDJRatingUnits() async {
-        ratingUnits = (try? await djLinkedContentRepository.fetchDJRatingUnits(djID: djID)) ?? []
+        if let page = try? await djLinkedContentRepository.fetchDJRatingUnits(
+            djID: djID,
+            page: 1,
+            limit: Self.djRatingPageSize
+        ) {
+            ratingUnits = page.items
+            ratingsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            ratingsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
+        } else {
+            ratingUnits = []
+            ratingsPage = 0
+            ratingsTotalPages = 1
+        }
         await persistCurrentDJManualCacheSnapshotIfPossible()
     }
 
@@ -3262,7 +3379,7 @@ struct DJDetailView: View {
             let djForCache = try await resolveDJForManualCache()
             async let setsTask = djLinkedContentRepository.fetchDJSets(djID: djID)
             async let ratingUnitsTask = djLinkedContentRepository.fetchDJRatingUnits(djID: djID)
-            async let relatedArticlesTask = fetchRelatedNewsArticlesForDJ(djID: djID)
+            async let relatedArticlesTask = newsRepository.fetchArticlesBoundToDJ(djID: djID, maxPages: 8)
 
             let snapshot = makeDJManualCacheSnapshot(
                 dj: djForCache,
@@ -3293,6 +3410,11 @@ struct DJDetailView: View {
         endedEventsPage = splitEvents.ended.isEmpty ? 0 : 1
         endedEventsTotalPages = 1
         ratingUnits = snapshot.ratingUnits
+        setsPage = snapshot.sets.isEmpty ? 0 : 1
+        setsTotalPages = 1
+        ratingsPage = snapshot.ratingUnits.isEmpty ? 0 : 1
+        ratingsTotalPages = 1
+        relatedArticlesNextCursor = nil
         Task {
             rankingHonors = []
         }
@@ -4841,8 +4963,7 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 8)
         } else {
-            let visibleArticles = Array(relatedArticles.prefix(visibleRelatedArticleCount))
-            ForEach(Array(visibleArticles.enumerated()), id: \.element.id) { index, article in
+            ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
                     discoverPush(.newsDetail(articleID: article.id))
                 } label: {
@@ -4851,18 +4972,22 @@ struct DJDetailView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
 
-                if index < visibleArticles.count - 1 {
+                if index < relatedArticles.count - 1 {
                     Divider()
                         .padding(.leading, 16)
                 }
             }
 
-            listLoadMoreButton(
-                shownCount: visibleArticles.count,
-                totalCount: relatedArticles.count,
-                title: LT("加载更多资讯", "Load More News", "ニュースをさらに表示")
-            ) {
-                visibleRelatedArticleCount += 5
+            if relatedArticlesNextCursor != nil || isLoadingMoreRelatedArticles {
+                listLoadMoreButton(
+                    shownCount: relatedArticles.count,
+                    totalCount: relatedArticles.count + (relatedArticlesNextCursor == nil ? 0 : Self.relatedArticlePageSizeHint),
+                    title: isLoadingMoreRelatedArticles
+                        ? LT("正在加载更多资讯...", "Loading more news...", "ニュースをさらに読み込み中...")
+                        : LT("加载更多资讯", "Load More News", "ニュースをさらに表示")
+                ) {
+                    Task { await loadMoreRelatedArticlesIfNeeded() }
+                }
             }
         }
     }
@@ -5090,8 +5215,7 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            let visibleSets = Array(sets.prefix(visibleSetCount))
-            ForEach(visibleSets) { set in
+            ForEach(sets) { set in
                 Button {
                     discoverPush(.setDetail(setID: set.id))
                 } label: {
@@ -5100,12 +5224,16 @@ struct DJDetailView: View {
                 .buttonStyle(.plain)
             }
 
-            listLoadMoreButton(
-                shownCount: visibleSets.count,
-                totalCount: sets.count,
-                title: LT("加载更多 Sets", "Load More Sets", "Setをさらに表示")
-            ) {
-                visibleSetCount += 10
+            if setsPage < setsTotalPages || isLoadingMoreSets {
+                listLoadMoreButton(
+                    shownCount: sets.count,
+                    totalCount: max(sets.count, setsTotalPages * Self.djSetPageSize),
+                    title: isLoadingMoreSets
+                        ? LT("正在加载更多 Sets...", "Loading more sets...", "Setをさらに読み込み中...")
+                        : LT("加载更多 Sets", "Load More Sets", "Setをさらに表示")
+                ) {
+                    Task { await loadMoreSetsIfNeeded() }
+                }
             }
         }
     }
@@ -5528,8 +5656,7 @@ struct DJDetailView: View {
                 .foregroundStyle(RaverTheme.secondaryText)
                 .padding(.vertical, 6)
         } else {
-            let visibleRatings = Array(ratingUnits.prefix(visibleRatingCount))
-            ForEach(visibleRatings) { unit in
+            ForEach(ratingUnits) { unit in
                 Button {
                     appPush(.ratingUnitDetail(unitID: unit.id))
                 } label: {
@@ -5538,12 +5665,16 @@ struct DJDetailView: View {
                 .buttonStyle(.plain)
             }
 
-            listLoadMoreButton(
-                shownCount: visibleRatings.count,
-                totalCount: ratingUnits.count,
-                title: LT("加载更多打分", "Load More Ratings", "評価をさらに表示")
-            ) {
-                visibleRatingCount += 10
+            if ratingsPage < ratingsTotalPages || isLoadingMoreRatings {
+                listLoadMoreButton(
+                    shownCount: ratingUnits.count,
+                    totalCount: max(ratingUnits.count, ratingsTotalPages * Self.djRatingPageSize),
+                    title: isLoadingMoreRatings
+                        ? LT("正在加载更多打分...", "Loading more ratings...", "評価をさらに読み込み中...")
+                        : LT("加载更多打分", "Load More Ratings", "評価をさらに表示")
+                ) {
+                    Task { await loadMoreRatingsIfNeeded() }
+                }
             }
         }
     }

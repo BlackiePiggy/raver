@@ -325,9 +325,9 @@ async function persistFestivalPayload(fest, payload, options = {}) {
     payload.countryI18n ?? payload.country,
     hasPayloadCountryField ? '' : (fest?.info?.countryI18n ?? fest?.info?.country ?? '')
   );
-  payload.name = String(payload.name || payload.nameI18n.en || payload.nameI18n.zh || '').trim();
-  payload.city = String(payload.city || payload.cityI18n.zh || payload.cityI18n.en || '').trim();
-  payload.country = String(payload.country || payload.countryI18n.en || payload.countryI18n.zh || '').trim();
+  payload.name = String(payload.name || payload.nameI18n.en || payload.nameI18n.zh || payload.nameI18n.ja || '').trim();
+  payload.city = String(payload.city || payload.cityI18n.zh || payload.cityI18n.en || payload.cityI18n.ja || '').trim();
+  payload.country = String(payload.country || payload.countryI18n.en || payload.countryI18n.zh || payload.countryI18n.ja || '').trim();
   if (!hasPayloadManualLocationField && !payload.manualLocation && (detailAddressBi.en || detailAddressBi.zh)) {
     const formattedZh = [payload.countryI18n.zh || payload.countryI18n.enFull || payload.countryI18n.en, payload.cityI18n.zh || payload.cityI18n.en, detailAddressBi.zh || detailAddressBi.en]
       .filter(Boolean)

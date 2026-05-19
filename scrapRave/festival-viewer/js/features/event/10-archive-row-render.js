@@ -188,6 +188,12 @@ function buildRow(fest) {
         <div class="edit-field event-single-translate-field">
           <button class="edit-btn translate-inline ai-action-btn" type="button" title="把当前活动名称、地点等字段翻译成中英双语；会先打开确认弹窗，不会直接保存">翻译当前活动字段</button>
         </div>
+        <div class="edit-section-title full">多语言 JSON（中 / 英 / 日）</div>
+        <div class="edit-field full">
+          <label>多语言字段 JSON</label>
+          <div class="edit-lineup-hint">复制这段 JSON 给 AI 做翻译后再粘贴回来即可。未填写的语言保持空字符串，不会自动补全。</div>
+          <textarea class="edit-lineup-textarea" data-field="multiLangJson" placeholder='{"nameI18n":{"zh":"","en":"","ja":""},"cityI18n":{"zh":"","en":"","ja":""},"countryI18n":{"zh":"","en":"","ja":"","enFull":""},"detailAddressI18n":{"zh":"","en":"","ja":""},"descriptionI18n":{"zh":"","en":"","ja":""}}'></textarea>
+        </div>
         <div class="edit-section-title full">共享基础层（双语）</div>
         <div class="edit-field">
           <label>City (EN)</label>

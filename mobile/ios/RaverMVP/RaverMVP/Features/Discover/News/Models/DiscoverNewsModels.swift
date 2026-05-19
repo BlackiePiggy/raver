@@ -108,7 +108,9 @@ protocol DiscoverNewsRepository {
     func searchDJs(query: String, limit: Int) async throws -> [WebDJ]
     func searchEvents(query: String, limit: Int) async throws -> [WebEvent]
     func uploadNewsCoverImage(imageData: Data, fileName: String, mimeType: String) async throws -> String
+    func fetchArticlesBoundToEvent(eventID: String, cursor: String?) async throws -> DiscoverNewsPage
     func fetchArticlesBoundToEvent(eventID: String, maxPages: Int) async throws -> [DiscoverNewsArticle]
+    func fetchArticlesBoundToDJ(djID: String, cursor: String?) async throws -> DiscoverNewsPage
     func fetchArticlesBoundToDJ(djID: String, maxPages: Int) async throws -> [DiscoverNewsArticle]
     func fetchArticlesBoundToFestival(festivalID: String, maxPages: Int) async throws -> [DiscoverNewsArticle]
     func searchUsers(query: String) async throws -> [UserSummary]
@@ -211,6 +213,17 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
         )
     }
 
+    func fetchArticlesBoundToEvent(eventID: String, cursor: String?) async throws -> DiscoverNewsPage {
+        let trimmedEventID = eventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEventID.isEmpty else { return DiscoverNewsPage(items: [], nextCursor: nil) }
+        return try await socialService.fetchBoundNewsArticles(
+            eventID: trimmedEventID,
+            djID: nil,
+            festivalID: nil,
+            cursor: cursor
+        )
+    }
+
     func fetchArticlesBoundToDJ(djID: String, maxPages: Int = 8) async throws -> [DiscoverNewsArticle] {
         let trimmedDJID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDJID.isEmpty else { return [] }
@@ -220,6 +233,17 @@ struct DiscoverNewsRepositoryAdapter: DiscoverNewsRepository {
             djID: trimmedDJID,
             festivalID: nil,
             maxPages: maxPages
+        )
+    }
+
+    func fetchArticlesBoundToDJ(djID: String, cursor: String?) async throws -> DiscoverNewsPage {
+        let trimmedDJID = djID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDJID.isEmpty else { return DiscoverNewsPage(items: [], nextCursor: nil) }
+        return try await socialService.fetchBoundNewsArticles(
+            eventID: nil,
+            djID: trimmedDJID,
+            festivalID: nil,
+            cursor: cursor
         )
     }
 

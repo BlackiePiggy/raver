@@ -5274,19 +5274,38 @@ router.get('/events/my', optionalAuth, async (req: Request, res: Response): Prom
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
 
-    const rows = await prisma.event.findMany({
-      where: { organizerId: userId },
-      orderBy: { createdAt: 'desc' },
-      include: includeEventForWeb,
-    });
+    const [rows, total] = await Promise.all([
+      prisma.event.findMany({
+        where: { organizerId: userId },
+        orderBy: { createdAt: 'desc' },
+        include: includeEventForWeb,
+        skip,
+        take: limit,
+      }),
+      prisma.event.count({
+        where: { organizerId: userId },
+      }),
+    ]);
 
     const rowsWithPerformers = await withLineupSlotPerformers(rows);
     const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, rowsWithPerformers.map((row) => row.id));
     const rowsWithFavorites = attachEventFavoriteState(rowsWithPerformers, favoriteIdsByEventId);
     const complianceUser = await resolveRegionalComplianceUser(userId);
 
-    ok(res, { items: rowsWithFavorites.map((row) => mapEvent(row, complianceUser)) });
+    ok(
+      res,
+      { items: rowsWithFavorites.map((row) => mapEvent(row, complianceUser)) },
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      }
+    );
   } catch (error) {
     console.error('BFF web my events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -5844,6 +5863,9 @@ router.delete('/events/:id/timetable/:slotId', optionalAuth, async (req: Request
 router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const eventId = req.params.id as string;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
     const sourceEvent = await prisma.event.findUnique({
       where: { id: eventId },
       select: { id: true },
@@ -5854,26 +5876,33 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
       return;
     }
 
-    const rows = await prisma.ratingEvent.findMany({
-      where: { sourceEventId: eventId },
-      orderBy: [{ createdAt: 'desc' }],
-      include: {
-        createdBy: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-        units: {
-          orderBy: [{ createdAt: 'asc' }],
-          include: {
-            comments: {
-              select: { score: true },
-            },
-            createdBy: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true },
+    const [rows, total] = await Promise.all([
+      prisma.ratingEvent.findMany({
+        where: { sourceEventId: eventId },
+        orderBy: [{ createdAt: 'desc' }],
+        include: {
+          createdBy: {
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
+          },
+          units: {
+            orderBy: [{ createdAt: 'asc' }],
+            include: {
+              comments: {
+                select: { score: true },
+              },
+              createdBy: {
+                select: { id: true, username: true, displayName: true, avatarUrl: true },
+              },
             },
           },
         },
-      },
-    });
+        skip,
+        take: limit,
+      }),
+      prisma.ratingEvent.count({
+        where: { sourceEventId: eventId },
+      }),
+    ]);
 
     const rowsWithLinkedUnits = await Promise.all(
       rows.map(async (row) => ({
@@ -5882,7 +5911,12 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
       }))
     );
 
-    ok(res, { items: rowsWithLinkedUnits.map(mapRatingEvent) });
+    ok(res, { items: rowsWithLinkedUnits.map(mapRatingEvent) }, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
   } catch (error) {
     console.error('BFF web event rating events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -8884,8 +8918,17 @@ router.delete('/djs/:id', optionalAuth, async (req: Request, res: Response): Pro
 router.get('/djs/:id/sets', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const djId = req.params.id as string;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const start = (page - 1) * limit;
     const sets = await djSetService.getDJSetsByDJ(djId);
-    ok(res, { items: sets.map(mapDJSet) });
+    const pageItems = sets.slice(start, start + limit);
+    ok(res, { items: pageItems.map(mapDJSet) }, {
+      page,
+      limit,
+      total: sets.length,
+      totalPages: Math.ceil(sets.length / limit) || 1,
+    });
   } catch (error) {
     console.error('BFF web dj sets error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -8979,6 +9022,9 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
 router.get('/djs/:id/rating-units', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const djId = req.params.id as string;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
     const sourceDJ = await prisma.dJ.findUnique({
       where: { id: djId },
       select: { id: true },
@@ -8988,29 +9034,41 @@ router.get('/djs/:id/rating-units', optionalAuth, async (req: Request, res: Resp
       return;
     }
 
-    const rows = await prisma.ratingUnit.findMany({
-      where: {
-        OR: [
-          { djId },
-          { djIds: { has: djId } },
-        ],
-      },
-      orderBy: [{ createdAt: 'desc' }],
-      include: {
-        event: {
-          select: { id: true, name: true, description: true, imageUrl: true },
+    const where = {
+      OR: [
+        { djId },
+        { djIds: { has: djId } },
+      ],
+    };
+
+    const [rows, total] = await Promise.all([
+      prisma.ratingUnit.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }],
+        include: {
+          event: {
+            select: { id: true, name: true, description: true, imageUrl: true },
+          },
+          comments: {
+            select: { score: true },
+          },
+          createdBy: {
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
+          },
         },
-        comments: {
-          select: { score: true },
-        },
-        createdBy: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-      },
-    });
+        skip,
+        take: limit,
+      }),
+      prisma.ratingUnit.count({ where }),
+    ]);
 
     const linkedRows = await attachLinkedDJsToRatingUnits(rows as any[]);
-    ok(res, { items: linkedRows.map((row) => mapRatingUnit(row)) });
+    ok(res, { items: linkedRows.map((row) => mapRatingUnit(row)) }, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
   } catch (error) {
     console.error('BFF web dj rating units error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -9303,8 +9361,17 @@ router.get('/dj-sets/mine', optionalAuth, async (req: Request, res: Response): P
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const start = (page - 1) * limit;
     const sets = await djSetService.getDJSetsByUploader(userId);
-    ok(res, { items: sets.map(mapDJSet) });
+    const pageItems = sets.slice(start, start + limit);
+    ok(res, { items: pageItems.map(mapDJSet) }, {
+      page,
+      limit,
+      total: sets.length,
+      totalPages: Math.ceil(sets.length / limit) || 1,
+    });
   } catch (error) {
     console.error('BFF web my dj sets error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -9408,6 +9475,9 @@ router.get('/dj-sets/:id', optionalAuth, async (req: Request, res: Response): Pr
 router.get('/dj-sets/:id/tracklists', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const setId = req.params.id as string;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const start = (page - 1) * limit;
     const set = await djSetService.getDJSet(setId);
     if (!set) {
       res.status(404).json({ error: 'DJ set not found' });
@@ -9415,7 +9485,13 @@ router.get('/dj-sets/:id/tracklists', optionalAuth, async (req: Request, res: Re
     }
 
     const tracklists = await djSetService.getTracklists(setId);
-    ok(res, { items: tracklists.map(mapTracklistSummary) });
+    const pageItems = tracklists.slice(start, start + limit);
+    ok(res, { items: pageItems.map(mapTracklistSummary) }, {
+      page,
+      limit,
+      total: tracklists.length,
+      totalPages: Math.ceil(tracklists.length / limit) || 1,
+    });
   } catch (error) {
     console.error('BFF web dj set tracklists error:', error);
     res.status(500).json({ error: (error as Error).message || 'Internal server error' });
@@ -9757,8 +9833,17 @@ router.post('/dj-sets/upload-video', optionalAuth, djSetVideoUpload.single('vide
 router.get('/dj-sets/:id/comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const setId = req.params.id as string;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const start = (page - 1) * limit;
     const comments = await commentService.getComments(setId);
-    ok(res, { items: comments });
+    const pageItems = comments.slice(start, start + limit);
+    ok(res, { items: pageItems }, {
+      page,
+      limit,
+      total: comments.length,
+      totalPages: Math.ceil(comments.length / limit) || 1,
+    });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message || 'Internal server error' });
   }
@@ -10317,27 +10402,35 @@ router.post('/rating/upload-image', optionalAuth, ratingImageUpload.single('imag
   }
 });
 
-router.get('/rating-events', optionalAuth, async (_req: Request, res: Response): Promise<void> => {
+router.get('/rating-events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await prisma.ratingEvent.findMany({
-      orderBy: [{ createdAt: 'desc' }],
-      include: {
-        createdBy: {
-          select: { id: true, username: true, displayName: true, avatarUrl: true },
-        },
-        units: {
-          orderBy: [{ createdAt: 'asc' }],
-          include: {
-            comments: {
-              select: { score: true },
-            },
-            createdBy: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true },
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
+    const [rows, total] = await Promise.all([
+      prisma.ratingEvent.findMany({
+        orderBy: [{ createdAt: 'desc' }],
+        include: {
+          createdBy: {
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
+          },
+          units: {
+            orderBy: [{ createdAt: 'asc' }],
+            include: {
+              comments: {
+                select: { score: true },
+              },
+              createdBy: {
+                select: { id: true, username: true, displayName: true, avatarUrl: true },
+              },
             },
           },
         },
-      },
-    });
+        skip,
+        take: limit,
+      }),
+      prisma.ratingEvent.count(),
+    ]);
 
     const rowsWithLinkedDJs = await Promise.all(
       rows.map(async (row) => ({
@@ -10346,7 +10439,12 @@ router.get('/rating-events', optionalAuth, async (_req: Request, res: Response):
       }))
     );
 
-    ok(res, { items: rowsWithLinkedDJs.map(mapRatingEvent) });
+    ok(res, { items: rowsWithLinkedDJs.map(mapRatingEvent) }, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
   } catch (error) {
     console.error('BFF web rating events error:', error);
     res.status(500).json({ error: 'Internal server error' });

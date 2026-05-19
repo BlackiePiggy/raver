@@ -1447,8 +1447,10 @@ struct EventDetailView: View {
     @State private var relatedEventSets: [WebDJSet] = []
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
+    @State private var isLoadingMoreRelatedArticles = false
     @State private var didLoadRelatedArticles = false
     @State private var isLoadingRelatedRatingEvents = false
+    @State private var isLoadingMoreRelatedRatingEvents = false
     @State private var didLoadRelatedRatingEvents = false
     @State private var isLoadingRelatedEventSets = false
     @State private var didLoadRelatedEventSets = false
@@ -1456,8 +1458,9 @@ struct EventDetailView: View {
     @State private var relatedRatingEventsLoadFailed = false
     @State private var relatedEventSetsLoadFailed = false
     @State private var visibleEventDiscussionCount = 10
-    @State private var visibleRelatedArticleCount = 5
-    @State private var visibleRelatedRatingCount = 10
+    @State private var relatedArticlesNextCursor: String?
+    @State private var relatedRatingsPage = 0
+    @State private var relatedRatingsTotalPages = 1
     @State private var visibleRelatedSetCount = 10
     @State private var selectedRatingEventID: String?
     @State private var showExpandedLineupList = false
@@ -1486,6 +1489,10 @@ struct EventDetailView: View {
     @State private var eventDetailGuideStep: EventDetailGuidanceStep = .lineupTab
     @State private var scheduleViewMode: EventScheduleViewMode = .timeline
     @State private var selectedScheduleDayID: String?
+
+    private static let relatedArticlesInitialCursor: String? = nil
+    private static let relatedArticlesPageSizeHint = 5
+    private static let relatedRatingsPageSize = 10
     @State private var selectedScheduleStageKey: String?
     @State private var routeActionFrame: CGRect = .zero
     @State private var showEventWidgetGuide = false
@@ -2835,8 +2842,7 @@ struct EventDetailView: View {
                 retry: { await loadRelatedArticlesIfNeeded(force: true) }
             )
         } else {
-            let visibleArticles = Array(relatedArticles.prefix(visibleRelatedArticleCount))
-            ForEach(Array(visibleArticles.enumerated()), id: \.element.id) { index, article in
+            ForEach(Array(relatedArticles.enumerated()), id: \.element.id) { index, article in
                 Button {
                     discoverPush(.newsDetail(articleID: article.id))
                 } label: {
@@ -2845,18 +2851,22 @@ struct EventDetailView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
 
-                if index < visibleArticles.count - 1 {
+                if index < relatedArticles.count - 1 {
                     Divider()
                         .padding(.leading, 16)
                 }
             }
 
-            eventLoadMoreButton(
-                shownCount: visibleArticles.count,
-                totalCount: relatedArticles.count,
-                title: LT("加载更多资讯", "Load More News", "ニュースをさらに表示")
-            ) {
-                visibleRelatedArticleCount += 5
+            if relatedArticlesNextCursor != nil || isLoadingMoreRelatedArticles {
+                eventLoadMoreButton(
+                    shownCount: relatedArticles.count,
+                    totalCount: relatedArticles.count + (relatedArticlesNextCursor == nil ? 0 : Self.relatedArticlesPageSizeHint),
+                    title: isLoadingMoreRelatedArticles
+                        ? LT("正在加载更多资讯...", "Loading more news...", "ニュースをさらに読み込み中...")
+                        : LT("加载更多资讯", "Load More News", "ニュースをさらに表示")
+                ) {
+                    Task { await loadMoreRelatedArticlesIfNeeded() }
+                }
             }
         }
     }
@@ -3791,8 +3801,7 @@ struct EventDetailView: View {
                 retry: { await loadRelatedRatingsIfNeeded(force: true) }
             )
         } else {
-            let visibleRatings = Array(relatedRatingEvents.prefix(visibleRelatedRatingCount))
-            ForEach(visibleRatings) { ratingEvent in
+            ForEach(relatedRatingEvents) { ratingEvent in
                 Button {
                     selectedRatingEventID = ratingEvent.id
                 } label: {
@@ -3824,12 +3833,16 @@ struct EventDetailView: View {
                 .buttonStyle(.plain)
             }
 
-            eventLoadMoreButton(
-                shownCount: visibleRatings.count,
-                totalCount: relatedRatingEvents.count,
-                title: LT("加载更多打分", "Load More Ratings", "評価をさらに表示")
-            ) {
-                visibleRelatedRatingCount += 10
+            if relatedRatingsPage < relatedRatingsTotalPages || isLoadingMoreRelatedRatingEvents {
+                eventLoadMoreButton(
+                    shownCount: relatedRatingEvents.count,
+                    totalCount: max(relatedRatingEvents.count, relatedRatingsTotalPages * Self.relatedRatingsPageSize),
+                    title: isLoadingMoreRelatedRatingEvents
+                        ? LT("正在加载更多打分...", "Loading more ratings...", "評価をさらに読み込み中...")
+                        : LT("加载更多打分", "Load More Ratings", "評価をさらに表示")
+                ) {
+                    Task { await loadMoreRelatedRatingsIfNeeded() }
+                }
             }
         }
     }
@@ -5511,10 +5524,8 @@ struct EventDetailView: View {
             visibleEventDiscussionCount = 10
             await loadEventDiscussionPosts(force: false)
         case .news:
-            visibleRelatedArticleCount = 5
             await loadRelatedArticlesIfNeeded()
         case .ratings:
-            visibleRelatedRatingCount = 10
             await loadRelatedRatingsIfNeeded()
         case .sets:
             visibleRelatedSetCount = 10
@@ -5532,7 +5543,9 @@ struct EventDetailView: View {
         relatedArticlesLoadFailed = false
         defer { isLoadingRelatedArticles = false }
         do {
-            relatedArticles = try await fetchRelatedNewsArticlesForEvent(eventID: eventID)
+            let page = try await newsRepository.fetchArticlesBoundToEvent(eventID: eventID, cursor: nil)
+            relatedArticles = page.items
+            relatedArticlesNextCursor = page.nextCursor
             didLoadRelatedArticles = true
             await persistCurrentManualCacheSnapshotIfPossible()
         } catch is CancellationError {
@@ -5550,7 +5563,58 @@ struct EventDetailView: View {
         relatedRatingEventsLoadFailed = false
         defer { isLoadingRelatedRatingEvents = false }
         do {
-            relatedRatingEvents = try await ratingRepository.fetchEventRatingEvents(eventID: eventID)
+            let page = try await ratingRepository.fetchEventRatingEvents(
+                eventID: eventID,
+                page: 1,
+                limit: Self.relatedRatingsPageSize
+            )
+            relatedRatingEvents = page.items
+            relatedRatingsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            relatedRatingsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
+            didLoadRelatedRatingEvents = true
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            relatedRatingEventsLoadFailed = true
+        }
+    }
+
+    @MainActor
+    private func loadMoreRelatedArticlesIfNeeded() async {
+        guard !isLoadingRelatedArticles, !isLoadingMoreRelatedArticles else { return }
+        guard let cursor = relatedArticlesNextCursor, !cursor.isEmpty else { return }
+        isLoadingMoreRelatedArticles = true
+        defer { isLoadingMoreRelatedArticles = false }
+        do {
+            let page = try await newsRepository.fetchArticlesBoundToEvent(eventID: eventID, cursor: cursor)
+            relatedArticles = mergeRelatedArticles(existing: relatedArticles, incoming: page.items)
+            relatedArticlesNextCursor = page.nextCursor
+            didLoadRelatedArticles = true
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            relatedArticlesLoadFailed = true
+        }
+    }
+
+    @MainActor
+    private func loadMoreRelatedRatingsIfNeeded() async {
+        guard !isLoadingRelatedRatingEvents, !isLoadingMoreRelatedRatingEvents else { return }
+        guard relatedRatingsPage < relatedRatingsTotalPages else { return }
+        isLoadingMoreRelatedRatingEvents = true
+        defer { isLoadingMoreRelatedRatingEvents = false }
+        do {
+            let nextPage = max(relatedRatingsPage, 0) + 1
+            let page = try await ratingRepository.fetchEventRatingEvents(
+                eventID: eventID,
+                page: nextPage,
+                limit: Self.relatedRatingsPageSize
+            )
+            relatedRatingEvents = mergeRelatedRatingEvents(existing: relatedRatingEvents, incoming: page.items)
+            relatedRatingsPage = page.pagination?.page ?? nextPage
+            relatedRatingsTotalPages = max(page.pagination?.totalPages ?? relatedRatingsTotalPages, 1)
             didLoadRelatedRatingEvents = true
             await persistCurrentManualCacheSnapshotIfPossible()
         } catch is CancellationError {
@@ -5584,7 +5648,19 @@ struct EventDetailView: View {
     }
 
     private func reloadEventRatings() async {
-        relatedRatingEvents = (try? await ratingRepository.fetchEventRatingEvents(eventID: eventID)) ?? []
+        if let page = try? await ratingRepository.fetchEventRatingEvents(
+            eventID: eventID,
+            page: 1,
+            limit: Self.relatedRatingsPageSize
+        ) {
+            relatedRatingEvents = page.items
+            relatedRatingsPage = page.pagination?.page ?? (page.items.isEmpty ? 0 : 1)
+            relatedRatingsTotalPages = max(page.pagination?.totalPages ?? 1, 1)
+        } else {
+            relatedRatingEvents = []
+            relatedRatingsPage = 0
+            relatedRatingsTotalPages = 1
+        }
         didLoadRelatedRatingEvents = true
         await persistCurrentManualCacheSnapshotIfPossible()
     }
@@ -5598,6 +5674,30 @@ struct EventDetailView: View {
         relatedEventSets = (try? await eventRelatedContentRepository.fetchEventDJSets(eventID: event.id, eventName: event.name)) ?? []
         didLoadRelatedEventSets = true
         await persistCurrentManualCacheSnapshotIfPossible()
+    }
+
+    private func mergeRelatedArticles(
+        existing: [DiscoverNewsArticle],
+        incoming: [DiscoverNewsArticle]
+    ) -> [DiscoverNewsArticle] {
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for article in incoming where seen.insert(article.id).inserted {
+            merged.append(article)
+        }
+        return merged
+    }
+
+    private func mergeRelatedRatingEvents(
+        existing: [WebRatingEvent],
+        incoming: [WebRatingEvent]
+    ) -> [WebRatingEvent] {
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for item in incoming where seen.insert(item.id).inserted {
+            merged.append(item)
+        }
+        return merged
     }
 
     @MainActor
@@ -5643,6 +5743,9 @@ struct EventDetailView: View {
         relatedRatingEvents = snapshot.relatedRatingEvents
         relatedEventSets = snapshot.relatedEventSets
         relatedArticles = snapshot.relatedNewsArticles
+        relatedRatingsPage = snapshot.relatedRatingEvents.isEmpty ? 0 : 1
+        relatedRatingsTotalPages = 1
+        relatedArticlesNextCursor = nil
         didLoadRelatedRatingEvents = !snapshot.relatedRatingEvents.isEmpty
         didLoadRelatedEventSets = !snapshot.relatedEventSets.isEmpty
         didLoadRelatedArticles = !snapshot.relatedNewsArticles.isEmpty
