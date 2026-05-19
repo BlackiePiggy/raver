@@ -177,15 +177,24 @@ function buildRow(fest) {
         </div>
       </div>
       <div class="edit-grid">
-        <div class="edit-field">
-          <label>Festival Name (EN)</label>
-          <input class="edit-input" data-field="nameEn" type="text">
+        <div class="edit-field edit-field-i18n full">
+          <label>Festival Name</label>
+          <div class="edit-i18n-unit">
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">ZH</span>
+              <input class="edit-input" data-field="nameZh" type="text" placeholder="活动中文名">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">EN</span>
+              <input class="edit-input" data-field="nameEn" type="text" placeholder="Festival name in English">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">JA</span>
+              <input class="edit-input" data-field="nameJa" type="text" placeholder="フェス名（日本語）">
+            </div>
+          </div>
         </div>
-        <div class="edit-field">
-          <label>Festival Name (ZH)</label>
-          <input class="edit-input" data-field="nameZh" type="text">
-        </div>
-        <div class="edit-field event-single-translate-field">
+        <div class="edit-field event-single-translate-field full">
           <button class="edit-btn translate-inline ai-action-btn" type="button" title="把当前活动名称、地点等字段翻译成中英双语；会先打开确认弹窗，不会直接保存">翻译当前活动字段</button>
         </div>
         <div class="edit-section-title full">多语言 JSON（中 / 英 / 日）</div>
@@ -201,35 +210,62 @@ function buildRow(fest) {
           <div class="edit-lineup-hint">复制这段 JSON 给 AI 做翻译后再粘贴回来即可。未填写的语言保持空字符串，不会自动补全。</div>
           <textarea class="edit-lineup-textarea" data-field="multiLangJson" placeholder='{"nameI18n":{"zh":"","en":"","ja":""},"cityI18n":{"zh":"","en":"","ja":""},"countryI18n":{"zh":"","en":"","ja":"","enFull":""},"detailAddressI18n":{"zh":"","en":"","ja":""},"descriptionI18n":{"zh":"","en":"","ja":""}}'></textarea>
         </div>
-        <div class="edit-section-title full">共享基础层（双语）</div>
-        <div class="edit-field">
-          <label>City (EN)</label>
-          <input class="edit-input" data-field="cityEn" type="text" placeholder="Shanghai / Phuket / Amsterdam">
+        <div class="edit-section-title full">共享基础层（三语）</div>
+        <div class="edit-field edit-field-i18n">
+          <label>City</label>
+          <div class="edit-i18n-unit">
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">ZH</span>
+              <input class="edit-input" data-field="cityZh" type="text" placeholder="上海 / 普吉岛 / 阿姆斯特丹">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">EN</span>
+              <input class="edit-input" data-field="cityEn" type="text" placeholder="Shanghai / Phuket / Amsterdam">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">JA</span>
+              <input class="edit-input" data-field="cityJa" type="text" placeholder="上海 / プーケット / アムステルダム">
+            </div>
+          </div>
         </div>
-        <div class="edit-field">
-          <label>城市（中文）</label>
-          <input class="edit-input" data-field="cityZh" type="text" placeholder="上海 / 普吉岛 / 阿姆斯特丹">
+        <div class="edit-field edit-field-i18n">
+          <label>Country</label>
+          <div class="edit-i18n-unit">
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">ZH</span>
+              <input class="edit-input" data-field="countryZh" type="text" placeholder="中国 / 泰国 / 荷兰">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">EN</span>
+              <input class="edit-input" data-field="countryEn" type="text" placeholder="China / Thailand / Netherlands">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">JA</span>
+              <input class="edit-input" data-field="countryJa" type="text" placeholder="中国 / タイ / オランダ">
+            </div>
+            <div class="edit-i18n-row">
+              <span class="edit-i18n-lang">ENF</span>
+              <input class="edit-input" data-field="countryEnFull" type="text" placeholder="People's Republic of China / Kingdom of Thailand">
+            </div>
+          </div>
         </div>
-        <div class="edit-field">
-          <label>Country (EN)</label>
-          <input class="edit-input" data-field="countryEn" type="text" placeholder="China / Thailand / Netherlands">
-        </div>
-        <div class="edit-field">
-          <label>Country (EN Full)</label>
-          <input class="edit-input" data-field="countryEnFull" type="text" placeholder="People's Republic of China / Kingdom of Thailand">
-        </div>
-        <div class="edit-field">
-          <label>国家（中文）</label>
-          <input class="edit-input" data-field="countryZh" type="text" placeholder="中国 / 泰国 / 荷兰">
-        </div>
-        <div class="edit-section-title full">详细地址层（中英文）</div>
-        <div class="edit-field full">
-          <label>详细地址（中文）</label>
-          <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressZh" placeholder="普吉岛 Boat Avenue Lakefront"></textarea>
-        </div>
-        <div class="edit-field full">
-          <label>Detailed Address (EN)</label>
-          <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressEn" placeholder="Boat Avenue Lakefront, Phuket"></textarea>
+        <div class="edit-section-title full">详细地址层（三语）</div>
+        <div class="edit-field edit-field-i18n full">
+          <label>Detailed Address</label>
+          <div class="edit-i18n-unit">
+            <div class="edit-i18n-row align-start">
+              <span class="edit-i18n-lang">ZH</span>
+              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressZh" placeholder="普吉岛 Boat Avenue Lakefront"></textarea>
+            </div>
+            <div class="edit-i18n-row align-start">
+              <span class="edit-i18n-lang">EN</span>
+              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressEn" placeholder="Boat Avenue Lakefront, Phuket"></textarea>
+            </div>
+            <div class="edit-i18n-row align-start">
+              <span class="edit-i18n-lang">JA</span>
+              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressJa" placeholder="プーケット Boat Avenue Lakefront"></textarea>
+            </div>
+          </div>
         </div>
         <div class="edit-section-title full">地图辅助层（定位点，可选地图）</div>
         <div class="edit-field full event-location-field">

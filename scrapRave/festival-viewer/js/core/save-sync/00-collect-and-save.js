@@ -49,22 +49,27 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
 
   const nameEn = getVal('nameEn');
   const nameZh = getVal('nameZh');
+  const nameJa = getVal('nameJa');
   const cityEn = getVal('cityEn');
   const cityZh = getVal('cityZh');
+  const cityJa = getVal('cityJa');
   const countryEn = getVal('countryEn');
   const countryEnFull = getVal('countryEnFull');
   const countryZh = getVal('countryZh');
+  const countryJa = getVal('countryJa');
   const detailAddressEn = getVal('detailAddressEn');
   const detailAddressZh = getVal('detailAddressZh');
+  const detailAddressJa = getVal('detailAddressJa');
   const detailAddressI18n = normalizeBiTextValue({
     ...(multiLangDraft?.detailAddressI18n || {}),
     en: detailAddressEn,
     zh: detailAddressZh,
+    ja: detailAddressJa,
   }, '');
   const descriptionI18n = normalizeBiTextValue(multiLangDraft?.descriptionI18n || {}, '');
   const detailAddressSeed = detailAddressZh || detailAddressEn || detailAddressI18n.ja || '';
-  const citySeed = cityZh || cityEn;
-  const countrySeed = countryZh || countryEnFull || countryEn;
+  const citySeed = cityZh || cityEn || cityJa;
+  const countrySeed = countryZh || countryEnFull || countryEn || countryJa;
   const wikiFestivalId = getVal('wikiFestivalId');
   const wikiFestivalName = getVal('wikiFestivalName');
   const statusValue = normalizeArchiveEventStatus(
@@ -78,15 +83,15 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
   const finalStatus = canceled ? 'cancelled' : (statusValue || '');
 
   const payload = {
-    name: nameEn || nameZh || multiLangDraft?.nameI18n?.ja || '',
-    nameI18n: normalizeBiTextValue({ ...(multiLangDraft?.nameI18n || {}), en: nameEn, zh: nameZh }, ''),
+    name: nameEn || nameZh || nameJa || multiLangDraft?.nameI18n?.ja || '',
+    nameI18n: normalizeBiTextValue({ ...(multiLangDraft?.nameI18n || {}), en: nameEn, zh: nameZh, ja: nameJa }, ''),
     country: countrySeed,
     countryI18n: normalizeCountryBiTextValue(
-      { ...(multiLangDraft?.countryI18n || {}), en: countryEn, zh: countryZh, enFull: countryEnFull || multiLangDraft?.countryI18n?.enFull || '' },
+      { ...(multiLangDraft?.countryI18n || {}), en: countryEn, zh: countryZh, ja: countryJa, enFull: countryEnFull || multiLangDraft?.countryI18n?.enFull || '' },
       ''
     ),
     city: citySeed || multiLangDraft?.cityI18n?.ja || '',
-    cityI18n: normalizeBiTextValue({ ...(multiLangDraft?.cityI18n || {}), en: cityEn, zh: cityZh }, ''),
+    cityI18n: normalizeBiTextValue({ ...(multiLangDraft?.cityI18n || {}), en: cityEn, zh: cityZh, ja: cityJa }, ''),
     canceled,
     status: finalStatus,
     eventType: String(get('eventType')?.value || fest?.info?.eventType || 'festival').trim() || 'festival',
@@ -107,7 +112,7 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
     festivalId: String(fest?.info?.festivalId || '').trim(),
     source: mergeSourceMeta(fest?.info?.source)
   };
-  const hasManualLocation = !!(detailAddressEn || detailAddressZh);
+  const hasManualLocation = !!(detailAddressEn || detailAddressZh || detailAddressJa);
   if (hasManualLocation) {
     const countryDisplayEn = payload.countryI18n.enFull || countryEn || countryZh;
     const formattedZh = [countryZh || countryDisplayEn || countryEn, cityZh || cityEn, detailAddressZh || detailAddressEn].filter(Boolean).join(' · ');

@@ -367,6 +367,18 @@ struct WebEventLineupSlotDJ: Codable, Identifiable, Hashable {
     var soundCloudFollowers: Int? = nil
 }
 
+struct WebEventLineupArtist: Codable, Identifiable, Hashable {
+    let id: String
+    var eventId: String?
+    var djId: String?
+    var djIds: [String]? = nil
+    var djName: String
+    var sortOrder: Int
+    var createdAt: Date? = nil
+    var updatedAt: Date? = nil
+    var dj: WebEventLineupSlotDJ?
+}
+
 struct WebEventLineupSlot: Codable, Identifiable, Hashable {
     let id: String
     var eventId: String?
@@ -554,6 +566,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var organizer: WebUserLite?
     var wikiFestival: WebEventFestivalLite? = nil
     var ticketTiers: [WebEventTicketTier]
+    var lineupArtists: [WebEventLineupArtist]? = nil
     var lineupSlots: [WebEventLineupSlot]
     var favoriteId: String? = nil
     var isFavorited: Bool? = nil

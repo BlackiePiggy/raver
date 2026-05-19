@@ -1356,12 +1356,28 @@ struct EventDetailView: View {
 
     private struct EventLineupEntriesCacheKey: Equatable {
         let eventID: String
+        let artistCount: Int
+        let artistSignature: Int
         let slotCount: Int
         let slotSignature: Int
         let sortMode: LineupSortMode
 
         init(event: WebEvent, sortMode: LineupSortMode) {
             self.eventID = event.id
+            let lineupArtists = event.lineupArtists ?? []
+            self.artistCount = lineupArtists.count
+            self.artistSignature = lineupArtists.reduce(0) { partial, artist in
+                var hasher = Hasher()
+                hasher.combine(partial)
+                hasher.combine(artist.id)
+                hasher.combine(artist.djId)
+                hasher.combine(artist.djName)
+                hasher.combine(artist.sortOrder)
+                hasher.combine(artist.dj?.id)
+                hasher.combine(artist.dj?.avatarSmallUrl)
+                hasher.combine(artist.dj?.avatarUrl)
+                return hasher.finalize()
+            }
             self.slotCount = event.lineupSlots.count
             self.slotSignature = event.lineupSlots.reduce(0) { partial, slot in
                 var hasher = Hasher()
@@ -3318,7 +3334,7 @@ struct EventDetailView: View {
             "lineup-tab-\(event.id)-\(lineupSortMode.rawValue)-\(showExpandedLineupList)",
             interval: 1
         ) {
-            "lineup tab body event=\(event.id) slots=\(event.lineupSlots.count) sort=\(lineupSortMode.rawValue) expanded=\(showExpandedLineupList)"
+            "lineup tab body event=\(event.id) artists=\((event.lineupArtists ?? []).count) slots=\(event.lineupSlots.count) sort=\(lineupSortMode.rawValue) expanded=\(showExpandedLineupList)"
         }
 #endif
         let lineupImageURLs = event.lineupAssetURLs
@@ -5043,7 +5059,7 @@ struct EventDetailView: View {
         }
 #if DEBUG
         let entries = EventDetailPerfLog.measure(
-            "lineupDJEntries event=\(event.id) slots=\(event.lineupSlots.count) sort=\(sortMode.rawValue)",
+            "lineupDJEntries event=\(event.id) artists=\((event.lineupArtists ?? []).count) slots=\(event.lineupSlots.count) sort=\(sortMode.rawValue)",
             minDurationMS: 1
         ) {
             buildLineupDJEntries(for: event, sortMode: sortMode)
@@ -5063,8 +5079,22 @@ struct EventDetailView: View {
         var seen = Set<String>()
         var result: [EventLineupDJEntry] = []
 
-        for slot in event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }) {
-            let act = EventLineupActCodec.parse(slot: slot)
+        let acts: [EventLineupResolvedAct]
+        let lineupArtists = event.lineupArtists ?? []
+        if !lineupArtists.isEmpty {
+            acts = lineupArtists
+                .sorted { lhs, rhs in
+                    if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+                    return lhs.djName.localizedCaseInsensitiveCompare(rhs.djName) == .orderedAscending
+                }
+                .map { EventLineupActCodec.parse(artist: $0) }
+        } else {
+            acts = event.lineupSlots
+                .sorted(by: { $0.startTime < $1.startTime })
+                .map { EventLineupActCodec.parse(slot: $0) }
+        }
+
+        for act in acts {
             let displayName = act.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !displayName.isEmpty else { continue }
 
@@ -5106,6 +5136,12 @@ struct EventDetailView: View {
 
     private func lineupFollowerMapByID(from event: WebEvent) -> [String: Int] {
         var map: [String: Int] = [:]
+        for artist in event.lineupArtists ?? [] {
+            if let dj = artist.dj,
+               let followers = dj.soundCloudFollowers {
+                map[dj.id] = max(map[dj.id] ?? 0, followers)
+            }
+        }
         for slot in event.lineupSlots {
             for dj in slot.djs ?? [] {
                 guard let followers = dj.soundCloudFollowers else { continue }

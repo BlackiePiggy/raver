@@ -53,6 +53,23 @@ struct EventLineupResolvedAct: Hashable {
 }
 
 enum EventLineupActCodec {
+    static func parse(artist: WebEventLineupArtist) -> EventLineupResolvedAct {
+        let avatarUrl = firstNonEmpty(
+            artist.dj?.avatarSmallUrl,
+            artist.dj?.avatarUrl,
+            artist.dj?.avatarMediumUrl,
+            artist.dj?.avatarOriginalUrl
+        )
+        let preferredName = artist.djName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackName = artist.dj?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return parse(
+            name: preferredName.isEmpty ? fallbackName : preferredName,
+            djID: artist.dj?.id ?? artist.djId,
+            avatarUrl: avatarUrl,
+            performerIDPrefix: "artist-\(artist.id)-p"
+        )
+    }
+
     static func parse(slot: WebEventLineupSlot) -> EventLineupResolvedAct {
         let boundDJs = normalizedBoundDJs(from: slot)
         if !boundDJs.isEmpty {

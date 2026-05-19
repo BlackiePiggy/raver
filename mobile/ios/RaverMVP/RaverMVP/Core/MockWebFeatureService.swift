@@ -2410,25 +2410,25 @@ actor MockWebFeatureService: WebFeatureService {
         }
         let normalizedName = sourceDJ.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        let filtered = ratingEvents
-            .flatMap { event in
-                event.units.compactMap { unit in
-                    let performerNames = parseDJActNames(from: unit.name)
-                    let contains = performerNames.contains { performer in
-                        performer.lowercased() == normalizedName
-                    }
-                    guard contains else { return nil }
-                    var normalized = normalizeRatingUnit(unit)
-                    normalized.event = WebRatingUnitEventLite(
-                        id: event.id,
-                        name: event.name,
-                        description: event.description,
-                        imageUrl: event.imageUrl
-                    )
-                    return normalized
+        var filtered: [WebRatingUnit] = []
+        for event in ratingEvents {
+            for unit in event.units {
+                let performerNames = parseDJActNames(from: unit.name)
+                let contains = performerNames.contains { performer in
+                    performer.lowercased() == normalizedName
                 }
+                guard contains else { continue }
+                var normalized = normalizeRatingUnit(unit)
+                normalized.event = WebRatingUnitEventLite(
+                    id: event.id,
+                    name: event.name,
+                    description: event.description,
+                    imageUrl: event.imageUrl
+                )
+                filtered.append(normalized)
             }
-            .sorted(by: { $0.createdAt > $1.createdAt })
+        }
+        filtered.sort(by: { $0.createdAt > $1.createdAt })
         return paginateList(filtered, page: page, limit: limit)
     }
 

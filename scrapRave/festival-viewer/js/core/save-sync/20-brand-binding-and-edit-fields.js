@@ -367,6 +367,76 @@ function eventEditSetMultiLangCopyStatus(panelEl, message, isError = false) {
   statusEl.style.color = isError ? '#ff8cae' : 'var(--accent3)';
 }
 
+function ensureEventAiPromptModal() {
+  let overlay = document.getElementById('event-ai-prompt-overlay');
+  if (overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.id = 'event-ai-prompt-overlay';
+  overlay.innerHTML = `
+    <div id="event-ai-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="event-ai-prompt-title">
+      <div class="event-ai-prompt-header">
+        <div>
+          <div id="event-ai-prompt-title" class="event-ai-prompt-title">AI Prompt Template</div>
+          <div class="event-ai-prompt-sub">编辑复制多语言 JSON 时附带的提示词</div>
+        </div>
+        <div class="event-ai-prompt-actions">
+          <button class="edit-btn" type="button" data-ai-prompt-action="reset">恢复默认</button>
+          <button class="edit-btn" type="button" data-ai-prompt-action="cancel">取消</button>
+          <button class="edit-btn save" type="button" data-ai-prompt-action="save">保存</button>
+        </div>
+      </div>
+      <div class="event-ai-prompt-body">
+        <textarea class="event-ai-prompt-textarea" data-ai-prompt-textarea spellcheck="false"></textarea>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  });
+  return overlay;
+}
+
+function openEventAiPromptModal(initialValue, panelEl) {
+  const overlay = ensureEventAiPromptModal();
+  const textarea = overlay.querySelector('[data-ai-prompt-textarea]');
+  const saveBtn = overlay.querySelector('[data-ai-prompt-action="save"]');
+  const cancelBtn = overlay.querySelector('[data-ai-prompt-action="cancel"]');
+  const resetBtn = overlay.querySelector('[data-ai-prompt-action="reset"]');
+  if (!(textarea instanceof HTMLTextAreaElement) || !(saveBtn instanceof HTMLButtonElement) || !(cancelBtn instanceof HTMLButtonElement) || !(resetBtn instanceof HTMLButtonElement)) {
+    return;
+  }
+  textarea.value = String(initialValue || '').trim();
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, 0);
+
+  const close = () => {
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+    saveBtn.onclick = null;
+    cancelBtn.onclick = null;
+    resetBtn.onclick = null;
+  };
+
+  saveBtn.onclick = () => {
+    eventEditSetAiPromptTemplate(textarea.value);
+    eventEditSetMultiLangCopyStatus(panelEl, '提示词已更新');
+    close();
+  };
+  cancelBtn.onclick = () => close();
+  resetBtn.onclick = () => {
+    textarea.value = EVENT_MULTILANG_AI_PROMPT_DEFAULT;
+    textarea.focus();
+  };
+}
+
 async function eventEditCopyMultiLangJsonForAi(panelEl) {
   const textarea = panelEl?.querySelector('.fest-info-edit [data-field="multiLangJson"]');
   const jsonText = String(textarea?.value || '').trim();
@@ -398,10 +468,7 @@ async function eventEditCopyMultiLangJsonForAi(panelEl) {
 
 function eventEditOpenAiPromptEditor(panelEl) {
   const current = eventEditGetAiPromptTemplate();
-  const next = window.prompt('编辑复制给 AI 时附带的提示词：', current);
-  if (next === null) return;
-  eventEditSetAiPromptTemplate(next);
-  eventEditSetMultiLangCopyStatus(panelEl, '提示词已更新');
+  openEventAiPromptModal(current, panelEl);
 }
 
 function eventEditBuildMultiLangDraft(info) {
@@ -452,15 +519,21 @@ function eventEditSyncMultiLangDraftFromInputs(panelEl) {
   const current = eventEditReadMultiLangDraft(panelEl);
   const draft = current?.draft || eventEditBuildMultiLangDraft({});
   const read = (key) => String(panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`)?.value || '').trim();
-  draft.nameI18n = { ...(draft.nameI18n || {}), en: read('nameEn'), zh: read('nameZh') };
-  draft.cityI18n = { ...(draft.cityI18n || {}), en: read('cityEn'), zh: read('cityZh') };
+  draft.nameI18n = { ...(draft.nameI18n || {}), en: read('nameEn'), zh: read('nameZh'), ja: read('nameJa') };
+  draft.cityI18n = { ...(draft.cityI18n || {}), en: read('cityEn'), zh: read('cityZh'), ja: read('cityJa') };
   draft.countryI18n = {
     ...(draft.countryI18n || {}),
     en: read('countryEn'),
     zh: read('countryZh'),
+    ja: read('countryJa'),
     enFull: read('countryEnFull'),
   };
-  draft.detailAddressI18n = { ...(draft.detailAddressI18n || {}), en: read('detailAddressEn'), zh: read('detailAddressZh') };
+  draft.detailAddressI18n = {
+    ...(draft.detailAddressI18n || {}),
+    en: read('detailAddressEn'),
+    zh: read('detailAddressZh'),
+    ja: read('detailAddressJa'),
+  };
   eventEditWriteMultiLangDraft(panelEl, draft);
 }
 
@@ -472,13 +545,17 @@ function eventEditApplyMultiLangDraftToInputs(panelEl, draft) {
   };
   set('nameEn', draft?.nameI18n?.en || '');
   set('nameZh', draft?.nameI18n?.zh || '');
+  set('nameJa', draft?.nameI18n?.ja || '');
   set('cityEn', draft?.cityI18n?.en || '');
   set('cityZh', draft?.cityI18n?.zh || '');
+  set('cityJa', draft?.cityI18n?.ja || '');
   set('countryEn', draft?.countryI18n?.en || '');
   set('countryZh', draft?.countryI18n?.zh || '');
+  set('countryJa', draft?.countryI18n?.ja || '');
   set('countryEnFull', draft?.countryI18n?.enFull || '');
   set('detailAddressEn', draft?.detailAddressI18n?.en || '');
   set('detailAddressZh', draft?.detailAddressI18n?.zh || '');
+  set('detailAddressJa', draft?.detailAddressI18n?.ja || '');
 }
 
 function bindEventMultiLangJsonEditor(panelEl, info = null) {
@@ -491,13 +568,17 @@ function bindEventMultiLangJsonEditor(panelEl, info = null) {
   const trackedFields = [
     'nameEn',
     'nameZh',
+    'nameJa',
     'cityEn',
     'cityZh',
+    'cityJa',
     'countryEn',
     'countryZh',
+    'countryJa',
     'countryEnFull',
     'detailAddressEn',
     'detailAddressZh',
+    'detailAddressJa',
   ];
   trackedFields.forEach((field) => {
     const el = panelEl.querySelector(`.fest-info-edit [data-field="${field}"]`);
@@ -557,9 +638,11 @@ function setEditInputs(panelEl, info) {
   const countryRaw = (typeof normalizeScalarText === 'function') ? normalizeScalarText(info?.country) : String(info?.country || '').trim();
   const cityEn = String(multiLangDraft?.cityI18n?.en || (!info?.cityI18n ? (cityBi.en || cityRaw || '') : '')).trim();
   const cityZh = String(multiLangDraft?.cityI18n?.zh || (!info?.cityI18n ? (cityBi.zh || cityRaw || '') : '')).trim();
+  const cityJa = String(multiLangDraft?.cityI18n?.ja || '').trim();
   const countryEn = String(multiLangDraft?.countryI18n?.en || (!info?.countryI18n ? (countryBi.en || countryRaw || '') : '')).trim();
   const countryEnFull = String(multiLangDraft?.countryI18n?.enFull || (!info?.countryI18n ? (countryBi.enFull || countryEn || countryRaw || '') : '')).trim();
   const countryZh = String(multiLangDraft?.countryI18n?.zh || (!info?.countryI18n ? (countryBi.zh || countryRaw || '') : '')).trim();
+  const countryJa = String(multiLangDraft?.countryI18n?.ja || '').trim();
   const detailAddressEn = String(
     multiLangDraft?.detailAddressI18n?.en
     || (!manualLocation?.detailAddressI18n ? (manualLocation?.formattedAddressI18n?.en || '') : '')
@@ -569,15 +652,20 @@ function setEditInputs(panelEl, info) {
     multiLangDraft?.detailAddressI18n?.zh
     || (!manualLocation?.detailAddressI18n ? (manualLocation?.formattedAddressI18n?.zh || '') : '')
   ).trim();
+  const detailAddressJa = String(multiLangDraft?.detailAddressI18n?.ja || '').trim();
   set('nameEn', nameBi.en);
   set('nameZh', nameBi.zh);
+  set('nameJa', multiLangDraft?.nameI18n?.ja || '');
   set('cityEn', cityEn);
   set('cityZh', cityZh);
+  set('cityJa', cityJa);
   set('countryEn', countryEn);
   set('countryEnFull', countryEnFull);
   set('countryZh', countryZh);
+  set('countryJa', countryJa);
   set('detailAddressEn', detailAddressEn);
   set('detailAddressZh', detailAddressZh);
+  set('detailAddressJa', detailAddressJa);
   set('wikiFestivalId', info.wikiFestivalId || info?.wikiFestival?.id || '');
   set('wikiFestivalName', eventBrandDisplayName(info.wikiFestival || null));
   set('canceled', info.canceled ? 'true' : 'false');
