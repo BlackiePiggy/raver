@@ -78,11 +78,14 @@ struct LearnModuleView: View {
     @State private var createFestivalBackgroundData: Data?
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
+    @State private var hasTriggeredInitialLoad = false
     private let festivalPageSize = 10
+    private let isActive: Bool
 
-    init(initialSection: LearnModuleSection = .rankings, showsSectionTabs: Bool = true) {
+    init(initialSection: LearnModuleSection = .rankings, showsSectionTabs: Bool = true, isActive: Bool = true) {
         self.initialSection = initialSection
         self.showsSectionTabs = showsSectionTabs
+        self.isActive = isActive
         _selectedSection = State(initialValue: initialSection)
     }
 
@@ -144,11 +147,10 @@ struct LearnModuleView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                if showsSectionTabs {
-                    await loadInitial()
-                } else {
-                    await refreshSelectedSection()
-                }
+                await triggerInitialLoadIfNeeded()
+            }
+            .onChange(of: isActive) { _, _ in
+                Task { await triggerInitialLoadIfNeeded() }
             }
             .onChange(of: selectedSort) { _, next in
                 sortOrder = next.defaultOrder
@@ -189,6 +191,19 @@ struct LearnModuleView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
+    }
+
+    @MainActor
+    private func triggerInitialLoadIfNeeded() async {
+        guard isActive else { return }
+        guard !hasTriggeredInitialLoad else { return }
+        hasTriggeredInitialLoad = true
+
+        if showsSectionTabs {
+            await loadInitial()
+        } else {
+            await refreshSelectedSection()
+        }
     }
 
     @ViewBuilder

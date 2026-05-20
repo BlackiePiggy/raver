@@ -4104,6 +4104,7 @@ const mapDJSet = (row: any) => ({
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   uploadedById: row.uploadedById,
+  coDjIds: Array.isArray(row.coDjIds) ? row.coDjIds : [],
   customDjNames: row.customDjNames || [],
   dj: row.dj
     ? {
