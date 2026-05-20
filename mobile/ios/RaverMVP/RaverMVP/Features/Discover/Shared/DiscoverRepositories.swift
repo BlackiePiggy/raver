@@ -388,6 +388,7 @@ protocol DiscoverWikiRepository {
     func fetchLearnGenres() async throws -> [LearnGenreNode]
     func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage
     func fetchLearnFestival(id: String) async throws -> WebLearnFestival
+    func fetchLearnLabel(id: String) async throws -> LearnLabel
     func fetchLearnLabels(
         page: Int,
         limit: Int,
@@ -457,6 +458,10 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
 
     func fetchLearnFestival(id: String) async throws -> WebLearnFestival {
         try await service.fetchLearnFestival(id: id)
+    }
+
+    func fetchLearnLabel(id: String) async throws -> LearnLabel {
+        try await service.fetchLearnLabel(id: id)
     }
 
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {

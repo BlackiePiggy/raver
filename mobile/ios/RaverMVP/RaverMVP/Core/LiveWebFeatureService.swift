@@ -1157,6 +1157,14 @@ final class LiveWebFeatureService: WebFeatureService {
         return localizedLearnFestival(response.data)
     }
 
+    func fetchLearnLabel(id: String) async throws -> LearnLabel {
+        let response: BFFEnvelope<LearnLabel> = try await request(
+            path: "/v1/learn/labels/\(id)",
+            method: "GET"
+        )
+        return response.data
+    }
+
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {
         let response: BFFEnvelope<CreateContentResult<LearnLabel>> = try await request(
             path: "/v1/learn/labels",

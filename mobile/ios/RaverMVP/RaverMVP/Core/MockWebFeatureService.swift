@@ -2893,6 +2893,22 @@ actor MockWebFeatureService: WebFeatureService {
         return festival
     }
 
+    func fetchLearnLabel(id: String) async throws -> LearnLabel {
+        let page = try await fetchLearnLabels(
+            page: 1,
+            limit: 500,
+            sortBy: "soundcloudFollowers",
+            order: "desc",
+            search: nil,
+            nation: nil,
+            genre: nil
+        )
+        guard let label = page.items.first(where: { $0.id == id }) else {
+            throw ServiceError.message("Label not found")
+        }
+        return label
+    }
+
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {
         let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {

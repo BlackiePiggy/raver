@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum DiscoverRoute: Hashable {
-    case labelDetail(labelID: String)
+    case labelDetail(labelID: String, prefetchedLabel: LearnLabel? = nil)
     case festivalDetail(festivalID: String, prefetchedFestival: LearnFestival? = nil)
     case setDetail(setID: String)
     case newsDetail(articleID: String)
@@ -54,8 +54,12 @@ func makeDiscoverRouteDestination(
     appContainer: AppContainer
 ) -> some View {
     switch route {
-    case .labelDetail(let labelID):
-        DiscoverLabelDetailLoaderView(labelID: labelID, repository: appContainer.discoverWikiRepository)
+    case .labelDetail(let labelID, let prefetchedLabel):
+        DiscoverLabelDetailLoaderView(
+            labelID: labelID,
+            prefetchedLabel: prefetchedLabel,
+            repository: appContainer.discoverWikiRepository
+        )
 
     case .festivalDetail(let festivalID, let prefetchedFestival):
         DiscoverFestivalDetailLoaderView(
@@ -264,6 +268,7 @@ private struct DiscoverNewsDetailLoaderView: View {
 
 private struct DiscoverLabelDetailLoaderView: View {
     let labelID: String
+    let prefetchedLabel: LearnLabel?
     let repository: DiscoverWikiRepository
 
     @State private var label: LearnLabel?
@@ -280,6 +285,10 @@ private struct DiscoverLabelDetailLoaderView: View {
             }
         }
         .task {
+            if let prefetchedLabel, label == nil {
+                label = prefetchedLabel
+                phase = .success
+            }
             await loadLabel(force: false)
         }
     }
@@ -287,7 +296,9 @@ private struct DiscoverLabelDetailLoaderView: View {
     @MainActor
     private func loadLabel(force: Bool) async {
         if label != nil && !force { return }
-        phase = .initialLoading
+        if label == nil {
+            phase = .initialLoading
+        }
         do {
             label = try await fetchLearnLabelByID(labelID, repository: repository)
             phase = .success
@@ -376,31 +387,7 @@ private struct DiscoverFestivalEditorLoaderView: View {
 }
 
 private func fetchLearnLabelByID(_ labelID: String, repository: DiscoverWikiRepository) async throws -> LearnLabel {
-    var page = 1
-    let limit = 100
-
-    while true {
-        let response = try await repository.fetchLearnLabels(
-            page: page,
-            limit: limit,
-            sortBy: "followerCount",
-            order: "desc",
-            search: nil,
-            nation: nil,
-            genre: nil
-        )
-        if let matched = response.items.first(where: { $0.id == labelID }) {
-            return matched
-        }
-
-        guard let pagination = response.pagination,
-              page < pagination.totalPages else {
-            break
-        }
-        page += 1
-    }
-
-    throw ServiceError.message(LT("厂牌不存在或已被移除", "Label not found", "レーベルが存在しないか削除されました"))
+    try await repository.fetchLearnLabel(id: labelID)
 }
 
 private func fetchLearnFestivalByID(_ festivalID: String, repository: DiscoverWikiRepository) async throws -> LearnFestival {

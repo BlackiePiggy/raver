@@ -12545,6 +12545,37 @@ router.get('/learn/labels', async (req: Request, res: Response): Promise<void> =
   }
 });
 
+router.get('/learn/labels/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const labelId = String(req.params.id || '').trim();
+    if (!labelId) {
+      res.status(400).json({ error: 'Label ID is required' });
+      return;
+    }
+
+    const label = await prisma.label.findUnique({
+      where: { id: labelId },
+    });
+
+    if (!label) {
+      res.status(404).json({ error: 'Label not found' });
+      return;
+    }
+
+    const founderDj = label.founderDjId
+      ? await prisma.dJ.findUnique({ where: { id: label.founderDjId } })
+      : null;
+
+    ok(res, {
+      ...label,
+      founderDj,
+    });
+  } catch (error) {
+    console.error('BFF web learn label detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;

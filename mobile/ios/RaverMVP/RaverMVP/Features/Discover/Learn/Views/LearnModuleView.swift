@@ -537,7 +537,7 @@ struct LearnModuleView: View {
                         LearnLabelCard(label: label)
                             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .onTapGesture {
-                                discoverPush(.labelDetail(labelID: label.id))
+                                discoverPush(.labelDetail(labelID: label.id, prefetchedLabel: label))
                             }
                             .onAppear {
                                 guard label.id == labels.last?.id else { return }
