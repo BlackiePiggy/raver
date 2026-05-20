@@ -651,6 +651,12 @@ struct UserProfile: Codable, Identifiable {
     var isFriend: Bool?
 }
 
+struct ProfileBootstrapResponse: Codable {
+    var profile: UserProfile
+    var appearance: UserAssetAppearance
+    var recentCheckins: [WebCheckin]
+}
+
 struct Post: Codable, Identifiable, Hashable {
     let id: String
     var author: UserSummary

@@ -352,6 +352,7 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func deactivateDevicePushToken(deviceID: String, platform: String) async throws
 
     func fetchMyProfile() async throws -> UserProfile
+    func fetchMyProfileBootstrap() async throws -> ProfileBootstrapResponse
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage

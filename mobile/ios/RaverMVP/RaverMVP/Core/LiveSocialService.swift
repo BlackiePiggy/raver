@@ -1412,6 +1412,10 @@ final class LiveSocialService: SocialService {
         try await request(path: "/v1/profile/me", method: "GET")
     }
 
+    func fetchMyProfileBootstrap() async throws -> ProfileBootstrapResponse {
+        try await request(path: "/v1/profile/bootstrap", method: "GET")
+    }
+
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
         try await request(path: "/v1/profile/me", method: "PATCH", body: input)
     }

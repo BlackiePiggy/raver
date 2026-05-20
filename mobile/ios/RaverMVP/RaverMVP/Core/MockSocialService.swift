@@ -2144,6 +2144,15 @@ actor MockSocialService: SocialService {
         return profile
     }
 
+    func fetchMyProfileBootstrap() async throws -> ProfileBootstrapResponse {
+        let profile = try await fetchMyProfile()
+        return ProfileBootstrapResponse(
+            profile: profile,
+            appearance: .empty(userID: currentUser.id),
+            recentCheckins: []
+        )
+    }
+
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
         let displayName = input.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if displayName.isEmpty {

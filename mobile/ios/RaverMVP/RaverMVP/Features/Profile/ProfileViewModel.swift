@@ -3,6 +3,7 @@ import Combine
 
 protocol ProfileUserRepository {
     func fetchMyProfile() async throws -> UserProfile
+    func fetchMyProfileBootstrap() async throws -> ProfileBootstrapResponse
     func fetchUserProfile(userID: String) async throws -> UserProfile
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFollowing(userID: String, cursor: String?) async throws -> FollowListPage
@@ -64,6 +65,10 @@ struct ProfileUserRepositoryAdapter: ProfileUserRepository {
 
     func fetchMyProfile() async throws -> UserProfile {
         try await socialService.fetchMyProfile()
+    }
+
+    func fetchMyProfileBootstrap() async throws -> ProfileBootstrapResponse {
+        try await socialService.fetchMyProfileBootstrap()
     }
 
     func fetchUserProfile(userID: String) async throws -> UserProfile {
@@ -246,7 +251,7 @@ struct ProfileCheckinRepositoryAdapter: ProfileCheckinRepository {
 
 struct ProfileDashboardSnapshot {
     let profile: UserProfile
-    let recentPosts: [Post]
+    let appearance: UserAssetAppearance
     let recentCheckins: [WebCheckin]
 }
 
@@ -262,30 +267,19 @@ private struct ProfileOfflineSnapshot: Codable {
 
 struct LoadMyProfileDashboardUseCase {
     private let userRepository: ProfileUserRepository
-    private let contentRepository: ProfileContentRepository
-    private let checkinRepository: ProfileCheckinRepository
 
     init(
-        userRepository: ProfileUserRepository,
-        contentRepository: ProfileContentRepository,
-        checkinRepository: ProfileCheckinRepository
+        userRepository: ProfileUserRepository
     ) {
         self.userRepository = userRepository
-        self.contentRepository = contentRepository
-        self.checkinRepository = checkinRepository
     }
 
     func execute() async throws -> ProfileDashboardSnapshot {
-        let profileValue = try await userRepository.fetchMyProfile()
-
-        async let postsTask = contentRepository.fetchPostsByUser(userID: profileValue.id, cursor: nil, limit: 8)
-        let postsPage = try await postsTask
-        let checkins = (try? await checkinRepository.fetchUserCheckins(userID: profileValue.id, page: 1, limit: 6, type: nil))?.items ?? []
-
+        let bootstrap = try await userRepository.fetchMyProfileBootstrap()
         return ProfileDashboardSnapshot(
-            profile: profileValue,
-            recentPosts: postsPage.posts.filter { !$0.isRaverNews },
-            recentCheckins: checkins
+            profile: bootstrap.profile,
+            appearance: bootstrap.appearance,
+            recentCheckins: bootstrap.recentCheckins
         )
     }
 }
@@ -350,9 +344,7 @@ final class ProfileViewModel: ObservableObject {
         self.checkinRepository = checkinRepository
         self.virtualAssetRepository = virtualAssetRepository
         self.loadDashboardUseCase = LoadMyProfileDashboardUseCase(
-            userRepository: userRepository,
-            contentRepository: contentRepository,
-            checkinRepository: checkinRepository
+            userRepository: userRepository
         )
     }
 
@@ -371,14 +363,15 @@ final class ProfileViewModel: ObservableObject {
         do {
             let dashboard = try await loadDashboardUseCase.execute()
             profile = dashboard.profile
-            recentPosts = dashboard.recentPosts
+            appearance = dashboard.appearance
             recentCheckins = dashboard.recentCheckins
-            loadedSections.insert(.published)
-            await loadAppearance(for: dashboard.profile.id)
             persistOfflineSnapshot()
             phase = .success
             bannerMessage = nil
             self.error = nil
+            if selectedSection == .published && !loadedSections.contains(.published) {
+                await loadSection(.published)
+            }
         } catch {
             if restoreOfflineSnapshot() {
                 phase = .success

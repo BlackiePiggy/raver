@@ -91,6 +91,7 @@ import {
   shouldAllowLocalUploadFallback,
 } from '../services/media-storage.service';
 import { mediaAssetService } from '../services/media-asset.service';
+import { virtualAssetService } from '../services/virtual-asset.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -11471,6 +11472,155 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
     });
   } catch (error) {
     console.error('BFF profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const [user, followersCount, followingCount, postsCount, friendIds, tags, appearance, checkinRows] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          bio: true,
+          location: true,
+          avatarUrl: true,
+          isFollowersListPublic: true,
+          isFollowingListPublic: true,
+        },
+      }),
+      prisma.userEntityFollow.count({
+        where: {
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
+          targetId: userId,
+        },
+      }),
+      prisma.userEntityFollow.count({
+        where: {
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
+        },
+      }),
+      prisma.post.count({
+        where: { userId },
+      }),
+      buildFriendUserIds(userId),
+      resolveUserGenrePreferences(prisma, userId),
+      virtualAssetService.getAppearance(userId),
+      prisma.checkin.findMany({
+        where: { userId },
+        take: 6,
+        orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }],
+        include: {
+          event: {
+            select: {
+              id: true,
+              name: true,
+              nameI18n: true,
+              cityI18n: true,
+              countryI18n: true,
+              manualLocation: true,
+              locationPoint: true,
+              coverImageUrl: true,
+              city: true,
+              country: true,
+              startDate: true,
+              endDate: true,
+            },
+          },
+          dj: {
+            select: {
+              id: true,
+              name: true,
+              nameI18n: true,
+              avatarUrl: true,
+              country: true,
+              countryI18n: true,
+            },
+          },
+          selections: {
+            orderBy: [{ dayIndex: 'asc' }, { sortOrder: 'asc' }],
+            select: {
+              dayId: true,
+              dayIndex: true,
+              djs: {
+                orderBy: [{ sortOrder: 'asc' }, { performerIndex: 'asc' }],
+                select: {
+                  djId: true,
+                  displayName: true,
+                  actGroupId: true,
+                  actType: true,
+                  performerIndex: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    res.json({
+      profile: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName || user.username,
+        bio: user.bio || '',
+        location: user.location || null,
+        avatarURL: user.avatarUrl,
+        tags,
+        isFollowersListPublic: user.isFollowersListPublic,
+        isFollowingListPublic: user.isFollowingListPublic,
+        canViewFollowersList: true,
+        canViewFollowingList: true,
+        followersCount,
+        followingCount,
+        friendsCount: friendIds.size,
+        postsCount,
+        isFollowing: false,
+        isFriend: false,
+      },
+      appearance,
+      recentCheckins: checkinRows.map((row) => ({
+        id: row.id,
+        userId: row.userId,
+        eventId: row.eventId,
+        djId: row.djId,
+        type: row.type,
+        note: row.note,
+        photoUrl: row.photoUrl,
+        rating: row.rating,
+        attendedAt: row.attendedAt,
+        createdAt: row.createdAt,
+        event: row.event,
+        dj: row.dj,
+        selections: row.selections.map((selection) => ({
+          dayId: selection.dayId,
+          dayIndex: selection.dayIndex,
+          djs: selection.djs.map((dj) => ({
+            djId: dj.djId,
+            displayName: dj.displayName,
+            actGroupId: dj.actGroupId ?? `${selection.dayId}:act:${dj.displayName}`,
+            actType: dj.actType ?? 'solo',
+            performerIndex: dj.performerIndex,
+          })),
+        })),
+      })),
+    });
+  } catch (error) {
+    console.error('BFF profile bootstrap error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

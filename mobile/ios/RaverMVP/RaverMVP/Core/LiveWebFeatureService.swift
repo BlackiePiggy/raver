@@ -1093,7 +1093,8 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func fetchLearnGenreDetail(id: String) async throws -> LearnGenreDetail {
-        let response: BFFEnvelope<LearnGenreDetail> = try await request(path: "/v1/learn/genres/\(id)", method: "GET")
+        let encodedID = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? id
+        let response: BFFEnvelope<LearnGenreDetail> = try await request(path: "/v1/learn/genres/\(encodedID)", method: "GET")
         return response.data
     }
 
