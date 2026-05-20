@@ -18,6 +18,16 @@ struct EventListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct FestivalEventFeedPage: Codable {
+    var items: [WebEvent]
+    var pagination: BFFPagination?
+}
+
+struct FestivalEventFeedResponse: Codable {
+    var upcoming: FestivalEventFeedPage
+    var ended: FestivalEventFeedPage
+}
+
 struct EventFavoriteStatus: Codable, Hashable {
     var id: String?
     var eventId: String

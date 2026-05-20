@@ -21,6 +21,13 @@ struct DiscoverEventsPageRequest: Equatable {
 
 protocol EventListRepository {
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage
+    func fetchFestivalEventFeed(
+        wikiFestivalId: String,
+        upcomingPage: Int,
+        upcomingLimit: Int,
+        endedPage: Int,
+        endedLimit: Int
+    ) async throws -> FestivalEventFeedResponse
 }
 
 protocol EventRecommendationRepository {
@@ -121,6 +128,22 @@ struct EventListRepositoryAdapter: EventListRepository {
             eventType: request.eventType,
             status: request.status,
             wikiFestivalId: request.wikiFestivalId
+        )
+    }
+
+    func fetchFestivalEventFeed(
+        wikiFestivalId: String,
+        upcomingPage: Int,
+        upcomingLimit: Int,
+        endedPage: Int,
+        endedLimit: Int
+    ) async throws -> FestivalEventFeedResponse {
+        try await service.fetchFestivalEventFeed(
+            wikiFestivalId: wikiFestivalId,
+            upcomingPage: upcomingPage,
+            upcomingLimit: upcomingLimit,
+            endedPage: endedPage,
+            endedLimit: endedLimit
         )
     }
 }

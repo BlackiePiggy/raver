@@ -440,6 +440,33 @@ actor MockWebFeatureService: WebFeatureService {
         return paginateEvents(sorted, page: page, limit: limit)
     }
 
+    func fetchFestivalEventFeed(
+        wikiFestivalId: String,
+        upcomingPage: Int,
+        upcomingLimit: Int,
+        endedPage: Int,
+        endedLimit: Int
+    ) async throws -> FestivalEventFeedResponse {
+        let normalizedWikiFestivalId = wikiFestivalId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let festivalEvents = events.filter { event in
+            normalizedWikiFestivalId.isEmpty || event.wikiFestivalId == normalizedWikiFestivalId || event.wikiFestival?.id == normalizedWikiFestivalId
+        }
+
+        let upcoming = festivalEvents
+            .filter { resolveEventStatus(for: $0) == "upcoming" }
+            .sorted(by: { $0.startDate < $1.startDate })
+        let ended = festivalEvents
+            .filter { resolveEventStatus(for: $0) == "ended" }
+            .sorted(by: { $0.startDate > $1.startDate })
+
+        let upcomingPageResult = paginateEvents(upcoming, page: upcomingPage, limit: upcomingLimit)
+        let endedPageResult = paginateEvents(ended, page: endedPage, limit: endedLimit)
+        return FestivalEventFeedResponse(
+            upcoming: FestivalEventFeedPage(items: upcomingPageResult.items, pagination: upcomingPageResult.pagination),
+            ended: FestivalEventFeedPage(items: endedPageResult.items, pagination: endedPageResult.pagination)
+        )
+    }
+
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
         let normalizedStatuses = (statuses ?? ["ongoing", "upcoming", "ended"])
             .map { value -> String in

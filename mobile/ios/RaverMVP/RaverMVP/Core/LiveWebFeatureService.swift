@@ -30,6 +30,37 @@ final class LiveWebFeatureService: WebFeatureService {
         return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)
     }
 
+    func fetchFestivalEventFeed(
+        wikiFestivalId: String,
+        upcomingPage: Int,
+        upcomingLimit: Int,
+        endedPage: Int,
+        endedLimit: Int
+    ) async throws -> FestivalEventFeedResponse {
+        let normalizedFestivalId = wikiFestivalId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let response: BFFEnvelope<FestivalEventFeedResponse> = try await request(
+            path: "/v1/events/festival-feed",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "wikiFestivalId", value: normalizedFestivalId),
+                URLQueryItem(name: "upcomingPage", value: "\(max(1, upcomingPage))"),
+                URLQueryItem(name: "upcomingLimit", value: "\(max(1, min(100, upcomingLimit)))"),
+                URLQueryItem(name: "endedPage", value: "\(max(1, endedPage))"),
+                URLQueryItem(name: "endedLimit", value: "\(max(1, min(100, endedLimit)))")
+            ]
+        )
+        return FestivalEventFeedResponse(
+            upcoming: FestivalEventFeedPage(
+                items: response.data.upcoming.items.map(localizedEvent),
+                pagination: response.data.upcoming.pagination
+            ),
+            ended: FestivalEventFeedPage(
+                items: response.data.ended.items.map(localizedEvent),
+                pagination: response.data.ended.pagination
+            )
+        )
+    }
+
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
         var queryItems = [
             URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")

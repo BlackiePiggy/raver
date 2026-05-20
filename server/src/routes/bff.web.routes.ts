@@ -5324,6 +5324,90 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
   }
 });
 
+router.get('/events/festival-feed', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as BFFAuthRequest).user?.userId;
+    const wikiFestivalId = typeof req.query.wikiFestivalId === 'string' ? req.query.wikiFestivalId.trim() : '';
+    if (!wikiFestivalId) {
+      res.status(400).json({ error: 'wikiFestivalId is required' });
+      return;
+    }
+
+    const upcomingPage = normalizePage(req.query.upcomingPage, 1);
+    const upcomingLimit = normalizeLimit(req.query.upcomingLimit, 10, 100);
+    const endedPage = normalizePage(req.query.endedPage, 1);
+    const endedLimit = normalizeLimit(req.query.endedLimit, 10, 100);
+    const now = new Date();
+
+    const upcomingWhere: Prisma.EventWhereInput = {
+      wikiFestivalId,
+      startDate: { gt: now },
+      status: { not: 'cancelled' },
+    };
+    const endedWhere: Prisma.EventWhereInput = {
+      wikiFestivalId,
+      endDate: { lt: now },
+      status: { not: 'cancelled' },
+    };
+
+    const [
+      upcomingRows,
+      upcomingTotal,
+      endedRows,
+      endedTotal,
+    ] = await Promise.all([
+      prisma.event.findMany({
+        where: upcomingWhere,
+        skip: (upcomingPage - 1) * upcomingLimit,
+        take: upcomingLimit,
+        orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
+        select: selectEventListCardForWeb,
+      }),
+      prisma.event.count({ where: upcomingWhere }),
+      prisma.event.findMany({
+        where: endedWhere,
+        skip: (endedPage - 1) * endedLimit,
+        take: endedLimit,
+        orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+        select: selectEventListCardForWeb,
+      }),
+      prisma.event.count({ where: endedWhere }),
+    ]);
+
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, [
+      ...upcomingRows.map((row) => row.id),
+      ...endedRows.map((row) => row.id),
+    ]);
+    const complianceUser = await resolveRegionalComplianceUser(userId);
+    const mapRows = (rows: typeof upcomingRows) =>
+      attachEventFavoriteState(rows, favoriteIdsByEventId).map((row) => mapEventListCard(row, complianceUser));
+
+    ok(res, {
+      upcoming: {
+        items: mapRows(upcomingRows),
+        pagination: {
+          page: upcomingPage,
+          limit: upcomingLimit,
+          total: upcomingTotal,
+          totalPages: Math.ceil(upcomingTotal / upcomingLimit) || 1,
+        },
+      },
+      ended: {
+        items: mapRows(endedRows),
+        pagination: {
+          page: endedPage,
+          limit: endedLimit,
+          total: endedTotal,
+          totalPages: Math.ceil(endedTotal / endedLimit) || 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('BFF web festival event feed error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/events/my', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);
