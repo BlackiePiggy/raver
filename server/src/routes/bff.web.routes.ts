@@ -3715,6 +3715,7 @@ const mapWikiFestival = (
   });
   const isContributor = !!viewerId && contributors.some((user: any) => user.id === viewerId);
   const canEdit = viewerRole === 'admin' || isContributor;
+  const isFollowing = !!viewerId && Array.isArray(row?.followedByUserIds) && row.followedByUserIds.includes(viewerId);
 
   return {
     id: row.id,
@@ -3743,6 +3744,7 @@ const mapWikiFestival = (
     backgroundUrl: row.backgroundUrl ?? null,
     links,
     contributors,
+    isFollowing,
     canEdit,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -11819,7 +11821,7 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
         : {}),
     };
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, followedBrandPreference] = await Promise.all([
       prisma.wikiFestival.findMany({
         where,
         skip,
@@ -11856,11 +11858,27 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
         },
       }),
       prisma.wikiFestival.count({ where }),
+      viewerId
+        ? notificationCenterService.getFollowedBrandUpdatePreference(viewerId)
+        : Promise.resolve(null),
     ]);
+    const followedBrandIDs = new Set(followedBrandPreference?.watchedBrandIds ?? []);
 
     ok(
       res,
-      { items: rows.map((row) => mapWikiFestival({ ...row, contributors: [] }, viewerId, viewerRole)) },
+      {
+        items: rows.map((row) =>
+          mapWikiFestival(
+            {
+              ...row,
+              contributors: [],
+              followedByUserIds: followedBrandIDs.has(row.id) && viewerId ? [viewerId] : [],
+            },
+            viewerId,
+            viewerRole
+          )
+        ),
+      },
       {
         page,
         limit,
@@ -11999,25 +12017,41 @@ router.get('/learn/festivals/:id', optionalAuth, async (req: Request, res: Respo
     const viewerRole = authReq.user?.role ?? null;
     const festivalId = req.params.id as string;
 
-    const row = await prisma.wikiFestival.findUnique({
-      where: { id: festivalId },
-      include: {
-        contributors: {
-          include: {
-            user: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true },
+    const [row, followedBrandPreference] = await Promise.all([
+      prisma.wikiFestival.findUnique({
+        where: { id: festivalId },
+        include: {
+          contributors: {
+            include: {
+              user: {
+                select: { id: true, username: true, displayName: true, avatarUrl: true },
+              },
             },
           },
         },
-      },
-    });
+      }),
+      viewerId
+        ? notificationCenterService.getFollowedBrandUpdatePreference(viewerId)
+        : Promise.resolve(null),
+    ]);
 
     if (!row || !row.isActive) {
       res.status(404).json({ error: 'Festival not found' });
       return;
     }
 
-    ok(res, mapWikiFestival(row, viewerId, viewerRole));
+    const isFollowing = Boolean(viewerId && followedBrandPreference?.watchedBrandIds.includes(row.id));
+    ok(
+      res,
+      mapWikiFestival(
+        {
+          ...row,
+          followedByUserIds: isFollowing && viewerId ? [viewerId] : [],
+        },
+        viewerId,
+        viewerRole
+      )
+    );
   } catch (error) {
     console.error('BFF web learn festival detail error:', error);
     res.status(500).json({ error: 'Internal server error' });

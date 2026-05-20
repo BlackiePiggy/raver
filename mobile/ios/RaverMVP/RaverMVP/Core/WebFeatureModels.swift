@@ -273,6 +273,7 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
     var backgroundUrl: String?
     var links: [LearnFestivalLinkPayload]
     var contributors: [WebUserLite]
+    var isFollowing: Bool? = nil
     var canEdit: Bool?
     var createdAt: Date?
     var updatedAt: Date?

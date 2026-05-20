@@ -3917,6 +3917,7 @@ struct LearnFestival: Identifiable, Hashable {
     var backgroundUrl: String?
     var links: [LearnFestivalLink]
     var contributors: [WebUserLite] = defaultContributors
+    var isFollowing: Bool? = nil
     var canEdit: Bool? = nil
 
     static let defaultContributors: [WebUserLite] = [
@@ -4100,6 +4101,7 @@ extension LearnFestival {
         self.backgroundUrl = web.backgroundUrl
         self.links = web.links.map { LearnFestivalLink(title: $0.title, icon: $0.icon, url: $0.url) }
         self.contributors = web.contributors.isEmpty ? LearnFestival.defaultContributors : web.contributors
+        self.isFollowing = web.isFollowing
         self.canEdit = web.canEdit
     }
 }
@@ -4844,7 +4846,7 @@ struct LearnFestivalDetailView: View {
     }
 
     private var isFollowingCurrentFestivalBrand: Bool {
-        followedBrandUpdatePreference.watchedBrandIds.contains(currentFestival.id)
+        currentFestival.isFollowing ?? followedBrandUpdatePreference.watchedBrandIds.contains(currentFestival.id)
     }
 
     @MainActor
@@ -4860,6 +4862,7 @@ struct LearnFestivalDetailView: View {
 
         do {
             followedBrandUpdatePreference = try await wikiRepository.fetchFollowedBrandUpdatePreference()
+            currentFestival.isFollowing = followedBrandUpdatePreference.watchedBrandIds.contains(currentFestival.id)
         } catch {
             followedBrandUpdatePreference = .empty
         }
@@ -4909,6 +4912,7 @@ struct LearnFestivalDetailView: View {
                     includeEvents: nil
                 )
             )
+            currentFestival.isFollowing = followedBrandUpdatePreference.watchedBrandIds.contains(currentFestival.id)
         } catch {
             errorMessage = error.userFacingMessage ?? LT("关注状态更新失败，请稍后重试。", "Failed to update follow status. Please try again later.", "フォロー状態を更新できませんでした。時間をおいて再試行してください。")
         }
