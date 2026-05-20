@@ -12383,6 +12383,26 @@ router.delete('/learn/festivals/:id', optionalAuth, async (req: Request, res: Re
 
 type LearnLabelSortBy = 'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt';
 
+const learnLabelListSelect = {
+  id: true,
+  name: true,
+  profileUrl: true,
+  profileSlug: true,
+  logoUrl: true,
+  avatarUrl: true,
+  backgroundUrl: true,
+  nation: true,
+  soundcloudFollowers: true,
+  likes: true,
+  genres: true,
+  genresPreview: true,
+  latestReleaseListing: true,
+  introductionPreview: true,
+  introduction: true,
+  founderDjId: true,
+  createdAt: true,
+} satisfies Prisma.LabelSelect;
+
 const parseLearnLabelSortBy = (value: unknown): LearnLabelSortBy => {
   if (value === 'likes') return 'likes';
   if (value === 'name') return 'name';
@@ -12473,6 +12493,7 @@ router.get('/learn/labels', async (req: Request, res: Response): Promise<void> =
         orderBy,
         skip: (page - 1) * limit,
         take: limit,
+        select: learnLabelListSelect,
       }),
       prisma.label.count({ where }),
     ]);

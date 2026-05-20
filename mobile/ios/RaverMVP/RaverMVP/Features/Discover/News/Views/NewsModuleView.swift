@@ -4,6 +4,7 @@ struct NewsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+    private let isActive: Bool
 
     @State private var articles: [DiscoverNewsArticle] = []
     @State private var nextCursor: String?
@@ -13,9 +14,11 @@ struct NewsModuleView: View {
     @State private var isRefreshing = false
     @State private var bannerMessage: String?
     @State private var isSelectorDragging = false
+    @State private var hasTriggeredInitialLoad = false
 
-    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil) {
+    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil, isActive: Bool = true) {
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+        self.isActive = isActive
     }
 
     private var repository: DiscoverNewsRepository {
@@ -31,7 +34,10 @@ struct NewsModuleView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await reload()
+            await triggerInitialLoadIfNeeded()
+        }
+        .onChange(of: isActive) { _, _ in
+            Task { await triggerInitialLoadIfNeeded() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverNewsDidPublish)) { _ in
             Task { await reload() }
@@ -39,6 +45,14 @@ struct NewsModuleView: View {
         .onDisappear {
             notifySelectorDragging(false)
         }
+    }
+
+    @MainActor
+    private func triggerInitialLoadIfNeeded() async {
+        guard isActive else { return }
+        guard !hasTriggeredInitialLoad else { return }
+        hasTriggeredInitialLoad = true
+        await reload()
     }
 
     private var newsSelectorRow: some View {

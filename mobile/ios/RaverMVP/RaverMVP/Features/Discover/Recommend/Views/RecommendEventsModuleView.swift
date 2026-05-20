@@ -4,6 +4,7 @@ struct DiscoverRecommendEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
     var onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
     var onRequestMoveToNextDiscoverSection: (() -> Void)? = nil
+    var isActive: Bool = true
 
     var body: some View {
         RecommendEventsModuleView(
@@ -12,6 +13,7 @@ struct DiscoverRecommendEventsRootView: View {
                 listRepository: appContainer.eventListRepository,
                 checkinRepository: appContainer.eventCheckinRepository
             ),
+            isActive: isActive,
             onHorizontalDragStateChanged: onHorizontalDragStateChanged,
             onRequestMoveToNextDiscoverSection: onRequestMoveToNextDiscoverSection
         )
@@ -35,13 +37,17 @@ struct RecommendEventsModuleView: View {
     @State private var showRecommendGuide = false
     @State private var guideStep: RecommendEventsGuidanceStep = .tap
     @State private var guideHandOffset: CGFloat = 0
+    @State private var hasTriggeredInitialLoad = false
 
+    private let isActive: Bool
     init(
         viewModel: RecommendEventsViewModel,
+        isActive: Bool = true,
         onHorizontalDragStateChanged: ((Bool) -> Void)? = nil,
         onRequestMoveToNextDiscoverSection: (() -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.isActive = isActive
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
         self.onRequestMoveToNextDiscoverSection = onRequestMoveToNextDiscoverSection
     }
@@ -116,8 +122,10 @@ struct RecommendEventsModuleView: View {
             presentGuideIfNeeded()
         }
         .task {
-            await viewModel.loadIfNeeded(sessionUserID: appState.session?.user.id)
-            presentGuideIfNeeded()
+            await triggerInitialLoadIfNeeded()
+        }
+        .onChange(of: isActive) { _, _ in
+            Task { await triggerInitialLoadIfNeeded() }
         }
         .onChange(of: viewModel.events.count) { _, _ in
             presentGuideIfNeeded()
@@ -130,11 +138,21 @@ struct RecommendEventsModuleView: View {
             presentGuideIfNeeded()
         }
         .task(id: appState.session?.user.id) {
+            guard isActive else { return }
             await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil)
         }
         .onDisappear {
             notifyHorizontalDragging(false)
         }
+    }
+
+    @MainActor
+    private func triggerInitialLoadIfNeeded() async {
+        guard isActive else { return }
+        guard !hasTriggeredInitialLoad else { return }
+        hasTriggeredInitialLoad = true
+        await viewModel.loadIfNeeded(sessionUserID: appState.session?.user.id)
+        presentGuideIfNeeded()
     }
 
     private var recommendationPager: some View {

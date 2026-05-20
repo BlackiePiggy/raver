@@ -83,6 +83,7 @@ struct DiscoverHomeView: View {
         switch section {
         case .recommend:
             DiscoverRecommendEventsRootView(
+                isActive: self.section == .recommend,
                 onHorizontalDragStateChanged: { isDragging in
                     guard isChildHorizontalDragging != isDragging else { return }
                     isChildHorizontalDragging = isDragging
@@ -94,6 +95,7 @@ struct DiscoverHomeView: View {
             )
         case .events:
             DiscoverEventsRootView(
+                isActive: self.section == .events,
                 onHorizontalDragStateChanged: { isDragging in
                     guard isChildHorizontalDragging != isDragging else { return }
                     isChildHorizontalDragging = isDragging
@@ -101,6 +103,7 @@ struct DiscoverHomeView: View {
             )
         case .news:
             NewsModuleView(
+                isActive: self.section == .news,
                 onHorizontalDragStateChanged: { isDragging in
                     guard isChildHorizontalDragging != isDragging else { return }
                     isChildHorizontalDragging = isDragging

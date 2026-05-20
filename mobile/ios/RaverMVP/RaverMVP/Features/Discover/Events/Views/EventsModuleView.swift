@@ -4,9 +4,11 @@ import CoreLocation
 struct DiscoverEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
+    private let isActive: Bool
 
-    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil) {
+    init(onHorizontalDragStateChanged: ((Bool) -> Void)? = nil, isActive: Bool = true) {
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
+        self.isActive = isActive
     }
 
     var body: some View {
@@ -16,6 +18,7 @@ struct DiscoverEventsRootView: View {
                 eventReadRepository: appContainer.eventReadRepository,
                 checkinRepository: appContainer.eventCheckinRepository
             ),
+            isActive: isActive,
             onHorizontalDragStateChanged: onHorizontalDragStateChanged
         )
     }
@@ -92,12 +95,16 @@ struct EventsModuleView: View {
     @State private var isSelectorDragging = false
     @State private var showEventsListTabsGuide = false
     @State private var eventsListTabsGuideHandOffset: CGFloat = 0
+    @State private var hasTriggeredInitialLoad = false
 
+    private let isActive: Bool
     init(
         viewModel: EventsModuleViewModel,
+        isActive: Bool = true,
         onHorizontalDragStateChanged: ((Bool) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.isActive = isActive
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
     }
 
@@ -160,12 +167,20 @@ struct EventsModuleView: View {
             .presentationDetents([.medium, .large])
         }
         .task(id: appState.session != nil) {
+            guard isActive else { return }
             await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
         }
         .task(id: allQueryTaskKey) {
+            guard isActive else { return }
             guard selectedScope == .all else { return }
             await viewModel.reloadAll(query: allQuery)
             presentEventsListTabsGuideIfNeeded()
+        }
+        .task {
+            await triggerInitialLoadIfNeeded()
+        }
+        .onChange(of: isActive) { _, _ in
+            Task { await triggerInitialLoadIfNeeded() }
         }
         .onAppear {
             presentEventsListTabsGuideIfNeeded()
@@ -183,6 +198,17 @@ struct EventsModuleView: View {
             Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    @MainActor
+    private func triggerInitialLoadIfNeeded() async {
+        guard isActive else { return }
+        guard !hasTriggeredInitialLoad else { return }
+        hasTriggeredInitialLoad = true
+        if selectedScope == .all {
+            await viewModel.reloadAll(query: allQuery)
+            presentEventsListTabsGuideIfNeeded()
         }
     }
 

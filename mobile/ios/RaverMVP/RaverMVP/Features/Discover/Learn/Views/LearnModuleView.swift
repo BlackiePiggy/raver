@@ -59,6 +59,7 @@ struct LearnModuleView: View {
     @State private var isRefreshingGenres = false
     @State private var isRefreshingLabels = false
     @State private var isRefreshingFestivals = false
+    @State private var isLoadingMoreLabels = false
     @State private var isLoadingMoreFestivals = false
     @State private var selectedFestivalRankingBoard: LearnFestivalRankingBoard?
     @State private var showFestivalCreateSheet = false
@@ -79,6 +80,7 @@ struct LearnModuleView: View {
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
     @State private var hasTriggeredInitialLoad = false
+    private let labelPageSize = 20
     private let festivalPageSize = 10
     private let isActive: Bool
 
@@ -160,10 +162,10 @@ struct LearnModuleView: View {
                 Task { await loadLabels() }
             }
             .onChange(of: selectedGenreFilters) { _, _ in
-                applyLabelFilters()
+                Task { await loadLabels() }
             }
             .onChange(of: selectedNationFilters) { _, _ in
-                applyLabelFilters()
+                Task { await loadLabels() }
             }
             .onChange(of: createFestivalAvatarItem) { _, item in
                 Task { await loadFestivalCreatePhoto(item, target: .avatar) }
@@ -537,6 +539,19 @@ struct LearnModuleView: View {
                             .onTapGesture {
                                 discoverPush(.labelDetail(labelID: label.id))
                             }
+                            .onAppear {
+                                guard label.id == labels.last?.id else { return }
+                                Task { await loadMoreLabelsIfNeeded() }
+                            }
+                    }
+
+                    if isLoadingMoreLabels {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .padding(.vertical, 8)
+                            Spacer()
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -725,15 +740,15 @@ struct LearnModuleView: View {
         do {
             let page = try await wikiRepository.fetchLearnLabels(
                 page: 1,
-                limit: 500,
+                limit: labelPageSize,
                 sortBy: selectedSort.apiValue,
                 order: sortOrder.rawValue,
                 search: nil,
-                nation: nil,
-                genre: nil
+                nation: currentLabelNationFilterQuery,
+                genre: currentLabelGenreFilterQuery
             )
             allLabels = page.items
-            applyLabelFilters()
+            labels = page.items
             labelsPagination = page.pagination
             labelsPhase = labels.isEmpty ? .empty : .success
             bannerMessage = nil
@@ -745,6 +760,36 @@ struct LearnModuleView: View {
             } else {
                 labelsPhase = .failure(message: message)
             }
+        }
+    }
+
+    @MainActor
+    private func loadMoreLabelsIfNeeded() async {
+        guard !isLoadingLabels, !isLoadingMoreLabels else { return }
+        guard let pagination = labelsPagination, pagination.page < pagination.totalPages else { return }
+
+        isLoadingMoreLabels = true
+        defer { isLoadingMoreLabels = false }
+
+        do {
+            let nextPage = pagination.page + 1
+            let response = try await wikiRepository.fetchLearnLabels(
+                page: nextPage,
+                limit: labelPageSize,
+                sortBy: selectedSort.apiValue,
+                order: sortOrder.rawValue,
+                search: nil,
+                nation: currentLabelNationFilterQuery,
+                genre: currentLabelGenreFilterQuery
+            )
+            let existingIDs = Set(allLabels.map(\.id))
+            let appended = response.items.filter { !existingIDs.contains($0.id) }
+            allLabels.append(contentsOf: appended)
+            labels.append(contentsOf: appended)
+            labelsPagination = response.pagination
+            labelsPhase = labels.isEmpty ? .empty : .success
+        } catch {
+            bannerMessage = error.userFacingMessage ?? LT("厂牌加载失败，请稍后重试", "Failed to load labels. Please try again later.", "レーベルを読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -820,6 +865,22 @@ struct LearnModuleView: View {
             return trimmed.isEmpty ? nil : trimmed
         }
         return Array(Set(nations)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var currentLabelGenreFilterQuery: String? {
+        let values = selectedGenreFilters
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+        return values.isEmpty ? nil : values.joined(separator: ",")
+    }
+
+    private var currentLabelNationFilterQuery: String? {
+        let values = selectedNationFilters
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+        return values.isEmpty ? nil : values.joined(separator: ",")
     }
 
     private func applyLabelFilters() {
@@ -4718,7 +4779,6 @@ struct LearnFestivalDetailView: View {
         .task(id: currentFestival.id) {
             prepareFestivalEditDraft()
             await hydrateFestivalContributorsIfNeeded()
-            await refreshFollowedBrandUpdatePreference()
         }
         .task(id: currentFestival.avatarUrl ?? "") {
             await resolveAvatarLuminance()
