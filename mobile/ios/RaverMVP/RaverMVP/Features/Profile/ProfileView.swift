@@ -304,13 +304,7 @@ struct ProfileView: View {
 
             switch viewModel.selectedSection {
             case .published:
-                if viewModel.loadingSection == .published && viewModel.recentPosts.isEmpty {
-                    ProfileSkeletonView()
-                } else if viewModel.recentPosts.isEmpty {
-                    ContentUnavailableView(LT("还没有动态", "No posts yet", "投稿はまだありません"), systemImage: "square.and.pencil")
-                } else {
-                    feedList(viewModel.recentPosts, actionAt: nil)
-                }
+                publishedSectionContent
             case .saves:
                 if !viewModel.hasLoadedSection(.saves) && viewModel.savedItems.isEmpty {
                     ProgressView()
@@ -348,8 +342,24 @@ struct ProfileView: View {
     }
 
     @ViewBuilder
+    private var publishedSectionContent: some View {
+        Group {
+            if viewModel.loadingSection == .published || (!viewModel.hasLoadedSection(.published) && viewModel.recentPosts.isEmpty) {
+                ProfileSkeletonView()
+            } else if viewModel.recentPosts.isEmpty {
+                ContentUnavailableView(LT("还没有动态", "No posts yet", "投稿はまだありません"), systemImage: "square.and.pencil")
+            } else {
+                feedList(viewModel.recentPosts, actionAt: nil)
+            }
+        }
+        .onAppear {
+            Task { await viewModel.loadSectionIfNeeded(.published) }
+        }
+    }
+
+    @ViewBuilder
     private func feedList(_ posts: [Post], actionAt: [String: Date]?) -> some View {
-        VStack(spacing: 12) {
+        LazyVStack(spacing: 12) {
             ForEach(posts) { post in
                 VStack(alignment: .leading, spacing: 8) {
                     if let actionAt,
@@ -387,6 +397,15 @@ struct ProfileView: View {
                 .onTapGesture {
                     appPush(.postDetail(postID: post.id))
                 }
+                .task {
+                    await viewModel.loadMorePublishedPostsIfNeeded(currentPostID: post.id)
+                }
+            }
+
+            if viewModel.selectedSection == .published && viewModel.isLoadingMorePublishedPosts {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
             }
         }
     }

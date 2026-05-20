@@ -554,6 +554,21 @@ final class LiveSocialService: SocialService {
         return try await request(path: path, method: "GET")
     }
 
+    func fetchMyProfilePosts(cursor: String?, limit: Int? = nil) async throws -> FeedPage {
+        var queryItems: [String] = []
+        if let limit {
+            queryItems.append("limit=\(max(1, limit))")
+        }
+        if let cursor {
+            queryItems.append("cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cursor)")
+        }
+        var path = "/v1/profile/me/posts"
+        if !queryItems.isEmpty {
+            path += "?\(queryItems.joined(separator: "&"))"
+        }
+        return try await request(path: path, method: "GET")
+    }
+
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage {
         var path = "/v1/users/\(userID)/followers"
         if let cursor {

@@ -276,6 +276,7 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func searchUsers(query: String) async throws -> [UserSummary]
     func fetchUserProfile(userID: String) async throws -> UserProfile
     func fetchPostsByUser(userID: String, cursor: String?, limit: Int?) async throws -> FeedPage
+    func fetchMyProfilePosts(cursor: String?, limit: Int?) async throws -> FeedPage
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFollowing(userID: String, cursor: String?) async throws -> FollowListPage
     func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
@@ -365,6 +366,10 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
 extension SocialService {
     func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
         try await fetchPostsByUser(userID: userID, cursor: cursor, limit: nil)
+    }
+
+    func fetchMyProfilePosts(cursor: String?) async throws -> FeedPage {
+        try await fetchMyProfilePosts(cursor: cursor, limit: nil)
     }
 }
 

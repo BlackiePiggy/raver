@@ -2349,6 +2349,59 @@ const mapPost = (
   };
 };
 
+const mapProfileFeedPost = (
+  post: {
+    id: string;
+    user: BasicUser;
+    content: string;
+    images: string[];
+    location?: string | null;
+    eventId?: string | null;
+    displayPublishedAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    likeCount: number;
+    repostCount: number;
+    saveCount: number;
+    shareCount: number;
+    commentCount: number;
+  },
+  likedPostIds: Set<string>,
+  repostedPostIds: Set<string>,
+  savedPostIds: Set<string>,
+  hiddenPostIds: Set<string>
+) => {
+  const displayPublishedAt = post.displayPublishedAt ?? post.createdAt;
+  return {
+    id: post.id,
+    author: toUserSummary(post.user, false),
+    content: post.content,
+    images: post.images,
+    location: post.location ?? null,
+    eventId: post.eventId ?? null,
+    boundDjIds: [],
+    boundBrandIds: [],
+    boundEventIds: [],
+    displayPublishedAt,
+    publishedAt: displayPublishedAt,
+    firstPublishedAt: post.createdAt,
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    likeCount: post.likeCount,
+    repostCount: post.repostCount,
+    saveCount: post.saveCount,
+    shareCount: post.shareCount,
+    commentCount: post.commentCount,
+    isLiked: likedPostIds.has(post.id),
+    isReposted: repostedPostIds.has(post.id),
+    isSaved: savedPostIds.has(post.id),
+    isHidden: hiddenPostIds.has(post.id),
+    recommendationReasonCode: null,
+    recommendationReason: null,
+    squad: null,
+  };
+};
+
 const mapEventLiveComment = (
   comment: {
     id: string;
@@ -7814,6 +7867,77 @@ router.get('/users/:id/posts', optionalAuth, async (req: Request, res: Response)
     });
   } catch (error) {
     console.error('BFF user posts error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/profile/me/posts', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const limit = normalizeLimit(req.query.limit, 20, 50);
+    const cursorDate = parseCursorDate(req.query.cursor);
+
+    const posts = await prisma.post.findMany({
+      where: {
+        userId,
+        visibility: 'public',
+        squadId: null,
+        ...(cursorDate
+          ? {
+              createdAt: {
+                lt: cursorDate,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        content: true,
+        images: true,
+        location: true,
+        eventId: true,
+        displayPublishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        likeCount: true,
+        repostCount: true,
+        saveCount: true,
+        shareCount: true,
+        commentCount: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = posts.length > limit;
+    const pagePosts = hasMore ? posts.slice(0, limit) : posts;
+    const postIds = pagePosts.map((post) => post.id);
+
+    const [likedPostIds, repostedPostIds, savedPostIds, hiddenPostIds] = await Promise.all([
+      buildLikedPostMap(userId, postIds),
+      buildRepostedPostMap(userId, postIds),
+      buildSavedPostMap(userId, postIds),
+      buildHiddenPostMap(userId, postIds),
+    ]);
+
+    res.json({
+      posts: pagePosts.map((post) =>
+        mapProfileFeedPost(post, likedPostIds, repostedPostIds, savedPostIds, hiddenPostIds)
+      ),
+      nextCursor: hasMore ? pagePosts[pagePosts.length - 1]?.createdAt.toISOString() ?? null : null,
+    });
+  } catch (error) {
+    console.error('BFF profile posts feed error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

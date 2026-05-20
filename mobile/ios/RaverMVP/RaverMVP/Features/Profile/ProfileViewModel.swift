@@ -15,6 +15,7 @@ protocol ProfileUserRepository {
 
 protocol ProfileContentRepository {
     func fetchPostsByUser(userID: String, cursor: String?, limit: Int?) async throws -> FeedPage
+    func fetchMyProfilePosts(cursor: String?, limit: Int?) async throws -> FeedPage
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
@@ -39,6 +40,10 @@ protocol ProfileContentRepository {
 extension ProfileContentRepository {
     func fetchPostsByUser(userID: String, cursor: String?) async throws -> FeedPage {
         try await fetchPostsByUser(userID: userID, cursor: cursor, limit: nil)
+    }
+
+    func fetchMyProfilePosts(cursor: String?) async throws -> FeedPage {
+        try await fetchMyProfilePosts(cursor: cursor, limit: nil)
     }
 }
 
@@ -114,6 +119,10 @@ struct ProfileContentRepositoryAdapter: ProfileContentRepository {
 
     func fetchPostsByUser(userID: String, cursor: String?, limit: Int? = nil) async throws -> FeedPage {
         try await socialService.fetchPostsByUser(userID: userID, cursor: cursor, limit: limit)
+    }
+
+    func fetchMyProfilePosts(cursor: String?, limit: Int? = nil) async throws -> FeedPage {
+        try await socialService.fetchMyProfilePosts(cursor: cursor, limit: limit)
     }
 
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage {
@@ -286,6 +295,9 @@ struct LoadMyProfileDashboardUseCase {
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
+    private let initialPublishedPostsLimit = 1
+    private let subsequentPublishedPostsLimit = 10
+
     enum Section: String, CaseIterable, Identifiable {
         case published
         case saves
@@ -317,6 +329,8 @@ final class ProfileViewModel: ObservableObject {
     @Published var savedItems: [ActivityPostItem] = []
     @Published var recentCheckins: [WebCheckin] = []
     @Published var appearance: UserAssetAppearance?
+    @Published var hasMorePublishedPosts = false
+    @Published var isLoadingMorePublishedPosts = false
     @Published var selectedSection: Section = .published
     @Published var loadingSection: Section?
     @Published private(set) var phase: LoadPhase = .idle
@@ -332,6 +346,7 @@ final class ProfileViewModel: ObservableObject {
     private let virtualAssetRepository: VirtualAssetRepository
     private let loadDashboardUseCase: LoadMyProfileDashboardUseCase
     private let offlineSnapshotStorageKey = "raver.profile.offlineSnapshot.v1"
+    private var publishedPostsNextCursor: String?
 
     init(
         userRepository: ProfileUserRepository,
@@ -369,9 +384,6 @@ final class ProfileViewModel: ObservableObject {
             phase = .success
             bannerMessage = nil
             self.error = nil
-            if selectedSection == .published && !loadedSections.contains(.published) {
-                await loadSection(.published)
-            }
         } catch {
             if restoreOfflineSnapshot() {
                 phase = .success
@@ -399,7 +411,11 @@ final class ProfileViewModel: ObservableObject {
         do {
             switch selectedSection {
             case .published:
-                recentPosts = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: nil, limit: 8).posts.filter { !$0.isRaverNews }
+                let page = try await contentRepository.fetchMyProfilePosts(
+                    cursor: nil,
+                    limit: initialPublishedPostsLimit
+                )
+                applyPublishedPostsPage(page, reset: true)
             case .saves:
                 savedItems = try await contentRepository.fetchMySaveHistory(cursor: nil).items
             case .likes:
@@ -425,6 +441,11 @@ final class ProfileViewModel: ObservableObject {
         await loadSection(selectedSection)
     }
 
+    func loadSectionIfNeeded(_ section: Section) async {
+        guard !loadedSections.contains(section) else { return }
+        await loadSection(section)
+    }
+
     func hasLoadedSection(_ section: Section) -> Bool {
         loadedSections.contains(section)
     }
@@ -441,7 +462,11 @@ final class ProfileViewModel: ObservableObject {
         do {
             switch section {
             case .published:
-                recentPosts = try await contentRepository.fetchPostsByUser(userID: profile.id, cursor: nil, limit: 8).posts.filter { !$0.isRaverNews }
+                let page = try await contentRepository.fetchMyProfilePosts(
+                    cursor: nil,
+                    limit: initialPublishedPostsLimit
+                )
+                applyPublishedPostsPage(page, reset: true)
             case .saves:
                 savedItems = try await contentRepository.fetchMySaveHistory(cursor: nil).items
             case .likes:
@@ -454,6 +479,35 @@ final class ProfileViewModel: ObservableObject {
         } catch {
             guard !error.isUserInitiatedCancellation else { return }
             bannerMessage = error.userFacingMessage ?? LT("当前内容加载失败，请稍后重试", "Failed to load this section. Please try again later.", "この内容を読み込めませんでした。時間をおいて再試行してください。")
+        }
+    }
+
+    func loadMorePublishedPostsIfNeeded(currentPostID: String) async {
+        guard selectedSection == .published,
+              hasMorePublishedPosts,
+              !isLoadingMorePublishedPosts,
+              let lastPostID = recentPosts.last?.id,
+              lastPostID == currentPostID,
+              let profile,
+              let cursor = publishedPostsNextCursor else {
+            return
+        }
+
+        isLoadingMorePublishedPosts = true
+        defer { isLoadingMorePublishedPosts = false }
+
+        do {
+            let page = try await contentRepository.fetchMyProfilePosts(
+                cursor: cursor,
+                limit: subsequentPublishedPostsLimit
+            )
+            applyPublishedPostsPage(page, reset: false)
+            persistOfflineSnapshot()
+            bannerMessage = nil
+            self.error = nil
+        } catch {
+            guard !error.isUserInitiatedCancellation else { return }
+            bannerMessage = error.userFacingMessage ?? LT("加载更多动态失败，请稍后重试", "Failed to load more posts. Please try again later.", "投稿をさらに読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -543,6 +597,19 @@ final class ProfileViewModel: ObservableObject {
         for index in savedItems.indices where savedItems[index].post.id == updated.id {
             savedItems[index].post = updated
         }
+    }
+
+    private func applyPublishedPostsPage(_ page: FeedPage, reset: Bool) {
+        let filtered = page.posts.filter { !$0.isRaverNews }
+        if reset {
+            recentPosts = filtered
+        } else {
+            var seen = Set(recentPosts.map(\.id))
+            let appended = filtered.filter { seen.insert($0.id).inserted }
+            recentPosts.append(contentsOf: appended)
+        }
+        publishedPostsNextCursor = page.nextCursor
+        hasMorePublishedPosts = page.nextCursor != nil
     }
 
     private func persistOfflineSnapshot() {

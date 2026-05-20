@@ -900,6 +900,10 @@ actor MockSocialService: SocialService {
         return FeedPage(posts: filtered, nextCursor: nil)
     }
 
+    func fetchMyProfilePosts(cursor: String?, limit: Int? = nil) async throws -> FeedPage {
+        try await fetchPostsByUser(userID: currentUser.id, cursor: cursor, limit: limit)
+    }
+
     func fetchFollowers(userID: String, cursor: String?) async throws -> FollowListPage {
         _ = cursor
         guard let profile = profilesByID[userID] else {
