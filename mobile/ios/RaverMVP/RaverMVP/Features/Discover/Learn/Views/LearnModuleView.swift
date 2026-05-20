@@ -78,7 +78,7 @@ struct LearnModuleView: View {
     @State private var createFestivalBackgroundData: Data?
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
-    private let festivalPageSize = 20
+    private let festivalPageSize = 10
 
     init(initialSection: LearnModuleSection = .rankings, showsSectionTabs: Bool = true) {
         self.initialSection = initialSection

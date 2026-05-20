@@ -6719,9 +6719,10 @@ const mapNewsArticle = (article: NewsArticleRow) => {
     authorUsername: article.author?.username || 'raver',
     authorName: article.author?.displayName || article.author?.username || 'Raver',
     authorAvatarURL: article.author?.avatarUrl || null,
-    boundDjIds: bindingIds.djIds,
-    boundBrandIds: bindingIds.brandIds,
-    boundEventIds: bindingIds.eventIds,
+    legacyEventID: null,
+    boundDjIDs: bindingIds.djIds,
+    boundBrandIDs: bindingIds.brandIds,
+    boundEventIDs: bindingIds.eventIds,
   };
 };
 
@@ -6801,9 +6802,9 @@ const normalizeNewsDraft = (body: Record<string, unknown>) => {
     link,
     coverImageUrl,
     category: normalizeNewsCategory(body.category),
-    boundDjIds: normalizePostBindingIDs(body.boundDjIds),
-    boundBrandIds: normalizePostBindingIDs(body.boundBrandIds),
-    boundEventIds: normalizePostBindingIDs(body.boundEventIds),
+    boundDjIds: normalizePostBindingIDs(body.boundDjIDs ?? body.boundDjIds),
+    boundBrandIds: normalizePostBindingIDs(body.boundBrandIDs ?? body.boundBrandIds),
+    boundEventIds: normalizePostBindingIDs(body.boundEventIDs ?? body.boundEventIds),
     publishedAt: parsedPublishedAt,
   };
 };

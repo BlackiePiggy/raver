@@ -2882,7 +2882,7 @@ actor MockWebFeatureService: WebFeatureService {
 
     func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage {
         let items = try await fetchLearnFestivals(search: search)
-        let pagination = paginateArray(items, page: page, limit: limit)
+        let pagination = paginateList(items, page: page, limit: limit)
         return LearnFestivalListPage(items: pagination.items, pagination: pagination.pagination)
     }
 
