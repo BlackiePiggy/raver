@@ -553,7 +553,6 @@ final class EventsModuleViewModel: ObservableObject {
     @Published private(set) var allEvents: [WebEvent] = []
     @Published private(set) var isLoadingAll = false
     @Published private(set) var isLoadingMoreAll = false
-    @Published private(set) var isShowingCachedAll = false
     @Published var errorMessage: String?
 
     private let fetchEventsBootstrapUseCase: FetchDiscoverEventsBootstrapUseCase
@@ -569,6 +568,7 @@ final class EventsModuleViewModel: ObservableObject {
     private var totalUpcomingPages = 1
     private var allReloadToken = UUID()
     private var lastSuccessfulAllLoadAt: Date?
+    private var didHydrateAllFromDiskCache = false
 
     init(
         listRepository: EventListRepository,
@@ -614,7 +614,7 @@ final class EventsModuleViewModel: ObservableObject {
             totalAllPages = max(totalOngoingPages, totalUpcomingPages)
             nextAllPage = 2
             lastSuccessfulAllLoadAt = Date()
-            isShowingCachedAll = false
+            didHydrateAllFromDiskCache = false
             persistOfflineSnapshot(query: query)
         } catch {
             guard allReloadToken == token else { return }
@@ -713,6 +713,9 @@ final class EventsModuleViewModel: ObservableObject {
     }
 
     private func shouldRefreshBootstrap(for query: AllQuery) -> Bool {
+        if didHydrateAllFromDiskCache, query == currentAllQuery {
+            return true
+        }
         guard query == currentAllQuery else { return true }
         guard let lastSuccessfulAllLoadAt else { return true }
         return Date().timeIntervalSince(lastSuccessfulAllLoadAt) >= bootstrapRefreshInterval
@@ -769,7 +772,7 @@ final class EventsModuleViewModel: ObservableObject {
         totalOngoingPages = snapshot.totalOngoingPages
         totalUpcomingPages = snapshot.totalUpcomingPages
         lastSuccessfulAllLoadAt = snapshot.cachedAt
-        isShowingCachedAll = true
+        didHydrateAllFromDiskCache = true
     }
 
     private func sortEventByActiveTimeline(_ lhs: WebEvent, _ rhs: WebEvent) -> Bool {

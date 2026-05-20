@@ -518,10 +518,6 @@ struct EventsModuleView: View {
     private var eventsListView: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
-                if viewModel.isShowingCachedAll {
-                    cachedBanner
-                }
-
                 if isLoadingCurrentScope {
                     HStack {
                         Spacer()
@@ -554,24 +550,6 @@ struct EventsModuleView: View {
         .refreshable {
             await refreshCurrentScope()
         }
-    }
-
-    private var cachedBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.caption.weight(.semibold))
-            Text(LT("已先显示上次缓存内容，正在静默刷新", "Showing cached events first and refreshing in background", "前回キャッシュを先に表示し、バックグラウンドで更新しています"))
-                .font(.caption)
-                .lineLimit(2)
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(RaverTheme.secondaryText)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(RaverTheme.card)
-        )
     }
 
     private func eventListRow(_ event: WebEvent) -> some View {
