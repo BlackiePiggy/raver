@@ -58,9 +58,40 @@ import {
   shouldAllowLocalUploadFallback,
 } from '../services/media-storage.service';
 import { mediaAssetService } from '../services/media-asset.service';
+import { notificationCenterService } from '../services/notification-center';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+
+const learnFestivalListSelect = {
+  id: true,
+  name: true,
+  nameI18n: true,
+  sourceRowId: true,
+  abbreviation: true,
+  aliases: true,
+  country: true,
+  countryI18n: true,
+  city: true,
+  cityI18n: true,
+  foundedYear: true,
+  frequency: true,
+  frequencyI18n: true,
+  tagline: true,
+  introduction: true,
+  descriptionI18n: true,
+  officialWebsite: true,
+  facebookUrl: true,
+  instagramUrl: true,
+  twitterUrl: true,
+  youtubeUrl: true,
+  tiktokUrl: true,
+  avatarUrl: true,
+  backgroundUrl: true,
+  links: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.WikiFestivalSelect;
 
 const refreshUserCheckinProjectionBestEffort = async (userId: string): Promise<void> => {
   try {
@@ -11827,35 +11858,7 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
         skip,
         take: limit,
         orderBy: [{ name: 'asc' }],
-        select: {
-          id: true,
-          name: true,
-          nameI18n: true,
-          sourceRowId: true,
-          abbreviation: true,
-          aliases: true,
-          country: true,
-          countryI18n: true,
-          city: true,
-          cityI18n: true,
-          foundedYear: true,
-          frequency: true,
-          frequencyI18n: true,
-          tagline: true,
-          introduction: true,
-          descriptionI18n: true,
-          officialWebsite: true,
-          facebookUrl: true,
-          instagramUrl: true,
-          twitterUrl: true,
-          youtubeUrl: true,
-          tiktokUrl: true,
-          avatarUrl: true,
-          backgroundUrl: true,
-          links: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: learnFestivalListSelect,
       }),
       prisma.wikiFestival.count({ where }),
       viewerId
@@ -11867,7 +11870,7 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
     ok(
       res,
       {
-        items: rows.map((row) =>
+        items: rows.map((row: Prisma.WikiFestivalGetPayload<{ select: typeof learnFestivalListSelect }>) =>
           mapWikiFestival(
             {
               ...row,
