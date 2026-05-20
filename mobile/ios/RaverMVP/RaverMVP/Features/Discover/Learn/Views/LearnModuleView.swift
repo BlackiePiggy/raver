@@ -10,6 +10,14 @@ import CoreLocation
 import CoreText
 import Foundation
 
+private struct LearnFestivalEventsScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct LearnModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
@@ -4547,6 +4555,8 @@ struct LearnFestivalDetailView: View {
     @State private var endedRelatedEventsPage = 0
     @State private var endedRelatedEventsTotalPages = 1
     @State private var visibleRelatedArticleCount = 5
+    @State private var eventsTabScrollOffset: CGFloat = 0
+    @State private var hasActivatedEventsAutoPagination = false
     @State private var errorMessage: String?
     @State private var showCreateEventSheet = false
     @State private var showFestivalEditSheet = false
@@ -5337,7 +5347,7 @@ struct LearnFestivalDetailView: View {
         case .basic:
             basicInfoTabContent
         case .events:
-            eventsTabContent
+            eventsTabContent(coordinateSpaceName: "LearnFestivalDetailTab-events")
         case .posts:
             postsTabContent
         }
@@ -5391,7 +5401,7 @@ struct LearnFestivalDetailView: View {
     }
 
     @ViewBuilder
-    private var eventsTabContent: some View {
+    private func eventsTabContent(coordinateSpaceName: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
                 discoverPush(.eventCreate)
@@ -5428,10 +5438,9 @@ struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
                     pagedFestivalEventSection(
                         events: upcomingRelatedEvents,
+                        section: .upcoming,
                         hasMore: hasMoreUpcomingRelatedEvents,
-                        isLoadingMore: isLoadingMoreUpcomingRelatedEvents,
-                        loadMoreTitle: LT("加载更多即将开始的活动", "Load More Upcoming Events", "今後のイベントをさらに表示"),
-                        onLoadMore: { Task { await loadMoreRelatedEvents(section: .upcoming) } }
+                        isLoadingMore: isLoadingMoreUpcomingRelatedEvents
                     )
                 }
 
@@ -5439,12 +5448,26 @@ struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
                     pagedFestivalEventSection(
                         events: endedRelatedEvents,
+                        section: .ended,
                         hasMore: hasMoreEndedRelatedEvents,
-                        isLoadingMore: isLoadingMoreEndedRelatedEvents,
-                        loadMoreTitle: LT("加载更多已结束活动", "Load More Ended Events", "終了したイベントをさらに表示"),
-                        onLoadMore: { Task { await loadMoreRelatedEvents(section: .ended) } }
+                        isLoadingMore: isLoadingMoreEndedRelatedEvents
                     )
                 }
+            }
+        }
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(
+                        key: LearnFestivalEventsScrollOffsetPreferenceKey.self,
+                        value: max(0, -proxy.frame(in: .named(coordinateSpaceName)).minY)
+                    )
+            }
+        )
+        .onPreferenceChange(LearnFestivalEventsScrollOffsetPreferenceKey.self) { offset in
+            eventsTabScrollOffset = offset
+            if offset >= 120 {
+                hasActivatedEventsAutoPagination = true
             }
         }
     }
@@ -5520,10 +5543,9 @@ struct LearnFestivalDetailView: View {
     @ViewBuilder
     private func pagedFestivalEventSection(
         events: [WebEvent],
+        section: FestivalRelatedEventSection,
         hasMore: Bool,
-        isLoadingMore: Bool,
-        loadMoreTitle: String,
-        onLoadMore: @escaping () -> Void
+        isLoadingMore: Bool
     ) -> some View {
         ForEach(events) { event in
             Button {
@@ -5532,14 +5554,22 @@ struct LearnFestivalDetailView: View {
                 festivalEventRow(event)
             }
             .buttonStyle(.plain)
+            .onAppear {
+                guard hasMore else { return }
+                guard event.id == events.last?.id else { return }
+                guard hasActivatedEventsAutoPagination || eventsTabScrollOffset >= 120 else { return }
+                Task { await loadMoreRelatedEvents(section: section) }
+            }
         }
 
-        festivalLoadMoreButton(
-            hasMore: hasMore,
-            isLoadingMore: isLoadingMore,
-            title: loadMoreTitle,
-            action: onLoadMore
-        )
+        if isLoadingMore {
+            HStack {
+                Spacer()
+                ProgressView()
+                    .padding(.top, 8)
+                Spacer()
+            }
+        }
     }
 
     @ViewBuilder
@@ -6172,10 +6202,8 @@ struct LearnFestivalDetailView: View {
         case .basic:
             return
         case .events:
-            upcomingRelatedEventsPage = 0
-            upcomingRelatedEventsTotalPages = 1
-            endedRelatedEventsPage = 0
-            endedRelatedEventsTotalPages = 1
+            eventsTabScrollOffset = 0
+            hasActivatedEventsAutoPagination = false
         case .posts:
             visibleRelatedArticleCount = 5
         }

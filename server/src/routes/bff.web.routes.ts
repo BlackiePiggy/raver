@@ -5288,12 +5288,17 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
       }
     }
 
+    const eventOrderBy: Prisma.EventOrderByWithRelationInput[] =
+      status === 'ended'
+        ? [{ startDate: 'desc' }, { id: 'desc' }]
+        : [{ startDate: 'asc' }, { id: 'asc' }];
+
     const [rows, total] = await Promise.all([
       prisma.event.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { startDate: 'asc' },
+        orderBy: eventOrderBy,
         select: selectEventListCardForWeb,
       }),
       prisma.event.count({ where }),
