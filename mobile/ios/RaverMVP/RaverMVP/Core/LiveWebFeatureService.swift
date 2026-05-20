@@ -1087,6 +1087,16 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func fetchLearnGenreTreeSummary() async throws -> [LearnGenreTreeSummaryNode] {
+        let response: BFFEnvelope<[LearnGenreTreeSummaryNode]> = try await request(path: "/v1/learn/genres/tree-summary", method: "GET")
+        return response.data
+    }
+
+    func fetchLearnGenreDetail(id: String) async throws -> LearnGenreDetail {
+        let response: BFFEnvelope<LearnGenreDetail> = try await request(path: "/v1/learn/genres/\(id)", method: "GET")
+        return response.data
+    }
+
     func fetchLearnLabels(
         page: Int,
         limit: Int,

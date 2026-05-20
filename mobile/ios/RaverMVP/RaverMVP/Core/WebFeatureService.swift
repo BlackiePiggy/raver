@@ -133,6 +133,8 @@ protocol WebFeatureService {
     func addRatingComment(unitID: String, input: CreateRatingCommentInput) async throws -> WebRatingComment
 
     func fetchLearnGenres() async throws -> [LearnGenreNode]
+    func fetchLearnGenreTreeSummary() async throws -> [LearnGenreTreeSummaryNode]
+    func fetchLearnGenreDetail(id: String) async throws -> LearnGenreDetail
     func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage
     func fetchLearnFestival(id: String) async throws -> WebLearnFestival
     func fetchLearnLabel(id: String) async throws -> LearnLabel

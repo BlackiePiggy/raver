@@ -1394,6 +1394,25 @@ struct LearnGenreNode: Codable, Identifiable, Hashable {
     var children: [LearnGenreNode]?
 }
 
+struct LearnGenreTreeSummaryNode: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var path: String?
+    var children: [LearnGenreTreeSummaryNode]?
+}
+
+struct LearnGenreDetail: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var path: String?
+    var description: String
+    var example: String?
+    var spotifyTrackURL: String?
+    var wikipediaURL: String?
+    var keyArtists: [String]?
+    var keyArtistBindings: [LearnGenreKeyArtistBinding]?
+}
+
 struct LearnGenreKeyArtistBinding: Codable, Identifiable, Hashable {
     var id: String { name }
     var name: String

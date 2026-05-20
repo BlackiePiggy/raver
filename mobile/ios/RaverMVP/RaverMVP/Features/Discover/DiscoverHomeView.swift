@@ -117,7 +117,7 @@ struct DiscoverHomeView: View {
                 }
             )
         case .sets:
-            SetsModuleView()
+            SetsModuleView(isActive: self.section == .sets)
         case .rankings:
             LearnModuleView(
                 initialSection: .rankings,

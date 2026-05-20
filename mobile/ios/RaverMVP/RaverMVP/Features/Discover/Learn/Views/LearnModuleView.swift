@@ -32,7 +32,7 @@ struct LearnModuleView: View {
         appContainer.djRankingRepository
     }
 
-    @State private var genres: [LearnGenreNode] = []
+    @State private var genreTree: [LearnGenreTreeSummaryNode] = []
     @State private var allLabels: [LearnLabel] = []
     @State private var labels: [LearnLabel] = []
     @State private var festivals: [LearnFestival] = []
@@ -80,7 +80,7 @@ struct LearnModuleView: View {
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
     @State private var hasTriggeredInitialLoad = false
-    private let labelPageSize = 20
+    private let labelPageSize = 10
     private let festivalPageSize = 10
     private let isActive: Bool
 
@@ -487,11 +487,12 @@ struct LearnModuleView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
-        } else if genres.isEmpty {
+        } else if genreTree.isEmpty {
             ContentUnavailableView(LT("暂无学习内容", "暂无学习内容", "学習コンテンツはまだありません"), systemImage: "book")
         } else {
             LearnGenreSunburstSection(
-                genres: genres,
+                genres: genreTree,
+                wikiRepository: wikiRepository,
                 bottomInset: max(0, tabBarReservedHeight) + 14
             )
             .refreshable {
@@ -702,7 +703,7 @@ struct LearnModuleView: View {
     }
 
     private func loadGenres() async {
-        let hadContent = !genres.isEmpty
+        let hadContent = !genreTree.isEmpty
         isLoadingGenres = true
         if hadContent {
             isRefreshingGenres = true
@@ -712,8 +713,8 @@ struct LearnModuleView: View {
         defer { isLoadingGenres = false }
         defer { isRefreshingGenres = false }
         do {
-            genres = try await wikiRepository.fetchLearnGenres()
-            genresPhase = genres.isEmpty ? .empty : .success
+            genreTree = try await wikiRepository.fetchLearnGenreTreeSummary()
+            genresPhase = genreTree.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
             let message = error.userFacingMessage ?? LT("学习内容加载失败，请稍后重试", "Failed to load learn content. Please try again later.", "学習コンテンツを読み込めませんでした。時間をおいて再試行してください。")
@@ -1222,18 +1223,21 @@ struct LearnModuleView: View {
 }
 
 private struct LearnGenreSunburstSection: View {
-    let genres: [LearnGenreNode]
+    let genres: [LearnGenreTreeSummaryNode]
+    let wikiRepository: DiscoverWikiRepository
     let bottomInset: CGFloat
 
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appPush) private var appPush
     @State private var focusedId: String?
     @State private var selectedNode: GenreSunburstNode?
     @State private var rootNode: GenreSunburstNode
     @State private var searchIndex: [GenreSunburstSearchItem]
+    @State private var genreDetails: [String: LearnGenreDetail] = [:]
+    @State private var detailLoadTask: Task<Void, Never>?
 
-    init(genres: [LearnGenreNode], bottomInset: CGFloat) {
+    init(genres: [LearnGenreTreeSummaryNode], wikiRepository: DiscoverWikiRepository, bottomInset: CGFloat) {
         self.genres = genres
+        self.wikiRepository = wikiRepository
         self.bottomInset = bottomInset
 
         let root = Self.makeRootNode(from: genres)
@@ -1241,7 +1245,7 @@ private struct LearnGenreSunburstSection: View {
         _searchIndex = State(initialValue: Self.makeSearchIndex(root: root))
     }
 
-    private static func makeRootNode(from genres: [LearnGenreNode]) -> GenreSunburstNode {
+    private static func makeRootNode(from genres: [LearnGenreTreeSummaryNode]) -> GenreSunburstNode {
         GenreSunburstNode(
             id: "learn-genres-root",
             name: LT("流派树", "Genre Tree", "ジャンルツリー"),
@@ -1252,7 +1256,7 @@ private struct LearnGenreSunburstSection: View {
             wikipediaURL: "",
             keyArtists: [],
             keyArtistBindings: [],
-            children: genres.map { GenreSunburstNode(learnNode: $0, parentPath: "learn-genres-root") }
+            children: genres.map { GenreSunburstNode(summaryNode: $0, parentPath: "learn-genres-root") }
         )
     }
 
@@ -1293,8 +1297,9 @@ private struct LearnGenreSunburstSection: View {
                     .frame(height: chartSize)
 
                     GenreSunburstSelectionCard(
-                        node: selectedNode ?? rootNode.firstNode(withId: focusedId ?? "") ?? rootNode,
-                        pathText: pathText(for: selectedNode ?? rootNode.firstNode(withId: focusedId ?? "") ?? rootNode),
+                        node: currentDisplayNode,
+                        pathText: pathText(for: currentDisplayNode),
+                        detail: currentGenreDetail,
                         onArtistTap: openArtistDetail
                     )
                 }
@@ -1317,11 +1322,47 @@ private struct LearnGenreSunburstSection: View {
             searchIndex = Self.makeSearchIndex(root: updatedRoot)
             focusedId = nil
             selectedNode = nil
+            genreDetails = [:]
+            detailLoadTask?.cancel()
         }
+        .onChange(of: focusedId) { _, _ in
+            loadDetailIfNeeded()
+        }
+        .onChange(of: selectedNode?.id) { _, _ in
+            loadDetailIfNeeded()
+        }
+    }
+
+    private var currentDisplayNode: GenreSunburstNode {
+        selectedNode ?? rootNode.firstNode(withId: focusedId ?? "") ?? rootNode
+    }
+
+    private var currentGenreDetail: LearnGenreDetail? {
+        guard currentDisplayNode.id != rootNode.id else { return nil }
+        return genreDetails[currentDisplayNode.id]
     }
 
     private func pathText(for node: GenreSunburstNode) -> String {
         node.pathDisplayText(root: rootNode)
+    }
+
+    private func loadDetailIfNeeded() {
+        detailLoadTask?.cancel()
+        let node = currentDisplayNode
+        guard node.id != rootNode.id else { return }
+        guard genreDetails[node.id] == nil else { return }
+
+        let repository = wikiRepository
+        detailLoadTask = Task {
+            do {
+                let detail = try await repository.fetchLearnGenreDetail(id: node.id)
+                await MainActor.run {
+                    genreDetails[node.id] = detail
+                }
+            } catch {
+                return
+            }
+        }
     }
 
     private func openArtistDetail(_ artist: LearnGenreKeyArtistBinding) {
@@ -1386,6 +1427,7 @@ private struct GenreSunburstSelectionCard: View {
     @Environment(\.colorScheme) private var colorScheme
     let node: GenreSunburstNode
     let pathText: String
+    let detail: LearnGenreDetail?
     let onArtistTap: (LearnGenreKeyArtistBinding) -> Void
 
     var body: some View {
@@ -1404,12 +1446,15 @@ private struct GenreSunburstSelectionCard: View {
                     .minimumScaleFactor(0.8)
             }
 
-            if !node.description.isEmpty {
-                Text(node.description)
+            if !displayDescription.isEmpty {
+                Text(displayDescription)
                     .font(.system(size: 14.5, weight: .regular))
                     .foregroundStyle(secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineSpacing(2)
+            } else if detail == nil && !isRootNode {
+                ProgressView()
+                    .controlSize(.small)
             }
 
             if !infoItems.isEmpty {
@@ -1423,31 +1468,6 @@ private struct GenreSunburstSelectionCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(
-                colors: cardGradientColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: cardStrokeColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(
-            color: colorScheme == .dark ? .clear : Color.black.opacity(0.10),
-            radius: colorScheme == .dark ? 0 : 18,
-            x: 0,
-            y: colorScheme == .dark ? 0 : 10
-        )
     }
 
     private var primaryText: Color {
@@ -1464,30 +1484,6 @@ private struct GenreSunburstSelectionCard: View {
             : Color.black.opacity(0.82)
     }
 
-    private var cardGradientColors: [Color] {
-        colorScheme == .dark
-            ? [
-                Color(red: 0.08, green: 0.10, blue: 0.16).opacity(0.94),
-                Color(red: 0.04, green: 0.05, blue: 0.09).opacity(0.98)
-            ]
-            : [
-                Color.white.opacity(0.96),
-                Color(red: 0.92, green: 0.96, blue: 1.0).opacity(0.92)
-            ]
-    }
-
-    private var cardStrokeColors: [Color] {
-        colorScheme == .dark
-            ? [
-                Color(red: 0.42, green: 0.84, blue: 1.0).opacity(0.34),
-                Color(red: 1.0, green: 0.26, blue: 0.67).opacity(0.16)
-            ]
-            : [
-                Color(red: 0.10, green: 0.48, blue: 0.78).opacity(0.18),
-                Color(red: 0.86, green: 0.20, blue: 0.52).opacity(0.10)
-            ]
-    }
-
     private var infoItems: [GenreSunburstInfoItem] {
         var items: [GenreSunburstInfoItem] = []
 
@@ -1502,12 +1498,12 @@ private struct GenreSunburstSelectionCard: View {
             ))
         }
 
-        if !node.example.isEmpty {
+        if !displayExample.isEmpty {
             items.append(GenreSunburstInfoItem(
                 id: "example",
                 icon: "music.note",
                 title: LT("声音线索", "Sound cue", "サウンド"),
-                value: node.example,
+                value: displayExample,
                 artists: []
             ))
         }
@@ -1515,12 +1511,25 @@ private struct GenreSunburstSelectionCard: View {
         return items
     }
 
+    private var isRootNode: Bool {
+        node.id == "learn-genres-root"
+    }
+
+    private var displayDescription: String {
+        detail?.description ?? node.description
+    }
+
+    private var displayExample: String {
+        detail?.example ?? node.example
+    }
+
     private func normalizedArtistBindings() -> [LearnGenreKeyArtistBinding] {
-        if !node.keyArtistBindings.isEmpty {
-            return node.keyArtistBindings
+        let bindings = detail?.keyArtistBindings ?? node.keyArtistBindings
+        if !bindings.isEmpty {
+            return bindings
         }
 
-        return node.keyArtists.map { LearnGenreKeyArtistBinding(name: $0, djId: nil, dj: nil) }
+        return (detail?.keyArtists ?? node.keyArtists).map { LearnGenreKeyArtistBinding(name: $0, djId: nil, dj: nil) }
     }
 }
 
@@ -1732,10 +1741,6 @@ private struct GenreSunburstSearchItem: Identifiable, Sendable {
     let parentId: String?
     let pathText: String
     let nameLower: String
-    let pathLower: String
-    let descriptionLower: String
-    let exampleLower: String
-    let artistLower: String
 
     init(node: GenreSunburstNode, parentId: String?, pathText: String) {
         self.id = node.id
@@ -1743,23 +1748,13 @@ private struct GenreSunburstSearchItem: Identifiable, Sendable {
         self.parentId = parentId
         self.pathText = pathText
         self.nameLower = node.name.lowercased()
-        self.pathLower = node.path.lowercased()
-        self.descriptionLower = node.description.lowercased()
-        self.exampleLower = node.example.lowercased()
-        self.artistLower = node.keyArtists.joined(separator: " ").lowercased()
     }
 
     func score(for query: String) -> Int {
         var score = 0
         if nameLower == query { score += 1200 }
-        if pathLower == query { score += 900 }
         if nameLower.hasPrefix(query) { score += 700 }
-        if pathLower.hasPrefix(query) { score += 450 }
         if nameLower.contains(query) { score += 300 }
-        if pathLower.contains(query) { score += 220 }
-        if descriptionLower.contains(query) { score += 120 }
-        if exampleLower.contains(query) { score += 100 }
-        if artistLower.contains(query) { score += 100 }
         return score
     }
 }
@@ -1963,42 +1958,6 @@ private extension GenreSunburstNode {
         let names = path.dropFirst().map(\.name)
         return names.joined(separator: " / ")
     }
-
-    var searchIndex: String {
-        [
-            name,
-            description,
-            example,
-            wikipediaURL,
-            keyArtists.joined(separator: " "),
-            path
-        ]
-        .joined(separator: " ")
-        .lowercased()
-    }
-
-    func searchScore(for query: String) -> Int {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return 0 }
-
-        let nameLower = name.lowercased()
-        let pathLower = path.lowercased()
-        let descriptionLower = description.lowercased()
-        let exampleLower = example.lowercased()
-        let artistLower = keyArtists.joined(separator: " ").lowercased()
-
-        var score = 0
-        if nameLower == normalizedQuery { score += 1200 }
-        if pathLower == normalizedQuery { score += 900 }
-        if nameLower.hasPrefix(normalizedQuery) { score += 700 }
-        if pathLower.hasPrefix(normalizedQuery) { score += 450 }
-        if nameLower.contains(normalizedQuery) { score += 300 }
-        if pathLower.contains(normalizedQuery) { score += 220 }
-        if descriptionLower.contains(normalizedQuery) { score += 120 }
-        if exampleLower.contains(normalizedQuery) { score += 100 }
-        if artistLower.contains(normalizedQuery) { score += 100 }
-        return score
-    }
 }
 
 private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
@@ -2037,17 +1996,17 @@ private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
         self.children = children
     }
 
-    init(learnNode: LearnGenreNode, parentPath: String) {
-        self.id = learnNode.id
-        self.name = learnNode.name
-        self.path = learnNode.path ?? "\(parentPath)/\(learnNode.id)"
-        self.description = learnNode.description
-        self.example = learnNode.example ?? ""
-        self.spotifyTrackURL = learnNode.spotifyTrackURL ?? ""
-        self.wikipediaURL = learnNode.wikipediaURL ?? ""
-        self.keyArtists = learnNode.keyArtists ?? []
-        self.keyArtistBindings = learnNode.keyArtistBindings ?? []
-        self.children = (learnNode.children ?? []).map { GenreSunburstNode(learnNode: $0, parentPath: "\(parentPath)/\(learnNode.id)") }
+    init(summaryNode: LearnGenreTreeSummaryNode, parentPath: String) {
+        self.id = summaryNode.id
+        self.name = summaryNode.name
+        self.path = summaryNode.path ?? "\(parentPath)/\(summaryNode.id)"
+        self.description = ""
+        self.example = ""
+        self.spotifyTrackURL = ""
+        self.wikipediaURL = ""
+        self.keyArtists = []
+        self.keyArtistBindings = []
+        self.children = (summaryNode.children ?? []).map { GenreSunburstNode(summaryNode: $0, parentPath: "\(parentPath)/\(summaryNode.id)") }
     }
 
     var isLeaf: Bool {

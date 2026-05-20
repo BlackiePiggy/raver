@@ -2708,6 +2708,105 @@ actor MockWebFeatureService: WebFeatureService {
         ]
     }
 
+    func fetchLearnGenreTreeSummary() async throws -> [LearnGenreTreeSummaryNode] {
+        [
+            LearnGenreTreeSummaryNode(
+                id: "house",
+                name: "House",
+                path: "electronic-music/house",
+                children: [
+                    LearnGenreTreeSummaryNode(id: "deep-house", name: "Deep House", path: "electronic-music/house/deep-house", children: nil),
+                    LearnGenreTreeSummaryNode(id: "tech-house", name: "Tech House", path: "electronic-music/house/tech-house", children: nil)
+                ]
+            ),
+            LearnGenreTreeSummaryNode(
+                id: "techno",
+                name: "Techno",
+                path: "electronic-music/techno",
+                children: [
+                    LearnGenreTreeSummaryNode(id: "melodic-techno", name: "Melodic Techno", path: "electronic-music/techno/melodic-techno", children: nil),
+                    LearnGenreTreeSummaryNode(id: "hard-techno", name: "Hard Techno", path: "electronic-music/techno/hard-techno", children: nil)
+                ]
+            )
+        ]
+    }
+
+    func fetchLearnGenreDetail(id: String) async throws -> LearnGenreDetail {
+        let details: [String: LearnGenreDetail] = [
+            "house": LearnGenreDetail(
+                id: "house",
+                name: "House",
+                path: "electronic-music/house",
+                description: "四拍地板鼓点为核心。",
+                example: "律动温暖、适合长时间舞池推进。",
+                spotifyTrackURL: nil,
+                wikipediaURL: nil,
+                keyArtists: ["Frankie Knuckles"],
+                keyArtistBindings: []
+            ),
+            "deep-house": LearnGenreDetail(
+                id: "deep-house",
+                name: "Deep House",
+                path: "electronic-music/house/deep-house",
+                description: "柔和、氛围化。",
+                example: "更细腻、更流动的律动层次。",
+                spotifyTrackURL: nil,
+                wikipediaURL: nil,
+                keyArtists: ["Larry Heard"],
+                keyArtistBindings: []
+            ),
+            "tech-house": LearnGenreDetail(
+                id: "tech-house",
+                name: "Tech House",
+                path: "electronic-music/house/tech-house",
+                description: "节奏简洁、律动强。",
+                example: "鼓点清晰，偏功能性舞池驱动。",
+                spotifyTrackURL: nil,
+                wikipediaURL: nil,
+                keyArtists: ["Fisher"],
+                keyArtistBindings: []
+            ),
+            "techno": LearnGenreDetail(
+                id: "techno",
+                name: "Techno",
+                path: "electronic-music/techno",
+                description: "工业感与重复推进。",
+                example: "机械、循环、推进感强。",
+                spotifyTrackURL: nil,
+                wikipediaURL: nil,
+                keyArtists: ["Jeff Mills"],
+                keyArtistBindings: []
+            ),
+            "melodic-techno": LearnGenreDetail(
+                id: "melodic-techno",
+                name: "Melodic Techno",
+                path: "electronic-music/techno/melodic-techno",
+                description: "旋律驱动。",
+                example: "情绪线更明显，常见铺陈与堆叠。",
+                spotifyTrackURL: nil,
+                wikipediaURL: nil,
+                keyArtists: ["Tale Of Us"],
+                keyArtistBindings: []
+            ),
+            "hard-techno": LearnGenreDetail(
+                id: "hard-techno",
+                name: "Hard Techno",
+                path: "electronic-music/techno/hard-techno",
+                description: "更快更硬。",
+                example: "速度更快，冲击更强。",
+                spotifyTrackURL: nil,
+                wikipediaURL: nil,
+                keyArtists: ["Charlotte de Witte"],
+                keyArtistBindings: []
+            ),
+        ]
+
+        if let detail = details[id] {
+            return detail
+        }
+        throw ServiceError.message("流派不存在")
+    }
+
     func fetchLearnLabels(
         page: Int,
         limit: Int,

@@ -11315,6 +11315,25 @@ type LearnGenreTreeNode = {
   children: LearnGenreTreeNode[];
 };
 
+type LearnGenreTreeSummaryNode = {
+  id: string;
+  name: string;
+  path: string;
+  children: LearnGenreTreeSummaryNode[];
+};
+
+type LearnGenreDetailNode = {
+  id: string;
+  name: string;
+  path: string;
+  description: string;
+  example: string;
+  spotifyTrackURL: string;
+  wikipediaURL: string;
+  keyArtists: string[];
+  keyArtistBindings: LearnGenreKeyArtistBinding[];
+};
+
 type LearnGenreKeyArtistBinding = {
   name: string;
   djId: string | null;
@@ -11599,6 +11618,101 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
     ok(res, electronicRoot?.children ?? roots);
   } catch (error) {
     console.error('BFF web learn genres error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/learn/genres/tree-summary', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await prisma.genre.findMany({
+      orderBy: [{ parentId: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        path: true,
+        parentId: true,
+      },
+    });
+
+    const byParentId = new Map<string | null, typeof rows>();
+    for (const row of rows) {
+      const siblings = byParentId.get(row.parentId) ?? [];
+      siblings.push(row);
+      byParentId.set(row.parentId, siblings);
+    }
+
+    const buildNode = (row: (typeof rows)[number]): LearnGenreTreeSummaryNode => ({
+      id: row.id,
+      name: row.name,
+      path: row.path,
+      children: (byParentId.get(row.id) ?? []).map(buildNode),
+    });
+
+    const roots = (byParentId.get(null) ?? []).map(buildNode);
+    const electronicRoot = roots.find((node) => node.id === 'electronic-music');
+    ok(res, electronicRoot?.children ?? roots);
+  } catch (error) {
+    console.error('BFF web learn genres tree summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!id) {
+      res.status(400).json({ error: 'Genre id is required' });
+      return;
+    }
+
+    const row = await prisma.genre.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        path: true,
+        description: true,
+        example: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
+        keyArtists: true,
+        keyArtistBindings: true,
+      },
+    });
+
+    if (!row) {
+      res.status(404).json({ error: 'Genre not found' });
+      return;
+    }
+
+    const boundDjIds = Array.from(new Set(
+      (Array.isArray(row.keyArtistBindings) ? row.keyArtistBindings : [])
+        .map((item) => (item && typeof item === 'object' && typeof (item as any).djId === 'string' ? (item as any).djId.trim() : ''))
+        .filter(Boolean)
+    ));
+    const boundDJs = boundDjIds.length
+      ? await prisma.dJ.findMany({
+          where: { id: { in: boundDjIds } },
+          select: selectGenreDJLite,
+        })
+      : [];
+    const djById = new Map(boundDJs.map((dj) => [dj.id, dj]));
+
+    const detail: LearnGenreDetailNode = {
+      id: row.id,
+      name: row.name,
+      path: row.path,
+      description: row.description ?? '',
+      example: row.example ?? '',
+      spotifyTrackURL: row.spotifyTrackUrl ?? '',
+      wikipediaURL: row.wikipediaUrl ?? '',
+      keyArtists: row.keyArtists,
+      keyArtistBindings: normalizeGenreKeyArtistBindings(row.keyArtists, row.keyArtistBindings, djById),
+    };
+
+    ok(res, detail);
+  } catch (error) {
+    console.error('BFF web learn genre detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

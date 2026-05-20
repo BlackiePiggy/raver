@@ -101,6 +101,7 @@ struct SetsModuleView: View {
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
+    private let isActive: Bool
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
@@ -119,6 +120,10 @@ struct SetsModuleView: View {
     @State private var isRefreshing = false
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
+
+    init(isActive: Bool = true) {
+        self.isActive = isActive
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -233,7 +238,13 @@ struct SetsModuleView: View {
                 .background(RaverTheme.background)
         }
         .task {
+            guard isActive else { return }
             await reload()
+        }
+        .onChange(of: isActive) { _, newValue in
+            guard newValue else { return }
+            guard sets.isEmpty, !isLoading else { return }
+            Task { await reload() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverSetDidSave)) { _ in
             Task { await reload() }
