@@ -4536,12 +4536,16 @@ struct LearnFestivalDetailView: View {
     @State private var isLoadingRelatedContent = false
     @State private var isLoadingRelatedEvents = false
     @State private var isLoadingRelatedArticles = false
+    @State private var isLoadingMoreUpcomingRelatedEvents = false
+    @State private var isLoadingMoreEndedRelatedEvents = false
     @State private var didLoadRelatedEvents = false
     @State private var didLoadRelatedArticles = false
     @State private var relatedEventsLoadFailed = false
     @State private var relatedArticlesLoadFailed = false
-    @State private var visibleUpcomingRelatedEventCount = 10
-    @State private var visibleEndedRelatedEventCount = 10
+    @State private var upcomingRelatedEventsPage = 0
+    @State private var upcomingRelatedEventsTotalPages = 1
+    @State private var endedRelatedEventsPage = 0
+    @State private var endedRelatedEventsTotalPages = 1
     @State private var visibleRelatedArticleCount = 5
     @State private var errorMessage: String?
     @State private var showCreateEventSheet = false
@@ -5424,9 +5428,10 @@ struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
                     pagedFestivalEventSection(
                         events: upcomingRelatedEvents,
-                        visibleCount: visibleUpcomingRelatedEventCount,
+                        hasMore: hasMoreUpcomingRelatedEvents,
+                        isLoadingMore: isLoadingMoreUpcomingRelatedEvents,
                         loadMoreTitle: LT("加载更多即将开始的活动", "Load More Upcoming Events", "今後のイベントをさらに表示"),
-                        onLoadMore: { visibleUpcomingRelatedEventCount += 10 }
+                        onLoadMore: { Task { await loadMoreRelatedEvents(section: .upcoming) } }
                     )
                 }
 
@@ -5434,9 +5439,10 @@ struct LearnFestivalDetailView: View {
                     festivalEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
                     pagedFestivalEventSection(
                         events: endedRelatedEvents,
-                        visibleCount: visibleEndedRelatedEventCount,
+                        hasMore: hasMoreEndedRelatedEvents,
+                        isLoadingMore: isLoadingMoreEndedRelatedEvents,
                         loadMoreTitle: LT("加载更多已结束活动", "Load More Ended Events", "終了したイベントをさらに表示"),
-                        onLoadMore: { visibleEndedRelatedEventCount += 10 }
+                        onLoadMore: { Task { await loadMoreRelatedEvents(section: .ended) } }
                     )
                 }
             }
@@ -5502,8 +5508,8 @@ struct LearnFestivalDetailView: View {
             }
 
             festivalLoadMoreButton(
-                shownCount: visibleArticles.count,
-                totalCount: relatedArticles.count,
+                hasMore: visibleArticles.count < relatedArticles.count,
+                isLoadingMore: false,
                 title: LT("加载更多动态", "Load More Posts", "投稿をさらに表示")
             ) {
                 visibleRelatedArticleCount += 5
@@ -5514,12 +5520,12 @@ struct LearnFestivalDetailView: View {
     @ViewBuilder
     private func pagedFestivalEventSection(
         events: [WebEvent],
-        visibleCount: Int,
+        hasMore: Bool,
+        isLoadingMore: Bool,
         loadMoreTitle: String,
         onLoadMore: @escaping () -> Void
     ) -> some View {
-        let visibleEvents = Array(events.prefix(visibleCount))
-        ForEach(visibleEvents) { event in
+        ForEach(events) { event in
             Button {
                 appPush(.eventDetail(eventID: event.id))
             } label: {
@@ -5529,8 +5535,8 @@ struct LearnFestivalDetailView: View {
         }
 
         festivalLoadMoreButton(
-            shownCount: visibleEvents.count,
-            totalCount: events.count,
+            hasMore: hasMore,
+            isLoadingMore: isLoadingMore,
             title: loadMoreTitle,
             action: onLoadMore
         )
@@ -5538,19 +5544,27 @@ struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private func festivalLoadMoreButton(
-        shownCount: Int,
-        totalCount: Int,
+        hasMore: Bool,
+        isLoadingMore: Bool,
         title: String,
         action: @escaping () -> Void
     ) -> some View {
-        if shownCount < totalCount {
+        if hasMore || isLoadingMore {
             Button(action: action) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                Group {
+                    if isLoadingMore {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 10)
             }
             .buttonStyle(.bordered)
+            .disabled(isLoadingMore)
             .padding(.top, 8)
         }
     }
@@ -6158,8 +6172,10 @@ struct LearnFestivalDetailView: View {
         case .basic:
             return
         case .events:
-            visibleUpcomingRelatedEventCount = 10
-            visibleEndedRelatedEventCount = 10
+            upcomingRelatedEventsPage = 0
+            upcomingRelatedEventsTotalPages = 1
+            endedRelatedEventsPage = 0
+            endedRelatedEventsTotalPages = 1
         case .posts:
             visibleRelatedArticleCount = 5
         }
@@ -6190,7 +6206,14 @@ struct LearnFestivalDetailView: View {
         }
 
         do {
-            relatedEvents = try await fetchRelatedEvents()
+            async let upcomingPage = fetchRelatedEvents(page: 1, status: "upcoming")
+            async let endedPage = fetchRelatedEvents(page: 1, status: "ended")
+            let (upcoming, ended) = try await (upcomingPage, endedPage)
+            relatedEvents = (upcoming.items + ended.items).sorted { $0.startDate > $1.startDate }
+            upcomingRelatedEventsPage = upcoming.pagination?.page ?? 1
+            upcomingRelatedEventsTotalPages = max(upcoming.pagination?.totalPages ?? 1, 1)
+            endedRelatedEventsPage = ended.pagination?.page ?? 1
+            endedRelatedEventsTotalPages = max(ended.pagination?.totalPages ?? 1, 1)
             didLoadRelatedEvents = true
         } catch is CancellationError {
             return
@@ -6222,29 +6245,87 @@ struct LearnFestivalDetailView: View {
         }
     }
 
-    private func fetchRelatedEvents() async throws -> [WebEvent] {
-        let brandID = currentFestival.id.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !brandID.isEmpty else { return [] }
-        var merged: [WebEvent] = []
-        var seen = Set<String>()
+    private enum FestivalRelatedEventSection {
+        case upcoming
+        case ended
+    }
 
-        let page = try await eventListRepository.fetchEvents(
-            request: DiscoverEventsPageRequest(
-                page: 1,
-                limit: 120,
-                search: nil,
-                eventType: nil,
-                status: "all",
-                wikiFestivalId: brandID
-            )
-        )
-        for item in page.items where eventMatchesFestival(item) {
-            if seen.insert(item.id).inserted {
-                merged.append(item)
+    @MainActor
+    private func loadMoreRelatedEvents(section: FestivalRelatedEventSection) async {
+        guard didLoadRelatedEvents else { return }
+        guard !isLoadingRelatedEvents else { return }
+
+        switch section {
+        case .upcoming:
+            guard !isLoadingMoreUpcomingRelatedEvents, hasMoreUpcomingRelatedEvents else { return }
+            isLoadingMoreUpcomingRelatedEvents = true
+        case .ended:
+            guard !isLoadingMoreEndedRelatedEvents, hasMoreEndedRelatedEvents else { return }
+            isLoadingMoreEndedRelatedEvents = true
+        }
+        defer {
+            switch section {
+            case .upcoming:
+                isLoadingMoreUpcomingRelatedEvents = false
+            case .ended:
+                isLoadingMoreEndedRelatedEvents = false
             }
         }
 
-        return merged.sorted { $0.startDate > $1.startDate }
+        do {
+            let nextPage: Int
+            let status: String
+            switch section {
+            case .upcoming:
+                nextPage = max(upcomingRelatedEventsPage, 0) + 1
+                status = "upcoming"
+            case .ended:
+                nextPage = max(endedRelatedEventsPage, 0) + 1
+                status = "ended"
+            }
+
+            let page = try await fetchRelatedEvents(page: nextPage, status: status)
+            let existingIds = Set(relatedEvents.map(\.id))
+            let appended = page.items.filter { !existingIds.contains($0.id) }
+            relatedEvents.append(contentsOf: appended)
+            switch section {
+            case .upcoming:
+                upcomingRelatedEventsPage = page.pagination?.page ?? nextPage
+                upcomingRelatedEventsTotalPages = max(page.pagination?.totalPages ?? upcomingRelatedEventsTotalPages, 1)
+            case .ended:
+                endedRelatedEventsPage = page.pagination?.page ?? nextPage
+                endedRelatedEventsTotalPages = max(page.pagination?.totalPages ?? endedRelatedEventsTotalPages, 1)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.userFacingMessage
+        }
+    }
+
+    private var hasMoreUpcomingRelatedEvents: Bool {
+        upcomingRelatedEventsPage < upcomingRelatedEventsTotalPages
+    }
+
+    private var hasMoreEndedRelatedEvents: Bool {
+        endedRelatedEventsPage < endedRelatedEventsTotalPages
+    }
+
+    private func fetchRelatedEvents(page: Int, status: String) async throws -> EventListPage {
+        let brandID = currentFestival.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !brandID.isEmpty else { return EventListPage(items: [], pagination: nil) }
+        let response = try await eventListRepository.fetchEvents(
+            request: DiscoverEventsPageRequest(
+                page: max(page, 1),
+                limit: 10,
+                search: nil,
+                eventType: nil,
+                status: status,
+                wikiFestivalId: brandID
+            )
+        )
+        let filtered = response.items.filter(eventMatchesFestival)
+        return EventListPage(items: filtered, pagination: response.pagination)
     }
 
     private func fetchRelatedPosts() async throws -> [DiscoverNewsArticle] {

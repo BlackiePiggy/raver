@@ -371,7 +371,7 @@ final class LiveSocialService: SocialService {
         }
         if let eventID, !eventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let encoded = eventID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? eventID
-            queryItems.append("eventID=\(encoded)")
+            queryItems.append("eventId=\(encoded)")
         }
         let path = "/v1/feed?\(queryItems.joined(separator: "&"))"
         return try await request(path: path, method: "GET")
@@ -408,15 +408,15 @@ final class LiveSocialService: SocialService {
         }
         if let eventID, !eventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let encoded = eventID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? eventID
-            queryItems.append("eventID=\(encoded)")
+            queryItems.append("eventId=\(encoded)")
         }
         if let djID, !djID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let encoded = djID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? djID
-            queryItems.append("djID=\(encoded)")
+            queryItems.append("djId=\(encoded)")
         }
         if let festivalID, !festivalID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let encoded = festivalID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? festivalID
-            queryItems.append("festivalID=\(encoded)")
+            queryItems.append("festivalId=\(encoded)")
         }
         let path = "/v1/news/bound?\(queryItems.joined(separator: "&"))"
         return try await request(path: path, method: "GET")

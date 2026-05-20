@@ -115,9 +115,9 @@ const readDate = (value: unknown): Date | null => {
 type FollowedEventInboxProjection = {
   id: string;
   type: string;
-  eventID: string;
+  eventId: string;
   eventName: string;
-  newsID: string;
+  newsId: string;
   newsTitle: string;
   newsSummary: string | null;
   newsCoverImageURL: string | null;
@@ -128,9 +128,9 @@ type FollowedEventInboxProjection = {
 type FollowedDJInboxProjection = {
   id: string;
   type: string;
-  djID: string;
+  djId: string;
   djName: string;
-  newsID: string;
+  newsId: string;
   newsTitle: string;
   newsSummary: string | null;
   newsCoverImageURL: string | null;
@@ -141,9 +141,9 @@ type FollowedDJInboxProjection = {
 type FollowedBrandInboxProjection = {
   id: string;
   type: string;
-  brandID: string;
+  brandId: string;
   brandName: string;
-  newsID: string;
+  newsId: string;
   newsTitle: string;
   newsSummary: string | null;
   newsCoverImageURL: string | null;
@@ -235,16 +235,10 @@ const mapFollowedEventInboxItem = (
     return null;
   }
 
-  const eventID =
-    readString(metadata.eventID) ??
-    readString(metadata.eventId) ??
-    null;
-  const newsID =
-    readString(metadata.newsID) ??
-    readString(metadata.newsId) ??
-    null;
+  const eventId = readString(metadata.eventId);
+  const newsId = readString(metadata.newsId);
 
-  if (!eventID || !newsID) {
+  if (!eventId || !newsId) {
     return null;
   }
 
@@ -256,12 +250,12 @@ const mapFollowedEventInboxItem = (
   return {
     id: row.id,
     type: readString(metadata.primaryUpdateKind) ?? readString(metadata.type) ?? 'news',
-    eventID,
+    eventId,
     eventName:
       readString(metadata.eventName) ??
       readString(metadata.title) ??
       row.title,
-    newsID,
+    newsId,
     newsTitle:
       readString(metadata.newsTitle) ??
       readString(metadata.title) ??
@@ -312,16 +306,10 @@ const mapFollowedDJInboxItem = (
     return null;
   }
 
-  const djID =
-    readString(metadata.djID) ??
-    readString(metadata.djId) ??
-    null;
-  const newsID =
-    readString(metadata.newsID) ??
-    readString(metadata.newsId) ??
-    null;
+  const djId = readString(metadata.djId);
+  const newsId = readString(metadata.newsId);
 
-  if (!djID || !newsID) {
+  if (!djId || !newsId) {
     return null;
   }
 
@@ -333,12 +321,12 @@ const mapFollowedDJInboxItem = (
   return {
     id: row.id,
     type: readString(metadata.primaryUpdateKind) ?? readString(metadata.type) ?? 'news',
-    djID,
+    djId,
     djName:
       readString(metadata.djName) ??
       readString(metadata.title) ??
       row.title,
-    newsID,
+    newsId,
     newsTitle:
       readString(metadata.newsTitle) ??
       readString(metadata.title) ??
@@ -389,18 +377,10 @@ const mapFollowedBrandInboxItem = (
     return null;
   }
 
-  const brandID =
-    readString(metadata.brandID) ??
-    readString(metadata.brandId) ??
-    readString(metadata.festivalID) ??
-    readString(metadata.festivalId) ??
-    null;
-  const newsID =
-    readString(metadata.newsID) ??
-    readString(metadata.newsId) ??
-    null;
+  const brandId = readString(metadata.brandId);
+  const newsId = readString(metadata.newsId);
 
-  if (!brandID || !newsID) {
+  if (!brandId || !newsId) {
     return null;
   }
 
@@ -412,13 +392,12 @@ const mapFollowedBrandInboxItem = (
   return {
     id: row.id,
     type: readString(metadata.primaryUpdateKind) ?? readString(metadata.type) ?? 'news',
-    brandID,
+    brandId,
     brandName:
       readString(metadata.brandName) ??
-      readString(metadata.festivalName) ??
       readString(metadata.title) ??
       row.title,
-    newsID,
+    newsId,
     newsTitle:
       readString(metadata.newsTitle) ??
       readString(metadata.title) ??
@@ -743,18 +722,17 @@ router.post('/followed-events/read', authenticate, async (req: AuthRequest, res:
     }
 
     const body = (req.body ?? {}) as {
-      itemID?: unknown;
       itemId?: unknown;
     };
-    const itemID = readString(body.itemID) ?? readString(body.itemId);
-    if (!itemID) {
-      res.status(400).json({ error: 'itemID/itemId is required' });
+    const itemId = readString(body.itemId);
+    if (!itemId) {
+      res.status(400).json({ error: 'itemId is required' });
       return;
     }
 
     const updated = await prisma.notificationInboxItem.updateMany({
       where: {
-        id: itemID,
+        id: itemId,
         userId,
         isRead: false,
       },
@@ -867,18 +845,17 @@ router.post('/content-reviews/read', authenticate, async (req: AuthRequest, res:
     }
 
     const body = (req.body ?? {}) as {
-      itemID?: unknown;
       itemId?: unknown;
     };
-    const itemID = readString(body.itemID) ?? readString(body.itemId);
-    if (!itemID) {
-      res.status(400).json({ error: 'itemID/itemId is required' });
+    const itemId = readString(body.itemId);
+    if (!itemId) {
+      res.status(400).json({ error: 'itemId is required' });
       return;
     }
 
     const updated = await prisma.notificationInboxItem.updateMany({
       where: {
-        id: itemID,
+        id: itemId,
         userId,
         isRead: false,
       },
@@ -991,18 +968,17 @@ router.post('/followed-djs/read', authenticate, async (req: AuthRequest, res: Re
     }
 
     const body = (req.body ?? {}) as {
-      itemID?: unknown;
       itemId?: unknown;
     };
-    const itemID = readString(body.itemID) ?? readString(body.itemId);
-    if (!itemID) {
-      res.status(400).json({ error: 'itemID/itemId is required' });
+    const itemId = readString(body.itemId);
+    if (!itemId) {
+      res.status(400).json({ error: 'itemId is required' });
       return;
     }
 
     const updated = await prisma.notificationInboxItem.updateMany({
       where: {
-        id: itemID,
+        id: itemId,
         userId,
         isRead: false,
       },
@@ -1115,18 +1091,17 @@ router.post('/followed-brands/read', authenticate, async (req: AuthRequest, res:
     }
 
     const body = (req.body ?? {}) as {
-      itemID?: unknown;
       itemId?: unknown;
     };
-    const itemID = readString(body.itemID) ?? readString(body.itemId);
-    if (!itemID) {
-      res.status(400).json({ error: 'itemID/itemId is required' });
+    const itemId = readString(body.itemId);
+    if (!itemId) {
+      res.status(400).json({ error: 'itemId is required' });
       return;
     }
 
     const updated = await prisma.notificationInboxItem.updateMany({
       where: {
-        id: itemID,
+        id: itemId,
         userId,
         isRead: false,
       },

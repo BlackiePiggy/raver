@@ -1,6 +1,13 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
+import {
+  USER_ENTITY_RELATION_FOLLOW,
+  USER_ENTITY_TARGET_DJ,
+  deleteUserEntityRelation,
+  upsertUserEntityRelation,
+  userEntityFollowWhere,
+} from '../services/user-entity-follow.service';
 
 const prisma = new PrismaClient();
 
@@ -28,13 +35,8 @@ export const followDJ = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const existingFollow = await prisma.follow.findUnique({
-      where: {
-        followerId_djId: {
-          followerId: userId,
-          djId,
-        },
-      },
+    const existingFollow = await prisma.userEntityFollow.findUnique({
+      where: userEntityFollowWhere(userId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_DJ, djId),
     });
 
     if (existingFollow) {
@@ -42,24 +44,36 @@ export const followDJ = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const follow = await prisma.follow.create({
-      data: {
+    const follow = await prisma.$transaction(async (tx) => {
+      const relation = await upsertUserEntityRelation(tx, {
+        userId,
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_DJ,
+        targetId: djId,
+      });
+      const djRow = await tx.dJ.findUniqueOrThrow({
+        where: { id: djId },
+      });
+
+      await tx.dJ.update({
+        where: { id: djId },
+        data: {
+          followerCount: {
+            increment: 1,
+          },
+        },
+      });
+
+      return {
+        id: relation.id,
         followerId: userId,
+        followingId: null,
         djId,
         type: 'dj',
-      },
-      include: {
-        dj: true,
-      },
-    });
-
-    await prisma.dJ.update({
-      where: { id: djId },
-      data: {
-        followerCount: {
-          increment: 1,
-        },
-      },
+        createdAt: relation.createdAt,
+        updatedAt: relation.updatedAt,
+        dj: djRow,
+      };
     });
 
     res.status(201).json(follow);
@@ -79,13 +93,8 @@ export const unfollowDJ = async (req: AuthRequest, res: Response): Promise<void>
 
     const { djId } = req.params;
 
-    const follow = await prisma.follow.findUnique({
-      where: {
-        followerId_djId: {
-          followerId: userId,
-          djId: djId as string,
-        },
-      },
+    const follow = await prisma.userEntityFollow.findUnique({
+      where: userEntityFollowWhere(userId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_DJ, djId as string),
     });
 
     if (!follow) {
@@ -93,22 +102,22 @@ export const unfollowDJ = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    await prisma.follow.delete({
-      where: {
-        followerId_djId: {
-          followerId: userId,
-          djId: djId as string,
-        },
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      await deleteUserEntityRelation(tx, {
+        userId,
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_DJ,
+        targetId: djId as string,
+      });
 
-    await prisma.dJ.update({
-      where: { id: djId as string },
-      data: {
-        followerCount: {
-          decrement: 1,
+      await tx.dJ.update({
+        where: { id: djId as string },
+        data: {
+          followerCount: {
+            decrement: 1,
+          },
         },
-      },
+      });
     });
 
     res.status(204).send();
@@ -135,26 +144,60 @@ export const getMyFollowedDJs = async (req: AuthRequest, res: Response): Promise
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const [follows, total] = await Promise.all([
-      prisma.follow.findMany({
+    const [followRows, total] = await Promise.all([
+      prisma.userEntityFollow.findMany({
         where: {
-          followerId: userId,
-          type: 'dj',
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_DJ,
         },
         skip,
         take: limitNum,
         orderBy: { createdAt: 'desc' },
-        include: {
-          dj: true,
+        select: {
+          id: true,
+          userId: true,
+          targetId: true,
+          createdAt: true,
+          updatedAt: true,
         },
       }),
-      prisma.follow.count({
+      prisma.userEntityFollow.count({
         where: {
-          followerId: userId,
-          type: 'dj',
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_DJ,
         },
       }),
     ]);
+
+    const orderedDjIds = followRows.map((row) => row.targetId).filter((id): id is string => Boolean(id));
+    const djRows = orderedDjIds.length
+      ? await prisma.dJ.findMany({
+          where: {
+            id: {
+              in: orderedDjIds,
+            },
+          },
+        })
+      : [];
+    const djById = new Map(djRows.map((row) => [row.id, row]));
+    const follows = followRows
+      .map((row) => {
+        const dj = djById.get(row.targetId);
+        if (!dj) return null;
+        return {
+          id: row.id,
+          followerId: row.userId,
+          followingId: null,
+          djId: row.targetId,
+          type: 'dj',
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          dj,
+        };
+      })
+      .filter(Boolean);
 
     res.json({
       follows,
@@ -181,13 +224,8 @@ export const checkFollowStatus = async (req: AuthRequest, res: Response): Promis
 
     const { djId } = req.params;
 
-    const follow = await prisma.follow.findUnique({
-      where: {
-        followerId_djId: {
-          followerId: userId,
-          djId: djId as string,
-        },
-      },
+    const follow = await prisma.userEntityFollow.findUnique({
+      where: userEntityFollowWhere(userId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_DJ, djId as string),
     });
 
     res.json({

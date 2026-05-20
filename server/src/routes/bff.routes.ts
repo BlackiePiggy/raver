@@ -24,6 +24,29 @@ import { recordSmsMetric } from '../services/sms/sms-metrics';
 import { verifyFirebasePhoneIdToken } from '../services/firebase-phone-auth.service';
 import { notificationCenterService } from '../services/notification-center';
 import {
+  deriveNewsBindingIds,
+  derivePostBindingIds,
+  includeNewsBindings,
+  includePostBindings,
+  syncNewsBindings,
+  syncPostBindings,
+} from '../services/content-bindings.service';
+import {
+  USER_ENTITY_RELATION_FAVORITE,
+  USER_ENTITY_RELATION_FOLLOW,
+  USER_ENTITY_TARGET_DJ,
+  USER_ENTITY_TARGET_EVENT,
+  USER_ENTITY_TARGET_USER,
+  deleteUserEntityRelation,
+  upsertUserEntityRelation,
+  userEntityFollowWhere,
+} from '../services/user-entity-follow.service';
+import {
+  normalizeGenrePreferenceKeys,
+  resolveUserGenrePreferences,
+  syncUserGenrePreferences,
+} from '../services/user-genre-preference.service';
+import {
   FEED_RANKING_WEIGHTS_VERSION,
   FeedEventValidationError,
   type FeedExperimentBucket,
@@ -2031,7 +2054,7 @@ const toSquadOfflineActivityResponse = async (
   return {
     id: activity.id,
     squadID: activity.squadId,
-    eventID: activity.eventId,
+    eventId: activity.eventId,
     eventName: activity.event?.name ?? activity.title,
     eventCoverImageURL: activity.event?.coverImageUrl ?? null,
     eventVenueName: activity.event?.venueName ?? null,
@@ -2117,7 +2140,7 @@ const buildSquadOfflineActivityCardPayload = (activity: {
   return {
     activityID: activity.id,
     squadID: activity.squadId,
-    eventID: activity.eventId,
+    eventId: activity.eventId,
     title,
     eventName: activity.event?.name ?? null,
     venueName: activity.event?.venueName ?? null,
@@ -2163,16 +2186,17 @@ const buildFollowingMap = async (viewerId: string | undefined, targetUserIds: st
     return new Set<string>();
   }
 
-  const follows = await prisma.follow.findMany({
+  const follows = await prisma.userEntityFollow.findMany({
     where: {
-      followerId: viewerId,
-      type: 'user',
-      followingId: { in: targetUserIds },
+      userId: viewerId,
+      relationType: USER_ENTITY_RELATION_FOLLOW,
+      targetType: USER_ENTITY_TARGET_USER,
+      targetId: { in: targetUserIds },
     },
-    select: { followingId: true },
+    select: { targetId: true },
   });
 
-  return new Set(follows.map((f) => f.followingId).filter((id): id is string => Boolean(id)));
+  return new Set(follows.map((f) => f.targetId));
 };
 
 const buildBlockedRelationUserIds = async (viewerId: string | undefined | null): Promise<Set<string>> => {
@@ -2219,44 +2243,42 @@ const hasBlockingRelationship = async (userAId: string, userBId: string): Promis
 };
 
 const buildFriendUserIds = async (userId: string, candidateUserIds?: string[]) => {
-  const outgoing = await prisma.follow.findMany({
+  const outgoing = await prisma.userEntityFollow.findMany({
     where: {
-      followerId: userId,
-      type: 'user',
+      userId,
+      relationType: USER_ENTITY_RELATION_FOLLOW,
+      targetType: USER_ENTITY_TARGET_USER,
       ...(candidateUserIds
         ? {
-            followingId: {
+            targetId: {
               in: candidateUserIds,
             },
           }
-        : {
-            followingId: {
-              not: null,
-            },
-          }),
+        : {}),
     },
-    select: { followingId: true },
+    select: { targetId: true },
   });
 
   const outgoingIds = outgoing
-    .map((row) => row.followingId)
+    .map((row) => row.targetId)
     .filter((id): id is string => Boolean(id));
   if (outgoingIds.length === 0) {
     return new Set<string>();
   }
 
-  const incoming = await prisma.follow.findMany({
+  const incoming = await prisma.userEntityFollow.findMany({
     where: {
-      followerId: {
+      userId: {
         in: outgoingIds,
       },
-      followingId: userId,
-      type: 'user',
+      targetId: userId,
+      relationType: USER_ENTITY_RELATION_FOLLOW,
+      targetType: USER_ENTITY_TARGET_USER,
     },
-    select: { followerId: true },
+    select: { userId: true },
   });
 
-  return new Set(incoming.map((row) => row.followerId));
+  return new Set(incoming.map((row) => row.userId));
 };
 
 const mapPost = (
@@ -2268,9 +2290,9 @@ const mapPost = (
     images: string[];
     location?: string | null;
     eventId?: string | null;
-    boundDjIds?: string[] | null;
-    boundBrandIds?: string[] | null;
-    boundEventIds?: string[] | null;
+    djBindings?: Array<{ djId: string }> | null;
+    festivalBrandBindings?: Array<{ festivalBrandId: string }> | null;
+    eventBindings?: Array<{ eventId: string }> | null;
     displayPublishedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -2289,16 +2311,17 @@ const mapPost = (
   recommendation?: { reasonCode: string | null; reasonText: string | null }
 ) => {
   const displayPublishedAt = post.displayPublishedAt ?? post.createdAt;
+  const bindingIds = derivePostBindingIds(post);
   return {
     id: post.id,
     author: toUserSummary(post.user, followingSet.has(post.user.id)),
     content: post.content,
     images: post.images,
     location: post.location ?? null,
-    eventID: post.eventId ?? null,
-    boundDjIDs: Array.isArray(post.boundDjIds) ? post.boundDjIds : [],
-    boundBrandIDs: Array.isArray(post.boundBrandIds) ? post.boundBrandIds : [],
-    boundEventIDs: Array.isArray(post.boundEventIds) ? post.boundEventIds : [],
+    eventId: post.eventId ?? null,
+    boundDjIds: bindingIds.djIds,
+    boundBrandIds: bindingIds.brandIds,
+    boundEventIds: bindingIds.eventIds,
     displayPublishedAt,
     publishedAt: displayPublishedAt,
     firstPublishedAt: post.createdAt,
@@ -2343,7 +2366,7 @@ const mapEventLiveComment = (
   likedCommentIds: Set<string> = new Set()
 ) => ({
   id: comment.id,
-  eventID: comment.eventId,
+  eventId: comment.eventId,
   parentCommentID: comment.parentCommentId ?? null,
   rootCommentID: comment.rootCommentId ?? null,
   depth: comment.depth ?? 0,
@@ -2522,22 +2545,12 @@ const FRIEND_CHAT_GREETING = '你们已成功添加好友，现在可以开始�
 
 const isMutualFriend = async (userOneId: string, userTwoId: string): Promise<boolean> => {
   const [outgoing, incoming] = await Promise.all([
-    prisma.follow.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: userOneId,
-          followingId: userTwoId,
-        },
-      },
+    prisma.userEntityFollow.findUnique({
+      where: userEntityFollowWhere(userOneId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_USER, userTwoId),
       select: { id: true },
     }),
-    prisma.follow.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: userTwoId,
-          followingId: userOneId,
-        },
-      },
+    prisma.userEntityFollow.findUnique({
+      where: userEntityFollowWhere(userTwoId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_USER, userOneId),
       select: { id: true },
     }),
   ]);
@@ -2791,13 +2804,13 @@ const publishFavoritedEventNewsSafely = async (params: {
   postId: string;
   content: string;
   imageURLs: string[];
-  boundEventIDs: string[];
+  boundEventIds: string[];
   occurredAt: Date;
 }): Promise<void> => {
-  const normalizedEventIDs = Array.from(
-    new Set(params.boundEventIDs.map((item) => item.trim()).filter((item) => item.length > 0))
+  const normalizedEventIds = Array.from(
+    new Set(params.boundEventIds.map((item) => item.trim()).filter((item) => item.length > 0))
   );
-  if (normalizedEventIDs.length === 0) {
+  if (normalizedEventIds.length === 0) {
     return;
   }
 
@@ -2809,7 +2822,7 @@ const publishFavoritedEventNewsSafely = async (params: {
   const events = await prisma.event.findMany({
     where: {
       id: {
-        in: normalizedEventIDs,
+        in: normalizedEventIds,
       },
     },
     select: {
@@ -2821,18 +2834,20 @@ const publishFavoritedEventNewsSafely = async (params: {
     return;
   }
 
-  const eventNameByID = new Map(events.map((item) => [item.id, item.name.trim() || item.id]));
+  const eventNameById = new Map(events.map((item) => [item.id, item.name.trim() || item.id]));
   const coverImageURL = params.imageURLs.find((item) => item.trim().length > 0)?.trim() || null;
   const fallbackSummary = newsSingleLine(decodedNews.body).slice(0, 140);
   const newsSummary = decodedNews.summary || fallbackSummary || '你收藏的活动发布了新的资讯。';
 
-  for (const eventID of normalizedEventIDs) {
-    const eventName = eventNameByID.get(eventID);
+  for (const eventId of normalizedEventIds) {
+    const eventName = eventNameById.get(eventId);
     if (!eventName) continue;
 
-    const rows = await prisma.eventFavorite.findMany({
+    const rows = await prisma.userEntityFollow.findMany({
       where: {
-        eventId: eventID,
+        relationType: USER_ENTITY_RELATION_FAVORITE,
+        targetType: USER_ENTITY_TARGET_EVENT,
+        targetId: eventId,
       },
       select: {
         userId: true,
@@ -2857,9 +2872,9 @@ const publishFavoritedEventNewsSafely = async (params: {
             route: 'event_update',
             primaryUpdateKind: 'news',
             updateKind: 'news',
-            eventID,
+            eventId,
             eventName,
-            newsID: params.postId,
+            newsId: params.postId,
             newsTitle: decodedNews.title,
             newsSummary,
             newsCoverImageURL: coverImageURL,
@@ -2868,11 +2883,11 @@ const publishFavoritedEventNewsSafely = async (params: {
             sourceAudience: 'marked_event_users',
           },
         },
-        dedupeKey: `event-news:${eventID}:post:${params.postId}`,
+        dedupeKey: `event-news:${eventId}:post:${params.postId}`,
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[notification-center] event news publish failed event=${eventID} post=${params.postId}: ${message}`);
+        console.error(`[notification-center] event news publish failed event=${eventId} post=${params.postId}: ${message}`);
       });
   }
 };
@@ -2882,13 +2897,13 @@ const publishFollowedDJNewsSafely = async (params: {
   postId: string;
   content: string;
   imageURLs: string[];
-  boundDjIDs: string[];
+  boundDjIds: string[];
   occurredAt: Date;
 }): Promise<void> => {
-  const normalizedDJIDs = Array.from(
-    new Set(params.boundDjIDs.map((item) => item.trim()).filter((item) => item.length > 0))
+  const normalizedDjIds = Array.from(
+    new Set(params.boundDjIds.map((item) => item.trim()).filter((item) => item.length > 0))
   );
-  if (normalizedDJIDs.length === 0) {
+  if (normalizedDjIds.length === 0) {
     return;
   }
 
@@ -2900,7 +2915,7 @@ const publishFollowedDJNewsSafely = async (params: {
   const djs = await prisma.dJ.findMany({
     where: {
       id: {
-        in: normalizedDJIDs,
+        in: normalizedDjIds,
       },
     },
     select: {
@@ -2912,26 +2927,27 @@ const publishFollowedDJNewsSafely = async (params: {
     return;
   }
 
-  const djNameByID = new Map(djs.map((item) => [item.id, item.name.trim() || item.id]));
+  const djNameById = new Map(djs.map((item) => [item.id, item.name.trim() || item.id]));
   const coverImageURL = params.imageURLs.find((item) => item.trim().length > 0)?.trim() || null;
   const fallbackSummary = newsSingleLine(decodedNews.body).slice(0, 140);
   const newsSummary = decodedNews.summary || fallbackSummary || '你关注的DJ发布了新的资讯。';
 
-  for (const djID of normalizedDJIDs) {
-    const djName = djNameByID.get(djID);
+  for (const djId of normalizedDjIds) {
+    const djName = djNameById.get(djId);
     if (!djName) continue;
 
-    const rows = await prisma.follow.findMany({
+    const rows = await prisma.userEntityFollow.findMany({
       where: {
-        djId: djID,
-        type: 'dj',
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_DJ,
+        targetId: djId,
       },
       select: {
-        followerId: true,
+        userId: true,
       },
     });
 
-    const targetUserIds = normalizeNotificationTargets(rows.map((item) => item.followerId));
+    const targetUserIds = normalizeNotificationTargets(rows.map((item) => item.userId));
     if (targetUserIds.length === 0) {
       continue;
     }
@@ -2949,9 +2965,9 @@ const publishFollowedDJNewsSafely = async (params: {
             route: 'dj_update',
             primaryUpdateKind: 'news',
             updateKind: 'news',
-            djID,
+            djId,
             djName,
-            newsID: params.postId,
+            newsId: params.postId,
             newsTitle: decodedNews.title,
             newsSummary,
             newsCoverImageURL: coverImageURL,
@@ -2960,11 +2976,11 @@ const publishFollowedDJNewsSafely = async (params: {
             sourceAudience: 'followed_dj_users',
           },
         },
-        dedupeKey: `dj-news:${djID}:post:${params.postId}`,
+        dedupeKey: `dj-news:${djId}:post:${params.postId}`,
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[notification-center] followed dj news publish failed dj=${djID} error=${message}`);
+        console.error(`[notification-center] followed dj news publish failed dj=${djId} error=${message}`);
       });
   }
 };
@@ -2974,13 +2990,13 @@ const publishFollowedBrandNewsSafely = async (params: {
   postId: string;
   content: string;
   imageURLs: string[];
-  boundBrandIDs: string[];
+  boundBrandIds: string[];
   occurredAt: Date;
 }): Promise<void> => {
-  const normalizedBrandIDs = Array.from(
-    new Set(params.boundBrandIDs.map((item) => item.trim()).filter((item) => item.length > 0))
+  const normalizedBrandIds = Array.from(
+    new Set(params.boundBrandIds.map((item) => item.trim()).filter((item) => item.length > 0))
   );
-  if (normalizedBrandIDs.length === 0) {
+  if (normalizedBrandIds.length === 0) {
     return;
   }
 
@@ -2993,7 +3009,7 @@ const publishFollowedBrandNewsSafely = async (params: {
     prisma.wikiFestival.findMany({
       where: {
         id: {
-          in: normalizedBrandIDs,
+          in: normalizedBrandIds,
         },
       },
       select: {
@@ -3004,7 +3020,7 @@ const publishFollowedBrandNewsSafely = async (params: {
     prisma.label.findMany({
       where: {
         id: {
-          in: normalizedBrandIDs,
+          in: normalizedBrandIds,
         },
       },
       select: {
@@ -3014,16 +3030,16 @@ const publishFollowedBrandNewsSafely = async (params: {
     }),
   ]);
 
-  const brandNameByID = new Map<string, string>();
+  const brandNameById = new Map<string, string>();
   for (const brand of wikiBrands) {
-    brandNameByID.set(brand.id, brand.name.trim() || brand.id);
+    brandNameById.set(brand.id, brand.name.trim() || brand.id);
   }
   for (const brand of labels) {
-    if (!brandNameByID.has(brand.id)) {
-      brandNameByID.set(brand.id, brand.name.trim() || brand.id);
+    if (!brandNameById.has(brand.id)) {
+      brandNameById.set(brand.id, brand.name.trim() || brand.id);
     }
   }
-  if (brandNameByID.size == 0) {
+  if (brandNameById.size == 0) {
     return;
   }
 
@@ -3036,13 +3052,13 @@ const publishFollowedBrandNewsSafely = async (params: {
   const fallbackSummary = newsSingleLine(decodedNews.body).slice(0, 140);
   const newsSummary = decodedNews.summary || fallbackSummary || '你关注的音乐节发布了新的资讯。';
 
-  for (const brandID of normalizedBrandIDs) {
-    const brandName = brandNameByID.get(brandID);
+  for (const brandId of normalizedBrandIds) {
+    const brandName = brandNameById.get(brandId);
     if (!brandName) continue;
 
     const targetUserIds = normalizeNotificationTargets(
       subscriptions
-        .filter((item) => item.preference.enabled && item.preference.watchedBrandIds.includes(brandID))
+        .filter((item) => item.preference.enabled && item.preference.watchedBrandIds.includes(brandId))
         .map((item) => item.userId)
     );
     if (targetUserIds.length === 0) {
@@ -3062,9 +3078,9 @@ const publishFollowedBrandNewsSafely = async (params: {
             route: 'brand_update',
             primaryUpdateKind: 'news',
             updateKind: 'news',
-            brandID,
+            brandId,
             brandName,
-            newsID: params.postId,
+            newsId: params.postId,
             newsTitle: decodedNews.title,
             newsSummary,
             newsCoverImageURL: coverImageURL,
@@ -3073,11 +3089,11 @@ const publishFollowedBrandNewsSafely = async (params: {
             sourceAudience: 'followed_brand_users',
           },
         },
-        dedupeKey: `brand-news:${brandID}:post:${params.postId}`,
+        dedupeKey: `brand-news:${brandId}:post:${params.postId}`,
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`[notification-center] followed brand news publish failed brand=${brandID} error=${message}`);
+        console.error(`[notification-center] followed brand news publish failed brand=${brandId} error=${message}`);
       });
   }
 };
@@ -5251,6 +5267,46 @@ router.delete('/auth/account', optionalAuth, async (req: Request, res: Response)
         data: { isActive: false, lastSeenAt: now },
       });
 
+      const followedDjRows = await tx.userEntityFollow.findMany({
+        where: {
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_DJ,
+        },
+        select: {
+          targetId: true,
+        },
+      });
+      const followedDjIds = Array.from(
+        new Set(followedDjRows.map((row) => row.targetId).filter((id): id is string => Boolean(id)))
+      );
+      await Promise.all(
+        followedDjIds.map((djId) =>
+          tx.dJ.updateMany({
+            where: { id: djId },
+            data: {
+              followerCount: {
+                decrement: 1,
+              },
+            },
+          })
+        )
+      );
+      await tx.userEntityFollow.deleteMany({
+        where: {
+          OR: [
+            { userId },
+            {
+              targetType: USER_ENTITY_TARGET_USER,
+              targetId: userId,
+            },
+          ],
+        },
+      });
+      await tx.userGenrePreference.deleteMany({
+        where: { userId },
+      });
+
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -5268,8 +5324,6 @@ router.delete('/auth/account', optionalAuth, async (req: Request, res: Response)
           avatarReviewNote: null,
           bio: null,
           location: null,
-          favoriteDjIds: [],
-          favoriteGenres: [],
           isVerified: false,
           profileShareCode: null,
           profileShareQrCodeUrl: null,
@@ -5588,12 +5642,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
     const effectiveMode: FeedMode = requestedMode === 'following' && !viewerId ? 'latest' : requestedMode;
     const experimentBucket: FeedExperimentBucket = resolveFeedExperimentBucket(req, viewerId);
     const rankingWeights = buildFeedRankingWeights(experimentBucket);
-    const eventID =
-      typeof req.query.eventID === 'string'
-        ? req.query.eventID.trim()
-        : typeof req.query.eventId === 'string'
-          ? req.query.eventId.trim()
-          : '';
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId.trim() : '';
 
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const cursorDate = parseCursorDate(req.query.cursor);
@@ -5606,12 +5655,16 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
             userId: { notIn: Array.from(blockedRelationUserIds) },
           }
         : {}),
-      ...(eventID
+      ...(eventId
         ? {
             content: { not: { contains: NEWS_MARKER } },
             OR: [
-              { eventId: eventID },
-              { boundEventIds: { has: eventID } },
+              { eventId },
+              {
+                eventBindings: {
+                  some: { eventId },
+                },
+              },
             ],
           }
         : {}),
@@ -5647,13 +5700,14 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
           avatarUrl: true,
         },
       },
+      ...includePostBindings,
     } as const;
 
     let sourcePosts: Array<Parameters<typeof mapPost>[0]> = [];
     let recallSourcesByPostId = new Map<string, Set<FeedRecallSource>>();
     let preloadedFollowedDjIds: Set<string> | null = null;
 
-    if (eventID) {
+    if (eventId) {
       sourcePosts = await prisma.post.findMany({
         where: baseWhere,
         include: postInclude,
@@ -5676,7 +5730,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
       res.json({
         mode: requestedMode,
         effectiveMode,
-        eventID,
+        eventId,
         rankingExperiment: null,
         posts: pagePosts.map((post) =>
           mapPost(post, followingSet, likedPostIds, repostedPostIds, savedPostIds, hiddenPostIds)
@@ -5719,21 +5773,21 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
         mergeRecallPosts(mergedById, trendingCandidates, 'trending');
       } else {
         const [followingRows, followedDjRows, recentSaveRows, recentLikeRows] = await Promise.all([
-          prisma.follow.findMany({
+          prisma.userEntityFollow.findMany({
             where: {
-              followerId: viewerId,
-              type: 'user',
-              followingId: { not: null },
+              userId: viewerId,
+              relationType: USER_ENTITY_RELATION_FOLLOW,
+              targetType: USER_ENTITY_TARGET_USER,
             },
-            select: { followingId: true },
+            select: { targetId: true },
           }),
-          prisma.follow.findMany({
+          prisma.userEntityFollow.findMany({
             where: {
-              followerId: viewerId,
-              type: 'dj',
-              djId: { not: null },
+              userId: viewerId,
+              relationType: USER_ENTITY_RELATION_FOLLOW,
+              targetType: USER_ENTITY_TARGET_DJ,
             },
-            select: { djId: true },
+            select: { targetId: true },
           }),
           prisma.postSave.findMany({
             where: { userId: viewerId },
@@ -5750,10 +5804,10 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
         ]);
 
         const followingIds = followingRows
-          .map((row) => row.followingId)
+          .map((row) => row.targetId)
           .filter((id): id is string => Boolean(id && !blockedRelationUserIds.has(id)));
         const followedDjIds = new Set(
-          followedDjRows.map((row) => row.djId).filter((id): id is string => Boolean(id))
+          followedDjRows.map((row) => row.targetId).filter((id): id is string => Boolean(id))
         );
         preloadedFollowedDjIds = followedDjIds;
 
@@ -5773,9 +5827,15 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
                 },
                 select: {
                   userId: true,
-                  boundDjIds: true,
-                  boundBrandIds: true,
-                  boundEventIds: true,
+                  djBindings: {
+                    select: { djId: true },
+                  },
+                  festivalBrandBindings: {
+                    select: { festivalBrandId: true },
+                  },
+                  eventBindings: {
+                    select: { eventId: true },
+                  },
                 },
               })
             : [];
@@ -5787,22 +5847,44 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
               .filter((id): id is string => Boolean(id && id !== viewerId && !blockedRelationUserIds.has(id)))
           )
         );
-        const relatedDjIds = Array.from(new Set(interactionSeeds.flatMap((row) => row.boundDjIds || [])));
-        const relatedBrandIds = Array.from(new Set(interactionSeeds.flatMap((row) => row.boundBrandIds || [])));
-        const relatedEventIds = Array.from(new Set(interactionSeeds.flatMap((row) => row.boundEventIds || [])));
+        const relatedDjIds = Array.from(
+          new Set(interactionSeeds.flatMap((row) => row.djBindings.map((binding) => binding.djId)))
+        );
+        const relatedBrandIds = Array.from(
+          new Set(
+            interactionSeeds.flatMap((row) =>
+              row.festivalBrandBindings.map((binding) => binding.festivalBrandId)
+            )
+          )
+        );
+        const relatedEventIds = Array.from(
+          new Set(interactionSeeds.flatMap((row) => row.eventBindings.map((binding) => binding.eventId)))
+        );
 
         const behaviorWhereOr: Prisma.PostWhereInput[] = [];
         if (relatedAuthorIds.length > 0) {
           behaviorWhereOr.push({ userId: { in: relatedAuthorIds } });
         }
         if (relatedDjIds.length > 0) {
-          behaviorWhereOr.push({ boundDjIds: { hasSome: relatedDjIds } });
+          behaviorWhereOr.push({
+            djBindings: {
+              some: { djId: { in: relatedDjIds } },
+            },
+          });
         }
         if (relatedBrandIds.length > 0) {
-          behaviorWhereOr.push({ boundBrandIds: { hasSome: relatedBrandIds } });
+          behaviorWhereOr.push({
+            festivalBrandBindings: {
+              some: { festivalBrandId: { in: relatedBrandIds } },
+            },
+          });
         }
         if (relatedEventIds.length > 0) {
-          behaviorWhereOr.push({ boundEventIds: { hasSome: relatedEventIds } });
+          behaviorWhereOr.push({
+            eventBindings: {
+              some: { eventId: { in: relatedEventIds } },
+            },
+          });
         }
 
         const emptyPosts: Array<Parameters<typeof mapPost>[0]> = [];
@@ -5829,7 +5911,9 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
               ? prisma.post.findMany({
                   where: {
                     ...baseWhere,
-                    boundDjIds: { hasSome: Array.from(followedDjIds) },
+                    djBindings: {
+                      some: { djId: { in: Array.from(followedDjIds) } },
+                    },
                   },
                   include: postInclude,
                   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -5858,16 +5942,16 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
       const maxCandidatePool = Math.min(Math.max(limit * 12, 180), 420);
       sourcePosts = Array.from(mergedById.values()).slice(0, maxCandidatePool);
     } else if (effectiveMode === 'following' && viewerId) {
-      const followingRows = await prisma.follow.findMany({
+      const followingRows = await prisma.userEntityFollow.findMany({
         where: {
-          followerId: viewerId,
-          type: 'user',
-          followingId: { not: null },
+          userId: viewerId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
         },
-        select: { followingId: true },
+        select: { targetId: true },
       });
       const followingIds = followingRows
-        .map((row) => row.followingId)
+        .map((row) => row.targetId)
         .filter((id): id is string => Boolean(id && !blockedRelationUserIds.has(id)));
 
       if (followingIds.length === 0) {
@@ -5901,7 +5985,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
     const authorIds = Array.from(new Set(sourcePosts.map((post) => post.user.id)));
     const postIds = sourcePosts.map((post) => post.id);
     const boundDjIds = Array.from(
-      new Set(sourcePosts.flatMap((post) => (Array.isArray(post.boundDjIds) ? post.boundDjIds : [])))
+      new Set(sourcePosts.flatMap((post) => derivePostBindingIds(post).djIds))
     );
 
     const [
@@ -5920,16 +6004,17 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
       preloadedFollowedDjIds
         ? Promise.resolve(preloadedFollowedDjIds)
         : viewerId && boundDjIds.length > 0
-          ? prisma.follow
+          ? prisma.userEntityFollow
               .findMany({
                 where: {
-                  followerId: viewerId,
-                  type: 'dj',
-                  djId: { in: boundDjIds },
+                  userId: viewerId,
+                  relationType: USER_ENTITY_RELATION_FOLLOW,
+                  targetType: USER_ENTITY_TARGET_DJ,
+                  targetId: { in: boundDjIds },
                 },
-                select: { djId: true },
+                select: { targetId: true },
               })
-              .then((rows) => new Set(rows.map((row) => row.djId).filter((id): id is string => Boolean(id))))
+              .then((rows) => new Set(rows.map((row) => row.targetId).filter((id): id is string => Boolean(id))))
           : Promise.resolve(new Set<string>()),
     ]);
 
@@ -6005,7 +6090,7 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
           score += rankingWeights.recallTrendingWeight;
         }
 
-        const hasFollowedDj = Array.isArray(post.boundDjIds) && post.boundDjIds.some((id) => followedDjIds.has(id));
+        const hasFollowedDj = derivePostBindingIds(post).djIds.some((id) => followedDjIds.has(id));
         if (hasFollowedDj) {
           score += rankingWeights.followedDjBonus;
           reasonCode = 'followed_dj';
@@ -6052,10 +6137,11 @@ router.get('/feed', optionalAuth, async (req: Request, res: Response): Promise<v
       const entityExposure = new Map<string, number>();
       const exposureLimit = Math.max(1, rankingWeights.exposureLimit);
 
-      const resolvePrimaryEntityKey = (post: Parameters<typeof mapPost>[0]): string | null => {
-        if (Array.isArray(post.boundDjIds) && post.boundDjIds.length > 0) return `dj:${post.boundDjIds[0]}`;
-        if (Array.isArray(post.boundBrandIds) && post.boundBrandIds.length > 0) return `brand:${post.boundBrandIds[0]}`;
-        if (Array.isArray(post.boundEventIds) && post.boundEventIds.length > 0) return `event:${post.boundEventIds[0]}`;
+        const resolvePrimaryEntityKey = (post: Parameters<typeof mapPost>[0]): string | null => {
+        const bindingIds = derivePostBindingIds(post);
+        if (bindingIds.djIds.length > 0) return `dj:${bindingIds.djIds[0]}`;
+        if (bindingIds.brandIds.length > 0) return `brand:${bindingIds.brandIds[0]}`;
+        if (bindingIds.eventIds.length > 0) return `event:${bindingIds.eventIds[0]}`;
         return null;
       };
 
@@ -6170,13 +6256,13 @@ router.post('/feed/events', optionalAuth, async (req: Request, res: Response): P
 router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const viewerId = (req as BFFAuthRequest).user?.userId;
-    const eventID = String(req.params.id || '').trim();
+    const eventId = String(req.params.id || '').trim();
     const limit = normalizeLimit(req.query.limit, 50, 100);
     const cursorDate = parseCursorDate(req.query.cursor);
     const sort = String(req.query.sort || 'oldest').trim().toLowerCase();
     const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
 
-    if (!eventID) {
+    if (!eventId) {
       res.status(400).json({ error: 'Event id is required' });
       return;
     }
@@ -6191,7 +6277,7 @@ router.get('/events/:id/live-comments', optionalAuth, async (req: Request, res: 
 
     const comments = await prisma.eventLiveComment.findMany({
       where: {
-        eventId: eventID,
+        eventId,
         ...(cursorDate
           ? {
               createdAt: {
@@ -6259,7 +6345,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
     if (await denyForEnforcement(userId, 'comment_create', res)) return;
     if (await denyForForumAgeRestriction(userId, res)) return;
 
-    const eventID = String(req.params.id || '').trim();
+    const eventId = String(req.params.id || '').trim();
     const body = (req.body ?? {}) as {
       content?: unknown;
       imageURLs?: unknown;
@@ -6284,7 +6370,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
     const normalizedParentCommentID = parentCommentID.length > 0 ? parentCommentID : null;
     const blockedRelationUserIds = await buildBlockedRelationUserIds(userId);
 
-    if (!eventID) {
+    if (!eventId) {
       res.status(400).json({ error: 'Event id is required' });
       return;
     }
@@ -6294,7 +6380,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
     }
 
     const eventExists = await prisma.event.findUnique({
-      where: { id: eventID },
+      where: { id: eventId },
       select: { id: true },
     });
     if (!eventExists) {
@@ -6325,7 +6411,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
           },
         });
 
-        if (!parentComment || parentComment.eventId !== eventID) {
+        if (!parentComment || parentComment.eventId !== eventId) {
           throw new Error('Parent comment not found');
         }
         if (blockedRelationUserIds.has(parentComment.userId)) {
@@ -6338,7 +6424,7 @@ router.post('/events/:id/live-comments', optionalAuth, async (req: Request, res:
 
       return tx.eventLiveComment.create({
         data: {
-          eventId: eventID,
+          eventId,
           userId,
           parentCommentId: parentComment?.id ?? null,
           rootCommentId,
@@ -6609,33 +6695,35 @@ type NewsArticleRow = {
   body: string;
   link: string | null;
   coverImageUrl: string | null;
-  boundDjIds: string[];
-  boundBrandIds: string[];
-  boundEventIds: string[];
+  djBindings?: Array<{ djId: string }> | null;
+  festivalBrandBindings?: Array<{ festivalBrandId: string }> | null;
+  eventBindings?: Array<{ eventId: string }> | null;
   commentCount?: number | null;
   publishedAt: Date;
 };
 
-const mapNewsArticle = (article: NewsArticleRow) => ({
-  id: article.id,
-  category: article.category,
-  source: article.source,
-  title: article.title,
-  summary: article.summary,
-  body: article.body,
-  link: article.link,
-  coverImageURL: article.coverImageUrl,
-  publishedAt: article.publishedAt.toISOString(),
-  replyCount: article.commentCount ?? 0,
-  authorID: article.authorId || '',
-  authorUsername: article.author?.username || 'raver',
-  authorName: article.author?.displayName || article.author?.username || 'Raver',
-  authorAvatarURL: article.author?.avatarUrl || null,
-  legacyEventID: null,
-  boundDjIDs: article.boundDjIds,
-  boundBrandIDs: article.boundBrandIds,
-  boundEventIDs: article.boundEventIds,
-});
+const mapNewsArticle = (article: NewsArticleRow) => {
+  const bindingIds = deriveNewsBindingIds(article);
+  return {
+    id: article.id,
+    category: article.category,
+    source: article.source,
+    title: article.title,
+    summary: article.summary,
+    body: article.body,
+    link: article.link,
+    coverImageURL: article.coverImageUrl,
+    publishedAt: article.publishedAt.toISOString(),
+    replyCount: article.commentCount ?? 0,
+    authorID: article.authorId || '',
+    authorUsername: article.author?.username || 'raver',
+    authorName: article.author?.displayName || article.author?.username || 'Raver',
+    authorAvatarURL: article.author?.avatarUrl || null,
+    boundDjIds: bindingIds.djIds,
+    boundBrandIds: bindingIds.brandIds,
+    boundEventIds: bindingIds.eventIds,
+  };
+};
 
 const selectNewsArticleAuthor = {
   id: true,
@@ -6713,9 +6801,9 @@ const normalizeNewsDraft = (body: Record<string, unknown>) => {
     link,
     coverImageUrl,
     category: normalizeNewsCategory(body.category),
-    boundDjIds: normalizePostBindingIDs(body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids),
-    boundBrandIds: normalizePostBindingIDs(body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids),
-    boundEventIds: normalizePostBindingIDs(body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids),
+    boundDjIds: normalizePostBindingIDs(body.boundDjIds),
+    boundBrandIds: normalizePostBindingIDs(body.boundBrandIds),
+    boundEventIds: normalizePostBindingIDs(body.boundEventIds),
     publishedAt: parsedPublishedAt,
   };
 };
@@ -6744,7 +6832,7 @@ router.get('/news/search', optionalAuth, async (req: Request, res: Response): Pr
           { source: { contains: query, mode: 'insensitive' } },
         ],
       },
-      include: { author: { select: selectNewsArticleAuthor } },
+      include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });
@@ -6760,30 +6848,16 @@ router.get('/news/bound', optionalAuth, async (req: Request, res: Response): Pro
   try {
     const authReq = req as BFFAuthRequest;
     const viewerId = authReq.user?.userId;
-    const eventID =
-      typeof req.query.eventID === 'string'
-        ? req.query.eventID.trim()
-        : typeof req.query.eventId === 'string'
-          ? req.query.eventId.trim()
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId.trim() : '';
+    const djId = typeof req.query.djId === 'string' ? req.query.djId.trim() : '';
+    const festivalId =
+      typeof req.query.festivalId === 'string'
+        ? req.query.festivalId.trim()
+        : typeof req.query.brandId === 'string'
+          ? req.query.brandId.trim()
           : '';
-    const djID =
-      typeof req.query.djID === 'string'
-        ? req.query.djID.trim()
-        : typeof req.query.djId === 'string'
-          ? req.query.djId.trim()
-          : '';
-    const festivalID =
-      typeof req.query.festivalID === 'string'
-        ? req.query.festivalID.trim()
-        : typeof req.query.festivalId === 'string'
-          ? req.query.festivalId.trim()
-          : typeof req.query.brandID === 'string'
-            ? req.query.brandID.trim()
-            : typeof req.query.brandId === 'string'
-              ? req.query.brandId.trim()
-              : '';
 
-    if (!eventID && !djID && !festivalID) {
+    if (!eventId && !djId && !festivalId) {
       res.status(400).json({ error: 'At least one binding identifier is required' });
       return;
     }
@@ -6794,9 +6868,27 @@ router.get('/news/bound', optionalAuth, async (req: Request, res: Response): Pro
 
     const where = {
       visibility: 'public' as const,
-      ...(eventID ? { boundEventIds: { has: eventID } } : {}),
-      ...(djID ? { boundDjIds: { has: djID } } : {}),
-      ...(festivalID ? { boundBrandIds: { has: festivalID } } : {}),
+      ...(eventId
+        ? {
+            eventBindings: {
+              some: { eventId },
+            },
+          }
+        : {}),
+      ...(djId
+        ? {
+            djBindings: {
+              some: { djId },
+            },
+          }
+        : {}),
+      ...(festivalId
+        ? {
+            festivalBrandBindings: {
+              some: { festivalBrandId: festivalId },
+            },
+          }
+        : {}),
       ...(blockedRelationUserIds.size > 0
         ? {
             authorId: { notIn: Array.from(blockedRelationUserIds) },
@@ -6813,7 +6905,7 @@ router.get('/news/bound', optionalAuth, async (req: Request, res: Response): Pro
 
     const sourceArticles = await prisma.newsArticle.findMany({
       where,
-      include: { author: { select: selectNewsArticleAuthor } },
+      include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
     });
@@ -7013,7 +7105,7 @@ router.get('/news/:id', optionalAuth, async (req: Request, res: Response): Promi
     const articleId = String(req.params.id || '').trim();
     const article = await prisma.newsArticle.findFirst({
       where: { id: articleId, visibility: 'public' },
-      include: { author: { select: selectNewsArticleAuthor } },
+      include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
     });
     if (!article) {
       res.status(404).json({ error: 'News article not found' });
@@ -7039,7 +7131,7 @@ router.get('/news', optionalAuth, async (req: Request, res: Response): Promise<v
         authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
         ...(cursorDate ? { publishedAt: { lt: cursorDate } } : {}),
       },
-      include: { author: { select: selectNewsArticleAuthor } },
+      include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
       orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
     });
@@ -7085,9 +7177,9 @@ router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<
       category: draft.category,
       link: draft.link,
       coverImageURL: draft.coverImageUrl,
-      boundDjIDs: draft.boundDjIds,
-      boundBrandIDs: draft.boundBrandIds,
-      boundEventIDs: draft.boundEventIds,
+      boundDjIds: draft.boundDjIds,
+      boundBrandIds: draft.boundBrandIds,
+      boundEventIds: draft.boundEventIds,
       publishedAt: (draft.publishedAt || new Date()).toISOString(),
     };
     const complianceError = contentCompliance.validationError('news', submissionPayload);
@@ -7107,23 +7199,30 @@ router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<
       return;
     }
 
-    const created = await prisma.newsArticle.create({
-      data: {
-        authorId: userId,
-        category: draft.category,
-        source: draft.source,
-        title: draft.title || newsTitleFromContent(draft.body),
-        summary: draft.summary,
-        body: draft.body,
-        link: draft.link,
-        coverImageUrl: draft.coverImageUrl,
-        visibility: 'public',
-        boundDjIds: draft.boundDjIds,
-        boundBrandIds: draft.boundBrandIds,
-        boundEventIds: draft.boundEventIds,
-        publishedAt: draft.publishedAt || new Date(),
-      },
-      include: { author: { select: selectNewsArticleAuthor } },
+    const created = await prisma.$transaction(async (tx) => {
+      const article = await tx.newsArticle.create({
+        data: {
+          authorId: userId,
+          category: draft.category,
+          source: draft.source,
+          title: draft.title || newsTitleFromContent(draft.body),
+          summary: draft.summary,
+          body: draft.body,
+          link: draft.link,
+          coverImageUrl: draft.coverImageUrl,
+          visibility: 'public',
+          publishedAt: draft.publishedAt || new Date(),
+        },
+      });
+      await syncNewsBindings(tx, article.id, {
+        djIds: draft.boundDjIds,
+        brandIds: draft.boundBrandIds,
+        eventIds: draft.boundEventIds,
+      });
+      return tx.newsArticle.findUniqueOrThrow({
+        where: { id: article.id },
+        include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
+      });
     });
     res.status(201).json(mapNewsArticle(created));
   } catch (error) {
@@ -7189,6 +7288,7 @@ router.get('/feed/search', optionalAuth, async (req: Request, res: Response): Pr
             avatarUrl: true,
           },
         },
+        ...includePostBindings,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
@@ -7255,6 +7355,7 @@ router.get('/feed/posts/:id', optionalAuth, async (req: Request, res: Response):
             avatarUrl: true,
           },
         },
+        ...includePostBindings,
       },
     });
 
@@ -7338,7 +7439,6 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
         displayName: true,
         bio: true,
         avatarUrl: true,
-        favoriteGenres: true,
         isFollowersListPublic: true,
         isFollowingListPublic: true,
         isActive: true,
@@ -7350,18 +7450,19 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       return;
     }
 
-    const [followersCount, followingCount, postsCount, followRow, viewerFriendIds, targetFriendIds] = await Promise.all([
-      prisma.follow.count({
+    const [followersCount, followingCount, postsCount, followRow, viewerFriendIds, targetFriendIds, genreTags] = await Promise.all([
+      prisma.userEntityFollow.count({
         where: {
-          followingId: targetUserId,
-          type: 'user',
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
+          targetId: targetUserId,
         },
       }),
-      prisma.follow.count({
+      prisma.userEntityFollow.count({
         where: {
-          followerId: targetUserId,
-          type: 'user',
-          followingId: { not: null },
+          userId: targetUserId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
         },
       }),
       prisma.post.count({
@@ -7372,17 +7473,13 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       }),
       viewerId === targetUserId
         ? Promise.resolve(null)
-        : prisma.follow.findUnique({
-            where: {
-              followerId_followingId: {
-                followerId: viewerId,
-                followingId: targetUserId,
-              },
-            },
+        : prisma.userEntityFollow.findUnique({
+            where: userEntityFollowWhere(viewerId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_USER, targetUserId),
             select: { id: true },
           }),
       viewerId === targetUserId ? Promise.resolve(new Set<string>()) : buildFriendUserIds(viewerId, [targetUserId]),
       buildFriendUserIds(targetUserId),
+      resolveUserGenrePreferences(prisma, targetUserId),
     ]);
 
     const profileShareLink = await resolveOrCreateShareLink({
@@ -7403,7 +7500,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       displayName: user.displayName || user.username,
       bio: user.bio || '',
       avatarURL: user.avatarUrl,
-      tags: user.favoriteGenres,
+      tags: genreTags,
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
       canViewFollowersList,
@@ -7446,10 +7543,11 @@ router.get('/users/:id/followers', optionalAuth, async (req: Request, res: Respo
       return;
     }
 
-    const rows = await prisma.follow.findMany({
+    const rows = await prisma.userEntityFollow.findMany({
       where: {
-        followingId: targetUserId,
-        type: 'user',
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_USER,
+        targetId: targetUserId,
         ...(cursorDate
           ? {
               createdAt: {
@@ -7458,29 +7556,44 @@ router.get('/users/:id/followers', optionalAuth, async (req: Request, res: Respo
             }
           : {}),
       },
-      include: {
-        follower: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
-      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        userId: true,
+        createdAt: true,
+      },
       take: limit + 1,
     });
 
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const followerIds = pageRows.map((row) => row.userId);
+    const usersById = new Map(
+      (
+        followerIds.length > 0
+          ? await prisma.user.findMany({
+              where: {
+                id: { in: followerIds },
+              },
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            })
+          : []
+      ).map((row) => [row.id, row])
+    );
+    const followers = followerIds
+      .map((userId) => usersById.get(userId) ?? null)
+      .filter((user): user is BasicUser => Boolean(user));
     const followingSet = await buildFollowingMap(
       viewerId,
-      pageRows.map((row) => row.follower.id)
+      followers.map((row) => row.id)
     );
 
     res.json({
-      users: pageRows.map((row) => toUserSummary(row.follower, followingSet.has(row.follower.id))),
+      users: followers.map((row) => toUserSummary(row, followingSet.has(row.id))),
       nextCursor: hasMore ? pageRows[pageRows.length - 1]?.createdAt.toISOString() ?? null : null,
     });
   } catch (error) {
@@ -7513,11 +7626,11 @@ router.get('/users/:id/following', optionalAuth, async (req: Request, res: Respo
       return;
     }
 
-    const rows = await prisma.follow.findMany({
+    const rows = await prisma.userEntityFollow.findMany({
       where: {
-        followerId: targetUserId,
-        type: 'user',
-        followingId: { not: null },
+        userId: targetUserId,
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_USER,
         ...(cursorDate
           ? {
               createdAt: {
@@ -7526,24 +7639,38 @@ router.get('/users/:id/following', optionalAuth, async (req: Request, res: Respo
             }
           : {}),
       },
-      include: {
-        following: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-            isActive: true,
-          },
-        },
-      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        targetId: true,
+        createdAt: true,
+      },
       take: limit + 1,
     });
 
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const users = pageRows.map((row) => row.following).filter((target): target is BasicUser & { isActive: boolean } => Boolean(target && target.isActive));
+    const followingIds = pageRows.map((row) => row.targetId);
+    const usersById = new Map(
+      (
+        followingIds.length > 0
+          ? await prisma.user.findMany({
+              where: {
+                id: { in: followingIds },
+                isActive: true,
+              },
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true,
+              },
+            })
+          : []
+      ).map((row) => [row.id, row])
+    );
+    const users = followingIds
+      .map((userId) => usersById.get(userId) ?? null)
+      .filter((target): target is BasicUser => Boolean(target));
     const followingSet = await buildFollowingMap(
       viewerId,
       users.map((target) => target.id)
@@ -7659,6 +7786,7 @@ router.get('/users/:id/posts', optionalAuth, async (req: Request, res: Response)
             avatarUrl: true,
           },
         },
+        ...includePostBindings,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -8265,12 +8393,8 @@ router.post('/squads/:id/offline-activities', optionalAuth, async (req: Request,
     if (!userId) return;
 
     const squadId = req.params.id as string;
-    const body = req.body as { eventID?: unknown; eventId?: unknown; title?: unknown };
-    const eventId = typeof body.eventID === 'string'
-      ? body.eventID.trim()
-      : typeof body.eventId === 'string'
-        ? body.eventId.trim()
-        : '';
+    const body = req.body as { eventId?: unknown; title?: unknown };
+    const eventId = typeof body.eventId === 'string' ? body.eventId.trim() : '';
     const title = typeof body.title === 'string' ? body.title.trim() : '';
 
     const [squad, membership, existingActive] = await Promise.all([
@@ -9728,15 +9852,9 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       ? images.filter((url): url is string => typeof url === 'string' && !!url.trim())
       : [];
     const normalizedLocation = typeof location === 'string' ? location.trim().slice(0, 160) : '';
-    const normalizedBoundDjIDs = normalizePostBindingIDs(
-      body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids
-    );
-    const normalizedBoundBrandIDs = normalizePostBindingIDs(
-      body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids
-    );
-    const normalizedBoundEventIDs = normalizePostBindingIDs(
-      body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids
-    );
+    const normalizedBoundDjIds = normalizePostBindingIDs(body.boundDjIds);
+    const normalizedBoundBrandIds = normalizePostBindingIDs(body.boundBrandIds);
+    const normalizedBoundEventIds = normalizePostBindingIDs(body.boundEventIds);
     const displayPublishedAtInput =
       body.displayPublishedAt ??
       body.display_published_at ??
@@ -9780,9 +9898,9 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
         content: trimmed,
         images: normalizedImages,
         location: normalizedLocation || null,
-        boundDjIDs: normalizedBoundDjIDs,
-        boundBrandIDs: normalizedBoundBrandIDs,
-        boundEventIDs: normalizedBoundEventIDs,
+        boundDjIds: normalizedBoundDjIds,
+        boundBrandIds: normalizedBoundBrandIds,
+        boundEventIds: normalizedBoundEventIds,
         displayPublishedAt: parsedDisplayPublishedAt || new Date().toISOString(),
       };
       const complianceError = contentCompliance.validationError(entityType, submissionPayload);
@@ -9832,48 +9950,58 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       linkedSquadId = squad.id;
     }
 
-    const created = await prisma.post.create({
-      data: {
-        userId,
-        squadId: linkedSquadId,
-        content: trimmed,
-        images: normalizedImages,
-        location: normalizedLocation || null,
-        type: linkedSquadId ? 'squad' : 'general',
-        visibility: 'public',
-        boundDjIds: normalizedBoundDjIDs,
-        boundBrandIds: normalizedBoundBrandIDs,
-        boundEventIds: normalizedBoundEventIDs,
-        displayPublishedAt: parsedDisplayPublishedAt || new Date(),
-      } as any,
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
+    const created = await prisma.$transaction(async (tx) => {
+      const post = await tx.post.create({
+        data: {
+          userId,
+          squadId: linkedSquadId,
+          content: trimmed,
+          images: normalizedImages,
+          location: normalizedLocation || null,
+          type: linkedSquadId ? 'squad' : 'general',
+          visibility: 'public',
+          displayPublishedAt: parsedDisplayPublishedAt || new Date(),
+        } as any,
+      });
+      await syncPostBindings(tx, post.id, {
+        djIds: normalizedBoundDjIds,
+        brandIds: normalizedBoundBrandIds,
+        eventIds: normalizedBoundEventIds,
+      });
+      return tx.post.findUniqueOrThrow({
+        where: { id: post.id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+            },
           },
-        },
-        squad: {
-          select: {
-            id: true,
-            name: true,
-            avatarUrl: true,
+          squad: {
+            select: {
+              id: true,
+              name: true,
+              avatarUrl: true,
+            },
           },
+          ...includePostBindings,
         },
-      },
+      });
     });
 
     const followingSet = await buildFollowingMap(userId, [created.user.id]);
     const mapped = mapPost(created, followingSet, new Set<string>(), new Set<string>());
+
+    const createdBindingIds = derivePostBindingIds(created);
 
     void publishFavoritedEventNewsSafely({
       actorUserId: userId,
       postId: created.id,
       content: created.content,
       imageURLs: Array.isArray(created.images) ? created.images : [],
-      boundEventIDs: Array.isArray((created as any).boundEventIds) ? ((created as any).boundEventIds as string[]) : [],
+      boundEventIds: createdBindingIds.eventIds,
       occurredAt: created.displayPublishedAt ?? created.createdAt,
     });
 
@@ -9882,7 +10010,7 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       postId: created.id,
       content: created.content,
       imageURLs: Array.isArray(created.images) ? created.images : [],
-      boundDjIDs: Array.isArray((created as any).boundDjIds) ? ((created as any).boundDjIds as string[]) : [],
+      boundDjIds: createdBindingIds.djIds,
       occurredAt: created.displayPublishedAt ?? created.createdAt,
     });
 
@@ -9891,7 +10019,7 @@ router.post('/feed/posts', optionalAuth, async (req: Request, res: Response): Pr
       postId: created.id,
       content: created.content,
       imageURLs: Array.isArray(created.images) ? created.images : [],
-      boundBrandIDs: Array.isArray((created as any).boundBrandIds) ? ((created as any).boundBrandIds as string[]) : [],
+      boundBrandIds: createdBindingIds.brandIds,
       occurredAt: created.displayPublishedAt ?? created.createdAt,
     });
 
@@ -9915,9 +10043,9 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       images?: string[];
       location?: string;
     };
-    const boundDjIDs = body.boundDjIDs ?? body.boundDjIds ?? body.boundDJIDs ?? body.bound_dj_ids;
-    const boundBrandIDs = body.boundBrandIDs ?? body.boundBrandIds ?? body.bound_brand_ids;
-    const boundEventIDs = body.boundEventIDs ?? body.boundEventIds ?? body.bound_event_ids;
+    const boundDjIds = body.boundDjIds;
+    const boundBrandIds = body.boundBrandIds;
+    const boundEventIds = body.boundEventIds;
     const hasDisplayPublishedAt =
       Object.prototype.hasOwnProperty.call(body, 'displayPublishedAt') ||
       Object.prototype.hasOwnProperty.call(body, 'display_published_at') ||
@@ -9941,16 +10069,16 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
     const hasContent = typeof content === 'string';
     const hasImages = Array.isArray(images);
     const hasLocation = typeof location === 'string';
-    const hasBoundDjIDs = Array.isArray(boundDjIDs);
-    const hasBoundBrandIDs = Array.isArray(boundBrandIDs);
-    const hasBoundEventIDs = Array.isArray(boundEventIDs);
+    const hasBoundDjIds = Array.isArray(boundDjIds);
+    const hasBoundBrandIds = Array.isArray(boundBrandIds);
+    const hasBoundEventIds = Array.isArray(boundEventIds);
     if (
       !hasContent &&
       !hasImages &&
       !hasLocation &&
-      !hasBoundDjIDs &&
-      !hasBoundBrandIDs &&
-      !hasBoundEventIDs &&
+      !hasBoundDjIds &&
+      !hasBoundBrandIds &&
+      !hasBoundEventIds &&
       !hasDisplayPublishedAt
     ) {
       res.status(400).json({ error: 'content, images, location, displayPublishedAt or binding fields is required' });
@@ -10005,9 +10133,6 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       content?: string;
       images?: string[];
       location?: string | null;
-      boundDjIds?: string[];
-      boundBrandIds?: string[];
-      boundEventIds?: string[];
       displayPublishedAt?: Date;
     } = {};
     if (hasContent) {
@@ -10020,15 +10145,9 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       const normalizedLocation = String(location || '').trim().slice(0, 160);
       updateData.location = normalizedLocation || null;
     }
-    if (hasBoundDjIDs) {
-      updateData.boundDjIds = normalizePostBindingIDs(boundDjIDs);
-    }
-    if (hasBoundBrandIDs) {
-      updateData.boundBrandIds = normalizePostBindingIDs(boundBrandIDs);
-    }
-    if (hasBoundEventIDs) {
-      updateData.boundEventIds = normalizePostBindingIDs(boundEventIDs);
-    }
+    const nextBoundDjIds = hasBoundDjIds ? normalizePostBindingIDs(boundDjIds) : null;
+    const nextBoundBrandIds = hasBoundBrandIds ? normalizePostBindingIDs(boundBrandIds) : null;
+    const nextBoundEventIds = hasBoundEventIds ? normalizePostBindingIDs(boundEventIds) : null;
     if (hasDisplayPublishedAt) {
       const normalizedDisplayPublishedAt =
         parsedDisplayPublishedAt && parsedDisplayPublishedAt !== 'invalid'
@@ -10037,28 +10156,42 @@ router.patch('/feed/posts/:id', optionalAuth, async (req: Request, res: Response
       updateData.displayPublishedAt = normalizedDisplayPublishedAt || existing.createdAt;
     }
 
+    const shouldUpdateBindings = hasBoundDjIds || hasBoundBrandIds || hasBoundEventIds;
     const updated =
-      Object.keys(updateData).length > 0
-        ? await prisma.post.update({
-            where: { id: postId },
-            data: updateData as any,
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  username: true,
-                  displayName: true,
-                  avatarUrl: true,
+      Object.keys(updateData).length > 0 || shouldUpdateBindings
+        ? await prisma.$transaction(async (tx) => {
+            if (Object.keys(updateData).length > 0) {
+              await tx.post.update({
+                where: { id: postId },
+                data: updateData as any,
+              });
+            }
+            await syncPostBindings(tx, postId, {
+              ...(hasBoundDjIds ? { djIds: nextBoundDjIds ?? [] } : {}),
+              ...(hasBoundBrandIds ? { brandIds: nextBoundBrandIds ?? [] } : {}),
+              ...(hasBoundEventIds ? { eventIds: nextBoundEventIds ?? [] } : {}),
+            });
+            return tx.post.findUniqueOrThrow({
+              where: { id: postId },
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    username: true,
+                    displayName: true,
+                    avatarUrl: true,
+                  },
                 },
-              },
-              squad: {
-                select: {
-                  id: true,
-                  name: true,
-                  avatarUrl: true,
+                squad: {
+                  select: {
+                    id: true,
+                    name: true,
+                    avatarUrl: true,
+                  },
                 },
+                ...includePostBindings,
               },
-            },
+            });
           })
         : existing;
 
@@ -11276,22 +11409,22 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
           bio: true,
           location: true,
           avatarUrl: true,
-          favoriteGenres: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
         },
       }),
-      prisma.follow.count({
+      prisma.userEntityFollow.count({
         where: {
-          followingId: userId,
-          type: 'user',
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
+          targetId: userId,
         },
       }),
-      prisma.follow.count({
+      prisma.userEntityFollow.count({
         where: {
-          followerId: userId,
-          type: 'user',
-          followingId: { not: null },
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
         },
       }),
       prisma.post.count({
@@ -11323,7 +11456,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       bio: user.bio || '',
       location: user.location || null,
       avatarURL: user.avatarUrl,
-      tags: user.favoriteGenres,
+      tags: await resolveUserGenrePreferences(prisma, user.id),
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
       canViewFollowersList: true,
@@ -11363,7 +11496,6 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       displayNameReviewNote?: string | null;
       bio?: string;
       location?: string | null;
-      favoriteGenres?: string[];
       isFollowersListPublic?: boolean;
       isFollowingListPublic?: boolean;
     } = {};
@@ -11407,10 +11539,6 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       data.location = null;
     }
 
-    if (body.tags !== undefined) {
-      data.favoriteGenres = normalizeTags(body.tags);
-    }
-
     if (typeof body.isFollowersListPublic === 'boolean') {
       data.isFollowersListPublic = body.isFollowersListPublic;
     }
@@ -11418,12 +11546,20 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
     if (typeof body.isFollowingListPublic === 'boolean') {
       data.isFollowingListPublic = body.isFollowingListPublic;
     }
+    const nextTags = body.tags !== undefined ? normalizeGenrePreferenceKeys(normalizeTags(body.tags)) : null;
 
-    if (Object.keys(data).length > 0) {
-      await prisma.user.update({
-        where: { id: userId },
-        data,
-        select: { id: true },
+    if (Object.keys(data).length > 0 || nextTags !== null) {
+      await prisma.$transaction(async (tx) => {
+        if (Object.keys(data).length > 0) {
+          await tx.user.update({
+            where: { id: userId },
+            data,
+            select: { id: true },
+          });
+        }
+        if (nextTags !== null) {
+          await syncUserGenrePreferences(tx, userId, nextTags);
+        }
       });
 
       if (data.displayName && data.displayNameNormalized) {
@@ -11448,22 +11584,22 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
           bio: true,
           location: true,
           avatarUrl: true,
-          favoriteGenres: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
         },
       }),
-      prisma.follow.count({
+      prisma.userEntityFollow.count({
         where: {
-          followingId: userId,
-          type: 'user',
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
+          targetId: userId,
         },
       }),
-      prisma.follow.count({
+      prisma.userEntityFollow.count({
         where: {
-          followerId: userId,
-          type: 'user',
-          followingId: { not: null },
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
         },
       }),
       prisma.post.count({
@@ -11484,7 +11620,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       bio: user.bio || '',
       location: user.location || null,
       avatarURL: user.avatarUrl,
-      tags: user.favoriteGenres,
+      tags: await resolveUserGenrePreferences(prisma, user.id),
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
       canViewFollowersList: true,
@@ -11833,25 +11969,21 @@ router.post('/social/users/:id/follow', optionalAuth, async (req: Request, res: 
       return;
     }
 
-    const existing = await prisma.follow.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: userId,
-          followingId: targetUserId,
-        },
-      },
+    const existing = await prisma.userEntityFollow.findUnique({
+      where: userEntityFollowWhere(userId, USER_ENTITY_RELATION_FOLLOW, USER_ENTITY_TARGET_USER, targetUserId),
     });
 
     let createdFollowId: string | null = null;
     let friendConversationResult: { conversationId: string; createdGreeting: boolean } | null = null;
     if (!existing) {
-      const createdFollow = await prisma.follow.create({
-        data: {
-          followerId: userId,
-          followingId: targetUserId,
-          type: 'user',
-        },
-        select: { id: true },
+      const createdFollow = await prisma.$transaction(async (tx) => {
+        const relation = await upsertUserEntityRelation(tx, {
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_USER,
+          targetId: targetUserId,
+        });
+        return relation;
       });
       createdFollowId = createdFollow.id;
     }
@@ -11919,12 +12051,13 @@ router.delete('/social/users/:id/follow', optionalAuth, async (req: Request, res
       return;
     }
 
-    await prisma.follow.deleteMany({
-      where: {
-        followerId: userId,
-        followingId: targetUserId,
-        type: 'user',
-      },
+    await prisma.$transaction(async (tx) => {
+      await deleteUserEntityRelation(tx, {
+        userId,
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_USER,
+        targetId: targetUserId,
+      });
     });
 
     res.json(toUserSummary(target, false));

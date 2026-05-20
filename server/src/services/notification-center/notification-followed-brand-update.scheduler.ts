@@ -84,27 +84,29 @@ const resolveInfoCountMap = async (brandIds: string[], since: Date): Promise<Map
   if (brandIds.length === 0) {
     return new Map();
   }
-  const posts = await prisma.post.findMany({
+  const rows = await prisma.postFestivalBrandBinding.findMany({
     where: {
-      createdAt: {
-        gte: since,
+      festivalBrandId: {
+        in: brandIds,
       },
-      boundBrandIds: {
-        hasSome: brandIds,
+      post: {
+        createdAt: {
+          gte: since,
+        },
       },
     },
     select: {
-      boundBrandIds: true,
+      festivalBrandId: true,
+      postId: true,
     },
   });
-  const brandIdSet = new Set(brandIds);
   const countMap = new Map<string, number>();
-  for (const post of posts) {
-    const uniqueBrandIds = Array.from(new Set(post.boundBrandIds.map((item) => item.trim()).filter(Boolean)));
-    for (const brandId of uniqueBrandIds) {
-      if (!brandIdSet.has(brandId)) continue;
-      countMap.set(brandId, (countMap.get(brandId) ?? 0) + 1);
-    }
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.festivalBrandId}:${row.postId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    countMap.set(row.festivalBrandId, (countMap.get(row.festivalBrandId) ?? 0) + 1);
   }
   return countMap;
 };

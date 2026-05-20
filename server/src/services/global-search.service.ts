@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
+import { resolveUserGenrePreferenceMap } from './user-genre-preference.service';
 
 const prisma = new PrismaClient();
 
@@ -517,7 +518,8 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         { country: containsInsensitive(query) },
         { venueName: containsInsensitive(query) },
         { organizerName: containsInsensitive(query) },
-        { lineupSlots: { some: { djName: containsInsensitive(query) } } },
+        { canonicalArtists: { some: { displayName: containsInsensitive(query) } } },
+        { canonicalArtists: { some: { members: { some: { memberNameSnapshot: containsInsensitive(query) } } } } },
         {
           wikiFestival: {
             is: {
@@ -558,9 +560,15 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
           aliases: true,
         },
       },
-      lineupSlots: {
-        select: { djName: true, stageName: true },
+      canonicalArtists: {
+        orderBy: [{ billingOrder: 'asc' }],
         take: 8,
+        select: { displayName: true },
+      },
+      performances: {
+        orderBy: [{ startAt: 'asc' }, { sortOrder: 'asc' }],
+        take: 8,
+        select: { displayNameSnapshot: true, stage: { select: { name: true } } },
       },
     },
     orderBy: [{ startDate: 'desc' }],
@@ -576,7 +584,10 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       const brandName = row.wikiFestival
         ? pickLocalizedText(row.wikiFestival.nameI18n, locale, row.wikiFestival.name)
         : null;
-      const lineupNames = row.lineupSlots.map((slot) => slot.djName);
+      const lineupNames = Array.from(new Set([
+        ...row.canonicalArtists.map((artist) => artist.displayName),
+        ...row.performances.map((slot) => slot.displayNameSnapshot),
+      ].filter(Boolean)));
       const brandNames = row.wikiFestival
         ? [brandName, row.wikiFestival.name, row.wikiFestival.abbreviation, ...(row.wikiFestival.aliases || [])]
         : [];
@@ -1339,7 +1350,6 @@ const searchPeopleSquads = async (query: string, limit: number, userId: string, 
         avatarUrl: true,
         bio: true,
         location: true,
-        favoriteGenres: true,
         isVerified: true,
         updatedAt: true,
       },
@@ -1369,10 +1379,12 @@ const searchPeopleSquads = async (query: string, limit: number, userId: string, 
     }),
   ]);
 
+  const genreMap = await resolveUserGenrePreferenceMap(prisma, users.map((row) => row.id));
   const userItems = users.map((row) => {
+    const favoriteGenres = genreMap.get(row.id) || [];
     const score = Math.max(
       scoreText(query, row.displayName),
-      arrayScore(query, row.favoriteGenres),
+      arrayScore(query, favoriteGenres),
       scoreTexts(query, [row.bio, row.location], { exact: 58, prefix: 46, contains: 34 })
     ) + (row.isVerified ? 4 : 0);
     return {
@@ -1381,7 +1393,7 @@ const searchPeopleSquads = async (query: string, limit: number, userId: string, 
       entityID: row.id,
       title: row.displayName || row.username,
       subtitle: compact([row.location]),
-      summary: truncate(row.bio || row.favoriteGenres.join(', ')),
+      summary: truncate(row.bio || favoriteGenres.join(', ')),
       imageUrl: row.avatarUrl,
       badgeText: row.isVerified ? 'Verified User' : 'User',
       deeplink: `raver://profile/${row.id}`,

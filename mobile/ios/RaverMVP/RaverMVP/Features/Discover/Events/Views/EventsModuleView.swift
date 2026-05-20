@@ -544,18 +544,12 @@ struct EventsModuleView: View {
     }
 
     private func eventListRow(_ event: WebEvent) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            Button {
-                presentEventDetail(event)
-            } label: {
-                EventRow(event: event)
-            }
-            .buttonStyle(.plain)
-
-            eventActionButtons(for: event)
-                .padding(.bottom, 10)
-                .padding(.trailing, 10)
+        Button {
+            presentEventDetail(event)
+        } label: {
+            EventRow(event: event)
         }
+        .buttonStyle(.plain)
     }
 
     private func utilityIconButton(
@@ -735,38 +729,6 @@ struct EventsModuleView: View {
     private func presentEventDetail(_ event: WebEvent) {
         guard !showCalendar, !showCountryFilter else { return }
         appPush(.eventDetail(eventID: event.id))
-    }
-
-    private func eventActionButtons(for event: WebEvent) -> some View {
-        let isMarked = viewModel.markedCheckinIDsByEventID[event.id] != nil
-
-        return HStack(spacing: 8) {
-            Button {
-                Task {
-                    await viewModel.toggleMarked(event: event, isLoggedIn: appState.session != nil)
-                }
-            } label: {
-                Label(
-                    isMarked ? LT("已关注", "Following", "フォロー中") : LT("关注", "Follow", "フォロー"),
-                    systemImage: isMarked ? "bell.fill" : "bell"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .frame(height: 34)
-                .background(
-                    Capsule()
-                        .fill(
-                            isMarked
-                            ? Color(red: 0.20, green: 0.56, blue: 0.98).opacity(0.45)
-                            : Color(red: 0.20, green: 0.56, blue: 0.98)
-                        )
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isMarked ? LT("已关注活动", "Following event", "イベントをフォロー中") : LT("关注活动", "Follow event", "イベントをフォロー"))
-        }
     }
 
     private static let continentBucketByCountryToken: [String: ContinentBucket] = [

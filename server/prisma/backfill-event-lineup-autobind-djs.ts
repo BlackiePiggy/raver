@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import {
+  loadCanonicalEventLineupSnapshot,
+  syncCanonicalEventLineupAndTimetable,
+} from '../src/services/event-lineup-canonical.service';
 
 dotenv.config();
 
@@ -20,12 +24,14 @@ type DJLite = {
 type SlotLite = {
   id: string;
   eventId: string;
+  lineupArtistId?: string | null;
   djId: string | null;
   djIds: string[];
   djName: string;
 };
 
 type SlotResult = {
+  lineupArtistId?: string | null;
   nextDjId: string | null;
   nextDjIds: string[];
   changed: boolean;
@@ -160,6 +166,7 @@ const computeSlotBinding = (slot: SlotLite, matchMap: Map<string, DJLite>): Slot
     !sameIdArray(originalDjIds, finalDjIds);
 
   return {
+    lineupArtistId: slot.lineupArtistId ?? null,
     nextDjId: finalDjId,
     nextDjIds: finalDjIds,
     changed,
@@ -192,64 +199,81 @@ async function main() {
   const matchMap = buildMatchMap(djs);
   console.log(`[lineup-autobind] dj loaded=${djs.length} keys=${matchMap.size}`);
 
-  const slotWhere = EVENT_ID ? { eventId: EVENT_ID } : {};
-  const totalSlots = await prisma.eventLineupSlot.count({ where: slotWhere });
-  console.log(`[lineup-autobind] totalSlots=${totalSlots}`);
+  const eventRows = EVENT_ID
+    ? [{ id: EVENT_ID }]
+    : await prisma.event.findMany({
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
 
-  let cursorId: string | undefined;
+  const snapshots = await Promise.all(
+    eventRows.map(async (event) => ({
+      eventId: event.id,
+      snapshot: await loadCanonicalEventLineupSnapshot(prisma, event.id),
+    }))
+  );
+  const totalSlots = snapshots.reduce((sum, item) => sum + item.snapshot.slots.length, 0);
+  console.log(`[lineup-autobind] totalEvents=${snapshots.length} totalSlots=${totalSlots}`);
+
   let scanned = 0;
   let touched = 0;
   let appliedBindings = 0;
   const perEventTouched = new Map<string, number>();
-  const updates: Array<{ id: string; eventId: string; data: { djId: string | null; djIds: string[] } }> = [];
   const samples: Array<Record<string, unknown>> = [];
+  const eventUpdates = new Map<string, {
+    artists: Awaited<ReturnType<typeof loadCanonicalEventLineupSnapshot>>['artists'];
+    slots: Awaited<ReturnType<typeof loadCanonicalEventLineupSnapshot>>['slots'];
+  }>();
 
-  while (true) {
-    const rows = await prisma.eventLineupSlot.findMany({
-      where: slotWhere,
-      orderBy: { id: 'asc' },
-      take: TAKE,
-      ...(cursorId ? { skip: 1, cursor: { id: cursorId } } : {}),
-      select: {
-        id: true,
-        eventId: true,
-        djId: true,
-        djIds: true,
-        djName: true,
-      },
-    });
-    if (!rows.length) break;
-    cursorId = rows[rows.length - 1]?.id;
+  for (const { eventId, snapshot } of snapshots) {
+    const nextSlots = snapshot.slots.map((slot) => ({ ...slot }));
+    const nextArtists = snapshot.artists.map((artist) => ({ ...artist, djIds: [...artist.djIds] }));
+    let eventChanged = false;
 
-    for (const row of rows) {
+    for (const row of nextSlots) {
       scanned += 1;
       if (LIMIT > 0 && scanned > LIMIT) break;
 
-      const result = computeSlotBinding(row as SlotLite, matchMap);
+      const result = computeSlotBinding({
+        id: row.id || '',
+        eventId,
+        lineupArtistId: row.lineupArtistId ?? null,
+        djId: row.djId,
+        djIds: row.djIds,
+        djName: row.djName,
+      }, matchMap);
       if (!result.changed) continue;
 
       touched += 1;
       appliedBindings += result.appliedCount;
-      perEventTouched.set(row.eventId, (perEventTouched.get(row.eventId) || 0) + 1);
-      updates.push({
-        id: row.id,
-        eventId: row.eventId,
-        data: {
-          djId: result.nextDjId,
-          djIds: result.nextDjIds,
-        },
-      });
+      eventChanged = true;
+      perEventTouched.set(eventId, (perEventTouched.get(eventId) || 0) + 1);
+
+      row.djId = result.nextDjId;
+      row.djIds = result.nextDjIds;
+
+      if (result.lineupArtistId) {
+        const artist = nextArtists.find((item) => item.id === result.lineupArtistId);
+        if (artist) {
+          artist.djId = result.nextDjId;
+          artist.djIds = result.nextDjIds;
+        }
+      }
 
       if (samples.length < 60) {
         samples.push({
-          slotId: row.id,
-          eventId: row.eventId,
+          slotId: row.id || '',
+          eventId,
           djName: row.djName,
-          before: { djId: row.djId, djIds: row.djIds },
+          before: { djId: snapshot.slots.find((item) => item.id === row.id)?.djId ?? null, djIds: snapshot.slots.find((item) => item.id === row.id)?.djIds ?? [] },
           after: { djId: result.nextDjId, djIds: result.nextDjIds },
           appliedCount: result.appliedCount,
         });
       }
+    }
+
+    if (eventChanged) {
+      eventUpdates.set(eventId, { artists: nextArtists, slots: nextSlots });
     }
 
     if (LIMIT > 0 && scanned >= LIMIT) break;
@@ -258,19 +282,17 @@ async function main() {
     }
   }
 
-  if (!DRY_RUN && updates.length) {
-    console.log(`[lineup-autobind] writing updates=${updates.length} ...`);
-    for (let i = 0; i < updates.length; i += TX_CHUNK) {
-      const chunk = updates.slice(i, i + TX_CHUNK);
-      await prisma.$transaction(
-        chunk.map((item) =>
-          prisma.eventLineupSlot.update({
-            where: { id: item.id },
-            data: item.data,
-          })
-        )
-      );
-      console.log(`[lineup-autobind] committed ${Math.min(i + TX_CHUNK, updates.length)}/${updates.length}`);
+  if (!DRY_RUN && eventUpdates.size) {
+    const entries = Array.from(eventUpdates.entries());
+    console.log(`[lineup-autobind] writing events=${entries.length} ...`);
+    for (let i = 0; i < entries.length; i += TX_CHUNK) {
+      const chunk = entries.slice(i, i + TX_CHUNK);
+      await Promise.all(chunk.map(async ([eventId, data]) => {
+        await prisma.$transaction(async (tx) => {
+          await syncCanonicalEventLineupAndTimetable(tx, eventId, data.slots, data.artists);
+        });
+      }));
+      console.log(`[lineup-autobind] committed ${Math.min(i + TX_CHUNK, entries.length)}/${entries.length} events`);
     }
   }
 
@@ -291,8 +313,8 @@ async function main() {
       scanned,
       touchedSlots: touched,
       appliedBindings,
-      updatesWritten: DRY_RUN ? 0 : updates.length,
-      affectedEvents: perEventTouched.size,
+      updatesWritten: DRY_RUN ? 0 : eventUpdates.size,
+      affectedEvents: eventUpdates.size,
     },
     topAffectedEvents: Array.from(perEventTouched.entries())
       .sort((a, b) => b[1] - a[1])

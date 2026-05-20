@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import OSS from 'ali-oss';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { syncCanonicalEventLineupAndTimetable } from '../src/services/event-lineup-canonical.service';
 
 type ImageType = 'cover' | 'luall' | 'tt' | 'other';
 
@@ -773,15 +774,26 @@ const uploadImageCandidates = async (
   return { assets, uploaded, failed };
 };
 
+type CanonicalArchiveLineupSlot = {
+  djId: string | null;
+  djIds: string[];
+  djName: string;
+  stageName: string | null;
+  sortOrder: number;
+  startTime: Date;
+  endTime: Date;
+  festivalDayIndex: number | null;
+};
+
 const parseLineupRows = (
   rawLineup: unknown,
   eventStartDate: Date,
   validDJIds: Set<string>,
   djIdByName: Map<string, string>
-): Prisma.EventLineupSlotCreateManyInput[] => {
+): CanonicalArchiveLineupSlot[] => {
   if (!Array.isArray(rawLineup)) return [];
 
-  const out: Prisma.EventLineupSlotCreateManyInput[] = [];
+  const out: CanonicalArchiveLineupSlot[] = [];
 
   rawLineup.forEach((item, index) => {
     if (!item || typeof item !== 'object') return;
@@ -809,13 +821,14 @@ const parseLineupRows = (
     const stageName = safeText(row.stage);
 
     out.push({
-      eventId: '',
       djId: djId || null,
+      djIds: djId ? [djId] : [],
       djName,
       stageName: stageName || null,
       sortOrder: index + 1,
       startTime,
       endTime,
+      festivalDayIndex: null,
     });
   });
 
@@ -1163,15 +1176,15 @@ const main = async (): Promise<void> => {
               select: { id: true },
             });
 
-        await tx.eventLineupSlot.deleteMany({ where: { eventId: event.id } });
-        if (lineupSlots.length > 0) {
-          await tx.eventLineupSlot.createMany({
-            data: lineupSlots.map((slot) => ({
-              ...slot,
-              eventId: event.id,
-            })),
-          });
-        }
+        await syncCanonicalEventLineupAndTimetable(
+          tx,
+          event.id,
+          lineupSlots.map((slot) => ({
+            ...slot,
+            lineupArtistId: null,
+          })),
+          []
+        );
 
         return event;
       });

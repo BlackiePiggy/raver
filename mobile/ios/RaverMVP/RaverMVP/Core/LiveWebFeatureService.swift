@@ -523,7 +523,7 @@ final class LiveWebFeatureService: WebFeatureService {
             URLQueryItem(name: "sortBy", value: "latest"),
         ]
         if !normalizedEventID.isEmpty {
-            queryItems.append(URLQueryItem(name: "eventID", value: normalizedEventID))
+            queryItems.append(URLQueryItem(name: "eventId", value: normalizedEventID))
         }
         if !normalized.isEmpty {
             queryItems.append(URLQueryItem(name: "eventName", value: normalized))

@@ -38,6 +38,7 @@ const baseUrl = (process.env.AUTH_INTEGRATION_BASE_URL || 'http://127.0.0.1:3901
 const expectedAccessExpiresIn = Number(process.env.AUTH_INTEGRATION_EXPECT_ACCESS_EXPIRES_IN || '900');
 const loginRateLimitMaxAttempts = Number(process.env.AUTH_INTEGRATION_LOGIN_RATE_MAX_ATTEMPTS || '10');
 const registerRateLimitMaxAttempts = Number(process.env.AUTH_INTEGRATION_REGISTER_RATE_MAX_ATTEMPTS || '10');
+const requestTimeoutMs = Number(process.env.AUTH_INTEGRATION_TIMEOUT_MS || '15000');
 const enableSmsFlow = !['0', 'false', 'no', 'off'].includes(
   String(process.env.AUTH_INTEGRATION_ENABLE_SMS || 'true').trim().toLowerCase()
 );
@@ -79,12 +80,15 @@ const request = async <T>(
   cookieHeader: string,
   accessToken?: string
 ): Promise<ApiResponse<T>> => {
+  const hasBody = body !== null && body !== undefined && method.toUpperCase() !== 'GET';
   const response = await axios.request<T>({
     method,
     url: buildPath(path),
-    data: body,
+    ...(hasBody ? { data: body } : {}),
+    timeout: requestTimeoutMs,
     headers: {
-      'Content-Type': 'application/json',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      Connection: 'close',
       ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
@@ -100,6 +104,10 @@ const request = async <T>(
 
 const assert = (condition: boolean, message: string): void => {
   if (!condition) throw new Error(message);
+};
+
+const logStep = (step: string, detail?: Record<string, unknown>): void => {
+  console.log('[auth-integration]', step, detail || {});
 };
 
 const parseDateMs = (value: string | null | undefined, label: string): number => {
@@ -157,6 +165,7 @@ const main = async (): Promise<void> => {
     register.data.accessTokenExpiresIn === expectedAccessExpiresIn,
     `register accessTokenExpiresIn expected ${expectedAccessExpiresIn} but got ${String(register.data.accessTokenExpiresIn)}`
   );
+  logStep('register ok', { username: account.username });
 
   const logoutAfterRegister = await request<{ success?: boolean }>('POST', '/auth/logout', {}, cookieHeader);
   cookieHeader = mergeCookies(cookieHeader, logoutAfterRegister.setCookies);
@@ -172,7 +181,9 @@ const main = async (): Promise<void> => {
   assert(login.status === 200, `login expected 200 but got ${login.status}`);
   const loginRefreshToken = login.data.refreshToken || '';
   assert(Boolean(loginRefreshToken), 'login response missing refreshToken');
+  logStep('login ok');
 
+  logStep('refresh start');
   const refresh = await request<AuthSuccessBody>('POST', '/auth/refresh', {}, cookieHeader);
   cookieHeader = mergeCookies(cookieHeader, refresh.setCookies);
   assert(refresh.status === 200, `refresh expected 200 but got ${refresh.status}`);
@@ -186,6 +197,7 @@ const main = async (): Promise<void> => {
     refreshedRefreshToken !== loginRefreshToken,
     'refresh rotation expected new refresh token but received same token'
   );
+  logStep('refresh ok');
   const activeAccessToken = refresh.data.accessToken || refresh.data.token || '';
   assert(Boolean(activeAccessToken), 'refresh response missing access token');
 
@@ -236,6 +248,7 @@ const main = async (): Promise<void> => {
   const webAdminLogin = await axios.request<AuthSuccessBody>({
     method: 'POST',
     url: buildPath('/auth/login'),
+    timeout: requestTimeoutMs,
     data: {
       identifier: account.username,
       password: account.password,
@@ -246,6 +259,7 @@ const main = async (): Promise<void> => {
     },
     headers: {
       'Content-Type': 'application/json',
+      Connection: 'close',
       'x-raver-client-type': 'web_admin',
       'x-raver-device-name': 'Auth Integration Admin Browser',
       'x-raver-platform': 'web',
@@ -279,6 +293,7 @@ const main = async (): Promise<void> => {
   const iosLogin = await axios.request<AuthSuccessBody>({
     method: 'POST',
     url: buildPath('/auth/login'),
+    timeout: requestTimeoutMs,
     data: {
       identifier: account.username,
       password: account.password,
@@ -289,6 +304,7 @@ const main = async (): Promise<void> => {
     },
     headers: {
       'Content-Type': 'application/json',
+      Connection: 'close',
       'x-raver-client-type': 'ios',
       'x-raver-device-name': 'Auth Integration iPhone',
       'x-raver-platform': 'ios',
@@ -593,7 +609,7 @@ const main = async (): Promise<void> => {
       const smsLogin = await request<AuthSuccessBody>(
         'POST',
         '/auth/sms/login',
-        { phone: phoneNumber, code: debugCode },
+        { phone: phoneNumber, code: debugCode, birthYear: 1998, regionCode: 'JP' },
         ''
       );
       assert(smsLogin.status === 200, `sms-login expected 200 but got ${smsLogin.status}`);

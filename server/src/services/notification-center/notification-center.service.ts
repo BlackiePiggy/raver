@@ -1,4 +1,8 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import {
+  USER_ENTITY_RELATION_FAVORITE,
+  USER_ENTITY_TARGET_EVENT,
+} from '../user-entity-follow.service';
 import type {
   NotificationChannel,
   NotificationChannelHandler,
@@ -2842,37 +2846,33 @@ export const notificationCenterService = {
     const maxDaysBeforeStart = normalizeDaysBeforeStart(input.maxDaysBeforeStart, 3);
     const now = new Date();
     const until = new Date(now.getTime() + (maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
-    const rows = await prisma.eventFavorite.findMany({
-      where: {
-        userId: {
-          in: normalizedUserIds,
-        },
-        event: {
-          startDate: {
-            gte: now,
-            lte: until,
-          },
-        },
-      },
-      select: {
-        userId: true,
-        eventId: true,
-        event: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-          },
-        },
-      },
-      orderBy: [{ event: { startDate: 'asc' } }, { createdAt: 'desc' }],
-    });
+    const rows = await prisma.$queryRaw<Array<{
+      userId: string;
+      eventId: string;
+      eventName: string;
+      eventStartDate: Date;
+      createdAt: Date;
+    }>>`
+      SELECT
+        uef.user_id AS "userId",
+        uef.target_id AS "eventId",
+        e.name AS "eventName",
+        e.start_date AS "eventStartDate",
+        uef.created_at AS "createdAt"
+      FROM user_entity_follows uef
+      INNER JOIN events e ON e.id = uef.target_id
+      WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
+        AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
+        AND uef.user_id IN (${Prisma.join(normalizedUserIds)})
+        AND e.start_date >= ${now}
+        AND e.start_date <= ${until}
+      ORDER BY e.start_date ASC, uef.created_at DESC
+    `;
 
     const unique = new Map<string, { userId: string; eventId: string; eventName: string; eventStartDate: Date }>();
     for (const row of rows) {
-      const event = row.event;
       const eventId = row.eventId?.trim();
-      if (!event || !eventId) {
+      if (!eventId) {
         continue;
       }
       const key = `${row.userId}:${eventId}`;
@@ -2882,8 +2882,8 @@ export const notificationCenterService = {
       unique.set(key, {
         userId: row.userId,
         eventId,
-        eventName: event.name,
-        eventStartDate: event.startDate,
+        eventName: row.eventName,
+        eventStartDate: row.eventStartDate,
       });
     }
 
@@ -3058,43 +3058,38 @@ export const notificationCenterService = {
     const now = new Date();
     const until = new Date(now.getTime() + (maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
     const since = new Date(now.getTime() - maxDaysAfterEnd * 24 * 60 * 60 * 1000);
-    const rows = await prisma.eventFavorite.findMany({
-      where: {
-        userId: {
-          in: normalizedUserIds,
-        },
-        event: {
-          startDate: {
-            lte: until,
-          },
-          endDate: {
-            gte: since,
-          },
-        },
-      },
-      select: {
-        userId: true,
-        eventId: true,
-        event: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-      },
-      orderBy: [{ event: { startDate: 'asc' } }, { createdAt: 'desc' }],
-    });
+    const rows = await prisma.$queryRaw<Array<{
+      userId: string;
+      eventId: string;
+      eventName: string;
+      eventStartDate: Date;
+      eventEndDate: Date;
+      createdAt: Date;
+    }>>`
+      SELECT
+        uef.user_id AS "userId",
+        uef.target_id AS "eventId",
+        e.name AS "eventName",
+        e.start_date AS "eventStartDate",
+        e.end_date AS "eventEndDate",
+        uef.created_at AS "createdAt"
+      FROM user_entity_follows uef
+      INNER JOIN events e ON e.id = uef.target_id
+      WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
+        AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
+        AND uef.user_id IN (${Prisma.join(normalizedUserIds)})
+        AND e.start_date <= ${until}
+        AND e.end_date >= ${since}
+      ORDER BY e.start_date ASC, uef.created_at DESC
+    `;
 
     const unique = new Map<
       string,
       { userId: string; eventId: string; eventName: string; eventStartDate: Date; eventEndDate: Date }
     >();
     for (const row of rows) {
-      const event = row.event;
       const eventId = row.eventId?.trim();
-      if (!event || !eventId) {
+      if (!eventId) {
         continue;
       }
       const key = `${row.userId}:${eventId}`;
@@ -3104,9 +3099,9 @@ export const notificationCenterService = {
       unique.set(key, {
         userId: row.userId,
         eventId,
-        eventName: event.name,
-        eventStartDate: event.startDate,
-        eventEndDate: event.endDate,
+        eventName: row.eventName,
+        eventStartDate: row.eventStartDate,
+        eventEndDate: row.eventEndDate,
       });
     }
 

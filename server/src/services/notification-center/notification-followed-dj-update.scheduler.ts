@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { notificationCenterService, type FollowedDJUpdatePreference } from './notification-center.service';
+import {
+  USER_ENTITY_RELATION_FOLLOW,
+  USER_ENTITY_TARGET_DJ,
+} from '../user-entity-follow.service';
 
 const prisma = new PrismaClient();
 
@@ -84,28 +88,30 @@ const resolveInfoCountMap = async (djIds: string[], since: Date): Promise<Map<st
   if (djIds.length === 0) {
     return new Map();
   }
-  const posts = await prisma.post.findMany({
+  const rows = await prisma.postDJBinding.findMany({
     where: {
-      createdAt: {
-        gte: since,
+      djId: {
+        in: djIds,
       },
-      boundDjIds: {
-        hasSome: djIds,
+      post: {
+        createdAt: {
+          gte: since,
+        },
       },
     },
     select: {
-      boundDjIds: true,
+      djId: true,
+      postId: true,
     },
   });
 
   const countMap = new Map<string, number>();
-  const djIdSet = new Set(djIds);
-  for (const row of posts) {
-    const uniqueDjIds = Array.from(new Set(row.boundDjIds.map((item) => item.trim()).filter(Boolean)));
-    for (const djId of uniqueDjIds) {
-      if (!djIdSet.has(djId)) continue;
-      countMap.set(djId, (countMap.get(djId) ?? 0) + 1);
-    }
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.djId}:${row.postId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    countMap.set(row.djId, (countMap.get(row.djId) ?? 0) + 1);
   }
   return countMap;
 };
@@ -114,38 +120,31 @@ const resolveSetCountMap = async (djIds: string[], since: Date): Promise<Map<str
   if (djIds.length === 0) {
     return new Map();
   }
-  const sets = await prisma.dJSet.findMany({
+  const rows = await prisma.dJSetArtist.findMany({
     where: {
-      createdAt: {
-        gte: since,
+      djId: {
+        in: djIds,
       },
-      OR: [
-        {
-          djId: {
-            in: djIds,
-          },
+      set: {
+        createdAt: {
+          gte: since,
         },
-        {
-          coDjIds: {
-            hasSome: djIds,
-          },
-        },
-      ],
+      },
     },
     select: {
       djId: true,
-      coDjIds: true,
+      setId: true,
     },
   });
 
   const countMap = new Map<string, number>();
-  const djIdSet = new Set(djIds);
-  for (const row of sets) {
-    const uniqueDjIds = new Set<string>([row.djId, ...row.coDjIds].map((item) => String(item || '').trim()).filter(Boolean));
-    for (const djId of uniqueDjIds) {
-      if (!djIdSet.has(djId)) continue;
-      countMap.set(djId, (countMap.get(djId) ?? 0) + 1);
-    }
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row.djId) continue;
+    const key = `${row.djId}:${row.setId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    countMap.set(row.djId, (countMap.get(row.djId) ?? 0) + 1);
   }
   return countMap;
 };
@@ -246,16 +245,14 @@ export const runFollowedDJUpdateJob = async (): Promise<FollowedDJUpdateJobRepor
   }
 
   const now = executedAt;
-  const followRows = await prisma.follow.findMany({
+  const followRows = await prisma.userEntityFollow.findMany({
     where: {
-      type: 'dj',
-      djId: {
-        not: null,
-      },
+      relationType: USER_ENTITY_RELATION_FOLLOW,
+      targetType: USER_ENTITY_TARGET_DJ,
     },
     select: {
-      followerId: true,
-      djId: true,
+      userId: true,
+      targetId: true,
     },
   });
   if (followRows.length === 0) {
@@ -276,11 +273,11 @@ export const runFollowedDJUpdateJob = async (): Promise<FollowedDJUpdateJobRepor
 
   const followsByUser = new Map<string, Set<string>>();
   for (const row of followRows) {
-    const djId = row.djId?.trim();
+    const djId = row.targetId?.trim();
     if (!djId) continue;
-    const current = followsByUser.get(row.followerId) ?? new Set<string>();
+    const current = followsByUser.get(row.userId) ?? new Set<string>();
     current.add(djId);
-    followsByUser.set(row.followerId, current);
+    followsByUser.set(row.userId, current);
   }
   const candidateUserIds = Array.from(followsByUser.keys());
   const preferenceMap = await resolvePreferenceMap(candidateUserIds);

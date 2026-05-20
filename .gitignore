@@ -30,6 +30,10 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+*.env.backup
+*.env.*.backup
+*.backup
+server/.env.*
 
 # Vercel
 .vercel
@@ -46,6 +50,7 @@ yarn-error.log*
 # Database
 *.db
 *.sqlite
+server/prisma/.cache/
 
 # Logs
 logs/

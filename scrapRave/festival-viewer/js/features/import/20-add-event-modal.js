@@ -52,12 +52,14 @@ function ensureAddEventDraftFestival() {
       sourceMode: 'backend',
       info: normalizeFestivalInfo({
         name: '',
-        nameI18n: { en: '', zh: '' },
+        nameI18n: { en: '', zh: '', ja: '' },
         location: '',
         country: '',
-        countryI18n: { en: '', zh: '' },
+        countryI18n: { en: '', zh: '', ja: '' },
         city: '',
-        cityI18n: { en: '', zh: '' },
+        cityI18n: { en: '', zh: '', ja: '' },
+        detailAddressI18n: { en: '', zh: '', ja: '' },
+        descriptionI18n: { en: '', zh: '', ja: '' },
         locationPoint: null,
         canceled: false,
         status: 'upcoming',
@@ -68,6 +70,7 @@ function ensureAddEventDraftFestival() {
         relatedLinks: [],
         socialLinks: [],
         lineup: [],
+        lineupArtists: [],
         source: mergeSourceMeta({ provider: 'archive-manual' }),
       }, {}),
     };
@@ -118,6 +121,12 @@ function initAddEventModalOnce() {
   const fest = ensureAddEventDraftFestival();
   initEventImageUploadZones(panel, fest);
   ensureEventBrandBindingUI(panel, fest.info || null);
+  if (typeof bindEventLineupArtistEditor === 'function') {
+    bindEventLineupArtistEditor(panel, fest.info || null);
+  }
+  if (typeof bindEventMultiLangJsonEditor === 'function') {
+    bindEventMultiLangJsonEditor(panel, fest.info || null);
+  }
   if (typeof bindEventLocationEditorActions === 'function') {
     bindEventLocationEditorActions(panel, fest);
   }
@@ -135,12 +144,14 @@ function resetAddEventModalForm() {
   fest.images = [];
   fest.info = normalizeFestivalInfo({
     name: '',
-    nameI18n: { en: '', zh: '' },
+    nameI18n: { en: '', zh: '', ja: '' },
     location: '',
     country: '',
-    countryI18n: { en: '', zh: '' },
+    countryI18n: { en: '', zh: '', ja: '' },
     city: '',
-    cityI18n: { en: '', zh: '' },
+    cityI18n: { en: '', zh: '', ja: '' },
+    detailAddressI18n: { en: '', zh: '', ja: '' },
+    descriptionI18n: { en: '', zh: '', ja: '' },
     locationPoint: null,
     canceled: false,
     status: 'upcoming',
@@ -151,18 +162,24 @@ function resetAddEventModalForm() {
     relatedLinks: [],
     socialLinks: [],
     lineup: [],
+    lineupArtists: [],
     source: mergeSourceMeta({ provider: 'archive-manual' }),
   }, fest.info || {});
 
   addEventSetFieldValue('nameEn', '');
   addEventSetFieldValue('nameZh', '');
+  addEventSetFieldValue('nameJa', '');
   addEventSetFieldValue('cityEn', '');
   addEventSetFieldValue('cityZh', '');
+  addEventSetFieldValue('cityJa', '');
   addEventSetFieldValue('countryEn', '');
   addEventSetFieldValue('countryEnFull', '');
   addEventSetFieldValue('countryZh', '');
+  addEventSetFieldValue('countryJa', '');
   addEventSetFieldValue('detailAddressEn', '');
   addEventSetFieldValue('detailAddressZh', '');
+  addEventSetFieldValue('detailAddressJa', '');
+  addEventSetFieldValue('multiLangJson', '');
   addEventSetFieldValue('locationPointJson', '');
   addEventSetFieldValue(
     'locationProvider',
@@ -184,12 +201,19 @@ function resetAddEventModalForm() {
   addEventSetFieldValue('socialLinks', '');
   addEventSetFieldValue('relatedLinks', '');
   addEventSetFieldValue('lineup', '');
+  addEventSetFieldValue('lineupArtists', '');
 
   clearEventImageDraftState(panel);
   clearExistingEventAssetDraft(panel);
   renderExistingEventAssetDrafts(panel, fest);
   renderEventImageZoneDrafts(panel, fest);
   ensureEventBrandBindingUI(panel, fest.info || null);
+  if (typeof bindEventLineupArtistEditor === 'function') {
+    bindEventLineupArtistEditor(panel, fest.info || null);
+  }
+  if (typeof bindEventMultiLangJsonEditor === 'function') {
+    bindEventMultiLangJsonEditor(panel, fest.info || null);
+  }
   if (typeof bindEventLocationEditorActions === 'function') {
     bindEventLocationEditorActions(panel, fest);
   }
@@ -273,16 +297,20 @@ async function runAddEventTranslateWithCoze() {
 
   const nameEn = addEventGetFieldValue('nameEn');
   const nameZh = addEventGetFieldValue('nameZh');
+  const nameJa = addEventGetFieldValue('nameJa');
   const cityEn = addEventGetFieldValue('cityEn');
   const cityZh = addEventGetFieldValue('cityZh');
+  const cityJa = addEventGetFieldValue('cityJa');
   const countryEn = addEventGetFieldValue('countryEn');
   const countryEnFull = addEventGetFieldValue('countryEnFull');
   const countryZh = addEventGetFieldValue('countryZh');
+  const countryJa = addEventGetFieldValue('countryJa');
   const detailAddressEn = addEventGetFieldValue('detailAddressEn');
   const detailAddressZh = addEventGetFieldValue('detailAddressZh');
-  const detailSeed = detailAddressEn || detailAddressZh || cityZh || cityEn;
-  const countrySeed = countryZh || countryEnFull || countryEn;
-  const hasAnyInput = [nameEn, nameZh, detailSeed, countrySeed].some(Boolean);
+  const detailAddressJa = addEventGetFieldValue('detailAddressJa');
+  const detailSeed = detailAddressEn || detailAddressZh || detailAddressJa || cityZh || cityEn || cityJa;
+  const countrySeed = countryZh || countryEnFull || countryEn || countryJa;
+  const hasAnyInput = [nameEn, nameZh, nameJa, detailSeed, countrySeed].some(Boolean);
   if (!hasAnyInput) {
     addEventSetModalStatus('请先填写至少一个语言字段，再执行一键翻译。', true);
     return;
@@ -291,15 +319,16 @@ async function runAddEventTranslateWithCoze() {
   btn.disabled = true;
   addEventSetModalStatus('正在调用 Coze 翻译...');
   try {
-    const currentCountry = normalizeCountryBiTextValue({ en: countryEn, zh: countryZh, enFull: countryEnFull }, countrySeed);
+    const currentCountry = normalizeCountryBiTextValue({ en: countryEn, zh: countryZh, ja: countryJa, enFull: countryEnFull }, countrySeed);
     const resp = await apiPost('/api/coze/translate-festival', {
       festival: {
-        name_i18n: { en: nameEn, zh: nameZh },
-        city_i18n: { en: cityEn, zh: cityZh },
-        detail_address_i18n: { en: detailAddressEn, zh: detailAddressZh },
+        name_i18n: { en: nameEn, zh: nameZh, ja: nameJa },
+        city_i18n: { en: cityEn, zh: cityZh, ja: cityJa },
+        detail_address_i18n: { en: detailAddressEn, zh: detailAddressZh, ja: detailAddressJa },
         country_i18n: {
           en: currentCountry.en || '',
           zh: currentCountry.zh || '',
+          ja: currentCountry.ja || '',
           en_full: currentCountry.enFull || '',
         },
       }
@@ -320,14 +349,20 @@ async function runAddEventTranslateWithCoze() {
     let fillCount = 0;
     if (!nameEn && nameOut.en) { addEventSetFieldValue('nameEn', nameOut.en); fillCount += 1; }
     if (!nameZh && nameOut.zh) { addEventSetFieldValue('nameZh', nameOut.zh); fillCount += 1; }
+    if (!nameJa && nameOut.ja) { addEventSetFieldValue('nameJa', nameOut.ja); fillCount += 1; }
     if (!detailAddressEn && detailOut.en) { addEventSetFieldValue('detailAddressEn', detailOut.en); fillCount += 1; }
     if (!detailAddressZh && detailOut.zh) { addEventSetFieldValue('detailAddressZh', detailOut.zh); fillCount += 1; }
+    if (!detailAddressJa && detailOut.ja) { addEventSetFieldValue('detailAddressJa', detailOut.ja); fillCount += 1; }
     if (!cityEn && cityOut.en) {
       addEventSetFieldValue('cityEn', cityOut.en);
       fillCount += 1;
     }
     if (!cityZh && cityOut.zh) {
       addEventSetFieldValue('cityZh', cityOut.zh);
+      fillCount += 1;
+    }
+    if (!cityJa && cityOut.ja) {
+      addEventSetFieldValue('cityJa', cityOut.ja);
       fillCount += 1;
     }
     if (!countryEn && countryOut.en) {
@@ -341,6 +376,14 @@ async function runAddEventTranslateWithCoze() {
     if (!countryZh && countryOut.zh) {
       addEventSetFieldValue('countryZh', countryOut.zh);
       fillCount += 1;
+    }
+    if (!countryJa && countryOut.ja) {
+      addEventSetFieldValue('countryJa', countryOut.ja);
+      fillCount += 1;
+    }
+
+    if (typeof eventEditSyncMultiLangDraftFromInputs === 'function') {
+      eventEditSyncMultiLangDraftFromInputs(panel);
     }
 
     if (fillCount > 0) {
@@ -371,12 +414,13 @@ async function confirmAddEventCreate() {
     return;
   }
 
-  const hasName = !!(addEventGetFieldValue('nameEn') || addEventGetFieldValue('nameZh'));
-  const hasLocation = !!(addEventGetFieldValue('cityEn') || addEventGetFieldValue('cityZh'));
+  const hasName = !!(addEventGetFieldValue('nameEn') || addEventGetFieldValue('nameZh') || addEventGetFieldValue('nameJa'));
+  const hasLocation = !!(addEventGetFieldValue('cityEn') || addEventGetFieldValue('cityZh') || addEventGetFieldValue('cityJa'));
   const hasCountry = !!(
     addEventGetFieldValue('countryEn')
     || addEventGetFieldValue('countryEnFull')
     || addEventGetFieldValue('countryZh')
+    || addEventGetFieldValue('countryJa')
   );
   const statusValue = normalizeArchiveEventStatus(addEventGetFieldValue('status'));
   const eventTypeValue = String(addEventGetFieldValue('eventType') || '').trim();

@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { notificationCenterService, type EventCountdownPreference } from './notification-center.service';
+import {
+  USER_ENTITY_RELATION_FAVORITE,
+  USER_ENTITY_TARGET_EVENT,
+} from '../user-entity-follow.service';
 
 const prisma = new PrismaClient();
 
@@ -129,20 +133,15 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
 
   const now = executedAt;
   const until = new Date(now.getTime() + (SCHEDULER_CONFIG.maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
-  const userRows = await prisma.eventFavorite.findMany({
-    where: {
-      event: {
-        startDate: {
-          gte: now,
-          lte: until,
-        },
-      },
-    },
-    select: {
-      userId: true,
-    },
-    distinct: ['userId'],
-  });
+  const userRows = await prisma.$queryRaw<Array<{ userId: string }>>`
+    SELECT DISTINCT uef.user_id AS "userId"
+    FROM user_entity_follows uef
+    INNER JOIN events e ON e.id = uef.target_id
+    WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
+      AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
+      AND e.start_date >= ${now}
+      AND e.start_date <= ${until}
+  `;
   const candidateUserIds = userRows.map((item) => item.userId.trim()).filter(Boolean);
   if (candidateUserIds.length === 0) {
     return {

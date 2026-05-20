@@ -1480,7 +1480,7 @@
         <div class="coze-modal-sub" id="add-event-modal-sub">填写活动信息并直接入库（含 OSS 图片上传）</div>
       </div>
       <div class="coze-modal-header-actions">
-        <button class="coze-btn add-event-translate-btn ai-action-btn" id="add-event-translate-btn" onclick="runAddEventTranslateWithCoze()" title="把新增活动表单里的名称、城市、国家、地址翻译成中英双语">翻译新增活动字段</button>
+        <button class="coze-btn add-event-translate-btn ai-action-btn" id="add-event-translate-btn" onclick="runAddEventTranslateWithCoze()" title="把新增活动表单里的名称、城市、国家、地址翻译成中英日三语草稿">翻译新增活动字段</button>
         <button class="coze-btn ai-action-btn" id="add-event-coze-lineup-btn" onclick="runAddEventLineupRecognitionWithCoze()" title="从新增活动图片中识别 DJ、日期、时间和舞台，并回填到 Timetable JSON">从图片识别时间表</button>
         <button class="coze-btn ai-action-btn" id="add-event-coze-poster-btn" onclick="runAddEventPosterRecognitionWithCoze()" title="从新增活动海报中识别名称、日期、地点、票务等基础信息并回填表单">从海报识别活动信息</button>
         <button class="coze-btn primary" id="add-event-save-btn" onclick="confirmAddEventCreate()">💾 创建并同步数据库</button>
@@ -1490,48 +1490,100 @@
     </div>
     <div class="add-event-modal-body">
       <div class="add-event-required-hint">
-        必填：名称 + 共享基础层（城市/国家双语）+ 开启状态 + 活动类型 + 至少 1 张图片；详细地址层（中英文）建议填写
+        必填：名称 + 共享基础层（城市/国家三语可选，至少填一个语言）+ 开启状态 + 活动类型 + 至少 1 张图片；详细地址层建议填写
       </div>
       <div class="add-event-form-panel" id="add-event-form-panel">
         <div class="fest-info-edit">
           <div class="edit-grid">
-            <div class="edit-field">
-              <label>Festival Name (EN)</label>
-              <input class="edit-input" data-field="nameEn" type="text">
+            <div class="edit-field edit-field-i18n full">
+              <label>Festival Name</label>
+              <div class="edit-i18n-unit">
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">ZH</span>
+                  <input class="edit-input" data-field="nameZh" type="text" placeholder="活动中文名">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">EN</span>
+                  <input class="edit-input" data-field="nameEn" type="text" placeholder="Festival name in English">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">JA</span>
+                  <input class="edit-input" data-field="nameJa" type="text" placeholder="フェス名（日本語）">
+                </div>
+              </div>
             </div>
-            <div class="edit-field">
-              <label>Festival Name (ZH)</label>
-              <input class="edit-input" data-field="nameZh" type="text">
+            <div class="edit-field event-single-translate-field full">
+              <button class="edit-btn translate-inline ai-action-btn" type="button" id="add-event-translate-inline-btn" onclick="runAddEventTranslateWithCoze()" title="把新增活动名称、地点等字段翻译成三语草稿；会优先补空字段">翻译当前活动字段</button>
             </div>
-            <div class="edit-section-title full">共享基础层（双语）</div>
-            <div class="edit-field">
-              <label>City (EN)</label>
-              <input class="edit-input" data-field="cityEn" type="text" placeholder="Shanghai / Phuket / Amsterdam">
-            </div>
-            <div class="edit-field">
-              <label>城市（中文）</label>
-              <input class="edit-input" data-field="cityZh" type="text" placeholder="上海 / 普吉岛 / 阿姆斯特丹">
-            </div>
-            <div class="edit-field">
-              <label>Country (EN)</label>
-              <input class="edit-input" data-field="countryEn" type="text" placeholder="China / Thailand / Netherlands">
-            </div>
-            <div class="edit-field">
-              <label>Country (EN Full)</label>
-              <input class="edit-input" data-field="countryEnFull" type="text" placeholder="People's Republic of China / Kingdom of Thailand">
-            </div>
-            <div class="edit-field">
-              <label>国家（中文）</label>
-              <input class="edit-input" data-field="countryZh" type="text" placeholder="中国 / 泰国 / 荷兰">
-            </div>
-            <div class="edit-section-title full">详细地址层（中英文）</div>
+            <div class="edit-section-title full">多语言 JSON（中 / 英 / 日）</div>
             <div class="edit-field full">
-              <label>详细地址（中文）</label>
-              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressZh" placeholder="普吉岛 Boat Avenue Lakefront"></textarea>
+              <div class="event-multilang-toolbar">
+                <label>多语言字段 JSON</label>
+                <div class="event-multilang-toolbar-actions">
+                  <span class="event-multilang-copy-status" data-multilang-copy-status></span>
+                  <button class="edit-btn" type="button" data-action="multilang-edit-prompt">提示词</button>
+                  <button class="edit-btn" type="button" data-action="multilang-copy-ai">复制给 AI</button>
+                </div>
+              </div>
+              <div class="edit-lineup-hint">复制这段 JSON 给 AI 做翻译后再粘贴回来即可。未填写的语言保持空字符串，不会自动补全。</div>
+              <textarea class="edit-lineup-textarea" data-field="multiLangJson" placeholder='{"nameI18n":{"zh":"","en":"","ja":""},"cityI18n":{"zh":"","en":"","ja":""},"countryI18n":{"zh":"","en":"","ja":"","enFull":""},"detailAddressI18n":{"zh":"","en":"","ja":""},"descriptionI18n":{"zh":"","en":"","ja":""}}'></textarea>
             </div>
-            <div class="edit-field full">
-              <label>Detailed Address (EN)</label>
-              <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressEn" placeholder="Boat Avenue Lakefront, Phuket"></textarea>
+            <div class="edit-section-title full">共享基础层（三语）</div>
+            <div class="edit-field edit-field-i18n">
+              <label>City</label>
+              <div class="edit-i18n-unit">
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">ZH</span>
+                  <input class="edit-input" data-field="cityZh" type="text" placeholder="上海 / 普吉岛 / 阿姆斯特丹">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">EN</span>
+                  <input class="edit-input" data-field="cityEn" type="text" placeholder="Shanghai / Phuket / Amsterdam">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">JA</span>
+                  <input class="edit-input" data-field="cityJa" type="text" placeholder="上海 / プーケット / アムステルダム">
+                </div>
+              </div>
+            </div>
+            <div class="edit-field edit-field-i18n">
+              <label>Country</label>
+              <div class="edit-i18n-unit">
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">ZH</span>
+                  <input class="edit-input" data-field="countryZh" type="text" placeholder="中国 / 泰国 / 荷兰">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">EN</span>
+                  <input class="edit-input" data-field="countryEn" type="text" placeholder="China / Thailand / Netherlands">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">JA</span>
+                  <input class="edit-input" data-field="countryJa" type="text" placeholder="中国 / タイ / オランダ">
+                </div>
+                <div class="edit-i18n-row">
+                  <span class="edit-i18n-lang">ENF</span>
+                  <input class="edit-input" data-field="countryEnFull" type="text" placeholder="People's Republic of China / Kingdom of Thailand">
+                </div>
+              </div>
+            </div>
+            <div class="edit-section-title full">详细地址层（三语）</div>
+            <div class="edit-field edit-field-i18n full">
+              <label>Detailed Address</label>
+              <div class="edit-i18n-unit">
+                <div class="edit-i18n-row align-start">
+                  <span class="edit-i18n-lang">ZH</span>
+                  <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressZh" placeholder="普吉岛 Boat Avenue Lakefront"></textarea>
+                </div>
+                <div class="edit-i18n-row align-start">
+                  <span class="edit-i18n-lang">EN</span>
+                  <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressEn" placeholder="Boat Avenue Lakefront, Phuket"></textarea>
+                </div>
+                <div class="edit-i18n-row align-start">
+                  <span class="edit-i18n-lang">JA</span>
+                  <textarea class="edit-input edit-textarea event-manual-address" data-field="detailAddressJa" placeholder="プーケット Boat Avenue Lakefront"></textarea>
+                </div>
+              </div>
             </div>
             <div class="edit-section-title full">地图辅助层（定位点，可选地图）</div>
             <div class="edit-field full event-location-field">
@@ -1641,9 +1693,25 @@
             <label>Related Links（每行一个 URL）</label>
             <textarea class="edit-textarea" data-field="relatedLinks" placeholder="https://..."></textarea>
           </div>
+          <div class="edit-lineup-area event-lineup-editor-area">
+            <label>DJ 阵容（只保存 DJ 名单，不要求时间）</label>
+            <div class="event-lineup-editor-tools">
+              <input class="edit-input" data-lineup-dj-search type="text" placeholder="搜索 DJ 库，如 Martin Garrix">
+              <button class="edit-btn" type="button" data-action="lineup-search-dj">搜索 DJ 库</button>
+              <input class="edit-input" data-lineup-manual-name type="text" placeholder="库里没有，只填 DJ 名字">
+              <button class="edit-btn" type="button" data-action="lineup-add-name">添加名字</button>
+            </div>
+            <div class="event-lineup-search-results" data-lineup-search-results></div>
+            <div class="event-lineup-artist-list" data-lineup-artist-list></div>
+            <details class="event-lineup-json-details">
+              <summary>JSON 批量编辑</summary>
+              <div class="edit-lineup-hint">格式：{"lineup_artists":[{"djName":"Artist Name"}]}。可视化列表会和这里同步。</div>
+              <textarea class="edit-lineup-textarea" data-field="lineupArtists" placeholder='{"lineup_artists":[{"djName":"Artist Name"}]}'></textarea>
+            </details>
+          </div>
           <div class="edit-lineup-area">
-            <label>🎵 Lineup JSON（可选）</label>
-            <div class="edit-lineup-hint">格式：{"lineup_info":[{"musician":"...","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"},...]} 或直接粘贴数组 [...]</div>
+            <label>Timetable JSON（演出时间表，可自动补阵容）</label>
+            <div class="edit-lineup-hint">格式：{"lineup_info":[{"musician":"...","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"}]}。保存时间表只修改演出时间信息；DJ 阵容会保留，新增姓名可补入阵容。</div>
             <textarea class="edit-lineup-textarea" data-field="lineup" placeholder='{"lineup_info":[{"musician":"Artist Name","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"}]}'></textarea>
           </div>
           <div class="edit-image-zone-area">

@@ -1,6 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import axios, { AxiosRequestConfig } from 'axios';
 import path from 'path';
+import {
+  USER_ENTITY_RELATION_FAVORITE,
+  USER_ENTITY_TARGET_DJ,
+} from './user-entity-follow.service';
+import { resolveUserGenrePreferences } from './user-genre-preference.service';
 
 const prisma = new PrismaClient();
 
@@ -89,8 +94,6 @@ export class DJSetService {
     avatarUrl: true,
     bio: true,
     location: true,
-    favoriteDjIds: true,
-    favoriteGenres: true,
   } as const;
 
   private async filterActiveCopyrightTakedowns<T extends { id: string }>(sets: T[]): Promise<T[]> {
@@ -128,8 +131,6 @@ export class DJSetService {
           avatarUrl: string | null;
           bio: string | null;
           location: string | null;
-          favoriteDjIds: string[];
-          favoriteGenres: string[];
         }
       | null
       | undefined
@@ -138,12 +139,29 @@ export class DJSetService {
       return null;
     }
 
+    const favoriteDjRelationRows = await prisma.userEntityFollow.findMany({
+      where: {
+        userId: user.id,
+        relationType: USER_ENTITY_RELATION_FAVORITE,
+        targetType: USER_ENTITY_TARGET_DJ,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        targetId: true,
+      },
+    });
+
+    const favoriteDjIds =
+      favoriteDjRelationRows.length > 0
+        ? favoriteDjRelationRows.map((row) => row.targetId).filter((id): id is string => Boolean(id))
+        : [];
+
     let favoriteDJs: string[] = [];
-    if (Array.isArray(user.favoriteDjIds) && user.favoriteDjIds.length > 0) {
+    if (favoriteDjIds.length > 0) {
       const djs = await prisma.dJ.findMany({
         where: {
           id: {
-            in: user.favoriteDjIds,
+            in: favoriteDjIds,
           },
         },
         select: {
@@ -153,8 +171,9 @@ export class DJSetService {
       });
 
       const djNameById = new Map(djs.map((dj) => [dj.id, dj.name]));
-      favoriteDJs = user.favoriteDjIds.map((djId) => djNameById.get(djId)).filter((name): name is string => Boolean(name));
+      favoriteDJs = favoriteDjIds.map((djId) => djNameById.get(djId)).filter((name): name is string => Boolean(name));
     }
+    const favoriteGenres = await resolveUserGenrePreferences(prisma, user.id);
 
     return {
       id: user.id,
@@ -163,7 +182,7 @@ export class DJSetService {
       avatarUrl: user.avatarUrl,
       bio: user.bio,
       location: user.location,
-      favoriteGenres: user.favoriteGenres || [],
+      favoriteGenres,
       favoriteDJs,
     };
   }
@@ -384,38 +403,46 @@ export class DJSetService {
     const thumbnailUrl = input.thumbnailUrl?.trim() || undefined;
 
     const normalizedDjIds = this.normalizeDjIds(normalizedPrimaryDjId, input.djIds);
-    const coDjIds = normalizedDjIds.filter((id) => id !== normalizedPrimaryDjId);
     const customDjNames = this.normalizeCustomDjNames(input.customDjNames);
     const eventId = this.normalizeNullableId(input.eventId);
 
     const slug = await this.generateUniqueSlug(input.title);
 
-    return await prisma.dJSet.create({
-      data: {
-        djId: normalizedPrimaryDjId,
-        coDjIds,
-        customDjNames,
-        uploadedById: input.uploadedById,
-        title: input.title,
-        slug,
-        description: input.description,
-        thumbnailUrl,
-        videoUrl: input.videoUrl,
-        videoAuthorName: input.videoAuthorName?.trim() || undefined,
-        platform: videoInfo.platform,
-        videoId: videoInfo.videoId,
-        recordedAt: input.recordedAt,
-        venue: input.venue,
-        eventId,
-        eventName: input.eventName,
-      },
-      include: {
-        dj: true,
-        uploader: {
-          select: this.contributorUserSelect,
+    const created = await prisma.$transaction(async (tx) => {
+      const set = await tx.dJSet.create({
+        data: {
+          djId: normalizedPrimaryDjId,
+          customDjNames,
+          uploadedById: input.uploadedById,
+          title: input.title,
+          slug,
+          description: input.description,
+          thumbnailUrl,
+          videoUrl: input.videoUrl,
+          videoAuthorName: input.videoAuthorName?.trim() || undefined,
+          platform: videoInfo.platform,
+          videoId: videoInfo.videoId,
+          recordedAt: input.recordedAt,
+          venue: input.venue,
+          eventId,
+          eventName: input.eventName,
         },
-      },
-    }).then((set) => this.attachLineupInfo(set as any));
+        include: {
+          dj: true,
+          uploader: {
+            select: this.contributorUserSelect,
+          },
+        },
+      });
+      await this.syncDJSetArtists(tx, set.id, {
+        primaryDjId: normalizedPrimaryDjId ?? null,
+        djIds: normalizedDjIds,
+        customDjNames,
+      });
+      return set;
+    });
+
+    return this.attachLineupInfo(created as any);
   }
 
   /**
@@ -527,6 +554,14 @@ export class DJSetService {
     const sets = await prisma.dJSet.findMany({
       include: {
         dj: true,
+        artists: {
+          orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+        },
         uploader: {
           select: this.contributorUserSelect,
         },
@@ -585,6 +620,14 @@ export class DJSetService {
         where,
         include: {
           dj: true,
+          artists: {
+            orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+            include: {
+              dj: {
+                select: { id: true, name: true, avatarUrl: true },
+              },
+            },
+          },
           uploader: {
             select: this.contributorUserSelect,
           },
@@ -619,6 +662,14 @@ export class DJSetService {
       where: { uploadedById: userId },
       include: {
         dj: true,
+        artists: {
+          orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+        },
         uploader: {
           select: this.contributorUserSelect,
         },
@@ -651,6 +702,14 @@ export class DJSetService {
       where: { id: setId },
       include: {
         dj: true,
+        artists: {
+          orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+        },
         uploader: {
           select: this.contributorUserSelect,
         },
@@ -682,9 +741,21 @@ export class DJSetService {
    */
   async getDJSetsByDJ(djId: string) {
     const sets = await prisma.dJSet.findMany({
-      where: { djId },
+      where: {
+        artists: {
+          some: { djId },
+        },
+      },
       include: {
         dj: true,
+        artists: {
+          orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+        },
         uploader: {
           select: this.contributorUserSelect,
         },
@@ -715,7 +786,6 @@ export class DJSetService {
       select: {
         id: true,
         djId: true,
-        coDjIds: true,
         customDjNames: true,
         uploadedById: true,
         videoUrl: true,
@@ -746,43 +816,65 @@ export class DJSetService {
 
     const nextDjId = input.djId !== undefined ? (String(input.djId || '').trim() || null) : current.djId;
     const nextEventId = this.normalizeNullableId(input.eventId);
+    const currentArtists = await prisma.dJSetArtist.findMany({
+      where: { setId },
+      orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { djId: true },
+    });
+    const currentDjIds = currentArtists
+      .map((artist) => String(artist.djId || '').trim())
+      .filter((id): id is string => Boolean(id));
     const normalizedDjIds = this.normalizeDjIds(
       nextDjId,
-      input.djIds && input.djIds.length > 0 ? input.djIds : current.coDjIds
+      input.djIds && input.djIds.length > 0 ? input.djIds : currentDjIds
     );
-    const coDjIds = normalizedDjIds.filter((id) => id !== (nextDjId ?? undefined));
     const customDjNames =
       input.customDjNames !== undefined
         ? this.normalizeCustomDjNames(input.customDjNames)
         : current.customDjNames;
 
-    const updated = await prisma.dJSet.update({
-      where: { id: setId },
-      data: {
-        djId: nextDjId,
-        coDjIds,
+    const updated = await prisma.$transaction(async (tx) => {
+      const set = await tx.dJSet.update({
+        where: { id: setId },
+        data: {
+          djId: nextDjId,
+          customDjNames,
+          title: input.title ?? undefined,
+          description: input.description ?? undefined,
+          videoUrl: input.videoUrl ?? undefined,
+          videoAuthorName: input.videoAuthorName?.trim() || undefined,
+          thumbnailUrl,
+          venue: input.venue ?? undefined,
+          eventId: nextEventId,
+          eventName: input.eventName ?? undefined,
+          recordedAt: input.recordedAt ?? undefined,
+          platform,
+          videoId,
+        },
+        include: {
+          dj: true,
+          artists: {
+            orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+            include: {
+              dj: {
+                select: { id: true, name: true, avatarUrl: true },
+              },
+            },
+          },
+          uploader: {
+            select: this.contributorUserSelect,
+          },
+          tracks: {
+            orderBy: { position: 'asc' },
+          },
+        },
+      });
+      await this.syncDJSetArtists(tx, setId, {
+        primaryDjId: nextDjId,
+        djIds: normalizedDjIds,
         customDjNames,
-        title: input.title ?? undefined,
-        description: input.description ?? undefined,
-        videoUrl: input.videoUrl ?? undefined,
-        videoAuthorName: input.videoAuthorName?.trim() || undefined,
-        thumbnailUrl,
-        venue: input.venue ?? undefined,
-        eventId: nextEventId,
-        eventName: input.eventName ?? undefined,
-        recordedAt: input.recordedAt ?? undefined,
-        platform,
-        videoId,
-      },
-      include: {
-        dj: true,
-        uploader: {
-          select: this.contributorUserSelect,
-        },
-        tracks: {
-          orderBy: { position: 'asc' },
-        },
-      },
+      });
+      return set;
     });
     return this.attachLineupInfo(updated as any);
   }
@@ -841,20 +933,90 @@ export class DJSetService {
     return [...new Set(cleaned)];
   }
 
-  private async attachLineupInfo<T extends { djId?: string | null; coDjIds: string[]; customDjNames: string[] }>(
+  private async syncDJSetArtists(
+    tx: Prisma.TransactionClient,
+    setId: string,
+    input: {
+      primaryDjId?: string | null;
+      djIds: string[];
+      customDjNames: string[];
+    }
+  ): Promise<void> {
+    await tx.dJSetArtist.deleteMany({
+      where: { setId },
+    });
+
+    const normalizedDjIds = this.normalizeDjIds(input.primaryDjId, input.djIds);
+    const djRows =
+      normalizedDjIds.length > 0
+        ? await tx.dJ.findMany({
+            where: {
+              id: { in: normalizedDjIds },
+            },
+            select: {
+              id: true,
+              name: true,
+            },
+          })
+        : [];
+    const djNameById = new Map(djRows.map((row) => [row.id, row.name]));
+
+    const artistRows: Prisma.DJSetArtistCreateManyInput[] = [];
+    normalizedDjIds.forEach((djId, index) => {
+      artistRows.push({
+        setId,
+        djId,
+        artistNameSnapshot: djNameById.get(djId) ?? djId,
+        artistOrder: index,
+        role: input.primaryDjId && djId === input.primaryDjId ? 'primary' : 'co',
+      });
+    });
+    input.customDjNames.forEach((name, index) => {
+      artistRows.push({
+        setId,
+        djId: null,
+        artistNameSnapshot: name,
+        artistOrder: normalizedDjIds.length + index,
+        role: 'custom',
+      });
+    });
+
+    if (artistRows.length > 0) {
+      await tx.dJSetArtist.createMany({
+        data: artistRows,
+      });
+    }
+  }
+
+  private async attachLineupInfo<T extends { id: string; djId?: string | null; customDjNames: string[]; artists?: any[] }>(
     set: T
   ) {
-    const lineupIds = this.normalizeDjIds(set.djId, set.coDjIds);
-    const lineupDjs = await prisma.dJ.findMany({
-      where: { id: { in: lineupIds } },
-      select: { id: true, name: true, avatarUrl: true },
-    });
-    const djById = new Map(lineupDjs.map((dj) => [dj.id, dj]));
+    const artistRows = Array.isArray(set.artists)
+      ? set.artists
+      : await prisma.dJSetArtist.findMany({
+          where: { setId: set.id },
+          orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            dj: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+        });
+
+    const lineupIds = artistRows
+      .map((artist: any) => artist.djId)
+      .filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0);
+    const lineupDjs = artistRows.map((artist: any) => artist.dj).filter((dj: any) => Boolean(dj));
+    const djById = new Map(lineupDjs.map((dj: any) => [dj.id, dj]));
+    const customDjNames = artistRows
+      .filter((artist: any) => !artist.djId)
+      .map((artist: any) => String(artist.artistNameSnapshot || '').trim())
+      .filter(Boolean);
 
     return {
       ...set,
       lineupDjs: lineupIds.map((id) => djById.get(id)).filter((dj): dj is NonNullable<typeof dj> => Boolean(dj)),
-      customDjNames: set.customDjNames || [],
+      customDjNames,
     };
   }
 

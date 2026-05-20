@@ -7,6 +7,7 @@ import { notificationCenterService } from '../modules/notifications';
 import { isValidEventTimeZone, normalizeEventTimeZone, parseEventDateInput, startOfEventDay } from '../utils/event-timezone';
 import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText, triTextToJson } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
+import { syncNewsBindings, syncPostBindings } from '../services/content-bindings.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -38,6 +39,30 @@ const toOptionalJsonObject = (value: unknown): Prisma.InputJsonObject | undefine
     return undefined;
   }
   return value as Prisma.InputJsonObject;
+};
+
+const syncRatingUnitDjBindings = async (
+  tx: Prisma.TransactionClient,
+  unitId: string,
+  djIds: string[]
+): Promise<void> => {
+  await tx.ratingUnitDJBinding.deleteMany({
+    where: { unitId },
+  });
+
+  const uniqueIds = Array.from(new Set(djIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  await tx.ratingUnitDJBinding.createMany({
+    data: uniqueIds.map((djId, index) => ({
+      unitId,
+      djId,
+      sortOrder: index,
+      bindingType: 'rated',
+    })),
+  });
 };
 
 const titleFromPayload = (entityType: string, payload: Prisma.InputJsonObject): string => {
@@ -354,22 +379,30 @@ const createNewsFromSubmission = async (payload: Prisma.JsonObject, submitterId:
     cleanText(payload.coverImageUrl) ||
     stringArray(payload.images)[0] ||
     null;
-  return prisma.newsArticle.create({
-    data: {
-      authorId: submitterId,
-      category: cleanText(payload.category) || 'community',
-      source: cleanText(payload.source) || 'Raver',
-      title,
-      summary: cleanText(payload.summary) || '',
-      body,
-      link: cleanText(payload.link) || null,
-      coverImageUrl,
-      visibility: 'public',
-      boundDjIds: stringArray(payload.boundDjIDs ?? payload.boundDjIds),
-      boundBrandIds: stringArray(payload.boundBrandIDs ?? payload.boundBrandIds),
-      boundEventIds: stringArray(payload.boundEventIDs ?? payload.boundEventIds),
-      publishedAt: dateFromPayload(payload.publishedAt ?? payload.displayPublishedAt) || new Date(),
-    } as any,
+  const boundDjIds = stringArray(payload.boundDjIds);
+  const boundBrandIds = stringArray(payload.boundBrandIds);
+  const boundEventIds = stringArray(payload.boundEventIds);
+  return prisma.$transaction(async (tx) => {
+    const article = await tx.newsArticle.create({
+      data: {
+        authorId: submitterId,
+        category: cleanText(payload.category) || 'community',
+        source: cleanText(payload.source) || 'Raver',
+        title,
+        summary: cleanText(payload.summary) || '',
+        body,
+        link: cleanText(payload.link) || null,
+        coverImageUrl,
+        visibility: 'public',
+        publishedAt: dateFromPayload(payload.publishedAt ?? payload.displayPublishedAt) || new Date(),
+      } as any,
+    });
+    await syncNewsBindings(tx, article.id, {
+      djIds: boundDjIds,
+      brandIds: boundBrandIds,
+      eventIds: boundEventIds,
+    });
+    return article;
   });
 };
 
@@ -383,28 +416,52 @@ const createSetFromSubmission = async (payload: Prisma.JsonObject, submitterId: 
   const dj = await prisma.dJ.findUnique({ where: { id: djId }, select: { id: true } });
   if (!dj) throw new Error('关联 DJ 不存在');
   const slug = await uniqueDJSetSlug(title, cleanText(payload.slug));
-  return prisma.dJSet.create({
-    data: {
-      djId,
-      coDjIds: stringArray(payload.djIds ?? payload.coDjIds).filter((id) => id !== djId),
-      customDjNames: stringArray(payload.customDjNames),
-      uploadedById: submitterId,
-      title,
-      titleI18n: triTextToJson(normalizeTriTextPayload(payload.titleI18n, title)),
-      slug,
-      description: cleanText(payload.description) || null,
-      descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.description) || '')),
-      thumbnailUrl: cleanText(payload.thumbnailUrl) || null,
-      videoUrl,
-      platform: cleanText(payload.platform) || 'external',
-      videoId: cleanText(payload.videoId) || slug,
-      duration: integerOrNull(payload.duration),
-      recordedAt: dateOrUndefined(payload.recordedAt),
-      venue: cleanText(payload.venue) || null,
-      eventId: cleanText(payload.eventId ?? payload.eventID) || null,
-      eventName: cleanText(payload.eventName) || null,
-      isVerified: true,
-    } as any,
+  const normalizedDjIds = Array.from(new Set([djId, ...stringArray(payload.djIds)])).filter(Boolean);
+  const customDjNames = stringArray(payload.customDjNames);
+  return prisma.$transaction(async (tx) => {
+    const set = await tx.dJSet.create({
+      data: {
+        djId,
+        customDjNames,
+        uploadedById: submitterId,
+        title,
+        titleI18n: triTextToJson(normalizeTriTextPayload(payload.titleI18n, title)),
+        slug,
+        description: cleanText(payload.description) || null,
+        descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.description) || '')),
+        thumbnailUrl: cleanText(payload.thumbnailUrl) || null,
+        videoUrl,
+        platform: cleanText(payload.platform) || 'external',
+        videoId: cleanText(payload.videoId) || slug,
+        duration: integerOrNull(payload.duration),
+        recordedAt: dateOrUndefined(payload.recordedAt),
+        venue: cleanText(payload.venue) || null,
+        eventId: cleanText(payload.eventId) || null,
+        eventName: cleanText(payload.eventName) || null,
+        isVerified: true,
+      } as any,
+    });
+    if (normalizedDjIds.length > 0 || customDjNames.length > 0) {
+      await tx.dJSetArtist.createMany({
+        data: [
+          ...normalizedDjIds.map((id, index) => ({
+            setId: set.id,
+            djId: id,
+            artistNameSnapshot: id,
+            artistOrder: index,
+            role: id === djId ? 'primary' : 'co',
+          })),
+          ...customDjNames.map((name, index) => ({
+            setId: set.id,
+            djId: null,
+            artistNameSnapshot: name,
+            artistOrder: normalizedDjIds.length + index,
+            role: 'custom',
+          })),
+        ],
+      });
+    }
+    return set;
   });
 };
 
@@ -482,7 +539,7 @@ const createRatingFromSubmission = async (payload: Prisma.JsonObject, submitterI
   const name = cleanText(payload.name) || cleanText(payload.title);
   if (!name) throw new Error('打分标题不能为空');
   const rawDjId = cleanText(payload.djId);
-  const rawDjIds = stringArray(payload.djIds ?? payload.djIDs);
+  const rawDjIds = stringArray(payload.djIds);
   const djIds = Array.from(new Set([...rawDjIds, ...(rawDjId ? [rawDjId] : [])])).filter(Boolean);
   if (djIds.length > 0) {
     const existingDjs = await prisma.dJ.findMany({ where: { id: { in: djIds } }, select: { id: true } });
@@ -494,19 +551,22 @@ const createRatingFromSubmission = async (payload: Prisma.JsonObject, submitterI
     const eventId = cleanText(payload.ratingEventId)!;
     const event = await prisma.ratingEvent.findUnique({ where: { id: eventId }, select: { id: true } });
     if (!event) throw new Error('打分事件不存在');
-    return prisma.ratingUnit.create({
-      data: {
-        eventId,
-        createdById: submitterId,
-        djId: rawDjId || djIds[0] || null,
-        djIds,
-        name,
-        description: cleanText(payload.description) || null,
-        imageUrl: cleanText(payload.imageUrl) || null,
-      },
+    return prisma.$transaction(async (tx) => {
+      const unit = await tx.ratingUnit.create({
+        data: {
+          eventId,
+          createdById: submitterId,
+          djId: rawDjId || djIds[0] || null,
+          name,
+          description: cleanText(payload.description) || null,
+          imageUrl: cleanText(payload.imageUrl) || null,
+        },
+      });
+      await syncRatingUnitDjBindings(tx, unit.id, djIds);
+      return unit;
     });
   }
-  const sourceEventId = cleanText(payload.sourceEventId ?? payload.eventId ?? payload.eventID);
+  const sourceEventId = cleanText(payload.sourceEventId ?? payload.eventId);
   if (sourceEventId) {
     const sourceEvent = await prisma.event.findUnique({ where: { id: sourceEventId }, select: { id: true } });
     if (!sourceEvent) throw new Error('关联活动不存在');
@@ -529,25 +589,32 @@ const createIDFromSubmission = async (payload: Prisma.JsonObject, submitterId: s
   const videoUrl = cleanText(payload.videoUrl);
   const eventName = cleanText(payload.eventName);
   const djNames = stringArray(payload.djNames);
-  return prisma.post.create({
-    data: {
-      userId: submitterId,
-      content: [
-        '#RAVER_ID',
-        `标题：${songName}`,
-        djNames.length > 0 ? `艺人：${djNames.join(', ')}` : (cleanText(payload.artistName) ? `艺人：${cleanText(payload.artistName)}` : null),
-        eventName ? `活动：${eventName}` : null,
-        audioUrl ? `音频：${audioUrl}` : null,
-        videoUrl ? `视频：${videoUrl}` : null,
-        cleanText(payload.description) ? `描述：${cleanText(payload.description)}` : null,
-      ].filter(Boolean).join('\n'),
-      images: stringArray(payload.images),
-      type: 'general',
-      visibility: 'public',
-      boundDjIds: stringArray(payload.boundDjIDs ?? payload.boundDjIds ?? payload.djIds),
-      boundEventIds: stringArray(payload.boundEventIDs ?? payload.boundEventIds ?? payload.eventId),
-      displayPublishedAt: new Date(),
-    } as any,
+  const boundDjIds = stringArray(payload.boundDjIds);
+  const boundEventIds = stringArray(payload.boundEventIds);
+  return prisma.$transaction(async (tx) => {
+    const post = await tx.post.create({
+      data: {
+        userId: submitterId,
+        content: [
+          '#RAVER_ID',
+          `标题：${songName}`,
+          djNames.length > 0 ? `艺人：${djNames.join(', ')}` : (cleanText(payload.artistName) ? `艺人：${cleanText(payload.artistName)}` : null),
+          eventName ? `活动：${eventName}` : null,
+          audioUrl ? `音频：${audioUrl}` : null,
+          videoUrl ? `视频：${videoUrl}` : null,
+          cleanText(payload.description) ? `描述：${cleanText(payload.description)}` : null,
+        ].filter(Boolean).join('\n'),
+        images: stringArray(payload.images),
+        type: 'general',
+        visibility: 'public',
+        displayPublishedAt: new Date(),
+      } as any,
+    });
+    await syncPostBindings(tx, post.id, {
+      djIds: boundDjIds,
+      eventIds: boundEventIds,
+    });
+    return post;
   });
 };
 

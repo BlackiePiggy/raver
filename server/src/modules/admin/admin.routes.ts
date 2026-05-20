@@ -17,6 +17,11 @@ import crypto from 'crypto';
 import { notificationCenterService } from '../../modules/notifications';
 import { verifyReauthProof } from '../../utils/auth';
 import { normalizeTriTextPayload, resolveLocalizedText } from '../../utils/i18n';
+import {
+  USER_ENTITY_RELATION_FOLLOW,
+  USER_ENTITY_TARGET_DJ,
+  USER_ENTITY_TARGET_USER,
+} from '../../services/user-entity-follow.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -48,6 +53,55 @@ const parseDateCursor = (value: unknown): Date | undefined => {
   if (typeof value !== 'string' || !value.trim()) return undefined;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
+const loadUserFollowCounts = async (
+  userIds: string[]
+): Promise<Map<string, { follows: number; followers: number }>> => {
+  const uniqueUserIds = Array.from(new Set(userIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  const countsByUserId = new Map<string, { follows: number; followers: number }>();
+  if (uniqueUserIds.length === 0) {
+    return countsByUserId;
+  }
+
+  const [followingRows, followerRows] = await Promise.all([
+    prisma.userEntityFollow.groupBy({
+      by: ['userId'],
+      where: {
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_USER,
+        userId: { in: uniqueUserIds },
+      },
+      _count: { _all: true },
+    }),
+    prisma.userEntityFollow.groupBy({
+      by: ['targetId'],
+      where: {
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_USER,
+        targetId: { in: uniqueUserIds },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+
+  for (const userId of uniqueUserIds) {
+    countsByUserId.set(userId, { follows: 0, followers: 0 });
+  }
+
+  for (const row of followingRows) {
+    const current = countsByUserId.get(row.userId) ?? { follows: 0, followers: 0 };
+    current.follows = row._count._all;
+    countsByUserId.set(row.userId, current);
+  }
+
+  for (const row of followerRows) {
+    const current = countsByUserId.get(row.targetId) ?? { follows: 0, followers: 0 };
+    current.followers = row._count._all;
+    countsByUserId.set(row.targetId, current);
+  }
+
+  return countsByUserId;
 };
 
 const firstQueryValue = (value: unknown): string | undefined => {
@@ -182,7 +236,7 @@ const mapAdminUser = (user: {
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt: Date | null;
-  _count?: {
+  counts?: {
     posts: number;
     follows: number;
     followers: number;
@@ -206,14 +260,14 @@ const mapAdminUser = (user: {
   createdAt: user.createdAt.toISOString(),
   updatedAt: user.updatedAt.toISOString(),
   lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
-  counts: user._count
+  counts: user.counts
     ? {
-        posts: user._count.posts,
-        follows: user._count.follows,
-        followers: user._count.followers,
-        authSessions: user._count.authRefreshTokens,
-        enforcements: user._count.accountEnforcements,
-        deletionRequests: user._count.accountDeletionRequests,
+        posts: user.counts.posts,
+        follows: user.counts.follows,
+        followers: user.counts.followers,
+        authSessions: user.counts.authRefreshTokens,
+        enforcements: user.counts.accountEnforcements,
+        deletionRequests: user.counts.accountDeletionRequests,
       }
     : undefined,
 });
@@ -1042,8 +1096,6 @@ router.get('/users', authenticate, requireAdminOrOperator, async (req: AuthReque
         _count: {
           select: {
             posts: true,
-            follows: true,
-            followers: true,
             authRefreshTokens: true,
             accountEnforcements: true,
             accountDeletionRequests: true,
@@ -1054,9 +1106,22 @@ router.get('/users', authenticate, requireAdminOrOperator, async (req: AuthReque
 
     const hasMore = users.length > limit;
     const pageItems = hasMore ? users.slice(0, limit) : users;
+    const followCountsByUserId = await loadUserFollowCounts(pageItems.map((user) => user.id));
     res.json({
       success: true,
-      items: pageItems.map(mapAdminUser),
+      items: pageItems.map((user) =>
+        mapAdminUser({
+          ...user,
+          counts: {
+            posts: user._count.posts,
+            follows: followCountsByUserId.get(user.id)?.follows ?? 0,
+            followers: followCountsByUserId.get(user.id)?.followers ?? 0,
+            authRefreshTokens: user._count.authRefreshTokens,
+            accountEnforcements: user._count.accountEnforcements,
+            accountDeletionRequests: user._count.accountDeletionRequests,
+          },
+        })
+      ),
       nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
     });
   } catch (error) {
@@ -1089,8 +1154,6 @@ router.get('/users/:id', authenticate, requireAdminOrOperator, async (req: AuthR
         _count: {
           select: {
             posts: true,
-            follows: true,
-            followers: true,
             authRefreshTokens: true,
             accountEnforcements: true,
             accountDeletionRequests: true,
@@ -1103,7 +1166,8 @@ router.get('/users/:id', authenticate, requireAdminOrOperator, async (req: AuthR
       return;
     }
 
-    const [activeSessions, activePushTokens, activeEnforcements, latestDeletionRequest] = await Promise.all([
+    const [followCountsByUserId, activeSessions, activePushTokens, activeEnforcements, latestDeletionRequest] = await Promise.all([
+      loadUserFollowCounts([userId]),
       prisma.authRefreshToken.count({ where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } }),
       prisma.devicePushToken.count({ where: { userId, isActive: true } }),
       prisma.accountEnforcement.count({ where: { userId, status: 'active' } }),
@@ -1113,10 +1177,21 @@ router.get('/users/:id', authenticate, requireAdminOrOperator, async (req: AuthR
         select: { id: true, status: true, requestedBy: true, requestSource: true, createdAt: true, completedAt: true },
       }),
     ]);
+    const followCounts = followCountsByUserId.get(userId) ?? { follows: 0, followers: 0 };
 
     res.json({
       success: true,
-      user: mapAdminUser(user),
+      user: mapAdminUser({
+        ...user,
+        counts: {
+          posts: user._count.posts,
+          follows: followCounts.follows,
+          followers: followCounts.followers,
+          authRefreshTokens: user._count.authRefreshTokens,
+          accountEnforcements: user._count.accountEnforcements,
+          accountDeletionRequests: user._count.accountDeletionRequests,
+        },
+      }),
       stats: {
         activeSessions,
         activePushTokens,
@@ -1190,6 +1265,45 @@ router.post('/users/:id/delete-account', authenticate, requireAdmin, requireReau
         where: { userId, isActive: true },
         data: { isActive: false, lastSeenAt: now },
       });
+      const followedDjRows = await tx.userEntityFollow.findMany({
+        where: {
+          userId,
+          relationType: USER_ENTITY_RELATION_FOLLOW,
+          targetType: USER_ENTITY_TARGET_DJ,
+        },
+        select: {
+          targetId: true,
+        },
+      });
+      const followedDjIds = Array.from(
+        new Set(followedDjRows.map((row) => row.targetId).filter((id): id is string => Boolean(id)))
+      );
+      await Promise.all(
+        followedDjIds.map((djId) =>
+          tx.dJ.updateMany({
+            where: { id: djId },
+            data: {
+              followerCount: {
+                decrement: 1,
+              },
+            },
+          })
+        )
+      );
+      await tx.userEntityFollow.deleteMany({
+        where: {
+          OR: [
+            { userId },
+            {
+              targetType: USER_ENTITY_TARGET_USER,
+              targetId: userId,
+            },
+          ],
+        },
+      });
+      await tx.userGenrePreference.deleteMany({
+        where: { userId },
+      });
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -1207,8 +1321,6 @@ router.post('/users/:id/delete-account', authenticate, requireAdmin, requireReau
           avatarReviewNote: null,
           bio: null,
           location: null,
-          favoriteDjIds: [],
-          favoriteGenres: [],
           isVerified: false,
           profileShareCode: null,
           profileShareQrCodeUrl: null,

@@ -20,6 +20,11 @@ import {
   setEventDayAndKeepTime,
   startOfEventDay,
 } from '../utils/event-timezone';
+import {
+  loadCanonicalEventLineupSnapshot,
+  normalizeCanonicalLineupArtists,
+  syncCanonicalEventLineupAndTimetable,
+} from '../services/event-lineup-canonical.service';
 
 const prisma = new PrismaClient();
 
@@ -330,29 +335,34 @@ const buildLineupArtistsFromSlots = (slots: LineupSlotInput[]): LineupArtistInpu
 const normalizeLineupArtists = (artists: unknown, fallbackSlots: LineupSlotInput[] = []): LineupArtistInput[] => {
   const source = Array.isArray(artists) ? artists : null;
   if (!source) return buildLineupArtistsFromSlots(fallbackSlots);
-  const byKey = new Map<string, LineupArtistInput>();
-  for (const [index, raw] of source.entries()) {
-    if (!raw || typeof raw !== 'object') continue;
-    const row = raw as RawLineupArtistInput;
-    const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
-    if (!djName) continue;
-    const djIds = (Array.isArray(row.djIds) ? row.djIds : [])
-      .map((id) => String(id || '').trim())
-      .filter((id) => id && !isLineupDjIdPlaceholder(id));
-    const primaryRaw = String(row.djId || '').trim();
-    const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (djIds[0] || null);
-    const mergedIds = Array.from(new Set([...djIds, ...(djId ? [djId] : [])])).filter(Boolean);
-    const sortOrder = typeof row.sortOrder === 'number' && Number.isFinite(row.sortOrder) ? row.sortOrder : index + 1;
-    const key = djId ? `id:${djId}` : `name:${djName.toLowerCase()}`;
-    const existing = byKey.get(key);
-    if (existing) {
-      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...mergedIds])).filter(Boolean);
-      existing.sortOrder = Math.min(existing.sortOrder, sortOrder);
-      continue;
-    }
-    byKey.set(key, { djId, djIds: mergedIds, djName, sortOrder });
-  }
-  return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+  return normalizeCanonicalLineupArtists(
+    source
+      .filter((raw): raw is RawLineupArtistInput => !!raw && typeof raw === 'object')
+      .map((row, index) => {
+        const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
+        const djIds = (Array.isArray(row.djIds) ? row.djIds : [])
+          .map((id) => String(id || '').trim())
+          .filter((id) => id && !isLineupDjIdPlaceholder(id));
+        const primaryRaw = String(row.djId || '').trim();
+        const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (djIds[0] || null);
+        return {
+          djId,
+          djIds,
+          djName,
+          sortOrder: typeof row.sortOrder === 'number' && Number.isFinite(row.sortOrder) ? row.sortOrder : index + 1,
+        };
+      }),
+    fallbackSlots.map((slot) => ({
+      djId: slot.djId ?? null,
+      djIds: slot.djIds ?? [],
+      djName: slot.djName || 'Unknown DJ',
+      stageName: slot.stageName ?? null,
+      festivalDayIndex: slot.festivalDayIndex ?? null,
+      startTime: new Date(slot.startTime),
+      endTime: new Date(slot.endTime),
+      sortOrder: slot.sortOrder || 0,
+    }))
+  );
 };
 
 const normalizeTicketTiers = (tiers: unknown): TicketTierInput[] => {
@@ -363,6 +373,79 @@ const normalizeTicketTiers = (tiers: unknown): TicketTierInput[] => {
     .filter((tier) => tier && typeof tier === 'object')
     .map((tier) => tier as TicketTierInput)
     .filter((tier) => String(tier.name || '').trim() && toNumberOrNull(tier.price) !== null);
+};
+
+const attachCanonicalLineupToEvent = async <
+  T extends {
+    id: string;
+  }
+>(
+  event: T
+): Promise<T & {
+  lineupArtists: Array<{
+    id: string;
+    eventId: string;
+    djId: string | null;
+    djIds: string[];
+    djName: string;
+    sortOrder: number;
+  }>;
+  lineupSlots: Array<{
+    id: string;
+    eventId: string;
+    lineupArtistId: string | null;
+    djId: string | null;
+    djIds: string[];
+    djName: string;
+    festivalDayIndex: number | null;
+    stageName: string | null;
+    sortOrder: number;
+    startTime: Date;
+    endTime: Date;
+  }>;
+  timetableSlots: Array<{
+    id: string;
+    eventId: string;
+    lineupArtistId: string | null;
+    djId: string | null;
+    djIds: string[];
+    djName: string;
+    festivalDayIndex: number | null;
+    stageName: string | null;
+    sortOrder: number;
+    startTime: Date;
+    endTime: Date;
+  }>;
+}> => {
+  const snapshot = await loadCanonicalEventLineupSnapshot(prisma, event.id);
+  const mappedArtists = snapshot.artists.map((artist) => ({
+    id: artist.id || '',
+    eventId: event.id,
+    djId: artist.djId,
+    djIds: artist.djIds,
+    djName: artist.djName,
+    sortOrder: artist.sortOrder,
+  }));
+  const mappedSlots = snapshot.slots.map((slot) => ({
+    id: slot.id || '',
+    eventId: event.id,
+    lineupArtistId: slot.lineupArtistId ?? null,
+    djId: slot.djId,
+    djIds: slot.djIds,
+    djName: slot.djName,
+    festivalDayIndex: slot.festivalDayIndex,
+    stageName: slot.stageName,
+    sortOrder: slot.sortOrder,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+  }));
+
+  return {
+    ...event,
+    lineupArtists: mappedArtists,
+    lineupSlots: mappedSlots,
+    timetableSlots: mappedSlots,
+  };
 };
 
 export const getEvents = async (req: Request, res: Response): Promise<void> => {
@@ -441,22 +524,6 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
           ticketTiers: {
             orderBy: { sortOrder: 'asc' },
           },
-          lineupSlots: {
-            orderBy: { startTime: 'asc' },
-            include: {
-              dj: {
-                select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-              },
-            },
-          },
-          lineupArtists: {
-            orderBy: { sortOrder: 'asc' },
-            include: {
-              dj: {
-                select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-              },
-            },
-          },
           organizer: {
             select: {
               id: true,
@@ -470,8 +537,10 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
       prisma.event.count({ where }),
     ]);
 
+    const eventsWithCanonicalLineup = await Promise.all(events.map((event) => attachCanonicalLineupToEvent(event)));
+
     res.json({
-      events: events.map((event) => withDerivedStatus(event)),
+      events: eventsWithCanonicalLineup.map((event) => withDerivedStatus(event)),
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -515,22 +584,6 @@ export const getMyEvents = async (req: AuthRequest, res: Response): Promise<void
         ticketTiers: {
           orderBy: { sortOrder: 'asc' },
         },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-            },
-          },
-        },
-        lineupArtists: {
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-            },
-          },
-        },
         organizer: {
           select: {
             id: true,
@@ -542,7 +595,9 @@ export const getMyEvents = async (req: AuthRequest, res: Response): Promise<void
       },
     });
 
-    res.json({ events: events.map((event) => withDerivedStatus(event)) });
+    const eventsWithCanonicalLineup = await Promise.all(events.map((event) => attachCanonicalLineupToEvent(event)));
+
+    res.json({ events: eventsWithCanonicalLineup.map((event) => withDerivedStatus(event)) });
   } catch (error) {
     console.error('Get my events error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -558,22 +613,6 @@ export const getEvent = async (req: Request, res: Response): Promise<void> => {
       include: {
         ticketTiers: {
           orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
-            },
-          },
-        },
-        lineupArtists: {
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true },
-            },
-          },
         },
         organizer: {
           select: {
@@ -591,7 +630,7 @@ export const getEvent = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json(withDerivedStatus(event));
+    res.json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
     console.error('Get event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -697,106 +736,87 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
 
-    const event = await prisma.event.create({
-      data: {
-        organizerId: userId,
-        name,
-        slug: desiredSlug,
-        description,
-        nameI18n: normalizedNameI18n,
-        descriptionI18n: normalizedDescriptionI18n,
-        coverImageUrl,
-        lineupImageUrl,
-        eventType,
-        organizerName,
-        city,
-        cityI18n: normalizedCityI18n,
-        country,
-        countryI18n: normalizedCountryI18n,
-        manualLocation,
-        locationPoint,
-        latitude: toNumberOrNull(latitude),
-        longitude: toNumberOrNull(longitude),
-        startDate: parsedStartDate,
-        endDate: parsedEndDate,
-        timeZone: normalizedTimeZone,
-        startTime: normalizedStartTime,
-        endTime: normalizedEndTime,
-        dayRolloverHour: normalizedDayRolloverHour,
-        status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof status === 'string' ? status : null),
-        ticketUrl,
-        ticketPriceMin: toNumberOrNull(ticketPriceMin),
-        ticketPriceMax: toNumberOrNull(ticketPriceMax),
-        ticketCurrency,
-        ticketNotes,
-        ticketTiers: normalizedTicketTiers.length
-          ? {
-              create: normalizedTicketTiers.map((tier, index) => ({
-                name: String(tier.name).trim(),
-                price: Number(tier.price),
-                currency: tier.currency || ticketCurrency || null,
-                sortOrder: tier.sortOrder ?? index + 1,
-              })),
-            }
-          : undefined,
-        officialWebsite,
-        lineupArtists: normalizedLineupArtists.length
-          ? {
-              create: normalizedLineupArtists.map((artist) => ({
-                djId: artist.djId,
-                djIds: artist.djIds,
-                djName: artist.djName,
-                sortOrder: artist.sortOrder,
-              })),
-            }
-          : undefined,
-        lineupSlots: normalizedSlots.length
-          ? {
-              create: normalizedSlots.map((slot, index) => ({
-                djId: slot.djId || null,
-                djIds: Array.isArray(slot.djIds) ? slot.djIds : [],
-                festivalDayIndex: slot.festivalDayIndex ?? null,
-                djName: slot.djName || 'Unknown DJ',
-                stageName: slot.stageName || null,
-                sortOrder: slot.sortOrder ?? index + 1,
-                startTime: new Date(slot.startTime),
-                endTime: new Date(slot.endTime),
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        ticketTiers: {
-          orderBy: { sortOrder: 'asc' },
+    const event = await prisma.$transaction(async (tx) => {
+      const created = await tx.event.create({
+        data: {
+          organizerId: userId,
+          name,
+          slug: desiredSlug,
+          description,
+          nameI18n: normalizedNameI18n,
+          descriptionI18n: normalizedDescriptionI18n,
+          coverImageUrl,
+          lineupImageUrl,
+          eventType,
+          organizerName,
+          city,
+          cityI18n: normalizedCityI18n,
+          country,
+          countryI18n: normalizedCountryI18n,
+          manualLocation,
+          locationPoint,
+          latitude: toNumberOrNull(latitude),
+          longitude: toNumberOrNull(longitude),
+          startDate: parsedStartDate,
+          endDate: parsedEndDate,
+          timeZone: normalizedTimeZone,
+          startTime: normalizedStartTime,
+          endTime: normalizedEndTime,
+          dayRolloverHour: normalizedDayRolloverHour,
+          status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof status === 'string' ? status : null),
+          ticketUrl,
+          ticketPriceMin: toNumberOrNull(ticketPriceMin),
+          ticketPriceMax: toNumberOrNull(ticketPriceMax),
+          ticketCurrency,
+          ticketNotes,
+          ticketTiers: normalizedTicketTiers.length
+            ? {
+                create: normalizedTicketTiers.map((tier, index) => ({
+                  name: String(tier.name).trim(),
+                  price: Number(tier.price),
+                  currency: tier.currency || ticketCurrency || null,
+                  sortOrder: tier.sortOrder ?? index + 1,
+                })),
+              }
+            : undefined,
+          officialWebsite,
         },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
+      });
+      await syncCanonicalEventLineupAndTimetable(
+        tx,
+        created.id,
+        normalizedSlots.map((slot) => ({
+          ...slot,
+          djId: slot.djId ?? null,
+          djIds: slot.djIds ?? [],
+          djName: slot.djName || 'Unknown DJ',
+          sortOrder: slot.sortOrder || 0,
+          stageName: slot.stageName ?? null,
+          festivalDayIndex: slot.festivalDayIndex ?? null,
+          startTime: new Date(slot.startTime),
+          endTime: new Date(slot.endTime),
+        })),
+        normalizedLineupArtists
+      );
+      return tx.event.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          ticketTiers: {
+            orderBy: { sortOrder: 'asc' },
+          },
+          organizer: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
             },
           },
         },
-        lineupArtists: {
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-            },
-          },
-        },
-        organizer: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
-      },
+      });
     });
 
-    res.status(201).json(withDerivedStatus(event));
+    res.status(201).json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
     console.error('Create event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -858,14 +878,6 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         endTime: true,
         dayRolloverHour: true,
         status: true,
-        lineupSlots: {
-          select: {
-            id: true,
-            festivalDayIndex: true,
-            startTime: true,
-            endTime: true,
-          },
-        },
       },
     });
     if (!existing) {
@@ -913,111 +925,111 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const shouldRebaseExistingLineupSlots =
       !Array.isArray(lineupSlots)
       && (startDate !== undefined || dayRolloverHour !== undefined || timeZone !== undefined)
-      && existing.lineupSlots.length > 0;
+      && (await loadCanonicalEventLineupSnapshot(prisma, id as string)).slots.length > 0;
     const shouldSyncLineupArtists = Array.isArray(req.body.lineupArtists) || Array.isArray(lineupSlots);
     const normalizedNameI18n = normalizeOptionalTriTextJson(req.body.nameI18n);
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
 
-    await prisma.event.update({
-      where: { id: id as string },
-      data: {
-        name: name ?? undefined,
-        slug: slug ?? undefined,
-        description: description ?? undefined,
-        nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
-        descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
-        coverImageUrl: coverImageUrl ?? undefined,
-        lineupImageUrl: lineupImageUrl ?? undefined,
-        eventType: eventType ?? undefined,
-        organizerName: organizerName ?? undefined,
-        city: city ?? undefined,
-        cityI18n: cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
-        country: country ?? undefined,
-        countryI18n: countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
-        manualLocation: manualLocation ?? undefined,
-        locationPoint: locationPoint ?? undefined,
-        latitude: latitude !== undefined ? toNumberOrNull(latitude) : undefined,
-        longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
-        startDate: startDate ? nextStartDate ?? undefined : undefined,
-        endDate: endDate ? nextEndDate ?? undefined : undefined,
-        timeZone: timeZone !== undefined ? nextTimeZone : undefined,
-        startTime: startTime !== undefined ? nextStartTime : undefined,
-        endTime: endTime !== undefined ? nextEndTime : undefined,
-        dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
-        ticketUrl: ticketUrl ?? undefined,
-        ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
-        ticketPriceMax: ticketPriceMax !== undefined ? toNumberOrNull(ticketPriceMax) : undefined,
-        ticketCurrency: ticketCurrency ?? undefined,
-        ticketNotes: ticketNotes ?? undefined,
-        ticketTiers: Array.isArray(ticketTiers)
-          ? {
-              deleteMany: {},
-              create: normalizedTicketTiers.map((tier, index) => ({
-                name: String(tier.name).trim(),
-                price: Number(tier.price),
-                currency: tier.currency || ticketCurrency || null,
-                sortOrder: tier.sortOrder ?? index + 1,
-              })),
-            }
-          : undefined,
-        officialWebsite: officialWebsite ?? undefined,
-        status: resolveEventStatus(
-          effectiveStartDate,
-          effectiveEndDate,
-          typeof status === 'string' ? status : existing.status
-        ),
-        lineupArtists: shouldSyncLineupArtists
-          ? {
-              deleteMany: {},
-              create: normalizedLineupArtists.map((artist) => ({
-                djId: artist.djId,
-                djIds: artist.djIds,
-                djName: artist.djName,
-                sortOrder: artist.sortOrder,
-              })),
-            }
-          : undefined,
-        lineupSlots: Array.isArray(lineupSlots)
-          ? {
-              deleteMany: {},
-              create: normalizedSlots.map((slot, index) => ({
-                djId: slot.djId || null,
-                djIds: Array.isArray(slot.djIds) ? slot.djIds : [],
-                festivalDayIndex: slot.festivalDayIndex ?? null,
-                djName: slot.djName || 'Unknown DJ',
-                stageName: slot.stageName || null,
-                sortOrder: slot.sortOrder ?? index + 1,
-                startTime: new Date(slot.startTime),
-                endTime: new Date(slot.endTime),
-              })),
-            }
-          : undefined,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.event.update({
+        where: { id: id as string },
+        data: {
+          name: name ?? undefined,
+          slug: slug ?? undefined,
+          description: description ?? undefined,
+          nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
+          descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
+          coverImageUrl: coverImageUrl ?? undefined,
+          lineupImageUrl: lineupImageUrl ?? undefined,
+          eventType: eventType ?? undefined,
+          organizerName: organizerName ?? undefined,
+          city: city ?? undefined,
+          cityI18n: cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
+          country: country ?? undefined,
+          countryI18n: countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
+          manualLocation: manualLocation ?? undefined,
+          locationPoint: locationPoint ?? undefined,
+          latitude: latitude !== undefined ? toNumberOrNull(latitude) : undefined,
+          longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
+          startDate: startDate ? nextStartDate ?? undefined : undefined,
+          endDate: endDate ? nextEndDate ?? undefined : undefined,
+          timeZone: timeZone !== undefined ? nextTimeZone : undefined,
+          startTime: startTime !== undefined ? nextStartTime : undefined,
+          endTime: endTime !== undefined ? nextEndTime : undefined,
+          dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
+          ticketUrl: ticketUrl ?? undefined,
+          ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
+          ticketPriceMax: ticketPriceMax !== undefined ? toNumberOrNull(ticketPriceMax) : undefined,
+          ticketCurrency: ticketCurrency ?? undefined,
+          ticketNotes: ticketNotes ?? undefined,
+          ticketTiers: Array.isArray(ticketTiers)
+            ? {
+                deleteMany: {},
+                create: normalizedTicketTiers.map((tier, index) => ({
+                  name: String(tier.name).trim(),
+                  price: Number(tier.price),
+                  currency: tier.currency || ticketCurrency || null,
+                  sortOrder: tier.sortOrder ?? index + 1,
+                })),
+              }
+            : undefined,
+          officialWebsite: officialWebsite ?? undefined,
+          status: resolveEventStatus(
+            effectiveStartDate,
+            effectiveEndDate,
+            typeof status === 'string' ? status : existing.status
+          ),
+        },
+      });
+      if (shouldSyncLineupArtists) {
+        await syncCanonicalEventLineupAndTimetable(
+          tx,
+          id as string,
+          normalizedSlots.map((slot) => ({
+            ...slot,
+            djId: slot.djId ?? null,
+            djIds: slot.djIds ?? [],
+            djName: slot.djName || 'Unknown DJ',
+            sortOrder: slot.sortOrder || 0,
+            stageName: slot.stageName ?? null,
+            festivalDayIndex: slot.festivalDayIndex ?? null,
+            startTime: new Date(slot.startTime),
+            endTime: new Date(slot.endTime),
+          })),
+          normalizedLineupArtists
+        );
+      }
     });
 
     if (shouldRebaseExistingLineupSlots) {
-      const rebasedSlots = rebaseExistingLineupSlotsToEventStart(
-        existing.lineupSlots,
-        existing.startDate,
-        effectiveStartDate,
-        nextDayRolloverHour,
-        nextTimeZone
-      );
-
-      await prisma.$transaction(
-        rebasedSlots.map((slot) =>
-          prisma.eventLineupSlot.update({
-            where: { id: slot.id },
-            data: {
-              festivalDayIndex: slot.festivalDayIndex,
-              startTime: slot.startTime,
-              endTime: slot.endTime,
-            },
-          })
-        )
-      );
+      await prisma.$transaction(async (tx) => {
+        const snapshot = await loadCanonicalEventLineupSnapshot(tx, id as string);
+        const rebasedSlots = rebaseExistingLineupSlotsToEventStart(
+          snapshot.slots.map((slot) => ({
+            id: slot.id || '',
+            festivalDayIndex: slot.festivalDayIndex,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          })),
+          existing.startDate,
+          effectiveStartDate,
+          nextDayRolloverHour,
+          nextTimeZone
+        );
+        await syncCanonicalEventLineupAndTimetable(
+          tx,
+          id as string,
+          snapshot.slots.map((slot) => {
+            const rebased = rebasedSlots.find((item) => item.id === slot.id);
+            return rebased
+              ? { ...slot, festivalDayIndex: rebased.festivalDayIndex, startTime: rebased.startTime, endTime: rebased.endTime }
+              : slot;
+          }),
+          snapshot.artists
+        );
+      });
     }
 
     const event = await prisma.event.findUnique({
@@ -1025,22 +1037,6 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       include: {
         ticketTiers: {
           orderBy: { sortOrder: 'asc' },
-        },
-        lineupSlots: {
-          orderBy: { startTime: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-            },
-          },
-        },
-        lineupArtists: {
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            dj: {
-              select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
-            },
-          },
         },
         organizer: {
           select: {
@@ -1058,7 +1054,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    res.json(withDerivedStatus(event));
+    res.json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
     console.error('Update event error:', error);
     res.status(500).json({ error: 'Internal server error' });

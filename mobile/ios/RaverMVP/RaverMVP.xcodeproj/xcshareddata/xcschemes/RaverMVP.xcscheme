@@ -20,6 +20,34 @@
                ReferencedContainer = "container:RaverMVP.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "04BBDDA62D906013E8909A71"
+               BuildableName = "RaverMVPUITests.xctest"
+               BlueprintName = "RaverMVPUITests"
+               ReferencedContainer = "container:RaverMVP.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B0803E54265F78B2A57966B9"
+               BuildableName = "RaverCountdownWidgets.appex"
+               BlueprintName = "RaverCountdownWidgets"
+               ReferencedContainer = "container:RaverMVP.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -82,7 +110,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "RAVER_BFF_BASE_URL"
-            value = "192.168.0.9:3901"
+            value = "192.168.0.8:3901"
             isEnabled = "NO">
          </EnvironmentVariable>
          <EnvironmentVariable

@@ -1,10 +1,19 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import OSS from 'ali-oss';
 import crypto from 'crypto';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth';
 import { tencentIMUserService } from '../modules/im';
 import { mediaAssetService } from '../services/media-asset.service';
+import {
+  USER_ENTITY_RELATION_FAVORITE,
+  USER_ENTITY_TARGET_DJ,
+} from '../services/user-entity-follow.service';
+import {
+  normalizeGenrePreferenceKeys,
+  resolveUserGenrePreferences,
+  syncUserGenrePreferences,
+} from '../services/user-genre-preference.service';
 
 const prisma = new PrismaClient();
 
@@ -106,6 +115,61 @@ const syncTencentIMUserBestEffort = async (userId: string, reason: string): Prom
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[tencent-im] user sync skipped during ${reason}: ${message}`, { userId });
   }
+};
+
+const resolveFavoriteDjIds = async (userId: string): Promise<string[]> => {
+  const rows = await prisma.userEntityFollow.findMany({
+    where: {
+      userId,
+      relationType: USER_ENTITY_RELATION_FAVORITE,
+      targetType: USER_ENTITY_TARGET_DJ,
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      targetId: true,
+    },
+  });
+
+  if (rows.length > 0) {
+    return rows.map((row) => row.targetId).filter((id): id is string => Boolean(id));
+  }
+  return [];
+};
+
+const syncFavoriteDjRelations = async (
+  tx: Prisma.TransactionClient,
+  userId: string,
+  favoriteDjIds: string[]
+): Promise<void> => {
+  await tx.userEntityFollow.deleteMany({
+    where: {
+      userId,
+      relationType: USER_ENTITY_RELATION_FAVORITE,
+      targetType: USER_ENTITY_TARGET_DJ,
+    },
+  });
+
+  const orderedIds = Array.from(
+    new Set(
+      favoriteDjIds
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    )
+  );
+  if (orderedIds.length === 0) {
+    return;
+  }
+
+  await tx.userEntityFollow.createMany({
+    data: orderedIds.map((targetId, index) => ({
+      userId,
+      relationType: USER_ENTITY_RELATION_FAVORITE,
+      targetType: USER_ENTITY_TARGET_DJ,
+      targetId,
+      sortOrder: index,
+    })),
+    skipDuplicates: true,
+  });
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -282,8 +346,6 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
         avatarUrl: true,
         bio: true,
         location: true,
-        favoriteDjIds: true,
-        favoriteGenres: true,
         role: true,
         isVerified: true,
         createdAt: true,
@@ -295,7 +357,11 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    res.json(user);
+    res.json({
+      ...user,
+      favoriteGenres: await resolveUserGenrePreferences(prisma, user.id),
+      favoriteDjIds: await resolveFavoriteDjIds(user.id),
+    });
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -314,8 +380,6 @@ export const getPublicProfile = async (req: Request, res: Response): Promise<voi
         avatarUrl: true,
         bio: true,
         location: true,
-        favoriteDjIds: true,
-        favoriteGenres: true,
         createdAt: true,
       },
     });
@@ -325,7 +389,11 @@ export const getPublicProfile = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    res.json(user);
+    res.json({
+      ...user,
+      favoriteGenres: await resolveUserGenrePreferences(prisma, user.id),
+      favoriteDjIds: await resolveFavoriteDjIds(user.id),
+    });
   } catch (error) {
     console.error('Get public profile error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -362,14 +430,13 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       displayNameReviewNote?: string | null;
       bio?: string;
       location?: string;
-      favoriteDjIds?: string[];
-      favoriteGenres?: string[];
     } = {
       bio: bio ?? undefined,
       location: location ?? undefined,
-      favoriteDjIds: Array.isArray(favoriteDjIds) ? favoriteDjIds : undefined,
-      favoriteGenres: Array.isArray(favoriteGenres) ? favoriteGenres : undefined,
     };
+    const normalizedFavoriteGenres = Array.isArray(favoriteGenres)
+      ? normalizeGenrePreferenceKeys(favoriteGenres)
+      : null;
 
     if (typeof displayName === 'string') {
       const trimmedDisplayName = normalizeDisplayName(displayName);
@@ -395,23 +462,30 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       data.displayNameReviewNote = null;
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data,
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        avatarUrl: true,
-        bio: true,
-        location: true,
-        favoriteDjIds: true,
-        favoriteGenres: true,
-        role: true,
-        isVerified: true,
-        createdAt: true,
-      },
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: userId },
+        data,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          displayName: true,
+          avatarUrl: true,
+          bio: true,
+          location: true,
+          role: true,
+          isVerified: true,
+          createdAt: true,
+        },
+      });
+      if (Array.isArray(favoriteDjIds)) {
+        await syncFavoriteDjRelations(tx, userId, favoriteDjIds);
+      }
+      if (normalizedFavoriteGenres) {
+        await syncUserGenrePreferences(tx, userId, normalizedFavoriteGenres);
+      }
+      return user;
     });
 
     if (data.displayName && data.displayNameNormalized) {
@@ -429,7 +503,11 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
 
     await syncTencentIMUserBestEffort(userId, 'auth-update-profile');
 
-    res.json(updatedUser);
+    res.json({
+      ...updatedUser,
+      favoriteGenres: await resolveUserGenrePreferences(prisma, updatedUser.id),
+      favoriteDjIds: await resolveFavoriteDjIds(updatedUser.id),
+    });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -473,8 +551,6 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
         avatarUrl: true,
         bio: true,
         location: true,
-        favoriteDjIds: true,
-        favoriteGenres: true,
         role: true,
         isVerified: true,
         createdAt: true,
@@ -498,7 +574,11 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
 
     await syncTencentIMUserBestEffort(userId, 'auth-upload-avatar');
 
-    res.status(201).json(updatedUser);
+    res.status(201).json({
+      ...updatedUser,
+      favoriteGenres: await resolveUserGenrePreferences(prisma, updatedUser.id),
+      favoriteDjIds: await resolveFavoriteDjIds(updatedUser.id),
+    });
   } catch (error) {
     console.error('Upload avatar error:', error);
     res.status(500).json({ error: 'Internal server error' });

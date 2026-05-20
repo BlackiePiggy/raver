@@ -26,8 +26,6 @@ model User {
   avatarReviewNote      String?   @map("avatar_review_note")
   bio                   String?
   location              String?
-  favoriteDjIds         String[]  @default([]) @map("favorite_dj_ids")
-  favoriteGenres        String[]  @default([]) @map("favorite_genres")
   isFollowersListPublic Boolean   @default(true) @map("is_followers_list_public")
   isFollowingListPublic Boolean   @default(true) @map("is_following_list_public")
   createdAt             DateTime  @default(now()) @map("created_at")
@@ -45,11 +43,10 @@ model User {
   ageDeclaredAt         DateTime? @map("age_declared_at")
 
   checkins            Checkin[]
-  eventFavorites      EventFavorite[]
+  entityFollows       UserEntityFollow[]
+  genrePreferences    UserGenrePreference[]
   dailyEventRecommendations UserDailyEventRecommendation[]
   dailyDJRecommendations    UserDailyDJRecommendation[]
-  follows             Follow[]        @relation("UserFollows")
-  followers           Follow[]        @relation("UserFollowers")
   uploadedSets        DJSet[]         @relation("UserUploadedSets")
   djContributions     DJContributor[]
   publishedEvents     Event[]         @relation("UserPublishedEvents")
@@ -465,7 +462,6 @@ model Event {
   startTime         String   @default("00:00:00") @map("start_time")
   endTime           String   @default("23:59:59") @map("end_time")
   dayRolloverHour   Int      @default(6) @map("day_rollover_hour")
-  stageOrder        Json?    @map("stage_order")
   ticketUrl         String?  @map("ticket_url")
   ticketPriceMin    Decimal? @map("ticket_price_min") @db.Decimal(10, 2)
   ticketPriceMax    Decimal? @map("ticket_price_max") @db.Decimal(10, 2)
@@ -480,13 +476,14 @@ model Event {
   organizer              User?                  @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
   wikiFestival           WikiFestival?          @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
   checkins               Checkin[]
-  favorites              EventFavorite[]
-  lineupSlots            EventLineupSlot[]
-  lineupArtists          EventLineupArtist[]
-  timetableSlots         EventTimetableSlot[]
+  canonicalArtists       EventArtist[]
+  stages                 EventStage[]
+  performances           EventPerformance[]
   ticketTiers            EventTicketTier[]
   ratingEvents           RatingEvent[]          @relation("EventRatingEvents")
   posts                  Post[]
+  postBindings           PostEventBinding[]
+  newsBindings           NewsEventBinding[]
   djSets                 DJSet[]
   liveComments           EventLiveComment[]
   squadActivities        SquadActivity[]
@@ -497,20 +494,38 @@ model Event {
   @@map("events")
 }
 
-model EventFavorite {
+model UserEntityFollow {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  targetType   String   @map("target_type")
+  targetId     String   @map("target_id")
+  relationType String   @map("relation_type")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, relationType, targetType, targetId])
+  @@index([userId, relationType, targetType, createdAt])
+  @@index([targetType, targetId, relationType, createdAt])
+  @@map("user_entity_follows")
+}
+
+model UserGenrePreference {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
-  eventId   String   @map("event_id")
+  genreKey  String   @map("genre_key")
+  sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, eventId])
-  @@index([userId, createdAt])
-  @@index([eventId, createdAt])
-  @@map("event_favorites")
+  @@unique([userId, genreKey])
+  @@index([userId, sortOrder])
+  @@index([genreKey, createdAt])
+  @@map("user_genre_preferences")
 }
 
 model UserDailyEventRecommendation {
@@ -567,72 +582,90 @@ model EventTicketTier {
   @@map("event_ticket_tiers")
 }
 
-model EventLineupSlot {
-  id               String   @id @default(uuid())
-  eventId          String   @map("event_id")
-  djId             String?  @map("dj_id")
-  djIds            String[] @default([]) @map("dj_ids")
-  festivalDayIndex Int?     @map("festival_day_index")
-  djName           String   @map("dj_name")
-  stageName        String?  @map("stage_name")
-  sortOrder        Int      @default(0) @map("sort_order")
-  startTime        DateTime @map("start_time")
-  endTime          DateTime @map("end_time")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+model EventArtist {
+  id              String   @id @default(uuid())
+  eventId         String   @map("event_id")
+  displayName     String   @map("display_name")
+  normalizedName  String?  @map("normalized_name")
+  actType         String   @default("unknown") @map("act_type")
+  primaryDjId     String?  @map("primary_dj_id")
+  billingOrder    Int      @default(0) @map("billing_order")
+  posterTier      String?  @map("poster_tier")
+  sourceType      String   @default("migration") @map("source_type")
+  isTimetableOnly Boolean  @default(false) @map("is_timetable_only")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  dj    DJ?   @relation(fields: [djId], references: [id], onDelete: SetNull)
+  event        Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  primaryDj    DJ?                  @relation("EventArtistPrimaryDJ", fields: [primaryDjId], references: [id], onDelete: SetNull)
+  members      EventArtistMember[]
+  performances EventPerformance[]
 
-  @@index([eventId])
-  @@index([djId])
-  @@index([startTime])
-  @@map("event_lineup_slots")
+  @@index([eventId, billingOrder])
+  @@index([eventId, normalizedName])
+  @@index([primaryDjId])
+  @@map("event_artists")
 }
 
-model EventLineupArtist {
-  id        String   @id @default(uuid())
-  eventId   String   @map("event_id")
-  djId      String?  @map("dj_id")
-  djIds     String[] @default([]) @map("dj_ids")
-  djName    String   @map("dj_name")
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+model EventArtistMember {
+  id                 String   @id @default(uuid())
+  eventArtistId      String   @map("event_artist_id")
+  djId               String?  @map("dj_id")
+  memberNameSnapshot String   @map("member_name_snapshot")
+  memberOrder        Int      @default(0) @map("member_order")
+  role               String   @default("performer")
+  createdAt          DateTime @default(now()) @map("created_at")
 
-  event          Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  dj             DJ?                  @relation(fields: [djId], references: [id], onDelete: SetNull)
-  timetableSlots EventTimetableSlot[]
+  eventArtist EventArtist @relation(fields: [eventArtistId], references: [id], onDelete: Cascade)
+  dj          DJ?         @relation("EventArtistMemberDJ", fields: [djId], references: [id], onDelete: SetNull)
 
-  @@index([eventId])
-  @@index([djId])
-  @@map("event_lineup_artists")
+  @@unique([eventArtistId, memberOrder])
+  @@index([eventArtistId, memberOrder])
+  @@index([djId, eventArtistId])
+  @@map("event_artist_members")
 }
 
-model EventTimetableSlot {
-  id               String   @id @default(uuid())
-  eventId          String   @map("event_id")
-  lineupArtistId   String?  @map("lineup_artist_id")
-  djId             String?  @map("dj_id")
-  djIds            String[] @default([]) @map("dj_ids")
-  djNameSnapshot   String   @map("dj_name_snapshot")
-  stageName        String?  @map("stage_name")
-  festivalDayIndex Int?     @map("festival_day_index")
-  startTime        DateTime @map("start_time")
-  endTime          DateTime @map("end_time")
-  sortOrder        Int      @default(0) @map("sort_order")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+model EventStage {
+  id             String   @id @default(uuid())
+  eventId        String   @map("event_id")
+  name           String
+  normalizedName String   @map("normalized_name")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   event        Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  lineupArtist EventLineupArtist? @relation(fields: [lineupArtistId], references: [id], onDelete: SetNull)
-  dj           DJ?                @relation(fields: [djId], references: [id], onDelete: SetNull)
+  performances EventPerformance[]
 
-  @@index([eventId])
-  @@index([lineupArtistId])
-  @@index([djId])
-  @@index([startTime])
-  @@map("event_timetable_slots")
+  @@unique([eventId, normalizedName])
+  @@index([eventId, sortOrder])
+  @@map("event_stages")
+}
+
+model EventPerformance {
+  id                  String    @id @default(uuid())
+  eventId             String    @map("event_id")
+  eventArtistId       String    @map("event_artist_id")
+  stageId             String?   @map("stage_id")
+  displayNameSnapshot String    @map("display_name_snapshot")
+  festivalDayIndex    Int?      @map("festival_day_index")
+  startAt             DateTime? @map("start_at")
+  endAt               DateTime? @map("end_at")
+  sortOrder           Int       @default(0) @map("sort_order")
+  status              String    @default("scheduled")
+  sourceType          String    @default("migration") @map("source_type")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventArtist EventArtist @relation(fields: [eventArtistId], references: [id], onDelete: Cascade)
+  stage       EventStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+
+  @@index([eventId, startAt])
+  @@index([eventId, festivalDayIndex, startAt])
+  @@index([stageId, startAt])
+  @@index([eventArtistId, startAt])
+  @@map("event_performances")
 }
 
 model DJ {
@@ -713,15 +746,18 @@ model DJ {
   updatedAt    DateTime  @updatedAt @map("updated_at")
   lastSyncedAt DateTime? @map("last_synced_at")
 
-  checkins          Checkin[]
-  follows           Follow[]
-  sets              DJSet[]
-  lineupSlots       EventLineupSlot[]
-  lineupArtists     EventLineupArtist[]
-  timetableSlots    EventTimetableSlot[]
-  contributors      DJContributor[]
-  enrichmentResults DJEnrichmentResult[]
-  ratingUnits       RatingUnit[]         @relation("RatingUnitPrimaryDJ")
+  checkins           Checkin[]
+  sets               DJSet[]
+  canonicalArtists   EventArtist[]        @relation("EventArtistPrimaryDJ")
+  eventArtistMembers EventArtistMember[]  @relation("EventArtistMemberDJ")
+  contributors       DJContributor[]
+  enrichmentResults  DJEnrichmentResult[]
+  ratingUnits        RatingUnit[]         @relation("RatingUnitPrimaryDJ")
+  ratingUnitBindings RatingUnitDJBinding[]
+  setArtists         DJSetArtist[]
+  genreBindings      DJGenreBinding[]
+  postBindings       PostDJBinding[]
+  newsBindings       NewsDJBinding[]
   foundedLabels     Label[]              @relation("LabelFounderDJ")
 
   @@map("djs")
@@ -809,8 +845,27 @@ model Genre {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  djBindings DJGenreBinding[]
+
   @@index([parentId, sortOrder])
   @@map("genres")
+}
+
+model DJGenreBinding {
+  id          String   @id @default(uuid())
+  djId        String   @map("dj_id")
+  genreId     String   @map("genre_id")
+  bindingType String   @default("style") @map("binding_type")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  dj    DJ    @relation(fields: [djId], references: [id], onDelete: Cascade)
+  genre Genre @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@unique([djId, genreId])
+  @@index([djId, sortOrder])
+  @@index([genreId, createdAt])
+  @@map("dj_genre_bindings")
 }
 
 model Label {
@@ -899,6 +954,8 @@ model WikiFestival {
 
   contributors WikiFestivalContributor[]
   events       Event[]
+  postBindings PostFestivalBrandBinding[]
+  newsBindings NewsFestivalBrandBinding[]
 
   @@index([name])
   @@index([country])
@@ -1145,30 +1202,9 @@ model CheckinOutboxEvent {
   @@map("checkin_outbox_events")
 }
 
-model Follow {
-  id          String   @id @default(uuid())
-  followerId  String   @map("follower_id")
-  followingId String?  @map("following_id")
-  djId        String?  @map("dj_id")
-  type        String // "user" or "dj"
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  follower  User  @relation("UserFollows", fields: [followerId], references: [id], onDelete: Cascade)
-  following User? @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
-  dj        DJ?   @relation(fields: [djId], references: [id], onDelete: Cascade)
-
-  @@unique([followerId, followingId])
-  @@unique([followerId, djId])
-  @@index([followerId])
-  @@index([followingId])
-  @@index([djId])
-  @@map("follows")
-}
-
 model DJSet {
   id              String    @id @default(uuid())
   djId            String?   @map("dj_id")
-  coDjIds         String[]  @default([]) @map("co_dj_ids")
   customDjNames   String[]  @default([]) @map("custom_dj_names")
   uploadedById    String?   @map("uploaded_by_id")
   title           String
@@ -1199,11 +1235,30 @@ model DJSet {
   tracklists Tracklist[]
   comments   Comment[]
   posts      Post[]
+  artists    DJSetArtist[]
 
   @@index([djId])
   @@index([eventId])
   @@index([uploadedById])
   @@map("dj_sets")
+}
+
+model DJSetArtist {
+  id                 String   @id @default(uuid())
+  setId              String   @map("set_id")
+  djId               String?  @map("dj_id")
+  artistNameSnapshot String   @map("artist_name_snapshot")
+  artistOrder        Int      @default(0) @map("artist_order")
+  role               String   @default("primary")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  set DJSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  dj  DJ?   @relation(fields: [djId], references: [id], onDelete: SetNull)
+
+  @@unique([setId, artistOrder])
+  @@index([setId, artistOrder])
+  @@index([djId, createdAt])
+  @@map("dj_set_artists")
 }
 
 model Tracklist {
@@ -1336,7 +1391,6 @@ model RatingUnit {
   eventId     String   @map("event_id")
   createdById String   @map("created_by_id")
   djId        String?  @map("dj_id")
-  djIds       String[] @default([]) @map("dj_ids")
   name        String
   description String?
   imageUrl    String?  @map("image_url")
@@ -1347,13 +1401,30 @@ model RatingUnit {
   createdBy User            @relation("RatingUnitCreator", fields: [createdById], references: [id], onDelete: Cascade)
   dj        DJ?             @relation("RatingUnitPrimaryDJ", fields: [djId], references: [id], onDelete: SetNull)
   comments  RatingComment[]
+  djBindings RatingUnitDJBinding[]
 
   @@index([eventId])
   @@index([createdById])
   @@index([djId])
-  @@index([djIds], type: Gin)
   @@index([createdAt])
   @@map("rating_units")
+}
+
+model RatingUnitDJBinding {
+  id          String   @id @default(uuid())
+  unitId      String   @map("unit_id")
+  djId        String   @map("dj_id")
+  sortOrder   Int      @default(0) @map("sort_order")
+  bindingType String   @default("rated") @map("binding_type")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  unit RatingUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  dj   DJ         @relation(fields: [djId], references: [id], onDelete: Cascade)
+
+  @@unique([unitId, djId])
+  @@index([unitId, sortOrder])
+  @@index([djId, createdAt])
+  @@map("rating_unit_dj_bindings")
 }
 
 model RatingComment {
@@ -1392,9 +1463,6 @@ model Post {
   squadId            String?   @map("squad_id")
   eventId            String?   @map("event_id")
   setId              String?   @map("set_id")
-  boundDjIds         String[]  @default([]) @map("bound_dj_ids")
-  boundBrandIds      String[]  @default([]) @map("bound_brand_ids")
-  boundEventIds      String[]  @default([]) @map("bound_event_ids")
   displayPublishedAt DateTime? @map("display_published_at") @db.Timestamptz(3)
   likeCount          Int       @default(0) @map("like_count")
   repostCount        Int       @default(0) @map("repost_count")
@@ -1416,16 +1484,67 @@ model Post {
   hides      PostHide[]
   feedEvents FeedEvent[]
   comments   PostComment[]
+  djBindings PostDJBinding[]
+  eventBindings PostEventBinding[]
+  festivalBrandBindings PostFestivalBrandBinding[]
 
   @@index([userId])
   @@index([squadId])
   @@index([eventId, createdAt])
   @@index([createdAt])
   @@index([type])
-  @@index([boundDjIds], type: Gin)
-  @@index([boundBrandIds], type: Gin)
-  @@index([boundEventIds], type: Gin)
   @@map("posts")
+}
+
+model PostDJBinding {
+  id          String   @id @default(uuid())
+  postId      String   @map("post_id")
+  djId        String   @map("dj_id")
+  bindingType String   @default("related") @map("binding_type")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  dj   DJ   @relation(fields: [djId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, djId])
+  @@index([postId, sortOrder, createdAt])
+  @@index([djId, createdAt])
+  @@map("post_dj_bindings")
+}
+
+model PostEventBinding {
+  id          String   @id @default(uuid())
+  postId      String   @map("post_id")
+  eventId     String   @map("event_id")
+  bindingType String   @default("related") @map("binding_type")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  post  Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, eventId])
+  @@index([postId, sortOrder, createdAt])
+  @@index([eventId, createdAt])
+  @@map("post_event_bindings")
+}
+
+model PostFestivalBrandBinding {
+  id              String   @id @default(uuid())
+  postId          String   @map("post_id")
+  festivalBrandId String   @map("festival_brand_id")
+  bindingType     String   @default("related") @map("binding_type")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  post          Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  festivalBrand WikiFestival @relation(fields: [festivalBrandId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, festivalBrandId])
+  @@index([postId, sortOrder, createdAt])
+  @@index([festivalBrandId, createdAt])
+  @@map("post_festival_brand_bindings")
 }
 
 model NewsArticle {
@@ -1439,9 +1558,6 @@ model NewsArticle {
   link           String?  @db.Text
   coverImageUrl  String?  @map("cover_image_url") @db.Text
   visibility     String   @default("public")
-  boundDjIds     String[] @default([]) @map("bound_dj_ids")
-  boundBrandIds  String[] @default([]) @map("bound_brand_ids")
-  boundEventIds  String[] @default([]) @map("bound_event_ids")
   commentCount   Int      @default(0) @map("comment_count")
   publishedAt    DateTime @default(now()) @map("published_at") @db.Timestamptz(3)
   createdAt      DateTime @default(now()) @map("created_at")
@@ -1449,14 +1565,65 @@ model NewsArticle {
 
   author   User?         @relation("UserNewsArticles", fields: [authorId], references: [id], onDelete: SetNull)
   comments NewsComment[]
+  djBindings NewsDJBinding[]
+  eventBindings NewsEventBinding[]
+  festivalBrandBindings NewsFestivalBrandBinding[]
 
   @@index([authorId, publishedAt])
   @@index([visibility, publishedAt])
   @@index([publishedAt])
-  @@index([boundDjIds], type: Gin)
-  @@index([boundBrandIds], type: Gin)
-  @@index([boundEventIds], type: Gin)
   @@map("news_articles")
+}
+
+model NewsDJBinding {
+  id          String   @id @default(uuid())
+  articleId   String   @map("article_id")
+  djId        String   @map("dj_id")
+  bindingType String   @default("related") @map("binding_type")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  dj      DJ          @relation(fields: [djId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, djId])
+  @@index([articleId, sortOrder, createdAt])
+  @@index([djId, createdAt])
+  @@map("news_dj_bindings")
+}
+
+model NewsEventBinding {
+  id          String   @id @default(uuid())
+  articleId   String   @map("article_id")
+  eventId     String   @map("event_id")
+  bindingType String   @default("related") @map("binding_type")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  event   Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, eventId])
+  @@index([articleId, sortOrder, createdAt])
+  @@index([eventId, createdAt])
+  @@map("news_event_bindings")
+}
+
+model NewsFestivalBrandBinding {
+  id              String   @id @default(uuid())
+  articleId       String   @map("article_id")
+  festivalBrandId String   @map("festival_brand_id")
+  bindingType     String   @default("related") @map("binding_type")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  article       NewsArticle  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  festivalBrand WikiFestival @relation(fields: [festivalBrandId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, festivalBrandId])
+  @@index([articleId, sortOrder, createdAt])
+  @@index([festivalBrandId, createdAt])
+  @@map("news_festival_brand_bindings")
 }
 
 model NewsComment {

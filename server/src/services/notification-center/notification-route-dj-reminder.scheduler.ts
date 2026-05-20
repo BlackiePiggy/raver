@@ -111,12 +111,12 @@ export const runRouteDJReminderJob = async (): Promise<RouteDJReminderJobReport>
   });
   const slotIds = Array.from(new Set(watchedSlots.map((item) => item.slotId)));
   const slotRows = slotIds.length
-    ? await prisma.eventLineupSlot.findMany({
+    ? await prisma.eventPerformance.findMany({
         where: {
           id: {
             in: slotIds,
           },
-          startTime: {
+          startAt: {
             gte: now,
             lte: lookAhead,
           },
@@ -124,19 +124,27 @@ export const runRouteDJReminderJob = async (): Promise<RouteDJReminderJobReport>
         select: {
           id: true,
           eventId: true,
-          djName: true,
-          stageName: true,
-          startTime: true,
+          displayNameSnapshot: true,
+          startAt: true,
+          stage: {
+            select: {
+              name: true,
+            },
+          },
           event: {
             select: {
               id: true,
               name: true,
             },
           },
-          dj: {
+          eventArtist: {
             select: {
-              id: true,
-              name: true,
+              primaryDj: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             },
           },
         },
@@ -165,7 +173,12 @@ export const runRouteDJReminderJob = async (): Promise<RouteDJReminderJobReport>
       continue;
     }
 
-    const minutesUntilStart = Math.floor((slot.startTime.getTime() - now.getTime()) / (60 * 1000));
+    if (!slot.startAt) {
+      skippedByMissingSlot += 1;
+      continue;
+    }
+
+    const minutesUntilStart = Math.floor((slot.startAt.getTime() - now.getTime()) / (60 * 1000));
     const lowerBound = Math.max(0, watch.reminderMinutesBefore - SCHEDULER_CONFIG.triggerWindowMinutes);
     if (minutesUntilStart > watch.reminderMinutesBefore || minutesUntilStart < lowerBound) {
       skippedByTimeWindow += 1;
@@ -175,8 +188,8 @@ export const runRouteDJReminderJob = async (): Promise<RouteDJReminderJobReport>
     attemptedPublishes += 1;
     const message = buildReminderMessage({
       eventName: slot.event.name,
-      djName: slot.dj?.name || slot.djName,
-      stageName: slot.stageName,
+      djName: slot.eventArtist?.primaryDj?.name || slot.displayNameSnapshot,
+      stageName: slot.stage?.name ?? null,
       minutesUntilStart,
     });
     const dedupeKey = `route_dj_reminder:${watch.userId}:${slot.id}:${watch.reminderMinutesBefore}`;
@@ -195,10 +208,10 @@ export const runRouteDJReminderJob = async (): Promise<RouteDJReminderJobReport>
             eventId: slot.event.id,
             eventName: slot.event.name,
             slotId: slot.id,
-            slotStartTime: slot.startTime.toISOString(),
-            stageName: slot.stageName,
-            djId: slot.dj?.id || null,
-            djName: slot.dj?.name || slot.djName,
+            slotStartTime: slot.startAt.toISOString(),
+            stageName: slot.stage?.name ?? null,
+            djId: slot.eventArtist?.primaryDj?.id || null,
+            djName: slot.eventArtist?.primaryDj?.name || slot.displayNameSnapshot,
             minutesUntilStart,
             reminderMinutesBefore: watch.reminderMinutesBefore,
             source: 'route_dj_reminder_scheduler',
