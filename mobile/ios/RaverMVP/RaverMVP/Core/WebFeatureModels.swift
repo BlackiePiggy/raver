@@ -28,6 +28,11 @@ struct FestivalEventFeedResponse: Codable {
     var ended: FestivalEventFeedPage
 }
 
+struct EventsBootstrapResponse: Codable {
+    var ongoing: EventListPage
+    var upcoming: EventListPage
+}
+
 struct EventFavoriteStatus: Codable, Hashable {
     var id: String?
     var eventId: String

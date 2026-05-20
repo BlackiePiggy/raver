@@ -467,6 +467,26 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse {
+        let upcoming = try await fetchEvents(
+            page: 1,
+            limit: limit,
+            search: search,
+            eventType: eventType,
+            status: "upcoming",
+            wikiFestivalId: nil
+        )
+        let ongoing = try await fetchEvents(
+            page: 1,
+            limit: limit,
+            search: search,
+            eventType: eventType,
+            status: "ongoing",
+            wikiFestivalId: nil
+        )
+        return EventsBootstrapResponse(ongoing: ongoing, upcoming: upcoming)
+    }
+
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
         let normalizedStatuses = (statuses ?? ["ongoing", "upcoming", "ended"])
             .map { value -> String in

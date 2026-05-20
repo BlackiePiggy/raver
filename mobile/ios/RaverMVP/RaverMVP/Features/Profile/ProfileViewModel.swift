@@ -365,10 +365,16 @@ final class ProfileViewModel: ObservableObject {
 
     func load() async {
         if isLoading { return }
+        let restoredFromSnapshot = profile == nil && restoreOfflineSnapshot()
         isLoading = true
         let hadContent = profile != nil
         if hadContent {
             isRefreshing = true
+            phase = .success
+            if restoredFromSnapshot {
+                bannerMessage = nil
+                self.error = nil
+            }
         } else {
             phase = .initialLoading
         }

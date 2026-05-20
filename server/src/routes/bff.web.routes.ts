@@ -5227,6 +5227,136 @@ router.get('/events/recommendations', optionalAuth, async (req: Request, res: Re
   }
 });
 
+router.get('/events/bootstrap', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as BFFAuthRequest).user?.userId;
+    const limit = normalizeLimit(req.query.limit, 5, 20);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
+    const now = new Date();
+
+    const baseWhere: Prisma.EventWhereInput = {};
+    if (search) {
+      const aliasMatchedBrands = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "wiki_festivals"
+        WHERE "is_active" = true
+          AND cardinality("aliases") > 0
+          AND EXISTS (
+            SELECT 1
+            FROM unnest("aliases") AS alias
+            WHERE alias ILIKE ${`%${search}%`}
+          )
+        LIMIT 100
+      `);
+      const aliasMatchedBrandIDs = aliasMatchedBrands.map((brand) => brand.id);
+      baseWhere.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { slug: { contains: search, mode: 'insensitive' } },
+        { city: { contains: search, mode: 'insensitive' } },
+        { country: { contains: search, mode: 'insensitive' } },
+        { organizerName: { contains: search, mode: 'insensitive' } },
+        { wikiFestivalId: { contains: search, mode: 'insensitive' } },
+        {
+          wikiFestival: {
+            is: {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { abbreviation: { contains: search, mode: 'insensitive' } },
+                { aliases: { has: search } },
+              ],
+            },
+          },
+        },
+        ...(aliasMatchedBrandIDs.length > 0 ? [{ wikiFestivalId: { in: aliasMatchedBrandIDs } }] : []),
+        { nameI18n: { path: ['zh'], string_contains: search } },
+        { nameI18n: { path: ['en'], string_contains: search } },
+        { descriptionI18n: { path: ['zh'], string_contains: search } },
+        { descriptionI18n: { path: ['en'], string_contains: search } },
+        { manualLocation: { path: ['detailAddressI18n', 'zh'], string_contains: search } },
+        { manualLocation: { path: ['detailAddressI18n', 'en'], string_contains: search } },
+        { manualLocation: { path: ['formattedAddressI18n', 'zh'], string_contains: search } },
+        { manualLocation: { path: ['formattedAddressI18n', 'en'], string_contains: search } },
+        { cityI18n: { path: ['zh'], string_contains: search } },
+        { cityI18n: { path: ['en'], string_contains: search } },
+        { countryI18n: { path: ['zh'], string_contains: search } },
+        { countryI18n: { path: ['en'], string_contains: search } },
+        { countryI18n: { path: ['enFull'], string_contains: search } },
+      ];
+    }
+    if (eventType) {
+      const eventTypeValues = resolveEventTypeFilterValues(eventType);
+      if (eventTypeValues.length <= 1) {
+        baseWhere.eventType = eventTypeValues[0] ?? eventType;
+      } else {
+        baseWhere.eventType = { in: eventTypeValues };
+      }
+    }
+
+    const ongoingWhere: Prisma.EventWhereInput = {
+      ...baseWhere,
+      startDate: { lte: now },
+      endDate: { gte: now },
+      status: { not: 'cancelled' },
+    };
+    const upcomingWhere: Prisma.EventWhereInput = {
+      ...baseWhere,
+      startDate: { gt: now },
+      status: { not: 'cancelled' },
+    };
+
+    const [ongoingRows, ongoingTotal, upcomingRows, upcomingTotal] = await Promise.all([
+      prisma.event.findMany({
+        where: ongoingWhere,
+        take: limit,
+        orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
+        select: selectEventListCardForWeb,
+      }),
+      prisma.event.count({ where: ongoingWhere }),
+      prisma.event.findMany({
+        where: upcomingWhere,
+        take: limit,
+        orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
+        select: selectEventListCardForWeb,
+      }),
+      prisma.event.count({ where: upcomingWhere }),
+    ]);
+
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, [
+      ...ongoingRows.map((row) => row.id),
+      ...upcomingRows.map((row) => row.id),
+    ]);
+    const complianceUser = await resolveRegionalComplianceUser(userId);
+    const mapRows = (rows: typeof ongoingRows) =>
+      attachEventFavoriteState(rows, favoriteIdsByEventId).map((row) => mapEventListCard(row, complianceUser));
+
+    ok(res, {
+      ongoing: {
+        items: mapRows(ongoingRows),
+        pagination: {
+          page: 1,
+          limit,
+          total: ongoingTotal,
+          totalPages: Math.ceil(ongoingTotal / limit) || 1,
+        },
+      },
+      upcoming: {
+        items: mapRows(upcomingRows),
+        pagination: {
+          page: 1,
+          limit,
+          total: upcomingTotal,
+          totalPages: Math.ceil(upcomingTotal / limit) || 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('BFF web events bootstrap error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as BFFAuthRequest).user?.userId;

@@ -30,6 +30,33 @@ final class LiveWebFeatureService: WebFeatureService {
         return EventListPage(items: response.data.items.map(localizedEvent), pagination: response.pagination)
     }
 
+    func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse {
+        var queryItems = [
+            URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")
+        ]
+        if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "search", value: search))
+        }
+        if let eventType, !eventType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "eventType", value: eventType))
+        }
+        let response: BFFEnvelope<EventsBootstrapResponse> = try await request(
+            path: "/v1/events/bootstrap",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return EventsBootstrapResponse(
+            ongoing: EventListPage(
+                items: response.data.ongoing.items.map(localizedEvent),
+                pagination: response.data.ongoing.pagination
+            ),
+            upcoming: EventListPage(
+                items: response.data.upcoming.items.map(localizedEvent),
+                pagination: response.data.upcoming.pagination
+            )
+        )
+    }
+
     func fetchFestivalEventFeed(
         wikiFestivalId: String,
         upcomingPage: Int,

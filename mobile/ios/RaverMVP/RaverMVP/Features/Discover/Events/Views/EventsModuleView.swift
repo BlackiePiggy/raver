@@ -1,6 +1,19 @@
 import SwiftUI
 import CoreLocation
 
+private struct EventsSkeletonBlock: View {
+    var width: CGFloat? = nil
+    var height: CGFloat
+    var cornerRadius: CGFloat = 14
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(RaverTheme.cardBorder.opacity(0.7))
+            .frame(width: width, height: height)
+            .redacted(reason: .placeholder)
+    }
+}
+
 struct DiscoverEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
@@ -34,20 +47,6 @@ struct EventsModuleView: View {
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
-
-    private enum EventScope: String, CaseIterable, Identifiable {
-        case all
-        case mine
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .all: return LT("全部活动", "All Events", "すべてのイベント")
-            case .mine: return LT("关注活动", "Following", "フォロー中")
-            }
-        }
-    }
 
     enum CountryAreaBucket: String, CaseIterable, Identifiable {
         case domestic
@@ -83,7 +82,6 @@ struct EventsModuleView: View {
         }
     }
 
-    @State private var selectedScope: EventScope = .all
     @State private var selectedEventType = ""
     @State private var showCalendar = false
     @State private var showCountryFilter = false
@@ -95,7 +93,6 @@ struct EventsModuleView: View {
     @State private var isSelectorDragging = false
     @State private var showEventsListTabsGuide = false
     @State private var eventsListTabsGuideHandOffset: CGFloat = 0
-    @State private var hasTriggeredInitialLoad = false
 
     private let isActive: Bool
     init(
@@ -114,7 +111,7 @@ struct EventsModuleView: View {
 
             Group {
                 if isShowingFullScreenLoading {
-                    loadingStateView
+                    eventsSkeletonView
                 } else if visibleEvents.isEmpty {
                     emptyStateView
                 } else {
@@ -145,7 +142,7 @@ struct EventsModuleView: View {
         .sheet(isPresented: $showCalendar) {
             EventCalendarSheet(
                 events: calendarSourceEvents,
-                markedEventIDs: Set(viewModel.markedCheckinIDsByEventID.keys),
+                markedEventIDs: [],
                 selectedDate: $calendarSelectedDate,
                 selectedFilters: $calendarFilters,
                 onEventSelected: { event in
@@ -166,23 +163,20 @@ struct EventsModuleView: View {
             )
             .presentationDetents([.medium, .large])
         }
-        .task(id: appState.session != nil) {
+        .task(id: allQuery) {
             guard isActive else { return }
-            await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
-        }
-        .task(id: allQueryTaskKey) {
-            guard isActive else { return }
-            guard selectedScope == .all else { return }
+            viewModel.hydrateAllFromCacheIfPossible(query: allQuery)
             await viewModel.reloadAll(query: allQuery)
             presentEventsListTabsGuideIfNeeded()
         }
-        .task {
-            await triggerInitialLoadIfNeeded()
-        }
-        .onChange(of: isActive) { _, _ in
-            Task { await triggerInitialLoadIfNeeded() }
+        .onChange(of: isActive) { _, newValue in
+            guard newValue else { return }
+            if !selectedEventType.isEmpty {
+                selectedEventType = ""
+            }
         }
         .onAppear {
+            viewModel.hydrateAllFromCacheIfPossible(query: allQuery)
             presentEventsListTabsGuideIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
@@ -201,31 +195,12 @@ struct EventsModuleView: View {
         }
     }
 
-    @MainActor
-    private func triggerInitialLoadIfNeeded() async {
-        guard isActive else { return }
-        guard !hasTriggeredInitialLoad else { return }
-        hasTriggeredInitialLoad = true
-        if selectedScope == .all {
-            await viewModel.reloadAll(query: allQuery)
-            presentEventsListTabsGuideIfNeeded()
-        }
-    }
-
     private var allQuery: EventsModuleViewModel.AllQuery {
         EventsModuleViewModel.AllQuery(search: "", eventTypeKey: selectedEventType)
     }
 
-    private var allQueryTaskKey: EventsModuleViewModel.AllQuery? {
-        selectedScope == .all ? allQuery : nil
-    }
-
-    private var rawSourceEvents: [WebEvent] {
-        selectedScope == .all ? viewModel.allEvents : viewModel.markedEvents
-    }
-
     private var sourceEvents: [WebEvent] {
-        rawSourceEvents
+        viewModel.allEvents
             .filter(eventMatchesSelectedType)
     }
 
@@ -238,7 +213,7 @@ struct EventsModuleView: View {
     }
 
     private var isLoadingCurrentScope: Bool {
-        selectedScope == .all ? viewModel.isLoadingAll : viewModel.isLoadingMarked
+        viewModel.isLoadingAll
     }
 
     private var isShowingFullScreenLoading: Bool {
@@ -250,7 +225,7 @@ struct EventsModuleView: View {
     }
 
     private var eventTypeTabs: [String] {
-        let dynamic = Set((viewModel.allEvents + viewModel.markedEvents).compactMap { event in
+        let dynamic = Set(viewModel.allEvents.compactMap { event in
             let key = EventTypeOption.key(for: event.eventType)
             return key.isEmpty ? nil : key
         })
@@ -472,15 +447,38 @@ struct EventsModuleView: View {
     private var loadingStateView: some View {
         VStack(spacing: 12) {
             ProgressView()
-            Text(
-                selectedScope == .all
-                    ? LT("正在加载活动", "Loading events", "イベントを読み込み中")
-                    : LT("正在加载关注活动", "Loading followed events", "フォロー中のイベントを読み込み中")
-            )
+            Text(LT("正在加载活动", "Loading events", "イベントを読み込み中"))
             .font(.subheadline)
             .foregroundStyle(RaverTheme.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var eventsSkeletonView: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                ForEach(0..<4, id: \.self) { _ in
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            EventsSkeletonBlock(height: 190, cornerRadius: 18)
+                            EventsSkeletonBlock(width: 180, height: 20, cornerRadius: 10)
+                            EventsSkeletonBlock(width: 140, height: 14, cornerRadius: 7)
+                            EventsSkeletonBlock(height: 14, cornerRadius: 7)
+                            EventsSkeletonBlock(height: 14, cornerRadius: 7)
+                            HStack(spacing: 10) {
+                                EventsSkeletonBlock(width: 92, height: 28, cornerRadius: 14)
+                                EventsSkeletonBlock(width: 110, height: 28, cornerRadius: 14)
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .raverTabBarBottomPadding(24)
+        }
+        .scrollIndicators(.hidden)
     }
 
     private var emptyStateView: some View {
@@ -503,38 +501,27 @@ struct EventsModuleView: View {
     }
 
     private var emptyStateTitle: String {
-        if selectedScope == .mine && appState.session == nil {
-            return LT("登录后查看关注活动", "Sign in to view followed events", "ログインしてフォロー中のイベントを見る")
-        }
-        if selectedScope == .mine {
-            return LT("暂无关注活动", "No followed events yet", "フォロー中のイベントはまだありません")
-        }
         return LT("没有匹配的活动", "No matching events", "一致するイベントがありません")
     }
 
     private var emptyStateMessage: String {
-        if selectedScope == .mine && appState.session == nil {
-            return LT("你标记过的活动会集中显示在这里。", "Events you mark will appear here.", "マークしたイベントはここにまとめて表示されます。")
-        }
         if isCountryFilterActive || !selectedEventType.isEmpty {
             return LT("试试清空筛选条件。", "Try clearing filters.", "絞り込み条件をクリアしてみてください。")
-        }
-        if selectedScope == .mine {
-            return LT("在活动列表里点亮星标后，这里就会出现内容。", "Mark events with the star button and they will show up here.", "イベント一覧で星を付けると、ここに表示されます。")
         }
         return LT("当前没有可展示的活动。", "There are no events to show right now.", "現在表示できるイベントはありません。")
     }
 
     private var emptyStateIcon: String {
-        if selectedScope == .mine && appState.session == nil {
-            return "person.crop.circle.badge.exclamationmark"
-        }
-        return selectedScope == .mine ? "star.circle" : "calendar.badge.plus"
+        return "calendar.badge.plus"
     }
 
     private var eventsListView: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
+                if viewModel.isShowingCachedAll {
+                    cachedBanner
+                }
+
                 if isLoadingCurrentScope {
                     HStack {
                         Spacer()
@@ -548,7 +535,7 @@ struct EventsModuleView: View {
                     eventListRow(event)
                 }
 
-                if selectedScope == .all && viewModel.canLoadMoreAll {
+                if viewModel.canLoadMoreAll {
                     HStack {
                         Spacer()
                         ProgressView()
@@ -567,6 +554,24 @@ struct EventsModuleView: View {
         .refreshable {
             await refreshCurrentScope()
         }
+    }
+
+    private var cachedBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.caption.weight(.semibold))
+            Text(LT("已先显示上次缓存内容，正在静默刷新", "Showing cached events first and refreshing in background", "前回キャッシュを先に表示し、バックグラウンドで更新しています"))
+                .font(.caption)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(RaverTheme.secondaryText)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.card)
+        )
     }
 
     private func eventListRow(_ event: WebEvent) -> some View {
@@ -646,16 +651,12 @@ struct EventsModuleView: View {
 
     @MainActor
     private func refreshCurrentScope() async {
-        if selectedScope == .all {
-            await viewModel.reloadAll(query: allQuery, force: true)
-        }
-        await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
+        await viewModel.reloadAll(query: allQuery, force: true)
     }
 
     @MainActor
     private func refreshAfterCreate() async {
         await viewModel.reloadAll(query: allQuery, force: true)
-        await viewModel.reloadMarkedState(isLoggedIn: appState.session != nil, force: true)
     }
 
     private func clearCountryFilters() {

@@ -66,7 +66,7 @@ private enum SquadOfflineCoordinateTransform {
 }
 
 @MainActor
-final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CLLocationManagerDelegate {
+final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var lastLocation: CLLocation?
     @Published private(set) var lastUploadAt: Date?
@@ -138,39 +138,6 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
         }
         let location = await requestFreshLocation(allowsCachedLocation: false)
         return await uploadLocation(location, repository: repository, squadID: squadID, activityID: activityID)
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        authorizationStatus = manager.authorizationStatus
-        if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
-            manager.startUpdatingLocation()
-        }
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let location = bestLocation(from: locations + [lastLocation].compactMap { $0 }) {
-            lastLocation = location
-        }
-        let requestScopedLocations = locations.filter { location in
-            guard let pendingRequestStartedAt else { return true }
-            return location.timestamp >= pendingRequestStartedAt.addingTimeInterval(-5)
-        }
-        if let location = bestLocation(from: requestScopedLocations) {
-            pendingBestLocation = bestLocation(from: [pendingBestLocation, location].compactMap { $0 })
-            guard isFreshEnough(location), isPreciseEnough(location) else { return }
-            pendingLocationRequest?.resume(returning: location)
-            pendingLocationRequest = nil
-            pendingBestLocation = nil
-            pendingRequestStartedAt = nil
-        }
-    }
-
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        errorMessage = error.localizedDescription
-        pendingLocationRequest?.resume(returning: nil)
-        pendingLocationRequest = nil
-        pendingBestLocation = nil
-        pendingRequestStartedAt = nil
     }
 
     @discardableResult
@@ -281,5 +248,49 @@ final class SquadOfflineActivityLocationUploader: NSObject, ObservableObject, CL
 
     private var hasLocationAuthorization: Bool {
         authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways
+    }
+}
+
+extension SquadOfflineActivityLocationUploader: CLLocationManagerDelegate {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.authorizationStatus = manager.authorizationStatus
+            if self.authorizationStatus == .authorizedWhenInUse || self.authorizationStatus == .authorizedAlways {
+                manager.startUpdatingLocation()
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let location = self.bestLocation(from: locations + [self.lastLocation].compactMap { $0 }) {
+                self.lastLocation = location
+            }
+            let requestScopedLocations = locations.filter { location in
+                guard let pendingRequestStartedAt = self.pendingRequestStartedAt else { return true }
+                return location.timestamp >= pendingRequestStartedAt.addingTimeInterval(-5)
+            }
+            if let location = self.bestLocation(from: requestScopedLocations) {
+                self.pendingBestLocation = self.bestLocation(from: [self.pendingBestLocation, location].compactMap { $0 })
+                guard self.isFreshEnough(location), self.isPreciseEnough(location) else { return }
+                self.pendingLocationRequest?.resume(returning: location)
+                self.pendingLocationRequest = nil
+                self.pendingBestLocation = nil
+                self.pendingRequestStartedAt = nil
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.errorMessage = error.localizedDescription
+            self.pendingLocationRequest?.resume(returning: nil)
+            self.pendingLocationRequest = nil
+            self.pendingBestLocation = nil
+            self.pendingRequestStartedAt = nil
+        }
     }
 }

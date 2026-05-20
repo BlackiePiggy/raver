@@ -21,6 +21,7 @@ struct DiscoverEventsPageRequest: Equatable {
 
 protocol EventListRepository {
     func fetchEvents(request: DiscoverEventsPageRequest) async throws -> EventListPage
+    func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse
     func fetchFestivalEventFeed(
         wikiFestivalId: String,
         upcomingPage: Int,
@@ -129,6 +130,10 @@ struct EventListRepositoryAdapter: EventListRepository {
             status: request.status,
             wikiFestivalId: request.wikiFestivalId
         )
+    }
+
+    func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse {
+        try await service.fetchEventsBootstrap(limit: limit, search: search, eventType: eventType)
     }
 
     func fetchFestivalEventFeed(
@@ -456,6 +461,18 @@ struct FetchDiscoverEventsPageUseCase {
     }
 }
 
+struct FetchDiscoverEventsBootstrapUseCase {
+    private let repository: EventListRepository
+
+    init(repository: EventListRepository) {
+        self.repository = repository
+    }
+
+    func execute(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse {
+        try await repository.fetchEventsBootstrap(limit: limit, search: search, eventType: eventType)
+    }
+}
+
 struct FetchRecommendedDiscoverEventsUseCase {
     private let repository: EventRecommendationRepository
 
@@ -506,6 +523,17 @@ struct ToggleMarkedEventUseCase {
     }
 }
 
+private struct EventsModuleOfflineSnapshot: Codable {
+    var querySearch: String
+    var queryEventTypeKey: String
+    var allEvents: [WebEvent]
+    var nextAllPage: Int
+    var totalAllPages: Int
+    var totalOngoingPages: Int
+    var totalUpcomingPages: Int
+    var cachedAt: Date
+}
+
 @MainActor
 final class EventsModuleViewModel: ObservableObject {
     struct AllQuery: Equatable {
@@ -523,18 +551,16 @@ final class EventsModuleViewModel: ObservableObject {
     }
 
     @Published private(set) var allEvents: [WebEvent] = []
-    @Published private(set) var markedEvents: [WebEvent] = []
-    @Published private(set) var markedCheckinIDsByEventID: [String: String] = [:]
     @Published private(set) var isLoadingAll = false
-    @Published private(set) var isLoadingMarked = false
     @Published private(set) var isLoadingMoreAll = false
+    @Published private(set) var isShowingCachedAll = false
     @Published var errorMessage: String?
 
-    private let eventReadRepository: EventReadRepository
+    private let fetchEventsBootstrapUseCase: FetchDiscoverEventsBootstrapUseCase
     private let fetchEventsPageUseCase: FetchDiscoverEventsPageUseCase
-    private let fetchMarkedEventCheckinsUseCase: FetchMarkedEventCheckinsUseCase
-    private let toggleMarkedEventUseCase: ToggleMarkedEventUseCase
     private let pageSize = 5
+    private let offlineSnapshotStorageKey = "raver.discover.events.offlineSnapshots.v2"
+    private let bootstrapRefreshInterval: TimeInterval = 30
 
     private var currentAllQuery = AllQuery(search: "", eventTypeKey: "")
     private var nextAllPage = 1
@@ -542,44 +568,54 @@ final class EventsModuleViewModel: ObservableObject {
     private var totalOngoingPages = 1
     private var totalUpcomingPages = 1
     private var allReloadToken = UUID()
-    private var markedReloadToken = UUID()
-    private var hasLoadedMarkedState = false
+    private var lastSuccessfulAllLoadAt: Date?
 
     init(
         listRepository: EventListRepository,
         eventReadRepository: EventReadRepository,
         checkinRepository: EventCheckinRepository
     ) {
-        self.eventReadRepository = eventReadRepository
+        self.fetchEventsBootstrapUseCase = FetchDiscoverEventsBootstrapUseCase(repository: listRepository)
+        _ = eventReadRepository
+        _ = checkinRepository
         self.fetchEventsPageUseCase = FetchDiscoverEventsPageUseCase(repository: listRepository)
-        self.fetchMarkedEventCheckinsUseCase = FetchMarkedEventCheckinsUseCase(repository: checkinRepository)
-        self.toggleMarkedEventUseCase = ToggleMarkedEventUseCase(repository: checkinRepository)
     }
 
     var canLoadMoreAll: Bool {
         nextAllPage <= totalAllPages
     }
 
+    func hydrateAllFromCacheIfPossible(query: AllQuery) {
+        guard allEvents.isEmpty else { return }
+        guard let snapshot = restoreOfflineSnapshot(query: query) else { return }
+        applyOfflineSnapshot(snapshot, query: query)
+    }
+
     func reloadAll(query: AllQuery, force: Bool = false) async {
-        guard force || query != currentAllQuery || allEvents.isEmpty else { return }
+        guard force || query != currentAllQuery || allEvents.isEmpty || shouldRefreshBootstrap(for: query) else { return }
 
         let token = UUID()
         allReloadToken = token
         currentAllQuery = query
-        isLoadingAll = true
+        isLoadingAll = allEvents.isEmpty
         errorMessage = nil
 
         do {
-            async let ongoingResult = try fetchActiveEventsPage(query: query, page: 1, status: "ongoing")
-            async let upcomingResult = try fetchActiveEventsPage(query: query, page: 1, status: "upcoming")
-            let (ongoingPage, upcomingPage) = try await (ongoingResult, upcomingResult)
+            let bootstrap = try await fetchEventsBootstrapUseCase.execute(
+                limit: pageSize,
+                search: query.searchParam,
+                eventType: query.eventTypeParam
+            )
 
             guard allReloadToken == token else { return }
-            allEvents = mergeAndSortActiveEvents(ongoing: ongoingPage.items, upcoming: upcomingPage.items)
-            totalOngoingPages = ongoingPage.pagination?.totalPages ?? 1
-            totalUpcomingPages = upcomingPage.pagination?.totalPages ?? 1
+            allEvents = mergeAndSortActiveEvents(ongoing: bootstrap.ongoing.items, upcoming: bootstrap.upcoming.items)
+            totalOngoingPages = bootstrap.ongoing.pagination?.totalPages ?? 1
+            totalUpcomingPages = bootstrap.upcoming.pagination?.totalPages ?? 1
             totalAllPages = max(totalOngoingPages, totalUpcomingPages)
             nextAllPage = 2
+            lastSuccessfulAllLoadAt = Date()
+            isShowingCachedAll = false
+            persistOfflineSnapshot(query: query)
         } catch {
             guard allReloadToken == token else { return }
             errorMessage = error.userFacingMessage
@@ -629,6 +665,7 @@ final class EventsModuleViewModel: ObservableObject {
             }
             totalAllPages = max(totalOngoingPages, totalUpcomingPages)
             nextAllPage = pageToLoad + 1
+            persistOfflineSnapshot(query: query)
         } catch {
             if query == currentAllQuery {
                 errorMessage = error.userFacingMessage
@@ -637,100 +674,6 @@ final class EventsModuleViewModel: ObservableObject {
 
         if query == currentAllQuery {
             isLoadingMoreAll = false
-        }
-    }
-
-    func reloadMarkedState(isLoggedIn: Bool, force: Bool = false) async {
-        guard isLoggedIn else {
-            markedReloadToken = UUID()
-            hasLoadedMarkedState = false
-            markedCheckinIDsByEventID = [:]
-            markedEvents = []
-            isLoadingMarked = false
-            return
-        }
-
-        guard force || !hasLoadedMarkedState else { return }
-
-        let token = UUID()
-        markedReloadToken = token
-        isLoadingMarked = true
-        errorMessage = nil
-
-        do {
-            let markedMap = try await fetchMarkedEventCheckinsUseCase.execute()
-            guard markedReloadToken == token else { return }
-
-            markedCheckinIDsByEventID = markedMap
-            let loadedEvents = await fetchEventsByIDs(Array(markedMap.keys))
-            guard markedReloadToken == token else { return }
-
-            markedEvents = loadedEvents.sorted(by: { $0.startDate < $1.startDate })
-            hasLoadedMarkedState = true
-        } catch {
-            guard markedReloadToken == token else { return }
-            errorMessage = error.userFacingMessage
-        }
-
-        if markedReloadToken == token {
-            isLoadingMarked = false
-        }
-    }
-
-    func toggleMarked(event: WebEvent, isLoggedIn: Bool) async {
-        guard isLoggedIn else {
-            errorMessage = LT("请先登录再标记活动", "Please log in before marking events.", "イベントをマークするにはログインしてください。")
-            return
-        }
-
-        markedReloadToken = UUID()
-        isLoadingMarked = false
-
-        do {
-            let wasMarked = markedCheckinIDsByEventID[event.id] != nil
-            markedCheckinIDsByEventID = try await toggleMarkedEventUseCase.execute(
-                event: event,
-                markedCheckinIDsByEventID: markedCheckinIDsByEventID
-            )
-
-            if wasMarked {
-                markedEvents.removeAll { $0.id == event.id }
-            } else {
-                insertMarkedEvent(event)
-            }
-            hasLoadedMarkedState = true
-        } catch {
-            errorMessage = error.userFacingMessage
-        }
-    }
-
-    private func insertMarkedEvent(_ event: WebEvent) {
-        if let index = markedEvents.firstIndex(where: { $0.id == event.id }) {
-            markedEvents[index] = event
-        } else {
-            markedEvents.append(event)
-        }
-        markedEvents.sort(by: { $0.startDate < $1.startDate })
-    }
-
-    private func fetchEventsByIDs(_ ids: [String]) async -> [WebEvent] {
-        guard !ids.isEmpty else { return [] }
-
-        let repository = eventReadRepository
-        return await withTaskGroup(of: WebEvent?.self, returning: [WebEvent].self) { group in
-            for id in ids.sorted() {
-                group.addTask {
-                    try? await repository.fetchEvent(id: id)
-                }
-            }
-
-            var result: [WebEvent] = []
-            for await item in group {
-                if let item {
-                    result.append(item)
-                }
-            }
-            return result
         }
     }
 
@@ -767,6 +710,66 @@ final class EventsModuleViewModel: ObservableObject {
 
     private func mergeAndSortActiveEvents(ongoing: [WebEvent], upcoming: [WebEvent]) -> [WebEvent] {
         mergeUnique(existing: ongoing, with: upcoming)
+    }
+
+    private func shouldRefreshBootstrap(for query: AllQuery) -> Bool {
+        guard query == currentAllQuery else { return true }
+        guard let lastSuccessfulAllLoadAt else { return true }
+        return Date().timeIntervalSince(lastSuccessfulAllLoadAt) >= bootstrapRefreshInterval
+    }
+
+    private func persistOfflineSnapshot(query: AllQuery) {
+        let snapshot = EventsModuleOfflineSnapshot(
+            querySearch: query.search,
+            queryEventTypeKey: query.eventTypeKey,
+            allEvents: allEvents,
+            nextAllPage: nextAllPage,
+            totalAllPages: totalAllPages,
+            totalOngoingPages: totalOngoingPages,
+            totalUpcomingPages: totalUpcomingPages,
+            cachedAt: Date()
+        )
+
+        do {
+            var snapshots = loadOfflineSnapshots()
+            snapshots.removeAll {
+                $0.querySearch == query.search && $0.queryEventTypeKey == query.eventTypeKey
+            }
+            snapshots.append(snapshot)
+            snapshots.sort { $0.cachedAt > $1.cachedAt }
+            if snapshots.count > 12 {
+                snapshots = Array(snapshots.prefix(12))
+            }
+            let data = try JSONEncoder.raver.encode(snapshots)
+            UserDefaults.standard.set(data, forKey: offlineSnapshotStorageKey)
+        } catch {
+            assertionFailure("Failed to persist discover events offline snapshot: \(error)")
+        }
+    }
+
+    private func restoreOfflineSnapshot(query: AllQuery) -> EventsModuleOfflineSnapshot? {
+        loadOfflineSnapshots().first {
+            $0.querySearch == query.search && $0.queryEventTypeKey == query.eventTypeKey
+        }
+    }
+
+    private func loadOfflineSnapshots() -> [EventsModuleOfflineSnapshot] {
+        guard let data = UserDefaults.standard.data(forKey: offlineSnapshotStorageKey),
+              let snapshots = try? JSONDecoder.raver.decode([EventsModuleOfflineSnapshot].self, from: data) else {
+            return []
+        }
+        return snapshots
+    }
+
+    private func applyOfflineSnapshot(_ snapshot: EventsModuleOfflineSnapshot, query: AllQuery) {
+        currentAllQuery = query
+        allEvents = snapshot.allEvents
+        nextAllPage = snapshot.nextAllPage
+        totalAllPages = snapshot.totalAllPages
+        totalOngoingPages = snapshot.totalOngoingPages
+        totalUpcomingPages = snapshot.totalUpcomingPages
+        lastSuccessfulAllLoadAt = snapshot.cachedAt
+        isShowingCachedAll = true
     }
 
     private func sortEventByActiveTimeline(_ lhs: WebEvent, _ rhs: WebEvent) -> Bool {
