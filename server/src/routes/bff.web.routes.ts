@@ -11862,7 +11862,7 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
       }),
       prisma.wikiFestival.count({ where }),
       viewerId
-        ? notificationCenterService.getFollowedBrandUpdatePreference(viewerId)
+        ? notificationCenterService.fetchFollowedBrandUpdatePreference(viewerId)
         : Promise.resolve(null),
     ]);
     const followedBrandIDs = new Set(followedBrandPreference?.watchedBrandIds ?? []);
@@ -12034,7 +12034,7 @@ router.get('/learn/festivals/:id', optionalAuth, async (req: Request, res: Respo
         },
       }),
       viewerId
-        ? notificationCenterService.getFollowedBrandUpdatePreference(viewerId)
+        ? notificationCenterService.fetchFollowedBrandUpdatePreference(viewerId)
         : Promise.resolve(null),
     ]);
 
