@@ -2,7 +2,7 @@ import SwiftUI
 
 enum DiscoverRoute: Hashable {
     case labelDetail(labelID: String)
-    case festivalDetail(festivalID: String)
+    case festivalDetail(festivalID: String, prefetchedFestival: LearnFestival? = nil)
     case setDetail(setID: String)
     case newsDetail(articleID: String)
     case learnFestivalCreate
@@ -57,8 +57,12 @@ func makeDiscoverRouteDestination(
     case .labelDetail(let labelID):
         DiscoverLabelDetailLoaderView(labelID: labelID, repository: appContainer.discoverWikiRepository)
 
-    case .festivalDetail(let festivalID):
-        DiscoverFestivalDetailLoaderView(festivalID: festivalID, repository: appContainer.discoverWikiRepository)
+    case .festivalDetail(let festivalID, let prefetchedFestival):
+        DiscoverFestivalDetailLoaderView(
+            festivalID: festivalID,
+            prefetchedFestival: prefetchedFestival,
+            repository: appContainer.discoverWikiRepository
+        )
 
     case .setDetail(let setID):
         DJSetDetailView(setID: setID)
@@ -295,6 +299,7 @@ private struct DiscoverLabelDetailLoaderView: View {
 
 private struct DiscoverFestivalDetailLoaderView: View {
     let festivalID: String
+    let prefetchedFestival: LearnFestival?
     let repository: DiscoverWikiRepository
 
     @State private var festival: LearnFestival?
@@ -311,6 +316,10 @@ private struct DiscoverFestivalDetailLoaderView: View {
             }
         }
         .task {
+            if let prefetchedFestival, festival == nil {
+                festival = prefetchedFestival
+                phase = .success
+            }
             await loadFestival(force: false)
         }
     }
@@ -318,7 +327,9 @@ private struct DiscoverFestivalDetailLoaderView: View {
     @MainActor
     private func loadFestival(force: Bool) async {
         if festival != nil && !force { return }
-        phase = .initialLoading
+        if festival == nil {
+            phase = .initialLoading
+        }
         do {
             festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
             phase = .success
@@ -393,9 +404,5 @@ private func fetchLearnLabelByID(_ labelID: String, repository: DiscoverWikiRepo
 }
 
 private func fetchLearnFestivalByID(_ festivalID: String, repository: DiscoverWikiRepository) async throws -> LearnFestival {
-    let festivals = try await repository.fetchLearnFestivals(search: nil)
-    if let matched = festivals.first(where: { $0.id == festivalID }) {
-        return LearnFestival(web: matched)
-    }
-    throw ServiceError.message(LT("电音节不存在或已被移除", "Festival not found", "フェスが存在しないか削除されました"))
+    LearnFestival(web: try await repository.fetchLearnFestival(id: festivalID))
 }

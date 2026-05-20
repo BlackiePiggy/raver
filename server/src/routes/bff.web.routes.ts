@@ -11790,63 +11790,83 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
     const authReq = req as BFFAuthRequest;
     const viewerId = authReq.user?.userId ?? null;
     const viewerRole = authReq.user?.role ?? null;
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const skip = (page - 1) * limit;
     const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
+    const where: Prisma.WikiFestivalWhereInput = {
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { abbreviation: { contains: search, mode: 'insensitive' } },
+              { aliases: { has: search } },
+              { country: { contains: search, mode: 'insensitive' } },
+              { city: { contains: search, mode: 'insensitive' } },
+              { frequency: { contains: search, mode: 'insensitive' } },
+              { tagline: { contains: search, mode: 'insensitive' } },
+              { introduction: { contains: search, mode: 'insensitive' } },
+              { officialWebsite: { contains: search, mode: 'insensitive' } },
+              { facebookUrl: { contains: search, mode: 'insensitive' } },
+              { instagramUrl: { contains: search, mode: 'insensitive' } },
+              { twitterUrl: { contains: search, mode: 'insensitive' } },
+              { youtubeUrl: { contains: search, mode: 'insensitive' } },
+              { tiktokUrl: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
 
-    const rows = await prisma.wikiFestival.findMany({
-      where: { isActive: true },
-      orderBy: [{ name: 'asc' }],
-      include: {
-        contributors: {
-          include: {
-            user: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true },
-            },
-          },
+    const [rows, total] = await Promise.all([
+      prisma.wikiFestival.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: [{ name: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          nameI18n: true,
+          sourceRowId: true,
+          abbreviation: true,
+          aliases: true,
+          country: true,
+          countryI18n: true,
+          city: true,
+          cityI18n: true,
+          foundedYear: true,
+          frequency: true,
+          frequencyI18n: true,
+          tagline: true,
+          introduction: true,
+          descriptionI18n: true,
+          officialWebsite: true,
+          facebookUrl: true,
+          instagramUrl: true,
+          twitterUrl: true,
+          youtubeUrl: true,
+          tiktokUrl: true,
+          avatarUrl: true,
+          backgroundUrl: true,
+          links: true,
+          createdAt: true,
+          updatedAt: true,
         },
-      },
-    });
+      }),
+      prisma.wikiFestival.count({ where }),
+    ]);
 
-    const filteredRows = !search
-      ? rows
-      : rows.filter((row) => {
-          const nameI18n = resolveBiTextWithFallback(row.nameI18n ?? null, row.name ?? '');
-          const descriptionI18n = resolveBiTextWithFallback(row.descriptionI18n ?? null, row.introduction ?? '');
-          const countryI18n = resolveCountryBiTextWithFallback(row.countryI18n ?? null, row.country ?? '');
-          const cityI18n = resolveBiTextWithFallback(row.cityI18n ?? null, row.city ?? '');
-          const frequencyI18n = resolveBiTextWithFallback(row.frequencyI18n ?? null, row.frequency ?? '');
-          const pool = [
-            row.name,
-            nameI18n?.zh,
-            nameI18n?.en,
-            row.abbreviation,
-            ...(Array.isArray(row.aliases) ? row.aliases : []),
-            row.country,
-            countryI18n?.zh,
-            countryI18n?.en,
-            countryI18n?.enFull,
-            row.city,
-            cityI18n?.zh,
-            cityI18n?.en,
-            row.frequency,
-            frequencyI18n?.zh,
-            frequencyI18n?.en,
-            row.tagline,
-            row.introduction,
-            descriptionI18n?.zh,
-            descriptionI18n?.en,
-            row.officialWebsite,
-            row.facebookUrl,
-            row.instagramUrl,
-            row.twitterUrl,
-            row.youtubeUrl,
-            row.tiktokUrl,
-          ]
-            .join(' ')
-            .toLowerCase();
-          return pool.includes(search);
-        });
-
-    ok(res, { items: filteredRows.map((row) => mapWikiFestival(row, viewerId, viewerRole)) });
+    ok(
+      res,
+      { items: rows.map((row) => mapWikiFestival({ ...row, contributors: [] }, viewerId, viewerRole)) },
+      {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      }
+    );
   } catch (error) {
     console.error('BFF web learn festivals error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -11967,6 +11987,38 @@ router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response
     ok(res, mapWikiFestival(created, userId, viewerRole));
   } catch (error) {
     console.error('BFF web create learn festival error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/learn/festivals/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const viewerId = authReq.user?.userId ?? null;
+    const viewerRole = authReq.user?.role ?? null;
+    const festivalId = req.params.id as string;
+
+    const row = await prisma.wikiFestival.findUnique({
+      where: { id: festivalId },
+      include: {
+        contributors: {
+          include: {
+            user: {
+              select: { id: true, username: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!row || !row.isActive) {
+      res.status(404).json({ error: 'Festival not found' });
+      return;
+    }
+
+    ok(res, mapWikiFestival(row, viewerId, viewerRole));
+  } catch (error) {
+    console.error('BFF web learn festival detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

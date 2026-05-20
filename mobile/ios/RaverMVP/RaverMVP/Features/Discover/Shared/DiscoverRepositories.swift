@@ -386,6 +386,8 @@ struct SetMediaRepositoryAdapter: SetMediaRepository {
 
 protocol DiscoverWikiRepository {
     func fetchLearnGenres() async throws -> [LearnGenreNode]
+    func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage
+    func fetchLearnFestival(id: String) async throws -> WebLearnFestival
     func fetchLearnLabels(
         page: Int,
         limit: Int,
@@ -447,6 +449,14 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
 
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival] {
         try await service.fetchLearnFestivals(search: search)
+    }
+
+    func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage {
+        try await service.fetchLearnFestivalPage(page: page, limit: limit, search: search)
+    }
+
+    func fetchLearnFestival(id: String) async throws -> WebLearnFestival {
+        try await service.fetchLearnFestival(id: id)
     }
 
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {

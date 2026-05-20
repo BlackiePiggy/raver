@@ -1120,6 +1120,22 @@ final class LiveWebFeatureService: WebFeatureService {
         return LearnLabelListPage(items: response.data.items, pagination: response.pagination)
     }
 
+    func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage {
+        var queryItems = [
+            URLQueryItem(name: "page", value: "\(max(1, page))"),
+            URLQueryItem(name: "limit", value: "\(max(1, min(100, limit)))")
+        ]
+        if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "search", value: search))
+        }
+        let response: BFFEnvelope<BFFItems<WebLearnFestival>> = try await request(
+            path: "/v1/learn/festivals",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return LearnFestivalListPage(items: response.data.items.map(localizedLearnFestival), pagination: response.pagination)
+    }
+
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival] {
         var queryItems: [URLQueryItem] = []
         if let search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1131,6 +1147,14 @@ final class LiveWebFeatureService: WebFeatureService {
             queryItems: queryItems
         )
         return response.data.items.map(localizedLearnFestival)
+    }
+
+    func fetchLearnFestival(id: String) async throws -> WebLearnFestival {
+        let response: BFFEnvelope<WebLearnFestival> = try await request(
+            path: "/v1/learn/festivals/\(id)",
+            method: "GET"
+        )
+        return localizedLearnFestival(response.data)
     }
 
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {

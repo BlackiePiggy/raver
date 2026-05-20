@@ -185,6 +185,11 @@ struct LearnLabelListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct LearnFestivalListPage: Codable {
+    var items: [WebLearnFestival]
+    var pagination: BFFPagination?
+}
+
 typealias RatingEventListPage = BFFListPage<WebRatingEvent>
 typealias RatingUnitListPage = BFFListPage<WebRatingUnit>
 typealias TracklistSummaryPage = BFFListPage<WebTracklistSummary>

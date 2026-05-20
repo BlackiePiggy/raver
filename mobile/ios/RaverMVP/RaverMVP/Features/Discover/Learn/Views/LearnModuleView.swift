@@ -35,8 +35,8 @@ struct LearnModuleView: View {
     @State private var genres: [LearnGenreNode] = []
     @State private var allLabels: [LearnLabel] = []
     @State private var labels: [LearnLabel] = []
-    @State private var allFestivals: [LearnFestival] = []
     @State private var festivals: [LearnFestival] = []
+    @State private var festivalsPagination: BFFPagination?
     @State private var rankingBoards: [RankingBoard] = []
     @State private var labelsPagination: BFFPagination?
     private let initialSection: LearnModuleSection
@@ -59,6 +59,7 @@ struct LearnModuleView: View {
     @State private var isRefreshingGenres = false
     @State private var isRefreshingLabels = false
     @State private var isRefreshingFestivals = false
+    @State private var isLoadingMoreFestivals = false
     @State private var selectedFestivalRankingBoard: LearnFestivalRankingBoard?
     @State private var showFestivalCreateSheet = false
     @State private var isCreatingFestival = false
@@ -77,6 +78,7 @@ struct LearnModuleView: View {
     @State private var createFestivalBackgroundData: Data?
     @State private var bannerMessage: String?
     @State private var errorMessage: String?
+    private let festivalPageSize = 20
 
     init(initialSection: LearnModuleSection = .rankings, showsSectionTabs: Bool = true) {
         self.initialSection = initialSection
@@ -361,10 +363,10 @@ struct LearnModuleView: View {
     private var festivalsToolbar: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                Text(LT("筛选后 \(festivals.count) / 共 \(allFestivals.count) 个主办方", "Filtered \(festivals.count) / Total \(allFestivals.count) organizers", "絞り込み後 \(festivals.count) / 全 \(allFestivals.count) 件の主催"))
+                let totalFestivals = festivalsPagination?.total ?? festivals.count
+                Text(LT("已加载 \(festivals.count) / 共 \(totalFestivals) 个主办方", "Loaded \(festivals.count) / \(totalFestivals) organizers", "\(festivals.count) / \(totalFestivals) 件の主催を読み込み済み"))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
-
                 Spacer(minLength: 0)
 
                 Button {
@@ -581,8 +583,21 @@ struct LearnModuleView: View {
                                 LearnFestivalCard(festival: festival)
                                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .onTapGesture {
-                                        discoverPush(.festivalDetail(festivalID: festival.id))
+                                        discoverPush(.festivalDetail(festivalID: festival.id, prefetchedFestival: festival))
                                     }
+                                    .onAppear {
+                                        guard festival.id == festivals.last?.id else { return }
+                                        Task { await loadMoreFestivalsIfNeeded() }
+                                    }
+                            }
+
+                            if isLoadingMoreFestivals {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .padding(.vertical, 8)
+                                    Spacer()
+                                }
                             }
                         }
                     }
@@ -719,7 +734,7 @@ struct LearnModuleView: View {
     }
 
     private func loadFestivals() async {
-        let hadContent = !allFestivals.isEmpty
+        let hadContent = !festivals.isEmpty
         isLoadingFestivals = true
         if hadContent {
             isRefreshingFestivals = true
@@ -730,9 +745,9 @@ struct LearnModuleView: View {
         defer { isRefreshingFestivals = false }
 
         do {
-            let fetched = try await wikiRepository.fetchLearnFestivals(search: nil)
-            allFestivals = fetched.map { LearnFestival(web: $0) }
-            applyFestivalFilters()
+            let page = try await wikiRepository.fetchLearnFestivalPage(page: 1, limit: festivalPageSize, search: nil)
+            festivals = page.items.map { LearnFestival(web: $0) }
+            festivalsPagination = page.pagination
             festivalsPhase = festivals.isEmpty ? .empty : .success
             bannerMessage = nil
         } catch {
@@ -743,6 +758,26 @@ struct LearnModuleView: View {
             } else {
                 festivalsPhase = .failure(message: message)
             }
+        }
+    }
+
+    @MainActor
+    private func loadMoreFestivalsIfNeeded() async {
+        guard !isLoadingFestivals, !isLoadingMoreFestivals else { return }
+        guard let pagination = festivalsPagination, pagination.page < pagination.totalPages else { return }
+
+        isLoadingMoreFestivals = true
+        defer { isLoadingMoreFestivals = false }
+
+        do {
+            let nextPage = pagination.page + 1
+            let response = try await wikiRepository.fetchLearnFestivalPage(page: nextPage, limit: festivalPageSize, search: nil)
+            let existingIDs = Set(festivals.map(\.id))
+            festivals.append(contentsOf: response.items.map(LearnFestival.init(web:)).filter { !existingIDs.contains($0.id) })
+            festivalsPagination = response.pagination
+            festivalsPhase = festivals.isEmpty ? .empty : .success
+        } catch {
+            bannerMessage = error.userFacingMessage ?? LT("主办方加载失败，请稍后重试", "Failed to load organizers. Please try again later.", "主催を読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -821,17 +856,12 @@ struct LearnModuleView: View {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private func applyFestivalFilters() {
-        festivals = allFestivals
-    }
-
     private func updateFestival(_ updated: LearnFestival) {
-        if let index = allFestivals.firstIndex(where: { $0.id == updated.id }) {
-            allFestivals[index] = updated
+        if let index = festivals.firstIndex(where: { $0.id == updated.id }) {
+            festivals[index] = updated
         } else {
-            allFestivals.insert(updated, at: 0)
+            festivals.insert(updated, at: 0)
         }
-        applyFestivalFilters()
     }
 
     private var festivalRankingBoards: [LearnFestivalRankingBoard] {
@@ -869,7 +899,7 @@ struct LearnModuleView: View {
 
     private func festivalRankedEntries(for board: LearnFestivalRankingBoard) -> [LearnFestivalRankedFestival] {
         var entries: [LearnFestivalRankedFestival] = []
-        let allByID = Dictionary(uniqueKeysWithValues: allFestivals.map { ($0.id, $0) })
+        let allByID = Dictionary(uniqueKeysWithValues: festivals.map { ($0.id, $0) })
 
         for (index, festivalID) in board.rankedFestivalIDs.enumerated() {
             if let festival = allByID[festivalID] {
@@ -883,7 +913,7 @@ struct LearnModuleView: View {
         }
 
         if entries.isEmpty {
-            entries = allFestivals.enumerated().map { index, festival in
+            entries = festivals.enumerated().map { index, festival in
                 LearnFestivalRankedFestival(rank: index + 1, festival: festival)
             }
         }
@@ -4681,7 +4711,8 @@ struct LearnFestivalDetailView: View {
             Task { await loadFestivalTabContentIfNeeded(for: tab) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
-            Task { await loadRelatedContent(force: true) }
+            guard selectedTab == .events else { return }
+            Task { await loadRelatedEventsIfNeeded(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { notification in
             let savedFestivalID = notification.object as? String
@@ -6072,7 +6103,6 @@ struct LearnFestivalDetailView: View {
             currentFestival = hydrated
             onFestivalUpdated?(hydrated)
             showFestivalEditSheet = false
-            await loadRelatedContent(force: true)
             errorMessage = LT("电音节信息已更新", "Festival info updated.", "フェス情報を更新しました。")
         } catch {
             errorMessage = LT("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")", "保存に失敗しました: \(error.userFacingMessage ?? "")")
@@ -6393,13 +6423,10 @@ struct LearnFestivalDetailView: View {
     @MainActor
     private func refreshCurrentFestivalAfterSave() async {
         do {
-            let festivals = try await wikiRepository.fetchLearnFestivals(search: nil)
-            if let latest = festivals.first(where: { $0.id == currentFestival.id }) {
-                let hydrated = LearnFestival(web: latest)
-                currentFestival = hydrated
-                onFestivalUpdated?(hydrated)
-            }
-            await loadRelatedContent(force: true)
+            let latest = try await wikiRepository.fetchLearnFestival(id: currentFestival.id)
+            let hydrated = LearnFestival(web: latest)
+            currentFestival = hydrated
+            onFestivalUpdated?(hydrated)
         } catch {
             errorMessage = error.userFacingMessage
         }

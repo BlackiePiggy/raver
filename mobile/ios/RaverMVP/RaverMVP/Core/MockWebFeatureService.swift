@@ -2880,6 +2880,19 @@ actor MockWebFeatureService: WebFeatureService {
         }
     }
 
+    func fetchLearnFestivalPage(page: Int, limit: Int, search: String?) async throws -> LearnFestivalListPage {
+        let items = try await fetchLearnFestivals(search: search)
+        let pagination = paginateArray(items, page: page, limit: limit)
+        return LearnFestivalListPage(items: pagination.items, pagination: pagination.pagination)
+    }
+
+    func fetchLearnFestival(id: String) async throws -> WebLearnFestival {
+        guard let festival = learnFestivals.first(where: { $0.id == id }) else {
+            throw ServiceError.message("Festival not found")
+        }
+        return festival
+    }
+
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel> {
         let finalName = input.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalName.isEmpty else {
