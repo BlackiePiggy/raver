@@ -134,6 +134,7 @@ enum AppConfig {
     private static let persistedBFFBaseURLKey = "raver.persisted.bffBaseURL"
     private static let persistedRealNameEnforcementEnabledKey = "raver.persisted.realNameEnforcementEnabled"
     private static let persistedVirtualAssetsEnabledKey = "raver.persisted.virtualAssetsEnabled"
+    private static let persistedGuidanceEnabledKey = "raver.persisted.guidanceEnabled"
     private static let tencentIMAPNSBusinessIDInfoPlistKey = "TencentIMAPNSBusinessID"
 
     static var runtimeMode: AppRuntimeMode {
@@ -241,15 +242,36 @@ enum AppConfig {
     }
 
     static var guidanceEnabled: Bool {
+        if let env = guidanceEnabledFromEnvironment() {
+#if DEBUG
+            UserDefaults.standard.set(env, forKey: persistedGuidanceEnabledKey)
+#endif
+            return env
+        }
+
+#if DEBUG
+        if UserDefaults.standard.object(forKey: persistedGuidanceEnabledKey) != nil {
+            return UserDefaults.standard.bool(forKey: persistedGuidanceEnabledKey)
+        }
+#endif
+
+        return true
+    }
+
+    static func setGuidanceEnabled(_ isEnabled: Bool) {
+#if DEBUG
+        UserDefaults.standard.set(isEnabled, forKey: persistedGuidanceEnabledKey)
+#endif
+    }
+
+    private static func guidanceEnabledFromEnvironment() -> Bool? {
         if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_GUIDANCE_ENABLED"]) {
             return env
         }
-
         if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_APP_GUIDANCE_ENABLED"]) {
             return env
         }
-
-        return true
+        return nil
     }
 
     private static func normalizedBaseURLString(_ raw: String?) -> String? {

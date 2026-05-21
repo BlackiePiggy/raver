@@ -8,8 +8,12 @@ function buildRow(fest) {
   const lineupArtists = (typeof buildEventLineupArtistsFromArchive === 'function')
     ? buildEventLineupArtistsFromArchive(fest?.info?.lineupArtists || [], fest?.info?.lineup || [])
     : [];
-  const hasLineupArtists = lineupArtists.length > 0 || Number(fest?.info?.lineupArtistCount || 0) > 0;
-  const hasTimetable = (Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0) || Number(fest?.info?.timetableSlotCount || 0) > 0;
+  const hasLineupArtists = typeof shouldShowEventLineupButton === 'function'
+    ? shouldShowEventLineupButton(fest)
+    : (lineupArtists.length > 0 || Number(fest?.info?.lineupArtistCount || 0) > 0);
+  const hasTimetable = typeof shouldShowEventTimetableButton === 'function'
+    ? shouldShowEventTimetableButton(fest)
+    : ((Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0) || Number(fest?.info?.timetableSlotCount || 0) > 0);
   const showOpenFolderBtn = !!fest?.dirHandle || !!fest?.backendEventId;
 
   // Tags
@@ -456,18 +460,30 @@ function buildRow(fest) {
   const modalCloseBtn = panel.querySelector('.event-edit-modal-close');
   const statusEl  = panel.querySelector('.edit-save-status');
 
-  editBtn.onclick = () => {
-    setEditInputs(panel, fest.info);
-    if (typeof bindEventLocationEditorActions === 'function') {
-      bindEventLocationEditorActions(panel, fest);
+  editBtn.onclick = async () => {
+    editBtn.disabled = true;
+    viewStatusEl.textContent = '正在加载活动完整详情...';
+    try {
+      if (typeof ensureFestivalEventDetailLoaded === 'function') {
+        await ensureFestivalEventDetailLoaded(fest, row);
+      }
+      setEditInputs(panel, fest.info);
+      if (typeof bindEventLocationEditorActions === 'function') {
+        bindEventLocationEditorActions(panel, fest);
+      }
+      clearExistingEventAssetDraft(panel);
+      toggleInfoEdit(panel, true);
+      if (typeof bindEventLineupArtistEditor === 'function') {
+        bindEventLineupArtistEditor(panel, fest.info);
+      }
+      renderExistingEventAssetDrafts(panel, fest);
+      renderEventImageZoneDrafts(panel, fest);
+      viewStatusEl.textContent = '';
+    } catch (error) {
+      viewStatusEl.textContent = `加载活动详情失败：${String(error?.message || error)}`;
+    } finally {
+      editBtn.disabled = false;
     }
-    clearExistingEventAssetDraft(panel);
-    toggleInfoEdit(panel, true);
-    if (typeof bindEventLineupArtistEditor === 'function') {
-      bindEventLineupArtistEditor(panel, fest.info);
-    }
-    renderExistingEventAssetDrafts(panel, fest);
-    renderEventImageZoneDrafts(panel, fest);
   };
   panel._cancelEventEdit = () => {
     toggleInfoEdit(panel, false);

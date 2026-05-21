@@ -1,3 +1,20 @@
+function eventHasBackendDetailCapability(fest) {
+  return !!String(fest?.backendEventId || fest?.info?.backendEventId || '').trim();
+}
+
+function shouldShowEventLineupButton(fest) {
+  const artists = buildEventLineupArtistsFromArchive(fest?.info?.lineupArtists || [], fest?.info?.lineup || []);
+  if (artists.length > 0) return true;
+  if (Number(fest?.info?.lineupArtistCount || 0) > 0) return true;
+  return eventHasBackendDetailCapability(fest);
+}
+
+function shouldShowEventTimetableButton(fest) {
+  if (Array.isArray(fest?.info?.lineup) && fest.info.lineup.length > 0) return true;
+  if (Number(fest?.info?.timetableSlotCount || 0) > 0) return true;
+  return eventHasBackendDetailCapability(fest);
+}
+
 function refreshFestHeaderDisplay(rowEl, fest) {
   if (!rowEl || !fest) return;
   const titleEl = rowEl.querySelector('.fest-name');
@@ -59,14 +76,11 @@ function refreshFestHeaderDisplay(rowEl, fest) {
   // Update timetable button
   const lineupBtn = rowEl.querySelector('.lineup-trigger-btn');
   if (lineupBtn) {
-    const artists = buildEventLineupArtistsFromArchive(fest?.info?.lineupArtists || [], fest?.info?.lineup || []);
-    const hasArtists = artists.length > 0 || Number(fest?.info?.lineupArtistCount || 0) > 0;
-    lineupBtn.style.display = hasArtists ? '' : 'none';
+    lineupBtn.style.display = shouldShowEventLineupButton(fest) ? '' : 'none';
   }
   const ttBtn = rowEl.querySelector('.timetable-trigger-btn');
   if (ttBtn) {
-    const hasLineup = (Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0) || Number(fest?.info?.timetableSlotCount || 0) > 0;
-    ttBtn.style.display = hasLineup ? '' : 'none';
+    ttBtn.style.display = shouldShowEventTimetableButton(fest) ? '' : 'none';
   }
 }
 
