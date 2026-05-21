@@ -38,6 +38,52 @@ async function hydrateFestivalImageCacheForRow(fest, row) {
   }
 }
 
+function loadFestivalRowImagesOnExpand(fest, row) {
+  if (!fest || !row || fest.imagesLoadedOnExpand) return;
+  fest.imagesLoadedOnExpand = true;
+  if (rootDirHandle && fest.backendEventId) {
+    void hydrateFestivalImageCacheForRow(fest, row);
+    return;
+  }
+  const images = Array.isArray(fest.images) ? fest.images : [];
+  for (let idx = 0; idx < images.length; idx += 1) {
+    const img = images[idx];
+    const remoteUrl = ttToAbsoluteLocalUrl(img?.url || img?.remoteUrl || '');
+    if (!remoteUrl) continue;
+    const domImg = row.querySelector(`img[data-img-idx="${idx}"]`);
+    if (domImg && domImg.src !== remoteUrl) domImg.src = remoteUrl;
+  }
+}
+
+async function ensureFestivalEventDetailLoaded(fest, rowEl = null) {
+  const eventId = String(fest?.backendEventId || fest?.info?.backendEventId || '').trim();
+  if (!fest || !eventId) return fest;
+  if (fest.backendDetailLoaded) return fest;
+  if (fest.backendDetailLoadingPromise) return await fest.backendDetailLoadingPromise;
+
+  fest.backendDetailLoadingPromise = (async () => {
+    const detailResp = await apiGet(`/api/raver/events/${encodeURIComponent(eventId)}`, getViewerAuthHeaders());
+    const event = detailResp?.data || detailResp || null;
+    if (!event || typeof event !== 'object') return fest;
+    const detailFest = mapBackendEventToFestival(event);
+    fest.info = { ...(fest.info || {}), ...(detailFest.info || {}) };
+    fest.images = Array.isArray(detailFest.images) ? detailFest.images : (Array.isArray(fest.images) ? fest.images : []);
+    fest.backendDetailLoaded = true;
+    if (rowEl && typeof refreshFestHeaderDisplay === 'function') {
+      refreshFestHeaderDisplay(rowEl, fest);
+    }
+    const panel = rowEl?.querySelector?.('.fest-info-panel');
+    if (panel && typeof renderInfoView === 'function') renderInfoView(panel, fest.info);
+    return fest;
+  })();
+
+  try {
+    return await fest.backendDetailLoadingPromise;
+  } finally {
+    fest.backendDetailLoadingPromise = null;
+  }
+}
+
 async function loadArchiveEventsFromBackend(options = {}) {
   const preserveView = !!options.preserveView;
   const prevView = preserveView ? {

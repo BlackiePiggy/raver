@@ -8,7 +8,8 @@ function buildRow(fest) {
   const lineupArtists = (typeof buildEventLineupArtistsFromArchive === 'function')
     ? buildEventLineupArtistsFromArchive(fest?.info?.lineupArtists || [], fest?.info?.lineup || [])
     : [];
-  const hasLineup = lineupArtists.length > 0 || (Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0);
+  const hasLineupArtists = lineupArtists.length > 0 || Number(fest?.info?.lineupArtistCount || 0) > 0;
+  const hasTimetable = (Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0) || Number(fest?.info?.timetableSlotCount || 0) > 0;
   const showOpenFolderBtn = !!fest?.dirHandle || !!fest?.backendEventId;
 
   // Tags
@@ -50,8 +51,8 @@ function buildRow(fest) {
     </div>
     <div class="fest-header-right">
       ${tags.join('')}
-      <button class="tt-trigger-btn lineup-trigger-btn" style="${hasLineup?'':'display:none'}">🎧 DJ阵容</button>
-      <button class="tt-trigger-btn timetable-trigger-btn" style="${hasLineup?'':'display:none'}">🗓 TIMETABLE</button>
+      <button class="tt-trigger-btn lineup-trigger-btn" style="${hasLineupArtists?'':'display:none'}">🎧 DJ阵容</button>
+      <button class="tt-trigger-btn timetable-trigger-btn" style="${hasTimetable?'':'display:none'}">🗓 TIMETABLE</button>
       ${showOpenFolderBtn ? `<button class="fest-open-btn">${fest?.backendEventId ? '打开缓存' : '打开文件夹'}</button>` : ''}
       <button class="fest-delete-btn">删除活动</button>
       <button class="fest-expand-btn" type="button" aria-expanded="false">展开详情 ▾</button>
@@ -62,8 +63,34 @@ function buildRow(fest) {
   // Bind timetable button
   const lineupBtn = hdr.querySelector('.lineup-trigger-btn');
   const ttBtn = hdr.querySelector('.timetable-trigger-btn');
-  if (lineupBtn) lineupBtn.onclick = (e) => { e.stopPropagation(); openEventLineupModal(fest, row); };
-  if (ttBtn) ttBtn.onclick = (e) => { e.stopPropagation(); openTtModal(fest, row); };
+  if (lineupBtn) {
+    lineupBtn.onclick = async (e) => {
+      e.stopPropagation();
+      lineupBtn.disabled = true;
+      try {
+        if (typeof ensureFestivalEventDetailLoaded === 'function') {
+          await ensureFestivalEventDetailLoaded(fest, row);
+        }
+        openEventLineupModal(fest, row);
+      } finally {
+        lineupBtn.disabled = false;
+      }
+    };
+  }
+  if (ttBtn) {
+    ttBtn.onclick = async (e) => {
+      e.stopPropagation();
+      ttBtn.disabled = true;
+      try {
+        if (typeof ensureFestivalEventDetailLoaded === 'function') {
+          await ensureFestivalEventDetailLoaded(fest, row);
+        }
+        openTtModal(fest, row);
+      } finally {
+        ttBtn.disabled = false;
+      }
+    };
+  }
   const openBtn = hdr.querySelector('.fest-open-btn');
   const delBtn = hdr.querySelector('.fest-delete-btn');
   const expandBtn = hdr.querySelector('.fest-expand-btn');
@@ -72,21 +99,22 @@ function buildRow(fest) {
   const details = document.createElement('div');
   details.className = 'fest-details';
 
-  const setExpanded = (expanded) => {
+  const setExpanded = (expanded, options = {}) => {
     row.classList.toggle('expanded', expanded);
     if (expandBtn) {
       expandBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       expandBtn.textContent = expanded ? '收起详情 ▴' : '展开详情 ▾';
     }
+    if (expanded && options.loadImages !== false) loadFestivalRowImagesOnExpand(fest, row);
   };
   row._setExpanded = setExpanded;
   if (expandBtn) {
     expandBtn.onclick = (e) => {
       e.stopPropagation();
-      setExpanded(!row.classList.contains('expanded'));
+      setExpanded(!row.classList.contains('expanded'), { loadImages: true });
     };
   }
-  setExpanded(false);
+  setExpanded(false, { loadImages: false });
 
   const imageZoneCardsHtml = buildEventImageZoneCardsHtml();
 
@@ -485,7 +513,6 @@ function buildRow(fest) {
     no.textContent = '— 该文件夹暂无图片 —';
     details.appendChild(no);
     row.appendChild(details);
-    hydrateFestivalImageCacheForRow(fest, row);
     return row;
   }
 
@@ -510,14 +537,12 @@ function buildRow(fest) {
     group.forEach((img, _gIdx) => {
       const cell = document.createElement('div'); cell.className = 'img-cell';
       const imgIdx = fest.images.indexOf(img);
-      const initialSrc = (fest.backendEventId && rootDirHandle)
-        ? EVENT_IMAGE_PLACEHOLDER_DATA_URL
-        : ttToAbsoluteLocalUrl(img.url || img.remoteUrl || '');
       const el = document.createElement('img');
-      el.src = initialSrc || EVENT_IMAGE_PLACEHOLDER_DATA_URL;
+      el.src = EVENT_IMAGE_PLACEHOLDER_DATA_URL;
       el.alt = img.classified.label;
       el.loading = 'lazy';
       el.dataset.imgIdx = String(imgIdx);
+      el.dataset.remoteSrc = ttToAbsoluteLocalUrl(img.url || img.remoteUrl || '');
       const lbl = document.createElement('div'); lbl.className = `img-label lbl-${img.classified.type}`; lbl.textContent = img.classified.label;
       cell.appendChild(el); cell.appendChild(lbl);
       cell.onclick = () => { openLightboxWithCache(fest, row, imgIdx); };
@@ -529,6 +554,5 @@ function buildRow(fest) {
   wrap.appendChild(strip);
   details.appendChild(wrap);
   row.appendChild(details);
-  hydrateFestivalImageCacheForRow(fest, row);
   return row;
 }

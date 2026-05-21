@@ -1180,6 +1180,12 @@ const selectEventRecommendationCardForWeb = {
       backgroundUrl: true,
     },
   },
+  _count: {
+    select: {
+      canonicalArtists: true,
+      performances: true,
+    },
+  },
 } satisfies Prisma.EventSelect;
 
 const selectEventListCardForWeb = {
@@ -1237,6 +1243,12 @@ const selectEventListCardForWeb = {
       cityI18n: true,
       avatarUrl: true,
       backgroundUrl: true,
+    },
+  },
+  _count: {
+    select: {
+      canonicalArtists: true,
+      performances: true,
     },
   },
 } satisfies Prisma.EventSelect;
@@ -4032,8 +4044,9 @@ const mapEventRecommendationCard = (row: any, complianceUser?: RegionalComplianc
 };
 
 const mapEventListCard = (row: any, complianceUser?: RegionalComplianceUser | null) =>
-  mapEvent(
-    {
+  {
+    const event = mapEvent(
+      {
       ...row,
       imageAssets: null,
       referenceLinks: [],
@@ -4045,9 +4058,15 @@ const mapEventListCard = (row: any, complianceUser?: RegionalComplianceUser | nu
       lineupArtists: [],
       timetableSlots: [],
       lineupSlots: [],
-    },
-    complianceUser
-  );
+      },
+      complianceUser
+    );
+    return {
+      ...event,
+      lineupArtistCount: Number(row?._count?.canonicalArtists || 0),
+      timetableSlotCount: Number(row?._count?.performances || 0),
+    };
+  };
 
 const resolveEventFavoriteIds = async (userId: string | undefined, eventIds: string[]): Promise<Map<string, string>> => {
   if (!userId || eventIds.length === 0) {

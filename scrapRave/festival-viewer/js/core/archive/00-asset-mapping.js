@@ -241,6 +241,8 @@ function mapBackendEventToFestival(event) {
     normalizeBackendEventImageAssets(event?.imageAssets)
   );
   const lineup = mapBackendLineupSlotsToArchiveRows(event?.lineupSlots, startDate);
+  const lineupArtistCount = Number(event?.lineupArtistCount ?? event?.lineupArtistsCount ?? 0);
+  const timetableSlotCount = Number(event?.timetableSlotCount ?? event?.timetableSlotsCount ?? 0);
   const lineupArtists = Array.isArray(event?.lineupArtists)
     ? event.lineupArtists
         .map((artist, index) => {
@@ -280,6 +282,8 @@ function mapBackendEventToFestival(event) {
     socialLinks: Array.isArray(event?.socialLinks) ? event.socialLinks : [],
     lineupArtists,
     lineup,
+    lineupArtistCount: Number.isFinite(lineupArtistCount) ? lineupArtistCount : 0,
+    timetableSlotCount: Number.isFinite(timetableSlotCount) ? timetableSlotCount : 0,
     festivalId,
     source,
     imageAssets: normalizedAssets,

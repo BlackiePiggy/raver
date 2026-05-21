@@ -60,12 +60,12 @@ function refreshFestHeaderDisplay(rowEl, fest) {
   const lineupBtn = rowEl.querySelector('.lineup-trigger-btn');
   if (lineupBtn) {
     const artists = buildEventLineupArtistsFromArchive(fest?.info?.lineupArtists || [], fest?.info?.lineup || []);
-    const hasArtists = artists.length > 0;
+    const hasArtists = artists.length > 0 || Number(fest?.info?.lineupArtistCount || 0) > 0;
     lineupBtn.style.display = hasArtists ? '' : 'none';
   }
   const ttBtn = rowEl.querySelector('.timetable-trigger-btn');
   if (ttBtn) {
-    const hasLineup = Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0;
+    const hasLineup = (Array.isArray(fest.info.lineup) && fest.info.lineup.length > 0) || Number(fest?.info?.timetableSlotCount || 0) > 0;
     ttBtn.style.display = hasLineup ? '' : 'none';
   }
 }

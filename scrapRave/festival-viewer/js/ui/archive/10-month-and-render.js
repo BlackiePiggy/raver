@@ -6,7 +6,7 @@ function setArchiveRowsExpanded(mainEl, expanded) {
   const rows = mainEl.querySelectorAll('.festival-row');
   rows.forEach((row) => {
     if (typeof row._setExpanded === 'function') {
-      row._setExpanded(expanded);
+      row._setExpanded(expanded, { loadImages: false });
       return;
     }
     row.classList.toggle('expanded', !!expanded);
