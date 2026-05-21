@@ -259,6 +259,56 @@ function ttTimelineSortVal(timeText, dayRolloverHour = 6) {
   return base < rolloverMinutes ? base + 24 * 60 : base;
 }
 
+function ttParseStrictClockValue(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return {
+    raw: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+    minutes: hours * 60 + minutes,
+  };
+}
+
+function ttValidateDraftSlot(slot, index) {
+  const rowNumber = Number(index) + 1;
+  const musician = String(slot?.musician || '').trim();
+  const dayLabel = String(slot?.date || '').trim();
+  const timeText = String(slot?.time || '').trim();
+  const dayIndex = ttResolveSlotDayIndex(slot);
+
+  if (!musician) return `第 ${rowNumber} 条缺少 DJ 名称。`;
+  if (!dayIndex || !dayLabel) return `第 ${rowNumber} 条缺少 Day 信息，请选择 Day 1 / Day 2。`;
+  if (!timeText) return `第 ${rowNumber} 条缺少时间段，请填写如 17:00-18:00。`;
+
+  const pair = timeText.match(/^(\d{1,2}:\d{2})\s*(?:—|–|~|-|to|TO|至|到)\s*(\d{1,2}:\d{2})$/);
+  if (!pair) return `第 ${rowNumber} 条时间格式无效，请使用 HH:mm-HH:mm。`;
+
+  const start = ttParseStrictClockValue(pair[1]);
+  const end = ttParseStrictClockValue(pair[2]);
+  if (!start || !end) return `第 ${rowNumber} 条时间超出有效范围，请使用 00:00-23:59。`;
+  if (start.minutes === end.minutes) return `第 ${rowNumber} 条开始和结束时间不能相同。`;
+
+  return null;
+}
+
+function ttCollectDraftValidationErrors(draftLineup) {
+  const errors = [];
+  const rows = Array.isArray(draftLineup) ? draftLineup : [];
+  rows.forEach((slot, index) => {
+    const musician = String(slot?.musician || '').trim();
+    const date = String(slot?.date || '').trim();
+    const time = String(slot?.time || '').trim();
+    const stage = String(slot?.stage || '').trim();
+    if (!musician && !date && !time && !stage) return;
+    const error = ttValidateDraftSlot(slot, index);
+    if (error) errors.push(error);
+  });
+  return errors;
+}
+
 function openTtModal(fest, rowEl = null) {
   ttModalState.currentFest = fest;
   ttModalState.currentRowEl = rowEl || null;
@@ -547,6 +597,11 @@ async function saveTtEditChanges() {
   setTtEditStatus('正在保存时间表修改...');
   syncTtModalActionState();
   try {
+    const validationErrors = ttCollectDraftValidationErrors(ttModalState.draftLineup);
+    if (validationErrors.length) {
+      setTtEditStatus(validationErrors[0], true);
+      return;
+    }
     const preservedLineupArtists = buildEventLineupArtistsFromArchive(
       ttModalState.currentFest?.info?.lineupArtists || [],
       ttModalState.currentFest?.info?.lineup || []
@@ -862,7 +917,7 @@ function renderTtDateContent(body, lineup, dateOrder, stages) {
                   <tr>
                     <td><input type="text" value="${escapeHtml(slot.musician || '')}" oninput="ttUpdateRowField(${slot._rid}, 'musician', this.value)"></td>
                     <td>${ttRenderDaySelectCell(slot)}</td>
-                    <td><input type="text" value="${escapeHtml(slot.time || '')}" oninput="ttUpdateRowField(${slot._rid}, 'time', this.value)"></td>
+                    <td><input type="text" value="${escapeHtml(slot.time || '')}" placeholder="17:00-18:00" title="活动当地时间，使用 HH:mm-HH:mm；若结束早于开始则自动视为次日结束" oninput="ttUpdateRowField(${slot._rid}, 'time', this.value)"></td>
                     <td><input type="text" value="${escapeHtml(slot.stage || '')}" oninput="ttUpdateRowField(${slot._rid}, 'stage', this.value)" onchange="ttUpdateRowField(${slot._rid}, 'stage', this.value, true)"></td>
                     <td class="tt-dj-entity-cell">${ttRenderBoundEntitiesCellHtml(slot)}</td>
                     <td class="tt-dj-bind-cell">${ttRenderBindingCellHtml(slot)}</td>

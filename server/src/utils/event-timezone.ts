@@ -108,6 +108,44 @@ const getTimeZoneOffsetMs = (timeZone: string, instant: Date): number => {
   return asUtc - instant.getTime();
 };
 
+const getLocalDateTimePartsForInstant = (instant: Date, timeZone: string): LocalDateTimeParts | null => {
+  if (!(instant instanceof Date) || Number.isNaN(instant.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+    millisecond: instant.getUTCMilliseconds(),
+  };
+};
+
+const localDateTimePartsMatch = (instant: Date, parts: LocalDateTimeParts, timeZone: string): boolean => {
+  const actual = getLocalDateTimePartsForInstant(instant, timeZone);
+  return Boolean(
+    actual
+    && actual.year === parts.year
+    && actual.month === parts.month
+    && actual.day === parts.day
+    && actual.hour === parts.hour
+    && actual.minute === parts.minute
+    && actual.second === parts.second
+    && actual.millisecond === parts.millisecond
+  );
+};
+
 export const zonedTimeToUtc = (parts: LocalDateTimeParts, timeZoneRaw: unknown): Date => {
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
   const utcGuess = Date.UTC(
@@ -121,6 +159,16 @@ export const zonedTimeToUtc = (parts: LocalDateTimeParts, timeZoneRaw: unknown):
   );
   let instant = new Date(utcGuess - getTimeZoneOffsetMs(timeZone, new Date(utcGuess)));
   instant = new Date(utcGuess - getTimeZoneOffsetMs(timeZone, instant));
+  if (!localDateTimePartsMatch(instant, parts, timeZone)) {
+    return new Date(NaN);
+  }
+  // Fall-back DST can produce the same wall time twice. Prefer the earlier real instant.
+  for (let minutes = 1; minutes <= 180; minutes += 1) {
+    const earlier = new Date(instant.getTime() - minutes * 60_000);
+    if (localDateTimePartsMatch(earlier, parts, timeZone)) {
+      instant = earlier;
+    }
+  }
   return instant;
 };
 
@@ -141,7 +189,10 @@ export const parseEventDateInput = (
   }
 
   const parts = parseLocalDateTimeParts(trimmed, boundary, clock);
-  if (parts) return zonedTimeToUtc(parts, timeZoneRaw);
+  if (parts) {
+    const parsed = zonedTimeToUtc(parts, timeZoneRaw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
 
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;

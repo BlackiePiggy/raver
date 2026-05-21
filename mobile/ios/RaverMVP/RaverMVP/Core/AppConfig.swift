@@ -135,6 +135,7 @@ enum AppConfig {
     private static let persistedRealNameEnforcementEnabledKey = "raver.persisted.realNameEnforcementEnabled"
     private static let persistedVirtualAssetsEnabledKey = "raver.persisted.virtualAssetsEnabled"
     private static let persistedGuidanceEnabledKey = "raver.persisted.guidanceEnabled"
+    private static let persistedEventUploadFlowV2EnabledKey = "raver.persisted.eventUploadFlowV2Enabled"
     private static let tencentIMAPNSBusinessIDInfoPlistKey = "TencentIMAPNSBusinessID"
 
     static var runtimeMode: AppRuntimeMode {
@@ -261,6 +262,29 @@ enum AppConfig {
     static func setGuidanceEnabled(_ isEnabled: Bool) {
 #if DEBUG
         UserDefaults.standard.set(isEnabled, forKey: persistedGuidanceEnabledKey)
+#endif
+    }
+
+    static var eventUploadFlowV2Enabled: Bool {
+        if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_EVENT_UPLOAD_FLOW_V2_ENABLED"]) {
+#if DEBUG
+            UserDefaults.standard.set(env, forKey: persistedEventUploadFlowV2EnabledKey)
+#endif
+            return env
+        }
+
+#if DEBUG
+        if UserDefaults.standard.object(forKey: persistedEventUploadFlowV2EnabledKey) != nil {
+            return UserDefaults.standard.bool(forKey: persistedEventUploadFlowV2EnabledKey)
+        }
+#endif
+
+        return false
+    }
+
+    static func setEventUploadFlowV2Enabled(_ isEnabled: Bool) {
+#if DEBUG
+        UserDefaults.standard.set(isEnabled, forKey: persistedEventUploadFlowV2EnabledKey)
 #endif
     }
 

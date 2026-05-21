@@ -75,12 +75,22 @@ func makeDiscoverRouteDestination(
         DiscoverNewsDetailLoaderView(articleID: articleID, repository: appContainer.discoverNewsRepository)
 
     case .eventCreate:
-        EventEditorView(mode: .create) {
-            NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+        if AppConfig.eventUploadFlowV2Enabled {
+            EventUploadFlowView(mode: .create, webService: appContainer.webService) {
+                NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+            }
+        } else {
+            EventEditorView(mode: .create) {
+                NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+            }
         }
 
     case .eventEdit(let eventID):
-        DiscoverEventEditorLoaderView(eventID: eventID, eventReadRepository: appContainer.eventReadRepository)
+        DiscoverEventEditorLoaderView(
+            eventID: eventID,
+            eventReadRepository: appContainer.eventReadRepository,
+            webService: appContainer.webService
+        )
 
     case .djImport(let initialName):
         DJsModuleView(
@@ -150,10 +160,12 @@ private struct DiscoverRouteLoaderScaffold<Content: View>: View {
 private struct DiscoverEventEditorLoaderView: View {
     let eventID: String
     let eventReadRepository: EventReadRepository
+    let webService: WebFeatureService
 
-    init(eventID: String, eventReadRepository: EventReadRepository) {
+    init(eventID: String, eventReadRepository: EventReadRepository, webService: WebFeatureService) {
         self.eventID = eventID
         self.eventReadRepository = eventReadRepository
+        self.webService = webService
     }
 
     @State private var event: WebEvent?
@@ -164,8 +176,14 @@ private struct DiscoverEventEditorLoaderView: View {
             Task { await loadEvent(force: true) }
         } content: {
             if let event {
-                EventEditorView(mode: .edit(event)) {
-                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+                if AppConfig.eventUploadFlowV2Enabled {
+                    EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
+                        NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+                    }
+                } else {
+                    EventEditorView(mode: .edit(event)) {
+                        NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+                    }
                 }
             } else {
                 Color.clear

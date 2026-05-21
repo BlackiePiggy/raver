@@ -8,9 +8,13 @@ import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Event, EventLineupSlot, eventAPI } from '@/lib/api/event';
 import {
+  ceilInstantToZonedHourMs,
+  floorInstantToZonedHourMs,
   formatDateTimeWithSystemTimeZoneLabel,
+  getFestivalDayKeyForInstant,
   getTimeZoneLabel,
   normalizeDisplayTimeZone,
+  zonedWallTimeToUtcMs,
 } from '@/lib/timezone';
 
 const STORAGE_KEY_PREFIX = 'ravehub:routine:';
@@ -52,27 +56,6 @@ type SwitchPlan = {
 const slotKey = (slot: EventLineupSlot) =>
   slot.id || `${slot.djName}-${slot.stageName || 'stage'}-${slot.startTime}-${slot.endTime}`;
 
-const getFestivalDayKey = (dateString: string, timeZone: string) => {
-  const localText = new Date(dateString).toLocaleString('sv-SE', {
-    timeZone,
-    hour12: false,
-  });
-  const [datePart, timePart] = localText.split(' ');
-  const hour = Number(timePart.split(':')[0] || '0');
-
-  if (hour >= 12) return datePart;
-
-  const [y, m, d] = datePart.split('-').map(Number);
-  const prev = new Date(Date.UTC(y, m - 1, d));
-  prev.setUTCDate(prev.getUTCDate() - 1);
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'UTC',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(prev);
-};
-
 const formatDayLabel = (dateString: string, timeZone: string) =>
   new Date(dateString).toLocaleDateString('zh-CN', {
     timeZone,
@@ -94,35 +77,13 @@ const toMs = (dateString: string) => new Date(dateString).getTime();
 const overlaps = (a: EventLineupSlot, b: EventLineupSlot) =>
   toMs(a.startTime) < toMs(b.endTime) && toMs(b.startTime) < toMs(a.endTime);
 
-const floorToHour = (ms: number) => {
-  const d = new Date(ms);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
-};
-
-const ceilToHour = (ms: number) => {
-  const d = new Date(ms);
-  if (d.getMinutes() !== 0 || d.getSeconds() !== 0 || d.getMilliseconds() !== 0) {
-    d.setHours(d.getHours() + 1);
-  }
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
-};
-
 const formatSwitchValue = (ms: number, timeZone: string) =>
   new Date(ms).toLocaleString('sv-SE', {
     timeZone,
     hour12: false,
   }).replace(' ', 'T').slice(0, 16);
 
-const parseSwitchValueToMs = (value: string) => {
-  const [datePart, timePart] = value.split('T');
-  if (!datePart || !timePart) return NaN;
-  const [y, m, d] = datePart.split('-').map(Number);
-  const [hh, mm] = timePart.split(':').map(Number);
-  if ([y, m, d, hh, mm].some((n) => Number.isNaN(n))) return NaN;
-  return new Date(y, m - 1, d, hh, mm, 0).getTime();
-};
+const parseSwitchValueToMs = (value: string, timeZone: string) => zonedWallTimeToUtcMs(value, timeZone);
 
 const getDjVisualImage = (slot: EventLineupSlot) => slot.dj?.bannerUrl || slot.dj?.avatarUrl || null;
 
@@ -140,6 +101,7 @@ export default function EventRoutinePage() {
   const sharePosterRef = useRef<HTMLDivElement | null>(null);
   const eventTimeZone = normalizeDisplayTimeZone(event?.timeZone);
   const eventTimeZoneLabel = getTimeZoneLabel(eventTimeZone);
+  const dayRolloverHour = event?.dayRolloverHour ?? 6;
 
   useEffect(() => {
     const load = async () => {
@@ -163,12 +125,17 @@ export default function EventRoutinePage() {
     const sorted = [...event.lineupSlots].sort((a, b) => toMs(a.startTime) - toMs(b.startTime));
     const map = new Map<string, EventLineupSlot[]>();
     for (const slot of sorted) {
-      const key = getFestivalDayKey(slot.startTime, eventTimeZone);
+      const key =
+        slot.festivalDayIndex && slot.festivalDayIndex > 0
+          ? `day-${slot.festivalDayIndex}`
+          : getFestivalDayKeyForInstant(slot.startTime, eventTimeZone, dayRolloverHour);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(slot);
     }
 
     return Array.from(map.entries()).map(([key, slots], index) => {
+      const festivalDayIndex =
+        slots.find((slot) => slot.festivalDayIndex && slot.festivalDayIndex > 0)?.festivalDayIndex ?? index + 1;
       const stageMap = new Map<string, EventLineupSlot[]>();
       for (const slot of slots) {
         const stageName = (slot.stageName || '未命名舞台').trim() || '未命名舞台';
@@ -177,7 +144,7 @@ export default function EventRoutinePage() {
       }
       return {
         key,
-        label: `Day ${index + 1} · ${formatDayLabel(slots[0].startTime, eventTimeZone)}`,
+        label: `Day ${festivalDayIndex} · ${formatDayLabel(slots[0].startTime, eventTimeZone)}`,
         slots,
         stages: Array.from(stageMap.entries()).map(([stageName, stageSlots]) => ({
           stageName,
@@ -185,7 +152,7 @@ export default function EventRoutinePage() {
         })),
       };
     });
-  }, [event?.lineupSlots, eventTimeZone]);
+  }, [dayRolloverHour, event?.lineupSlots, eventTimeZone]);
 
   const allSlots = useMemo(
     () =>
@@ -330,7 +297,7 @@ export default function EventRoutinePage() {
           continue;
         }
 
-        let switchAt = plan.switchAt ? parseSwitchValueToMs(plan.switchAt) : NaN;
+        let switchAt = plan.switchAt ? parseSwitchValueToMs(plan.switchAt, eventTimeZone) : NaN;
         if (Number.isNaN(switchAt)) switchAt = Math.floor((overlapStart + overlapEnd) / 2);
         switchAt = Math.min(Math.max(switchAt, overlapStart), overlapEnd);
 
@@ -629,8 +596,8 @@ export default function EventRoutinePage() {
                 const stageNames = day.stages.map((stage) => stage.stageName);
                 const minStart = Math.min(...day.slots.map((s) => toMs(s.startTime)));
                 const maxEnd = Math.max(...day.slots.map((s) => toMs(s.endTime)));
-                const axisStart = floorToHour(minStart);
-                const axisEnd = ceilToHour(maxEnd);
+                const axisStart = floorInstantToZonedHourMs(minStart, eventTimeZone);
+                const axisEnd = ceilInstantToZonedHourMs(maxEnd, eventTimeZone);
                 const totalMinutes = Math.max((axisEnd - axisStart) / 60000, 60);
                 const axisHeight = totalMinutes * PX_PER_MIN;
                 const stageWidthPercent = stageNames.length > 0 ? 100 / stageNames.length : 100;

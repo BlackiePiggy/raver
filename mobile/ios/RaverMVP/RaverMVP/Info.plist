@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>RaveHub</string>
+	<string>Raver MVP</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -28,27 +28,22 @@
 				<string>raver</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.raver.mvp.firebase-auth</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>app-1-377174862257-ios-79778d9d5dc0254d08b590</string>
-			</array>
-		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>RaveHub 需要保存分享海报到你的相册。</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>RaveHub 需要访问你的相册以保存分享海报。</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>RaveHub 会在你选择当前位置、发布地点标签或加入小队位置共享时使用定位，用于展示附近地点、活动地点和队友位置。</string>
+	<string>加入小队线下活动后，Raver 需要使用你的定位来展示队友位置并记录活动轨迹。</string>
 	<key>NSCameraUsageDescription</key>
-	<string>RaveHub 需要使用相机拍摄聊天图片或视频。</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>RaveHub 需要使用麦克风录制聊天语音消息。</string>
+	<string>Raver 需要使用相机来拍摄活动海报、阵容图、时间表或场地图。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Raver 需要保存分享海报到你的相册。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Raver 需要访问你的相册以保存分享海报。</string>
 	<key>TencentIMAPNSBusinessID</key>
 	<string>48505</string>
 	<key>UIApplicationSceneManifest</key>

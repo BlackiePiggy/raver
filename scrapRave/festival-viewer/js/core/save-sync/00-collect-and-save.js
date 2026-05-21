@@ -1,4 +1,153 @@
 // ── SAVE ──
+function eventEditReadTimezoneSelectionFromPanel(panelEl) {
+  if (!panelEl) return null;
+  const raw = String(panelEl.querySelector('.fest-info-edit [data-field="timeZoneCitySelectionJson"]')?.value || '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return normalizeEventTimezoneLookupItem(parsed);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function renderEventTimezoneSelectionState(panelEl, options = {}) {
+  if (!panelEl) return;
+  const previewEl = panelEl.querySelector('[data-event-timezone-preview]');
+  const resultsEl = panelEl.querySelector('[data-event-timezone-results]');
+  const selection = eventEditReadTimezoneSelectionFromPanel(panelEl);
+  const searchText = String(panelEl.querySelector('.fest-info-edit [data-field="timeZoneSearch"]')?.value || '').trim();
+  if (previewEl) {
+    if (selection?.timezone) {
+      previewEl.textContent = selection.label || `${selection.city} · ${selection.timezone}`;
+      previewEl.classList.remove('empty');
+    } else {
+      previewEl.textContent = searchText ? `尚未确认城市时区：${searchText}` : '未选择活动城市时区';
+      previewEl.classList.add('empty');
+    }
+  }
+  if (resultsEl && options.clearResults) {
+    resultsEl.innerHTML = '';
+  }
+}
+
+function eventEditApplyTimezoneSelectionToPanel(panelEl, item) {
+  if (!panelEl) return;
+  const normalized = normalizeEventTimezoneLookupItem(item);
+  if (!normalized) return;
+  const searchValue = normalized.cityAscii || normalized.city || '';
+  const set = (key, value) => {
+    const el = panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
+    if (el) el.value = value == null ? '' : String(value);
+  };
+  set('timeZone', normalized.timezone);
+  set('timeZoneSearch', searchValue);
+  set('timeZoneCitySelectionJson', JSON.stringify(normalized));
+  if (!String(panelEl.querySelector('.fest-info-edit [data-field="cityEn"]')?.value || '').trim() && normalized.city) {
+    set('cityEn', normalized.city);
+  }
+  if (!String(panelEl.querySelector('.fest-info-edit [data-field="countryEn"]')?.value || '').trim() && normalized.country) {
+    set('countryEn', normalized.country);
+  }
+  if (!String(panelEl.querySelector('.fest-info-edit [data-field="countryEnFull"]')?.value || '').trim() && normalized.country) {
+    set('countryEnFull', normalized.country);
+  }
+  renderEventTimezoneSelectionState(panelEl, { clearResults: true });
+}
+
+function eventEditClearTimezoneSelection(panelEl) {
+  if (!panelEl) return;
+  ['timeZone', 'timeZoneCitySelectionJson'].forEach((key) => {
+    const el = panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
+    if (el) el.value = '';
+  });
+  renderEventTimezoneSelectionState(panelEl, { clearResults: true });
+}
+
+async function eventEditRunTimezoneSearch(panelEl, statusEl = null) {
+  if (!panelEl) return;
+  const inputEl = panelEl.querySelector('.fest-info-edit [data-field="timeZoneSearch"]');
+  const resultsEl = panelEl.querySelector('[data-event-timezone-results]');
+  const query = String(inputEl?.value || '').trim();
+  if (!query) {
+    if (statusEl) statusEl.textContent = '请先输入城市、州/省或国家关键词再搜索时区。';
+    renderEventTimezoneSelectionState(panelEl, { clearResults: true });
+    return;
+  }
+  const requestId = ++eventTimezoneLookupState.requestSeq;
+  if (resultsEl) resultsEl.innerHTML = '<div class="edit-lineup-hint">正在搜索城市时区...</div>';
+  if (statusEl) statusEl.textContent = '正在搜索活动城市时区...';
+  try {
+    const items = await searchEventTimezonesByCity(query, 8);
+    if (requestId !== eventTimezoneLookupState.requestSeq) return;
+    if (!resultsEl) return;
+    if (!items.length) {
+      resultsEl.innerHTML = '<div class="edit-lineup-hint">没有匹配结果，请尝试输入城市英文名、州缩写或国家名。</div>';
+      if (statusEl) statusEl.textContent = '未找到匹配的城市时区';
+      return;
+    }
+    resultsEl.innerHTML = items.map((item, index) => `
+      <button class="edit-btn event-timezone-result-btn" type="button" data-timezone-result-index="${index}">
+        ${escapeHtml(item.label || `${item.city} · ${item.timezone}`)}
+      </button>
+    `).join('');
+    resultsEl.querySelectorAll('[data-timezone-result-index]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const item = items[Number(btn.getAttribute('data-timezone-result-index'))];
+        eventEditApplyTimezoneSelectionToPanel(panelEl, item);
+        if (statusEl) statusEl.textContent = `已确认活动时区：${item.label || item.timezone}`;
+      });
+    });
+    if (items.length === 1) {
+      eventEditApplyTimezoneSelectionToPanel(panelEl, items[0]);
+      if (statusEl) statusEl.textContent = `已自动选中唯一匹配：${items[0].label || items[0].timezone}`;
+    }
+  } catch (error) {
+    if (requestId !== eventTimezoneLookupState.requestSeq) return;
+    if (resultsEl) resultsEl.innerHTML = '<div class="edit-lineup-hint">时区搜索失败，请检查登录和后端服务。</div>';
+    if (statusEl) statusEl.textContent = `搜索城市时区失败：${String(error?.message || error)}`;
+  }
+}
+
+function bindEventTimezoneLookupUI(panelEl, statusEl = null) {
+  if (!panelEl || panelEl.dataset.eventTimezoneBound === 'true') return;
+  panelEl.dataset.eventTimezoneBound = 'true';
+  const searchBtn = panelEl.querySelector('[data-action="event-timezone-search"]');
+  const clearBtn = panelEl.querySelector('[data-action="event-timezone-clear"]');
+  const searchInput = panelEl.querySelector('.fest-info-edit [data-field="timeZoneSearch"]');
+  if (searchBtn) {
+    searchBtn.addEventListener('click', () => {
+      void eventEditRunTimezoneSearch(panelEl, statusEl);
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      eventEditClearTimezoneSelection(panelEl);
+      if (statusEl) statusEl.textContent = '已清空活动城市时区选择';
+    });
+  }
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const selected = eventEditReadTimezoneSelectionFromPanel(panelEl);
+      const current = String(searchInput.value || '').trim();
+      const selectedQuery = String(selected?.cityAscii || selected?.city || '').trim();
+      if (selected && current !== selectedQuery) {
+        const hidden = panelEl.querySelector('.fest-info-edit [data-field="timeZoneCitySelectionJson"]');
+        const tzField = panelEl.querySelector('.fest-info-edit [data-field="timeZone"]');
+        if (hidden) hidden.value = '';
+        if (tzField) tzField.value = '';
+      }
+      renderEventTimezoneSelectionState(panelEl);
+    });
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      void eventEditRunTimezoneSearch(panelEl, statusEl);
+    });
+  }
+  renderEventTimezoneSelectionState(panelEl);
+}
+
 function collectFestivalPayloadFromPanel(panelEl, fest) {
   const get = key => panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
   const getVal = key => String(get(key)?.value || '').trim();
@@ -21,6 +170,15 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
       return { error: `⚠ Lineup JSON 格式错误：${e.message}`, payload: null };
     }
   }
+  const startDateForLineup = getVal('startDate') || fest?.info?.startDate || '';
+  const endDateForLineup = getVal('endDate') || fest?.info?.endDate || startDateForLineup;
+  const dayRolloverHourForLineup = Number(fest?.info?.dayRolloverHour ?? 6);
+  lineup = normalizeLineupRowsForEventWallClockSync(
+    lineup,
+    startDateForLineup,
+    endDateForLineup,
+    dayRolloverHourForLineup
+  );
   let lineupArtists = fest?.info?.lineupArtists || [];
   if (lineupArtistsRaw) {
     try {
@@ -70,6 +228,7 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
   const detailAddressSeed = detailAddressZh || detailAddressEn || detailAddressI18n.ja || '';
   const citySeed = cityZh || cityEn || cityJa;
   const countrySeed = countryZh || countryEnFull || countryEn || countryJa;
+  const timeZoneSelection = eventEditReadTimezoneSelectionFromPanel(panelEl);
   const wikiFestivalId = getVal('wikiFestivalId');
   const wikiFestivalName = getVal('wikiFestivalName');
   const statusValue = normalizeArchiveEventStatus(
@@ -81,6 +240,10 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
     : normalizeBoolFlag(fest?.info?.canceled, false);
   if (statusValue === 'cancelled') canceled = true;
   const finalStatus = canceled ? 'cancelled' : (statusValue || '');
+
+  if (!timeZoneSelection?.timezone) {
+    return { error: '请先通过城市搜索并确认活动时区，不能再手填 timezone。', payload: null };
+  }
 
   const payload = {
     name: nameEn || nameZh || nameJa || multiLangDraft?.nameI18n?.ja || '',
@@ -95,7 +258,13 @@ function collectFestivalPayloadFromPanel(panelEl, fest) {
     canceled,
     status: finalStatus,
     eventType: String(get('eventType')?.value || fest?.info?.eventType || 'festival').trim() || 'festival',
-    timeZone: String(get('timeZone')?.value || fest?.info?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC').trim() || 'UTC',
+    timeZone: timeZoneSelection.timezone,
+    timeZoneCity: timeZoneSelection.city || '',
+    timeZoneProvince: timeZoneSelection.exactProvince || timeZoneSelection.province || '',
+    timeZoneCountry: timeZoneSelection.country || '',
+    timeZoneStateAnsi: timeZoneSelection.stateAnsi || '',
+    timeZoneLat: timeZoneSelection.lat,
+    timeZoneLng: timeZoneSelection.lng,
     startDate: getVal('startDate'),
     endDate: getVal('endDate'),
     relatedLinks: String(get('relatedLinks')?.value || '').split(/\r?\n/).map(v=>v.trim()).filter(Boolean),

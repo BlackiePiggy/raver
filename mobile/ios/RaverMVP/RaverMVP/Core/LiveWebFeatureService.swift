@@ -116,6 +116,20 @@ final class LiveWebFeatureService: WebFeatureService {
         return localizedEvent(response.data)
     }
 
+    func searchEventTimezones(query: String, limit: Int) async throws -> [EventTimezoneLookupItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let response: BFFEnvelope<BFFItems<EventTimezoneLookupItem>> = try await request(
+            path: "/v1/event-timezones/search",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "q", value: trimmed),
+                URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))"),
+            ]
+        )
+        return response.data.items
+    }
+
     func fetchMyEvents() async throws -> [WebEvent] {
         var page = 1
         var merged: [WebEvent] = []

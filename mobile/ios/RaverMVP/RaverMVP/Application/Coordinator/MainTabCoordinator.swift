@@ -663,11 +663,23 @@ struct MainTabCoordinatorView: View {
                         .toolbar(.hidden, for: .navigationBar)
                 }
             case .publishEvent:
-                EventEditorView(mode: .create) {}
+                if AppConfig.eventUploadFlowV2Enabled {
+                    EventUploadFlowView(mode: .create, webService: appContainer.webService) {
+                        NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+                    }
+                } else {
+                    EventEditorView(mode: .create) {
+                        NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+                    }
+                }
             case .uploadSet:
                 DJSetEditorView(mode: .create) {}
             case let .editEvent(eventID):
-                ProfileEventEditorLoaderView(eventID: eventID, eventReadRepository: appContainer.eventReadRepository)
+                ProfileEventEditorLoaderView(
+                    eventID: eventID,
+                    eventReadRepository: appContainer.eventReadRepository,
+                    webService: appContainer.webService
+                )
             case let .editSet(setID):
                 ProfileSetEditorLoaderView(setID: setID, setReadRepository: appContainer.setReadRepository)
             case let .editRatingEvent(eventID):
@@ -1835,6 +1847,16 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
     let load: () async throws -> Resource
     let content: (Resource) -> Content
 
+    init(
+        loadingText: String,
+        load: @escaping () async throws -> Resource,
+        @ViewBuilder content: @escaping (Resource) -> Content
+    ) {
+        self.loadingText = loadingText
+        self.load = load
+        self.content = content
+    }
+
     @State private var resource: Resource?
     @State private var phase: LoadPhase = .idle
     @State private var isLoading = false
@@ -1879,6 +1901,7 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
 private struct ProfileEventEditorLoaderView: View {
     let eventID: String
     let eventReadRepository: EventReadRepository
+    let webService: WebFeatureService
 
     var body: some View {
         ProfileResourceLoaderView(
@@ -1886,7 +1909,15 @@ private struct ProfileEventEditorLoaderView: View {
         ) {
             try await eventReadRepository.fetchEvent(id: eventID)
         } content: { event in
-            EventEditorView(mode: .edit(event)) {}
+            if AppConfig.eventUploadFlowV2Enabled {
+                EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
+                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+                }
+            } else {
+                EventEditorView(mode: .edit(event)) {
+                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+                }
+            }
         }
     }
 }

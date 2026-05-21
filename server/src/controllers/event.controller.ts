@@ -19,6 +19,7 @@ import {
   parseEventDateInput,
   setEventDayAndKeepTime,
   startOfEventDay,
+  zonedTimeToUtc,
 } from '../utils/event-timezone';
 import {
   loadCanonicalEventLineupSnapshot,
@@ -26,7 +27,14 @@ import {
   syncCanonicalEventLineupAndTimetable,
 } from '../services/event-lineup-canonical.service';
 
+const cityTimezones = require('city-timezones') as {
+  lookupViaCity: (city: string) => unknown[];
+  findFromCityStateProvince: (query: string) => unknown[];
+};
+
 const prisma = new PrismaClient();
+
+class EventInputValidationError extends Error {}
 
 type RawLineupSlotInput = {
   djId?: string;
@@ -74,6 +82,49 @@ type LineupArtistInput = {
   sortOrder: number;
 };
 
+type CityTimezoneLookupRow = {
+  city: string;
+  city_ascii?: string;
+  country?: string;
+  iso2?: string;
+  iso3?: string;
+  province?: string;
+  exactCity?: string;
+  exactProvince?: string;
+  state_ansi?: string;
+  timezone?: string;
+  lat?: number;
+  lng?: number;
+  pop?: number;
+};
+
+type EventTimezoneLookupItem = {
+  city: string;
+  cityAscii: string;
+  province: string;
+  exactProvince: string;
+  stateAnsi: string;
+  country: string;
+  iso2: string;
+  iso3: string;
+  timezone: string;
+  lat: number | null;
+  lng: number | null;
+  population: number | null;
+  label: string;
+  searchRank: number;
+  matchSource: 'exact-city' | 'city-region-search';
+};
+
+type SubmittedEventTimezoneSelection = {
+  city: string;
+  province: string;
+  country: string;
+  stateAnsi: string;
+  lat: number | null;
+  lng: number | null;
+};
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -87,6 +138,188 @@ const toNumberOrNull = (value: unknown): number | null => {
   }
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+};
+
+const normalizeCityTimezoneText = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const buildEventTimezoneLookupLabel = (item: {
+  city: string;
+  province?: string;
+  exactProvince?: string;
+  stateAnsi?: string;
+  country?: string;
+  timezone: string;
+}): string => {
+  const parts = [
+    normalizeCityTimezoneText(item.city),
+    normalizeCityTimezoneText(item.exactProvince || item.stateAnsi || item.province || ''),
+    normalizeCityTimezoneText(item.country || ''),
+  ].filter(Boolean);
+  return `${parts.join(', ')} · ${item.timezone}`;
+};
+
+const toEventTimezoneLookupItem = (
+  row: unknown,
+  query: string,
+  matchSource: 'exact-city' | 'city-region-search'
+): EventTimezoneLookupItem | null => {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const source = row as CityTimezoneLookupRow;
+  const timezone = normalizeCityTimezoneText(source.timezone);
+  const city = normalizeCityTimezoneText(source.city);
+  if (!city || !timezone || !isValidEventTimeZone(timezone)) return null;
+
+  const cityAscii = normalizeCityTimezoneText(source.city_ascii || city);
+  const province = normalizeCityTimezoneText(source.province);
+  const exactProvince = normalizeCityTimezoneText(source.exactProvince || province);
+  const stateAnsi = normalizeCityTimezoneText(source.state_ansi);
+  const country = normalizeCityTimezoneText(source.country);
+  const iso2 = normalizeCityTimezoneText(source.iso2).toUpperCase();
+  const iso3 = normalizeCityTimezoneText(source.iso3).toUpperCase();
+  const normalizedQuery = normalizeCityTimezoneText(query).toLowerCase();
+  const normalizedCity = city.toLowerCase();
+  const normalizedAscii = cityAscii.toLowerCase();
+  const exactCity = normalizeCityTimezoneText(source.exactCity || city).toLowerCase();
+
+  let searchRank = matchSource === 'exact-city' ? 0 : 20;
+  if (normalizedQuery && (
+    normalizedCity === normalizedQuery
+    || normalizedAscii === normalizedQuery
+    || exactCity === normalizedQuery
+  )) {
+    searchRank -= 10;
+  }
+  if (stateAnsi) searchRank -= 1;
+  const population = toNumberOrNull(source.pop);
+  if (population) {
+    searchRank -= Math.min(5, Math.floor(Math.log10(Math.max(1, population))));
+  }
+
+  return {
+    city,
+    cityAscii,
+    province,
+    exactProvince,
+    stateAnsi,
+    country,
+    iso2,
+    iso3,
+    timezone,
+    lat: toNumberOrNull(source.lat),
+    lng: toNumberOrNull(source.lng),
+    population,
+    label: buildEventTimezoneLookupLabel({
+      city,
+      province,
+      exactProvince,
+      stateAnsi,
+      country,
+      timezone,
+    }),
+    searchRank,
+    matchSource,
+  };
+};
+
+export const searchEventTimezonesByCity = (query: string, limitRaw: unknown): EventTimezoneLookupItem[] => {
+  const searchQuery = normalizeCityTimezoneText(query);
+  if (!searchQuery) return [];
+  const limitParsed = Number(limitRaw);
+  const limit = Number.isFinite(limitParsed)
+    ? Math.max(1, Math.min(20, Math.floor(limitParsed)))
+    : 8;
+
+  const exactMatches = cityTimezones.lookupViaCity(searchQuery) || [];
+  const broadMatches = cityTimezones.findFromCityStateProvince(searchQuery) || [];
+  const merged = new Map<string, EventTimezoneLookupItem>();
+  const push = (rows: unknown[], matchSource: 'exact-city' | 'city-region-search') => {
+    for (const row of rows) {
+      const item = toEventTimezoneLookupItem(row, searchQuery, matchSource);
+      if (!item) continue;
+      const key = [
+        item.city.toLowerCase(),
+        item.exactProvince.toLowerCase(),
+        item.country.toLowerCase(),
+        item.timezone.toLowerCase(),
+      ].join('|');
+      const existing = merged.get(key);
+      if (!existing || item.searchRank < existing.searchRank) {
+        merged.set(key, item);
+      }
+    }
+  };
+  push(exactMatches, 'exact-city');
+  push(broadMatches, 'city-region-search');
+
+  return Array.from(merged.values())
+    .sort((a, b) => {
+      if (a.searchRank !== b.searchRank) return a.searchRank - b.searchRank;
+      const popA = a.population ?? -1;
+      const popB = b.population ?? -1;
+      if (popA !== popB) return popB - popA;
+      return a.label.localeCompare(b.label, 'en', { sensitivity: 'base' });
+    })
+    .slice(0, limit);
+};
+
+const readSubmittedEventTimezoneSelection = (
+  body: Record<string, unknown>
+): SubmittedEventTimezoneSelection | null => {
+  const city = normalizeCityTimezoneText(body.timeZoneCity);
+  const province = normalizeCityTimezoneText(body.timeZoneProvince);
+  const country = normalizeCityTimezoneText(body.timeZoneCountry);
+  const stateAnsi = normalizeCityTimezoneText(body.timeZoneStateAnsi).toUpperCase();
+  const lat = toNumberOrNull(body.timeZoneLat);
+  const lng = toNumberOrNull(body.timeZoneLng);
+  if (!city && !province && !country && !stateAnsi && lat === null && lng === null) return null;
+  return {
+    city,
+    province,
+    country,
+    stateAnsi,
+    lat,
+    lng,
+  };
+};
+
+const validateSubmittedEventTimezoneSelection = (
+  body: Record<string, unknown>,
+  submittedTimeZone: string
+): string | null => {
+  const selection = readSubmittedEventTimezoneSelection(body);
+  if (!selection) return null;
+  if (!selection.city) return 'timeZoneCity is required when submitting city-based timezone metadata';
+
+  const query = [
+    selection.city,
+    selection.stateAnsi || selection.province,
+    selection.country,
+  ].filter(Boolean).join(' ').trim() || selection.city;
+
+  const candidates = searchEventTimezonesByCity(query, 20);
+  const cityLower = selection.city.toLowerCase();
+  const provinceLower = selection.province.toLowerCase();
+  const countryLower = selection.country.toLowerCase();
+  const targetTimeZone = normalizeEventTimeZone(submittedTimeZone);
+  const matched = candidates.find((item) => {
+    if (item.timezone !== targetTimeZone) return false;
+    const cityMatches = item.city.toLowerCase() === cityLower || item.cityAscii.toLowerCase() === cityLower;
+    if (!cityMatches) return false;
+    if (selection.stateAnsi && item.stateAnsi.toUpperCase() !== selection.stateAnsi) return false;
+    if (provinceLower) {
+      const itemProvince = (item.exactProvince || item.province || '').toLowerCase();
+      if (itemProvince && itemProvince !== provinceLower) return false;
+    }
+    if (countryLower && item.country.toLowerCase() !== countryLower) return false;
+    if (selection.lat !== null && item.lat !== null && Math.abs(item.lat - selection.lat) > 0.5) return false;
+    if (selection.lng !== null && item.lng !== null && Math.abs(item.lng - selection.lng) > 0.5) return false;
+    return true;
+  });
+
+  return matched ? null : 'Submitted event timezone does not match the selected city timezone result';
 };
 
 const EVENT_DEFAULT_START_TIME = '00:00:00';
@@ -196,6 +429,56 @@ const applyFestivalDayIndexToDate = (
   timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
+const datePartsInTimeZone = (date: Date, timeZone: string): { year: number; month: number; day: number } => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  };
+};
+
+const timePartsInTimeZone = (date: Date, timeZone: string): { hour: number; minute: number; second: number; millisecond: number } => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+    millisecond: date.getUTCMilliseconds(),
+  };
+};
+
+const applyFestivalDayIndexPreservingSourceWallTime = (
+  timeSource: Date,
+  eventStartDate: Date,
+  festivalDayIndex: number,
+  sourceTimeZoneRaw: unknown,
+  targetTimeZoneRaw: unknown
+): Date => {
+  const sourceTimeZone = normalizeEventTimeZone(sourceTimeZoneRaw);
+  const targetTimeZone = normalizeEventTimeZone(targetTimeZoneRaw);
+  const dateParts = datePartsInTimeZone(eventStartDate, targetTimeZone);
+  const timeParts = timePartsInTimeZone(timeSource, sourceTimeZone);
+  return zonedTimeToUtc({
+    ...dateParts,
+    day: dateParts.day + Math.max(0, festivalDayIndex - 1),
+    ...timeParts,
+  }, targetTimeZone);
+};
+
 type ExistingLineupSlotForRebase = {
   id: string;
   festivalDayIndex: number | null;
@@ -208,16 +491,29 @@ const rebaseExistingLineupSlotsToEventStart = (
   previousEventStartDate: Date,
   nextEventStartDate: Date,
   dayRolloverHour: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
+  previousTimeZone = DEFAULT_EVENT_TIME_ZONE,
+  nextTimeZone = DEFAULT_EVENT_TIME_ZONE
 ): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
   slots.map((slot) => {
     const festivalDayIndex =
       slot.festivalDayIndex
-      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour, timeZone)
+      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour, previousTimeZone)
       ?? 1;
-    const endDayOffset = Math.max(0, diffEventDays(slot.startTime, slot.endTime, timeZone));
-    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex, timeZone);
-    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset, timeZone);
+    const endDayOffset = Math.max(0, diffEventDays(slot.startTime, slot.endTime, previousTimeZone));
+    const startTime = applyFestivalDayIndexPreservingSourceWallTime(
+      slot.startTime,
+      nextEventStartDate,
+      festivalDayIndex,
+      previousTimeZone,
+      nextTimeZone
+    );
+    let endTime = applyFestivalDayIndexPreservingSourceWallTime(
+      slot.endTime,
+      nextEventStartDate,
+      festivalDayIndex + endDayOffset,
+      previousTimeZone,
+      nextTimeZone
+    );
 
     while (endTime < startTime) {
       endTime = new Date(endTime.getTime() + 86_400_000);
@@ -248,26 +544,24 @@ const normalizeLineupSlots = (
     .filter((slot) => slot && typeof slot === 'object')
     .map((slot) => slot as RawLineupSlotInput)
     .map((slot, index) => {
+      if (slot.startTime === undefined || slot.endTime === undefined) {
+        throw new EventInputValidationError(`lineupSlots[${index}] requires startTime and endTime`);
+      }
       const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
       const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
-      const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
+      if (!parsedStart || !parsedEnd) {
+        throw new EventInputValidationError(`lineupSlots[${index}] has invalid startTime or endTime`);
+      }
+      if (parsedStart.getTime() === parsedEnd.getTime()) {
+        throw new EventInputValidationError(`lineupSlots[${index}] startTime and endTime cannot be the same`);
+      }
       const explicitFestivalDayIndex =
         typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
           ? Math.max(1, Math.floor(slot.festivalDayIndex))
           : null;
 
-      let startTime = fallbackBase;
-      let endTime = fallbackBase;
-      if (parsedStart && parsedEnd) {
-        startTime = parsedStart;
-        endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedStart.getTime() + 3_600_000);
-      } else if (parsedStart) {
-        startTime = parsedStart;
-        endTime = new Date(parsedStart.getTime() + 3_600_000);
-      } else if (parsedEnd) {
-        endTime = parsedEnd;
-        startTime = new Date(parsedEnd.getTime() - 3_600_000);
-      }
+      let startTime = parsedStart;
+      let endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedEnd.getTime() + 86_400_000);
 
       if (explicitFestivalDayIndex) {
         startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
@@ -569,6 +863,28 @@ export const getEventYears = async (_req: Request, res: Response): Promise<void>
   }
 };
 
+export const searchEventTimezones = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = String(req.query.q || req.query.query || '').trim();
+    if (!query) {
+      res.json({
+        items: [],
+        query: '',
+      });
+      return;
+    }
+
+    const items = searchEventTimezonesByCity(query, req.query.limit);
+    res.json({
+      items,
+      query,
+    });
+  } catch (error) {
+    console.error('Search event timezones error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const getMyEvents = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
@@ -718,6 +1034,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
 
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
     const normalizedTimeZone = normalizeEventTimeZone(timeZone);
+    const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(req.body as Record<string, unknown>, normalizedTimeZone);
+    if (submittedTimeZoneSelectionError) {
+      res.status(400).json({ error: submittedTimeZoneSelectionError });
+      return;
+    }
     const normalizedStartTime = normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME);
     const normalizedEndTime = normalizeEventClockTime(endTime, EVENT_DEFAULT_END_TIME);
     const parsedStartDateInput = parseEventDateInput(startDate, normalizedTimeZone, 'start', normalizedStartTime);
@@ -818,6 +1139,10 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
 
     res.status(201).json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
+    if (error instanceof EventInputValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error('Create event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -896,6 +1221,13 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const nextTimeZone = timeZone !== undefined
       ? normalizeEventTimeZone(timeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
       : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
+    if (timeZone !== undefined) {
+      const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(req.body as Record<string, unknown>, nextTimeZone);
+      if (submittedTimeZoneSelectionError) {
+        res.status(400).json({ error: submittedTimeZoneSelectionError });
+        return;
+      }
+    }
     const nextStartTime = startTime !== undefined
       ? normalizeEventClockTime(startTime, EVENT_DEFAULT_START_TIME)
       : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
@@ -1016,6 +1348,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           existing.startDate,
           effectiveStartDate,
           nextDayRolloverHour,
+          existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE,
           nextTimeZone
         );
         await syncCanonicalEventLineupAndTimetable(
@@ -1056,6 +1389,10 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
 
     res.json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
+    if (error instanceof EventInputValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error('Update event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

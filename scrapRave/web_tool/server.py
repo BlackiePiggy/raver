@@ -3699,6 +3699,13 @@ class Handler(BaseHTTPRequestHandler):
                 auth_header=self.headers.get("Authorization", ""),
             )
             return
+        if path == "/api/raver/event-timezones/search":
+            self._proxy_raver_get(
+                "/v1/event-timezones/search",
+                parsed.query,
+                auth_header=self.headers.get("Authorization", ""),
+            )
+            return
         if path == "/api/raver/events/years":
             self._send_raver_event_years(self.headers.get("Authorization", ""))
             return

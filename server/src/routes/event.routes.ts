@@ -3,6 +3,7 @@ import multer from 'multer';
 import {
   getEvents,
   getEventYears,
+  searchEventTimezones,
   getMyEvents,
   getEvent,
   createEvent,
@@ -40,6 +41,7 @@ const upload = multer({
 
 router.get('/', getEvents);
 router.get('/years', getEventYears);
+router.get('/timezones/search', searchEventTimezones);
 router.get('/mine', authenticate, getMyEvents);
 router.post('/upload-image', authenticate, upload.single('image'), uploadEventImage);
 router.get('/:eventId/lineup', getLineup);

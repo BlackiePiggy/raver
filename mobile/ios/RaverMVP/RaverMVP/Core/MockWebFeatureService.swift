@@ -544,6 +544,53 @@ actor MockWebFeatureService: WebFeatureService {
         return item
     }
 
+    func searchEventTimezones(query: String, limit: Int) async throws -> [EventTimezoneLookupItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let samples = [
+            EventTimezoneLookupItem(
+                city: "Chicago",
+                cityAscii: "Chicago",
+                province: "Illinois",
+                exactProvince: "IL",
+                stateAnsi: "IL",
+                country: "United States of America",
+                iso2: "US",
+                iso3: "USA",
+                timezone: "America/Chicago",
+                lat: 41.82999066,
+                lng: -87.75005497,
+                population: 5915976,
+                label: "Chicago, IL, United States of America · America/Chicago",
+                matchSource: "exact-city"
+            ),
+            EventTimezoneLookupItem(
+                city: "Amsterdam",
+                cityAscii: "Amsterdam",
+                province: "Noord-Holland",
+                exactProvince: "Noord-Holland",
+                stateAnsi: "",
+                country: "Netherlands",
+                iso2: "NL",
+                iso3: "NLD",
+                timezone: "Europe/Amsterdam",
+                lat: 52.35,
+                lng: 4.9166,
+                population: 1031000,
+                label: "Amsterdam, Noord-Holland, Netherlands · Europe/Amsterdam",
+                matchSource: "exact-city"
+            ),
+        ]
+        return samples
+            .filter { item in
+                item.label.localizedCaseInsensitiveContains(trimmed)
+                    || item.city.localizedCaseInsensitiveContains(trimmed)
+                    || item.cityAscii.localizedCaseInsensitiveContains(trimmed)
+            }
+            .prefix(max(1, limit))
+            .map { $0 }
+    }
+
     func fetchMyEvents() async throws -> [WebEvent] {
         try await fetchMyEvents(page: 1, limit: max(events.count, 1)).items
     }

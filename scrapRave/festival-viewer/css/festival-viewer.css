@@ -9834,3 +9834,40 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(167,139,250,0.18);
   }
+
+.event-timezone-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.event-timezone-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.event-timezone-preview {
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border2);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.event-timezone-preview.empty {
+  color: var(--text-dim);
+}
+
+.event-timezone-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.event-timezone-result-btn {
+  text-align: left;
+  width: 100%;
+}

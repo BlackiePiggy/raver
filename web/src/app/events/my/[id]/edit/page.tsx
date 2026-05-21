@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Navigation from '@/components/Navigation';
+import EventTimezonePicker from '@/components/events/EventTimezonePicker';
 import { useAuth } from '@/contexts/AuthContext';
-import { eventAPI, Event } from '@/lib/api/event';
+import { eventAPI, Event, EventTimezoneLookupItem } from '@/lib/api/event';
 import { djAPI, DJ } from '@/lib/api/dj';
-import { DEFAULT_BUSINESS_TIME_ZONE, getSystemTimeZone, getTimeZoneLabel } from '@/lib/timezone';
+import { DEFAULT_BUSINESS_TIME_ZONE, formatClockTimeInTimeZone, formatDateInputInTimeZone } from '@/lib/timezone';
 
 interface LineupSlotForm {
   id?: string;
@@ -46,22 +47,6 @@ const startOfDay = (date: Date): Date => {
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
   return next;
-};
-
-const formatLocalDateInput = (value: string | Date): string => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: getSystemTimeZone(),
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const year = values.year;
-  const month = values.month;
-  const day = values.day;
-  return `${year}-${month}-${day}`;
 };
 
 const formatLocalDateTime = (date: Date): string => {
@@ -124,9 +109,10 @@ const buildLineupDateTime = (
 
 const inferFestivalDayIndex = (
   slotStartValue: string | undefined,
-  eventStartValue: string
+  eventStartValue: string,
+  timeZone: string
 ): string => {
-  const slotStart = slotStartValue ? parseLocalDate(slotStartValue) : null;
+  const slotStart = slotStartValue ? parseLocalDate(formatDateInputInTimeZone(slotStartValue, timeZone)) : null;
   const eventStart = parseLocalDate(eventStartValue);
   if (!slotStart || !eventStart) return '1';
   const diffDays = Math.floor((startOfDay(slotStart).getTime() - startOfDay(eventStart).getTime()) / 86_400_000);
@@ -209,7 +195,8 @@ export default function EditMyEventPage() {
   const [country, setCountry] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [eventTimeZone, setEventTimeZone] = useState(DEFAULT_BUSINESS_TIME_ZONE);
+  const [eventTimeZoneQuery, setEventTimeZoneQuery] = useState('');
+  const [eventTimeZoneSelection, setEventTimeZoneSelection] = useState<EventTimezoneLookupItem | null>(null);
   const [ticketUrl, setTicketUrl] = useState('');
   const [ticketCurrency, setTicketCurrency] = useState('CNY');
   const [ticketNotes, setTicketNotes] = useState('');
@@ -295,9 +282,25 @@ export default function EditMyEventPage() {
         setVenueAddress(data.venueAddress || '');
         setCity(data.city || '');
         setCountry(data.country || '');
-        setStartDate(data.startDate ? formatLocalDateInput(data.startDate) : '');
-        setEndDate(data.endDate ? formatLocalDateInput(data.endDate) : '');
-        setEventTimeZone(data.timeZone || DEFAULT_BUSINESS_TIME_ZONE);
+        const resolvedTimeZone = data.timeZone || DEFAULT_BUSINESS_TIME_ZONE;
+        setStartDate(data.startDate ? formatDateInputInTimeZone(data.startDate, resolvedTimeZone) : '');
+        setEndDate(data.endDate ? formatDateInputInTimeZone(data.endDate, resolvedTimeZone) : '');
+        setEventTimeZoneQuery(data.city || '');
+        setEventTimeZoneSelection({
+          city: data.city || '',
+          cityAscii: data.city || '',
+          province: '',
+          exactProvince: '',
+          stateAnsi: '',
+          country: data.country || '',
+          iso2: '',
+          iso3: '',
+          timezone: resolvedTimeZone,
+          lat: data.latitude ?? null,
+          lng: data.longitude ?? null,
+          population: null,
+          label: [data.city || '', data.country || ''].filter(Boolean).join(', ') + ` · ${resolvedTimeZone}`,
+        });
         setTicketUrl(data.ticketUrl || '');
         setTicketCurrency(data.ticketCurrency || 'CNY');
         setTicketNotes(data.ticketNotes || '');
@@ -318,12 +321,12 @@ export default function EditMyEventPage() {
             festivalDayIndex: String(
               slot.festivalDayIndex && slot.festivalDayIndex > 0
                 ? slot.festivalDayIndex
-                : Number(inferFestivalDayIndex(slot.startTime, data.startDate))
+                : Number(inferFestivalDayIndex(slot.startTime, formatDateInputInTimeZone(data.startDate, resolvedTimeZone), resolvedTimeZone))
             ),
             djName: slot.djName || slot.dj?.name || '',
             stageName: slot.stageName || '',
-            startTime: slot.startTime ? new Date(slot.startTime).toTimeString().slice(0, 5) : '',
-            endTime: slot.endTime ? new Date(slot.endTime).toTimeString().slice(0, 5) : '',
+            startTime: slot.startTime ? formatClockTimeInTimeZone(slot.startTime, resolvedTimeZone) : '',
+            endTime: slot.endTime ? formatClockTimeInTimeZone(slot.endTime, resolvedTimeZone) : '',
           }))
         );
       } catch (err) {
@@ -399,6 +402,9 @@ export default function EditMyEventPage() {
     setMessage('');
 
     try {
+      if (!eventTimeZoneSelection?.timezone) {
+        throw new Error('请先搜索并确认活动城市时区');
+      }
       await eventAPI.updateEvent(
         eventId,
         {
@@ -414,7 +420,13 @@ export default function EditMyEventPage() {
           country,
           startDate,
           endDate,
-          timeZone: eventTimeZone || DEFAULT_BUSINESS_TIME_ZONE,
+          timeZone: eventTimeZoneSelection.timezone || DEFAULT_BUSINESS_TIME_ZONE,
+          timeZoneCity: eventTimeZoneSelection.city,
+          timeZoneProvince: eventTimeZoneSelection.exactProvince || eventTimeZoneSelection.province || '',
+          timeZoneCountry: eventTimeZoneSelection.country || '',
+          timeZoneStateAnsi: eventTimeZoneSelection.stateAnsi || '',
+          timeZoneLat: eventTimeZoneSelection.lat,
+          timeZoneLng: eventTimeZoneSelection.lng,
           ticketUrl,
           ticketPriceMin: null,
           ticketPriceMax: null,
@@ -508,13 +520,17 @@ export default function EditMyEventPage() {
                 <label className="block text-sm text-text-secondary mb-1">结束时间</label>
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm text-text-secondary mb-1">活动时区</label>
-                <input value={eventTimeZone} onChange={(e) => setEventTimeZone(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" placeholder={DEFAULT_BUSINESS_TIME_ZONE} />
-                <p className="mt-1 text-xs text-text-tertiary">
-                  未填写时默认 {getTimeZoneLabel(DEFAULT_BUSINESS_TIME_ZONE)}；展示给用户时仍按用户系统时区显示。
-                </p>
-              </div>
+              <EventTimezonePicker
+                token={token}
+                query={eventTimeZoneQuery}
+                onQueryChange={setEventTimeZoneQuery}
+                selection={eventTimeZoneSelection}
+                onSelectionChange={setEventTimeZoneSelection}
+                onAutoFillLocation={(item) => {
+                  setCity((prev) => prev || item.city);
+                  setCountry((prev) => prev || item.country);
+                }}
+              />
               <div>
                 <label className="block text-sm text-text-secondary mb-1">国家</label>
                 <input value={country} onChange={(e) => setCountry(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />

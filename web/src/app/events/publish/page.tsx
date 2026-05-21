@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Navigation from '@/components/Navigation';
+import EventTimezonePicker from '@/components/events/EventTimezonePicker';
 import { useAuth } from '@/contexts/AuthContext';
-import { eventAPI } from '@/lib/api/event';
+import { eventAPI, EventTimezoneLookupItem } from '@/lib/api/event';
 import { djAPI, DJ } from '@/lib/api/dj';
-import { DEFAULT_BUSINESS_TIME_ZONE, getTimeZoneLabel } from '@/lib/timezone';
+import { DEFAULT_BUSINESS_TIME_ZONE } from '@/lib/timezone';
 
 interface LineupSlotForm {
   djId?: string;
@@ -184,7 +185,8 @@ export default function PublishEventPage() {
   const [country, setCountry] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [eventTimeZone, setEventTimeZone] = useState(DEFAULT_BUSINESS_TIME_ZONE);
+  const [eventTimeZoneQuery, setEventTimeZoneQuery] = useState('');
+  const [eventTimeZoneSelection, setEventTimeZoneSelection] = useState<EventTimezoneLookupItem | null>(null);
   const [ticketUrl, setTicketUrl] = useState('');
   const [ticketCurrency, setTicketCurrency] = useState('CNY');
   const [ticketNotes, setTicketNotes] = useState('');
@@ -222,8 +224,8 @@ export default function PublishEventPage() {
   }, [user]);
 
   const canSubmit = useMemo(() => {
-    return Boolean(name && startDate && endDate && city && country && venueName);
-  }, [name, startDate, endDate, city, country, venueName]);
+    return Boolean(name && startDate && endDate && city && country && venueName && eventTimeZoneSelection?.timezone);
+  }, [name, startDate, endDate, city, country, venueName, eventTimeZoneSelection]);
   const festivalDayOptions = useMemo(() => buildFestivalDayOptions(startDate, endDate), [startDate, endDate]);
 
   const uploadImage = async (file: File, target: 'cover' | 'lineup') => {
@@ -308,7 +310,7 @@ export default function PublishEventPage() {
       return;
     }
     if (!canSubmit) {
-      setError('请先填写活动名称、时间、国家城市和场地');
+      setError('请先填写活动名称、时间、国家城市、场地，并确认活动城市时区');
       return;
     }
 
@@ -317,6 +319,9 @@ export default function PublishEventPage() {
     setMessage('');
 
     try {
+      if (!eventTimeZoneSelection?.timezone) {
+        throw new Error('请先搜索并确认活动城市时区');
+      }
       const payload = {
         name,
         slug: `${slugify(name)}-${Date.now().toString().slice(-6)}`,
@@ -331,7 +336,13 @@ export default function PublishEventPage() {
         country,
         startDate,
         endDate,
-        timeZone: eventTimeZone || DEFAULT_BUSINESS_TIME_ZONE,
+        timeZone: eventTimeZoneSelection.timezone || DEFAULT_BUSINESS_TIME_ZONE,
+        timeZoneCity: eventTimeZoneSelection.city,
+        timeZoneProvince: eventTimeZoneSelection.exactProvince || eventTimeZoneSelection.province || '',
+        timeZoneCountry: eventTimeZoneSelection.country || '',
+        timeZoneStateAnsi: eventTimeZoneSelection.stateAnsi || '',
+        timeZoneLat: eventTimeZoneSelection.lat,
+        timeZoneLng: eventTimeZoneSelection.lng,
         ticketUrl: ticketUrl || null,
         ticketPriceMin: null,
         ticketPriceMax: null,
@@ -433,13 +444,17 @@ export default function PublishEventPage() {
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" required />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-sm text-text-secondary mb-1">活动时区</label>
-              <input value={eventTimeZone} onChange={(e) => setEventTimeZone(e.target.value)} className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary" placeholder={DEFAULT_BUSINESS_TIME_ZONE} />
-              <p className="mt-1 text-xs text-text-tertiary">
-                未填写时默认 {getTimeZoneLabel(DEFAULT_BUSINESS_TIME_ZONE)}；展示给用户时仍按用户系统时区显示。
-              </p>
-            </div>
+            <EventTimezonePicker
+              token={token}
+              query={eventTimeZoneQuery}
+              onQueryChange={setEventTimeZoneQuery}
+              selection={eventTimeZoneSelection}
+              onSelectionChange={setEventTimeZoneSelection}
+              onAutoFillLocation={(item) => {
+                setCity((prev) => prev || item.city);
+                setCountry((prev) => prev || item.country);
+              }}
+            />
 
             <div>
               <label className="block text-sm text-text-secondary mb-1">国家</label>

@@ -21,6 +21,45 @@ const cleanText = (value: unknown): string | undefined => {
   return trimmed || undefined;
 };
 
+const eventImageAssetsFromPayload = (value: unknown): Prisma.InputJsonValue[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const row = item as Record<string, unknown>;
+      const url = cleanText(row.url);
+      const type = cleanText(row.type)?.toLowerCase();
+      if (!url || !type || !['cover', 'luall', 'tt', 'other'].includes(type)) return null;
+      const label = cleanText(row.label) || type.toUpperCase();
+      const fileName = cleanText(row.fileName);
+      const source = cleanText(row.source);
+      const originalUrl = cleanText(row.originalUrl);
+      const order = typeof row.order === 'number' && Number.isFinite(row.order) ? row.order : undefined;
+      const sort = typeof row.sort === 'number' && Number.isFinite(row.sort) ? row.sort : undefined;
+      return {
+        type,
+        label,
+        url,
+        ...(fileName ? { fileName } : {}),
+        ...(source ? { source } : {}),
+        ...(originalUrl ? { originalUrl } : {}),
+        ...(order !== undefined ? { order } : {}),
+        ...(sort !== undefined ? { sort } : {}),
+      } as Prisma.InputJsonObject;
+    })
+    .filter((item): item is Prisma.InputJsonObject => item !== null);
+};
+
+const hasRequiredEventPosterAsset = (assets: Prisma.InputJsonValue[]): boolean =>
+  assets.some((asset) => {
+    if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return false;
+    const row = asset as Record<string, unknown>;
+    const type = cleanText(row.type)?.toLowerCase();
+    const label = cleanText(row.label)?.toUpperCase() || '';
+    const fileName = cleanText(row.fileName)?.toLowerCase() || '';
+    return type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));
+  });
+
 const parseLimit = (value: unknown, fallback = 50, max = 200): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -297,6 +336,10 @@ const createEventFromSubmission = async (payload: Prisma.JsonObject, submitterId
   if (!name || !startDate || !endDate) {
     throw new Error('活动名称、开始日期和结束日期不能为空');
   }
+  const imageAssets = eventImageAssetsFromPayload(payload.imageAssets);
+  if (!hasRequiredEventPosterAsset(imageAssets)) {
+    throw new Error('活动海报不能为空');
+  }
 
   const slug = await uniqueEventSlug(name, cleanText(payload.slug));
   return prisma.event.create({
@@ -309,6 +352,7 @@ const createEventFromSubmission = async (payload: Prisma.JsonObject, submitterId
       descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.description) || '')),
       coverImageUrl: cleanText(payload.coverImageUrl) || null,
       lineupImageUrl: cleanText(payload.lineupImageUrl) || null,
+      imageAssets: imageAssets.length ? imageAssets : undefined,
       eventType: cleanText(payload.eventType) || null,
       organizerName: cleanText(payload.organizerName) || null,
       city: cleanText(payload.city) || null,

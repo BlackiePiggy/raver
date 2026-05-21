@@ -64,7 +64,7 @@ function ensureAddEventDraftFestival() {
         canceled: false,
         status: 'upcoming',
         eventType: 'festival',
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+        timeZone: '',
         startDate: today,
         endDate: today,
         relatedLinks: [],
@@ -130,6 +130,9 @@ function initAddEventModalOnce() {
   if (typeof bindEventLocationEditorActions === 'function') {
     bindEventLocationEditorActions(panel, fest);
   }
+  if (typeof bindEventTimezoneLookupUI === 'function') {
+    bindEventTimezoneLookupUI(panel, document.getElementById('add-event-save-status'));
+  }
   if (typeof setEventLocationDraftFromInfo === 'function') {
     setEventLocationDraftFromInfo(panel, fest.info || null);
   }
@@ -156,7 +159,7 @@ function resetAddEventModalForm() {
     canceled: false,
     status: 'upcoming',
     eventType: 'festival',
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+    timeZone: '',
     startDate: today,
     endDate: today,
     relatedLinks: [],
@@ -190,7 +193,9 @@ function resetAddEventModalForm() {
   addEventSetFieldValue('status', 'upcoming');
   addEventSetFieldValue('canceled', 'false');
   addEventSetFieldValue('eventType', 'festival');
-  addEventSetFieldValue('timeZone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai');
+  addEventSetFieldValue('timeZoneSearch', '');
+  addEventSetFieldValue('timeZone', '');
+  addEventSetFieldValue('timeZoneCitySelectionJson', '');
   addEventSetFieldValue('startDate', today);
   addEventSetFieldValue('endDate', today);
   addEventSetFieldValue('ticketPriceMin', '');
@@ -216,6 +221,10 @@ function resetAddEventModalForm() {
   }
   if (typeof bindEventLocationEditorActions === 'function') {
     bindEventLocationEditorActions(panel, fest);
+  }
+  if (typeof bindEventTimezoneLookupUI === 'function') {
+    bindEventTimezoneLookupUI(panel, document.getElementById('add-event-save-status'));
+    renderEventTimezoneSelectionState(panel, { clearResults: true });
   }
   if (typeof setEventLocationDraftFromInfo === 'function') {
     setEventLocationDraftFromInfo(panel, fest.info || null);
@@ -277,6 +286,13 @@ function openAddEventTimetableEditorModal() {
 function addEventQueuedImageCount(panel) {
   const draft = collectEventImageDraftPayload(panel);
   return Object.values(draft).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+}
+
+function addEventQueuedImageCountForZone(panel, zoneKey) {
+  const draft = collectEventImageDraftPayload(panel);
+  const zone = normalizeEventImageZoneKey(zoneKey);
+  const list = Array.isArray(draft[zone]) ? draft[zone] : [];
+  return list.length;
 }
 
 function buildAddEventRecognitionContext() {
@@ -462,8 +478,13 @@ async function confirmAddEventCreate() {
   }
 
   const queuedImages = addEventQueuedImageCount(panel);
+  const queuedPosterImages = addEventQueuedImageCountForZone(panel, 'poster');
   if (queuedImages < 1) {
     addEventSetModalStatus('请至少上传 1 张图片。', true);
+    return;
+  }
+  if (queuedPosterImages < 1) {
+    addEventSetModalStatus('请在 Poster 分区至少上传 1 张海报图片，不能无海报创建活动。', true);
     return;
   }
 

@@ -85,6 +85,23 @@ export interface EventFilters {
   status?: string;
 }
 
+export interface EventTimezoneLookupItem {
+  city: string;
+  cityAscii: string;
+  province: string;
+  exactProvince: string;
+  stateAnsi: string;
+  country: string;
+  iso2: string;
+  iso3: string;
+  timezone: string;
+  lat: number | null;
+  lng: number | null;
+  population: number | null;
+  label: string;
+  matchSource?: string;
+}
+
 class EventAPI {
   private getHeaders(token?: string) {
     const headers: HeadersInit = {
@@ -140,6 +157,22 @@ class EventAPI {
     }
 
     return response.json();
+  }
+
+  async searchEventTimezones(query: string, token?: string): Promise<EventTimezoneLookupItem[]> {
+    const params = new URLSearchParams({
+      q: query.trim(),
+      limit: '8',
+    });
+    const response = await fetch(`${API_URL}/events/timezones/search?${params.toString()}`, {
+      headers: this.getHeaders(token),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to search event timezones');
+    }
+    const data = await response.json();
+    return Array.isArray(data?.items) ? data.items : [];
   }
 
   async getMyEvents(token: string): Promise<{ events: Event[] }> {

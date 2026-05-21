@@ -6,6 +6,7 @@ protocol WebFeatureService {
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEvent(id: String) async throws -> WebEvent
+    func searchEventTimezones(query: String, limit: Int) async throws -> [EventTimezoneLookupItem]
     func fetchMyEvents() async throws -> [WebEvent]
     func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage
     func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage

@@ -52,20 +52,37 @@ function guessImageExtFromNameOrUrl(nameOrUrl, mimeType = '') {
   return '.jpg';
 }
 
-function formatArchiveLineupTimeRange(startTime, endTime) {
+function formatArchiveLineupClockInTimeZone(value, timeZoneRaw = 'UTC') {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '00:00';
+  const timeZone = (typeof normalizeTimeZoneForSync === 'function')
+    ? normalizeTimeZoneForSync(timeZoneRaw, 'UTC')
+    : (String(timeZoneRaw || '').trim() || 'UTC');
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).formatToParts(date);
+    const get = (type) => parts.find((part) => part.type === type)?.value || '';
+    const hour = get('hour');
+    const minute = get('minute');
+    if (hour && minute) return `${hour}:${minute}`;
+  } catch (_error) {}
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  const m = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function formatArchiveLineupTimeRange(startTime, endTime, eventTimeZone = 'UTC') {
   const start = new Date(startTime);
   const end = new Date(endTime);
   if (Number.isNaN(start.getTime()) && Number.isNaN(end.getTime())) return '未知';
-  const fmt = (date) => {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '00:00';
-    const h = String(date.getHours()).padStart(2, '0');
-    const m = String(date.getMinutes()).padStart(2, '0');
-    return `${h}:${m}`;
-  };
-  return `${fmt(start)}—${fmt(end)}`;
+  return `${formatArchiveLineupClockInTimeZone(startTime, eventTimeZone)}—${formatArchiveLineupClockInTimeZone(endTime, eventTimeZone)}`;
 }
 
-function mapBackendLineupSlotsToArchiveRows(slots, eventStartDateText = '') {
+function mapBackendLineupSlotsToArchiveRows(slots, eventStartDateText = '', eventTimeZone = 'UTC') {
   if (!Array.isArray(slots)) return [];
   const eventStartDay = parseArchiveDateOnlyForSync(eventStartDateText);
   return slots
@@ -73,7 +90,6 @@ function mapBackendLineupSlotsToArchiveRows(slots, eventStartDateText = '') {
       if (!slot || typeof slot !== 'object') return null;
       const djName = String(slot.djName || slot?.dj?.name || '').trim();
       if (!djName) return null;
-      const start = new Date(slot.startTime);
       const explicitDayIndex = Number(slot.festivalDayIndex);
       const logicalDayDate = (
         Number.isInteger(explicitDayIndex)
@@ -82,10 +98,10 @@ function mapBackendLineupSlotsToArchiveRows(slots, eventStartDateText = '') {
         && !Number.isNaN(eventStartDay.getTime())
       )
         ? new Date(eventStartDay.getTime() + (explicitDayIndex - 1) * 24 * 60 * 60 * 1000)
-        : start;
-      const dateText = Number.isNaN(logicalDayDate.getTime())
-        ? '未知'
-        : `${logicalDayDate.getFullYear()}-${String(logicalDayDate.getMonth() + 1).padStart(2, '0')}-${String(logicalDayDate.getDate()).padStart(2, '0')}`;
+        : null;
+      const dateText = logicalDayDate instanceof Date && !Number.isNaN(logicalDayDate.getTime())
+        ? `${logicalDayDate.getFullYear()}-${String(logicalDayDate.getMonth() + 1).padStart(2, '0')}-${String(logicalDayDate.getDate()).padStart(2, '0')}`
+        : (formatArchiveDateInTimeZoneForSync(slot.startTime, eventTimeZone) || '未知');
       const rawDjIds = Array.isArray(slot?.djIds) ? slot.djIds : [];
       const djIds = rawDjIds
         .map((id) => String(id || '').trim())
@@ -95,7 +111,7 @@ function mapBackendLineupSlotsToArchiveRows(slots, eventStartDateText = '') {
       const row = normalizeLineupEntry({
         musician: djName,
         date: dateText,
-        time: formatArchiveLineupTimeRange(slot.startTime, slot.endTime),
+        time: formatArchiveLineupTimeRange(slot.startTime, slot.endTime, eventTimeZone),
         stage: String(slot.stageName || '').trim(),
         djId: fallbackDjId,
         djIds: mergedDjIds,
@@ -240,7 +256,7 @@ function mapBackendEventToFestival(event) {
     event,
     normalizeBackendEventImageAssets(event?.imageAssets)
   );
-  const lineup = mapBackendLineupSlotsToArchiveRows(event?.lineupSlots, startDate);
+  const lineup = mapBackendLineupSlotsToArchiveRows(event?.lineupSlots, startDate, eventTimeZone);
   const lineupArtistCount = Number(event?.lineupArtistCount ?? event?.lineupArtistsCount ?? 0);
   const timetableSlotCount = Number(event?.timetableSlotCount ?? event?.timetableSlotsCount ?? 0);
   const lineupArtists = Array.isArray(event?.lineupArtists)

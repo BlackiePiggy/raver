@@ -356,19 +356,18 @@ function buildRow(fest) {
             <option value="other">other</option>
           </select>
         </div>
-        <div class="edit-field">
+        <div class="edit-field full event-timezone-field">
           <label>Event Time Zone</label>
-          <select class="edit-input" data-field="timeZone">
-            <option value="Asia/Shanghai">Asia/Shanghai · 北京时间</option>
-            <option value="UTC">UTC</option>
-            <option value="Asia/Tokyo">Asia/Tokyo</option>
-            <option value="Asia/Singapore">Asia/Singapore</option>
-            <option value="Asia/Bangkok">Asia/Bangkok</option>
-            <option value="Europe/Amsterdam">Europe/Amsterdam</option>
-            <option value="Europe/London">Europe/London</option>
-            <option value="America/Los_Angeles">America/Los_Angeles</option>
-            <option value="America/New_York">America/New_York</option>
-          </select>
+          <input class="edit-input" data-field="timeZoneSearch" type="text" placeholder="输入城市或城市+州/国家，如 Chicago / Springfield MO / Amsterdam NL">
+          <input class="edit-input" data-field="timeZone" type="hidden">
+          <input class="edit-input" data-field="timeZoneCitySelectionJson" type="hidden">
+          <div class="event-timezone-actions">
+            <button class="edit-btn" type="button" data-action="event-timezone-search">搜索城市时区</button>
+            <button class="edit-btn" type="button" data-action="event-timezone-clear">清空时区选择</button>
+          </div>
+          <div class="edit-lineup-hint">不再手填 timezone 名称。请搜索活动所在城市，并从候选结果中确认。</div>
+          <div class="event-timezone-preview empty" data-event-timezone-preview>未选择活动城市时区</div>
+          <div class="event-timezone-results" data-event-timezone-results></div>
         </div>
         <div class="edit-field">
           <label>Start Date</label>

@@ -618,6 +618,29 @@ struct WebEvent: Codable, Identifiable, Hashable {
     }
 }
 
+struct EventTimezoneLookupItem: Codable, Hashable, Identifiable {
+    var city: String
+    var cityAscii: String
+    var province: String
+    var exactProvince: String
+    var stateAnsi: String
+    var country: String
+    var iso2: String
+    var iso3: String
+    var timezone: String
+    var lat: Double? = nil
+    var lng: Double? = nil
+    var population: Double? = nil
+    var label: String
+    var matchSource: String? = nil
+
+    var id: String {
+        [city, exactProvince, country, timezone]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .joined(separator: "|")
+    }
+}
+
 struct CreateEventInput: Codable {
     var name: String
     var wikiFestivalId: String? = nil
@@ -638,12 +661,19 @@ struct CreateEventInput: Codable {
     var startDate: Date
     var endDate: Date
     var timeZone: String? = nil
+    var timeZoneCity: String? = nil
+    var timeZoneProvince: String? = nil
+    var timeZoneCountry: String? = nil
+    var timeZoneStateAnsi: String? = nil
+    var timeZoneLat: Double? = nil
+    var timeZoneLng: Double? = nil
     var startTime: String? = nil
     var endTime: String? = nil
     var dayRolloverHour: Int? = nil
     var stageOrder: [String]? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var imageAssets: [WebEventImageAsset]? = nil
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
@@ -823,12 +853,19 @@ struct UpdateEventInput: Encodable {
     var startDate: Date?
     var endDate: Date?
     var timeZone: String? = nil
+    var timeZoneCity: String? = nil
+    var timeZoneProvince: String? = nil
+    var timeZoneCountry: String? = nil
+    var timeZoneStateAnsi: String? = nil
+    var timeZoneLat: Double? = nil
+    var timeZoneLng: Double? = nil
     var startTime: String? = nil
     var endTime: String? = nil
     var dayRolloverHour: Int? = nil
     var stageOrder: [String]? = nil
     var coverImageUrl: String?
     var lineupImageUrl: String?
+    var imageAssets: [WebEventImageAsset]? = nil
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
@@ -856,12 +893,19 @@ struct UpdateEventInput: Encodable {
         case startDate
         case endDate
         case timeZone
+        case timeZoneCity
+        case timeZoneProvince
+        case timeZoneCountry
+        case timeZoneStateAnsi
+        case timeZoneLat
+        case timeZoneLng
         case startTime
         case endTime
         case dayRolloverHour
         case stageOrder
         case coverImageUrl
         case lineupImageUrl
+        case imageAssets
         case ticketTiers
         case lineupSlots
         case status
@@ -900,12 +944,19 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(startDate, forKey: .startDate)
         try container.encodeIfPresent(endDate, forKey: .endDate)
         try container.encodeIfPresent(timeZone, forKey: .timeZone)
+        try container.encodeIfPresent(timeZoneCity, forKey: .timeZoneCity)
+        try container.encodeIfPresent(timeZoneProvince, forKey: .timeZoneProvince)
+        try container.encodeIfPresent(timeZoneCountry, forKey: .timeZoneCountry)
+        try container.encodeIfPresent(timeZoneStateAnsi, forKey: .timeZoneStateAnsi)
+        try container.encodeIfPresent(timeZoneLat, forKey: .timeZoneLat)
+        try container.encodeIfPresent(timeZoneLng, forKey: .timeZoneLng)
         try container.encodeIfPresent(startTime, forKey: .startTime)
         try container.encodeIfPresent(endTime, forKey: .endTime)
         try container.encodeIfPresent(dayRolloverHour, forKey: .dayRolloverHour)
         try container.encodeIfPresent(stageOrder, forKey: .stageOrder)
         try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
         try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
+        try container.encodeIfPresent(imageAssets, forKey: .imageAssets)
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
         try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
         try container.encodeIfPresent(status, forKey: .status)

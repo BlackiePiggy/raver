@@ -9,7 +9,13 @@ import { checkinAPI } from '@/lib/api/checkin';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
-import { getTimeZoneLabel, normalizeDisplayTimeZone } from '@/lib/timezone';
+import {
+  ceilInstantToZonedHourMs,
+  floorInstantToZonedHourMs,
+  getFestivalDayKeyForInstant,
+  getTimeZoneLabel,
+  normalizeDisplayTimeZone,
+} from '@/lib/timezone';
 
 const TIME_COL_WIDTH = 68;
 const PX_PER_MIN = 1.08;
@@ -83,6 +89,7 @@ export default function EventDetailPage() {
 
   const eventTimeZone = normalizeDisplayTimeZone(event?.timeZone);
   const eventTimeZoneLabel = getTimeZoneLabel(eventTimeZone);
+  const dayRolloverHour = event?.dayRolloverHour ?? 6;
 
   const formatDate = React.useCallback((dateString: string) => {
     const date = new Date(dateString);
@@ -102,30 +109,6 @@ export default function EventDetailPage() {
     };
   }, [eventTimeZone]);
 
-  // Festival day rule: 00:00-11:59 归属前一日，避免跨午夜场次被拆成“第三天”
-  const getFestivalDayKey = React.useCallback((dateString: string) => {
-    const localText = new Date(dateString).toLocaleString('sv-SE', {
-      timeZone: eventTimeZone,
-      hour12: false,
-    });
-    const [datePart, timePart] = localText.split(' ');
-    const hour = Number(timePart.split(':')[0] || '0');
-
-    if (hour >= 12) {
-      return datePart;
-    }
-
-    const [y, m, d] = datePart.split('-').map(Number);
-    const prev = new Date(Date.UTC(y, m - 1, d));
-    prev.setUTCDate(prev.getUTCDate() - 1);
-    return new Intl.DateTimeFormat('sv-SE', {
-      timeZone: 'UTC',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(prev);
-  }, [eventTimeZone]);
-
   const formatSlotTime = React.useCallback((dateString: string) =>
     new Date(dateString).toLocaleTimeString('zh-CN', {
       timeZone: eventTimeZone,
@@ -135,19 +118,14 @@ export default function EventDetailPage() {
     }), [eventTimeZone]);
 
   const toMs = (dateString: string) => new Date(dateString).getTime();
-  const floorToHour = (ms: number) => {
-    const d = new Date(ms);
-    d.setMinutes(0, 0, 0);
-    return d.getTime();
-  };
-  const ceilToHour = (ms: number) => {
-    const d = new Date(ms);
-    if (d.getMinutes() !== 0 || d.getSeconds() !== 0 || d.getMilliseconds() !== 0) {
-      d.setHours(d.getHours() + 1);
-    }
-    d.setMinutes(0, 0, 0);
-    return d.getTime();
-  };
+  const floorToHour = React.useCallback(
+    (ms: number) => floorInstantToZonedHourMs(ms, eventTimeZone),
+    [eventTimeZone]
+  );
+  const ceilToHour = React.useCallback(
+    (ms: number) => ceilInstantToZonedHourMs(ms, eventTimeZone),
+    [eventTimeZone]
+  );
 
   const formatDayLabel = React.useCallback((dateString: string) =>
     new Date(dateString).toLocaleDateString('zh-CN', {
@@ -167,7 +145,10 @@ export default function EventDetailPage() {
     );
     const map = new Map<string, NonNullable<Event['lineupSlots']>>();
     for (const slot of sorted) {
-      const key = getFestivalDayKey(slot.startTime);
+      const key =
+        slot.festivalDayIndex && slot.festivalDayIndex > 0
+          ? `day-${slot.festivalDayIndex}`
+          : getFestivalDayKeyForInstant(slot.startTime, eventTimeZone, dayRolloverHour);
       if (!map.has(key)) {
         map.set(key, []);
       }
@@ -176,6 +157,8 @@ export default function EventDetailPage() {
 
     const entries = Array.from(map.entries());
     return entries.map(([key, slots], index) => {
+      const festivalDayIndex =
+        slots.find((slot) => slot.festivalDayIndex && slot.festivalDayIndex > 0)?.festivalDayIndex ?? index + 1;
       const stageMap = new Map<string, NonNullable<Event['lineupSlots']>>();
       for (const slot of slots) {
         const stageName = (slot.stageName || '未命名舞台').trim() || '未命名舞台';
@@ -187,7 +170,7 @@ export default function EventDetailPage() {
 
       return {
         key,
-        label: `Day ${index + 1} · ${formatDayLabel(slots[0].startTime)}`,
+        label: `Day ${festivalDayIndex} · ${formatDayLabel(slots[0].startTime)}`,
         slots,
         stages: Array.from(stageMap.entries()).map(([stageName, stageSlots]) => ({
           stageName,
@@ -195,7 +178,7 @@ export default function EventDetailPage() {
         })),
       };
     });
-  }, [event?.lineupSlots, formatDayLabel, getFestivalDayKey]);
+  }, [dayRolloverHour, event?.lineupSlots, eventTimeZone, formatDayLabel]);
 
   if (isLoading) {
     return (

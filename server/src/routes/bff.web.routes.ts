@@ -62,6 +62,10 @@ import { notificationCenterService } from '../services/notification-center';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+const cityTimezones = require('city-timezones') as {
+  lookupViaCity: (city: string) => unknown[];
+  findFromCityStateProvince: (query: string) => unknown[];
+};
 
 const learnFestivalListSelect = {
   id: true,
@@ -219,6 +223,238 @@ const resolveRegionalComplianceUser = async (userId?: string | null): Promise<Re
 
 const canBypassContentReview = (role?: string | null): boolean =>
   role === 'admin' || role === 'operator';
+
+type CityTimezoneLookupRow = {
+  city: string;
+  city_ascii?: string;
+  country?: string;
+  iso2?: string;
+  iso3?: string;
+  province?: string;
+  exactCity?: string;
+  exactProvince?: string;
+  state_ansi?: string;
+  timezone?: string;
+  lat?: number;
+  lng?: number;
+  pop?: number;
+};
+
+type EventTimezoneLookupItem = {
+  city: string;
+  cityAscii: string;
+  province: string;
+  exactProvince: string;
+  stateAnsi: string;
+  country: string;
+  iso2: string;
+  iso3: string;
+  timezone: string;
+  lat: number | null;
+  lng: number | null;
+  population: number | null;
+  label: string;
+  searchRank: number;
+  matchSource: 'exact-city' | 'city-region-search';
+};
+
+type SubmittedEventTimezoneSelection = {
+  city: string;
+  province: string;
+  country: string;
+  stateAnsi: string;
+  lat: number | null;
+  lng: number | null;
+};
+
+const normalizeCityTimezoneText = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const toFiniteNumberOrNull = (value: unknown): number | null => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const buildEventTimezoneLookupLabel = (item: {
+  city: string;
+  province?: string;
+  exactProvince?: string;
+  stateAnsi?: string;
+  country?: string;
+  timezone: string;
+}): string => {
+  const parts = [
+    normalizeCityTimezoneText(item.city),
+    normalizeCityTimezoneText(item.exactProvince || item.stateAnsi || item.province || ''),
+    normalizeCityTimezoneText(item.country || ''),
+  ].filter(Boolean);
+  return `${parts.join(', ')} · ${item.timezone}`;
+};
+
+const toEventTimezoneLookupItem = (
+  row: unknown,
+  query: string,
+  matchSource: 'exact-city' | 'city-region-search'
+): EventTimezoneLookupItem | null => {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const source = row as CityTimezoneLookupRow;
+  const timezone = normalizeCityTimezoneText(source.timezone);
+  const city = normalizeCityTimezoneText(source.city);
+  if (!city || !timezone || !isValidEventTimeZone(timezone)) return null;
+
+  const cityAscii = normalizeCityTimezoneText(source.city_ascii || city);
+  const province = normalizeCityTimezoneText(source.province);
+  const exactProvince = normalizeCityTimezoneText(source.exactProvince || province);
+  const stateAnsi = normalizeCityTimezoneText(source.state_ansi);
+  const country = normalizeCityTimezoneText(source.country);
+  const iso2 = normalizeCityTimezoneText(source.iso2).toUpperCase();
+  const iso3 = normalizeCityTimezoneText(source.iso3).toUpperCase();
+  const normalizedQuery = normalizeCityTimezoneText(query).toLowerCase();
+  const normalizedCity = city.toLowerCase();
+  const normalizedAscii = cityAscii.toLowerCase();
+  const exactCity = normalizeCityTimezoneText(source.exactCity || city).toLowerCase();
+
+  let searchRank = matchSource === 'exact-city' ? 0 : 20;
+  if (normalizedQuery && (
+    normalizedCity === normalizedQuery
+    || normalizedAscii === normalizedQuery
+    || exactCity === normalizedQuery
+  )) {
+    searchRank -= 10;
+  }
+  if (stateAnsi) searchRank -= 1;
+  const population = toFiniteNumberOrNull(source.pop);
+  if (population) {
+    searchRank -= Math.min(5, Math.floor(Math.log10(Math.max(1, population))));
+  }
+
+  return {
+    city,
+    cityAscii,
+    province,
+    exactProvince,
+    stateAnsi,
+    country,
+    iso2,
+    iso3,
+    timezone,
+    lat: toFiniteNumberOrNull(source.lat),
+    lng: toFiniteNumberOrNull(source.lng),
+    population,
+    label: buildEventTimezoneLookupLabel({
+      city,
+      province,
+      exactProvince,
+      stateAnsi,
+      country,
+      timezone,
+    }),
+    searchRank,
+    matchSource,
+  };
+};
+
+const searchEventTimezonesByCity = (query: string, limitRaw: unknown): EventTimezoneLookupItem[] => {
+  const searchQuery = normalizeCityTimezoneText(query);
+  if (!searchQuery) return [];
+  const limitParsed = Number(limitRaw);
+  const limit = Number.isFinite(limitParsed)
+    ? Math.max(1, Math.min(20, Math.floor(limitParsed)))
+    : 8;
+
+  const exactMatches = cityTimezones.lookupViaCity(searchQuery) || [];
+  const broadMatches = cityTimezones.findFromCityStateProvince(searchQuery) || [];
+  const merged = new Map<string, EventTimezoneLookupItem>();
+  const push = (rows: unknown[], matchSource: 'exact-city' | 'city-region-search') => {
+    for (const row of rows) {
+      const item = toEventTimezoneLookupItem(row, searchQuery, matchSource);
+      if (!item) continue;
+      const key = [
+        item.city.toLowerCase(),
+        item.exactProvince.toLowerCase(),
+        item.country.toLowerCase(),
+        item.timezone.toLowerCase(),
+      ].join('|');
+      const existing = merged.get(key);
+      if (!existing || item.searchRank < existing.searchRank) {
+        merged.set(key, item);
+      }
+    }
+  };
+  push(exactMatches, 'exact-city');
+  push(broadMatches, 'city-region-search');
+
+  return Array.from(merged.values())
+    .sort((a, b) => {
+      if (a.searchRank !== b.searchRank) return a.searchRank - b.searchRank;
+      const popA = a.population ?? -1;
+      const popB = b.population ?? -1;
+      if (popA !== popB) return popB - popA;
+      return a.label.localeCompare(b.label, 'en', { sensitivity: 'base' });
+    })
+    .slice(0, limit);
+};
+
+const readSubmittedEventTimezoneSelection = (
+  body: Record<string, unknown>
+): SubmittedEventTimezoneSelection | null => {
+  const city = normalizeCityTimezoneText(body.timeZoneCity);
+  const province = normalizeCityTimezoneText(body.timeZoneProvince);
+  const country = normalizeCityTimezoneText(body.timeZoneCountry);
+  const stateAnsi = normalizeCityTimezoneText(body.timeZoneStateAnsi).toUpperCase();
+  const lat = toFiniteNumberOrNull(body.timeZoneLat);
+  const lng = toFiniteNumberOrNull(body.timeZoneLng);
+  if (!city && !province && !country && !stateAnsi && lat === null && lng === null) return null;
+  return {
+    city,
+    province,
+    country,
+    stateAnsi,
+    lat,
+    lng,
+  };
+};
+
+const validateSubmittedEventTimezoneSelection = (
+  body: Record<string, unknown>,
+  submittedTimeZone: string
+): string | null => {
+  const selection = readSubmittedEventTimezoneSelection(body);
+  if (!selection) return null;
+  if (!selection.city) {
+    return 'timeZoneCity is required when submitting city-based timezone metadata';
+  }
+
+  const query = [
+    selection.city,
+    selection.stateAnsi || selection.province,
+    selection.country,
+  ].filter(Boolean).join(' ').trim() || selection.city;
+
+  const candidates = searchEventTimezonesByCity(query, 20);
+  const cityLower = selection.city.toLowerCase();
+  const provinceLower = selection.province.toLowerCase();
+  const countryLower = selection.country.toLowerCase();
+  const targetTimeZone = normalizeEventTimeZone(submittedTimeZone);
+  const matched = candidates.find((item) => {
+    if (item.timezone !== targetTimeZone) return false;
+    const cityMatches = item.city.toLowerCase() === cityLower || item.cityAscii.toLowerCase() === cityLower;
+    if (!cityMatches) return false;
+    if (selection.stateAnsi && item.stateAnsi.toUpperCase() !== selection.stateAnsi) return false;
+    if (provinceLower) {
+      const itemProvince = (item.exactProvince || item.province || '').toLowerCase();
+      if (itemProvince && itemProvince !== provinceLower) return false;
+    }
+    if (countryLower && item.country.toLowerCase() !== countryLower) return false;
+    if (selection.lat !== null && item.lat !== null && Math.abs(item.lat - selection.lat) > 0.5) return false;
+    if (selection.lng !== null && item.lng !== null && Math.abs(item.lng - selection.lng) > 0.5) return false;
+    return true;
+  });
+
+  return matched ? null : 'Submitted event timezone does not match the selected city timezone result';
+};
 
 const CONTENT_I18N_FIELDS_BY_ENTITY: Record<string, string[]> = {
   event: ['nameI18n', 'descriptionI18n'],
@@ -717,6 +953,13 @@ const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
     })
     .filter((item): item is EventImageAssetPayload => item !== null);
 };
+
+const hasRequiredEventPosterAsset = (assets: EventImageAssetPayload[]): boolean =>
+  assets.some((asset) => {
+    const label = normalizeEventText(asset.label).toUpperCase();
+    const fileName = normalizeEventText(asset.fileName).toLowerCase();
+    return asset.type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));
+  });
 
 type NormalizedLineupSlot = {
   djId: string | null;
@@ -5507,6 +5750,32 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
   }
 });
 
+router.get('/event-timezones/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = String(req.query.q || req.query.query || '').trim();
+    if (!query) {
+      res.json({
+        data: {
+          query: '',
+          items: [],
+        },
+      });
+      return;
+    }
+
+    const items = searchEventTimezonesByCity(query, req.query.limit);
+    res.json({
+      data: {
+        query,
+        items,
+      },
+    });
+  } catch (error) {
+    console.error('BFF event timezone search failed:', error);
+    res.status(500).json({ error: 'Failed to search event timezones' });
+  }
+});
+
 router.get('/events/festival-feed', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as BFFAuthRequest).user?.userId;
@@ -6276,6 +6545,12 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
+    const submittedImageAssets = parseEventImageAssets(body.imageAssets);
+    if (!hasRequiredEventPosterAsset(submittedImageAssets)) {
+      res.status(400).json({ error: 'Poster image is required' });
+      return;
+    }
+
     if (!canBypassContentReview(viewerRole)) {
       const submission = await createPendingContentSubmission({
         submitterId: userId,
@@ -6288,6 +6563,11 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     }
 
     const timeZone = normalizeEventTimeZone(rawTimeZone);
+    const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(body, timeZone);
+    if (submittedTimeZoneSelectionError) {
+      res.status(400).json({ error: submittedTimeZoneSelectionError });
+      return;
+    }
     const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
     const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
     const parsedStartDateInput = parseEventDateInput(startDate, timeZone, 'start', startTime);
@@ -6343,7 +6623,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const descriptionI18n = normalizeEventBiText(body.descriptionI18n, descriptionSeed);
     const referenceLinks = parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks);
     const socialLinks = parseEventSocialLinks(body.socialLinks);
-    const imageAssets = parseEventImageAssets(body.imageAssets);
+    const imageAssets = submittedImageAssets;
     const rawManualLocation = Object.prototype.hasOwnProperty.call(body, 'manualLocation')
       ? body.manualLocation
       : body.manual_location;
@@ -6649,6 +6929,13 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const nextTimeZone = hasTimeZoneField
       ? normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
       : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
+    if (hasTimeZoneField) {
+      const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(body, nextTimeZone);
+      if (submittedTimeZoneSelectionError) {
+        res.status(400).json({ error: submittedTimeZoneSelectionError });
+        return;
+      }
+    }
     const nextStartTime = hasStartTimeField
       ? normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME)
       : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);

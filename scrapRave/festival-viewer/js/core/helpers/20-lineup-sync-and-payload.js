@@ -77,6 +77,15 @@ function normalizeDateOnlyForSync(value) {
   return out;
 }
 
+function addDaysToDateOnlyForSync(value, days) {
+  const base = normalizeDateOnlyForSync(value);
+  if (!base) return null;
+  const out = new Date(base);
+  out.setDate(out.getDate() + (Number(days) || 0));
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
 function parseLineupDayIndexForSync(value) {
   const text = String(value || '').trim();
   if (!text) return null;
@@ -351,6 +360,39 @@ function buildEventLineupArtistsFromArchive(lineupArtists, timetableRows = []) {
   return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+function normalizeLineupRowsForEventWallClockSync(lineup, eventStartDateText, eventEndDateText, dayRolloverHourRaw = 6) {
+  if (!Array.isArray(lineup)) return [];
+  const parsedStart = parseArchiveDateOnlyForSync(eventStartDateText);
+  const parsedEnd = parseArchiveDateOnlyForSync(eventEndDateText) || parsedStart;
+  const eventStartDate = normalizeDateOnlyForSync(parsedStart) || normalizeDateOnlyForSync(new Date()) || new Date();
+  const eventEndDate = normalizeDateOnlyForSync(parsedEnd) || eventStartDate;
+  const dayRolloverHour = normalizeDayRolloverHourForSync(dayRolloverHourRaw, 6);
+
+  return lineup.map((row) => {
+    const normalized = normalizeLineupEntry(row || {});
+    const explicitDayIndex = Number(normalized.festivalDayIndex);
+    let festivalDayIndex = Number.isInteger(explicitDayIndex) && explicitDayIndex > 0 ? explicitDayIndex : null;
+    if (!festivalDayIndex) {
+      const dateCandidate = resolveLineupDateForSync(normalized.date, eventStartDate, eventEndDate);
+      const normalizedDate = normalizeDateOnlyForSync(dateCandidate) || eventStartDate;
+      const naturalDayOffset = Math.max(0, Math.floor((normalizedDate.getTime() - eventStartDate.getTime()) / (24 * 60 * 60 * 1000)));
+      festivalDayIndex = naturalDayOffset + 1;
+      const { startHM } = parseLineupTimeRangeForSync(normalized.time);
+      if (startHM) {
+        const hour = Number(String(startHM).split(':')[0] || '0');
+        if (Number.isFinite(hour) && hour < dayRolloverHour && festivalDayIndex > 1) {
+          festivalDayIndex -= 1;
+        }
+      }
+    }
+    return {
+      ...normalized,
+      festivalDayIndex: Math.max(1, festivalDayIndex || 1),
+      date: `Day ${Math.max(1, festivalDayIndex || 1)}`,
+    };
+  });
+}
+
 function buildEventLineupSlotsFromArchive(lineup, eventStartDateText, eventEndDateText, dayRolloverHourRaw = 6, timeZoneRaw = 'UTC') {
   if (!Array.isArray(lineup)) return [];
   const parsedStart = parseArchiveDateOnlyForSync(eventStartDateText);
@@ -364,16 +406,24 @@ function buildEventLineupSlotsFromArchive(lineup, eventStartDateText, eventEndDa
     const normalized = normalizeLineupEntry(lineup[i] || {});
     const djName = String(normalized.musician || '').trim();
     if (!djName) continue;
-    const dateCandidate = resolveLineupDateForSync(normalized.date, eventStartDate, eventEndDate);
     const { startHM, endHM } = parseLineupTimeRangeForSync(normalized.time);
-    const naturalDayOffset = Math.max(0, Math.floor((normalizeDateOnlyForSync(dateCandidate).getTime() - eventStartDate.getTime()) / (24 * 60 * 60 * 1000)));
-    // Recompute festivalDayIndex from date/time on every save.
-    // Do not reuse incoming lineup.festivalDayIndex to avoid persisting stale values.
-    let festivalDayIndex = naturalDayOffset + 1;
-    if (startHM) {
-      const hour = Number(String(startHM).split(':')[0] || '0');
-      if (Number.isFinite(hour) && hour < dayRolloverHour && festivalDayIndex > 1) {
-        festivalDayIndex -= 1;
+    const explicitDayIndex = Number(normalized.festivalDayIndex);
+    let festivalDayIndex = Number.isInteger(explicitDayIndex) && explicitDayIndex > 0 ? explicitDayIndex : null;
+    let dateCandidate = null;
+    if (festivalDayIndex) {
+      const startHour = startHM ? Number(String(startHM).split(':')[0] || '0') : NaN;
+      const afterMidnightOffset = Number.isFinite(startHour) && startHour < dayRolloverHour ? 1 : 0;
+      dateCandidate = addDaysToDateOnlyForSync(eventStartDate, festivalDayIndex - 1 + afterMidnightOffset);
+    }
+    if (!dateCandidate) {
+      dateCandidate = resolveLineupDateForSync(normalized.date, eventStartDate, eventEndDate);
+      const naturalDayOffset = Math.max(0, Math.floor((normalizeDateOnlyForSync(dateCandidate).getTime() - eventStartDate.getTime()) / (24 * 60 * 60 * 1000)));
+      festivalDayIndex = naturalDayOffset + 1;
+      if (startHM) {
+        const hour = Number(String(startHM).split(':')[0] || '0');
+        if (Number.isFinite(hour) && hour < dayRolloverHour && festivalDayIndex > 1) {
+          festivalDayIndex -= 1;
+        }
       }
     }
     const startTime = zonedDateTimeToUtcForSync(dateCandidate, startHM, timeZone, i);

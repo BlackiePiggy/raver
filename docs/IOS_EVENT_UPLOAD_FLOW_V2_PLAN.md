@@ -1,0 +1,585 @@
+# iOS 活动上传流程 V2 落地方案
+
+## 背景
+
+当前 iOS 活动上传入口会进入 `EventEditorView`。它已经覆盖新增/编辑活动、封面/阵容图上传、时区、地图选点、舞台、阵容、票档等能力，但整体是一个长表单，字段密度高，用户需要一次性理解很多信息。附件 `event_upload_dark_v3.html` 提供的是一个 10 步移动端原型，适合拆解上传流程，但其中存在明显 Web 原型痕迹，例如 hover/cursor、固定 335px 手机容器、纯深色样式、步骤过碎、部分字段与当前 API/审核机制不完全一致。
+
+本方案目标是先把新上传流程独立设计清楚，后续实现时能并行开发、灰度切换，不影响现有 `EventEditorView`。
+
+## 目标
+
+- 新建一套独立的 iOS 活动上传流程，命名建议为 `EventUploadFlow`，不直接改造旧 `EventEditorView`。
+- 支持 light/dark 两套主题，全部使用 `RaverTheme` token，不复刻 HTML 中的固定深色变量。
+- 适配 App 端交互习惯：无 hover，无 Web 状态栏假壳，使用系统导航、sheet、PhotosPicker、Map picker、DatePicker、Picker、底部固定操作区。
+- 降低用户认知负担：从“长表单”改成“分组步骤 + 草稿保存 + 最终预览提交”。
+- 保留项目现有能力：城市时区确认、地图选点、活动类型、舞台排序、阵容导入、轻量票务、内容审核返回。
+- 对齐 `festival-viewer` 的六种图片分区：`poster / lineup / timetable / cover / map / other`。
+- 为后续直接替换当前上传页做隔离：新增和编辑入口都切 route 或 feature flag，不迁移旧页面内部状态。
+
+## 不做的事
+
+- 不在 V2 里直接删除或重构旧 `EventEditorView`。
+- 不把 HTML 原型原样搬进 SwiftUI。
+- 不新增后端字段前先假装支持。六种图片分区需要和 `festival-viewer` 当前同步模型对齐；如果 iOS 现有 BFF 只支持 `coverImageUrl` / `lineupImageUrl`，实现前需要补齐对应 asset API 或映射层。
+- 不把所有高级信息强制填完；活动上传应允许“先发基本活动，再逐步补齐”。
+
+## 推荐流程
+
+HTML 原型是 10 步。我建议 App 端合并为 6 个主步骤，内部用可展开区域承载高级项：
+
+1. **媒体与识别**
+   - 必填：至少 1 张 `poster` 图片；不允许无图创建。`festival-viewer` 的新增活动也应参考同样校验。
+   - 图片分区与 `festival-viewer` 完全对齐：`poster / lineup / timetable / cover / map / other`，每区支持多张。
+   - AI 识别首版不实现，只保留按钮。按钮应有明显“智能感”：彩色渐变、微光边框、sparkles 图标、按下反馈，但点击后提示“即将支持”或进入占位说明。
+   - App 适配：使用照片选择器 + 拍照入口，图片卡片支持替换、删除、排序、预览，不使用 hover。
+
+2. **基础信息**
+   - 活动名称必填。
+   - 活动类型使用现有 `EventTypeOption`。
+   - 简介可选。
+   - 城市、国家、详细地址必填；地图坐标可选。
+   - 不要求用户手动补齐多语言。根据系统语言决定当前填写哪个字段：中文系统优先写 zh，英文系统优先写 en，日文系统可写 ja/或先落到当前已有兼容字段；自动翻译/补齐以后再做。
+   - AI 识别结果首版不落地，只保留入口。
+
+3. **时间与时区**
+   - 开始日期、结束日期必填。
+   - 时区继续沿用当前逻辑：必须通过城市搜索候选确认，避免跨时区活动保存错误。
+   - 多 Week 是核心需求，不能藏成边角能力。单日、多日、多 Week 都应在时间步骤内清楚选择。
+   - 时间表必须支持跨天，例如 23:00-02:00。策略对齐 `festival-viewer`：使用 `dayRolloverHour`，默认建议 6 点；当结束时间不晚于开始时间时，按次日结束处理。
+
+4. **地点**
+   - 地图选点作为主 CTA。
+   - 手动地址不是兜底，而是最低必填信息的一部分：城市、国家、详细地址必须填写。
+   - 选点后自动回填城市/国家/地址，与当前 `EventLocationPickerSheet` 保持一致。
+   - UI 上展示一个可点击位置摘要，而不是 HTML 中的小地图占位条。
+
+5. **阵容与时间表**
+   - 舞台信息、Lineup、Timetable 合并到一个步骤。
+   - 先问“是否已有阵容/时间表”，没有则跳过。
+   - 有阵容：支持手动添加 DJ、搜索绑定已有 DJ、设置 solo/b2b/group。
+   - 有时间表：在每个 lineup slot 内补充 day/stage/start/end，避免单独拆出 Week 编辑、Day 编辑、舞台编辑多屏来回跳。
+   - 阵容图识别进入草稿，不直接写入最终表单，继续沿用当前“导入草稿可编辑再应用”的安全设计。
+
+6. **票务、预览与提交**
+   - 只做简单票务：最低价、最高价、币种、跳转链接。可保留备注，但不做库存、开售时间、停售时间、售罄状态。
+   - 最终预览分为：主图、名称类型、时间地点、阵容/舞台、票务。
+   - 提交后根据 `CreateEventResult` 展示两种成功态：
+     - 管理员直接创建：可返回活动页，也可进入活动详情。
+     - 普通用户提交审核：展示审核中状态，提示“可在我的发布中查看进度”，并提供返回活动页。
+
+## 页面结构
+
+建议的 SwiftUI 结构：
+
+```text
+Features/Discover/Events/UploadFlow/
+  EventUploadFlowView.swift
+  EventUploadFlowViewModel.swift
+  EventUploadDraft.swift
+  EventUploadStep.swift
+  EventUploadValidation.swift
+  EventUploadMappers.swift
+  EventUploadDraftStore.swift
+  EventUploadAnalytics.swift
+  Components/
+    EventUploadProgressHeader.swift
+    EventUploadBottomBar.swift
+    EventUploadImagePickerCard.swift
+    EventUploadFieldSection.swift
+    EventUploadSuggestionRow.swift
+    EventUploadReviewSection.swift
+```
+
+隔离原则：
+
+- `EventUploadDraft` 是 V2 的唯一 UI 草稿模型。
+- `EventUploadMappers` 负责把 draft 转成 `CreateEventInput` / `UpdateEventInput` / `EventLineupSlotInput`。
+- 上传、创建活动仍通过现有 `EventCommandRepository`、`EventMediaRepository`、`DJListRepository`、`WebFeatureService`。
+- 旧 `EventEditorView` 不依赖 V2，V2 也不反向调用旧 View。
+- 新增和编辑都使用 `EventUploadFlowView`。编辑态由已有 `WebEvent` hydrate 成 draft，提交时走 update；新增态从空 draft 或本地草稿开始。
+- 路由入口建议从 `.eventCreate` 切到：
+
+```swift
+if featureFlags.useEventUploadFlowV2 {
+    EventUploadFlowView(mode: .create) { ... }
+} else {
+    EventEditorView(mode: .create) { ... }
+}
+```
+
+编辑入口同理：
+
+```swift
+if featureFlags.useEventUploadFlowV2 {
+    EventUploadFlowView(mode: .edit(event)) { ... }
+} else {
+    EventEditorView(mode: .edit(event)) { ... }
+}
+```
+
+## 草稿模型
+
+建议 draft 覆盖当前 `CreateEventInput` 所需字段，同时预留 UI-only 状态：
+
+```text
+EventUploadDraft
+  media
+    zones
+      poster[]
+      lineup[]
+      timetable[]
+      cover[]
+      map[]
+      other[]
+  basic
+    name
+    description
+    eventType
+    localizedNameFields
+    localizedCityFields
+    localizedCountryFields
+    localizedAddressFields
+    preferredInputLanguage
+  time
+    startDate
+    endDate
+    timeZoneIdentifier
+    selectedTimeZoneLookup
+    scheduleMode: singleDay | multiDay | multiWeek
+    isWeekScheduleEnabled
+    dayRolloverHour
+  location
+    manualAddressZh / manualAddressEn
+    latitude / longitude
+    pickedMapAddress
+    pickedPlaceName
+  lineup
+    stageEntries
+    lineupSlots
+    importDraft
+  tickets
+    ticketUrl
+    ticketCurrency
+    ticketPriceMin
+    ticketPriceMax
+  ui
+    currentStep
+    dirty
+    validationErrors
+    uploadProgress
+```
+
+本地草稿策略：
+
+- 使用 `Codable` 保存表单 JSON，按 `eventUploadDraft.create.<userId>` 和 `eventUploadDraft.edit.<eventId>.<userId>` 区分。
+- 图片不塞进 JSON。将待上传图片复制到 App sandbox 临时草稿目录，draft 只保存本地文件 URL、zone、排序、原始文件名、尺寸、mimeType。
+- 自动保存触发：字段变更 debounce 1 秒、切后台、离开页面前。
+- 草稿保留 14 天；提交成功后清理对应草稿；用户手动放弃时二次确认并删除。
+- 新建活动只保留每个用户最近 1 份未提交草稿；如果再次进入上传页，先询问“继续上次草稿/重新开始”。
+- 编辑活动每个 event id 独立保存，避免覆盖新增草稿。
+
+## V2 首版接口字段
+
+V2 新建和编辑活动仍走现有 BFF：
+
+- `POST /v1/events`
+- `PATCH /v1/events/:id`
+- `POST /v1/events/upload-image`
+- `GET /v1/event-timezones/search`
+- `GET /v1/djs`
+
+活动 create/update payload 首版覆盖：
+
+- 基础：`name`、`description`、`eventType`、`city`、`cityI18n`、`country`、`countryI18n`
+- 地点：`manualLocation`、`locationPoint`、`latitude`、`longitude`
+- 时间：`startDate`、`endDate`、`timeZone`、`timeZoneCity`、`timeZoneProvince`、`timeZoneCountry`、`timeZoneStateAnsi`、`timeZoneLat`、`timeZoneLng`、`dayRolloverHour`
+- 媒体：`coverImageUrl`、`lineupImageUrl`、`imageAssets`
+- 阵容/时间表：`stageOrder`、`lineupSlots`
+- 票务：`ticketUrl`、`ticketCurrency`、`ticketTiers`
+- 状态：`status`
+
+`imageAssets` 对齐 `festival-viewer` 六区：
+
+- `poster`
+- `lineup`
+- `timetable`
+- `cover`
+- `map`
+- `other`
+
+后端 create 现在对所有角色强制 poster 资产；普通用户提交审核和管理员直发都不能创建无 poster 活动。编辑暂不强制 poster，用于兼容旧活动逐步补齐。
+
+## 校验策略
+
+每一步只校验“继续下一步必须知道的信息”，最终提交做全量校验。
+
+- 媒体：`poster` 至少 1 张；无 poster 禁止进入最终提交。
+- 基础信息：活动名称必填。
+- 时间：开始/结束日期必填，结束不能早于开始，时区必须从候选确认。
+- 地点：城市、国家、详细地址必填；地图坐标可选。
+- 阵容：没有阵容可以跳过；如果已有 pending lineup entry，必须确认或删除。
+- 时间表：支持跨天；`dayRolloverHour` 默认为 6，允许高级设置。
+- 票务：URL 格式校验；最低价/最高价必须是合法数字；币种标准化为大写。
+
+## 主题与视觉
+
+使用 `RaverTheme.background`、`RaverTheme.card`、`RaverTheme.cardBorder`、`RaverTheme.primaryText`、`RaverTheme.secondaryText`、`RaverTheme.accent`。
+
+视觉优化建议：
+
+- 不使用 HTML 里的全紫单色方案，紫色只做进度、主按钮和选中态。
+- AI 按钮可例外使用多色渐变，但只作为单个智能入口，不扩大成整页色彩主题。
+- 表单区域用系统背景 + 轻量 section，不做卡片套卡片。
+- 底部操作区固定：左侧上一步/保存草稿，右侧下一步/提交。
+- 进度条用“当前步骤 + 总步骤 + 可点击步骤列表”，不要 10 个小圆点挤满顶部。
+- 文案贴近 App：少解释功能，多给动作和当前状态。
+- Light 模式下避免浅紫大面积铺底；Dark 模式下避免所有层级都是接近黑色。
+- 主题跟随系统，不在 V2 内额外做主题切换。
+
+## HTML 原型取舍
+
+保留：
+
+- 分步上传的节奏。
+- 媒体先行，帮助后续 AI 识别。
+- 舞台、Week/Day、Timetable、Lineup、票务的完整信息结构。
+- 最终成功态。
+
+调整：
+
+- 10 步合并为 6 步。
+- 多 Week 从高级开关提升为核心选择。
+- Timetable 不单独做多个编辑页，合并进 lineup slot。
+- 图片类型对齐 `festival-viewer` 六区资产模型；`coverImageUrl` / `lineupImageUrl` 只作为兼容展示字段。
+- Hover/cursor/固定手机壳全部移除。
+- 顶部或媒体区保留 AI 按钮，但首版只做占位，不接识别能力。
+
+## 与现有后端/API 的关系
+
+当前 iOS 可用能力：
+
+- `POST /v1/events`
+- `PATCH /v1/events/:id`
+- `POST /v1/events/upload-image`
+- `POST /v1/events/lineup/import-image`
+- `GET /v1/djs?search=`
+- 城市时区搜索由 `webService.searchEventTimezones` 支撑。
+- `festival-viewer` 的图片分区资产模型：`poster` -> backend type `other` + label `POSTER`，`lineup` -> `luall`，`timetable` -> `tt`，`cover` -> `cover`，`map` -> `other` + label `MAP`，`other` -> `other`。
+
+需要注意的提交顺序：
+
+1. 管理员直接发布：
+   - 上传/准备六区图片资产。
+   - 创建或更新 event。
+   - 将图片资产绑定到 event，并同步主要兼容字段。
+   - 成功页提供“返回活动页”和“查看活动”。
+2. 普通用户提交审核：
+   - 不直接创建公开 event。
+   - 先上传图片到临时/审核可访问资产区，或由后端提供 content-submission 附件能力。
+   - 提交 `ContentSubmission`，payload 包含活动字段、六区图片 asset 引用、lineup/timetable、票务。
+   - 审核通过后由后台创建 event 并绑定资产。
+   - 成功页提示“已提交审核，可在我的发布中查看进度”，主按钮返回活动页。
+
+如果当前后端还没有“投稿携带六区图片资产”的能力，需要把它列为 V2 实现前置项，否则普通用户上传图片无法进入审核链路。
+
+## 已确认决策
+
+1. `poster` 图片必填，不允许无图创建；`festival-viewer` 新增活动也要补同等校验。
+2. 图片逻辑对齐 `festival-viewer` 六区：`poster / lineup / timetable / cover / map / other`。
+3. 六区图片都需要保存，展示和同步策略沿用 `festival-viewer`。
+4. AI 识别首版不实现，只保留一个高质感智能按钮。
+5. 管理员可直接发布；普通用户必须走审核。
+6. 地点最低要求：城市、国家、详细地址；地图坐标可选。
+7. 不要求用户补多语言；按系统语言决定写入哪个语言字段，自动补齐以后再做。
+8. 多 Week 是核心需求。
+9. Timetable 支持跨天，逻辑对齐 `festival-viewer` 的 `dayRolloverHour` 和结束时间次日处理。
+10. 票务只做简单票价和跳转链接，不做库存/开售停售/售罄。
+11. 草稿使用本地草稿，策略见上文。
+12. 编辑页面也使用这一套 UI，编辑态要完整适配。
+13. 发布/提交成功后可以选择返回活动页，并提示用户可在我的发布查看。
+14. 需要埋点。
+15. 主题跟随系统。
+
+## 埋点建议
+
+- `event_upload_v2_opened`：mode、source、hasDraft。
+- `event_upload_v2_step_viewed`：step、mode。
+- `event_upload_v2_step_completed`：step、duration、validationErrorCount。
+- `event_upload_v2_ai_placeholder_tapped`：sourceStep。
+- `event_upload_v2_draft_saved`：mode、imageCount、fieldCount。
+- `event_upload_v2_submit_tapped`：mode、role、imageZoneCounts、hasLineup、hasTimetable、scheduleMode。
+- `event_upload_v2_submit_succeeded`：mode、resultType(created/submittedForReview)、duration。
+- `event_upload_v2_submit_failed`：mode、errorCode、failedStage。
+- `event_upload_v2_abandoned`：mode、currentStep、hasDraft。
+
+## 建议实施阶段
+
+### Phase 1: 文档与确认
+
+- 冻结 V2 首版字段范围。
+- 明确新增/编辑都纳入 V2，但通过 feature flag 灰度，不一次性移除旧 `EventEditorView`。
+- 明确普通用户审核投稿携带六区图片资产的后端方案。
+
+### Phase 2: 骨架隔离
+
+- 新建 `EventUploadFlow` 模块。
+- 建 draft、step、validation、mapper。
+- 接入 route feature flag，但默认关闭。
+
+### Phase 3: 主要页面
+
+- 媒体、基础、时间地点、阵容时间表、票务、预览提交。
+- 使用现有 repository，不改后端。
+- 加本地草稿和离开确认。
+
+### Phase 4: AI 与高级能力
+
+- 首版只实现 AI 占位按钮和点击埋点。
+- 后续再接海报识别/阵容图识别，导入结果进入可编辑草稿。
+- 完善错误重试、上传进度、审核态。
+
+### Phase 5: 切换与收尾
+
+- Light/Dark 截图检查。
+- 真机检查键盘、照片权限、地图权限、弱网重试。
+- 灰度打开 V2 新增与编辑入口。
+- 稳定后再移除旧入口或降低旧 `EventEditorView` 的可见性。
+
+## 验收标准
+
+- V2 和旧上传页可以通过一个入口开关切换。
+- Light/Dark 下文字对比度、按钮状态、输入框边界清晰。
+- 必填字段错误能定位到具体步骤。
+- 用户中途退出会有草稿提示，不会静默丢失内容。
+- 图片上传失败可重试，已填表单不丢失。
+- 时区必须明确确认，跨时区日期预览清楚。
+- 无阵容/无票务也能提交基础活动。
+- 有阵容/票务时能在预览页完整检查。
+- 审核态和直接发布态都有不同成功反馈。
+
+## 落地进度 Checklist
+
+> 执行规则：后续每完成一轮代码改动或验证，都同步更新本 checklist。未完成项保持 unchecked，完成项打勾，并在必要时补充结果说明。
+
+### 0. 现状梳理与边界冻结
+
+- [x] 阅读附件 HTML 原型，确认它是 10 步移动端流程草图，不直接搬进 App。
+- [x] 阅读现有 iOS `EventEditorView`，确认当前新增/编辑活动能力和痛点。
+- [x] 阅读 `festival-viewer` 图片分区逻辑，确认六区为 `poster / lineup / timetable / cover / map / other`。
+- [x] 阅读 `festival-viewer` 时间表同步逻辑，确认跨天按 `dayRolloverHour` 和结束时间次日处理。
+- [x] 收敛产品决策：poster 必填、普通用户审核、管理员直发、地点最低必填、多 Week 核心、AI 仅占位、主题跟随系统。
+- [x] 冻结 V2 首版后端字段与接口清单。
+- [x] 冻结 V2 首版 iOS route 切换策略：通过 `AppConfig.eventUploadFlowV2Enabled` 灰度切换，默认关闭，旧 `EventEditorView` 保持可回退。
+
+### 1. 后端与 Web/Festival-Viewer 前置
+
+- [x] 梳理当前 event create/update API 对六区图片资产的支持情况。
+- [x] 设计普通用户审核投稿如何携带六区图片资产。
+- [x] 若缺失，补齐 content-submission 附件或临时图片资产能力。
+- [x] 对齐管理员直发：创建/更新 event 后能绑定六区图片资产。
+- [x] 同步主要兼容字段：`coverImageUrl`、`lineupImageUrl` 等当前客户端仍依赖的字段。
+- [x] 给 `festival-viewer` 新增活动补 `poster` 必填校验。
+- [x] 给 `festival-viewer` 保存失败提示补足六区图片校验信息。
+- [x] 增加后端/脚本级 guardrail，避免无 poster 活动被创建。
+- [x] 普通用户活动投稿和审核通过落库要求 poster 资产，并保存 `imageAssets`。
+- [ ] 验证管理员创建、普通用户审核、审核通过落库三条链路。
+
+### 2. iOS V2 模块隔离
+
+- [x] 新建 `Features/Discover/Events/UploadFlow/` 模块目录。
+- [x] 新建 `EventUploadFlowView.swift`。
+- [x] 新建 `EventUploadFlowViewModel.swift`。
+- [x] 新建 `EventUploadDraft.swift`。
+- [x] 新建 `EventUploadStep.swift`。
+- [x] 新建 `EventUploadValidation.swift`。
+- [x] 新建 `EventUploadMappers.swift`。
+- [x] 新建 `EventUploadDraftStore.swift`。
+- [x] 新建 `EventUploadAnalytics.swift`。
+- [x] 新建 UploadFlow `Components/` 基础组件目录。
+- [x] 保持旧 `EventEditorView` 可用，不把旧页面内部逻辑直接迁入 V2。
+- [x] 接入新增/编辑 route feature flag，V2 默认关闭。
+
+### 3. Draft、Hydration 与本地草稿
+
+- [x] 定义 `EventUploadDraft` 的媒体六区模型。
+- [x] 定义基础信息、时间、地点、阵容、票务、UI 状态子模型。
+- [x] 实现 create 空草稿初始化。
+- [x] 实现 edit 从 `WebEvent` hydrate 草稿。
+- [x] 实现系统语言到输入字段的选择策略。
+- [x] 实现草稿 `Codable` 存储。
+- [x] 实现图片复制到 App sandbox 草稿目录。
+- [x] 实现自动保存：字段变更 debounce 1 秒。
+- [x] 实现切后台自动保存。
+- [x] 实现离开页面前保存/放弃确认。
+- [x] 实现草稿 14 天过期清理。
+- [x] 实现提交成功后清理草稿。
+- [x] 实现新建活动“继续上次草稿/重新开始”提示。
+- [x] 实现编辑活动按 event id 独立草稿。
+
+### 4. Step 1 媒体与 AI 占位
+
+- [x] 实现六区图片上传 UI 骨架：poster、lineup、timetable、cover、map、other。
+- [x] 实现每区多图选择。
+- [x] 实现拍照入口。
+- [x] 实现图片缩略图预览。
+- [x] 实现图片删除。
+- [x] 实现图片排序。
+- [x] 实现图片替换。
+- [x] 实现 `poster` 至少 1 张校验。
+- [x] 实现 AI 占位按钮视觉：多色渐变、微光边框、sparkles 图标、按下反馈。
+- [x] 实现 AI 占位按钮点击提示。
+- [x] 实现 AI 占位按钮点击埋点。
+- [ ] Light/Dark 检查媒体页视觉。
+
+### 5. Step 2 基础信息
+
+- [x] 实现活动名称输入和必填校验。
+- [x] 实现活动类型选择，复用 `EventTypeOption`。
+- [x] 实现简介输入。
+- [x] 实现城市必填输入。
+- [x] 实现国家必填输入。
+- [x] 实现详细地址必填输入。
+- [x] 按系统语言写入对应本地化字段。
+- [x] 不要求用户手动补齐其他语言字段。
+- [ ] Light/Dark 检查基础信息页视觉。
+
+### 6. Step 3 时间与时区
+
+- [x] 实现单日/多日/多 Week 模式选择。
+- [x] 实现开始日期、结束日期选择。
+- [x] 实现城市时区搜索，复用 `/v1/event-timezones/search`。
+- [x] 实现新建活动必须从候选确认时区；编辑旧活动允许保留已有 timezone，修改时需重新搜索确认。
+- [x] 实现跨时区日期预览。
+- [x] 实现 `dayRolloverHour` 默认 6。
+- [x] 实现高级设置调整 `dayRolloverHour`。
+- [x] 实现结束日期早于开始日期校验。
+- [ ] Light/Dark 检查时间页视觉。
+
+### 7. Step 4 地点
+
+- [x] 复用或适配 `EventLocationPickerSheet`。
+- [x] 实现地图选点可选入口，接入现有 picker。
+- [x] 选点后回填城市/国家/详细地址。
+- [x] 展示位置摘要。
+- [x] 支持无坐标但有手动地址提交。
+- [ ] Light/Dark 检查地点页视觉。
+
+### 8. Step 5 阵容与时间表
+
+- [x] 实现舞台列表新增、删除。
+- [x] 实现舞台列表排序。
+- [x] 实现 lineup 手动添加 DJ。
+- [x] 实现 DJ 库搜索绑定。
+- [x] 实现 solo/b2b/group act type。
+- [x] 实现无阵容跳过。
+- [x] 实现 timetable slot 的 day/stage/start/end 编辑。
+- [x] 实现多 Week 下 Week/Day 映射。
+- [x] 实现跨天 slot：结束时间不晚于开始时间时按次日结束。
+- [x] 实现 pending lineup entry 保存前必须确认或删除校验。
+- [x] 保留阵容图识别入口但首版不接识别。
+- [ ] Light/Dark 检查阵容时间表页视觉。
+
+### 9. Step 6 票务、预览与提交
+
+- [x] 实现最低价输入。
+- [x] 实现最高价输入。
+- [x] 实现币种输入并标准化大写。
+- [x] 实现票务跳转链接输入。
+- [x] 实现 URL 格式校验。
+- [x] 实现最终预览：媒体、基础、时间地点、阵容/舞台、票务。
+- [x] 预览页错误能跳回对应步骤。
+- [x] 管理员提交走直接创建/更新链路。
+- [x] 普通用户提交走审核链路。
+- [x] 成功页提供返回活动页。
+- [x] 成功页提示可在我的发布查看。
+- [ ] Light/Dark 检查预览与成功页视觉。
+
+### 10. Mapper、API 与上传链路
+
+- [x] Draft 映射到 `CreateEventInput`。
+- [x] Draft 映射到 `UpdateEventInput`。
+- [x] Draft 映射到六区图片资产 payload。
+- [x] Draft 映射到 lineup slots。
+- [x] Draft 映射到 timetable slots 并保留跨天语义。
+- [x] Draft 映射到轻量票务字段。
+- [x] 管理员 create 前上传图片并在创建 payload 中绑定图片资产。
+- [x] 管理员 edit 后更新图片资产。
+- [x] 普通用户提交审核 payload 包含全部必要字段和图片引用。
+- [x] 上传失败后可重试且表单不丢失。
+- [x] 弱网/超时错误有明确提示。
+
+### 11. 路由切换与灰度
+
+- [x] 增加 `eventUploadFlowV2Enabled` feature flag，支持 DEBUG UserDefaults 和 `RAVER_EVENT_UPLOAD_FLOW_V2_ENABLED` 环境变量。
+- [x] Discover `.eventCreate` 按 flag 切 V2/旧页面。
+- [x] Discover `.eventEdit` 按 flag 切 V2/旧页面。
+- [x] Profile 或我的发布里的编辑入口按 flag 切 V2/旧页面。
+- [x] 确认旧 `EventEditorView` 保持可回退。
+- [x] 成功保存后刷新活动列表/详情。
+- [x] 返回活动页路径正确。
+
+### 12. 埋点
+
+- [x] 实现 `event_upload_v2_opened`。
+- [x] 实现 `event_upload_v2_step_viewed`。
+- [x] 实现 `event_upload_v2_step_completed`。
+- [x] 实现 `event_upload_v2_ai_placeholder_tapped`。
+- [x] 实现 `event_upload_v2_draft_saved`。
+- [x] 实现 `event_upload_v2_submit_tapped`。
+- [x] 实现 `event_upload_v2_submit_succeeded`。
+- [x] 实现 `event_upload_v2_submit_failed`。
+- [x] 实现 `event_upload_v2_abandoned`。
+
+### 13. 测试与验证
+
+- [ ] 单元测试：draft validation。
+- [ ] 单元测试：create mapper。
+- [ ] 单元测试：edit mapper。
+- [ ] 单元测试：跨天 timetable mapper。
+- [ ] 单元测试：draft store 保存/恢复/清理。
+- [ ] 集成测试：管理员直接创建。
+- [ ] 集成测试：普通用户提交审核。
+- [ ] 集成测试：编辑已有活动。
+- [ ] 集成测试：无 poster 禁止提交。
+- [ ] 真机验证：照片权限。
+- [ ] 真机验证：相机权限。
+- [ ] 真机验证：地图权限。
+- [ ] 真机验证：键盘遮挡与滚动。
+- [ ] 真机验证：切后台恢复草稿。
+- [ ] 截图检查：Light。
+- [ ] 截图检查：Dark。
+- [ ] 弱网验证：图片上传失败可重试。
+- [x] iOS Debug simulator build 通过；当前剩余输出为既有 warning，未发现 V2 编译错误。
+- [x] Step 2 基础信息页接入后再次通过 iOS Debug simulator build。
+- [x] Step 3 时间与时区页接入后再次通过 iOS Debug simulator build。
+- [x] Step 4 地点页接入后再次通过 iOS Debug simulator build。
+- [x] Step 6 票务与预览页接入后再次通过 iOS Debug simulator build。
+- [x] 媒体页相册多图选择、本地图片草稿保存、删除接入后再次通过 iOS Debug simulator build。
+- [x] 媒体页缩略图预览接入后再次通过 iOS Debug simulator build。
+- [x] 媒体图片排序和舞台排序接入后再次通过 iOS Debug simulator build。
+- [x] 城市时区搜索确认和现有地图 picker 接入后再次通过 iOS Debug simulator build。
+- [x] V2 create/edit 提交 mapper、六区图片资产编码、图片上传链路接入后再次通过 iOS Debug simulator build。
+- [x] V2 提交成功页接入后再次通过 iOS Debug simulator build。
+- [x] V2 手动阵容/时间表 slot、Week/Day 映射和跨天 mapper 接入后再次通过 iOS Debug simulator build。
+- [x] V2 草稿 14 天过期清理和继续/重新开始提示接入后再次通过 iOS Debug simulator build。
+- [x] V2 step completed 和 abandoned 埋点接入后再次通过 iOS Debug simulator build。
+- [x] Profile/我的发布发布与编辑入口按 flag 切 V2、保存后刷新列表接入后再次通过 iOS Debug simulator build。
+- [x] V2 阵容 DJ 库搜索绑定接入后再次通过 iOS Debug simulator build。
+- [x] V2 媒体页拍照入口和相机权限文案接入后再次通过 iOS Debug simulator build。
+- [x] V2 媒体页图片替换接入后再次通过 iOS Debug simulator build。
+- [x] V2 时间页跨时区日期预览接入后再次通过 iOS Debug simulator build。
+- [x] V2 切后台保存和离开前保存/放弃确认接入后再次通过 iOS Debug simulator build。
+- [x] V2 字段变更 1 秒 debounce 自动保存接入后再次通过 iOS Debug simulator build。
+- [x] 后端 create 对所有角色强制 poster 资产后通过 `pnpm build`。
+- [x] V2 最终回归再次通过 iOS Debug simulator build。
+
+### 14. 收尾与切换
+
+- [x] 更新相关开发文档。
+- [x] 更新 QA 验收说明。
+- [ ] 灰度打开新增活动 V2。
+- [ ] 灰度打开编辑活动 V2。
+- [ ] 观察埋点：完成率、失败率、放弃步骤。
+- [ ] 修复灰度问题。
+- [ ] 默认启用 V2。
+- [ ] 决定旧 `EventEditorView` 下线或保留为内部兜底。

@@ -470,6 +470,9 @@ struct MyPublishesView: View {
         .task {
             await viewModel.load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverEventDidSave)) { _ in
+            Task { await viewModel.load() }
+        }
         .onChange(of: selectedTab) { _, newTab in
             if newTab == 2 {
                 Task { await viewModel.ensureRatingsLoaded() }

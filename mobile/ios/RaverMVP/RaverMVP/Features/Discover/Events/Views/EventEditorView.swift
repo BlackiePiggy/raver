@@ -1002,17 +1002,6 @@ struct EventEditorView: View {
     private static let defaultEventTimeZoneID = "Asia/Shanghai"
 
     private static let eventTypeOptionKeys = EventTypeOption.allCases.map(\.rawValue)
-    private static let commonEventTimeZoneIDs = [
-        "Asia/Shanghai",
-        "UTC",
-        "Asia/Tokyo",
-        "Asia/Singapore",
-        "Asia/Bangkok",
-        "Europe/Amsterdam",
-        "Europe/London",
-        "America/Los_Angeles",
-        "America/New_York"
-    ]
 
     private static func eventCalendar(timeZoneID: String) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -1029,6 +1018,59 @@ struct EventEditorView: View {
         let start = calendar.startOfDay(for: date)
         return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? start
     }
+
+    #if DEBUG
+    private static func assertEventEditorTimezoneGuardrails() {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        var calendar = eventCalendar(timeZoneID: "Europe/Amsterdam")
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 6
+        components.day = 1
+        components.hour = 17
+        components.minute = 0
+        components.second = 0
+        let amsterdamWallClock = calendar.date(from: components)
+        assert(
+            amsterdamWallClock.map { isoFormatter.string(from: $0) } == "2026-06-01T15:00:00Z",
+            "EventEditor must interpret Day N HH:mm in the event timezone, not the device timezone."
+        )
+
+        calendar = eventCalendar(timeZoneID: "America/New_York")
+        let newYorkWallClock = calendar.date(from: components)
+        assert(
+            newYorkWallClock.map { isoFormatter.string(from: $0) } == "2026-06-01T21:00:00Z",
+            "Changing event timezone must preserve wall-clock HH:mm and recompute the UTC instant."
+        )
+
+        calendar = eventCalendar(timeZoneID: "Europe/Amsterdam")
+        components.hour = 23
+        components.minute = 30
+        let crossMidnightStart = calendar.date(from: components)
+        components.day = 2
+        components.hour = 1
+        components.minute = 0
+        let crossMidnightEnd = calendar.date(from: components)
+        assert(
+            crossMidnightStart.map { isoFormatter.string(from: $0) } == "2026-06-01T21:30:00Z",
+            "Cross-midnight start must be interpreted as event-local wall time."
+        )
+        assert(
+            crossMidnightEnd.map { isoFormatter.string(from: $0) } == "2026-06-01T23:00:00Z",
+            "End clock earlier than start must resolve to the next local calendar day."
+        )
+
+        components.day = 2
+        components.hour = 2
+        components.minute = 0
+        let afterRolloverDay1Slot = calendar.date(from: components)
+        assert(
+            afterRolloverDay1Slot.map { isoFormatter.string(from: $0) } == "2026-06-02T00:00:00Z",
+            "Day 1 after-midnight timetable rows must keep the event-local clock when stored as UTC."
+        )
+    }
+    #endif
 
     private struct EditableLineupPerformer: Identifiable, Hashable {
         let id: UUID
@@ -1136,6 +1178,10 @@ struct EventEditorView: View {
         appContainer.djListRepository
     }
 
+    private var webService: WebFeatureService {
+        appContainer.webService
+    }
+
     let mode: Mode
     let onSaved: () -> Void
 
@@ -1162,6 +1208,10 @@ struct EventEditorView: View {
     @State private var startDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var endDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var eventTimeZoneIdentifier = EventEditorView.defaultEventTimeZoneID
+    @State private var timeZoneSearchQuery = ""
+    @State private var timeZoneSearchResults: [EventTimezoneLookupItem] = []
+    @State private var selectedTimeZoneLookup: EventTimezoneLookupItem?
+    @State private var isSearchingTimeZones = false
     @State private var isWeekScheduleEnabled = false
     @State private var coverImageUrl = ""
     @State private var lineupImageUrl = ""
@@ -1304,12 +1354,49 @@ struct EventEditorView: View {
                 }
 
                 Section(LT("时间", "时间", "時間")) {
-                    Picker(LT("事件时区", "事件时区", "イベントのタイムゾーン"), selection: $eventTimeZoneIdentifier) {
-                        ForEach(Self.commonEventTimeZoneIDs, id: \.self) { identifier in
-                            Text(timeZonePickerTitle(identifier)).tag(identifier)
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField(
+                            LT("输入城市或城市+州/国家，如 Chicago / Springfield MO", "Enter city or city + state/country", "都市または都市+州/国を入力"),
+                            text: $timeZoneSearchQuery
+                        )
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(true)
+
+                        HStack(spacing: 10) {
+                            Button(isSearchingTimeZones ? LT("搜索中...", "Searching...", "検索中...") : LT("搜索城市时区", "Search city timezone", "都市タイムゾーンを検索")) {
+                                Task { await searchEventTimezones() }
+                            }
+                            .disabled(isSearchingTimeZones)
+
+                            Button(LT("清空", "Clear", "クリア")) {
+                                clearSelectedEventTimezone()
+                            }
                         }
-                        if !Self.commonEventTimeZoneIDs.contains(eventTimeZoneIdentifier) {
-                            Text(timeZonePickerTitle(eventTimeZoneIdentifier)).tag(eventTimeZoneIdentifier)
+
+                        Text(selectedTimeZoneSummaryText)
+                            .font(.caption)
+                            .foregroundStyle(selectedTimeZoneLookup == nil ? RaverTheme.secondaryText : .green)
+
+                        if !timeZoneSearchResults.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(timeZoneSearchResults.prefix(8)) { item in
+                                    Button {
+                                        applyEventTimezoneSelection(item)
+                                    } label: {
+                                        Text(item.label)
+                                            .font(.caption)
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(RaverTheme.card)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                     }
                     DatePicker(
@@ -1317,9 +1404,11 @@ struct EventEditorView: View {
                         selection: Binding(
                             get: { startDate },
                             set: { newValue in
+                                let previousStartDate = startDate
                                 let normalized = Self.normalizedStartOfDay(newValue, timeZoneID: eventTimeZoneIdentifier)
                                 startDate = normalized
                                 endDate = normalized
+                                rebaseLineupSlotsForEventStartDateChange(from: previousStartDate, to: normalized)
                             }
                         ),
                         displayedComponents: [.date]
@@ -1525,7 +1614,23 @@ struct EventEditorView: View {
                 }
             }
             .task {
+                #if DEBUG
+                Self.assertEventEditorTimezoneGuardrails()
+                #endif
                 prefillIfNeeded()
+            }
+            .onChange(of: timeZoneSearchQuery) { _, newValue in
+                guard let selectedTimeZoneLookup else { return }
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                let allowedValues = [
+                    selectedTimeZoneLookup.city,
+                    selectedTimeZoneLookup.cityAscii,
+                ]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if !trimmed.isEmpty && !allowedValues.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                    self.selectedTimeZoneLookup = nil
+                }
             }
             .onChange(of: selectedCoverPhoto) { _, newValue in
                 Task { await loadSelectedEventImage(newValue, target: .cover) }
@@ -1636,6 +1741,34 @@ struct EventEditorView: View {
         Self.eventCalendar(timeZoneID: eventTimeZoneIdentifier)
     }
 
+    private var selectedTimeZoneSummaryText: String {
+        if let selectedTimeZoneLookup {
+            return LT(
+                "已确认：\(selectedTimeZoneLookup.label)",
+                "Confirmed: \(selectedTimeZoneLookup.label)",
+                "確認済み: \(selectedTimeZoneLookup.label)"
+            )
+        }
+        if allowsLegacyTimeZoneSave {
+            return LT(
+                "当前活动沿用已有时区：\(eventTimeZoneIdentifier)。如果需要更精确的城市归属，请重新搜索并确认城市时区。",
+                "This event is keeping its existing timezone: \(eventTimeZoneIdentifier). Search and confirm a city timezone if you want to upgrade it.",
+                "このイベントは既存タイムゾーン \(eventTimeZoneIdentifier) を継続使用します。都市ベースに更新する場合は検索して確認してください。"
+            )
+        }
+        return LT(
+            "当前将保存为 \(eventTimeZoneIdentifier)。保存前必须从候选列表中明确确认活动城市时区。",
+            "Current save value: \(eventTimeZoneIdentifier). You must confirm an event city timezone before saving.",
+            "現在の保存値: \(eventTimeZoneIdentifier)。保存前に都市タイムゾーン候補を明示的に確認してください。"
+        )
+    }
+
+    private var allowsLegacyTimeZoneSave: Bool {
+        guard case .edit(let event) = mode else { return false }
+        let original = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        return selectedTimeZoneLookup == nil && original == eventTimeZoneIdentifier
+    }
+
     private var timeZonePreviewText: String {
         let localRange = normalizedEventStartDate.appLocalizedDateRangeText(to: normalizedEventEndDate, timeZone: .current)
         let eventRange = normalizedEventStartDate.appLocalizedDateRangeText(to: normalizedEventEndDate, timeZone: selectedEventTimeZone)
@@ -1653,14 +1786,141 @@ struct EventEditorView: View {
         Self.normalizedEndOfDay(max(endDate, startDate), timeZoneID: eventTimeZoneIdentifier)
     }
 
-    private func timeZonePickerTitle(_ identifier: String) -> String {
-        if identifier == "Asia/Shanghai" {
-            return "Asia/Shanghai · 北京时间"
+    private func searchEventTimezones() async {
+        let trimmed = timeZoneSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            errorMessage = LT("请先输入城市或城市+州/国家", "Please enter a city or city + state/country first.", "先に都市または都市+州/国を入力してください。")
+            timeZoneSearchResults = []
+            return
         }
-        if identifier == TimeZone.current.identifier {
-            return "\(identifier) · \(LT("当前设备", "Current device", "現在の端末"))"
+        isSearchingTimeZones = true
+        defer { isSearchingTimeZones = false }
+        do {
+            let results = try await webService.searchEventTimezones(query: trimmed, limit: 8)
+            timeZoneSearchResults = results
+            if results.isEmpty {
+                errorMessage = LT("没有匹配结果，请尝试英文城市名、州缩写或国家名", "No matches found. Try an English city name, state code, or country.", "一致する結果がありません。英語の都市名、州コード、または国名でお試しください。")
+            }
+        } catch {
+            timeZoneSearchResults = []
+            errorMessage = error.userFacingMessage ?? LT("搜索城市时区失败，请稍后重试", "Failed to search event timezones. Please try again.", "都市タイムゾーンの検索に失敗しました。もう一度お試しください。")
         }
-        return identifier
+    }
+
+    private func clearSelectedEventTimezone() {
+        selectedTimeZoneLookup = nil
+        timeZoneSearchResults = []
+        timeZoneSearchQuery = ""
+    }
+
+    private func applyEventTimezoneSelection(_ item: EventTimezoneLookupItem) {
+        let previousTimeZoneID = eventTimeZoneIdentifier
+        selectedTimeZoneLookup = item
+        timeZoneSearchQuery = item.cityAscii.isEmpty ? item.city : item.cityAscii
+        timeZoneSearchResults = []
+        eventTimeZoneIdentifier = item.timezone
+
+        if cityEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cityEn = item.cityAscii.isEmpty ? item.city : item.cityAscii
+        }
+        if countryEn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            countryEn = item.country
+        }
+        if countryEnFull.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            countryEnFull = item.country
+        }
+
+        guard previousTimeZoneID != item.timezone else { return }
+        rebaseEditorWallClock(from: previousTimeZoneID, to: item.timezone)
+    }
+
+    private func rebaseEditorWallClock(from sourceTimeZoneID: String, to targetTimeZoneID: String) {
+        startDate = rebaseDateKeepingWallClock(startDate, from: sourceTimeZoneID, to: targetTimeZoneID)
+        endDate = rebaseDateKeepingWallClock(endDate, from: sourceTimeZoneID, to: targetTimeZoneID)
+        lineupEntries = lineupEntries.map { rebaseLineupSlotWallClock($0, from: sourceTimeZoneID, to: targetTimeZoneID) }
+        lineupImportDraftEntries = lineupImportDraftEntries.map { rebaseLineupSlotWallClock($0, from: sourceTimeZoneID, to: targetTimeZoneID) }
+        if let pendingLineupEntry {
+            self.pendingLineupEntry = rebaseLineupSlotWallClock(pendingLineupEntry, from: sourceTimeZoneID, to: targetTimeZoneID)
+        }
+        let allDraftSlots = lineupEntries + lineupImportDraftEntries
+        lineupTimeDraftBySlotID = Dictionary(uniqueKeysWithValues: allDraftSlots.map { ($0.id, makeTimeDraft(from: $0)) })
+        if let pendingLineupEntry {
+            lineupTimeDraftBySlotID[pendingLineupEntry.id] = makeTimeDraft(from: pendingLineupEntry)
+        }
+    }
+
+    private func rebaseLineupSlotsForEventStartDateChange(from previousStartDate: Date, to nextStartDate: Date) {
+        let previousStartDay = eventCalendar.startOfDay(for: previousStartDate)
+        let nextStartDay = eventCalendar.startOfDay(for: nextStartDate)
+        guard previousStartDay != nextStartDay else { return }
+
+        lineupEntries = lineupEntries.map {
+            rebaseLineupSlotEventStartDate($0, previousStartDate: previousStartDay, nextStartDate: nextStartDay)
+        }
+        lineupImportDraftEntries = lineupImportDraftEntries.map {
+            rebaseLineupSlotEventStartDate($0, previousStartDate: previousStartDay, nextStartDate: nextStartDay)
+        }
+        if let pendingLineupEntry {
+            self.pendingLineupEntry = rebaseLineupSlotEventStartDate(
+                pendingLineupEntry,
+                previousStartDate: previousStartDay,
+                nextStartDate: nextStartDay
+            )
+        }
+
+        let allDraftSlots = lineupEntries + lineupImportDraftEntries
+        lineupTimeDraftBySlotID = Dictionary(uniqueKeysWithValues: allDraftSlots.map { ($0.id, makeTimeDraft(from: $0)) })
+        if let pendingLineupEntry {
+            lineupTimeDraftBySlotID[pendingLineupEntry.id] = makeTimeDraft(from: pendingLineupEntry)
+        }
+    }
+
+    private func rebaseLineupSlotEventStartDate(
+        _ slot: EditableLineupSlot,
+        previousStartDate: Date,
+        nextStartDate: Date
+    ) -> EditableLineupSlot {
+        let dayIndex = festivalDayIndex(for: slot, relativeTo: previousStartDate)
+        let nextDay = eventCalendar.date(byAdding: .day, value: max(dayIndex - 1, 0), to: nextStartDate) ?? nextStartDate
+        let endOffset = dayOffsetBetweenStartAndEnd(slot)
+
+        var rebased = slot
+        rebased.dayID = editorDayKey(for: nextDay)
+        if let start = slot.startTime {
+            rebased.startTime = combine(day: nextDay, preservingClockFrom: start)
+        }
+        if let end = slot.endTime {
+            let endBaseDay = eventCalendar.date(byAdding: .day, value: max(endOffset, 0), to: nextDay) ?? nextDay
+            rebased.endTime = combine(day: endBaseDay, preservingClockFrom: end)
+        }
+        return rebased
+    }
+
+    private func rebaseLineupSlotWallClock(
+        _ slot: EditableLineupSlot,
+        from sourceTimeZoneID: String,
+        to targetTimeZoneID: String
+    ) -> EditableLineupSlot {
+        var rebased = slot
+        if let start = slot.startTime {
+            rebased.startTime = rebaseDateKeepingWallClock(start, from: sourceTimeZoneID, to: targetTimeZoneID)
+        }
+        if let end = slot.endTime {
+            rebased.endTime = rebaseDateKeepingWallClock(end, from: sourceTimeZoneID, to: targetTimeZoneID)
+        }
+        if let dayID = slot.dayID,
+           let originalDay = editorDayKeyDate(from: dayID, timeZoneID: sourceTimeZoneID) {
+            let rebasedDay = rebaseDateKeepingWallClock(originalDay, from: sourceTimeZoneID, to: targetTimeZoneID)
+            rebased.dayID = editorDayKey(for: rebasedDay, timeZoneID: targetTimeZoneID)
+        }
+        return rebased
+    }
+
+    private func rebaseDateKeepingWallClock(_ date: Date, from sourceTimeZoneID: String, to targetTimeZoneID: String) -> Date {
+        let sourceCalendar = Self.eventCalendar(timeZoneID: sourceTimeZoneID)
+        let targetCalendar = Self.eventCalendar(timeZoneID: targetTimeZoneID)
+        let components = sourceCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        return targetCalendar.date(from: components) ?? date
     }
 
     private struct StageLineupGroup: Identifiable, Hashable {
@@ -2628,15 +2888,36 @@ struct EventEditorView: View {
         return offset + 1
     }
 
+    private func festivalDayIndex(for slot: EditableLineupSlot, relativeTo eventStartDate: Date) -> Int {
+        if let dayID = slot.dayID,
+           let parsedDay = editorDayKeyDate(from: dayID) {
+            let startDay = eventCalendar.startOfDay(for: eventStartDate)
+            let targetDay = eventCalendar.startOfDay(for: parsedDay)
+            let offset = eventCalendar.dateComponents([.day], from: startDay, to: targetDay).day ?? 0
+            if offset >= 0 { return offset + 1 }
+        }
+        if let start = slot.startTime {
+            let startDay = eventCalendar.startOfDay(for: eventStartDate)
+            let slotDay = eventCalendar.startOfDay(for: start)
+            let offset = eventCalendar.dateComponents([.day], from: startDay, to: slotDay).day ?? 0
+            if offset >= 0 { return offset + 1 }
+        }
+        return 1
+    }
+
     private func applyDay(_ dayID: String, to date: Date) -> Date {
         guard let targetDay = dayDate(for: dayID) else { return date }
+        return combine(day: targetDay, preservingClockFrom: date) ?? date
+    }
+
+    private func combine(day: Date, preservingClockFrom source: Date) -> Date? {
         let calendar = eventCalendar
-        let timeParts = calendar.dateComponents([.hour, .minute, .second], from: date)
-        var dayParts = calendar.dateComponents([.year, .month, .day], from: targetDay)
+        let timeParts = calendar.dateComponents([.hour, .minute, .second], from: source)
+        var dayParts = calendar.dateComponents([.year, .month, .day], from: day)
         dayParts.hour = timeParts.hour
         dayParts.minute = timeParts.minute
         dayParts.second = timeParts.second
-        return calendar.date(from: dayParts) ?? date
+        return calendar.date(from: dayParts)
     }
 
     private func prefillIfNeeded() {
@@ -2702,6 +2983,29 @@ struct EventEditorView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? ""
         eventTimeZoneIdentifier = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? Self.defaultEventTimeZoneID
+        timeZoneSearchQuery = event.city ?? ""
+        if let city = event.city?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+           let country = event.country?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
+            selectedTimeZoneLookup = EventTimezoneLookupItem(
+                city: city,
+                cityAscii: city,
+                province: "",
+                exactProvince: "",
+                stateAnsi: "",
+                country: country,
+                iso2: "",
+                iso3: "",
+                timezone: eventTimeZoneIdentifier,
+                lat: event.locationPoint?.location?.lat ?? event.latitude,
+                lng: event.locationPoint?.location?.lng ?? event.longitude,
+                population: nil,
+                label: "\(city), \(country) · \(eventTimeZoneIdentifier)",
+                matchSource: "prefilled-existing-event"
+            )
+        } else {
+            selectedTimeZoneLookup = nil
+        }
+        timeZoneSearchResults = []
         startDate = Self.normalizedStartOfDay(event.startDate, timeZoneID: eventTimeZoneIdentifier)
         endDate = Self.normalizedStartOfDay(event.endDate, timeZoneID: eventTimeZoneIdentifier)
         coverImageUrl = event.coverImageUrl ?? ""
@@ -2890,6 +3194,11 @@ struct EventEditorView: View {
             return
         }
 
+        guard selectedTimeZoneLookup != nil || allowsLegacyTimeZoneSave else {
+            errorMessage = LT("请先搜索并确认活动当地城市时区后再保存", "Please search and confirm the event city timezone before saving.", "保存前にイベント開催地の都市タイムゾーンを検索して確認してください。")
+            return
+        }
+
         guard let lineupSlotsInput = buildLineupSlotsInput() else {
             return
         }
@@ -2926,6 +3235,12 @@ struct EventEditorView: View {
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
                         timeZone: eventTimeZoneIdentifier,
+                        timeZoneCity: selectedTimeZoneLookup?.city,
+                        timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
+                        timeZoneCountry: selectedTimeZoneLookup?.country,
+                        timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
+                        timeZoneLat: selectedTimeZoneLookup?.lat,
+                        timeZoneLng: selectedTimeZoneLookup?.lng,
                         stageOrder: normalizedStageEntries,
                         coverImageUrl: nil,
                         lineupImageUrl: nil,
@@ -2969,6 +3284,12 @@ struct EventEditorView: View {
                     _ = try await eventCommandRepository.updateEvent(
                         id: created.id,
                         input: UpdateEventInput(
+                            timeZoneCity: selectedTimeZoneLookup?.city,
+                            timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
+                            timeZoneCountry: selectedTimeZoneLookup?.country,
+                            timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
+                            timeZoneLat: selectedTimeZoneLookup?.lat,
+                            timeZoneLng: selectedTimeZoneLookup?.lng,
                             coverImageUrl: uploadedCoverURL,
                             lineupImageUrl: uploadedLineupURL
                         )
@@ -3023,6 +3344,12 @@ struct EventEditorView: View {
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
                         timeZone: eventTimeZoneIdentifier,
+                        timeZoneCity: selectedTimeZoneLookup?.city,
+                        timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
+                        timeZoneCountry: selectedTimeZoneLookup?.country,
+                        timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
+                        timeZoneLat: selectedTimeZoneLookup?.lat,
+                        timeZoneLng: selectedTimeZoneLookup?.lng,
                         stageOrder: normalizedStageEntries,
                         coverImageUrl: finalCover.nilIfEmpty ?? "",
                         lineupImageUrl: finalLineup.nilIfEmpty ?? "",
@@ -4118,6 +4445,11 @@ struct EventEditorView: View {
                 return nil
             }
 
+            if let start = item.startTime, let end = item.endTime, start == end {
+                errorMessage = LT("第 \(index + 1) 个 DJ 的开始和结束时间不能相同", "Start and end time for DJ #\(index + 1) cannot be the same.", "\(index + 1)番目のDJの開始時間と終了時間は同じにできません。")
+                return nil
+            }
+
             let composedName = EventLineupActCodec.composeName(type: item.actType, performerNames: trimmedNames)
             guard !composedName.isEmpty else {
                 errorMessage = LT("第 \(index + 1) 个 DJ 名称为空，请补全后再保存", "DJ name #\(index + 1) is empty. Please complete before saving.", "\(index + 1)番目のDJ名が空です。入力してから保存してください。")
@@ -4148,17 +4480,25 @@ struct EventEditorView: View {
     }
 
     private func editorDayKey(for date: Date) -> String {
+        editorDayKey(for: date, timeZoneID: eventTimeZoneIdentifier)
+    }
+
+    private func editorDayKey(for date: Date, timeZoneID: String) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = selectedEventTimeZone
+        formatter.timeZone = TimeZone(identifier: timeZoneID) ?? .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
 
     private func editorDayKeyDate(from value: String) -> Date? {
+        editorDayKeyDate(from: value, timeZoneID: eventTimeZoneIdentifier)
+    }
+
+    private func editorDayKeyDate(from value: String, timeZoneID: String) -> Date? {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = selectedEventTimeZone
+        formatter.timeZone = TimeZone(identifier: timeZoneID) ?? .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: value)
     }
@@ -4181,7 +4521,7 @@ struct EventEditorView: View {
 
 }
 
-private struct EventLocationPickerResult {
+struct EventLocationPickerResult {
     let latitude: Double
     let longitude: Double
     let displayAddress: String
@@ -4190,7 +4530,7 @@ private struct EventLocationPickerResult {
     let placeName: String?
 }
 
-private enum EventCoordinateTransform {
+enum EventCoordinateTransform {
     private static let a = 6378245.0
     private static let ee = 0.00669342162296594323
 
@@ -4254,7 +4594,7 @@ private enum EventCoordinateTransform {
     }
 }
 
-private final class EventPickerCurrentLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
+final class EventPickerCurrentLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var coordinate: CLLocationCoordinate2D?
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
 
@@ -4299,7 +4639,7 @@ private final class EventPickerCurrentLocationProvider: NSObject, ObservableObje
     }
 }
 
-private struct EventLocationSearchCandidate: Identifiable {
+struct EventLocationSearchCandidate: Identifiable {
     let id: String
     let title: String
     let subtitle: String
@@ -4314,7 +4654,7 @@ private struct EventLocationSearchCandidate: Identifiable {
     }
 }
 
-private final class EventLocationSearchModel: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+final class EventLocationSearchModel: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
     @Published var query: String = ""
     @Published var queryCandidates: [EventLocationSearchCandidate] = []
     @Published var nearbyCandidates: [EventLocationSearchCandidate] = []
@@ -4410,7 +4750,7 @@ private final class EventLocationSearchModel: NSObject, ObservableObject, MKLoca
     }
 }
 
-private struct EventLocationPickerSheet: View {
+struct EventLocationPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var searchModel = EventLocationSearchModel()
     @StateObject private var locationProvider = EventPickerCurrentLocationProvider()

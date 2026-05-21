@@ -175,6 +175,9 @@ let eventBrandBindingState = {
   viewMode: 'list',
   selectedEventIds: new Set(),
 };
+let eventTimezoneLookupState = {
+  requestSeq: 0,
+};
 let rankingPageState = {
   loaded: false,
   loadingBoards: false,
@@ -352,4 +355,40 @@ async function apiGet(path, extraHeaders = null) {
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.error || `请求失败 (${resp.status})`);
   return data;
+}
+
+function normalizeEventTimezoneLookupItem(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const timezone = String(raw.timezone || '').trim();
+  const city = String(raw.city || '').trim();
+  if (!timezone || !city) return null;
+  return {
+    city,
+    cityAscii: String(raw.cityAscii || raw.city_ascii || city).trim(),
+    province: String(raw.province || '').trim(),
+    exactProvince: String(raw.exactProvince || raw.exact_province || '').trim(),
+    stateAnsi: String(raw.stateAnsi || raw.state_ansi || '').trim(),
+    country: String(raw.country || '').trim(),
+    iso2: String(raw.iso2 || '').trim(),
+    iso3: String(raw.iso3 || '').trim(),
+    timezone,
+    lat: Number.isFinite(Number(raw.lat)) ? Number(raw.lat) : null,
+    lng: Number.isFinite(Number(raw.lng)) ? Number(raw.lng) : null,
+    population: Number.isFinite(Number(raw.population)) ? Number(raw.population) : null,
+    label: String(raw.label || '').trim() || `${city} · ${timezone}`,
+    matchSource: String(raw.matchSource || raw.match_source || '').trim(),
+  };
+}
+
+async function searchEventTimezonesByCity(query, limit = 8) {
+  const text = String(query || '').trim();
+  if (!text) return [];
+  const headers = getViewerAuthHeaders();
+  const qs = new URLSearchParams({
+    q: text,
+    limit: String(Math.max(1, Math.min(20, Number(limit) || 8))),
+  });
+  const resp = await apiGet(`/api/raver/event-timezones/search?${qs.toString()}`, headers);
+  const items = Array.isArray(resp?.data?.items) ? resp.data.items : [];
+  return items.map(normalizeEventTimezoneLookupItem).filter(Boolean);
 }

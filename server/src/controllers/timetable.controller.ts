@@ -88,6 +88,11 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
       res.status(400).json({ error: 'startTime and endTime are required' });
       return;
     }
+    if (parsedStart.getTime() === parsedEnd.getTime()) {
+      res.status(400).json({ error: 'startTime and endTime cannot be the same' });
+      return;
+    }
+    const normalizedEnd = parsedEnd < parsedStart ? new Date(parsedEnd.getTime() + 86_400_000) : parsedEnd;
 
     const nameStr = String(djName || '').trim();
     if (!nameStr) { res.status(400).json({ error: 'djName is required' }); return; }
@@ -135,7 +140,7 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
           stageName: typeof stageName === 'string' && stageName.trim() ? stageName.trim() : null,
           festivalDayIndex: typeof festivalDayIndex === 'number' ? festivalDayIndex : null,
           startTime: parsedStart,
-          endTime: parsedEnd,
+          endTime: normalizedEnd,
           sortOrder: typeof sortOrder === 'number' ? sortOrder : snapshot.slots.length + 1,
         },
       ];
@@ -200,6 +205,8 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
     const normalizedDjId = String(djId || '').trim() || null;
     const parsedStart = startTime ? parseOptionalDate(startTime, event.timeZone) : null;
     const parsedEnd = endTime ? parseOptionalDate(endTime, event.timeZone) : null;
+    if (startTime && !parsedStart) { res.status(400).json({ error: 'Invalid startTime' }); return; }
+    if (endTime && !parsedEnd) { res.status(400).json({ error: 'Invalid endTime' }); return; }
 
     const updatedSlot = await prisma.$transaction(async (tx) => {
       const snapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
@@ -211,6 +218,11 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
         if (!artist) return 'invalid-lineup-artist' as const;
       }
 
+      const nextStart = parsedStart ?? existing.startTime;
+      let nextEnd = parsedEnd ?? existing.endTime;
+      if (nextStart.getTime() === nextEnd.getTime()) return 'invalid-time-range' as const;
+      if (nextEnd < nextStart) nextEnd = new Date(nextEnd.getTime() + 86_400_000);
+
       const nextSlots = snapshot.slots.map((slot) => (
         slot.id === slotId
           ? {
@@ -221,8 +233,8 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
               lineupArtistId: lineupArtistId !== undefined ? (String(lineupArtistId || '').trim() || null) : slot.lineupArtistId,
               stageName: stageName !== undefined ? (typeof stageName === 'string' && stageName.trim() ? stageName.trim() : null) : slot.stageName,
               festivalDayIndex: festivalDayIndex !== undefined ? (typeof festivalDayIndex === 'number' ? festivalDayIndex : null) : slot.festivalDayIndex,
-              startTime: parsedStart ?? slot.startTime,
-              endTime: parsedEnd ?? slot.endTime,
+              startTime: nextStart,
+              endTime: nextEnd,
               sortOrder: typeof sortOrder === 'number' ? sortOrder : slot.sortOrder,
             }
           : slot
@@ -233,6 +245,7 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
 
     if (updatedSlot === 'missing') { res.status(404).json({ error: 'Timetable slot not found' }); return; }
     if (updatedSlot === 'invalid-lineup-artist') { res.status(400).json({ error: 'lineupArtistId does not belong to this event' }); return; }
+    if (updatedSlot === 'invalid-time-range') { res.status(400).json({ error: 'startTime and endTime cannot be the same' }); return; }
     if (!updatedSlot) { res.status(500).json({ error: 'Failed to update timetable slot' }); return; }
 
     const dj = updatedSlot.djId

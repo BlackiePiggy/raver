@@ -111,6 +111,51 @@ private enum EventTimeZoneDisplay {
     }
 }
 
+private enum EventLiveSlotResolver {
+    static func currentSlot(from slots: [WebEventLineupSlot], now: Date = Date()) -> WebEventLineupSlot? {
+        slots.first { slot in
+            slot.startTime <= now && now < slot.endTime
+        }
+    }
+
+    #if DEBUG
+    private static var didRunGuardrails = false
+
+    static func assertGuardrailsOnce() {
+        guard !didRunGuardrails else { return }
+        didRunGuardrails = true
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        guard let start = formatter.date(from: "2026-06-01T15:00:00Z"),
+              let end = formatter.date(from: "2026-06-01T16:00:00Z"),
+              let during = formatter.date(from: "2026-06-01T15:30:00Z"),
+              let boundaryEnd = formatter.date(from: "2026-06-01T16:00:00Z") else {
+            assertionFailure("Event live slot guardrails need valid ISO dates.")
+            return
+        }
+
+        let slot = WebEventLineupSlot(
+            id: "guardrail-slot",
+            eventId: nil,
+            djId: nil,
+            djIds: nil,
+            djs: nil,
+            festivalDayIndex: 1,
+            djName: "Guardrail DJ",
+            stageName: "Main",
+            sortOrder: 1,
+            startTime: start,
+            endTime: end,
+            dj: nil
+        )
+
+        assert(currentSlot(from: [slot], now: during)?.id == slot.id, "Live room must detect current DJ by UTC instant comparison.")
+        assert(currentSlot(from: [slot], now: boundaryEnd) == nil, "Live room end boundary must be exclusive to avoid overlapping acts.")
+    }
+    #endif
+}
+
 struct EventLiveDiscussionView: View {
     @Environment(\.appPush) private var appPush
     @Environment(\.dismiss) private var dismiss
@@ -814,6 +859,10 @@ struct EventLiveDiscussionView: View {
     }
 
     private func liveStageSnapshots(for event: WebEvent) -> [EventStageLiveSnapshot] {
+        #if DEBUG
+        EventLiveSlotResolver.assertGuardrailsOnce()
+        #endif
+
         let now = Date()
         let stageBuckets = Dictionary(grouping: event.lineupSlots.filter { $0.endTime > $0.startTime }) { slot in
             let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -832,7 +881,7 @@ struct EventLiveDiscussionView: View {
                 return raw.isEmpty ? LT("未知舞台", "未知舞台", "不明なステージ") : raw
             }()
 
-            let currentSlot = sortedSlots.first { $0.startTime <= now && now <= $0.endTime }
+            let currentSlot = EventLiveSlotResolver.currentSlot(from: sortedSlots, now: now)
             let anchorTime = currentSlot?.endTime ?? now
             let currentDayIndex = EventLogicalDayResolver.dayIndex(
                 for: anchorTime,
@@ -2996,13 +3045,13 @@ struct EventDetailView: View {
     }
 
     private func isEventLiveDiscussionActive(_ event: WebEvent) -> Bool {
-        let calendar = Calendar.current
+        let calendar = Calendar.eventCalendar(timeZone: event.eventTimeZone)
         let start = calendar.startOfDay(for: event.startDate)
-        guard let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: event.endDate) else {
+        guard let endExclusive = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: event.endDate)) else {
             return false
         }
         let now = Date()
-        return now >= start && now <= end
+        return now >= start && now < endExclusive
     }
 
     private func currentLiveStageActs(for event: WebEvent) -> [EventLiveStageAct] {
@@ -3025,6 +3074,10 @@ struct EventDetailView: View {
     }
 
     private func liveStageSnapshots(for event: WebEvent) -> [EventStageLiveSnapshot] {
+        #if DEBUG
+        EventLiveSlotResolver.assertGuardrailsOnce()
+        #endif
+
         let now = Date()
         let stageBuckets = Dictionary(grouping: event.lineupSlots.filter { $0.endTime > $0.startTime }) { slot in
             let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -3043,9 +3096,23 @@ struct EventDetailView: View {
                 return raw.isEmpty ? LT("未知舞台", "未知舞台", "不明なステージ") : raw
             }()
 
-            let currentSlot = sortedSlots.first { $0.startTime <= now && now <= $0.endTime }
+            let currentSlot = EventLiveSlotResolver.currentSlot(from: sortedSlots, now: now)
             let anchorTime = currentSlot?.endTime ?? now
-            let nextSlot = sortedSlots.first { $0.startTime > anchorTime }
+            let currentDayIndex = EventLogicalDayResolver.dayIndex(
+                for: anchorTime,
+                eventStartDate: event.startDate,
+                dayRolloverHour: event.dayRolloverHour,
+                timeZone: event.eventTimeZone
+            )
+            let nextSlot = sortedSlots.first { slot in
+                guard slot.startTime > anchorTime else { return false }
+                return EventLogicalDayResolver.dayIndex(
+                    for: slot,
+                    eventStartDate: event.startDate,
+                    dayRolloverHour: event.dayRolloverHour,
+                    timeZone: event.eventTimeZone
+                ) == currentDayIndex
+            }
 
             return EventStageLiveSnapshot(
                 stageKey: stageKey,
@@ -6327,7 +6394,7 @@ struct EventDetailView: View {
             return []
         }
 
-        let calendar = Calendar.current
+        let calendar = Calendar.eventCalendar(timeZone: event.eventTimeZone)
         let selectedDJIDs = Set<String>(
             legacyRelatedDJCheckins.compactMap { item in
                 guard let djID = item.djId, !djID.isEmpty else { return nil }

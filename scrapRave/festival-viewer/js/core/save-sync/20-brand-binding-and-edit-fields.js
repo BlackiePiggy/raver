@@ -314,7 +314,14 @@ function bindEventLineupArtistEditor(panelEl, info = null) {
 function eventFormWriteTimetableToPanel(panelEl, lineup) {
   if (!panelEl) return;
   const textarea = panelEl.querySelector('.fest-info-edit [data-field="lineup"]');
-  const normalized = dedupeLineupEntries(Array.isArray(lineup) ? lineup : []);
+  const startDate = String(panelEl.querySelector('.fest-info-edit [data-field="startDate"]')?.value || '').trim();
+  const endDate = String(panelEl.querySelector('.fest-info-edit [data-field="endDate"]')?.value || '').trim() || startDate;
+  const normalized = dedupeLineupEntries(normalizeLineupRowsForEventWallClockSync(
+    Array.isArray(lineup) ? lineup : [],
+    startDate,
+    endDate,
+    6
+  ));
   if (textarea) {
     textarea.value = normalized.length ? JSON.stringify({ lineup_info: normalized }, null, 2) : '';
   }
@@ -722,17 +729,6 @@ function setEditInputs(panelEl, info) {
     const el = panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
     if (el) el.value = val || '';
   };
-  const ensureSelectHasOption = (key, value) => {
-    const selectEl = panelEl.querySelector(`.fest-info-edit [data-field="${key}"]`);
-    if (!selectEl || !String(value || '').trim()) return;
-    const normalizedValue = String(value).trim();
-    const hasOption = Array.from(selectEl.options || []).some((opt) => String(opt.value || '').trim() === normalizedValue);
-    if (hasOption) return;
-    const option = document.createElement('option');
-    option.value = normalizedValue;
-    option.textContent = normalizedValue;
-    selectEl.appendChild(option);
-  };
   const nameBi = normalizeBiTextValue(info.nameI18n ?? info.name, info.name);
   const multiLangDraft = eventEditBuildMultiLangDraft(info);
   const cityBi = normalizeBiTextValue(info.cityI18n ?? info.city, info.city);
@@ -776,14 +772,24 @@ function setEditInputs(panelEl, info) {
   set('wikiFestivalName', eventBrandDisplayName(info.wikiFestival || null));
   set('canceled', info.canceled ? 'true' : 'false');
   const statusValue = normalizeArchiveEventStatus(info.status, info.canceled ? 'cancelled' : 'upcoming') || (info.canceled ? 'cancelled' : 'upcoming');
-  ensureSelectHasOption('status', statusValue);
   set('status', statusValue);
   const eventTypeValue = String(info.eventType || 'festival').trim() || 'festival';
-  ensureSelectHasOption('eventType', eventTypeValue);
   set('eventType', eventTypeValue);
   const timeZoneValue = String(info.timeZone || info.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC').trim() || 'UTC';
-  ensureSelectHasOption('timeZone', timeZoneValue);
   set('timeZone', timeZoneValue);
+  const timeZoneSelection = {
+    city: cityEn || cityZh || cityJa || cityRaw || '',
+    province: '',
+    exactProvince: '',
+    stateAnsi: '',
+    country: countryEnFull || countryEn || countryZh || countryJa || countryRaw || '',
+    timezone: timeZoneValue,
+    label: [cityEn || cityZh || cityJa || cityRaw || '', countryEnFull || countryEn || countryZh || countryJa || countryRaw || '']
+      .filter(Boolean)
+      .join(', ') + (timeZoneValue ? ` · ${timeZoneValue}` : ''),
+  };
+  set('timeZoneSearch', cityEn || cityZh || cityJa || cityRaw || '');
+  set('timeZoneCitySelectionJson', JSON.stringify(timeZoneSelection));
   set('startDate', formatArchiveDateInTimeZoneForSync(info.startDate, timeZoneValue));
   set('endDate', formatArchiveDateInTimeZoneForSync(info.endDate, timeZoneValue));
   set('ticketPriceMin', info.ticketPriceMin === null || info.ticketPriceMin === undefined ? '' : String(info.ticketPriceMin));
@@ -807,4 +813,8 @@ function setEditInputs(panelEl, info) {
   ensureEventBrandBindingUI(panelEl, info);
   bindEventLineupArtistEditor(panelEl, info);
   bindEventMultiLangJsonEditor(panelEl, info);
+  if (typeof bindEventTimezoneLookupUI === 'function') {
+    bindEventTimezoneLookupUI(panelEl);
+    renderEventTimezoneSelectionState(panelEl);
+  }
 }
