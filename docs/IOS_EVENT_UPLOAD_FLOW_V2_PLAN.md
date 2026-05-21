@@ -31,12 +31,12 @@ HTML 原型是 10 步。我建议 App 端合并为 6 个主步骤，内部用可
    - 必填：至少 1 张 `poster` 图片；不允许无图创建。`festival-viewer` 的新增活动也应参考同样校验。
    - 图片分区与 `festival-viewer` 完全对齐：`poster / lineup / timetable / cover / map / other`，每区支持多张。
    - AI 识别首版不实现，只保留按钮。按钮应有明显“智能感”：彩色渐变、微光边框、sparkles 图标、按下反馈，但点击后提示“即将支持”或进入占位说明。
-   - App 适配：使用照片选择器 + 拍照入口，图片卡片支持替换、删除、排序、预览，不使用 hover。
+   - App 适配：只使用照片选择器，不接拍照入口；图片卡片支持删除、排序、预览，不使用 hover。
 
 2. **基础信息**
    - 活动名称必填。
    - 活动类型使用现有 `EventTypeOption`。
-   - 简介可选。
+   - 活动简称可选，例如 `A State of Trance` 可填 `ASOT`，用于活动搜索命中。
    - 城市、国家、详细地址必填；地图坐标可选。
    - 不要求用户手动补齐多语言。根据系统语言决定当前填写哪个字段：中文系统优先写 zh，英文系统优先写 en，日文系统可写 ja/或先落到当前已有兼容字段；自动翻译/补齐以后再做。
    - AI 识别结果首版不落地，只保留入口。
@@ -50,15 +50,15 @@ HTML 原型是 10 步。我建议 App 端合并为 6 个主步骤，内部用可
 4. **地点**
    - 地图选点前移到基础信息步骤中，不再保留独立地点页。
    - 手动地址不是兜底，而是最低必填信息的一部分：城市、国家、详细地址必须填写。
-   - 选点后自动回填城市/国家/地址，与当前 `EventLocationPickerSheet` 保持一致。
+   - 选点与详细地址解耦，只保存地图场地/坐标/地图地址，不覆盖用户手填详细地址。
    - UI 上展示一个可点击位置入口和坐标摘要，避免地图候选列表互相遮挡。
 
 5. **时间表**
    - 舞台信息和 Timetable 独立为一个步骤。
    - 先维护舞台列表，排序规则与 `festival-viewer` 一致，影响详情页 timetable 展示顺序。
-   - 至少保留 1 个舞台；舞台名留空时默认展示为“主舞台”。
+   - 时间表可以完全跳过；只有实际新增 timetable slot 时才校验条目完整性。舞台名留空时默认展示为“主舞台”。
    - TimeTable 先展示各 Week 总览卡，再进入对应 Week 的编辑页。
-   - 每个节目都必须填写艺人、舞台、开始时间、结束时间；艺人确认后默认展示为非编辑态，减少页面占用。
+   - 每个节目都必须填写艺人、开始时间、结束时间；艺人确认后默认展示为非编辑态，减少页面占用。
    - 时间表支持跨天，继续沿用 `dayRolloverHour` 语义。
 
 6. **仅阵容**
@@ -139,7 +139,7 @@ EventUploadDraft
       other[]
   basic
     name
-    description
+    abbreviation
     eventType
     localizedNameFields
     localizedCityFields
@@ -196,7 +196,7 @@ V2 新建和编辑活动仍走现有 BFF：
 
 活动 create/update payload 首版覆盖：
 
-- 基础：`name`、`description`、`eventType`、`city`、`cityI18n`、`country`、`countryI18n`
+- 基础：`name`、`abbreviation`、`eventType`、`city`、`cityI18n`、`country`、`countryI18n`
 - 地点：`manualLocation`、`locationPoint`、`latitude`、`longitude`
 - 时间：`startDate`、`endDate`、`timeZone`、`timeZoneCity`、`timeZoneProvince`、`timeZoneCountry`、`timeZoneStateAnsi`、`timeZoneLat`、`timeZoneLng`、`dayRolloverHour`
 - 媒体：`coverImageUrl`、`lineupImageUrl`、`imageAssets`
@@ -222,7 +222,7 @@ V2 新建和编辑活动仍走现有 BFF：
 ## 当前执行进度
 
 - [x] 新上传入口与编辑入口切到 `EventUploadFlowView`
-- [x] 第 1 页改为 2 列图片上传，移除拍照与已上传图片的重新上传按钮
+- [x] 第 1 页改为单列图片上传，移除拍照与已上传图片的重新上传按钮
 - [x] AI 入口移动到基础信息页顶部
 - [x] 基础信息页接入主办方搜索绑定、原文链接单独一行、时区搜索前移
 - [x] 地图选点前移到基础信息页，并移除地图页“附近推荐地点 / pin 周围 POI”遮挡层
@@ -237,6 +237,10 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 第 3 页：移除“周期概览”，跨天切日时间改为默认折叠的高级选项
 - [x] 第 3 页：单日 / 多日 / 多 Week 模式按钮完成一轮更移动端化的视觉收紧
 - [x] 第 3 页：多 Week 日期改为固定短格式 `yyyy/M/d` 展示，并改用独立选日面板避免样式跳变
+- [x] 第 1 页：图片分区标题下的解释性文字已移除，保留更紧凑的单列上传卡片
+- [x] 第 2 页：移除简介字段，替换为活动简称字段，并接入 event create/update payload
+- [x] 第 2 页：活动简称已接入后端 event 字段与活动搜索，聚合搜索和活动列表搜索均可命中简称
+- [x] 第 2 页：地图选点已移到详细地址下方，改为小按钮触发，并补齐绑定态展示
 - [x] 编辑回填：时区搜索词优先保持英文 / ASCII，避免 `Hong Kong` 被回填成 `香港` 导致再次提交异常
 - [x] lineup-only 数据结构支持 B2B / B3B 多成员：新增成员名与成员 DJ 绑定顺序字段，避免只保存第一个 DJ
 - [x] iOS 阵容 tab / 编辑回填支持从 `lineupArtists.members / djs / memberDjIds / memberNames` 恢复多成员头像、名称与绑定态
@@ -245,10 +249,20 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 活动上传链路中的 `lineupArtists` 已停止使用旧 `djIds`，统一迁移到 `memberDjIds / memberNames`
 - [x] 活动时间表槽位主链路已开始统一到 `memberDjIds / memberNames`，server / festival-viewer / iOS mapper 已同步
 - [x] 编辑活动提交流程已补齐 `lineupSlots` 更新映射，避免 timetable 编辑不生效
-- [ ] 第 1 页图片卡片继续收紧排版，与附件 html 的移动端层级更贴近（已按最新要求改回单列，继续收细节）
+- [x] 第 1 页图片卡片继续收紧排版，与附件 html 的移动端层级更贴近（已按最新要求改回单列，并移除每个图名下的解释文字）
 - [ ] Week 时间表编辑页继续优化完成态卡片：已添加 DJ 展示为头像 + 名称 + 补充信息，减少编辑态挤占
 - [ ] Week 时间表编辑页继续优化操作流，避免展开/编辑/删除的逻辑别扭
 - [ ] lineup-only 页面继续向 festival-viewer 的纯阵容录入方式收口
+- [x] lineup-only 页面已继续向附件 html 第 8 页靠一轮：补齐更清晰的概览头部、计数摘要、阵容卡分层和成员绑定状态展示
+- [x] 第 5 页阵容概览已压缩成单行摘要，移除大面积统计块与说明文案
+- [x] 第 5 页“添加阵容”已放到已添加内容下方，录入顺序更贴近附件 html
+- [x] 第 5 页单个阵容单元支持“确定后收起成轻量卡片，点击编辑再展开”
+- [x] 第 3 页：单日 / 多日 / 多 Week 模式已移除 icon 与解释性副文案；单日模式只保留一个日期选择器
+- [x] 第 3 页：`跨天切日时间` 上方补齐 `高级选项` 小标题，括号说明拆成换行小字
+- [x] 第 4 页：Week 时间表编辑页顶部已收敛为 `Week X + 时间跨度`，移除多余概览信息
+- [x] 第 4 页：删除舞台时会同步清理相关 timetable 草稿，修复“已删光舞台仍提示至少添加 1 个舞台”的残留校验
+- [x] 第 4 页：时间表校验不再强制必须存在舞台；空舞台名按“主舞台”归一，时间表为空时可直接下一步
+- [ ] 第 5 页轻量卡片继续细修：补充更像附件 html 的收起态密度、按钮对齐与层级节奏
 - [ ] 最终再做一轮 Light / Dark 主题细节 polish
 - [x] 完整 build 验证并回填本 md 的最终状态
 - [x] iOS 连带页面（DJ 详情 / 活动详情 / 我的 checkins 等）残余 `slot.djIds` 引用全部清理并再次完成全量 build
@@ -434,7 +448,8 @@ V2 新建和编辑活动仍走现有 BFF：
 - [ ] Week 时间表编辑页：继续向附件 html 第 6 页做细节对齐和 polish。
 - [x] Week 时间表编辑页：节目必须填写开始时间和结束时间，不能留空。
 - [x] lineup-only 页面：已完成一轮排版强化，补齐了概览摘要、绑定统计和更紧凑的条目头部。
-- [ ] lineup-only 页面：继续向附件 html 第 8 页做细节对齐和 polish。
+- [x] lineup-only 页面：继续向附件 html 第 8 页做了一轮细节对齐和 polish。
+- [ ] lineup-only 页面：继续收最后一轮视觉细节，特别是搜索结果列表和成员卡纵向节奏。
 - [x] timetable / lineup / 票务页已完成一轮统一视觉优化，强化了卡片层级、摘要区和提交前检查结构。
 - [ ] timetable / lineup / 票务页继续做少量 Light / Dark 细节 polish。
 
@@ -512,7 +527,7 @@ V2 新建和编辑活动仍走现有 BFF：
 
 - [x] 实现活动名称输入和必填校验。
 - [x] 实现活动类型选择，复用 `EventTypeOption`。
-- [x] 实现简介输入。
+- [x] 实现活动简称输入，并接入 create/update 与聚合搜索。
 - [x] 实现城市必填输入。
 - [x] 实现国家必填输入。
 - [x] 实现详细地址必填输入。
@@ -536,7 +551,7 @@ V2 新建和编辑活动仍走现有 BFF：
 
 - [x] 复用或适配 `EventLocationPickerSheet`。
 - [x] 实现地图选点可选入口，接入现有 picker。
-- [x] 选点后回填城市/国家/详细地址。
+- [x] 地图选点与详细地址解耦，只保存场地/坐标/地图地址，不覆盖详细地址。
 - [x] 展示位置摘要。
 - [x] 支持无坐标但有手动地址提交。
 - [ ] Light/Dark 检查地点页视觉。
@@ -549,7 +564,7 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 实现 DJ 库搜索绑定。
 - [x] 实现 solo/b2b/group act type。
 - [x] 实现无阵容跳过。
-- [x] 实现 timetable slot 的 day/stage/start/end 编辑。
+- [x] 实现 timetable slot 的 day/stage/start/end 编辑；舞台为空时默认主舞台。
 - [x] 实现多 Week 下 Week/Day 映射。
 - [x] 实现跨天 slot：结束时间不晚于开始时间时按次日结束。
 - [x] 实现 pending lineup entry 保存前必须确认或删除校验。

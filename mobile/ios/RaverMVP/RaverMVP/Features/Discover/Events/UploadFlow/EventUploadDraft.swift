@@ -189,7 +189,7 @@ struct EventUploadDraft: Hashable, Codable {
     var preferredLanguage: EventUploadPreferredLanguage = .current
     var imageZones: [EventUploadImageZone: [EventUploadImageDraft]] = EventUploadDraft.emptyImageZones()
     var name = EventUploadLocalizedFields()
-    var description = EventUploadLocalizedFields()
+    var abbreviation = ""
     var eventType = ""
     var organizerFestivalID: String?
     var organizerName = ""
@@ -229,6 +229,7 @@ struct EventUploadDraft: Hashable, Codable {
             en: event.nameI18n?.en ?? event.name,
             ja: event.nameI18n?.ja ?? ""
         )
+        draft.abbreviation = event.abbreviation ?? ""
         draft.eventType = event.eventType ?? ""
         draft.organizerFestivalID = event.wikiFestivalId ?? event.wikiFestival?.id
         draft.organizerName = event.wikiFestival?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)

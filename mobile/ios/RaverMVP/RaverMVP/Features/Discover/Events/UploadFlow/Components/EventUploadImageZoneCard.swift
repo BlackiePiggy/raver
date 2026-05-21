@@ -25,9 +25,6 @@ struct EventUploadImageZoneCard: View {
                                 .foregroundStyle(.red)
                         }
                     }
-                    Text(zoneHint)
-                        .font(.caption2)
-                        .foregroundStyle(RaverTheme.secondaryText)
                 }
                 Spacer()
                 Text(LT("\(images.count) 张", "\(images.count) images", "\(images.count)枚"))
@@ -146,23 +143,6 @@ struct EventUploadImageZoneCard: View {
                     }
                 }
             }
-    }
-
-    private var zoneHint: String {
-        switch zone {
-        case .poster:
-            return LT("活动主海报", "Main event poster", "メインポスター")
-        case .lineup:
-            return LT("阵容相关图片", "Lineup visual", "ラインナップ画像")
-        case .timetable:
-            return LT("时间表图片", "Timetable visual", "タイムテーブル画像")
-        case .cover:
-            return LT("活动封面图", "Cover image", "カバー画像")
-        case .map:
-            return LT("地图或场地示意", "Map or venue visual", "地図や会場イメージ")
-        case .other:
-            return LT("其他补充图片", "Other supporting images", "その他補足画像")
-        }
     }
 
     private func imageRowTitle(index: Int) -> String {

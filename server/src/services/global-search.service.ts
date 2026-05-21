@@ -513,6 +513,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
     where: {
       OR: [
         { name: containsInsensitive(query) },
+        { abbreviation: containsInsensitive(query) },
         { description: containsInsensitive(query) },
         { city: containsInsensitive(query) },
         { country: containsInsensitive(query) },
@@ -538,6 +539,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       id: true,
       name: true,
       nameI18n: true,
+      abbreviation: true,
       description: true,
       descriptionI18n: true,
       coverImageUrl: true,
@@ -593,6 +595,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         : [];
       const score = Math.max(
         scoreTexts(query, [row.name, title]),
+        scoreText(query, row.abbreviation, { exact: 90, prefix: 78, contains: 62 }),
         scoreTexts(query, [row.venueName, row.city, city, row.country, country, row.organizerName], { exact: 78, prefix: 66, contains: 48 }),
         scoreTexts(query, brandNames, { exact: 86, prefix: 74, contains: 56 }),
         scoreTexts(query, lineupNames, { exact: 82, prefix: 70, contains: 52 }),

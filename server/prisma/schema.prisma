@@ -434,6 +434,7 @@ model Event {
   name              String
   nameI18n          Json?    @map("name_i18n")
   slug              String   @unique
+  abbreviation      String?
   description       String?
   descriptionI18n   Json?    @map("description_i18n")
   locationI18n      Json?    @map("location_i18n")
@@ -491,6 +492,7 @@ model Event {
 
   @@index([organizerId])
   @@index([wikiFestivalId])
+  @@index([abbreviation])
   @@map("events")
 }
 

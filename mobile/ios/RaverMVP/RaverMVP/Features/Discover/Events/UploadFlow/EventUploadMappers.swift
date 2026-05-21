@@ -42,7 +42,8 @@ enum EventUploadMappers {
         return CreateEventInput(
             name: name,
             wikiFestivalId: draft.organizerFestivalID?.trimmed.eventUploadMapperNilIfBlank,
-            description: draft.description.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank,
+            abbreviation: draft.abbreviation.trimmed.eventUploadMapperNilIfBlank,
+            description: nil,
             eventType: EventTypeOption.submissionValue(for: draft.eventType),
             city: city,
             cityI18n: localizedText(from: draft.city, language: language),
@@ -80,6 +81,7 @@ enum EventUploadMappers {
         let create = createInput(from: draft)
         return UpdateEventInput(
             name: create.name,
+            abbreviation: create.abbreviation ?? "",
             description: create.description ?? "",
             eventType: create.eventType,
             city: create.city,
@@ -162,8 +164,15 @@ enum EventUploadMappers {
     }
 
     private static func normalizedStages(from draft: EventUploadDraft) -> [String]? {
-        let values = draft.stageEntries.map(\.trimmed).filter { !$0.isEmpty }
+        let values = draft.stageEntries.enumerated().map { index, stage in
+            let trimmed = stage.trimmed
+            return trimmed.isEmpty ? defaultStageName(at: index) : trimmed
+        }
         return values.isEmpty ? nil : values
+    }
+
+    private static func defaultStageName(at index: Int) -> String {
+        index == 0 ? LT("主舞台", "Main Stage", "メインステージ") : LT("舞台 \(index + 1)", "Stage \(index + 1)", "ステージ \(index + 1)")
     }
 
     private static func ticketTierInputs(min: Double?, max: Double?, currency: String) -> [EventTicketTierInput]? {
@@ -219,7 +228,7 @@ enum EventUploadMappers {
                 memberNames: performerNames,
                 festivalDayIndex: max(slot.dayIndex, 1),
                 djName: name,
-                stageName: slot.stageName.trimmed.eventUploadMapperNilIfBlank,
+                stageName: slot.stageName.trimmed.eventUploadMapperNilIfBlank ?? defaultStageName(at: 0),
                 sortOrder: index + 1,
                 startTime: slot.startTime,
                 endTime: normalizedLineupEndTime(start: slot.startTime, end: slot.endTime)

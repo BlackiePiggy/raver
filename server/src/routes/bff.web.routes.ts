@@ -1413,6 +1413,7 @@ const selectEventRecommendationCardForWeb = {
   wikiFestivalId: true,
   slug: true,
   archiveFestivalId: true,
+  abbreviation: true,
   countryI18n: true,
   cityI18n: true,
   coverImageUrl: true,
@@ -1477,6 +1478,7 @@ const selectEventListCardForWeb = {
   wikiFestivalId: true,
   slug: true,
   archiveFestivalId: true,
+  abbreviation: true,
   description: true,
   descriptionI18n: true,
   countryI18n: true,
@@ -4188,6 +4190,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     wikiFestivalId: row.wikiFestivalId ?? null,
     slug: row.slug,
     archiveFestivalId: row.archiveFestivalId ?? null,
+    abbreviation: row.abbreviation ?? null,
     description: row.description,
     descriptionI18n: row.descriptionI18n ?? null,
     countryI18n: countryI18n ?? null,
@@ -5550,6 +5553,7 @@ router.get('/events/bootstrap', optionalAuth, async (req: Request, res: Response
       const aliasMatchedBrandIDs = aliasMatchedBrands.map((brand) => brand.id);
       baseWhere.OR = [
         { name: { contains: search, mode: 'insensitive' } },
+        { abbreviation: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
         { slug: { contains: search, mode: 'insensitive' } },
         { city: { contains: search, mode: 'insensitive' } },
@@ -5705,6 +5709,7 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
       const aliasMatchedBrandIDs = aliasMatchedBrands.map((brand) => brand.id);
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
+        { abbreviation: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
         { slug: { contains: search, mode: 'insensitive' } },
         { city: { contains: search, mode: 'insensitive' } },
@@ -6656,6 +6661,10 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const citySeed = typeof body.city === 'string' ? body.city : '';
     const countrySeed = typeof body.country === 'string' ? body.country : '';
     const descriptionSeed = typeof body.description === 'string' ? body.description : '';
+    const abbreviationInput =
+      typeof body.abbreviation === 'string' && body.abbreviation.trim()
+        ? body.abbreviation.trim()
+        : null;
 
     const nameI18n = normalizeEventBiText(body.nameI18n, name);
     const cityI18n = normalizeEventBiText(body.cityI18n ?? body.city_i18n, citySeed);
@@ -6735,6 +6744,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         name,
         nameI18n: nameI18n ? (nameI18n as unknown as Prisma.InputJsonValue) : undefined,
         slug: desiredSlug,
+        abbreviation: abbreviationInput,
         wikiFestivalId: wikiFestivalIdInput,
         archiveFestivalId: archiveFestivalIdInput,
         description: typeof body.description === 'string' ? body.description : null,
@@ -6900,6 +6910,10 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const updateDescription = typeof body.description === 'string' ? body.description : '';
     const updateCitySeed = typeof body.city === 'string' ? body.city : '';
     const updateCountrySeed = typeof body.country === 'string' ? body.country : '';
+    const hasAbbreviationField = Object.prototype.hasOwnProperty.call(body, 'abbreviation');
+    const nextAbbreviation = hasAbbreviationField
+      ? (typeof body.abbreviation === 'string' && body.abbreviation.trim() ? body.abbreviation.trim() : null)
+      : undefined;
 
     const nextNameI18n = hasNameI18nField ? normalizeEventBiText(body.nameI18n, updateName) : null;
     const nextDescriptionI18n = hasDescriptionI18nField ? normalizeEventBiText(body.descriptionI18n, updateDescription) : null;
@@ -7029,6 +7043,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
 
     const updateEventData: any = {
         name: typeof body.name === 'string' ? body.name : undefined,
+        abbreviation: hasAbbreviationField ? nextAbbreviation : undefined,
         nameI18n: hasNameI18nField
           ? (nextNameI18n ? (nextNameI18n as unknown as Prisma.InputJsonValue) : undefined)
           : undefined,

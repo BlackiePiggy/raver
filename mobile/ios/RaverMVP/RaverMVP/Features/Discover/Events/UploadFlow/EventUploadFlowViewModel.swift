@@ -211,6 +211,12 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
+    func updateAbbreviation(_ value: String) {
+        draft.abbreviation = value
+        draft.dirty = true
+        saveDraft()
+    }
+
     func updateOrganizerName(_ value: String) {
         guard draft.organizerFestivalID == nil else { return }
         draft.organizerName = value
@@ -474,7 +480,18 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func removeStage(at index: Int) {
         guard draft.stageEntries.indices.contains(index) else { return }
+        let removedStage = normalizedStageName(at: index)
         draft.stageEntries.remove(at: index)
+        if draft.stageEntries.isEmpty {
+            draft.timetableSlots.removeAll()
+        } else {
+            draft.timetableSlots.removeAll { slot in
+                let stage = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? LT("主舞台", "Main Stage", "メインステージ")
+                    : slot.stageName
+                return stage == removedStage
+            }
+        }
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_stage_removed", properties: ["count": "\(draft.stageEntries.count)"])
@@ -556,12 +573,14 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    func addLineupOnlySlot() {
+    @discardableResult
+    func addLineupOnlySlot() -> UUID {
         var slot = EventUploadLineupOnlySlotDraft()
         slot.normalizePerformers()
         draft.lineupOnlySlots.append(slot)
         draft.dirty = true
         saveDraft()
+        return slot.id
     }
 
     func removeLineupOnlySlot(id: UUID) {

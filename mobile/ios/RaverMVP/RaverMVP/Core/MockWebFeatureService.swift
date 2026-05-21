@@ -665,6 +665,7 @@ actor MockWebFeatureService: WebFeatureService {
             id: eventID,
             name: input.name,
             slug: slugify(input.name),
+            abbreviation: normalizedOptional(input.abbreviation),
             description: input.description,
             countryI18n: input.countryI18n,
             cityI18n: input.cityI18n,
@@ -715,6 +716,9 @@ actor MockWebFeatureService: WebFeatureService {
             throw ServiceError.message("Forbidden")
         }
         if let name = input.name { events[idx].name = name }
+        if let abbreviation = input.abbreviation {
+            events[idx].abbreviation = normalizedOptional(abbreviation)
+        }
         if let description = input.description { events[idx].description = description }
         if let city = input.city { events[idx].city = city }
         if input.clearCityI18n {

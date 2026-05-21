@@ -575,6 +575,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var nameI18n: WebBiText? = nil
     var wikiFestivalId: String? = nil
     var slug: String
+    var abbreviation: String? = nil
     var description: String?
     var descriptionI18n: WebBiText? = nil
     var countryI18n: WebBiText? = nil
@@ -667,6 +668,7 @@ struct EventTimezoneLookupItem: Codable, Hashable, Identifiable {
 struct CreateEventInput: Codable {
     var name: String
     var wikiFestivalId: String? = nil
+    var abbreviation: String? = nil
     var description: String?
     var eventType: String? = nil
     var city: String?
@@ -860,6 +862,7 @@ enum CreatePostResult: Decodable, Hashable {
 struct UpdateEventInput: Encodable {
     var name: String?
     var wikiFestivalId: String? = nil
+    var abbreviation: String? = nil
     var description: String?
     var eventType: String? = nil
     var city: String?
@@ -901,6 +904,7 @@ struct UpdateEventInput: Encodable {
     enum CodingKeys: String, CodingKey {
         case name
         case wikiFestivalId
+        case abbreviation
         case description
         case eventType
         case city
@@ -941,6 +945,7 @@ struct UpdateEventInput: Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(name, forKey: .name)
         try container.encodeIfPresent(wikiFestivalId, forKey: .wikiFestivalId)
+        try container.encodeIfPresent(abbreviation, forKey: .abbreviation)
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(eventType, forKey: .eventType)
         try container.encodeIfPresent(city, forKey: .city)

@@ -32,23 +32,12 @@ enum EventUploadValidation {
         if case .create = draft.mode, draft.selectedTimeZoneLookup == nil {
             issues.append(.init(step: .basic, message: LT("请搜索城市并确认活动时区。", "Search a city and confirm the event timezone.", "都市を検索してイベントのタイムゾーンを確認してください。")))
         }
-        if !draft.timetableSlots.isEmpty {
-            let normalizedStages = draft.stageEntries
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if normalizedStages.isEmpty {
-                issues.append(.init(step: .timetable, message: LT("如果要填写时间表，请至少添加 1 个舞台；名称留空会默认展示为主舞台。", "Add at least one stage before filling a timetable. Empty names will default to Main Stage.", "タイムテーブルを入力する場合は、少なくとも1つのステージを追加してください。空欄名はメインステージとして扱われます。")))
-            }
-        }
         for (index, slot) in draft.timetableSlots.enumerated() {
             let names = slot.performerNames
                 .prefix(slot.actType.performerCount)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             if names.count != slot.actType.performerCount || names.contains(where: { $0.isEmpty }) {
                 issues.append(.init(step: .timetable, message: LT("第 \(index + 1) 个时间表条目有未填写的 DJ，请补全或删除。", "Timetable item #\(index + 1) has empty DJ names. Complete or remove it.", "\(index + 1)番目のタイムテーブル項目に未入力のDJがあります。入力または削除してください。")))
-            }
-            if slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                issues.append(.init(step: .timetable, message: LT("第 \(index + 1) 个时间表条目请选择舞台。", "Choose a stage for timetable item #\(index + 1).", "\(index + 1)番目のタイムテーブル項目でステージを選択してください。")))
             }
             if slot.startTime == nil || slot.endTime == nil {
                 issues.append(.init(step: .timetable, message: LT("第 \(index + 1) 个时间表条目必须填写开始和结束时间。", "Start and end time are required for timetable item #\(index + 1).", "\(index + 1)番目のタイムテーブル項目は開始時間と終了時間が必須です。")))
