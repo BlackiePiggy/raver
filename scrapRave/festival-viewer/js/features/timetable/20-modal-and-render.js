@@ -262,6 +262,7 @@ function ttTimelineSortVal(timeText, dayRolloverHour = 6) {
 function openTtModal(fest, rowEl = null) {
   ttModalState.currentFest = fest;
   ttModalState.currentRowEl = rowEl || null;
+  ttModalState.draftBridge = arguments[2]?.draftBridge || null;
   ttModalState.activeDateIdx = 0;
   ttModalState.editMode = false;
   ttModalState.quickBindMode = false;
@@ -292,7 +293,10 @@ function closeTtModal() {
   if (ttModalState.saving) return;
   if (ttGetBindStateForModal()?.open) closeTtDJBindModal();
   document.getElementById('tt-modal-overlay').classList.remove('open');
-  document.body.style.overflow = '';
+  document.body.style.overflow = document.getElementById('event-lineup-modal-overlay')?.classList.contains('open')
+    || document.getElementById('add-event-modal-overlay')?.classList.contains('open')
+    ? 'hidden'
+    : '';
   ttModalState.editMode = false;
   ttModalState.quickBindMode = false;
   ttModalState.draftLineup = [];
@@ -300,6 +304,7 @@ function closeTtModal() {
   ttOpenDayDropdownRid = null;
   ttModalState.currentFest = null;
   ttModalState.currentRowEl = null;
+  ttModalState.draftBridge = null;
   setTtEditStatus('');
 }
 
@@ -446,7 +451,16 @@ async function ttAutoMatchAllUnboundForCurrentEvent() {
       lineup: dedupeLineupEntries(cleaned),
       stageOrder: ttGetCurrentStageOrder(cleaned),
     };
-    await persistFestivalPayload(ttModalState.currentFest, payload);
+    if (ttModalState.draftBridge?.commit) {
+      ttModalState.currentFest.info = {
+        ...(ttModalState.currentFest.info || {}),
+        lineup: dedupeLineupEntries(cleaned),
+        stageOrder: ttGetCurrentStageOrder(cleaned),
+      };
+      await ttModalState.draftBridge.commit(ttModalState.currentFest);
+    } else {
+      await persistFestivalPayload(ttModalState.currentFest, payload);
+    }
     if (ttModalState.currentRowEl) {
       refreshFestHeaderDisplay(ttModalState.currentRowEl, ttModalState.currentFest);
       const panel = ttModalState.currentRowEl.querySelector('.fest-info-panel');
@@ -556,7 +570,17 @@ async function saveTtEditChanges() {
       lineup: dedupeLineupEntries(cleaned),
       stageOrder: ttGetCurrentStageOrder(cleaned),
     };
-    await persistFestivalPayload(ttModalState.currentFest, payload);
+    if (ttModalState.draftBridge?.commit) {
+      ttModalState.currentFest.info = {
+        ...(ttModalState.currentFest.info || {}),
+        lineupArtists: preservedLineupArtists,
+        lineup: dedupeLineupEntries(cleaned),
+        stageOrder: ttGetCurrentStageOrder(cleaned),
+      };
+      await ttModalState.draftBridge.commit(ttModalState.currentFest);
+    } else {
+      await persistFestivalPayload(ttModalState.currentFest, payload);
+    }
 
     if (ttModalState.currentRowEl) {
       refreshFestHeaderDisplay(ttModalState.currentRowEl, ttModalState.currentFest);
@@ -569,7 +593,7 @@ async function saveTtEditChanges() {
 
     ttModalState.editMode = false;
     ttModalState.draftLineup = [];
-    setTtEditStatus(`已保存 ${new Date().toLocaleTimeString()}`);
+    setTtEditStatus(`${ttModalState.draftBridge ? '已应用到表单' : '已保存'} ${new Date().toLocaleTimeString()}`);
     syncTtModalActionState();
     renderTtModalBody();
   } catch (e) {
@@ -660,7 +684,15 @@ async function ttSaveStageOrderFromModal() {
       ...ttModalState.currentFest.info,
       stageOrder,
     };
-    await persistFestivalPayload(ttModalState.currentFest, payload);
+    if (ttModalState.draftBridge?.commit) {
+      ttModalState.currentFest.info = {
+        ...(ttModalState.currentFest.info || {}),
+        stageOrder,
+      };
+      await ttModalState.draftBridge.commit(ttModalState.currentFest);
+    } else {
+      await persistFestivalPayload(ttModalState.currentFest, payload);
+    }
     if (ttModalState.currentRowEl) {
       refreshFestHeaderDisplay(ttModalState.currentRowEl, ttModalState.currentFest);
       const panel = ttModalState.currentRowEl.querySelector('.fest-info-panel');
@@ -669,7 +701,7 @@ async function ttSaveStageOrderFromModal() {
         if (panel.classList.contains('is-editing')) setEditInputs(panel, ttModalState.currentFest.info);
       }
     }
-    setTtEditStatus(`舞台顺序已保存：${stageOrder.join(' → ') || '未配置'}`);
+    setTtEditStatus(`${ttModalState.draftBridge ? '舞台顺序已应用到表单' : '舞台顺序已保存'}：${stageOrder.join(' → ') || '未配置'}`);
     renderTtModalBody();
   } catch (error) {
     setTtEditStatus(`保存舞台顺序失败：${String(error?.message || error)}`, true);

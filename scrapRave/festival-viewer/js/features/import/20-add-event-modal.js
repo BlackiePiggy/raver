@@ -258,6 +258,22 @@ function handleAddEventOverlayClick(event) {
   }
 }
 
+function openAddEventLineupEditorModal() {
+  const panel = getAddEventFormPanel();
+  const fest = ensureAddEventDraftFestival();
+  const statusEl = document.getElementById('add-event-save-status');
+  if (!panel || !fest) return;
+  void openEventLineupModalFromForm(panel, fest, statusEl);
+}
+
+function openAddEventTimetableEditorModal() {
+  const panel = getAddEventFormPanel();
+  const fest = ensureAddEventDraftFestival();
+  const statusEl = document.getElementById('add-event-save-status');
+  if (!panel || !fest) return;
+  void openEventTimetableModalFromForm(panel, fest, statusEl);
+}
+
 function addEventQueuedImageCount(panel) {
   const draft = collectEventImageDraftPayload(panel);
   return Object.values(draft).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);

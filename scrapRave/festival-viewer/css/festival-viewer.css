@@ -5208,7 +5208,7 @@
   }
 
   #event-lineup-modal-overlay {
-    display:none; position:fixed; inset:0; z-index:1995;
+    display:none; position:fixed; inset:0; z-index:2300;
     background:var(--overlay-bg); backdrop-filter:blur(8px);
     align-items:center; justify-content:center;
     padding:2rem;
@@ -6327,7 +6327,7 @@
 
   /* ── TIMETABLE MODAL ── */
   #tt-modal-overlay {
-    display:none; position:fixed; inset:0; z-index:2000;
+    display:none; position:fixed; inset:0; z-index:2305;
     background:var(--overlay-bg); backdrop-filter:blur(8px);
     align-items:center; justify-content:center;
     padding:2rem;

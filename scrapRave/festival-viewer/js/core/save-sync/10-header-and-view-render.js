@@ -15,6 +15,13 @@ function shouldShowEventTimetableButton(fest) {
   return eventHasBackendDetailCapability(fest);
 }
 
+function formatEventDateRangeWithTimeZone(info) {
+  const dateRange = formatDateRange(info?.startDate, info?.endDate, info?.timeZone || info?.timezone);
+  const timeZone = String(info?.timeZone || info?.timezone || '').trim();
+  if (dateRange && timeZone) return `${dateRange} · ${timeZone}`;
+  return dateRange || timeZone || '';
+}
+
 function refreshFestHeaderDisplay(rowEl, fest) {
   if (!rowEl || !fest) return;
   const titleEl = rowEl.querySelector('.fest-name');
@@ -151,7 +158,7 @@ function renderInfoView(panelEl, info) {
     canceledEl.classList.remove('empty');
     canceledEl.style.color = canceled ? '#ff9ac2' : 'var(--accent)';
   }
-  sv('dateRange', formatDateRange(info.startDate, info.endDate, info.timeZone || info.timezone));
+  sv('dateRange', formatEventDateRangeWithTimeZone(info));
   sv('status', info.status || (info.canceled ? 'cancelled' : 'upcoming'));
   sv('eventType', info.eventType);
   const tierRows = Array.isArray(info.ticketTiers) ? info.ticketTiers : [];

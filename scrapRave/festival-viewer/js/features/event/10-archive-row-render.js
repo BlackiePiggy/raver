@@ -410,6 +410,9 @@ function buildRow(fest) {
       <div class="edit-lineup-area event-lineup-editor-area">
         <label>DJ 阵容（只保存 DJ 名单，不要求时间）</label>
         <div class="event-lineup-editor-tools">
+          <button class="edit-btn" type="button" data-action="open-lineup-modal-editor">打开 DJ 阵容编辑器</button>
+        </div>
+        <div class="event-lineup-editor-tools">
           <input class="edit-input" data-lineup-dj-search type="text" placeholder="搜索 DJ 库，如 Martin Garrix">
           <button class="edit-btn" type="button" data-action="lineup-search-dj">搜索 DJ 库</button>
           <input class="edit-input" data-lineup-manual-name type="text" placeholder="库里没有，只填 DJ 名字">
@@ -425,6 +428,9 @@ function buildRow(fest) {
       </div>
       <div class="edit-lineup-area">
         <label>Timetable JSON（演出时间表，可自动补阵容）</label>
+        <div class="event-lineup-editor-tools">
+          <button class="edit-btn" type="button" data-action="open-timetable-modal-editor">打开 Timetable 编辑器</button>
+        </div>
         <div class="edit-lineup-hint">格式：{"lineup_info":[{"musician":"...","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"}]}。保存时间表只修改演出时间信息；DJ 阵容会保留，新增姓名可补入阵容。</div>
         <textarea class="edit-lineup-textarea" data-field="lineup" placeholder='{"lineup_info":[{"musician":"Artist Name","date":"Oct.2","time":"22:00—23:30","stage":"Main Stage"}]}'></textarea>
       </div>
@@ -510,9 +516,22 @@ function buildRow(fest) {
   if (openBtn) openBtn.onclick = (e) => { e.stopPropagation(); openFestivalFolder(fest, openBtn, viewStatusEl); };
   panel.addEventListener('click', (e) => {
     const toggleBtn = e.target.closest('[data-action="toggle-links"]');
-    if (!toggleBtn) return;
-    panel.dataset.linksExpanded = panel.dataset.linksExpanded === '1' ? '0' : '1';
-    renderInfoView(panel, fest.info);
+    if (toggleBtn) {
+      panel.dataset.linksExpanded = panel.dataset.linksExpanded === '1' ? '0' : '1';
+      renderInfoView(panel, fest.info);
+      return;
+    }
+    const lineupEditorBtn = e.target.closest('[data-action="open-lineup-modal-editor"]');
+    if (lineupEditorBtn) {
+      e.preventDefault();
+      void openEventLineupModalFromForm(panel, fest, statusEl);
+      return;
+    }
+    const timetableEditorBtn = e.target.closest('[data-action="open-timetable-modal-editor"]');
+    if (timetableEditorBtn) {
+      e.preventDefault();
+      void openEventTimetableModalFromForm(panel, fest, statusEl);
+    }
   });
 
   renderInfoView(panel, fest.info);

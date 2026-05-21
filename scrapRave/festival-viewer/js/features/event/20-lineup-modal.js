@@ -1,6 +1,7 @@
 const eventLineupModalState = {
   currentFest: null,
   currentRowEl: null,
+  draftBridge: null,
   editMode: false,
   saving: false,
   searchRows: [],
@@ -148,9 +149,10 @@ function renderEventLineupModalBody() {
   else renderEventLineupModalReadView(fest);
 }
 
-async function openEventLineupModal(fest, rowEl = null) {
+async function openEventLineupModal(fest, rowEl = null, options = {}) {
   eventLineupModalState.currentFest = fest;
   eventLineupModalState.currentRowEl = rowEl || null;
+  eventLineupModalState.draftBridge = options?.draftBridge || null;
   eventLineupModalState.editMode = false;
   eventLineupModalState.saving = false;
   eventLineupModalState.searchRows = [];
@@ -180,11 +182,13 @@ function closeEventLineupModal() {
   if (eventLineupModalState.saving) return;
   document.getElementById('event-lineup-modal-overlay')?.classList.remove('open');
   document.body.style.overflow = document.getElementById('tt-modal-overlay')?.classList.contains('open')
+    || document.getElementById('add-event-modal-overlay')?.classList.contains('open')
     || document.getElementById('tt-dj-bind-overlay')?.classList.contains('open')
     ? 'hidden'
     : '';
   eventLineupModalState.currentFest = null;
   eventLineupModalState.currentRowEl = null;
+  eventLineupModalState.draftBridge = null;
   eventLineupModalState.editMode = false;
   eventLineupModalState.searchRows = [];
   eventLineupModalState.searchQuery = '';
@@ -277,21 +281,29 @@ async function saveEventLineupModalChanges() {
   const panelEl = eventLineupModalState.currentRowEl?.querySelector('.fest-info-panel');
   const saveBtn = document.getElementById('event-lineup-modal-save-btn');
   try {
-    const payload = {
-      ...(fest.info || {}),
-      lineupArtists: getEventLineupArtistsForFest(fest),
-    };
-    const syncResult = await persistFestivalPayload(fest, payload, { imageZoneDraft: null, existingAssetDraft: null });
-    if (syncResult?.event) patchFestivalFromBackendEvent(fest, syncResult.event);
-    if (panelEl && typeof renderInfoView === 'function') renderInfoView(panelEl, fest.info);
-    if (panelEl && typeof setEditInputs === 'function') setEditInputs(panelEl, fest.info);
+    if (eventLineupModalState.draftBridge?.commit) {
+      fest.info = {
+        ...(fest.info || {}),
+        lineupArtists: getEventLineupArtistsForFest(fest),
+      };
+      await eventLineupModalState.draftBridge.commit(fest);
+    } else {
+      const payload = {
+        ...(fest.info || {}),
+        lineupArtists: getEventLineupArtistsForFest(fest),
+      };
+      const syncResult = await persistFestivalPayload(fest, payload, { imageZoneDraft: null, existingAssetDraft: null });
+      if (syncResult?.event) patchFestivalFromBackendEvent(fest, syncResult.event);
+      if (panelEl && typeof renderInfoView === 'function') renderInfoView(panelEl, fest.info);
+      if (panelEl && typeof setEditInputs === 'function') setEditInputs(panelEl, fest.info);
+    }
     eventLineupModalState.editMode = false;
     eventLineupModalState.searchRows = [];
     eventLineupModalState.searchQuery = '';
     eventLineupModalState.manualName = '';
     syncEventLineupModalActions();
     renderEventLineupModalBody();
-    setEventLineupModalStatus(`已保存 ${new Date().toLocaleTimeString()}`);
+    setEventLineupModalStatus(`${eventLineupModalState.draftBridge ? '已应用到表单' : '已保存'} ${new Date().toLocaleTimeString()}`);
   } catch (error) {
     setEventLineupModalStatus(`保存失败：${String(error?.message || error)}`, true);
   } finally {

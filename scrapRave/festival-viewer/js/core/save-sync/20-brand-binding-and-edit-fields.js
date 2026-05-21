@@ -311,6 +311,112 @@ function bindEventLineupArtistEditor(panelEl, info = null) {
   renderEventLineupArtistEditor(panelEl, buildEventLineupArtistsFromArchive(info?.lineupArtists || [], info?.lineup || []));
 }
 
+function eventFormWriteTimetableToPanel(panelEl, lineup) {
+  if (!panelEl) return;
+  const textarea = panelEl.querySelector('.fest-info-edit [data-field="lineup"]');
+  const normalized = dedupeLineupEntries(Array.isArray(lineup) ? lineup : []);
+  if (textarea) {
+    textarea.value = normalized.length ? JSON.stringify({ lineup_info: normalized }, null, 2) : '';
+  }
+}
+
+function eventFormSyncInfoPatchToFest(fest, patch = {}) {
+  if (!fest || typeof fest !== 'object') return;
+  fest.info = { ...(fest.info || {}), ...(patch || {}) };
+  if (typeof patch?.name === 'string' && patch.name.trim()) fest.name = patch.name.trim();
+  if (typeof patch?.location === 'string' && patch.location.trim()) fest.location = patch.location.trim();
+}
+
+function buildFestivalDraftFromPanel(panelEl, fest) {
+  const collected = collectFestivalPayloadFromPanel(panelEl, fest);
+  if (!collected?.payload) {
+    throw new Error(collected?.error || '表单数据校验失败');
+  }
+  const payload = collected.payload;
+  const normalizedInfo = normalizeFestivalInfo(payload, fest?.info || {});
+  const startDate = parseArchiveDateOnlyForSync(normalizedInfo.startDate);
+  const derivedYear = startDate instanceof Date && !Number.isNaN(startDate.getTime()) ? startDate.getFullYear() : Number(fest?.year || new Date().getFullYear());
+  const derivedMonth = startDate instanceof Date && !Number.isNaN(startDate.getTime()) ? (startDate.getMonth() + 1) : Number(fest?.month || 1);
+  return {
+    ...(fest || {}),
+    year: derivedYear,
+    month: derivedMonth,
+    backendEventId: String(fest?.backendEventId || fest?.info?.backendEventId || '').trim(),
+    name: normalizedInfo.name || fest?.name || '',
+    location: normalizedInfo.location || fest?.location || '',
+    info: { ...(fest?.info || {}), ...normalizedInfo },
+  };
+}
+
+async function openEventLineupModalFromForm(panelEl, fest, statusEl = null) {
+  try {
+    const draftFest = buildFestivalDraftFromPanel(panelEl, fest);
+    openEventLineupModal(draftFest, null, {
+      draftBridge: {
+        panelEl,
+        sourceFest: fest,
+        async commit(modalFest) {
+          const nextArtists = buildEventLineupArtistsFromArchive(
+            modalFest?.info?.lineupArtists || [],
+            modalFest?.info?.lineup || []
+          );
+          eventLineupEditorWriteArtists(panelEl, nextArtists);
+          eventFormSyncInfoPatchToFest(fest, { lineupArtists: nextArtists });
+          if (statusEl) {
+            statusEl.textContent = `DJ 阵容已应用到当前表单 ${new Date().toLocaleTimeString()}`;
+            statusEl.style.color = 'var(--text-dim)';
+          }
+        },
+      },
+    });
+  } catch (error) {
+    if (statusEl) {
+      statusEl.textContent = String(error?.message || error || '打开 DJ 阵容编辑器失败');
+      statusEl.style.color = 'var(--accent2)';
+      return;
+    }
+    throw error;
+  }
+}
+
+async function openEventTimetableModalFromForm(panelEl, fest, statusEl = null) {
+  try {
+    const draftFest = buildFestivalDraftFromPanel(panelEl, fest);
+    openTtModal(draftFest, null, {
+      draftBridge: {
+        panelEl,
+        sourceFest: fest,
+        async commit(modalFest) {
+          const nextLineup = dedupeLineupEntries(Array.isArray(modalFest?.info?.lineup) ? modalFest.info.lineup : []);
+          const nextArtists = buildEventLineupArtistsFromArchive(modalFest?.info?.lineupArtists || [], nextLineup);
+          const nextStageOrder = normalizeStageOrderForSync(
+            modalFest?.info?.stageOrder,
+            deriveStageOrderFromLineupForSync(nextLineup)
+          );
+          eventFormWriteTimetableToPanel(panelEl, nextLineup);
+          eventLineupEditorWriteArtists(panelEl, nextArtists);
+          eventFormSyncInfoPatchToFest(fest, {
+            lineup: nextLineup,
+            lineupArtists: nextArtists,
+            stageOrder: nextStageOrder,
+          });
+          if (statusEl) {
+            statusEl.textContent = `Timetable 已应用到当前表单 ${new Date().toLocaleTimeString()}`;
+            statusEl.style.color = 'var(--text-dim)';
+          }
+        },
+      },
+    });
+  } catch (error) {
+    if (statusEl) {
+      statusEl.textContent = String(error?.message || error || '打开 Timetable 编辑器失败');
+      statusEl.style.color = 'var(--accent2)';
+      return;
+    }
+    throw error;
+  }
+}
+
 function eventEditExtractTriTextDraft(value, options = {}) {
   const row = (value && typeof value === 'object' && !Array.isArray(value)) ? value : null;
   const draft = {
