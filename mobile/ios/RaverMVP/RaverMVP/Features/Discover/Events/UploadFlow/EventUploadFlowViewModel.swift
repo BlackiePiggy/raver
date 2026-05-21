@@ -212,8 +212,8 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func updateOrganizerName(_ value: String) {
+        guard draft.organizerFestivalID == nil else { return }
         draft.organizerName = value
-        draft.organizerFestivalID = nil
         organizerSearchResults = []
         draft.dirty = true
         saveDraft()
@@ -312,6 +312,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func updateTimeZoneIdentifier(_ value: String) {
+        guard draft.selectedTimeZoneLookup == nil else { return }
         draft.timeZoneIdentifier = value.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.selectedTimeZoneLookup = nil
         draft.dirty = true
@@ -319,6 +320,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func updateTimeZoneSearchQuery(_ value: String) {
+        guard draft.selectedTimeZoneLookup == nil else { return }
         draft.timeZoneSearchQuery = value
         draft.selectedTimeZoneLookup = nil
         draft.dirty = true

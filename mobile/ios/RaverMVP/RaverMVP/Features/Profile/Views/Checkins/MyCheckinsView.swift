@@ -2467,7 +2467,7 @@ struct MyCheckinsView: View {
     }
 
     private func timelineNormalizedLineupDJIDs(from slot: WebEventLineupSlot) -> [String] {
-        let rawIDs = (slot.djIds ?? []) + [slot.djId ?? ""]
+        let rawIDs = (slot.memberDjIds ?? []).compactMap { $0 } + [slot.djId ?? ""]
         var result: [String] = []
         var seen = Set<String>()
         for raw in rawIDs {

@@ -247,14 +247,56 @@ struct EventUploadDraft: Hashable, Codable {
             ja: event.countryI18n?.ja ?? "",
             enFull: event.countryI18n?.enFull ?? ""
         )
+        draft.detailAddress = EventUploadLocalizedFields(
+            zh: event.manualLocation?.detailAddressI18n?.zh ?? "",
+            en: event.manualLocation?.detailAddressI18n?.en ?? "",
+            ja: event.manualLocation?.detailAddressI18n?.ja ?? "",
+            enFull: event.manualLocation?.detailAddressI18n?.enFull ?? ""
+        )
         draft.startDate = event.startDate
         draft.endDate = event.endDate
         draft.weekRanges = [EventUploadWeekRangeDraft(startDate: event.startDate, endDate: event.endDate)]
         draft.timeZoneIdentifier = event.timeZone ?? draft.timeZoneIdentifier
-        draft.timeZoneSearchQuery = event.timeZone ?? ""
+        if let eventTimeZone = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines), !eventTimeZone.isEmpty {
+            let localizedCityEn = event.cityI18n?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let rawCity = event.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let fallbackCityFromTimeZone = eventTimeZone
+                .split(separator: "/")
+                .last
+                .map { String($0).replacingOccurrences(of: "_", with: " ") } ?? ""
+            let cityNameCandidate = localizedCityEn.isEmpty ? rawCity : localizedCityEn
+            let cityName = cityNameCandidate.canBeConverted(to: .ascii) || cityNameCandidate.isEmpty
+                ? cityNameCandidate
+                : fallbackCityFromTimeZone
+            let countryName = event.countryI18n?.en.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? (event.countryI18n?.en ?? event.country ?? "")
+                : (event.country ?? "")
+            let effectiveCityName = cityName.isEmpty ? fallbackCityFromTimeZone : cityName
+            draft.timeZoneSearchQuery = effectiveCityName.isEmpty ? eventTimeZone : effectiveCityName
+            draft.selectedTimeZoneLookup = EventTimezoneLookupItem(
+                city: effectiveCityName,
+                cityAscii: effectiveCityName,
+                province: "",
+                exactProvince: "",
+                stateAnsi: "",
+                country: countryName,
+                iso2: "",
+                iso3: "",
+                timezone: eventTimeZone,
+                lat: event.latitude,
+                lng: event.longitude,
+                population: nil,
+                label: [effectiveCityName, countryName].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.joined(separator: ", "),
+                matchSource: "event-edit-hydrate"
+            )
+        }
         draft.dayRolloverHour = event.dayRolloverHour ?? 6
         draft.latitude = event.latitude
         draft.longitude = event.longitude
+        draft.pickedMapAddress = event.locationPoint?.formattedAddressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? event.locationPoint?.addressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? ""
+        draft.pickedPlaceName = event.locationPoint?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? ""
         draft.ticket = EventUploadTicketDraft(
             priceMin: event.ticketPriceMin.map { String($0) } ?? "",
             priceMax: event.ticketPriceMax.map { String($0) } ?? "",

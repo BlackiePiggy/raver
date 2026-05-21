@@ -102,19 +102,18 @@ function mapBackendLineupSlotsToArchiveRows(slots, eventStartDateText = '', even
       const dateText = logicalDayDate instanceof Date && !Number.isNaN(logicalDayDate.getTime())
         ? `${logicalDayDate.getFullYear()}-${String(logicalDayDate.getMonth() + 1).padStart(2, '0')}-${String(logicalDayDate.getDate()).padStart(2, '0')}`
         : (formatArchiveDateInTimeZoneForSync(slot.startTime, eventTimeZone) || '未知');
-      const rawDjIds = Array.isArray(slot?.djIds) ? slot.djIds : [];
-      const djIds = rawDjIds
-        .map((id) => String(id || '').trim())
-        .filter(Boolean);
+      const rawMemberDjIds = Array.isArray(slot?.memberDjIds) ? slot.memberDjIds : [];
+      const memberDjIds = rawMemberDjIds
+        .map((id) => String(id || '').trim() || null);
       const fallbackDjId = String(slot.djId || slot?.dj?.id || '').trim();
-      const mergedDjIds = djIds.length ? djIds : (fallbackDjId ? [fallbackDjId] : []);
+      const mergedMemberDjIds = memberDjIds.length ? memberDjIds : (fallbackDjId ? [fallbackDjId] : []);
       const row = normalizeLineupEntry({
         musician: djName,
         date: dateText,
         time: formatArchiveLineupTimeRange(slot.startTime, slot.endTime, eventTimeZone),
         stage: String(slot.stageName || '').trim(),
         djId: fallbackDjId,
-        djIds: mergedDjIds,
+        memberDjIds: mergedMemberDjIds,
         festivalDayIndex: Number.isInteger(explicitDayIndex) && explicitDayIndex > 0 ? explicitDayIndex : undefined,
       });
       return row;
@@ -267,7 +266,8 @@ function mapBackendEventToFestival(event) {
           return {
             id: String(artist?.id || '').trim() || undefined,
             djId: String(artist?.djId || '').trim() || undefined,
-            djIds: Array.isArray(artist?.djIds) ? artist.djIds.map((id) => String(id || '').trim()).filter(Boolean) : [],
+            memberDjIds: Array.isArray(artist?.memberDjIds) ? artist.memberDjIds.map((id) => String(id || '').trim() || null) : [],
+            memberNames: Array.isArray(artist?.memberNames) ? artist.memberNames.map((item) => String(item || '').trim()).filter(Boolean) : [],
             djName,
             sortOrder: Number.isFinite(Number(artist?.sortOrder)) ? Number(artist.sortOrder) : index + 1,
           };

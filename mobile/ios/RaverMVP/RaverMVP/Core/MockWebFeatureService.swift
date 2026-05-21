@@ -655,8 +655,9 @@ actor MockWebFeatureService: WebFeatureService {
             )
         }
         let ticketPrices = normalizedTicketTiers.compactMap(\.price)
-        let lineupSlots = buildLineupSlots(
-            from: input.lineupSlots ?? [],
+        let classifiedLineup = classifyLineupInputs(
+            input.lineupSlots ?? [],
+            inputArtists: input.lineupArtists,
             eventID: eventID,
             eventStartDate: input.startDate
         )
@@ -699,7 +700,8 @@ actor MockWebFeatureService: WebFeatureService {
             updatedAt: now,
             organizer: currentUser,
             ticketTiers: normalizedTicketTiers,
-            lineupSlots: lineupSlots
+            lineupArtists: classifiedLineup.artists.isEmpty ? nil : classifiedLineup.artists,
+            lineupSlots: classifiedLineup.slots
         )
         events.insert(event, at: 0)
         return .created(event)
@@ -774,11 +776,14 @@ actor MockWebFeatureService: WebFeatureService {
             events[idx].ticketPriceMax = prices.max()
         }
         if let lineupSlots = input.lineupSlots {
-            events[idx].lineupSlots = buildLineupSlots(
-                from: lineupSlots,
+            let classifiedLineup = classifyLineupInputs(
+                lineupSlots,
+                inputArtists: input.lineupArtists,
                 eventID: events[idx].id,
                 eventStartDate: events[idx].startDate
             )
+            events[idx].lineupArtists = classifiedLineup.artists.isEmpty ? nil : classifiedLineup.artists
+            events[idx].lineupSlots = classifiedLineup.slots
         }
         events[idx].updatedAt = Date()
         return events[idx]
@@ -1360,7 +1365,7 @@ actor MockWebFeatureService: WebFeatureService {
         let filtered = events
             .filter { event in
                 event.lineupSlots.contains(where: { slot in
-                    slot.djId == djID || (slot.djIds ?? []).contains(djID)
+                    slot.djId == djID || (slot.memberDjIds ?? []).contains(where: { $0 == djID })
                 })
             }
             .filter { event in
@@ -3429,6 +3434,151 @@ actor MockWebFeatureService: WebFeatureService {
         return "ongoing"
     }
 
+    private func classifyLineupInputs(
+        _ inputSlots: [EventLineupSlotInput],
+        inputArtists: [EventLineupArtistInput]? = nil,
+        eventID: String,
+        eventStartDate: Date
+    ) -> (artists: [WebEventLineupArtist], slots: [WebEventLineupSlot]) {
+        let lineupOnlyInputs = inputSlots.filter { slot in
+            let stage = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return slot.startTime == nil && slot.endTime == nil && slot.festivalDayIndex == nil && stage.isEmpty
+        }
+        let timetableInputs = inputSlots.filter { slot in
+            let stage = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return !(slot.startTime == nil && slot.endTime == nil && slot.festivalDayIndex == nil && stage.isEmpty)
+        }
+
+        return (
+            artists: inputArtists.map { buildLineupArtists(from: $0, eventID: eventID) } ?? buildLineupArtists(from: lineupOnlyInputs, eventID: eventID),
+            slots: buildLineupSlots(from: timetableInputs, eventID: eventID, eventStartDate: eventStartDate)
+        )
+    }
+
+    private func buildLineupArtists(
+        from inputArtists: [EventLineupArtistInput],
+        eventID: String
+    ) -> [WebEventLineupArtist] {
+        inputArtists.enumerated().compactMap { index, artist in
+            let trimmedName = artist.djName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else { return nil }
+            let memberNames = artist.memberNames?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } ?? []
+            let memberDJIDs: [String?]
+            if let explicitMemberDJIDs = artist.memberDjIds {
+                memberDJIDs = explicitMemberDJIDs
+            } else if let djID = artist.djId {
+                memberDJIDs = [djID]
+            } else {
+                memberDJIDs = []
+            }
+            let memberDJs = memberDJIDs.compactMap { id -> WebEventLineupSlotDJ? in
+                guard let id = id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else { return nil }
+                return djs.first(where: { $0.id == id }).map {
+                    WebEventLineupSlotDJ(
+                        id: $0.id,
+                        name: $0.name,
+                        avatarUrl: $0.avatarUrl,
+                        bannerUrl: $0.bannerUrl,
+                        country: $0.country
+                    )
+                }
+            }
+            let primaryDJ = memberDJs.first
+            return WebEventLineupArtist(
+                id: "artist_\(UUID().uuidString)",
+                eventId: eventID,
+                djId: artist.djId ?? primaryDJ?.id,
+                memberDjIds: memberDJIDs,
+                memberNames: memberNames,
+                djs: memberDJs.isEmpty ? nil : memberDJs,
+                members: memberNames.enumerated().map { memberIndex, name in
+                    let dj = memberDJs.first(where: { memberDJIDs.indices.contains(memberIndex) && memberDJIDs[memberIndex] == $0.id })
+                    return WebEventLineupArtistMember(
+                        id: "member_\(UUID().uuidString)",
+                        djId: memberDJIDs.indices.contains(memberIndex) ? memberDJIDs[memberIndex] : nil,
+                        memberNameSnapshot: name,
+                        memberOrder: memberIndex + 1,
+                        role: "performer",
+                        dj: dj
+                    )
+                },
+                djName: trimmedName,
+                sortOrder: artist.sortOrder ?? (index + 1),
+                dj: primaryDJ
+            )
+        }
+    }
+
+    private func buildLineupArtists(
+        from inputArtists: [EventLineupSlotInput],
+        eventID: String
+    ) -> [WebEventLineupArtist] {
+        inputArtists.enumerated().compactMap { index, artist in
+            let trimmedName = artist.djName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let memberDJIDs = artist.memberDjIds ?? (artist.djId.map { [$0] } ?? [])
+            let matchedMemberDJs = memberDJIDs.compactMap { memberID -> WebDJ? in
+                guard let memberID = memberID?.trimmingCharacters(in: .whitespacesAndNewlines), !memberID.isEmpty else { return nil }
+                return djs.first(where: { $0.id == memberID })
+            }
+            let matchedDJ = matchedMemberDJs.first ??
+                djs.first(where: { $0.id == artist.djId }) ??
+                djs.first(where: { $0.name.compare(trimmedName, options: .caseInsensitive) == .orderedSame })
+            let finalDJName = trimmedName.isEmpty ? (matchedDJ?.name ?? "Unknown DJ") : trimmedName
+            guard !finalDJName.isEmpty else { return nil }
+            let memberNames = artist.memberNames?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                ?? {
+                    let parsed = EventLineupActCodec.parse(name: finalDJName)
+                    return parsed.performers.map(\.name).filter { !$0.isEmpty }
+                }()
+            let memberDJs = matchedMemberDJs.map {
+                WebEventLineupSlotDJ(
+                    id: $0.id,
+                    name: $0.name,
+                    avatarUrl: $0.avatarUrl,
+                    bannerUrl: $0.bannerUrl,
+                    country: $0.country
+                )
+            }
+
+            return WebEventLineupArtist(
+                id: "artist_\(UUID().uuidString)",
+                eventId: eventID,
+                djId: {
+                    if let resolvedID = matchedDJ?.id {
+                        return resolvedID
+                    }
+                    let fallbackID = artist.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return fallbackID.isEmpty ? nil : fallbackID
+                }(),
+                memberDjIds: memberDJIDs,
+                memberNames: memberNames,
+                djs: memberDJs.isEmpty ? nil : memberDJs,
+                members: memberNames.enumerated().map { memberIndex, name in
+                    let dj = memberDJs.first(where: { memberDJIDs.indices.contains(memberIndex) && memberDJIDs[memberIndex] == $0.id })
+                    return WebEventLineupArtistMember(
+                        id: "member_\(UUID().uuidString)",
+                        djId: memberDJIDs.indices.contains(memberIndex) ? memberDJIDs[memberIndex] : nil,
+                        memberNameSnapshot: name,
+                        memberOrder: memberIndex + 1,
+                        role: "performer",
+                        dj: dj
+                    )
+                },
+                djName: finalDJName,
+                sortOrder: artist.sortOrder ?? (index + 1),
+                dj: matchedDJ.map {
+                    WebEventLineupSlotDJ(
+                        id: $0.id,
+                        name: $0.name,
+                        avatarUrl: $0.avatarUrl,
+                        bannerUrl: $0.bannerUrl,
+                        country: $0.country
+                    )
+                }
+            )
+        }
+    }
+
     private func buildLineupSlots(
         from inputSlots: [EventLineupSlotInput],
         eventID: String,
@@ -3436,7 +3586,13 @@ actor MockWebFeatureService: WebFeatureService {
     ) -> [WebEventLineupSlot] {
         inputSlots.enumerated().compactMap { index, slot in
             let trimmedName = slot.djName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let matchedDJ = djs.first(where: { $0.id == slot.djId }) ??
+            let memberDJIDs = slot.memberDjIds ?? (slot.djId.map { [$0] } ?? [])
+            let matchedMemberDJs = memberDJIDs.compactMap { memberID -> WebDJ? in
+                guard let memberID = memberID?.trimmingCharacters(in: .whitespacesAndNewlines), !memberID.isEmpty else { return nil }
+                return djs.first(where: { $0.id == memberID })
+            }
+            let matchedDJ = matchedMemberDJs.first ??
+                djs.first(where: { $0.id == slot.djId }) ??
                 djs.first(where: { $0.name.compare(trimmedName, options: .caseInsensitive) == .orderedSame })
             let finalDJName = trimmedName.isEmpty ? (matchedDJ?.name ?? "Unknown DJ") : trimmedName
             guard !finalDJName.isEmpty else { return nil }
@@ -3471,6 +3627,17 @@ actor MockWebFeatureService: WebFeatureService {
                     let fallbackID = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     return fallbackID.isEmpty ? nil : fallbackID
                 }(),
+                memberDjIds: memberDJIDs,
+                memberNames: slot.memberNames,
+                djs: matchedMemberDJs.isEmpty ? nil : matchedMemberDJs.map {
+                    WebEventLineupSlotDJ(
+                        id: $0.id,
+                        name: $0.name,
+                        avatarUrl: $0.avatarUrl,
+                        bannerUrl: $0.bannerUrl,
+                        country: $0.country
+                    )
+                },
                 djName: finalDJName,
                 stageName: {
                     let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

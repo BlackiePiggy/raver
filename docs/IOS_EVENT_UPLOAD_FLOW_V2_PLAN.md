@@ -229,15 +229,29 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 地图选点与手填详细地址解耦，地图结果只保存场地/坐标信息，不再覆盖详细地址
 - [x] 活动周期页支持单日 / 多日 / 多 Week，并支持每个 Week 独立日期范围
 - [x] 时间表页支持先维护舞台顺序，再按 Week 进入编辑
+- [x] 时间表步骤改为完全可跳过；仅当用户实际填写 timetable 时，才要求舞台、时间与 Week 编辑
 - [x] 只填 lineup 的页面与 timetable 页面拆开，保持两条独立录入路径
 - [x] 纠正“lineup-only 自动推断 timetable 逻辑”的错误方向，恢复为与 festival-viewer 对齐的独立路径
 - [x] 修复独立模块中的脏字符编译错误，恢复主工程可编译状态
+- [x] 第 2 页：主办方 / 时区一旦绑定后，输入框进入显式锁定态，只能手动清除后重新搜索
+- [x] 第 3 页：移除“周期概览”，跨天切日时间改为默认折叠的高级选项
+- [x] 第 3 页：单日 / 多日 / 多 Week 模式按钮完成一轮更移动端化的视觉收紧
+- [x] 第 3 页：多 Week 日期改为固定短格式 `yyyy/M/d` 展示，并改用独立选日面板避免样式跳变
+- [x] 编辑回填：时区搜索词优先保持英文 / ASCII，避免 `Hong Kong` 被回填成 `香港` 导致再次提交异常
+- [x] lineup-only 数据结构支持 B2B / B3B 多成员：新增成员名与成员 DJ 绑定顺序字段，避免只保存第一个 DJ
+- [x] iOS 阵容 tab / 编辑回填支持从 `lineupArtists.members / djs / memberDjIds / memberNames` 恢复多成员头像、名称与绑定态
+- [x] server canonical event artist 同步支持成员顺序、未绑定成员占位和成员名快照
+- [x] festival-viewer 的 `lineupArtists` 归一化与后端映射支持 `memberNames` / `memberDjIds`
+- [x] 活动上传链路中的 `lineupArtists` 已停止使用旧 `djIds`，统一迁移到 `memberDjIds / memberNames`
+- [x] 活动时间表槽位主链路已开始统一到 `memberDjIds / memberNames`，server / festival-viewer / iOS mapper 已同步
+- [x] 编辑活动提交流程已补齐 `lineupSlots` 更新映射，避免 timetable 编辑不生效
 - [ ] 第 1 页图片卡片继续收紧排版，与附件 html 的移动端层级更贴近（已按最新要求改回单列，继续收细节）
 - [ ] Week 时间表编辑页继续优化完成态卡片：已添加 DJ 展示为头像 + 名称 + 补充信息，减少编辑态挤占
 - [ ] Week 时间表编辑页继续优化操作流，避免展开/编辑/删除的逻辑别扭
 - [ ] lineup-only 页面继续向 festival-viewer 的纯阵容录入方式收口
 - [ ] 最终再做一轮 Light / Dark 主题细节 polish
-- [ ] 完整 build 验证并回填本 md 的最终状态
+- [x] 完整 build 验证并回填本 md 的最终状态
+- [x] iOS 连带页面（DJ 详情 / 活动详情 / 我的 checkins 等）残余 `slot.djIds` 引用全部清理并再次完成全量 build
 
 - 媒体：`poster` 至少 1 张；无 poster 禁止进入最终提交。
 - 基础信息：活动名称必填。
@@ -641,6 +655,9 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] V2 step 结构改为 图片 / 信息 / 周期 / 时间表 / 阵容 / 票务 后再次通过 iOS Debug simulator build。
 - [x] V2 第三页支持 multi-week 周范围编辑，每个 week 可单独维护起止日期后再次通过 iOS Debug simulator build。
 - [x] V2 第五页拆出独立 timetable 总览与 lineup-only 页面后再次通过 iOS Debug simulator build。
+- [x] `festival-viewer` 本轮 `memberDjIds / memberNames` 迁移后再次通过 `node --check`。
+- [x] server 本轮 `memberDjIds / memberNames` 迁移后再次通过 `pnpm build`。
+- [x] iOS 本轮 `memberDjIds / memberNames` 迁移后已清理连带页面的旧 `slot.djIds` 引用，并再次通过全量 build。
 
 ### 14. 收尾与切换
 

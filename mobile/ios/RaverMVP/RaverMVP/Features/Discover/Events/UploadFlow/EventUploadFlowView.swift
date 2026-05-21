@@ -1,6 +1,20 @@
 import SwiftUI
 
 struct EventUploadFlowView: View {
+    private struct WeekDatePickerTarget: Identifiable {
+        enum Field {
+            case start
+            case end
+        }
+
+        let weekID: UUID
+        let field: Field
+
+        var id: String {
+            "\(weekID.uuidString)-\(field == .start ? "start" : "end")"
+        }
+    }
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: EventUploadFlowViewModel
@@ -8,6 +22,8 @@ struct EventUploadFlowView: View {
     @State private var showExitConfirmation = false
     @State private var selectedWeekForEditing: EventUploadWeekSelection?
     @State private var expandedTimetableSlots: Set<UUID> = []
+    @State private var showAdvancedRollover = false
+    @State private var activeWeekDatePicker: WeekDatePickerTarget?
 
     init(
         mode: EventUploadMode = .create,
@@ -67,6 +83,9 @@ struct EventUploadFlowView: View {
         }
         .sheet(item: $selectedWeekForEditing) { selection in
             weekEditorSheet(for: selection)
+        }
+        .sheet(item: $activeWeekDatePicker) { target in
+            weekDatePickerSheet(target: target)
         }
         .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredCreateDraft) {
             Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
@@ -337,39 +356,6 @@ struct EventUploadFlowView: View {
                 subtitle: LT("支持单日、多日和多 Week。多 Week 可继续拆分到每周范围。", "Supports single-day, multi-day, and multi-week schedules.", "1日、複数日、複数Weekに対応します。")
             )
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(LT("周期概览", "Schedule Overview", "開催概要"))
-                            .font(.headline)
-                            .foregroundStyle(RaverTheme.primaryText)
-                        Text(LT("先确认活动跨越几天，再决定是否拆成多个 Week。", "Confirm the event span first, then decide whether to split it into multiple weeks.", "まず開催日数を確定し、その後で複数Weekに分割するか決めます。"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(scheduleHeroValue)
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(RaverTheme.accent)
-                        Text(scheduleHeroLabel)
-                            .font(.caption2)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-
-                HStack(spacing: 10) {
-                    scheduleSummaryChip(title: LT("当前模式", "Mode", "現在のモード"), value: viewModel.draft.scheduleMode.title)
-                    scheduleSummaryChip(title: LT("Week 数量", "Weeks", "Week数"), value: "\(displayWeekRanges.count)")
-                }
-            }
-            .padding(16)
-            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
-            )
-
             VStack(alignment: .leading, spacing: 8) {
                 fieldTitle(LT("活动跨度", "Schedule Mode", "開催期間"), isRequired: false)
                 HStack(spacing: 8) {
@@ -431,10 +417,10 @@ struct EventUploadFlowView: View {
                             HStack(spacing: 10) {
                                 weekDateField(
                                     title: LT("开始", "Start", "開始"),
-                                    selection: Binding(
-                                        get: { week.startDate },
-                                        set: { value in viewModel.updateWeekRange(id: week.id, startDate: value) }
-                                    )
+                                    value: shortDateString(week.startDate),
+                                    action: {
+                                        activeWeekDatePicker = WeekDatePickerTarget(weekID: week.id, field: .start)
+                                    }
                                 )
 
                                 Image(systemName: "arrow.right")
@@ -443,10 +429,10 @@ struct EventUploadFlowView: View {
 
                                 weekDateField(
                                     title: LT("结束", "End", "終了"),
-                                    selection: Binding(
-                                        get: { week.endDate },
-                                        set: { value in viewModel.updateWeekRange(id: week.id, endDate: value) }
-                                    )
+                                    value: shortDateString(week.endDate),
+                                    action: {
+                                        activeWeekDatePicker = WeekDatePickerTarget(weekID: week.id, field: .end)
+                                    }
                                 )
                             }
                         }
@@ -481,48 +467,77 @@ struct EventUploadFlowView: View {
                     .buttonStyle(.plain)
                 }
             }
-            VStack(alignment: .leading, spacing: 10) {
-                Text(LT("跨天切日时间", "Overnight Rollover", "日付切替時刻"))
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(RaverTheme.primaryText)
 
-                HStack(spacing: 18) {
-                    Button {
-                        dayRolloverBinding.wrappedValue = max(dayRolloverBinding.wrappedValue - 1, 0)
-                    } label: {
-                        Image(systemName: "minus")
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .frame(width: 34, height: 34)
-                            .background(RaverTheme.card, in: Circle())
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showAdvancedRollover.toggle()
                     }
-                    .buttonStyle(.plain)
-
-                    VStack(spacing: 4) {
-                        Text("\(viewModel.draft.dayRolloverHour):00")
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                        Text(LT("凌晨前仍归前一日", "Before this still counts as previous day", "この時刻前は前日扱い"))
-                            .font(.caption)
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(LT("跨天切日时间（凌晨几点前的表演属于前一天）", "Overnight Rollover (performances before this hour count as the previous day)", "日付切替時刻（この時刻前の公演は前日扱い）"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .multilineTextAlignment(.leading)
+                            Text("\(viewModel.draft.dayRolloverHour):00")
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        Spacer()
+                        Image(systemName: showAdvancedRollover ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.bold))
                             .foregroundStyle(RaverTheme.secondaryText)
-                            .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity)
-
-                    Button {
-                        dayRolloverBinding.wrappedValue = min(dayRolloverBinding.wrappedValue + 1, 12)
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(RaverTheme.accent, in: Circle())
-                    }
-                    .buttonStyle(.plain)
+                    .padding(14)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                    )
                 }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 12)
-                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .buttonStyle(.plain)
+
+                if showAdvancedRollover {
+                    HStack(spacing: 18) {
+                        Button {
+                            dayRolloverBinding.wrappedValue = max(dayRolloverBinding.wrappedValue - 1, 0)
+                        } label: {
+                            Image(systemName: "minus")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .frame(width: 34, height: 34)
+                                .background(RaverTheme.background, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+
+                        VStack(spacing: 4) {
+                            Text("\(viewModel.draft.dayRolloverHour):00")
+                                .font(.system(size: 26, weight: .bold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Text(LT("凌晨前仍归前一日", "Before this still counts as previous day", "この時刻前は前日扱い"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        Button {
+                            dayRolloverBinding.wrappedValue = min(dayRolloverBinding.wrappedValue + 1, 12)
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 34, height: 34)
+                                .background(RaverTheme.accent, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
 
             if viewModel.draft.endDate < viewModel.draft.startDate {
@@ -537,7 +552,7 @@ struct EventUploadFlowView: View {
         VStack(alignment: .leading, spacing: 16) {
             sectionTitle(
                 LT("时间表", "Timetable", "タイムテーブル"),
-                subtitle: LT("先维护舞台顺序，再编辑各周的时间表。舞台顺序会影响活动页时间表展示。", "Set stage order first, then edit each week's timetable. Stage order affects schedule display.", "先にステージ順を設定し、その後各週のタイムテーブルを編集します。ステージ順は表示順に影響します。")
+                subtitle: LT("这一页可以完全跳过。只有当你要补充演出时间表时，才需要添加舞台并按 Week 编辑。", "This step is optional. Add stages and edit by week only if you want to provide a timetable.", "このステップは任意です。タイムテーブルを補足したい場合のみ、ステージ追加とWeek編集を行ってください。")
             )
 
             Button {
@@ -553,7 +568,7 @@ struct EventUploadFlowView: View {
             .buttonStyle(.plain)
 
             if viewModel.draft.stageEntries.isEmpty {
-                Text(LT("至少需要 1 个舞台。如果舞台名称留空，活动页会默认显示为主舞台。", "At least one stage is required. Empty stage names default to Main Stage.", "少なくとも1つのステージが必要です。名前が空欄の場合はメインステージとして扱われます。"))
+                Text(LT("如果这一场没有时间表，可以直接跳过这一页。需要填写时间表时，再添加舞台即可；名称留空会默认显示为主舞台。", "You can skip this step if there is no timetable yet. Add a stage only when you want to fill schedule details; empty names default to Main Stage.", "タイムテーブルが未定ならこのページはそのままスキップできます。入力したいときだけステージを追加してください。空欄名はメインステージとして扱われます。"))
                     .font(.subheadline)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .padding(14)
@@ -597,39 +612,45 @@ struct EventUploadFlowView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
 
-                ForEach(Array(displayWeekRanges.enumerated()), id: \.element.id) { index, week in
-                    Button {
-                        selectedWeekForEditing = EventUploadWeekSelection(index: index, week: week)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Week \(index + 1)")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.bold))
+                if viewModel.draft.stageEntries.isEmpty {
+                    Text(LT("还没有舞台，所以这里暂时不会生成 Week 时间表入口。", "There are no stages yet, so week timetable entry cards are hidden for now.", "ステージ未追加のため、Weekタイムテーブル入口はまだ表示されません。"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    ForEach(Array(displayWeekRanges.enumerated()), id: \.element.id) { index, week in
+                        Button {
+                            selectedWeekForEditing = EventUploadWeekSelection(index: index, week: week)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Week \(index + 1)")
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                                Text(weekRangeSummary(week))
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                Text(weekTimetableSummary(for: index, week: week))
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.accent)
+                                Text(LT("点击进入编辑这一周的节目单", "Tap to edit this week's schedule", "この週のタイムテーブルを編集"))
+                                    .font(.caption2)
                                     .foregroundStyle(RaverTheme.secondaryText)
                             }
-                            Text(weekRangeSummary(week))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(weekTimetableSummary(for: index, week: week))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.accent)
-                            Text(LT("点击进入编辑这一周的节目单", "Tap to edit this week's schedule", "この週のタイムテーブルを編集"))
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                            )
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(RaverTheme.cardBorder, lineWidth: 1)
-                        )
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -1005,56 +1026,62 @@ struct EventUploadFlowView: View {
             .background(tint, in: Capsule())
     }
 
-    private var scheduleHeroValue: String {
-        let calendar = Calendar.current
-        let days = max((calendar.dateComponents([.day], from: calendar.startOfDay(for: viewModel.draft.startDate), to: calendar.startOfDay(for: max(viewModel.draft.endDate, viewModel.draft.startDate))).day ?? 0) + 1, 1)
-        return "\(days)"
-    }
-
-    private var scheduleHeroLabel: String {
-        LT("总天数", "total days", "総日数")
-    }
-
-    private func scheduleSummaryChip(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(RaverTheme.secondaryText)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(RaverTheme.primaryText)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
     private func scheduleModeCard(_ mode: EventUploadScheduleMode) -> some View {
-        Button {
+        let isSelected = viewModel.draft.scheduleMode == mode
+        return Button {
             viewModel.updateScheduleMode(mode)
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(mode.title)
-                    .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: scheduleModeIcon(mode))
+                        .font(.subheadline.weight(.semibold))
+                    Text(mode.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.subheadline)
+                    }
+                }
                 Text(scheduleModeSubtitle(mode))
                     .font(.caption2)
                     .multilineTextAlignment(.leading)
+                    .lineLimit(2)
             }
-            .foregroundStyle(viewModel.draft.scheduleMode == mode ? .white : RaverTheme.primaryText)
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .padding(12)
+            .foregroundStyle(isSelected ? .white : RaverTheme.primaryText)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 13)
             .background(
-                viewModel.draft.scheduleMode == mode ? RaverTheme.accent : RaverTheme.card,
+                isSelected
+                    ? AnyShapeStyle(
+                        LinearGradient(
+                            colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    : AnyShapeStyle(RaverTheme.card),
                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(viewModel.draft.scheduleMode == mode ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
+                    .stroke(isSelected ? RaverTheme.accent.opacity(0.15) : RaverTheme.cardBorder, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func scheduleModeIcon(_ mode: EventUploadScheduleMode) -> String {
+        switch mode {
+        case .singleDay:
+            return "calendar"
+        case .multiDay:
+            return "calendar.badge.clock"
+        case .multiWeek:
+            return "square.grid.2x2"
+        }
     }
 
     private func scheduleModeSubtitle(_ mode: EventUploadScheduleMode) -> String {
@@ -1091,23 +1118,28 @@ struct EventUploadFlowView: View {
         )
     }
 
-    private func weekDateField(title: String, selection: Binding<Date>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(RaverTheme.secondaryText)
-            DatePicker(
-                "",
-                selection: selection,
-                displayedComponents: [.date]
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-            .tint(RaverTheme.accent)
+    private func weekDateField(title: String, value: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                HStack(spacing: 8) {
+                    Text(value)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "calendar")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .buttonStyle(.plain)
     }
 
     private func weekDateDurationSummary(_ week: EventUploadWeekRangeDraft) -> String {
@@ -1516,19 +1548,15 @@ struct EventUploadFlowView: View {
     }
 
     private var timeZoneSearchSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let isLocked = viewModel.draft.selectedTimeZoneLookup != nil
+        return VStack(alignment: .leading, spacing: 10) {
             fieldTitle(LT("城市时区", "City Time Zone", "都市タイムゾーン"), isRequired: true)
-            TextField(
-                LT("输入城市或城市+州/国家", "Enter city or city + state/country", "都市または都市+州/国を入力"),
-                text: timeZoneSearchBinding
+            lockedSearchField(
+                title: LT("输入城市或城市+州/国家", "Enter city or city + state/country", "都市または都市+州/国を入力"),
+                text: timeZoneSearchBinding,
+                isLocked: isLocked,
+                lockedLabel: LT("已绑定", "Bound", "紐付け済み")
             )
-            .font(.body)
-            .foregroundStyle(RaverTheme.primaryText)
-            .textInputAutocapitalization(.words)
-            .autocorrectionDisabled()
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
-            .background(fieldBackground)
 
             HStack(spacing: 10) {
                 Button {
@@ -1554,7 +1582,26 @@ struct EventUploadFlowView: View {
 
             Text(timeZoneSummary)
                 .font(.caption)
-                .foregroundStyle(viewModel.draft.selectedTimeZoneLookup == nil ? RaverTheme.secondaryText : .green)
+                .foregroundStyle(isLocked ? .green : RaverTheme.secondaryText)
+
+            if let item = viewModel.draft.selectedTimeZoneLookup {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(item.timezone)
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
 
             if !viewModel.timeZoneSearchResults.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1690,16 +1737,15 @@ struct EventUploadFlowView: View {
     }
 
     private var organizerSearchSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let isLocked = viewModel.draft.organizerFestivalID != nil
+        return VStack(alignment: .leading, spacing: 10) {
             fieldTitle(LT("主办方", "Organizer", "主催者"), isRequired: false)
-            TextField(LT("输入主办方名称", "Enter organizer name", "主催者名を入力"), text: organizerBinding)
-                .font(.body)
-                .foregroundStyle(RaverTheme.primaryText)
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 11)
-                .background(fieldBackground)
+            lockedSearchField(
+                title: LT("输入主办方名称", "Enter organizer name", "主催者名を入力"),
+                text: organizerBinding,
+                isLocked: isLocked,
+                lockedLabel: LT("已绑定", "Bound", "紐付け済み")
+            )
 
             HStack(spacing: 10) {
                 Button {
@@ -1729,6 +1775,23 @@ struct EventUploadFlowView: View {
                 Text(LT("已绑定主办方词条，提交时会同步携带主办方 ID。", "Organizer entry is bound and its ID will be submitted.", "主催者エントリが紐付け済みで、送信時にIDも保存されます。"))
                     .font(.caption)
                     .foregroundStyle(.green)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.draft.organizerName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(viewModel.draft.organizerFestivalID ?? "")
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             if !viewModel.organizerSearchResults.isEmpty {
@@ -1799,6 +1862,103 @@ struct EventUploadFlowView: View {
             return LT("当前活动时区：\(viewModel.draft.timeZoneIdentifier)。如需修改，请搜索城市并确认。", "Current event timezone: \(viewModel.draft.timeZoneIdentifier). Search a city to change it.", "現在のタイムゾーン：\(viewModel.draft.timeZoneIdentifier)。変更するには都市を検索してください。")
         }
         return LT("未确认活动城市时区", "No city timezone confirmed", "都市タイムゾーン未確認")
+    }
+
+    private func lockedSearchField(title: String, text: Binding<String>, isLocked: Bool, lockedLabel: String) -> some View {
+        HStack(spacing: 10) {
+            TextField(title, text: text)
+                .font(.body)
+                .foregroundStyle(isLocked ? RaverTheme.secondaryText : RaverTheme.primaryText)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .disabled(isLocked)
+
+            if isLocked {
+                HStack(spacing: 5) {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2.weight(.bold))
+                    Text(lockedLabel)
+                        .font(.caption2.weight(.bold))
+                }
+                .foregroundStyle(.green)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.green.opacity(0.12), in: Capsule())
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isLocked ? RaverTheme.card.opacity(0.72) : RaverTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isLocked ? Color.green.opacity(0.35) : RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func shortDateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy/M/d"
+        return formatter.string(from: date)
+    }
+
+    @ViewBuilder
+    private func weekDatePickerSheet(target: WeekDatePickerTarget) -> some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                DatePicker(
+                    "",
+                    selection: weekDateBinding(target: target),
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .tint(RaverTheme.accent)
+
+                HStack {
+                    Text(LT("当前选择", "Selected", "選択中"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Spacer()
+                    Text(shortDateString(weekDateBinding(target: target).wrappedValue))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                }
+                .padding(.horizontal, 4)
+
+                Spacer()
+            }
+            .padding(20)
+            .background(RaverTheme.background.ignoresSafeArea())
+            .navigationTitle(LT("选择日期", "Select Date", "日付を選択"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(LT("完成", "Done", "完了")) {
+                        activeWeekDatePicker = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func weekDateBinding(target: WeekDatePickerTarget) -> Binding<Date> {
+        Binding {
+            guard let week = viewModel.draft.weekRanges.first(where: { $0.id == target.weekID }) else {
+                return Date()
+            }
+            return target.field == .start ? week.startDate : week.endDate
+        } set: { value in
+            if target.field == .start {
+                viewModel.updateWeekRange(id: target.weekID, startDate: value)
+            } else {
+                viewModel.updateWeekRange(id: target.weekID, endDate: value)
+            }
+        }
     }
 
     private var dayRolloverBinding: Binding<Int> {

@@ -392,7 +392,10 @@ struct WebEventLineupArtist: Codable, Identifiable, Hashable {
     let id: String
     var eventId: String?
     var djId: String?
-    var djIds: [String]? = nil
+    var memberDjIds: [String?]? = nil
+    var memberNames: [String]? = nil
+    var djs: [WebEventLineupSlotDJ]? = nil
+    var members: [WebEventLineupArtistMember]? = nil
     var djName: String
     var sortOrder: Int
     var createdAt: Date? = nil
@@ -400,11 +403,21 @@ struct WebEventLineupArtist: Codable, Identifiable, Hashable {
     var dj: WebEventLineupSlotDJ?
 }
 
+struct WebEventLineupArtistMember: Codable, Identifiable, Hashable {
+    var id: String?
+    var djId: String?
+    var memberNameSnapshot: String?
+    var memberOrder: Int?
+    var role: String?
+    var dj: WebEventLineupSlotDJ?
+}
+
 struct WebEventLineupSlot: Codable, Identifiable, Hashable {
     let id: String
     var eventId: String?
     var djId: String?
-    var djIds: [String]? = nil
+    var memberDjIds: [String?]? = nil
+    var memberNames: [String]? = nil
     var djs: [WebEventLineupSlotDJ]? = nil
     var festivalDayIndex: Int? = nil
     var djName: String
@@ -417,12 +430,22 @@ struct WebEventLineupSlot: Codable, Identifiable, Hashable {
 
 struct EventLineupSlotInput: Codable, Hashable {
     var djId: String?
+    var memberDjIds: [String?]? = nil
+    var memberNames: [String]? = nil
     var festivalDayIndex: Int? = nil
     var djName: String
     var stageName: String?
     var sortOrder: Int?
     var startTime: Date?
     var endTime: Date?
+}
+
+struct EventLineupArtistInput: Codable, Hashable {
+    var djId: String?
+    var memberDjIds: [String?]? = nil
+    var memberNames: [String]? = nil
+    var djName: String
+    var sortOrder: Int?
 }
 
 struct EventTicketTierInput: Codable, Hashable {
@@ -675,6 +698,7 @@ struct CreateEventInput: Codable {
     var lineupImageUrl: String?
     var imageAssets: [WebEventImageAsset]? = nil
     var ticketTiers: [EventTicketTierInput]? = nil
+    var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
 }
@@ -867,6 +891,7 @@ struct UpdateEventInput: Encodable {
     var lineupImageUrl: String?
     var imageAssets: [WebEventImageAsset]? = nil
     var ticketTiers: [EventTicketTierInput]? = nil
+    var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
     var clearCityI18n: Bool = false
@@ -907,6 +932,7 @@ struct UpdateEventInput: Encodable {
         case lineupImageUrl
         case imageAssets
         case ticketTiers
+        case lineupArtists
         case lineupSlots
         case status
     }
@@ -958,6 +984,7 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
         try container.encodeIfPresent(imageAssets, forKey: .imageAssets)
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
+        try container.encodeIfPresent(lineupArtists, forKey: .lineupArtists)
         try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
         try container.encodeIfPresent(status, forKey: .status)
     }

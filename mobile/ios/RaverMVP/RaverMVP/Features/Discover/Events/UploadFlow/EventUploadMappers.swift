@@ -70,6 +70,7 @@ enum EventUploadMappers {
             lineupImageUrl: primaryLineupURL(from: draft),
             imageAssets: imageAssets(from: draft).isEmpty ? nil : imageAssets(from: draft),
             ticketTiers: ticketTiers,
+            lineupArtists: lineupArtistInputs(from: draft),
             lineupSlots: lineupSlotInputs(from: draft),
             status: EventVisualStatus.resolve(startDate: draft.startDate, endDate: draft.endDate).apiValue
         )
@@ -108,6 +109,8 @@ enum EventUploadMappers {
             lineupImageUrl: create.lineupImageUrl ?? "",
             imageAssets: create.imageAssets,
             ticketTiers: create.ticketTiers,
+            lineupArtists: create.lineupArtists,
+            lineupSlots: create.lineupSlots,
             status: create.status,
             clearManualLocation: create.manualLocation == nil
         )
@@ -175,6 +178,30 @@ enum EventUploadMappers {
         return tiers.isEmpty ? nil : tiers
     }
 
+    private static func lineupArtistInputs(from draft: EventUploadDraft) -> [EventLineupArtistInput]? {
+        let lineupArtists = draft.lineupOnlySlots.enumerated().compactMap { offset, slot -> EventLineupArtistInput? in
+            let performerNames = slot.performerNames
+                .prefix(slot.actType.performerCount)
+                .map { $0.trimmed }
+                .filter { !$0.isEmpty }
+            guard performerNames.count == slot.actType.performerCount else { return nil }
+            let name = EventLineupActCodec.composeName(type: slot.actType, performerNames: performerNames)
+            guard !name.isEmpty else { return nil }
+            let djIDs = slot.performerDJIDs
+                .prefix(slot.actType.performerCount)
+                .compactMap { $0?.trimmed.eventUploadMapperNilIfBlank }
+            let memberDJIDs = Array(slot.performerDJIDs.prefix(slot.actType.performerCount)).map { $0?.trimmed.eventUploadMapperNilIfBlank }
+            return EventLineupArtistInput(
+                djId: djIDs.first,
+                memberDjIds: memberDJIDs.contains(where: { $0 != nil }) ? memberDJIDs : nil,
+                memberNames: performerNames,
+                djName: name,
+                sortOrder: offset + 1
+            )
+        }
+        return lineupArtists.isEmpty ? nil : lineupArtists
+    }
+
     private static func lineupSlotInputs(from draft: EventUploadDraft) -> [EventLineupSlotInput]? {
         let timetableSlots = draft.timetableSlots.enumerated().compactMap { index, slot -> EventLineupSlotInput? in
             let performerNames = slot.performerNames
@@ -184,9 +211,12 @@ enum EventUploadMappers {
             guard performerNames.count == slot.actType.performerCount else { return nil }
             let name = EventLineupActCodec.composeName(type: slot.actType, performerNames: performerNames)
             guard !name.isEmpty else { return nil }
-            let primaryDJID = slot.performerDJIDs.first??.trimmed.eventUploadMapperNilIfBlank
+            let memberDJIDs = Array(slot.performerDJIDs.prefix(slot.actType.performerCount)).map { $0?.trimmed.eventUploadMapperNilIfBlank }
+            let primaryDJID = memberDJIDs.compactMap { $0 }.first
             return EventLineupSlotInput(
                 djId: primaryDJID,
+                memberDjIds: memberDJIDs.contains(where: { $0 != nil }) ? memberDJIDs : nil,
+                memberNames: performerNames,
                 festivalDayIndex: max(slot.dayIndex, 1),
                 djName: name,
                 stageName: slot.stageName.trimmed.eventUploadMapperNilIfBlank,
@@ -195,28 +225,7 @@ enum EventUploadMappers {
                 endTime: normalizedLineupEndTime(start: slot.startTime, end: slot.endTime)
             )
         }
-        let baseCount = timetableSlots.count
-        let lineupOnlySlots = draft.lineupOnlySlots.enumerated().compactMap { offset, slot -> EventLineupSlotInput? in
-            let performerNames = slot.performerNames
-                .prefix(slot.actType.performerCount)
-                .map { $0.trimmed }
-                .filter { !$0.isEmpty }
-            guard performerNames.count == slot.actType.performerCount else { return nil }
-            let name = EventLineupActCodec.composeName(type: slot.actType, performerNames: performerNames)
-            guard !name.isEmpty else { return nil }
-            let primaryDJID = slot.performerDJIDs.first??.trimmed.eventUploadMapperNilIfBlank
-            return EventLineupSlotInput(
-                djId: primaryDJID,
-                festivalDayIndex: nil,
-                djName: name,
-                stageName: nil,
-                sortOrder: baseCount + offset + 1,
-                startTime: nil,
-                endTime: nil
-            )
-        }
-        let merged = timetableSlots + lineupOnlySlots
-        return merged.isEmpty ? nil : merged
+        return timetableSlots.isEmpty ? nil : timetableSlots
     }
 
     private static func normalizedLineupEndTime(start: Date?, end: Date?) -> Date? {

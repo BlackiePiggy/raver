@@ -54,6 +54,26 @@ struct EventLineupResolvedAct: Hashable {
 
 enum EventLineupActCodec {
     static func parse(artist: WebEventLineupArtist) -> EventLineupResolvedAct {
+        let memberPerformers = normalizedMemberPerformers(from: artist)
+        if !memberPerformers.isEmpty {
+            let type = actType(forPerformerCount: memberPerformers.count)
+            return EventLineupResolvedAct(type: type, performers: Array(memberPerformers.prefix(type.performerCount)))
+        }
+
+        let boundDJs = normalizedBoundDJs(from: artist)
+        if !boundDJs.isEmpty {
+            let type = actType(forPerformerCount: boundDJs.count)
+            let performers = boundDJs.prefix(type.performerCount).enumerated().map { index, dj in
+                EventLineupPerformer(
+                    id: "artist-\(artist.id)-p-\(index)",
+                    name: dj.name,
+                    djID: dj.id,
+                    avatarUrl: firstNonEmpty(dj.avatarSmallUrl, dj.avatarUrl, dj.avatarMediumUrl, dj.avatarOriginalUrl)
+                )
+            }
+            return EventLineupResolvedAct(type: type, performers: performers)
+        }
+
         let avatarUrl = firstNonEmpty(
             artist.dj?.avatarSmallUrl,
             artist.dj?.avatarUrl,
@@ -71,6 +91,26 @@ enum EventLineupActCodec {
     }
 
     static func parse(slot: WebEventLineupSlot) -> EventLineupResolvedAct {
+        let explicitNames = slot.memberNames?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        if !explicitNames.isEmpty {
+            let djsByID = Dictionary(uniqueKeysWithValues: (slot.djs ?? []).map { ($0.id, $0) })
+            let memberIDs = slot.memberDjIds ?? []
+            let performers = explicitNames.enumerated().map { index, name in
+                let resolvedDJID = memberIDs.indices.contains(index) ? Self.normalizedID(memberIDs[index]) : nil
+                let dj = resolvedDJID.flatMap { djsByID[$0] } ?? (slot.dj?.id == resolvedDJID ? slot.dj : nil)
+                return EventLineupPerformer(
+                    id: "slot-\(slot.id)-p-\(index)",
+                    name: firstNonEmpty(dj?.name, name) ?? name,
+                    djID: resolvedDJID,
+                    avatarUrl: firstNonEmpty(dj?.avatarSmallUrl, dj?.avatarUrl, dj?.avatarMediumUrl, dj?.avatarOriginalUrl)
+                )
+            }
+            let type = actType(forPerformerCount: performers.count)
+            return EventLineupResolvedAct(type: type, performers: Array(performers.prefix(type.performerCount)))
+        }
+
         let boundDJs = normalizedBoundDJs(from: slot)
         if !boundDJs.isEmpty {
             let type = actType(forPerformerCount: boundDJs.count)
@@ -234,11 +274,94 @@ enum EventLineupActCodec {
             result.append(dj)
         }
 
-        let orderedIDs = (slot.djIds ?? []).compactMap(normalizedID)
+        let orderedIDs = (slot.memberDjIds ?? []).compactMap(normalizedID)
         guard !orderedIDs.isEmpty else { return result }
         let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.id, $0) })
         let ordered = orderedIDs.compactMap { byID[$0] }
         return ordered.isEmpty ? result : ordered
+    }
+
+    private static func normalizedBoundDJs(from artist: WebEventLineupArtist) -> [WebEventLineupSlotDJ] {
+        let source = artist.djs ?? []
+        var result: [WebEventLineupSlotDJ] = []
+        var seen = Set<String>()
+
+        for dj in source {
+            let id = normalizedID(dj.id)
+            guard let id, seen.insert(id).inserted else { continue }
+            result.append(dj)
+        }
+
+        for member in artist.members ?? [] {
+            guard let dj = member.dj else { continue }
+            let id = normalizedID(dj.id)
+            guard let id, seen.insert(id).inserted else { continue }
+            result.append(dj)
+        }
+
+        for id in artist.memberDjIds ?? [] {
+            guard let id = normalizedID(id), seen.insert(id).inserted else { continue }
+            if let dj = (artist.djs ?? []).first(where: { $0.id == id }) ?? (artist.dj?.id == id ? artist.dj : nil) {
+                result.append(dj)
+            }
+        }
+
+        if result.isEmpty,
+           let dj = artist.dj,
+           let id = normalizedID(dj.id),
+           seen.insert(id).inserted {
+            result.append(dj)
+        }
+
+        let orderedIDs = (artist.memberDjIds ?? []).compactMap(normalizedID)
+        guard !orderedIDs.isEmpty else { return result }
+        let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.id, $0) })
+        let ordered = orderedIDs.compactMap { byID[$0] }
+        return ordered.isEmpty ? result : ordered
+    }
+
+    private static func normalizedMemberPerformers(from artist: WebEventLineupArtist) -> [EventLineupPerformer] {
+        let explicitMembers = (artist.members ?? [])
+            .sorted { lhs, rhs in
+                (lhs.memberOrder ?? Int.max) < (rhs.memberOrder ?? Int.max)
+            }
+            .enumerated()
+            .compactMap { pair -> EventLineupPerformer? in
+                let index = pair.offset
+                let member = pair.element
+                let name = firstNonEmpty(member.memberNameSnapshot, member.dj?.name) ?? ""
+                guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                return EventLineupPerformer(
+                    id: "artist-\(artist.id)-p-\(index)",
+                    name: name,
+                    djID: normalizedID(member.djId ?? member.dj?.id),
+                    avatarUrl: firstNonEmpty(
+                        member.dj?.avatarSmallUrl,
+                        member.dj?.avatarUrl,
+                        member.dj?.avatarMediumUrl,
+                        member.dj?.avatarOriginalUrl
+                    )
+                )
+            }
+        if !explicitMembers.isEmpty { return explicitMembers }
+
+        let names = artist.memberNames?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            ?? split(artist.djName, keyword: "B3B")
+            ?? split(artist.djName, keyword: "B2B")
+            ?? []
+        guard names.count > 1 else { return [] }
+        let djsByID = Dictionary(uniqueKeysWithValues: (artist.djs ?? []).map { ($0.id, $0) })
+        let memberIDs = artist.memberDjIds ?? []
+        return names.enumerated().map { index, name in
+            let djID = memberIDs.indices.contains(index) ? normalizedID(memberIDs[index]) : nil
+            let dj = djID.flatMap { djsByID[$0] } ?? (artist.dj?.id == djID ? artist.dj : nil)
+            return EventLineupPerformer(
+                id: "artist-\(artist.id)-p-\(index)",
+                name: firstNonEmpty(dj?.name, name) ?? name,
+                djID: djID,
+                avatarUrl: firstNonEmpty(dj?.avatarSmallUrl, dj?.avatarUrl, dj?.avatarMediumUrl, dj?.avatarOriginalUrl)
+            )
+        }
     }
 
     private static func actType(forPerformerCount count: Int) -> EventLineupActType {

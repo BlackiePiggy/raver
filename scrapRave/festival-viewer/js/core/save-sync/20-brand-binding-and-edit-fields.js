@@ -135,7 +135,12 @@ function eventLineupEditorAddArtist(panelEl, artist) {
   const current = eventLineupEditorCurrentArtists(panelEl);
   const next = buildEventLineupArtistsFromArchive([...current, {
     djId: String(artist?.djId || artist?.id || '').trim() || undefined,
-    djIds: Array.isArray(artist?.djIds) ? artist.djIds : (artist?.id ? [String(artist.id)] : []),
+    memberDjIds: Array.isArray(artist?.memberDjIds)
+      ? artist.memberDjIds
+      : ((artist?.djId || artist?.id) ? [String(artist.djId || artist.id)] : []),
+    memberNames: Array.isArray(artist?.memberNames)
+      ? artist.memberNames
+      : [],
     djName,
     sortOrder: current.length + 1,
   }], []);
@@ -282,7 +287,9 @@ function bindEventLineupArtistEditor(panelEl, info = null) {
             return {
               ...item,
               djId: String(dj?.id || '').trim() || item.djId,
-              djIds: dj?.id ? [String(dj.id)] : (Array.isArray(item?.djIds) ? item.djIds : []),
+              memberDjIds: dj?.id
+                ? [String(dj.id)]
+                : (Array.isArray(item?.memberDjIds) ? item.memberDjIds : []),
               djName: String(dj?.name || item?.djName || '').trim() || item.djName,
               avatarUrl: String(dj?.avatarUrl || '').trim() || item.avatarUrl,
             };

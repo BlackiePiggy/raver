@@ -81,7 +81,12 @@ function ttArtistToDraftSlot(artist, activeDate) {
     time: '',
     stage: '',
     djId: String(artist?.djId || '').trim() || undefined,
-    djIds: Array.isArray(artist?.djIds) ? artist.djIds : [],
+    memberDjIds: Array.isArray(artist?.memberDjIds)
+      ? artist.memberDjIds
+      : (String(artist?.djId || '').trim() ? [String(artist.djId).trim()] : []),
+    memberNames: Array.isArray(artist?.memberNames)
+      ? artist.memberNames
+      : [],
     _rid: ttModalState.draftRowSeed++,
   };
 }

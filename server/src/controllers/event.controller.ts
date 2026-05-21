@@ -38,7 +38,8 @@ class EventInputValidationError extends Error {}
 
 type RawLineupSlotInput = {
   djId?: string;
-  djIds?: string[];
+  memberDjIds?: Array<string | null>;
+  memberNames?: string[];
   festivalDayIndex?: number;
   djName?: string;
   stageName?: string;
@@ -49,7 +50,8 @@ type RawLineupSlotInput = {
 
 type LineupSlotInput = {
   djId?: string;
-  djIds?: string[];
+  memberDjIds?: Array<string | null>;
+  memberNames?: string[];
   festivalDayIndex?: number;
   djName?: string;
   stageName?: string;
@@ -67,7 +69,8 @@ type TicketTierInput = {
 
 type RawLineupArtistInput = {
   djId?: string;
-  djIds?: string[];
+  memberDjIds?: Array<string | null>;
+  memberNames?: string[];
   djName?: string;
   name?: string;
   musician?: string;
@@ -77,7 +80,8 @@ type RawLineupArtistInput = {
 
 type LineupArtistInput = {
   djId: string | null;
-  djIds: string[];
+  memberDjIds: Array<string | null>;
+  memberNames?: string[];
   djName: string;
   sortOrder: number;
 };
@@ -572,15 +576,19 @@ const normalizeLineupSlots = (
       }
 
       const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
-      const djIds = Array.isArray(slot.djIds)
-        ? slot.djIds
-            .map((id) => (typeof id === 'string' ? id.trim() : ''))
-            .filter((id) => !!id)
+      const memberDjIds = Array.isArray(slot.memberDjIds)
+        ? slot.memberDjIds.map((id) => {
+            const normalized = typeof id === 'string' ? id.trim() : '';
+            return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
+          })
+        : [];
+      const memberNames = Array.isArray(slot.memberNames)
+        ? slot.memberNames.map((name) => String(name || '').trim()).filter(Boolean)
         : [];
       const djId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : undefined;
-      const firstBoundDjId = djIds.find((id) => !isLineupDjIdPlaceholder(id)) || undefined;
-      const mergedDjIds = djIds.length
-        ? djIds
+      const firstBoundDjId = memberDjIds.find((id) => !!id) || undefined;
+      const mergedMemberDjIds = memberDjIds.length
+        ? memberDjIds
         : (djId ? [djId] : []);
       const effectiveDjId = djId || firstBoundDjId;
       const festivalDayIndex =
@@ -589,7 +597,8 @@ const normalizeLineupSlots = (
 
       return {
         djId: effectiveDjId,
-        djIds: mergedDjIds,
+        memberDjIds: mergedMemberDjIds,
+        memberNames,
         festivalDayIndex: festivalDayIndex ?? undefined,
         djName: slot.djName,
         stageName: slot.stageName,
@@ -598,7 +607,7 @@ const normalizeLineupSlots = (
         endTime: endTime.toISOString(),
       };
     })
-    .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim() || (Array.isArray(slot.djIds) && slot.djIds.length > 0));
+    .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim() || (Array.isArray(slot.memberDjIds) && slot.memberDjIds.length > 0));
 };
 
 const buildLineupArtistsFromSlots = (slots: LineupSlotInput[]): LineupArtistInput[] => {
@@ -606,19 +615,30 @@ const buildLineupArtistsFromSlots = (slots: LineupSlotInput[]): LineupArtistInpu
   for (const [index, slot] of slots.entries()) {
     const djName = String(slot.djName || '').trim();
     if (!djName) continue;
-    const djIds = Array.isArray(slot.djIds) ? slot.djIds.filter((id) => id && !isLineupDjIdPlaceholder(id)) : [];
-    const primaryDjId = slot.djId && !isLineupDjIdPlaceholder(slot.djId) ? slot.djId : (djIds[0] || null);
+    const memberDjIds = Array.isArray(slot.memberDjIds)
+      ? slot.memberDjIds.map((id) => {
+          const normalized = String(id || '').trim();
+          return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
+        })
+      : [];
+    const primaryDjId = slot.djId && !isLineupDjIdPlaceholder(slot.djId) ? slot.djId : (memberDjIds.find((id) => !!id) || null);
     const key = primaryDjId ? `id:${primaryDjId}` : `name:${djName.toLowerCase()}`;
     const existing = byKey.get(key);
     if (existing) {
-      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean);
+      if (!existing.memberDjIds.length) {
+        existing.memberDjIds = memberDjIds.length ? memberDjIds : (primaryDjId ? [primaryDjId] : []);
+      }
+      if ((!existing.memberNames || !existing.memberNames.length) && Array.isArray(slot.memberNames) && slot.memberNames.length) {
+        existing.memberNames = slot.memberNames;
+      }
       if (!existing.djId && primaryDjId) existing.djId = primaryDjId;
       existing.sortOrder = Math.min(existing.sortOrder, slot.sortOrder || index + 1);
       continue;
     }
     byKey.set(key, {
       djId: primaryDjId,
-      djIds: Array.from(new Set([...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean),
+      memberDjIds: memberDjIds.length ? memberDjIds : (primaryDjId ? [primaryDjId] : []),
+      memberNames: Array.isArray(slot.memberNames) ? slot.memberNames : undefined,
       djName,
       sortOrder: slot.sortOrder || index + 1,
     });
@@ -634,21 +654,25 @@ const normalizeLineupArtists = (artists: unknown, fallbackSlots: LineupSlotInput
       .filter((raw): raw is RawLineupArtistInput => !!raw && typeof raw === 'object')
       .map((row, index) => {
         const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
-        const djIds = (Array.isArray(row.djIds) ? row.djIds : [])
-          .map((id) => String(id || '').trim())
-          .filter((id) => id && !isLineupDjIdPlaceholder(id));
+        const memberDjIds = (Array.isArray(row.memberDjIds) ? row.memberDjIds : [])
+          .map((id) => {
+            const normalized = String(id || '').trim();
+            return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
+          });
         const primaryRaw = String(row.djId || '').trim();
-        const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (djIds[0] || null);
-        return {
+        const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (memberDjIds.find((id) => !!id) || null);
+      return {
           djId,
-          djIds,
+          memberDjIds: memberDjIds.length ? memberDjIds : (djId ? [djId] : []),
+          memberNames: Array.isArray(row.memberNames) ? row.memberNames.map((name) => String(name || '').trim()).filter(Boolean) : undefined,
           djName,
           sortOrder: typeof row.sortOrder === 'number' && Number.isFinite(row.sortOrder) ? row.sortOrder : index + 1,
         };
       }),
     fallbackSlots.map((slot) => ({
       djId: slot.djId ?? null,
-      djIds: slot.djIds ?? [],
+      memberDjIds: slot.memberDjIds ?? [],
+      memberNames: slot.memberNames ?? [],
       djName: slot.djName || 'Unknown DJ',
       stageName: slot.stageName ?? null,
       festivalDayIndex: slot.festivalDayIndex ?? null,
@@ -656,7 +680,13 @@ const normalizeLineupArtists = (artists: unknown, fallbackSlots: LineupSlotInput
       endTime: new Date(slot.endTime),
       sortOrder: slot.sortOrder || 0,
     }))
-  );
+  ).map((artist) => ({
+    djId: artist.djId,
+    memberDjIds: artist.memberDjIds ?? (artist.djId ? [artist.djId] : []),
+    memberNames: artist.memberNames,
+    djName: artist.djName,
+    sortOrder: artist.sortOrder,
+  }));
 };
 
 const normalizeTicketTiers = (tiers: unknown): TicketTierInput[] => {
@@ -680,7 +710,8 @@ const attachCanonicalLineupToEvent = async <
     id: string;
     eventId: string;
     djId: string | null;
-    djIds: string[];
+    memberDjIds: Array<string | null>;
+    memberNames?: string[];
     djName: string;
     sortOrder: number;
   }>;
@@ -689,7 +720,8 @@ const attachCanonicalLineupToEvent = async <
     eventId: string;
     lineupArtistId: string | null;
     djId: string | null;
-    djIds: string[];
+    memberDjIds: Array<string | null>;
+    memberNames?: string[];
     djName: string;
     festivalDayIndex: number | null;
     stageName: string | null;
@@ -702,7 +734,8 @@ const attachCanonicalLineupToEvent = async <
     eventId: string;
     lineupArtistId: string | null;
     djId: string | null;
-    djIds: string[];
+    memberDjIds: Array<string | null>;
+    memberNames?: string[];
     djName: string;
     festivalDayIndex: number | null;
     stageName: string | null;
@@ -716,7 +749,8 @@ const attachCanonicalLineupToEvent = async <
     id: artist.id || '',
     eventId: event.id,
     djId: artist.djId,
-    djIds: artist.djIds,
+    memberDjIds: artist.memberDjIds ?? [],
+    memberNames: artist.memberNames ?? [],
     djName: artist.djName,
     sortOrder: artist.sortOrder,
   }));
@@ -725,7 +759,8 @@ const attachCanonicalLineupToEvent = async <
     eventId: event.id,
     lineupArtistId: slot.lineupArtistId ?? null,
     djId: slot.djId,
-    djIds: slot.djIds,
+    memberDjIds: slot.memberDjIds ?? [],
+    memberNames: [],
     djName: slot.djName,
     festivalDayIndex: slot.festivalDayIndex,
     stageName: slot.stageName,
@@ -1109,7 +1144,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         normalizedSlots.map((slot) => ({
           ...slot,
           djId: slot.djId ?? null,
-          djIds: slot.djIds ?? [],
+          memberDjIds: slot.memberDjIds ?? [],
+          memberNames: slot.memberNames ?? [],
           djName: slot.djName || 'Unknown DJ',
           sortOrder: slot.sortOrder || 0,
           stageName: slot.stageName ?? null,
@@ -1322,7 +1358,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           normalizedSlots.map((slot) => ({
             ...slot,
             djId: slot.djId ?? null,
-            djIds: slot.djIds ?? [],
+            memberDjIds: slot.memberDjIds ?? [],
+            memberNames: slot.memberNames ?? [],
             djName: slot.djName || 'Unknown DJ',
             sortOrder: slot.sortOrder || 0,
             stageName: slot.stageName ?? null,

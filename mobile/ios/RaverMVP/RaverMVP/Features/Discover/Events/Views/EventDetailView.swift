@@ -139,7 +139,8 @@ private enum EventLiveSlotResolver {
             id: "guardrail-slot",
             eventId: nil,
             djId: nil,
-            djIds: nil,
+            memberDjIds: nil,
+            memberNames: nil,
             djs: nil,
             festivalDayIndex: 1,
             djName: "Guardrail DJ",
@@ -8794,8 +8795,8 @@ private struct EventRoutineView: View {
             appendOption(djID, performer.name, "unbound-\(slot.id)-\(index)")
         }
 
-        let fallbackIDs = (slot.djIds ?? [])
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let fallbackIDs = (slot.memberDjIds ?? [])
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         for (index, djID) in fallbackIDs.enumerated() {
             let fallbackName: String
@@ -8819,8 +8820,8 @@ private struct EventRoutineView: View {
         let primary = slot.djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !primary.isEmpty { return primary }
 
-        if let fallback = (slot.djIds ?? [])
-            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        if let fallback = (slot.memberDjIds ?? [])
+            .compactMap({ $0?.trimmingCharacters(in: .whitespacesAndNewlines) })
             .first(where: { !$0.isEmpty }) {
             return fallback
         }

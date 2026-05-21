@@ -330,17 +330,25 @@ function buildEventLineupArtistsFromArchive(lineupArtists, timetableRows = []) {
   const push = (row, index) => {
     const djName = extractLineupArtistNameForSync(row);
     if (!djName) return;
-    const rawDjIds = Array.isArray(row?.djIds) ? row.djIds : [];
-    const djIds = rawDjIds
-      .map((id) => String(id || '').trim())
-      .filter((id) => id && !isLineupDjIdPlaceholder(id));
+    const memberDjIds = Array.isArray(row?.memberDjIds)
+      ? row.memberDjIds.map((id) => {
+          const normalized = String(id || '').trim();
+          return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
+        })
+      : [];
+    const memberNames = Array.isArray(row?.memberNames)
+      ? row.memberNames.map((item) => String(item || '').trim()).filter(Boolean)
+      : splitCollaborativeLineupArtistName(djName);
     const rawDjId = String(row?.djId || '').trim();
-    const djId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : (djIds[0] || null);
+    const djId = rawDjId && !isLineupDjIdPlaceholder(rawDjId)
+      ? rawDjId
+      : (memberDjIds.find((id) => !!id) || null);
     const key = djId ? `id:${djId}` : `name:${djName.toLowerCase()}`;
     const sortOrder = Number.isFinite(Number(row?.sortOrder)) ? Number(row.sortOrder) : index + 1;
     const existing = byKey.get(key);
     if (existing) {
-      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...djIds, ...(djId ? [djId] : [])])).filter(Boolean);
+      if (!Array.isArray(existing.memberDjIds) || !existing.memberDjIds.length) existing.memberDjIds = memberDjIds.length ? memberDjIds : (djId ? [djId] : []);
+      if (!Array.isArray(existing.memberNames) || !existing.memberNames.length) existing.memberNames = memberNames;
       existing.sortOrder = Math.min(existing.sortOrder, sortOrder);
       const avatarUrl = String(row?.avatarUrl || row?.avatar_url || row?.dj?.avatarUrl || row?.dj?.avatar_url || '').trim();
       if (avatarUrl && !existing.avatarUrl) existing.avatarUrl = avatarUrl;
@@ -349,7 +357,8 @@ function buildEventLineupArtistsFromArchive(lineupArtists, timetableRows = []) {
     const avatarUrl = String(row?.avatarUrl || row?.avatar_url || row?.dj?.avatarUrl || row?.dj?.avatar_url || '').trim();
     byKey.set(key, {
       djId,
-      djIds: Array.from(new Set([...djIds, ...(djId ? [djId] : [])])).filter(Boolean),
+      memberDjIds: memberDjIds.length ? memberDjIds : (djId ? [djId] : []),
+      memberNames,
       djName,
       sortOrder,
       ...(avatarUrl ? { avatarUrl } : {}),
@@ -358,6 +367,18 @@ function buildEventLineupArtistsFromArchive(lineupArtists, timetableRows = []) {
   source.forEach(push);
   if (!source.length) fallback.forEach(push);
   return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function splitCollaborativeLineupArtistName(value) {
+  const name = String(value || '').trim();
+  if (!name) return [];
+  const parts = name
+    .replace(/\s+b3b\s+/ig, '[[B3B]]')
+    .replace(/\s+b2b\s+/ig, '[[B2B]]')
+    .split(/\[\[(?:B2B|B3B)\]\]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parts.length > 1 ? parts : [name];
 }
 
 function normalizeLineupRowsForEventWallClockSync(lineup, eventStartDateText, eventEndDateText, dayRolloverHourRaw = 6) {
@@ -439,15 +460,21 @@ function buildEventLineupSlotsFromArchive(lineup, eventStartDateText, eventEndDa
       endTime: endTime.toISOString(),
       festivalDayIndex: Math.max(1, festivalDayIndex),
     };
-    const rawDjIds = Array.isArray(normalized.djIds) ? normalized.djIds : [];
-    const djIds = rawDjIds
-      .map((id) => String(id || '').trim())
-      .filter(Boolean);
-    const firstBoundId = djIds.find((id) => !isLineupDjIdPlaceholder(id)) || '';
+    const rawMemberDjIds = Array.isArray(normalized.memberDjIds) ? normalized.memberDjIds : [];
+    const memberDjIds = rawMemberDjIds
+      .map((id) => {
+        const value = String(id || '').trim();
+        return value && !isLineupDjIdPlaceholder(value) ? value : null;
+      });
+    const firstBoundId = memberDjIds.find((id) => !!id) || '';
     const normalizedPrimary = String(normalized.djId || '').trim();
     const djId = (!isLineupDjIdPlaceholder(normalizedPrimary) ? normalizedPrimary : '') || firstBoundId;
     if (djId) row.djId = djId;
-    if (djIds.length) row.djIds = djIds;
+    if (memberDjIds.length) row.memberDjIds = memberDjIds;
+    const memberNames = Array.isArray(normalized.memberNames)
+      ? normalized.memberNames.map((item) => String(item || '').trim()).filter(Boolean)
+      : splitCollaborativeLineupArtistName(djName);
+    if (memberNames.length) row.memberNames = memberNames;
     slots.push(row);
   }
   return slots;

@@ -963,7 +963,7 @@ const hasRequiredEventPosterAsset = (assets: EventImageAssetPayload[]): boolean 
 
 type NormalizedLineupSlot = {
   djId: string | null;
-  djIds: string[];
+  memberDjIds: Array<string | null>;
   festivalDayIndex: number | null;
   djName: string;
   stageName: string | null;
@@ -974,7 +974,8 @@ type NormalizedLineupSlot = {
 
 type NormalizedLineupArtistInput = {
   djId: string | null;
-  djIds: string[];
+  memberDjIds: Array<string | null>;
+  memberNames: string[];
   djName: string;
   sortOrder: number;
 };
@@ -1189,28 +1190,29 @@ const normalizeLineupSlots = (
 
       const djName = typeof slot.djName === 'string' ? slot.djName.trim() : '';
       const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
-      const rawDjIds = Array.isArray(slot.djIds) ? slot.djIds : [];
-      const cleanedDjIds = rawDjIds
-        .map((id) => (typeof id === 'string' ? id.trim() : ''))
-        .filter((id) => !!id);
+      const rawMemberDjIds = Array.isArray(slot.memberDjIds) ? slot.memberDjIds : [];
+      const cleanedMemberDjIds = rawMemberDjIds.map((id) => {
+        const normalized = typeof id === 'string' ? id.trim() : '';
+        return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
+      });
       const normalizedRawDjId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : '';
-      const firstBoundDjId = cleanedDjIds.find((id) => !isLineupDjIdPlaceholder(id)) || '';
+      const firstBoundDjId = cleanedMemberDjIds.find((id) => !!id) || '';
       const effectiveDjId = normalizedRawDjId || firstBoundDjId || null;
       const festivalDayIndex =
         explicitFestivalDayIndex
         // When the editor submits Day1/Day2 explicitly, that becomes the source of truth.
         ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour, timeZone);
-      const djIds = cleanedDjIds.length
-        ? cleanedDjIds
+      const memberDjIds = cleanedMemberDjIds.length
+        ? cleanedMemberDjIds
         : (effectiveDjId ? [effectiveDjId] : []);
-      const hasIdentity = djName.length > 0 || !!effectiveDjId || djIds.length > 0;
+      const hasIdentity = djName.length > 0 || !!effectiveDjId || memberDjIds.some(Boolean);
       if (!hasIdentity) {
         return null;
       }
 
       return {
         djId: effectiveDjId,
-        djIds,
+        memberDjIds,
         festivalDayIndex,
         djName: djName || 'Unknown DJ',
         stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
@@ -1227,24 +1229,56 @@ const buildLineupArtistsFromSlots = (slots: NormalizedLineupSlot[]): NormalizedL
   for (const [index, slot] of slots.entries()) {
     const djName = String(slot.djName || '').trim();
     if (!djName) continue;
-    const djIds = Array.isArray(slot.djIds) ? slot.djIds.filter((id) => !isLineupDjIdPlaceholder(id)) : [];
-    const primaryDjId = slot.djId && !isLineupDjIdPlaceholder(slot.djId) ? slot.djId : (djIds[0] || null);
+    const memberDjIds = Array.isArray(slot.memberDjIds) ? slot.memberDjIds : [];
+    const primaryDjId = slot.djId && !isLineupDjIdPlaceholder(slot.djId)
+      ? slot.djId
+      : (memberDjIds.find((id) => typeof id === 'string' && id.trim() && !isLineupDjIdPlaceholder(id.trim())) || null);
     const key = primaryDjId ? `id:${primaryDjId}` : `name:${djName.toLowerCase()}`;
     const existing = byKey.get(key);
     if (existing) {
-      existing.djIds = Array.from(new Set([...(existing.djIds || []), ...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean);
       if (!existing.djId && primaryDjId) existing.djId = primaryDjId;
+      if (!Array.isArray(existing.memberDjIds) || !existing.memberDjIds.length) existing.memberDjIds = memberDjIds.length ? memberDjIds : (primaryDjId ? [primaryDjId] : []);
       existing.sortOrder = Math.min(existing.sortOrder, slot.sortOrder || index + 1);
       continue;
     }
     byKey.set(key, {
       djId: primaryDjId,
-      djIds: Array.from(new Set([...djIds, ...(primaryDjId ? [primaryDjId] : [])])).filter(Boolean),
+      memberDjIds: memberDjIds.length ? memberDjIds : (primaryDjId ? [primaryDjId] : []),
+      memberNames: splitCollaborativeLineupName(djName),
       djName,
       sortOrder: slot.sortOrder || index + 1,
     });
   }
   return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const splitCollaborativeLineupName = (value: string): string[] => {
+  const name = String(value || '').trim();
+  if (!name) return [];
+  const parts = name
+    .replace(/\s+b3b\s+/ig, '[[B3B]]')
+    .replace(/\s+b2b\s+/ig, '[[B2B]]')
+    .split(/\[\[(?:B2B|B3B)\]\]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parts.length > 1 ? parts : [name];
+};
+
+const normalizeLineupMemberNamesInput = (row: Record<string, unknown>, djName: string): string[] => {
+  const explicit = Array.isArray(row.memberNames)
+    ? row.memberNames.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  return explicit.length ? explicit : splitCollaborativeLineupName(djName);
+};
+
+const normalizeLineupMemberDjIdsInput = (row: Record<string, unknown>, djId: string | null): Array<string | null> => {
+  if (Array.isArray(row.memberDjIds)) {
+    return row.memberDjIds.map((item) => {
+      const id = String(item || '').trim();
+      return id && !isLineupDjIdPlaceholder(id) ? id : null;
+    });
+  }
+  return djId ? [djId] : [];
 };
 
 const normalizeLineupArtistsInput = (
@@ -1258,21 +1292,26 @@ const normalizeLineupArtistsInput = (
       .filter((raw): raw is Record<string, unknown> => !!raw && typeof raw === 'object')
       .map((row, index) => {
         const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
-        const rawDjIds = Array.isArray(row.djIds) ? row.djIds : [];
-        const djIds = rawDjIds
-          .map((id) => String(id || '').trim())
-          .filter((id) => id && !isLineupDjIdPlaceholder(id));
         const primaryRaw = String(row.djId || '').trim();
-        const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : (djIds[0] || null);
+        const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : null;
         return {
           djId,
-          djIds,
+          memberDjIds: normalizeLineupMemberDjIdsInput(row, djId),
+          memberNames: normalizeLineupMemberNamesInput(row, djName),
           djName,
           sortOrder: typeof row.sortOrder === 'number' && Number.isFinite(row.sortOrder) ? row.sortOrder : index + 1,
         };
       }),
     fallbackSlots
-  );
+  ).map((artist) => ({
+    ...artist,
+    memberDjIds: Array.isArray(artist.memberDjIds)
+      ? artist.memberDjIds
+      : (artist.djId ? [artist.djId] : []),
+    memberNames: Array.isArray(artist.memberNames) && artist.memberNames.length
+      ? artist.memberNames
+      : splitCollaborativeLineupName(artist.djName),
+  }));
 };
 
 const syncEventLineupAndTimetable = async (
@@ -4082,9 +4121,8 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       id: artist.id,
       eventId: artist.eventId,
       djId: artist.primaryDjId ?? primaryDj?.id ?? null,
-      djIds: uniqueMembers.length > 0
-        ? uniqueMembers.map((member: any) => member.djId).filter(Boolean)
-        : (artist.primaryDjId ? [artist.primaryDjId] : []),
+      memberNames: uniqueMembers.map((member: any) => member.memberNameSnapshot).filter(Boolean),
+      memberDjIds: uniqueMembers.map((member: any) => member.djId || null),
       djName: artist.displayName,
       displayName: artist.displayName,
       normalizedName: artist.normalizedName ?? null,
@@ -4115,16 +4153,13 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     const uniqueMembers = Array.isArray(artist.members) ? dedupeCanonicalMembers(artist.members) : [];
     const memberDjs = uniqueMembers.map((member: any) => member.dj).filter(Boolean);
     const primaryDj = artist.primaryDj || memberDjs[0] || null;
-    const djIds = uniqueMembers.length > 0
-      ? uniqueMembers.map((member: any) => member.djId).filter(Boolean)
-      : (artist.primaryDjId ? [artist.primaryDjId] : []);
     return {
       id: performance.id,
       eventId: performance.eventId,
       lineupArtistId: performance.eventArtistId,
       eventArtistId: performance.eventArtistId,
       djId: artist.primaryDjId ?? primaryDj?.id ?? null,
-      djIds,
+      memberDjIds: uniqueMembers.map((member: any) => member.djId || null),
       djName: performance.displayNameSnapshot,
       djNameSnapshot: performance.displayNameSnapshot,
       festivalDayIndex: typeof performance.festivalDayIndex === 'number' ? performance.festivalDayIndex : null,
@@ -4220,7 +4255,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       eventId: slot.eventId,
       lineupArtistId: slot.lineupArtistId ?? null,
       djId: slot.djId,
-      djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
+      memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
       djName: slot.djName,
       djNameSnapshot: slot.djNameSnapshot ?? slot.djName,
       festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
@@ -4229,6 +4264,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       startTime: slot.startTime,
       endTime: slot.endTime,
       dj: mapDJLiteForEvent(slot.dj),
+      djs: Array.isArray(slot.djs) ? slot.djs.map(mapDJLiteForEvent).filter(Boolean) : [],
     })),
     lineupSlots: mappedCanonicalSlots
       .map((slot: any) => ({
@@ -4236,7 +4272,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
           eventId: slot.eventId,
           lineupArtistId: slot.lineupArtistId ?? null,
           djId: slot.djId,
-          djIds: Array.isArray(slot.djIds) ? slot.djIds : (slot.djId ? [slot.djId] : []),
+          memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
           djs: Array.isArray(slot.djs)
             ? slot.djs.map((dj: any) => ({
                 id: dj.id,
@@ -6117,7 +6153,8 @@ router.post('/events/:id/lineup', optionalAuth, async (req: Request, res: Respon
         {
           id: createdArtistId,
           djId: artist.djId,
-          djIds: artist.djIds,
+          memberDjIds: artist.memberDjIds,
+          memberNames: artist.memberNames,
           djName: artist.djName,
           sortOrder: artist.sortOrder,
         },
@@ -6172,11 +6209,12 @@ router.patch('/events/:id/lineup/:artistId', optionalAuth, async (req: Request, 
     const updated = await prisma.$transaction(async (tx) => {
       const snapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
       const nextArtists = snapshot.artists.map((item) => (
-        item.id === artistId
+            item.id === artistId
           ? {
               ...item,
-              djId: Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'djIds') ? artist.djId : item.djId,
-              djIds: Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'djIds') ? artist.djIds : item.djIds,
+              djId: Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'memberDjIds') ? artist.djId : item.djId,
+              memberDjIds: Object.prototype.hasOwnProperty.call(body, 'djId') || Object.prototype.hasOwnProperty.call(body, 'memberDjIds') ? artist.memberDjIds : item.memberDjIds,
+              memberNames: Object.prototype.hasOwnProperty.call(body, 'memberNames') ? artist.memberNames : item.memberNames,
               djName: Object.prototype.hasOwnProperty.call(body, 'djName') || Object.prototype.hasOwnProperty.call(body, 'name') || Object.prototype.hasOwnProperty.call(body, 'musician') ? artist.djName : item.djName,
               sortOrder: Object.prototype.hasOwnProperty.call(body, 'sortOrder') ? artist.sortOrder : item.sortOrder,
             }
@@ -6295,7 +6333,8 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
         nextArtists.push({
           id: lineupArtistId,
           djId: slot.djId,
-          djIds: slot.djIds,
+          memberDjIds: slot.memberDjIds,
+          memberNames: splitCollaborativeLineupName(slot.djName),
           djName: slot.djName,
           sortOrder: nextArtists.length + 1,
         });
@@ -6306,7 +6345,7 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
           id: createdSlotId,
           lineupArtistId,
           djId: slot.djId,
-          djIds: slot.djIds,
+          memberDjIds: slot.memberDjIds,
           djName: slot.djName,
           stageName: slot.stageName,
           festivalDayIndex: slot.festivalDayIndex,
@@ -6355,7 +6394,7 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
     }
     const merged = {
       djId: existing.djId,
-      djIds: existing.djIds,
+      memberDjIds: existing.memberDjIds,
       djName: existing.djName,
       stageName: existing.stageName,
       festivalDayIndex: existing.festivalDayIndex,
@@ -6380,7 +6419,8 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
         nextArtists.push({
           id: lineupArtistId,
           djId: slot.djId,
-          djIds: slot.djIds,
+          memberDjIds: slot.memberDjIds,
+          memberNames: splitCollaborativeLineupName(slot.djName),
           djName: slot.djName,
           sortOrder: nextArtists.length + 1,
         });
@@ -6394,7 +6434,7 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
                 ...item,
                 lineupArtistId,
                 djId: slot.djId,
-                djIds: slot.djIds,
+                memberDjIds: slot.memberDjIds,
                 djName: slot.djName,
                 stageName: slot.stageName,
                 festivalDayIndex: slot.festivalDayIndex,
@@ -11175,11 +11215,11 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
     const snapshotDjIds = Array.from(
       new Set(
         sourceSnapshot.slots.flatMap((slot) => [
-          ...(Array.isArray(slot.djIds) ? slot.djIds : []),
+          ...(Array.isArray(slot.memberDjIds) ? slot.memberDjIds : []),
           ...(slot.djId ? [slot.djId] : []),
         ])
       )
-    );
+    ).filter((id): id is string => typeof id === 'string' && !!id.trim());
     const snapshotDjs = snapshotDjIds.length
       ? await prisma.dJ.findMany({
           where: { id: { in: snapshotDjIds } },
@@ -11254,7 +11294,7 @@ router.post('/rating-events/from-event', optionalAuth, async (req: Request, res:
           ? djByNormalizedName.get(firstPerformerName.toLowerCase()) || null
           : null) || fallbackLineupDJ;
       const boundDjIds = Array.from(new Set([
-        ...(Array.isArray(slot.djIds) ? slot.djIds : []),
+        ...(Array.isArray(slot.memberDjIds) ? slot.memberDjIds : []),
         ...(slot.djId ? [slot.djId] : []),
         ...(matchedFirstDJ?.id ? [matchedFirstDJ.id] : []),
       ]

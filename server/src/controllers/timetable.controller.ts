@@ -11,11 +11,27 @@ import {
 const prisma = new PrismaClient();
 
 const paramString = (value: string | string[] | undefined): string => Array.isArray(value) ? String(value[0] || '') : String(value || '');
-const normalizeDjIds = (value: unknown, fallback: string | null = null): string[] => {
+const normalizeMemberDjIds = (value: unknown, fallback: string | null = null): Array<string | null> => {
   const ids = Array.isArray(value) ? value : [];
-  const out = ids.map((id) => String(id || '').trim()).filter(Boolean);
+  const out = ids.map((id) => {
+    const normalized = String(id || '').trim();
+    return normalized || null;
+  });
   if (fallback && !out.includes(fallback)) out.unshift(fallback);
   return out;
+};
+const normalizeMemberNames = (value: unknown, fallbackName: string): string[] => {
+  if (Array.isArray(value)) {
+    const explicit = value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (explicit.length) return explicit;
+  }
+  const parts = fallbackName
+    .replace(/\s+b3b\s+/ig, '[[B3B]]')
+    .replace(/\s+b2b\s+/ig, '[[B2B]]')
+    .split(/\[\[(?:B2B|B3B)\]\]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [fallbackName];
 };
 
 async function assertEventAccess(eventId: string, userId: string, role: string | undefined): Promise<{ id: string; organizerId: string | null; timeZone: string } | null> {
@@ -49,7 +65,8 @@ export const getTimetable = async (req: AuthRequest, res: Response): Promise<voi
         eventId,
         lineupArtistId: slot.lineupArtistId ?? null,
         djId: slot.djId,
-        djIds: slot.djIds,
+        memberDjIds: slot.memberDjIds ?? [],
+        memberNames: [],
         djNameSnapshot: slot.djName,
         stageName: slot.stageName,
         festivalDayIndex: slot.festivalDayIndex,
@@ -81,7 +98,7 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
     const event = await assertEventAccess(eventId, userId, role);
     if (!event) { res.status(404).json({ error: 'Event not found or access denied' }); return; }
 
-    const { djId, djIds, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
+    const { djId, memberDjIds, memberNames, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
     const parsedStart = parseOptionalDate(startTime, event.timeZone);
     const parsedEnd = parseOptionalDate(endTime, event.timeZone);
     if (!parsedStart || !parsedEnd) {
@@ -102,7 +119,8 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
       const snapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
       let resolvedLineupArtistId = String(lineupArtistId || '').trim() || null;
       let resolvedDjId = String(djId || '').trim() || null;
-      let resolvedDjIds = normalizeDjIds(djIds, resolvedDjId);
+      let resolvedMemberDjIds = normalizeMemberDjIds(memberDjIds, resolvedDjId);
+      const resolvedMemberNames = normalizeMemberNames(memberNames, nameStr);
       const nextArtists = [...snapshot.artists];
 
       if (resolvedLineupArtistId) {
@@ -116,13 +134,14 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
         if (matched) {
           resolvedLineupArtistId = matched.id || null;
           if (!resolvedDjId && matched.djId) resolvedDjId = matched.djId;
-          resolvedDjIds = normalizeDjIds(djIds, resolvedDjId);
+          resolvedMemberDjIds = normalizeMemberDjIds(memberDjIds, resolvedDjId);
         } else {
           resolvedLineupArtistId = randomUUID();
           nextArtists.push({
             id: resolvedLineupArtistId,
             djId: resolvedDjId,
-            djIds: resolvedDjIds,
+            memberDjIds: resolvedMemberDjIds,
+            memberNames: resolvedMemberNames,
             djName: nameStr,
             sortOrder: nextArtists.length + 1,
           });
@@ -135,7 +154,7 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
           id: createdSlotId,
           lineupArtistId: resolvedLineupArtistId,
           djId: resolvedDjId,
-          djIds: resolvedDjIds,
+          memberDjIds: resolvedMemberDjIds,
           djName: nameStr,
           stageName: typeof stageName === 'string' && stageName.trim() ? stageName.trim() : null,
           festivalDayIndex: typeof festivalDayIndex === 'number' ? festivalDayIndex : null,
@@ -165,7 +184,8 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
       eventId,
       lineupArtistId: createdSlot.lineupArtistId ?? null,
       djId: createdSlot.djId,
-      djIds: createdSlot.djIds,
+      memberDjIds: createdSlot.memberDjIds ?? [],
+      memberNames: [],
       djNameSnapshot: createdSlot.djName,
       stageName: createdSlot.stageName,
       festivalDayIndex: createdSlot.festivalDayIndex,
@@ -201,7 +221,7 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
     const event = await assertEventAccess(eventId, userId, role);
     if (!event) { res.status(404).json({ error: 'Event not found or access denied' }); return; }
 
-    const { djId, djIds, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
+    const { djId, memberDjIds, memberNames, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
     const normalizedDjId = String(djId || '').trim() || null;
     const parsedStart = startTime ? parseOptionalDate(startTime, event.timeZone) : null;
     const parsedEnd = endTime ? parseOptionalDate(endTime, event.timeZone) : null;
@@ -228,8 +248,11 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
           ? {
               ...slot,
               djId: djId !== undefined ? normalizedDjId : slot.djId,
-              djIds: djIds !== undefined || djId !== undefined ? normalizeDjIds(djIds, normalizedDjId) : slot.djIds,
+              memberDjIds: memberDjIds !== undefined || djId !== undefined
+                ? normalizeMemberDjIds(memberDjIds, normalizedDjId)
+                : slot.memberDjIds,
               djName: djName ? String(djName).trim() : slot.djName,
+              memberNames: memberNames !== undefined ? normalizeMemberNames(memberNames, djName ? String(djName).trim() : slot.djName) : [],
               lineupArtistId: lineupArtistId !== undefined ? (String(lineupArtistId || '').trim() || null) : slot.lineupArtistId,
               stageName: stageName !== undefined ? (typeof stageName === 'string' && stageName.trim() ? stageName.trim() : null) : slot.stageName,
               festivalDayIndex: festivalDayIndex !== undefined ? (typeof festivalDayIndex === 'number' ? festivalDayIndex : null) : slot.festivalDayIndex,
@@ -256,7 +279,8 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
       eventId,
       lineupArtistId: updatedSlot.lineupArtistId ?? null,
       djId: updatedSlot.djId,
-      djIds: updatedSlot.djIds,
+      memberDjIds: updatedSlot.memberDjIds ?? [],
+      memberNames: [],
       djNameSnapshot: updatedSlot.djName,
       stageName: updatedSlot.stageName,
       festivalDayIndex: updatedSlot.festivalDayIndex,

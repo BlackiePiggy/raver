@@ -32,11 +32,13 @@ enum EventUploadValidation {
         if case .create = draft.mode, draft.selectedTimeZoneLookup == nil {
             issues.append(.init(step: .basic, message: LT("请搜索城市并确认活动时区。", "Search a city and confirm the event timezone.", "都市を検索してイベントのタイムゾーンを確認してください。")))
         }
-        let normalizedStages = draft.stageEntries
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        if normalizedStages.isEmpty {
-            issues.append(.init(step: .timetable, message: LT("请至少添加 1 个舞台；如果名称留空会默认展示为主舞台。", "Add at least one stage. Empty names will default to Main Stage.", "少なくとも1つのステージを追加してください。空欄名はメインステージとして扱われます。")))
+        if !draft.timetableSlots.isEmpty {
+            let normalizedStages = draft.stageEntries
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if normalizedStages.isEmpty {
+                issues.append(.init(step: .timetable, message: LT("如果要填写时间表，请至少添加 1 个舞台；名称留空会默认展示为主舞台。", "Add at least one stage before filling a timetable. Empty names will default to Main Stage.", "タイムテーブルを入力する場合は、少なくとも1つのステージを追加してください。空欄名はメインステージとして扱われます。")))
+            }
         }
         for (index, slot) in draft.timetableSlots.enumerated() {
             let names = slot.performerNames

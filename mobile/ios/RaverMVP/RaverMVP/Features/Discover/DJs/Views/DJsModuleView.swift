@@ -4069,10 +4069,10 @@ struct DJDetailView: View {
         let normalizedDJID = dj.id.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedDJID.isEmpty {
             let candidateIDs = ([slot.djId, slot.dj?.id].compactMap { $0 })
-                + (slot.djIds ?? [])
+                + (slot.memberDjIds ?? []).compactMap { $0 }
                 + (slot.djs ?? []).map(\.id)
             if candidateIDs.contains(where: {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedDJID
+                $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) == normalizedDJID
             }) {
                 return true
             }

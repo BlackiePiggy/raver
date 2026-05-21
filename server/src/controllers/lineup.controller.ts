@@ -11,12 +11,17 @@ import {
 const prisma = new PrismaClient();
 
 const paramString = (value: string | string[] | undefined): string => Array.isArray(value) ? String(value[0] || '') : String(value || '');
-const normalizeDjIds = (value: unknown, fallback: string | null = null): string[] => {
+const normalizeMemberDjIds = (value: unknown, fallback: string | null = null): Array<string | null> => {
   const ids = Array.isArray(value) ? value : [];
-  const out = ids.map((id) => String(id || '').trim()).filter(Boolean);
+  const out = ids.map((id) => {
+    const normalized = String(id || '').trim();
+    return normalized || null;
+  });
   if (fallback && !out.includes(fallback)) out.unshift(fallback);
   return out;
 };
+const normalizeMemberNames = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
 
 async function assertEventAccess(eventId: string, userId: string, role: string | undefined): Promise<{ id: string; organizerId: string | null } | null> {
   const event = await prisma.event.findUnique({
@@ -35,7 +40,8 @@ const toArtistResponse = (
   id: artist.id || '',
   eventId: '',
   djId: artist.djId,
-  djIds: artist.djIds,
+  memberDjIds: artist.memberDjIds ?? [],
+  memberNames: artist.memberNames ?? [],
   djName: artist.djName,
   sortOrder: artist.sortOrder,
   dj: artist.djId ? (djMap.get(artist.djId) ?? null) : null,
@@ -72,7 +78,7 @@ export const addLineupArtist = async (req: AuthRequest, res: Response): Promise<
     const event = await assertEventAccess(eventId, userId, role);
     if (!event) { res.status(404).json({ error: 'Event not found or access denied' }); return; }
 
-    const { djId, djIds, djName, sortOrder } = req.body;
+    const { djId, memberDjIds, memberNames, djName, sortOrder } = req.body;
     const name = String(djName || '').trim();
     const normalizedDjId = String(djId || '').trim() || null;
     if (!name) { res.status(400).json({ error: 'djName is required' }); return; }
@@ -85,7 +91,8 @@ export const addLineupArtist = async (req: AuthRequest, res: Response): Promise<
         {
           id: createdArtistId,
           djId: normalizedDjId,
-          djIds: normalizeDjIds(djIds, normalizedDjId),
+          memberDjIds: normalizeMemberDjIds(memberDjIds, normalizedDjId),
+          memberNames: normalizeMemberNames(memberNames),
           djName: name,
           sortOrder: typeof sortOrder === 'number' ? sortOrder : snapshot.artists.length + 1,
         },
@@ -123,7 +130,7 @@ export const updateLineupArtist = async (req: AuthRequest, res: Response): Promi
     const event = await assertEventAccess(eventId, userId, role);
     if (!event) { res.status(404).json({ error: 'Event not found or access denied' }); return; }
 
-    const { djId, djIds, djName, sortOrder } = req.body;
+    const { djId, memberDjIds, memberNames, djName, sortOrder } = req.body;
     const normalizedDjId = String(djId || '').trim() || null;
     const updatedArtist = await prisma.$transaction(async (tx) => {
       const snapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
@@ -135,7 +142,10 @@ export const updateLineupArtist = async (req: AuthRequest, res: Response): Promi
           ? {
               ...artist,
               djId: djId !== undefined ? normalizedDjId : artist.djId,
-              djIds: djIds !== undefined || djId !== undefined ? normalizeDjIds(djIds, normalizedDjId) : artist.djIds,
+              memberDjIds: memberDjIds !== undefined || djId !== undefined
+                ? normalizeMemberDjIds(memberDjIds, normalizedDjId)
+                : (artist.memberDjIds ?? []),
+              memberNames: memberNames !== undefined ? normalizeMemberNames(memberNames) : artist.memberNames,
               djName: djName ? String(djName).trim() : artist.djName,
               sortOrder: typeof sortOrder === 'number' ? sortOrder : artist.sortOrder,
             }
