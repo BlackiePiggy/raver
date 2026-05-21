@@ -3144,6 +3144,23 @@ struct DJDetailView: View {
 
     @MainActor
     private func loadMoreDJEvents(section: DJEventSection) async {
+        switch section {
+        case .upcoming:
+            guard !isLoadingMoreUpcomingEvents else { return }
+            isLoadingMoreUpcomingEvents = true
+        case .ended:
+            guard !isLoadingMoreEndedEvents else { return }
+            isLoadingMoreEndedEvents = true
+        }
+        defer {
+            switch section {
+            case .upcoming:
+                isLoadingMoreUpcomingEvents = false
+            case .ended:
+                isLoadingMoreEndedEvents = false
+            }
+        }
+
         let statuses: [String]
         let nextPage: Int
 
@@ -3196,6 +3213,12 @@ struct DJDetailView: View {
             eventsLoadFailed = true
             debugDJEventPagination("request failed section=\(section.debugName) page=\(nextPage) error=\(error.localizedDescription)")
         }
+    }
+
+    private func debugDJEventPagination(_ message: String) {
+        #if DEBUG
+        print("[DJDetailEventsPagination] \(message)")
+        #endif
     }
 
     @MainActor
@@ -4875,7 +4898,10 @@ struct DJDetailView: View {
                     .frame(height: chrome.detailTopInset)
 
                 VStack(alignment: .leading, spacing: 14) {
-                    tabContent(dj, tab: tab)
+                    tabContent(
+                        dj,
+                        tab: tab
+                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -4900,7 +4926,10 @@ struct DJDetailView: View {
     }
 
     @ViewBuilder
-    private func tabContent(_ dj: WebDJ, tab: DJDetailTab) -> some View {
+    private func tabContent(
+        _ dj: WebDJ,
+        tab: DJDetailTab
+    ) -> some View {
         switch tab {
         case .intro:
             introTabContent(dj)
@@ -5240,404 +5269,35 @@ struct DJDetailView: View {
 
     @ViewBuilder
     private var eventsTabContent: some View {
-        if isLoadingEvents && combinedDJEvents.isEmpty {
-            ProgressView(LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."))
-                .padding(.vertical, 8)
-        } else if combinedDJEvents.isEmpty && !didLoadEvents {
-            tabLoadPlaceholder(
-                title: LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."),
-                didFail: eventsLoadFailed,
-                retry: { await loadEventsIfNeeded(force: true) }
-            )
-        } else if combinedDJEvents.isEmpty {
-            Text(LT("暂无历史活动", "暂无历史活动", "過去イベントはまだありません"))
-                .foregroundStyle(RaverTheme.secondaryText)
-                .padding(.vertical, 6)
-        } else {
-            historyEventsFilterButton
-
-            if isHistoryEventFilterPanelVisible {
-                historyEventsFilterPanel
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            let filteredEvents = filteredDJEvents
-            if filteredEvents.isEmpty {
-                Text(LT("没有匹配的活动", "No matching events", "一致するイベントがありません"))
-                    .font(.subheadline)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .padding(.top, 8)
-                    .padding(.bottom, 6)
-            } else {
-                let upcomingEvents = filteredUpcomingDJEvents
-                let endedEvents = filteredEndedDJEvents
-
-                if !upcomingEvents.isEmpty {
-                    djEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
-                    pagedDJEventSection(
-                        section: .upcoming,
-                        events: upcomingEvents,
-                        hasMore: upcomingEventsPage < upcomingEventsTotalPages
-                    )
-                }
-
-                if !endedEvents.isEmpty {
-                    djEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
-                    pagedDJEventSection(
-                        section: .ended,
-                        events: endedEvents,
-                        hasMore: endedEventsPage < endedEventsTotalPages
-                    )
-                }
-            }
-        }
-    }
-
-    private var historyEventsFilterButton: some View {
-        HStack(spacing: 8) {
-            Button {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                    isHistoryEventFilterPanelVisible.toggle()
-                }
-            } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: hasActiveHistoryEventFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                        .font(.subheadline.weight(.semibold))
-                    Text(historyEventFilterButtonTitle)
-                        .font(.subheadline.weight(.semibold))
-                    Image(systemName: isHistoryEventFilterPanelVisible ? "chevron.up" : "chevron.down")
-                        .font(.caption2.weight(.bold))
-                }
-                .foregroundStyle(hasActiveHistoryEventFilters ? DJDetailTab.events.themeColor : RaverTheme.primaryText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(
-                    Capsule()
-                        .fill(hasActiveHistoryEventFilters ? DJDetailTab.events.themeColor.opacity(0.15) : RaverTheme.card)
+        DiscoverStandardEventFeedTab(
+            primaryActionTitle: nil,
+            primaryActionAction: nil,
+            isLoading: isLoadingEvents && combinedDJEvents.isEmpty,
+            didLoad: didLoadEvents,
+            didFail: eventsLoadFailed,
+            loadingTitle: LT("正在加载活动...", "Loading events...", "イベントを読み込み中..."),
+            emptyTitle: LT("暂无历史活动", "暂无历史活动", "過去イベントはまだありません"),
+            retry: { await loadEventsIfNeeded(force: true) },
+            sections: [
+                DiscoverEventFeedSectionConfig(
+                    title: LT("即将开始", "Upcoming", "近日開催"),
+                    events: upcomingDJEvents,
+                    hasMore: upcomingEventsPage < upcomingEventsTotalPages,
+                    isLoadingMore: isLoadingMoreUpcomingEvents,
+                    onLoadMore: { await loadMoreDJEvents(section: .upcoming) }
+                ),
+                DiscoverEventFeedSectionConfig(
+                    title: LT("已结束活动", "Ended", "終了済み"),
+                    events: endedDJEvents,
+                    hasMore: endedEventsPage < endedEventsTotalPages,
+                    isLoadingMore: isLoadingMoreEndedEvents,
+                    onLoadMore: { await loadMoreDJEvents(section: .ended) }
                 )
-                .overlay(
-                    Capsule()
-                        .stroke(hasActiveHistoryEventFilters ? DJDetailTab.events.themeColor.opacity(0.38) : RaverTheme.secondaryText.opacity(0.12), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 0)
-
-            Text(historyEventFilterResultText)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(RaverTheme.secondaryText)
-        }
-        .padding(.bottom, isHistoryEventFilterPanelVisible ? 4 : 8)
-    }
-
-    private var historyEventsFilterPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-
-                TextField(LT("搜索活动名/地点/年份", "Search event/location/year", "イベント名/場所/年を検索"), text: $historyEventSearchText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-
-                if !historyEventSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button {
-                        historyEventSearchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText.opacity(0.75))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.black.opacity(0.04))
-            )
-
-            Picker(LT("地区筛选", "Region", "地域"), selection: $historyEventRegionFilter) {
-                ForEach(DJEventRegionFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle(LT("按开始时间筛选", "Filter by start date", "開始日で絞り込み"), isOn: historyEventStartDateToggleBinding)
-                    .font(.subheadline)
-                if historyEventStartDate != nil {
-                    HStack(spacing: 8) {
-                        Text(LT("开始于", "From", "開始"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Spacer(minLength: 0)
-                        DatePicker("", selection: historyEventStartDateBinding, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                            .labelsHidden()
-                    }
-                }
-
-                Toggle(LT("按结束时间筛选", "Filter by end date", "終了日で絞り込み"), isOn: historyEventEndDateToggleBinding)
-                    .font(.subheadline)
-                if historyEventEndDate != nil {
-                    HStack(spacing: 8) {
-                        Text(LT("结束于", "To", "終了"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Spacer(minLength: 0)
-                        DatePicker("", selection: historyEventEndDateBinding, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                            .labelsHidden()
-                    }
-                }
-            }
-
-            HStack(spacing: 8) {
-                Text(historyEventFilterResultText)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-                Spacer(minLength: 0)
-                if hasActiveHistoryEventFilters {
-                    Button(LT("清空筛选", "Clear", "絞り込みをクリア")) {
-                        clearHistoryEventFilters()
-                    }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(RaverTheme.card)
-        )
-        .padding(.bottom, 6)
-    }
-
-    private var historyEventFilterButtonTitle: String {
-        guard activeHistoryEventFilterCount > 0 else {
-            return LT("筛选活动", "Filter Events", "イベントを絞り込み")
-        }
-        return LT("筛选活动 \(activeHistoryEventFilterCount)", "Filter Events \(activeHistoryEventFilterCount)", "イベントを絞り込み \(activeHistoryEventFilterCount)")
-    }
-
-    private var activeHistoryEventFilterCount: Int {
-        var count = 0
-        if !historyEventSearchQuery.isEmpty { count += 1 }
-        if historyEventRegionFilter != .all { count += 1 }
-        if historyEventStartDate != nil { count += 1 }
-        if historyEventEndDate != nil { count += 1 }
-        return count
-    }
-
-    private var historyEventFilterResultText: String {
-        LT("显示 \(filteredDJEvents.count) / \(combinedDJEvents.count) 场", "\(filteredDJEvents.count) of \(combinedDJEvents.count) shown", "\(combinedDJEvents.count)件中 \(filteredDJEvents.count)件を表示")
-    }
-
-    private var historyEventSearchQuery: String {
-        historyEventSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var hasActiveHistoryEventFilters: Bool {
-        !historyEventSearchQuery.isEmpty
-            || historyEventRegionFilter != .all
-            || historyEventStartDate != nil
-            || historyEventEndDate != nil
-    }
-
-    private var filteredDJEvents: [WebEvent] {
-        combinedDJEvents.filter { event in
-            historyEventMatchesSearch(event)
-                && historyEventMatchesRegion(event)
-                && historyEventMatchesDate(event)
-        }
-    }
-
-    private var filteredUpcomingDJEvents: [WebEvent] {
-        upcomingDJEvents.filter { event in
-            historyEventMatchesSearch(event)
-                && historyEventMatchesRegion(event)
-                && historyEventMatchesDate(event)
-        }
-    }
-
-    private var filteredEndedDJEvents: [WebEvent] {
-        endedDJEvents.filter { event in
-            historyEventMatchesSearch(event)
-                && historyEventMatchesRegion(event)
-                && historyEventMatchesDate(event)
-        }
-    }
-
-    private var historyEventStartDateToggleBinding: Binding<Bool> {
-        Binding(
-            get: { historyEventStartDate != nil },
-            set: { enabled in
-                if enabled {
-                    historyEventStartDate = historyEventStartDate ?? fallbackHistoryEventStartDate
-                } else {
-                    historyEventStartDate = nil
-                }
+            ],
+            onOpenEvent: { event in
+                appPush(.eventDetail(eventID: event.id))
             }
         )
-    }
-
-    private var historyEventEndDateToggleBinding: Binding<Bool> {
-        Binding(
-            get: { historyEventEndDate != nil },
-            set: { enabled in
-                if enabled {
-                    historyEventEndDate = historyEventEndDate ?? fallbackHistoryEventEndDate
-                } else {
-                    historyEventEndDate = nil
-                }
-            }
-        )
-    }
-
-    private var historyEventStartDateBinding: Binding<Date> {
-        Binding(
-            get: { historyEventStartDate ?? fallbackHistoryEventStartDate },
-            set: { historyEventStartDate = Calendar.current.startOfDay(for: $0) }
-        )
-    }
-
-    private var historyEventEndDateBinding: Binding<Date> {
-        Binding(
-            get: { historyEventEndDate ?? fallbackHistoryEventEndDate },
-            set: { historyEventEndDate = Calendar.current.startOfDay(for: $0) }
-        )
-    }
-
-    private var fallbackHistoryEventStartDate: Date {
-        let base = combinedDJEvents.map(\.startDate).min() ?? Date()
-        return Calendar.current.startOfDay(for: base)
-    }
-
-    private var fallbackHistoryEventEndDate: Date {
-        let base = combinedDJEvents.map(\.startDate).max() ?? Date()
-        return Calendar.current.startOfDay(for: base)
-    }
-
-    private var normalizedHistoryDateBounds: (start: Date?, end: Date?) {
-        let calendar = Calendar.current
-        let start = historyEventStartDate.map { calendar.startOfDay(for: $0) }
-        let end = historyEventEndDate.map { calendar.startOfDay(for: $0) }
-        if let start, let end, start > end {
-            return (end, start)
-        }
-        return (start, end)
-    }
-
-    private func clearHistoryEventFilters() {
-        historyEventSearchText = ""
-        historyEventRegionFilter = .all
-        historyEventStartDate = nil
-        historyEventEndDate = nil
-    }
-
-    private func historyEventMatchesSearch(_ event: WebEvent) -> Bool {
-        guard !historyEventSearchQuery.isEmpty else { return true }
-
-        let year = String(Calendar.current.component(.year, from: event.startDate))
-        let searchPool = [
-            event.name,
-            event.summaryLocation,
-            event.city ?? "",
-            event.country ?? "",
-            event.nameI18n?.zh ?? "",
-            event.nameI18n?.en ?? "",
-            event.cityI18n?.zh ?? "",
-            event.cityI18n?.en ?? "",
-            event.countryI18n?.zh ?? "",
-            event.countryI18n?.en ?? "",
-            year
-        ]
-
-        return searchPool.contains { $0.localizedCaseInsensitiveContains(historyEventSearchQuery) }
-    }
-
-    private func historyEventMatchesRegion(_ event: WebEvent) -> Bool {
-        switch historyEventRegionFilter {
-        case .all:
-            return true
-        case .domestic:
-            return historyEventRegionCategory(for: event) == .domestic
-        case .international:
-            return historyEventRegionCategory(for: event) == .international
-        }
-    }
-
-    private func historyEventMatchesDate(_ event: WebEvent) -> Bool {
-        let bounds = normalizedHistoryDateBounds
-        let calendar = Calendar.current
-        let eventStartDay = calendar.startOfDay(for: event.startDate)
-
-        if let start = bounds.start, eventStartDay < start {
-            return false
-        }
-
-        if let end = bounds.end {
-            let endExclusive = calendar.date(byAdding: .day, value: 1, to: end) ?? end.addingTimeInterval(24 * 60 * 60)
-            if eventStartDay >= endExclusive {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    private enum DJEventRegionCategory {
-        case domestic
-        case international
-        case unknown
-    }
-
-    private func historyEventRegionCategory(for event: WebEvent) -> DJEventRegionCategory {
-        if let rawCountryCode = event.locationPoint.flatMap(\.countryCode) {
-            let countryCode = rawCountryCode
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-            if !countryCode.isEmpty {
-                return countryCode == "CN" ? .domestic : .international
-            }
-        }
-
-        let countryCandidates = [
-            event.country,
-            event.countryI18n?.zh,
-            event.countryI18n?.en
-        ]
-
-        var hasKnownCountry = false
-        for raw in countryCandidates {
-            let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !value.isEmpty else { continue }
-            hasKnownCountry = true
-            if isChinaCountryLabel(value) {
-                return .domestic
-            }
-        }
-
-        return hasKnownCountry ? .international : .unknown
-    }
-
-    private func isChinaCountryLabel(_ value: String) -> Bool {
-        let lowered = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let compact = lowered.replacingOccurrences(of: " ", with: "")
-        if compact == "cn"
-            || compact == "china"
-            || compact == "prc"
-            || compact == "peoplesrepublicofchina"
-            || compact == "people'srepublicofchina" {
-            return true
-        }
-        return value.contains("中国")
     }
 
     @ViewBuilder
@@ -5679,14 +5339,6 @@ struct DJDetailView: View {
         }
     }
 
-    private func djEventsSectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.headline)
-            .foregroundStyle(RaverTheme.primaryText)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
-    }
-
     private enum DJEventSection {
         case upcoming
         case ended
@@ -5699,108 +5351,6 @@ struct DJDetailView: View {
                 return "ended"
             }
         }
-    }
-
-    @ViewBuilder
-    private func pagedDJEventSection(
-        section: DJEventSection,
-        events: [WebEvent],
-        hasMore: Bool
-    ) -> some View {
-        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-            Button {
-                appPush(.eventDetail(eventID: event.id))
-            } label: {
-                historyEventRow(event)
-            }
-            .buttonStyle(.plain)
-            .onAppear {
-                guard index == events.count - 1 else { return }
-                debugDJEventPagination(
-                    "last-cell onAppear section=\(section.debugName) loaded=\(events.count) hasMore=\(hasMore)"
-                )
-                triggerDJEventAutoLoadMoreIfNeeded(
-                    section: section,
-                    loadedCount: events.count,
-                    hasMore: hasMore
-                )
-            }
-
-            if index < events.count - 1 {
-                Rectangle()
-                    .fill(RaverTheme.secondaryText.opacity(0.16))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 1)
-            }
-        }
-
-        if hasMore {
-            HStack {
-                Spacer()
-                ProgressView()
-                    .scaleEffect(0.82)
-                Spacer()
-            }
-            .padding(.vertical, 10)
-        }
-    }
-
-    @MainActor
-    private func triggerDJEventAutoLoadMoreIfNeeded(
-        section: DJEventSection,
-        loadedCount: Int,
-        hasMore: Bool
-    ) {
-        guard hasMore else {
-            debugDJEventPagination(
-                "skip load-more section=\(section.debugName) reason=fully-loaded loaded=\(loadedCount)"
-            )
-            return
-        }
-
-        switch section {
-        case .upcoming:
-            guard !isLoadingMoreUpcomingEvents else {
-                debugDJEventPagination(
-                    "skip load-more section=\(section.debugName) reason=already-loading loaded=\(loadedCount)"
-                )
-                return
-            }
-            isLoadingMoreUpcomingEvents = true
-        case .ended:
-            guard !isLoadingMoreEndedEvents else {
-                debugDJEventPagination(
-                    "skip load-more section=\(section.debugName) reason=already-loading loaded=\(loadedCount)"
-                )
-                return
-            }
-            isLoadingMoreEndedEvents = true
-        }
-
-        debugDJEventPagination(
-            "schedule load-more section=\(section.debugName) loaded=\(loadedCount)"
-        )
-
-        Task { @MainActor in
-            defer {
-                switch section {
-                case .upcoming:
-                    isLoadingMoreUpcomingEvents = false
-                case .ended:
-                    isLoadingMoreEndedEvents = false
-                }
-            }
-
-            try? await Task.sleep(nanoseconds: 180_000_000)
-
-            await loadMoreDJEvents(section: section)
-        }
-    }
-
-    private func debugDJEventPagination(_ message: String) {
-        #if DEBUG
-        print("[DJDetailEventsPagination] \(message)")
-        #endif
     }
 
     @ViewBuilder

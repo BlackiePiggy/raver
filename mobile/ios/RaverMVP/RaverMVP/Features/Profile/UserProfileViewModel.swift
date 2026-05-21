@@ -140,6 +140,11 @@ final class UserProfileViewModel: ObservableObject {
     }
 
     private func loadAppearance(for userID: String) async {
+        guard AppConfig.virtualAssetsEnabled else {
+            appearance = nil
+            return
+        }
+
         if appearance == nil, let cached = virtualAssetRepository.cachedAppearance(userID: userID) {
             appearance = cached
         }

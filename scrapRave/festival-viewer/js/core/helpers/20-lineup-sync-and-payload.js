@@ -30,6 +30,38 @@ function normalizeArchiveDateTextForSync(value) {
   return src;
 }
 
+function formatArchiveDateInTimeZoneForSync(value, timeZoneRaw = 'UTC') {
+  const src = String(value || '').trim();
+  if (!src) return '';
+
+  // Already-local date-only values should stay exactly as authored.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(src)
+    || /^\d{4}[\/.]\d{1,2}[\/.]\d{1,2}$/.test(src)
+    || /^\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?$/.test(src)) {
+    return normalizeArchiveDateTextForSync(src);
+  }
+
+  const parsed = new Date(src);
+  if (Number.isNaN(parsed.getTime())) return normalizeArchiveDateTextForSync(src);
+
+  const timeZone = normalizeTimeZoneForSync(timeZoneRaw);
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(parsed);
+    const get = (type) => parts.find((part) => part.type === type)?.value || '';
+    const year = get('year');
+    const month = get('month');
+    const day = get('day');
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch (_error) {}
+
+  return normalizeArchiveDateTextForSync(src);
+}
+
 function parseArchiveDateOnlyForSync(dateText) {
   const normalized = normalizeArchiveDateTextForSync(dateText);
   const m = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);

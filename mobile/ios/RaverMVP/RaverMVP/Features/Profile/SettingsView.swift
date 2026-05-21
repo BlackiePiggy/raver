@@ -150,14 +150,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    Toggle(isOn: virtualAssetsEnabledBinding) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label(LT("虚拟资产装扮", "Virtual asset styling", "バーチャルアイテム装飾"), systemImage: "sparkles")
-                            Text(LT("重启 App 后生效；关闭后装扮入口和展示会回退为普通头像/昵称。", "Takes effect after restarting the app. When off, styling entries and displays fall back to the normal avatar and nickname.", "App 再起動後に反映されます。オフにすると装飾入口と表示は通常のアイコン/ニックネームに戻ります。"))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                    }
                 }
 #endif
 

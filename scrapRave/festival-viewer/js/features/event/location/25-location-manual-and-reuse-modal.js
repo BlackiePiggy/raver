@@ -577,7 +577,7 @@ function eventLocationFlattenFestRows() {
         const addrEn = typeof formatFestivalUnifiedAddress === 'function'
           ? formatFestivalUnifiedAddress({ ...info, addressLang: 'en' })
           : '';
-        const date = formatDateRange(info?.startDate, info?.endDate);
+        const date = formatDateRange(info?.startDate, info?.endDate, info?.timeZone || info?.timezone);
         const locationPoint = normalizeEventLocationPoint(info?.locationPoint || null);
         const provider = String(locationPoint?.provider || '').trim();
         const searchText = [

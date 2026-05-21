@@ -43,7 +43,7 @@ function refreshFestHeaderDisplay(rowEl, fest) {
     }
   }
   if (dateEl) {
-    const dr = formatDateRange(fest.info.startDate, fest.info.endDate);
+    const dr = formatDateRange(fest.info.startDate, fest.info.endDate, fest.info.timeZone || fest.info.timezone);
     dateEl.textContent = dr; dateEl.style.display = dr ? '' : 'none';
   }
   if (countryEl) {
@@ -137,7 +137,7 @@ function renderInfoView(panelEl, info) {
     canceledEl.classList.remove('empty');
     canceledEl.style.color = canceled ? '#ff9ac2' : 'var(--accent)';
   }
-  sv('dateRange', formatDateRange(info.startDate, info.endDate));
+  sv('dateRange', formatDateRange(info.startDate, info.endDate, info.timeZone || info.timezone));
   sv('status', info.status || (info.canceled ? 'cancelled' : 'upcoming'));
   sv('eventType', info.eventType);
   const tierRows = Array.isArray(info.ticketTiers) ? info.ticketTiers : [];

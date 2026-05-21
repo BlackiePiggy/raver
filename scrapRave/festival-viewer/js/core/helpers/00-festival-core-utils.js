@@ -769,9 +769,13 @@ function normalizeFestivalInfo(raw, fallback) {
   };
 }
 
-function formatDateRange(startDate, endDate) {
-  const s = String(startDate||'').trim();
-  const e = String(endDate||'').trim();
+function formatDateRange(startDate, endDate, timeZone) {
+  const s = (typeof formatArchiveDateInTimeZoneForSync === 'function')
+    ? formatArchiveDateInTimeZoneForSync(startDate, timeZone || 'UTC')
+    : String(startDate || '').trim();
+  const e = (typeof formatArchiveDateInTimeZoneForSync === 'function')
+    ? formatArchiveDateInTimeZoneForSync(endDate, timeZone || 'UTC')
+    : String(endDate || '').trim();
   if (s && e && s !== e) return `${s} → ${e}`;
   return s || e || '';
 }

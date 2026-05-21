@@ -129,6 +129,7 @@ final class AppGuidanceCenter: ObservableObject {
         policy: AppGuidancePresentationPolicy,
         userID: String?
     ) -> Bool {
+        guard AppConfig.guidanceEnabled else { return false }
         guard isNextScriptedStep(id, userID: userID) else { return false }
 
         switch policy {

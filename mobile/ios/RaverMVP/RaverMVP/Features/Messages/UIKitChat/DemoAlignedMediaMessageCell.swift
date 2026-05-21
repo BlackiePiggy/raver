@@ -88,7 +88,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
 
         senderMetaRow.translatesAutoresizingMaskIntoConstraints = false
         senderMetaRow.axis = .horizontal
-        senderMetaRow.alignment = .center
+        senderMetaRow.alignment = .top
         senderMetaRow.spacing = 8
         contentView.addSubview(senderMetaRow)
 
@@ -238,7 +238,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
 
         bubbleMaxWidthConstraint = bubbleView.widthAnchor.constraint(lessThanOrEqualToConstant: 260)
         bubbleTopToContentConstraint = bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2)
-        bubbleTopToSenderConstraint = bubbleView.topAnchor.constraint(equalTo: senderMetaRow.bottomAnchor, constant: 4)
+        bubbleTopToSenderConstraint = bubbleView.topAnchor.constraint(equalTo: senderMetaRow.bottomAnchor, constant: 6)
         mineTrailingConstraint = bubbleView.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor)
         mineLeadingConstraint = bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.layoutMarginsGuide.leadingAnchor)
         otherLeadingConstraint = bubbleView.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor)
@@ -686,7 +686,6 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
                 senderMetaTrailingConstraint,
                 senderMetaLeadingLimitConstraint
             ])
-            senderMetaRow.alignment = .trailing
         } else {
             NSLayoutConstraint.activate([
                 otherLeadingConstraint,
@@ -694,7 +693,6 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
                 senderMetaLeadingConstraint,
                 senderMetaTrailingLimitConstraint
             ])
-            senderMetaRow.alignment = .leading
         }
     }
 
@@ -703,7 +701,7 @@ final class DemoAlignedMediaMessageCell: UICollectionViewCell {
         isClusterStart: Bool,
         isClusterEnd: Bool
     ) {
-        let topInset: CGFloat = isClusterStart ? 4 : 1
+        let topInset: CGFloat = isClusterStart ? 7 : 1
         let bottomInset: CGFloat = isClusterEnd ? 4 : 1
         contentView.layoutMargins = UIEdgeInsets(top: topInset, left: 12, bottom: bottomInset, right: 12)
 

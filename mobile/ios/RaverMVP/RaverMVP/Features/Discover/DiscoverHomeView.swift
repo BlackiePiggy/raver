@@ -5,11 +5,11 @@ struct DiscoverHomeView: View {
         case recommend
         case events
         case news
-        case djs
-        case sets
-        case rankings
         case organizers
+        case djs
         case labels
+        case rankings
+        case sets
         case genres
 
         var id: String { rawValue }

@@ -553,6 +553,7 @@ final class EventsModuleViewModel: ObservableObject {
     @Published private(set) var allEvents: [WebEvent] = []
     @Published private(set) var isLoadingAll = false
     @Published private(set) var isLoadingMoreAll = false
+    @Published private(set) var isShowingCachedAll = false
     @Published var errorMessage: String?
 
     private let fetchEventsBootstrapUseCase: FetchDiscoverEventsBootstrapUseCase
@@ -615,6 +616,7 @@ final class EventsModuleViewModel: ObservableObject {
             nextAllPage = 2
             lastSuccessfulAllLoadAt = Date()
             didHydrateAllFromDiskCache = false
+            isShowingCachedAll = false
             persistOfflineSnapshot(query: query)
         } catch {
             guard allReloadToken == token else { return }
@@ -773,6 +775,7 @@ final class EventsModuleViewModel: ObservableObject {
         totalUpcomingPages = snapshot.totalUpcomingPages
         lastSuccessfulAllLoadAt = snapshot.cachedAt
         didHydrateAllFromDiskCache = true
+        isShowingCachedAll = true
     }
 
     private func sortEventByActiveTimeline(_ lhs: WebEvent, _ rhs: WebEvent) -> Bool {

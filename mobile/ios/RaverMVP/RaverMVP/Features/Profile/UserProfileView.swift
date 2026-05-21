@@ -28,6 +28,10 @@ private struct UserProfileScreen: View {
     @State private var blockStatus: UserBlockStatus?
     @State private var reportTarget: ReportSheetTarget?
 
+    private var resolvedAppearance: UserAssetAppearance? {
+        AppConfig.virtualAssetsEnabled ? viewModel.appearance : nil
+    }
+
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
@@ -72,7 +76,7 @@ private struct UserProfileScreen: View {
                         if let profile = viewModel.profile {
                             ProfileHeaderCard(
                                 profile: profile,
-                                appearance: viewModel.appearance,
+                                appearance: resolvedAppearance,
                                 onFollowersTap: {
                                     if profile.canViewFollowersList {
                                         profilePush(.followList(userID: profile.id, kind: .followers))

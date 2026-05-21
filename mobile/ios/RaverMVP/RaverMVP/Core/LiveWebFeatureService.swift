@@ -109,6 +109,9 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func fetchEvent(id: String) async throws -> WebEvent {
+#if DEBUG
+        print("[EventDetailDebug] runtimeMode=\(AppConfig.runtimeMode.rawValue) bffBaseURL=\(AppConfig.bffBaseURL.absoluteString) requestPath=/v1/events/\(id)")
+#endif
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "GET")
         return localizedEvent(response.data)
     }
@@ -1346,6 +1349,11 @@ final class LiveWebFeatureService: WebFeatureService {
         body: Encodable? = nil
     ) async throws -> T {
         let url = try buildURL(path: path, queryItems: queryItems)
+#if DEBUG
+        if path.hasPrefix("/v1/events/"), method == "GET" {
+            print("[EventDetailDebug] requestURL=\(url.absoluteString)")
+        }
+#endif
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 20

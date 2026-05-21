@@ -650,6 +650,11 @@ final class ProfileViewModel: ObservableObject {
         repostedItems = snapshot.repostedItems
         savedItems = snapshot.savedItems
         recentCheckins = snapshot.recentCheckins
+        if !AppConfig.virtualAssetsEnabled {
+            appearance = nil
+            return true
+        }
+
         if appearance == nil {
             appearance = virtualAssetRepository.cachedAppearance(userID: snapshot.profile.id)
         }
@@ -657,6 +662,11 @@ final class ProfileViewModel: ObservableObject {
     }
 
     private func loadAppearance(for userID: String, preferCache: Bool = true) async {
+        guard AppConfig.virtualAssetsEnabled else {
+            appearance = nil
+            return
+        }
+
         if preferCache, appearance == nil, let cached = virtualAssetRepository.cachedAppearance(userID: userID) {
             appearance = cached
         }

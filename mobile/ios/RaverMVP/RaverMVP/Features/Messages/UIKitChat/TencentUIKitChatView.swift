@@ -505,10 +505,14 @@ struct TencentUIKitChatView: View {
             squadOfflineActivityCardMessageContent(params, payload: offlineActivityCard)
         } else if let audioFile = audioFilePayload(from: params.message) {
             audioFileMessageContent(params, payload: audioFile)
+        } else if let voicePayload = voicePayload(from: params.message) {
+            voiceMessageContent(params, payload: voicePayload)
+        } else if isPlainTextMessage(params.message) {
+            textMessageContent(params)
         } else if conversation.type == .group,
            params.message.user.type == .other,
            params.positionInGroup == .single || params.positionInGroup == .first {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 4) {
                 groupSenderMeta(for: params.message.user)
                 highlightedMessageContainer(messageID: params.message.id) {
                     params.defaultMessageView()
@@ -518,6 +522,154 @@ struct TencentUIKitChatView: View {
             highlightedMessageContainer(messageID: params.message.id) {
                 params.defaultMessageView()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func voiceMessageContent(
+        _ params: MessageBuilderParameters,
+        payload: ChatVoicePayload
+    ) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+
+        messageClusterRow(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName
+        ) {
+            Button {
+                openVoiceMessage(payload, for: params.message)
+            } label: {
+                ChatVoiceBubbleView(payload: payload, isMine: isMine)
+            }
+            .buttonStyle(.plain)
+            .disabled(payload.rawURL.isEmpty)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.35)
+                    .onEnded { _ in
+                        params.showContextMenuClosure()
+                    }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func textMessageContent(_ params: MessageBuilderParameters) -> some View {
+        let isMine = params.message.user.isCurrentUser
+        let showAvatar = shouldShowAvatar(for: params)
+        let showGroupName = conversation.type == .group &&
+            params.message.user.type == .other &&
+            (params.positionInGroup == .single || params.positionInGroup == .first)
+        messageClusterRow(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName
+        ) {
+            textMessageBubble(params.message)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.35)
+                        .onEnded { _ in
+                            params.showContextMenuClosure()
+                        }
+                )
+        }
+    }
+
+    @ViewBuilder
+    private func messageClusterRow<Content: View>(
+        _ params: MessageBuilderParameters,
+        isMine: Bool,
+        showAvatar: Bool,
+        showGroupName: Bool,
+        @ViewBuilder bubble: () -> Content
+    ) -> some View {
+        highlightedMessageContainer(messageID: params.message.id) {
+            HStack(alignment: showGroupName ? .top : .bottom, spacing: 6) {
+                if !isMine {
+                    fileMessageAvatar(for: params.message.user, visible: showAvatar)
+                }
+
+                VStack(alignment: isMine ? .trailing : .leading, spacing: showGroupName ? 3 : 0) {
+                    if showGroupName {
+                        groupSenderMeta(for: params.message.user)
+                    }
+
+                    HStack(alignment: .bottom, spacing: 6) {
+                        if isMine {
+                            fileMessageTimeView(for: params.message, isMine: true)
+                        }
+
+                        bubble()
+
+                        if !isMine {
+                            fileMessageTimeView(for: params.message, isMine: false)
+                        }
+
+                        if isMine {
+                            fileMessageStatusView(for: params.message.status)
+                        }
+                    }
+                }
+            }
+            .padding(.top, messageRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection, showsSenderMeta: showGroupName))
+            .padding(.horizontal, 12)
+            .padding(.leading, isMine ? 72 : 0)
+            .padding(.trailing, isMine ? 0 : 72)
+            .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func interactiveClusterBubble<Content: View>(
+        _ params: MessageBuilderParameters,
+        isMine: Bool,
+        showAvatar: Bool,
+        showGroupName: Bool,
+        onTap: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        messageClusterRow(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName
+        ) {
+            interactiveBubble(
+                onTap: onTap,
+                onLongPress: params.showContextMenuClosure,
+                content: content
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func cardClusterBubble<Content: View>(
+        _ params: MessageBuilderParameters,
+        isMine: Bool,
+        showAvatar: Bool,
+        showGroupName: Bool,
+        target: ChatCardRouteTarget,
+        onTap: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        messageClusterRow(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName
+        ) {
+            chatCardButton(
+                target: target,
+                onTap: onTap,
+                onLongPress: params.showContextMenuClosure,
+                content: content
+            )
         }
     }
 
@@ -532,55 +684,28 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        messageClusterRow(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
+            Button {
+                openAudioFile(payload, for: params.message)
+            } label: {
+                audioFileBubble(
+                    message: params.message,
+                    payload: payload
+                )
             }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
+            .buttonStyle(.plain)
+            .disabled(payload.rawURL.isEmpty)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.35)
+                    .onEnded { _ in
+                        params.showContextMenuClosure()
                     }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    Button {
-                        openAudioFile(payload, for: params.message)
-                    } label: {
-                        audioFileBubble(
-                            message: params.message,
-                            payload: payload
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(payload.rawURL.isEmpty)
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.35)
-                            .onEnded { _ in
-                                params.showContextMenuClosure()
-                            }
-                    )
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            )
         }
     }
 
@@ -595,48 +720,18 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
-        ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    interactiveBubble {
-                        openChatCardRoute(.event(eventID: payload.eventID)) {
-                            appNavigate(.eventDetail(eventID: payload.eventID))
-                        }
-                    } onLongPress: {
-                        params.showContextMenuClosure()
-                    } content: {
-                        ChatEventCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
+        interactiveClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            onTap: {
+                openChatCardRoute(.event(eventID: payload.eventID)) {
+                    appNavigate(.eventDetail(eventID: payload.eventID))
                 }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
             }
+        ) {
+            ChatEventCardBubbleView(payload: payload)
         }
     }
 
@@ -651,48 +746,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .post(postID: payload.postID),
+            onTap: {
+                appPush(.postDetail(postID: payload.postID))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .post(postID: payload.postID),
-                        onTap: {
-                            appPush(.postDetail(postID: payload.postID))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatPostCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatPostCardBubbleView(payload: payload)
         }
     }
 
@@ -707,51 +771,21 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
-        ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    interactiveBubble {
+        interactiveClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            onTap: {
 #if DEBUG
-                        print("[RatingEventResolve] chat-tap route=.circle(.ratingEventDetail(\(payload.eventID)))")
+                print("[RatingEventResolve] chat-tap route=.circle(.ratingEventDetail(\(payload.eventID)))")
 #endif
-                        openChatCardRoute(.ratingEvent(eventID: payload.eventID)) {
-                            appPush(.circle(.ratingEventDetail(payload.eventID)))
-                        }
-                    } onLongPress: {
-                        params.showContextMenuClosure()
-                    } content: {
-                        ChatRatingEventCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
+                openChatCardRoute(.ratingEvent(eventID: payload.eventID)) {
+                    appPush(.circle(.ratingEventDetail(payload.eventID)))
                 }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
             }
+        ) {
+            ChatRatingEventCardBubbleView(payload: payload)
         }
     }
 
@@ -766,48 +800,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .ratingUnit(unitID: payload.unitID),
+            onTap: {
+                appPush(.ratingUnitDetail(unitID: payload.unitID))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .ratingUnit(unitID: payload.unitID),
-                        onTap: {
-                            appPush(.ratingUnitDetail(unitID: payload.unitID))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatRatingUnitCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatRatingUnitCardBubbleView(payload: payload)
         }
     }
 
@@ -822,48 +825,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .dj(djID: payload.djID),
+            onTap: {
+                appNavigate(.djDetail(djID: payload.djID))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .dj(djID: payload.djID),
-                        onTap: {
-                            appNavigate(.djDetail(djID: payload.djID))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatDJCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatDJCardBubbleView(payload: payload)
         }
     }
 
@@ -878,48 +850,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .set(setID: payload.setID),
+            onTap: {
+                appPush(.discover(.setDetail(setID: payload.setID)))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .set(setID: payload.setID),
-                        onTap: {
-                            appPush(.discover(.setDetail(setID: payload.setID)))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatSetCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatSetCardBubbleView(payload: payload)
         }
     }
 
@@ -934,48 +875,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .festival(festivalID: payload.brandID),
+            onTap: {
+                appPush(.discover(.festivalDetail(festivalID: payload.brandID)))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .festival(festivalID: payload.brandID),
-                        onTap: {
-                            appPush(.discover(.festivalDetail(festivalID: payload.brandID)))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatBrandCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatBrandCardBubbleView(payload: payload)
         }
     }
 
@@ -990,48 +900,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .label(labelID: payload.labelID),
+            onTap: {
+                appPush(.labelDetail(labelID: payload.labelID))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .label(labelID: payload.labelID),
-                        onTap: {
-                            appPush(.labelDetail(labelID: payload.labelID))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatLabelCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatLabelCardBubbleView(payload: payload)
         }
     }
 
@@ -1045,56 +924,25 @@ struct TencentUIKitChatView: View {
         let showGroupName = conversation.type == .group &&
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
+        let board = RankingBoard(
+            id: payload.boardID,
+            title: payload.boardName,
+            subtitle: payload.boardSubtitle,
+            coverImageUrl: payload.coverImageURL,
+            years: [payload.year]
+        )
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .rankingBoard(board: board, year: payload.year),
+            onTap: {
+                appPush(.rankingBoardDetail(board: board, year: payload.year))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    let board = RankingBoard(
-                        id: payload.boardID,
-                        title: payload.boardName,
-                        subtitle: payload.boardSubtitle,
-                        coverImageUrl: payload.coverImageURL,
-                        years: [payload.year]
-                    )
-                    chatCardButton(
-                        target: .rankingBoard(board: board, year: payload.year),
-                        onTap: {
-                            appPush(.rankingBoardDetail(board: board, year: payload.year))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatRankingBoardCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatRankingBoardCardBubbleView(payload: payload)
         }
     }
 
@@ -1109,48 +957,17 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .circleID(entryID: payload.entryID),
+            onTap: {
+                appPush(.circle(.idDetail(entryID: payload.entryID)))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .circleID(entryID: payload.entryID),
-                        onTap: {
-                            appPush(.circle(.idDetail(entryID: payload.entryID)))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatCircleIDCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatCircleIDCardBubbleView(payload: payload)
         }
     }
 
@@ -1164,61 +981,31 @@ struct TencentUIKitChatView: View {
         let showGroupName = conversation.type == .group &&
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
+        let target = ChatCardRouteTarget.myCheckins(
+            targetUserID: payload.userID,
+            title: payload.title,
+            ownerDisplayName: payload.displayName
+        )
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
-        ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .myCheckins(
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: target,
+            onTap: {
+                appPush(
+                    .profile(
+                        .myCheckins(
                             targetUserID: payload.userID,
                             title: payload.title,
                             ownerDisplayName: payload.displayName
-                        ),
-                        onTap: {
-                            appPush(
-                                .profile(
-                                    .myCheckins(
-                                        targetUserID: payload.userID,
-                                        title: payload.title,
-                                        ownerDisplayName: payload.displayName
-                                    )
-                                )
-                            )
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatMyCheckinsCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+                        )
+                    )
+                )
             }
+        ) {
+            ChatMyCheckinsCardBubbleView(payload: payload)
         }
     }
 
@@ -1232,63 +1019,33 @@ struct TencentUIKitChatView: View {
         let showGroupName = conversation.type == .group &&
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
+        let target = ChatCardRouteTarget.eventRoute(
+            eventID: payload.eventID,
+            ownerUserID: payload.ownerUserID,
+            ownerDisplayName: payload.ownerDisplayName,
+            selectedDayID: payload.selectedDayID,
+            selectedSlotIDs: payload.selectedSlotIDs
+        )
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: target,
+            onTap: {
+                appPush(
+                    .eventRoute(
+                        eventID: payload.eventID,
+                        ownerUserID: payload.ownerUserID,
+                        ownerDisplayName: payload.ownerDisplayName,
+                        selectedDayID: payload.selectedDayID,
+                        selectedSlotIDs: payload.selectedSlotIDs
+                    )
+                )
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .eventRoute(
-                            eventID: payload.eventID,
-                            ownerUserID: payload.ownerUserID,
-                            ownerDisplayName: payload.ownerDisplayName,
-                            selectedDayID: payload.selectedDayID,
-                            selectedSlotIDs: payload.selectedSlotIDs
-                        ),
-                        onTap: {
-                            appPush(
-                                .eventRoute(
-                                    eventID: payload.eventID,
-                                    ownerUserID: payload.ownerUserID,
-                                    ownerDisplayName: payload.ownerDisplayName,
-                                    selectedDayID: payload.selectedDayID,
-                                    selectedSlotIDs: payload.selectedSlotIDs
-                                )
-                            )
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatEventRouteCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatEventRouteCardBubbleView(payload: payload)
         }
     }
 
@@ -1303,48 +1060,18 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
-        ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    interactiveBubble {
-                        openChatCardRoute(.squadOfflineActivityHistory(squadID: payload.squadID)) {
-                            appNavigate(.squadOfflineActivityHistory(squadID: payload.squadID))
-                        }
-                    } onLongPress: {
-                        params.showContextMenuClosure()
-                    } content: {
-                        ChatSquadOfflineActivityCardBubbleView(payload: payload)
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
+        interactiveClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            onTap: {
+                openChatCardRoute(.squadOfflineActivityHistory(squadID: payload.squadID)) {
+                    appNavigate(.squadOfflineActivityHistory(squadID: payload.squadID))
                 }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
             }
+        ) {
+            ChatSquadOfflineActivityCardBubbleView(payload: payload)
         }
     }
 
@@ -1359,54 +1086,23 @@ struct TencentUIKitChatView: View {
             params.message.user.type == .other &&
             (params.positionInGroup == .single || params.positionInGroup == .first)
 
-        VStack(
-            alignment: isMine ? .trailing : .leading,
-            spacing: showGroupName ? 1 : 0
+        cardClusterBubble(
+            params,
+            isMine: isMine,
+            showAvatar: showAvatar,
+            showGroupName: showGroupName,
+            target: .news(articleID: payload.articleID),
+            onTap: {
+                appPush(.newsDetail(articleID: payload.articleID))
+            }
         ) {
-            if showGroupName {
-                groupSenderMeta(for: params.message.user)
-            }
-
-            highlightedMessageContainer(messageID: params.message.id) {
-                HStack(alignment: .bottom, spacing: 6) {
-                    if !isMine {
-                        fileMessageAvatar(for: params.message.user, visible: showAvatar)
-                    }
-
-                    if isMine {
-                        fileMessageTimeView(for: params.message, isMine: true)
-                    }
-
-                    chatCardButton(
-                        target: .news(articleID: payload.articleID),
-                        onTap: {
-                            appPush(.newsDetail(articleID: payload.articleID))
-                        },
-                        onLongPress: params.showContextMenuClosure
-                    ) {
-                        ChatNewsCardBubbleView(
-                            payload: payload,
-                            maxWidth: newsCardMaxWidth(
-                                message: params.message,
-                                isMine: isMine
-                            )
-                        )
-                    }
-
-                    if !isMine {
-                        fileMessageTimeView(for: params.message, isMine: false)
-                    }
-
-                    if isMine {
-                        fileMessageStatusView(for: params.message.status)
-                    }
-                }
-                .padding(.top, fileRowTopPadding(for: params.positionInGroup, sectionPosition: params.positionInMessagesSection))
-                .padding(.horizontal, 12)
-                .padding(.leading, isMine ? 72 : 0)
-                .padding(.trailing, isMine ? 0 : 72)
-                .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
-            }
+            ChatNewsCardBubbleView(
+                payload: payload,
+                maxWidth: newsCardMaxWidth(
+                    message: params.message,
+                    isMine: isMine
+                )
+            )
         }
     }
 
@@ -1469,7 +1165,6 @@ struct TencentUIKitChatView: View {
                 VirtualAssetBadgeView(asset: badge, compact: true, showTitle: false)
             }
         }
-        .padding(.leading, 44)
     }
 
     @ViewBuilder
@@ -1773,6 +1468,17 @@ struct TencentUIKitChatView: View {
         )
     }
 
+    private func openVoiceMessage(_ payload: ChatVoicePayload, for message: Message) {
+        guard !payload.rawURL.isEmpty else { return }
+        presentedAudioFile = ChatAudioFilePresentation(
+            id: message.id,
+            fileName: LT("语音消息", "Voice message", "音声メッセージ"),
+            rawURL: payload.rawURL,
+            fileSizeBytes: 0,
+            durationSeconds: payload.durationSeconds
+        )
+    }
+
     private func audioFilePayload(from message: Message) -> ChatAudioFilePayload? {
         guard let sourceKind = message.customData["sourceKind"] as? String,
               sourceKind == ChatMessageKind.file.rawValue else {
@@ -1791,6 +1497,28 @@ struct TencentUIKitChatView: View {
             rawURL: rawURL ?? "",
             fileSizeBytes: fileSizeBytes,
             durationSeconds: durationSeconds
+        )
+    }
+
+    private func isPlainTextMessage(_ message: Message) -> Bool {
+        guard let sourceKind = message.customData["sourceKind"] as? String else {
+            return false
+        }
+        return sourceKind == ChatMessageKind.text.rawValue
+    }
+
+    private func voicePayload(from message: Message) -> ChatVoicePayload? {
+        guard let sourceKind = message.customData["sourceKind"] as? String else {
+            return nil
+        }
+        guard sourceKind == ChatMessageKind.voice.rawValue else {
+            return nil
+        }
+
+        return ChatVoicePayload(
+            rawURL: (message.customData["fileMediaURL"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            durationSeconds: (message.customData["fileDurationSeconds"] as? Int) ?? 0
         )
     }
 
@@ -2150,7 +1878,7 @@ struct TencentUIKitChatView: View {
 
     private func shouldShowAvatar(for params: MessageBuilderParameters) -> Bool {
         params.message.user.type == .other &&
-            (params.positionInGroup == .single || params.positionInGroup == .last)
+            (params.positionInGroup == .single || params.positionInGroup == .first)
     }
 
     private func fileRowTopPadding(
@@ -2159,14 +1887,35 @@ struct TencentUIKitChatView: View {
     ) -> CGFloat {
         switch (groupPosition, sectionPosition) {
         case (.first, .middle), (.first, .last), (.single, .middle), (.single, .last):
-            return 8
+            return 9
         default:
-            return 4
+            return 5
+        }
+    }
+
+    private func messageRowTopPadding(
+        for groupPosition: PositionInUserGroup,
+        sectionPosition: PositionInMessagesSection,
+        showsSenderMeta: Bool
+    ) -> CGFloat {
+        guard showsSenderMeta else {
+            return fileRowTopPadding(for: groupPosition, sectionPosition: sectionPosition)
+        }
+
+        switch (groupPosition, sectionPosition) {
+        case (.first, .middle), (.first, .last), (.single, .middle), (.single, .last):
+            return 12
+        default:
+            return 8
         }
     }
 
     @ViewBuilder
-    private func fileMessageAvatar(for user: User, visible: Bool) -> some View {
+    private func fileMessageAvatar(
+        for user: User,
+        visible: Bool,
+        alignWithSenderMeta: Bool = false
+    ) -> some View {
         if visible {
             Button {
                 guard viewModel.canOpenProfile(for: user) else { return }
@@ -2197,6 +1946,10 @@ struct TencentUIKitChatView: View {
         )
     }
 
+    private func textMessageBubble(_ message: Message) -> some View {
+        ChatPlainTextBubbleView(message: message)
+    }
+
     private func fileMessageTimeView(for message: Message, isMine: Bool) -> some View {
         Text(message.createdAt.chatTimeText)
             .font(.caption)
@@ -2206,7 +1959,7 @@ struct TencentUIKitChatView: View {
             .layoutPriority(1)
             .foregroundStyle(isMine ? RaverTheme.secondaryText : RaverTheme.secondaryText)
             .padding(.horizontal, 2)
-            .padding(.bottom, 8)
+            .padding(.bottom, 2)
     }
 
     @ViewBuilder
@@ -2262,6 +2015,11 @@ private struct ChatAudioFilePayload {
     let rawURL: String
     let fileSizeBytes: Int?
     let durationSeconds: Int?
+}
+
+private struct ChatVoicePayload {
+    let rawURL: String
+    let durationSeconds: Int
 }
 
 private struct ChatEventCardPayload {
@@ -2561,6 +2319,85 @@ private struct ChatAudioFileBubbleView: View {
     private func audioDurationText(_ seconds: Int?) -> String? {
         guard let seconds, seconds > 0 else { return nil }
         return ChatAudioFilePlayerViewModel.durationLabel(TimeInterval(seconds))
+    }
+}
+
+private struct ChatPlainTextBubbleView: View {
+    let message: Message
+
+    var body: some View {
+        Text(String(message.attributedText.characters))
+            .font(.system(size: 16))
+            .foregroundStyle(message.user.isCurrentUser ? Color.white : RaverTheme.primaryText)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(message.user.isCurrentUser ? RaverTheme.accent : RaverTheme.card)
+            )
+    }
+}
+
+private struct ChatVoiceBubbleView: View {
+    let payload: ChatVoicePayload
+    let isMine: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(isMine ? Color.black.opacity(0.85) : RaverTheme.accent)
+                    .frame(width: 26, height: 26)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .offset(x: 1)
+            }
+
+            HStack(spacing: 2.5) {
+                ForEach(0..<16, id: \.self) { index in
+                    Capsule(style: .continuous)
+                        .fill(waveformColor)
+                        .frame(width: 2.6, height: waveformHeight(at: index))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+
+            Text(durationText)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isMine ? Color.white : RaverTheme.primaryText)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 10)
+        .padding(.vertical, 9)
+        .frame(width: bubbleWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(isMine ? RaverTheme.accent : RaverTheme.card)
+        )
+    }
+
+    private var bubbleWidth: CGFloat {
+        184
+    }
+
+    private var durationText: String {
+        ChatAudioFilePlayerViewModel.durationLabel(TimeInterval(max(payload.durationSeconds, 1)))
+    }
+
+    private var waveformColor: Color {
+        isMine ? Color.white.opacity(0.72) : RaverTheme.secondaryText.opacity(0.78)
+    }
+
+    private func waveformHeight(at index: Int) -> CGFloat {
+        let pattern: [CGFloat] = [12, 16, 11, 18, 14, 20, 13, 17]
+        return pattern[index % pattern.count]
     }
 }
 

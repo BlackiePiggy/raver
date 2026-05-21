@@ -213,8 +213,9 @@ function buildFestivalImageEntriesFromBackendAssets(eventId, assets) {
 function mapBackendEventToFestival(event) {
   const eventId = String(event?.id || '').trim();
   const archiveFestivalId = String(event?.archiveFestivalId || '').trim();
-  const startDate = normalizeArchiveDateTextForSync(event?.startDate || '');
-  const endDate = normalizeArchiveDateTextForSync(event?.endDate || '') || startDate;
+  const eventTimeZone = String(event?.timeZone || event?.timezone || 'UTC').trim() || 'UTC';
+  const startDate = formatArchiveDateInTimeZoneForSync(event?.startDate || '', eventTimeZone);
+  const endDate = formatArchiveDateInTimeZoneForSync(event?.endDate || '', eventTimeZone) || startDate;
   const parsedStart = parseArchiveDateOnlyForSync(startDate);
   const fallbackStart = event?.startDate ? new Date(event.startDate) : null;
   const start = (parsedStart && !Number.isNaN(parsedStart.getTime()))
@@ -274,7 +275,7 @@ function mapBackendEventToFestival(event) {
     canceled: String(event?.status || '').trim().toLowerCase() === 'cancelled',
     startDate,
     endDate,
-    timeZone: String(event?.timeZone || event?.timezone || 'UTC').trim() || 'UTC',
+    timeZone: eventTimeZone,
     relatedLinks: Array.isArray(event?.referenceLinks) ? event.referenceLinks : [],
     socialLinks: Array.isArray(event?.socialLinks) ? event.socialLinks : [],
     lineupArtists,

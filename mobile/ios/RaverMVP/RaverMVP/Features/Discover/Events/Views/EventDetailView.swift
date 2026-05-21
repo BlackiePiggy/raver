@@ -5505,6 +5505,10 @@ struct EventDetailView: View {
             let loadedFavoriteStatus = await favoriteStatusTask
             let loadedCheckins = await checkinsTask
 
+#if DEBUG
+            debugEventDetailPayload(source: "network", event: loadedEvent)
+#endif
+
             event = loadedEvent
             invalidateLineupEntriesCache()
             relatedEventCheckins = loadedCheckins
@@ -5523,6 +5527,9 @@ struct EventDetailView: View {
         } catch {
             let canFallback = isOfflineRecoverableError(error) || event == nil
             if canFallback, let snapshot = await EventManualCacheStore.shared.loadSnapshot(eventID: eventID) {
+#if DEBUG
+                debugEventDetailPayload(source: "cache", event: snapshot.event)
+#endif
                 applyManualCacheSnapshot(snapshot)
                 phase = .success
                 await loadSelectedTabDataIfNeeded()
@@ -5910,6 +5917,32 @@ struct EventDetailView: View {
         )
         await persistManualCacheSnapshot(snapshot, prefetchImages: false)
     }
+
+#if DEBUG
+    private func debugEventDetailPayload(source: String, event: WebEvent) {
+        let lineupArtists = event.lineupArtists ?? []
+        let lineupSlots = event.lineupSlots
+        let firstArtist = lineupArtists.first
+        let firstSlot = lineupSlots.first
+        let firstArtistAvatar = firstArtist?.dj?.avatarUrl
+            ?? firstArtist?.dj?.avatarSmallUrl
+            ?? firstArtist?.dj?.avatarMediumUrl
+            ?? firstArtist?.dj?.avatarOriginalUrl
+        let firstSlotAvatar = firstSlot?.dj?.avatarUrl
+            ?? firstSlot?.dj?.avatarSmallUrl
+            ?? firstSlot?.dj?.avatarMediumUrl
+            ?? firstSlot?.dj?.avatarOriginalUrl
+
+        print(
+            """
+            [EventDetailDebug] source=\(source) eventID=\(event.id) name=\(event.name)
+            [EventDetailDebug] lineupArtists=\(lineupArtists.count) lineupSlots=\(lineupSlots.count) lineupAssets=\(event.lineupAssetURLs.count) timetableAssets=\(event.timetableAssetURLs.count)
+            [EventDetailDebug] firstArtistName=\(firstArtist?.djName ?? "nil") firstArtistDjID=\(firstArtist?.dj?.id ?? firstArtist?.djId ?? "nil") firstArtistAvatar=\(firstArtistAvatar ?? "nil")
+            [EventDetailDebug] firstSlotName=\(firstSlot?.djName ?? "nil") firstSlotStage=\(firstSlot?.stageName ?? "nil") firstSlotStart=\(firstSlot?.startTime.description ?? "nil") firstSlotEnd=\(firstSlot?.endTime.description ?? "nil") firstSlotDjID=\(firstSlot?.dj?.id ?? firstSlot?.djId ?? "nil") firstSlotAvatar=\(firstSlotAvatar ?? "nil")
+            """
+        )
+    }
+#endif
 
     private func isRequestTimeoutError(_ error: Error) -> Bool {
         if let urlError = error as? URLError {

@@ -10,14 +10,6 @@ import CoreLocation
 import CoreText
 import Foundation
 
-private struct LearnFestivalEventsScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct LearnModuleView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.appPush) private var appPush
@@ -4623,8 +4615,6 @@ struct LearnFestivalDetailView: View {
     @State private var endedRelatedEventsPage = 0
     @State private var endedRelatedEventsTotalPages = 1
     @State private var visibleRelatedArticleCount = 5
-    @State private var eventsTabScrollOffset: CGFloat = 0
-    @State private var hasActivatedEventsAutoPagination = false
     @State private var errorMessage: String?
     @State private var showCreateEventSheet = false
     @State private var showFestivalEditSheet = false
@@ -5417,7 +5407,7 @@ struct LearnFestivalDetailView: View {
         case .basic:
             basicInfoTabContent
         case .events:
-            eventsTabContent(coordinateSpaceName: "LearnFestivalDetailTab-events")
+            eventsTabContent
         case .posts:
             postsTabContent
         }
@@ -5471,85 +5461,36 @@ struct LearnFestivalDetailView: View {
     }
 
     @ViewBuilder
-    private func eventsTabContent(coordinateSpaceName: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                discoverPush(.eventCreate)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 16, weight: .bold))
-                    Text(LT("发布新活动", "发布新活动", "新しいイベントを公開"))
-                        .font(.subheadline.weight(.semibold))
-                }
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(RaverTheme.accent)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            if isLoadingRelatedContent && upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty {
-                ProgressView(LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."))
-                    .padding(.vertical, 8)
-            } else if upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty && !didLoadRelatedEvents {
-                festivalTabLoadPlaceholder(
-                    title: LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."),
-                    didFail: relatedEventsLoadFailed,
-                    retry: { await loadRelatedEventsIfNeeded(force: true) }
+    private var eventsTabContent: some View {
+        DiscoverStandardEventFeedTab(
+            primaryActionTitle: LT("发布新活动", "发布新活动", "新しいイベントを公開"),
+            primaryActionAction: { discoverPush(.eventCreate) },
+            isLoading: isLoadingRelatedContent && upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty,
+            didLoad: didLoadRelatedEvents,
+            didFail: relatedEventsLoadFailed,
+            loadingTitle: LT("正在加载关联活动...", "正在加载关联活动...", "関連イベントを読み込み中..."),
+            emptyTitle: LT("暂无关联活动", "暂无关联活动", "関連イベントはまだありません"),
+            retry: { await loadRelatedEventsIfNeeded(force: true) },
+            sections: [
+                DiscoverEventFeedSectionConfig(
+                    title: LT("即将开始", "Upcoming", "近日開催"),
+                    events: upcomingRelatedEvents,
+                    hasMore: hasMoreUpcomingRelatedEvents,
+                    isLoadingMore: isLoadingMoreUpcomingRelatedEvents,
+                    onLoadMore: { await loadMoreRelatedEvents(section: .upcoming) }
+                ),
+                DiscoverEventFeedSectionConfig(
+                    title: LT("已结束活动", "Ended", "終了済み"),
+                    events: endedRelatedEvents,
+                    hasMore: hasMoreEndedRelatedEvents,
+                    isLoadingMore: isLoadingMoreEndedRelatedEvents,
+                    onLoadMore: { await loadMoreRelatedEvents(section: .ended) }
                 )
-            } else if upcomingRelatedEvents.isEmpty && endedRelatedEvents.isEmpty {
-                Text(LT("暂无关联活动", "暂无关联活动", "関連イベントはまだありません"))
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .padding(.vertical, 8)
-            } else {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if !upcomingRelatedEvents.isEmpty {
-                        festivalEventsSectionHeader(LT("即将开始", "Upcoming", "近日開催"))
-                        pagedFestivalEventSection(
-                            events: upcomingRelatedEvents,
-                            section: .upcoming,
-                            hasMore: hasMoreUpcomingRelatedEvents,
-                            isLoadingMore: isLoadingMoreUpcomingRelatedEvents
-                        )
-                    }
-
-                    if !endedRelatedEvents.isEmpty {
-                        festivalEventsSectionHeader(LT("已结束活动", "Ended", "終了済み"))
-                        pagedFestivalEventSection(
-                            events: endedRelatedEvents,
-                            section: .ended,
-                            hasMore: hasMoreEndedRelatedEvents,
-                            isLoadingMore: isLoadingMoreEndedRelatedEvents
-                        )
-                    }
-                }
-            }
-        }
-        .background(
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(
-                        key: LearnFestivalEventsScrollOffsetPreferenceKey.self,
-                        value: max(0, -proxy.frame(in: .named(coordinateSpaceName)).minY)
-                    )
+            ],
+            onOpenEvent: { event in
+                appPush(.eventDetail(eventID: event.id))
             }
         )
-        .onPreferenceChange(LearnFestivalEventsScrollOffsetPreferenceKey.self) { offset in
-            eventsTabScrollOffset = offset
-            if offset >= 120 {
-                hasActivatedEventsAutoPagination = true
-            }
-        }
-    }
-
-    private func festivalEventsSectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.headline)
-            .foregroundStyle(RaverTheme.primaryText)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
     }
 
     @ViewBuilder
@@ -5595,127 +5536,18 @@ struct LearnFestivalDetailView: View {
     }
 
     @ViewBuilder
-    private func pagedFestivalEventSection(
-        events: [WebEvent],
-        section: FestivalRelatedEventSection,
-        hasMore: Bool,
-        isLoadingMore: Bool
-    ) -> some View {
-        ForEach(events) { event in
-            Button {
-                appPush(.eventDetail(eventID: event.id))
-            } label: {
-                festivalEventRow(event)
-            }
-            .buttonStyle(.plain)
-            .onAppear {
-                guard hasMore else { return }
-                guard event.id == events.last?.id else { return }
-                guard hasActivatedEventsAutoPagination || eventsTabScrollOffset >= 120 else { return }
-                Task { await loadMoreRelatedEvents(section: section) }
-            }
-        }
-
-        if isLoadingMore {
-            HStack {
-                Spacer()
-                ProgressView()
-                    .padding(.top, 8)
-                Spacer()
-            }
-        }
-    }
-
-    @ViewBuilder
     private func festivalLoadMoreButton(
         hasMore: Bool,
         isLoadingMore: Bool,
         title: String,
         action: @escaping () -> Void
     ) -> some View {
-        if hasMore || isLoadingMore {
-            Button(action: action) {
-                Group {
-                    if isLoadingMore {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Text(title)
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(.vertical, 10)
-            }
-            .buttonStyle(.bordered)
-            .disabled(isLoadingMore)
-            .padding(.top, 8)
-        }
-    }
-
-    private func festivalEventRow(_ event: WebEvent) -> some View {
-        let locationText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return HStack(alignment: .top, spacing: 10) {
-            festivalEventCoverImage(event)
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(event.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .lineLimit(2)
-
-                Text(festivalEventDateText(event))
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .lineLimit(1)
-
-                Text(locationText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : locationText)
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 8)
-        .overlay(alignment: .bottom) {
-            Divider().opacity(0.45)
-        }
-    }
-
-    @ViewBuilder
-    private func festivalEventCoverImage(_ event: WebEvent) -> some View {
-        if let cover = AppConfig.resolvedURLString(event.cardImageURL) {
-            ImageLoaderView(urlString: cover)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(RaverTheme.card)
-                )
-        } else {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    Image(systemName: "ticket.fill")
-                        .font(.title3)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                )
-        }
-    }
-
-    private func festivalEventDateText(_ event: WebEvent) -> String {
-        if AppLanguagePreference.current.effectiveLanguage != .en {
-            return event.startDate.appLocalizedDateRangeText(to: event.endDate)
-        }
-        return event.startDate.appLocalizedDateRangeText(to: event.endDate)
+        DiscoverSectionLoadMoreButton(
+            hasMore: hasMore,
+            isLoadingMore: isLoadingMore,
+            title: title,
+            action: action
+        )
     }
 
     @ViewBuilder
@@ -6255,8 +6087,7 @@ struct LearnFestivalDetailView: View {
         case .basic:
             return
         case .events:
-            eventsTabScrollOffset = 0
-            hasActivatedEventsAutoPagination = false
+            return
         case .posts:
             visibleRelatedArticleCount = 5
         }

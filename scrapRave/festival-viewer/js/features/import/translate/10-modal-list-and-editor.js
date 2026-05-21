@@ -98,7 +98,11 @@ function renderTranslateFestivalList() {
       const nameBi = toPlainBiText(entry.fest?.info?.nameI18n ?? entry.fest?.info?.name, entry.fest?.name || entry.fest?.folder || '');
       const title = nameBi.en || nameBi.zh || entry.fest?.folder || `活动 ${idx + 1}`;
       const key = getFestivalTranslateKey(entry.fest);
-      const dr = formatDateRange(entry.fest?.info?.startDate, entry.fest?.info?.endDate);
+      const dr = formatDateRange(
+        entry.fest?.info?.startDate,
+        entry.fest?.info?.endDate,
+        entry.fest?.info?.timeZone || entry.fest?.info?.timezone
+      );
       return `
         <div class="translate-fest-item">
           <div class="translate-fest-top">

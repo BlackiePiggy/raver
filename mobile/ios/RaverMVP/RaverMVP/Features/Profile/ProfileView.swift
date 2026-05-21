@@ -9,6 +9,10 @@ struct ProfileView: View {
     @Namespace private var profilePostTabNamespace
     @State private var isShowingRealNameSheet = false
 
+    private var resolvedAppearance: UserAssetAppearance? {
+        AppConfig.virtualAssetsEnabled ? viewModel.appearance : nil
+    }
+
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
@@ -83,7 +87,7 @@ struct ProfileView: View {
 
                             ProfileHeaderCard(
                                 profile: profile,
-                                appearance: viewModel.appearance,
+                                appearance: resolvedAppearance,
                                 realNameStatus: profileRealNameStatus,
                                 onAvatarTap: {
                                     profilePush(.avatarFullscreen)

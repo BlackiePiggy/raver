@@ -19,7 +19,7 @@ function buildRow(fest) {
   if (empty)         tags.push(`<span class="tag tag-empty">NO IMAGES</span>`);
 
   // Date/country for header
-  const dr = formatDateRange(fest.info.startDate, fest.info.endDate);
+  const dr = formatDateRange(fest.info.startDate, fest.info.endDate, fest.info.timeZone || fest.info.timezone);
   const nameBi = normalizeBiTextValue(
     fest.info.nameI18n ?? fest.info.name ?? fest.name ?? fest.folder,
     fest.name || fest.folder

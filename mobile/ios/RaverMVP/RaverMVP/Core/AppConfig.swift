@@ -231,22 +231,25 @@ enum AppConfig {
     }
 
     static var virtualAssetsEnabled: Bool {
-        if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_VIRTUAL_ASSETS_ENABLED"]) {
-            UserDefaults.standard.set(env, forKey: persistedVirtualAssetsEnabledKey)
-            return env
-        }
-
-        if UserDefaults.standard.object(forKey: persistedVirtualAssetsEnabledKey) != nil {
-            return UserDefaults.standard.bool(forKey: persistedVirtualAssetsEnabledKey)
-        }
-
-        return true
+        false
     }
 
     static func setVirtualAssetsEnabled(_ isEnabled: Bool) {
 #if DEBUG
-        UserDefaults.standard.set(isEnabled, forKey: persistedVirtualAssetsEnabledKey)
+        UserDefaults.standard.set(false, forKey: persistedVirtualAssetsEnabledKey)
 #endif
+    }
+
+    static var guidanceEnabled: Bool {
+        if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_GUIDANCE_ENABLED"]) {
+            return env
+        }
+
+        if let env = normalizedBool(ProcessInfo.processInfo.environment["RAVER_APP_GUIDANCE_ENABLED"]) {
+            return env
+        }
+
+        return true
     }
 
     private static func normalizedBaseURLString(_ raw: String?) -> String? {

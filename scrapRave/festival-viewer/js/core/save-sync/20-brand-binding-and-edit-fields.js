@@ -678,8 +678,8 @@ function setEditInputs(panelEl, info) {
   const timeZoneValue = String(info.timeZone || info.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC').trim() || 'UTC';
   ensureSelectHasOption('timeZone', timeZoneValue);
   set('timeZone', timeZoneValue);
-  set('startDate', info.startDate);
-  set('endDate', info.endDate);
+  set('startDate', formatArchiveDateInTimeZoneForSync(info.startDate, timeZoneValue));
+  set('endDate', formatArchiveDateInTimeZoneForSync(info.endDate, timeZoneValue));
   set('ticketPriceMin', info.ticketPriceMin === null || info.ticketPriceMin === undefined ? '' : String(info.ticketPriceMin));
   set('ticketPriceMax', info.ticketPriceMax === null || info.ticketPriceMax === undefined ? '' : String(info.ticketPriceMax));
   set('ticketCurrency', info.ticketCurrency || '');
