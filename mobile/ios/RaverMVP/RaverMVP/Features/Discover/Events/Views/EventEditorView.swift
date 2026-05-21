@@ -4771,8 +4771,6 @@ struct EventLocationPickerSheet: View {
     @State private var selectedCandidate: EventLocationSearchCandidate?
     @State private var isResolving = false
     @State private var errorMessage: String?
-    @State private var listMode: CandidateListMode = .nearby
-    @State private var nearbySearchTask: Task<Void, Never>?
     @FocusState private var isSearchFieldFocused: Bool
     @State private var hasAppliedInitialDeviceLocation = false
     @State private var showLocationPermissionRationale = false
@@ -4844,7 +4842,6 @@ struct EventLocationPickerSheet: View {
             }
             .onAppear {
                 searchModel.updateQuery(query)
-                scheduleNearbySearch(for: pinCoordinate)
                 requestCurrentLocationWithRationaleIfNeeded()
             }
             .onReceive(locationProvider.$coordinate) { coordinate in
@@ -4858,26 +4855,9 @@ struct EventLocationPickerSheet: View {
                         span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
                     )
                 )
-                listMode = .nearby
-                scheduleNearbySearch(for: coordinate)
             }
             .onChange(of: query) { _, newValue in
                 searchModel.updateQuery(newValue)
-                if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    listMode = .query
-                } else if !isSearchFieldFocused {
-                    listMode = .nearby
-                }
-            }
-            .onChange(of: isSearchFieldFocused) { _, isFocused in
-                if isFocused {
-                    listMode = .query
-                } else if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    listMode = .nearby
-                }
-            }
-            .onDisappear {
-                nearbySearchTask?.cancel()
             }
             .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
                 get: { errorMessage != nil },
@@ -4908,8 +4888,6 @@ struct EventLocationPickerSheet: View {
                 .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 360)
                 .onMapCameraChange(frequency: .onEnd) { context in
                     pinCoordinate = context.region.center
-                    listMode = .nearby
-                    scheduleNearbySearch(for: context.region.center)
                 }
 
             VStack(spacing: 0) {
@@ -4960,17 +4938,13 @@ struct EventLocationPickerSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 6) {
-                    Image(systemName: listMode == .query ? "magnifyingglass" : "scope")
+                    Image(systemName: "magnifyingglass")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
-                    Text(listMode == .query ? LT("搜索候选地点", "Search candidates", "候補地を検索") : LT("附近推荐地点", "Nearby recommendations", "近くのおすすめ"))
+                    Text(LT("搜索候选地点", "Search candidates", "候補地を検索"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.secondaryText)
                     Spacer(minLength: 0)
-                    if listMode == .nearby, searchModel.isLoadingNearby {
-                        ProgressView()
-                            .controlSize(.mini)
-                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
@@ -5126,32 +5100,13 @@ struct EventLocationPickerSheet: View {
     }
 
     private var displayedCandidates: [EventLocationSearchCandidate] {
-        switch listMode {
-        case .query:
-            return searchModel.queryCandidates
-        case .nearby:
-            return searchModel.nearbyCandidates
-        }
+        searchModel.queryCandidates
     }
 
     private var emptyHintText: String {
-        switch listMode {
-        case .query:
-            return query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? LT("输入关键词搜索地点", "Enter keywords to search places", "キーワードを入力して場所を検索")
-                : LT("未找到匹配地点", "No matching places found", "一致する場所が見つかりません")
-        case .nearby:
-            return LT("拖动地图后，将在这里展示 pin 附近地点", "After dragging the map, nearby places around the pin will appear here.", "地図をドラッグすると、ピン付近の場所がここに表示されます。")
-        }
-    }
-
-    private func scheduleNearbySearch(for coordinate: CLLocationCoordinate2D) {
-        nearbySearchTask?.cancel()
-        nearbySearchTask = Task {
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            guard !Task.isCancelled else { return }
-            await searchModel.searchNearby(around: coordinate)
-        }
+        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? LT("输入关键词搜索地点", "Enter keywords to search places", "キーワードを入力して場所を検索")
+            : LT("未找到匹配地点", "No matching places found", "一致する場所が見つかりません")
     }
 
     private func centerOnCurrentLocation(forceRequest: Bool) {
@@ -5163,8 +5118,6 @@ struct EventLocationPickerSheet: View {
                     span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
                 )
             )
-            listMode = .nearby
-            scheduleNearbySearch(for: coordinate)
             return
         }
 

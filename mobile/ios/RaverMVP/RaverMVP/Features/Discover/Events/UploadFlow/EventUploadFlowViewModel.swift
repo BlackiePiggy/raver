@@ -8,9 +8,11 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var submitSuccess: EventUploadSubmitSuccess?
     @Published var shouldConfirmRestoredCreateDraft = false
     @Published var timeZoneSearchResults: [EventTimezoneLookupItem] = []
+    @Published var organizerSearchResults: [WebLearnFestival] = []
     @Published var djSearchResults: [String: [WebDJ]] = [:]
     @Published var searchingDJKeys: Set<String> = []
     @Published var isSearchingTimeZones = false
+    @Published var isSearchingOrganizers = false
     @Published var isSubmitting = false
 
     private let draftStore: EventUploadDraftStore
@@ -209,8 +211,60 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
+    func updateOrganizerName(_ value: String) {
+        draft.organizerName = value
+        draft.organizerFestivalID = nil
+        organizerSearchResults = []
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func searchOrganizers() async {
+        let trimmed = draft.organizerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            statusMessage = LT("请先输入主办方名称。", "Enter an organizer name first.", "先に主催者名を入力してください。")
+            return
+        }
+        isSearchingOrganizers = true
+        defer { isSearchingOrganizers = false }
+        do {
+            organizerSearchResults = try await webService.fetchLearnFestivals(search: trimmed)
+            if organizerSearchResults.isEmpty {
+                statusMessage = LT("没有找到匹配主办方，当前会按手动名称保存。", "No matching organizer found. The current text will be saved as a manual name.", "一致する主催者が見つかりませんでした。現在のテキストを手入力名として保存します。")
+            }
+        } catch {
+            organizerSearchResults = []
+            statusMessage = error.userFacingMessage ?? LT("搜索主办方失败，请稍后重试。", "Failed to search organizers. Please try again.", "主催者検索に失敗しました。もう一度お試しください。")
+        }
+    }
+
+    func applyOrganizer(_ festival: WebLearnFestival) {
+        draft.organizerFestivalID = festival.id
+        draft.organizerName = festival.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? (festival.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? festival.name)
+            : festival.name
+        organizerSearchResults = []
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track("event_upload_v2_organizer_bound", properties: ["festivalID": festival.id])
+    }
+
+    func clearOrganizerBinding() {
+        draft.organizerFestivalID = nil
+        organizerSearchResults = []
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateSourceURL(_ value: String) {
+        draft.sourceURL = value
+        draft.dirty = true
+        saveDraft()
+    }
+
     func updateScheduleMode(_ mode: EventUploadScheduleMode) {
         draft.scheduleMode = mode
+        normalizeWeekRanges(for: mode)
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_schedule_mode_changed", properties: ["mode": mode.rawValue])
@@ -218,6 +272,41 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func updateDate(_ keyPath: WritableKeyPath<EventUploadDraft, Date>, value: Date) {
         draft[keyPath: keyPath] = value
+        syncWeekRangesWithEventDates()
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func addWeekRange() {
+        let anchor = draft.weekRanges.last?.endDate ?? draft.endDate
+        let nextStart = Calendar.current.date(byAdding: .day, value: 1, to: anchor) ?? anchor
+        let nextEnd = Calendar.current.date(byAdding: .day, value: 2, to: nextStart) ?? nextStart
+        draft.weekRanges.append(EventUploadWeekRangeDraft(startDate: nextStart, endDate: nextEnd))
+        recalculateEventDateBoundsFromWeeks()
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func removeWeekRange(id: UUID) {
+        guard draft.weekRanges.count > 1 else { return }
+        draft.weekRanges.removeAll { $0.id == id }
+        recalculateEventDateBoundsFromWeeks()
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateWeekRange(id: UUID, startDate: Date? = nil, endDate: Date? = nil) {
+        guard let index = draft.weekRanges.firstIndex(where: { $0.id == id }) else { return }
+        if let startDate {
+            draft.weekRanges[index].startDate = startDate
+        }
+        if let endDate {
+            draft.weekRanges[index].endDate = endDate
+        }
+        if draft.weekRanges[index].endDate < draft.weekRanges[index].startDate {
+            draft.weekRanges[index].endDate = draft.weekRanges[index].startDate
+        }
+        recalculateEventDateBoundsFromWeeks()
         draft.dirty = true
         saveDraft()
     }
@@ -328,10 +417,6 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.pickedPlaceName = result.placeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         let language = draft.preferredLanguage
-        if !result.displayAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           draft.detailAddress.primaryValue(preferredLanguage: language).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.detailAddress.setCurrentValue(result.displayAddress, preferredLanguage: language)
-        }
         if let city = result.city?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty,
            draft.city.primaryValue(preferredLanguage: language).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             draft.city.setCurrentValue(city, preferredLanguage: language)
@@ -364,7 +449,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func addStage() {
-        draft.stageEntries.append(LT("主舞台", "Main Stage", "メインステージ"))
+        draft.stageEntries.append("")
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_stage_added", properties: ["count": "\(draft.stageEntries.count)"])
@@ -375,6 +460,14 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.stageEntries[index] = value
         draft.dirty = true
         saveDraft()
+    }
+
+    func normalizedStageName(at index: Int) -> String {
+        guard draft.stageEntries.indices.contains(index) else {
+            return LT("主舞台", "Main Stage", "メインステージ")
+        }
+        let trimmed = draft.stageEntries[index].trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : trimmed
     }
 
     func removeStage(at index: Int) {
@@ -401,34 +494,56 @@ final class EventUploadFlowViewModel: ObservableObject {
         statusMessage = LT("阵容图识别会在后续接入。当前可以先维护舞台。", "Lineup image import will be wired later. You can set up stages for now.", "ラインナップ画像認識は後続で接続します。今はステージを設定できます。")
     }
 
-    func addLineupSlot() {
+    func addTimetableSlot() {
+        ensureDefaultStageExistsIfNeeded()
         var slot = EventUploadLineupSlotDraft()
-        slot.stageName = draft.stageEntries.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        slot.stageName = normalizedStageName(at: 0)
         slot.startTime = defaultLineupStartTime(dayIndex: 1)
         slot.endTime = defaultLineupEndTime(dayIndex: 1)
-        draft.lineupSlots.append(slot)
+        draft.timetableSlots.append(slot)
         draft.dirty = true
         saveDraft()
-        EventUploadAnalytics.track("event_upload_v2_lineup_slot_added", properties: ["count": "\(draft.lineupSlots.count)"])
+        EventUploadAnalytics.track("event_upload_v2_lineup_slot_added", properties: ["count": "\(draft.timetableSlots.count)"])
     }
 
-    func removeLineupSlot(id: UUID) {
-        draft.lineupSlots.removeAll { $0.id == id }
+    func addTimetableSlot(stageName: String, dayIndex: Int) {
+        ensureDefaultStageExistsIfNeeded()
+        var slot = EventUploadLineupSlotDraft()
+        let trimmedStage = stageName.trimmingCharacters(in: .whitespacesAndNewlines)
+        slot.stageName = trimmedStage.isEmpty ? normalizedStageName(at: 0) : trimmedStage
+        slot.dayIndex = max(dayIndex, 1)
+        slot.startTime = defaultLineupStartTime(dayIndex: slot.dayIndex)
+        slot.endTime = defaultLineupEndTime(dayIndex: slot.dayIndex)
+        draft.timetableSlots.append(slot)
         draft.dirty = true
         saveDraft()
-        EventUploadAnalytics.track("event_upload_v2_lineup_slot_removed", properties: ["count": "\(draft.lineupSlots.count)"])
+        EventUploadAnalytics.track(
+            "event_upload_v2_lineup_slot_added",
+            properties: [
+                "count": "\(draft.timetableSlots.count)",
+                "stage": slot.stageName,
+                "dayIndex": "\(slot.dayIndex)",
+            ]
+        )
     }
 
-    func updateLineupSlot(id: UUID, mutate: (inout EventUploadLineupSlotDraft) -> Void) {
-        guard let index = draft.lineupSlots.firstIndex(where: { $0.id == id }) else { return }
-        mutate(&draft.lineupSlots[index])
-        draft.lineupSlots[index].normalizePerformers()
+    func removeTimetableSlot(id: UUID) {
+        draft.timetableSlots.removeAll { $0.id == id }
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track("event_upload_v2_lineup_slot_removed", properties: ["count": "\(draft.timetableSlots.count)"])
+    }
+
+    func updateTimetableSlot(id: UUID, mutate: (inout EventUploadLineupSlotDraft) -> Void) {
+        guard let index = draft.timetableSlots.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&draft.timetableSlots[index])
+        draft.timetableSlots[index].normalizePerformers()
         draft.dirty = true
         saveDraft()
     }
 
-    func setLineupSlotTimed(id: UUID, isTimed: Bool) {
-        updateLineupSlot(id: id) { slot in
+    func setTimetableSlotTimed(id: UUID, isTimed: Bool) {
+        updateTimetableSlot(id: id) { slot in
             if isTimed {
                 slot.startTime = defaultLineupStartTime(dayIndex: slot.dayIndex)
                 slot.endTime = defaultLineupEndTime(dayIndex: slot.dayIndex)
@@ -439,8 +554,30 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    func searchLineupDJ(slotID: UUID, performerIndex: Int) async {
-        guard let slot = draft.lineupSlots.first(where: { $0.id == slotID }),
+    func addLineupOnlySlot() {
+        var slot = EventUploadLineupOnlySlotDraft()
+        slot.normalizePerformers()
+        draft.lineupOnlySlots.append(slot)
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func removeLineupOnlySlot(id: UUID) {
+        draft.lineupOnlySlots.removeAll { $0.id == id }
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateLineupOnlySlot(id: UUID, mutate: (inout EventUploadLineupOnlySlotDraft) -> Void) {
+        guard let index = draft.lineupOnlySlots.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&draft.lineupOnlySlots[index])
+        draft.lineupOnlySlots[index].normalizePerformers()
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func searchTimetableDJ(slotID: UUID, performerIndex: Int) async {
+        guard let slot = draft.timetableSlots.first(where: { $0.id == slotID }),
               slot.performerNames.indices.contains(performerIndex) else { return }
         let query = slot.performerNames[performerIndex].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
@@ -462,27 +599,86 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    func applyLineupDJ(_ dj: WebDJ, slotID: UUID, performerIndex: Int) {
-        updateLineupSlot(id: slotID) { slot in
+    func applyTimetableDJ(_ dj: WebDJ, slotID: UUID, performerIndex: Int) {
+        updateTimetableSlot(id: slotID) { slot in
             while slot.performerNames.count <= performerIndex {
                 slot.performerNames.append("")
             }
             while slot.performerDJIDs.count <= performerIndex {
                 slot.performerDJIDs.append(nil)
             }
+            while slot.performerAvatarURLs.count <= performerIndex {
+                slot.performerAvatarURLs.append(nil)
+            }
             slot.performerNames[performerIndex] = dj.name
             slot.performerDJIDs[performerIndex] = dj.id
+            slot.performerAvatarURLs[performerIndex] = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl ?? dj.avatarOriginalUrl
         }
         djSearchResults[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = []
         EventUploadAnalytics.track("event_upload_v2_lineup_dj_bound", properties: ["slotID": slotID.uuidString])
     }
 
-    func clearLineupDJBinding(slotID: UUID, performerIndex: Int) {
-        updateLineupSlot(id: slotID) { slot in
+    func clearTimetableDJBinding(slotID: UUID, performerIndex: Int) {
+        updateTimetableSlot(id: slotID) { slot in
             while slot.performerDJIDs.count <= performerIndex {
                 slot.performerDJIDs.append(nil)
             }
+            while slot.performerAvatarURLs.count <= performerIndex {
+                slot.performerAvatarURLs.append(nil)
+            }
             slot.performerDJIDs[performerIndex] = nil
+            slot.performerAvatarURLs[performerIndex] = nil
+        }
+    }
+
+    func searchLineupOnlyDJ(slotID: UUID, performerIndex: Int) async {
+        guard let slot = draft.lineupOnlySlots.first(where: { $0.id == slotID }),
+              slot.performerNames.indices.contains(performerIndex) else { return }
+        let query = slot.performerNames[performerIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            statusMessage = LT("请先输入 DJ 名称。", "Enter a DJ name first.", "先にDJ名を入力してください。")
+            return
+        }
+        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
+        searchingDJKeys.insert(key)
+        defer { searchingDJKeys.remove(key) }
+        do {
+            let page = try await webService.fetchDJs(page: 1, limit: 8, search: query, sortBy: "relevance")
+            djSearchResults[key] = page.items
+        } catch {
+            djSearchResults[key] = []
+            statusMessage = error.userFacingMessage ?? LT("搜索 DJ 失败，请稍后重试。", "Failed to search DJs. Please try again.", "DJ検索に失敗しました。もう一度お試しください。")
+        }
+    }
+
+    func applyLineupOnlyDJ(_ dj: WebDJ, slotID: UUID, performerIndex: Int) {
+        updateLineupOnlySlot(id: slotID) { slot in
+            while slot.performerNames.count <= performerIndex {
+                slot.performerNames.append("")
+            }
+            while slot.performerDJIDs.count <= performerIndex {
+                slot.performerDJIDs.append(nil)
+            }
+            while slot.performerAvatarURLs.count <= performerIndex {
+                slot.performerAvatarURLs.append(nil)
+            }
+            slot.performerNames[performerIndex] = dj.name
+            slot.performerDJIDs[performerIndex] = dj.id
+            slot.performerAvatarURLs[performerIndex] = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl ?? dj.avatarOriginalUrl
+        }
+        djSearchResults[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = []
+    }
+
+    func clearLineupOnlyDJBinding(slotID: UUID, performerIndex: Int) {
+        updateLineupOnlySlot(id: slotID) { slot in
+            while slot.performerDJIDs.count <= performerIndex {
+                slot.performerDJIDs.append(nil)
+            }
+            while slot.performerAvatarURLs.count <= performerIndex {
+                slot.performerAvatarURLs.append(nil)
+            }
+            slot.performerDJIDs[performerIndex] = nil
+            slot.performerAvatarURLs[performerIndex] = nil
         }
     }
 
@@ -609,6 +805,53 @@ final class EventUploadFlowViewModel: ObservableObject {
             return eventID
         }
         return nil
+    }
+
+    private func ensureDefaultStageExistsIfNeeded() {
+        guard draft.stageEntries.isEmpty else { return }
+        draft.stageEntries = [""]
+    }
+
+    private func normalizeWeekRanges(for mode: EventUploadScheduleMode) {
+        switch mode {
+        case .singleDay, .multiDay:
+            draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+        case .multiWeek:
+            if draft.weekRanges.isEmpty {
+                draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+            }
+            recalculateEventDateBoundsFromWeeks()
+        }
+    }
+
+    private func syncWeekRangesWithEventDates() {
+        if draft.scheduleMode == .multiWeek {
+            if draft.weekRanges.isEmpty {
+                draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+            } else {
+                draft.weekRanges[0].startDate = draft.startDate
+                if let lastIndex = draft.weekRanges.indices.last {
+                    draft.weekRanges[lastIndex].endDate = max(draft.weekRanges[lastIndex].endDate, draft.endDate)
+                }
+                recalculateEventDateBoundsFromWeeks()
+            }
+        } else {
+            draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+        }
+    }
+
+    private func recalculateEventDateBoundsFromWeeks() {
+        guard !draft.weekRanges.isEmpty else { return }
+        let normalized = draft.weekRanges.map { range in
+            EventUploadWeekRangeDraft(id: range.id, startDate: min(range.startDate, range.endDate), endDate: max(range.startDate, range.endDate))
+        }
+        draft.weekRanges = normalized.sorted { $0.startDate < $1.startDate }
+        if let first = draft.weekRanges.first {
+            draft.startDate = first.startDate
+        }
+        if let last = draft.weekRanges.last {
+            draft.endDate = last.endDate
+        }
     }
 
     private func defaultLineupStartTime(dayIndex: Int) -> Date {

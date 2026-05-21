@@ -220,7 +220,7 @@ enum AppConfig {
             return UserDefaults.standard.bool(forKey: persistedRealNameEnforcementEnabledKey)
         }
 
-        return false
+        return true
 #else
         false
 #endif
@@ -272,6 +272,12 @@ enum AppConfig {
 #endif
             return env
         }
+        if let env = normalizedBool(ProcessInfo.processInfo.environment["eventUploadFlowV2Enabled"]) {
+#if DEBUG
+            UserDefaults.standard.set(env, forKey: persistedEventUploadFlowV2EnabledKey)
+#endif
+            return env
+        }
 
 #if DEBUG
         if UserDefaults.standard.object(forKey: persistedEventUploadFlowV2EnabledKey) != nil {
@@ -279,7 +285,7 @@ enum AppConfig {
         }
 #endif
 
-        return false
+        return true
     }
 
     static func setEventUploadFlowV2Enabled(_ isEnabled: Bool) {

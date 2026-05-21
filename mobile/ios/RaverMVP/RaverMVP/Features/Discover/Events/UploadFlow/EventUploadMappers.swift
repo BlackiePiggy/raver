@@ -41,6 +41,7 @@ enum EventUploadMappers {
 
         return CreateEventInput(
             name: name,
+            wikiFestivalId: draft.organizerFestivalID?.trimmed.eventUploadMapperNilIfBlank,
             description: draft.description.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank,
             eventType: EventTypeOption.submissionValue(for: draft.eventType),
             city: city,
@@ -53,6 +54,7 @@ enum EventUploadMappers {
             longitude: draft.longitude,
             ticketUrl: draft.ticket.ticketURL.trimmed.eventUploadMapperNilIfBlank,
             ticketCurrency: draft.ticket.currency.trimmed.uppercased().eventUploadMapperNilIfBlank,
+            officialWebsite: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
             startDate: draft.startDate,
             endDate: draft.endDate,
             timeZone: timeZone,
@@ -90,6 +92,7 @@ enum EventUploadMappers {
             ticketUrl: create.ticketUrl ?? "",
             ticketCurrency: create.ticketCurrency ?? "",
             ticketNotes: "",
+            officialWebsite: create.officialWebsite ?? "",
             startDate: create.startDate,
             endDate: create.endDate,
             timeZone: create.timeZone,
@@ -173,7 +176,7 @@ enum EventUploadMappers {
     }
 
     private static func lineupSlotInputs(from draft: EventUploadDraft) -> [EventLineupSlotInput]? {
-        let slots = draft.lineupSlots.enumerated().compactMap { index, slot -> EventLineupSlotInput? in
+        let timetableSlots = draft.timetableSlots.enumerated().compactMap { index, slot -> EventLineupSlotInput? in
             let performerNames = slot.performerNames
                 .prefix(slot.actType.performerCount)
                 .map { $0.trimmed }
@@ -192,7 +195,28 @@ enum EventUploadMappers {
                 endTime: normalizedLineupEndTime(start: slot.startTime, end: slot.endTime)
             )
         }
-        return slots.isEmpty ? nil : slots
+        let baseCount = timetableSlots.count
+        let lineupOnlySlots = draft.lineupOnlySlots.enumerated().compactMap { offset, slot -> EventLineupSlotInput? in
+            let performerNames = slot.performerNames
+                .prefix(slot.actType.performerCount)
+                .map { $0.trimmed }
+                .filter { !$0.isEmpty }
+            guard performerNames.count == slot.actType.performerCount else { return nil }
+            let name = EventLineupActCodec.composeName(type: slot.actType, performerNames: performerNames)
+            guard !name.isEmpty else { return nil }
+            let primaryDJID = slot.performerDJIDs.first??.trimmed.eventUploadMapperNilIfBlank
+            return EventLineupSlotInput(
+                djId: primaryDJID,
+                festivalDayIndex: nil,
+                djName: name,
+                stageName: nil,
+                sortOrder: baseCount + offset + 1,
+                startTime: nil,
+                endTime: nil
+            )
+        }
+        let merged = timetableSlots + lineupOnlySlots
+        return merged.isEmpty ? nil : merged
     }
 
     private static func normalizedLineupEndTime(start: Date?, end: Date?) -> Date? {

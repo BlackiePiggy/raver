@@ -4,7 +4,7 @@ enum EventUploadStep: String, CaseIterable, Identifiable, Codable {
     case media
     case basic
     case time
-    case location
+    case timetable
     case lineup
     case review
 
@@ -13,11 +13,11 @@ enum EventUploadStep: String, CaseIterable, Identifiable, Codable {
     var title: String {
         switch self {
         case .media: return LT("媒体", "Media", "メディア")
-        case .basic: return LT("基础", "Basics", "基本")
-        case .time: return LT("时间", "Time", "時間")
-        case .location: return LT("地点", "Location", "場所")
+        case .basic: return LT("信息", "Info", "情報")
+        case .time: return LT("周期", "Schedule", "日程")
+        case .timetable: return LT("时间表", "Timetable", "タイムテーブル")
         case .lineup: return LT("阵容", "Lineup", "ラインナップ")
-        case .review: return LT("预览", "Review", "確認")
+        case .review: return LT("票务", "Tickets", "チケット")
         }
     }
 
@@ -48,4 +48,3 @@ enum EventUploadScheduleMode: String, CaseIterable, Identifiable, Codable {
         }
     }
 }
-

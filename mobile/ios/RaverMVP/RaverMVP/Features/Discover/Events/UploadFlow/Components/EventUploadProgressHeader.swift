@@ -4,7 +4,7 @@ struct EventUploadProgressHeader: View {
     let currentStep: EventUploadStep
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("\(currentIndex + 1)/\(EventUploadStep.allCases.count) · \(currentStep.title)")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -12,12 +12,13 @@ struct EventUploadProgressHeader: View {
                 ForEach(EventUploadStep.allCases) { step in
                     Capsule()
                         .fill(fillColor(for: step))
-                        .frame(height: 4)
+                        .frame(height: 6)
                 }
             }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
         .background(RaverTheme.background)
     }
 
@@ -30,4 +31,3 @@ struct EventUploadProgressHeader: View {
         return index <= currentIndex ? RaverTheme.accent : RaverTheme.cardBorder
     }
 }
-

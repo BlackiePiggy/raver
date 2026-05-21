@@ -6,6 +6,8 @@ struct EventUploadFlowView: View {
     @StateObject private var viewModel: EventUploadFlowViewModel
     @State private var showLocationPicker = false
     @State private var showExitConfirmation = false
+    @State private var selectedWeekForEditing: EventUploadWeekSelection?
+    @State private var expandedTimetableSlots: Set<UUID> = []
 
     init(
         mode: EventUploadMode = .create,
@@ -24,26 +26,7 @@ struct EventUploadFlowView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let success = viewModel.submitSuccess {
-                successView(success)
-            } else {
-                EventUploadProgressHeader(currentStep: viewModel.draft.currentStep)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        content
-                    }
-                    .padding(20)
-                }
-                EventUploadBottomBar(
-                    canGoBack: viewModel.draft.currentStep.previous != nil,
-                    isFinalStep: viewModel.draft.currentStep == .review,
-                    isBusy: viewModel.isSubmitting,
-                    onBack: viewModel.goBack,
-                    onNext: viewModel.advance
-                )
-            }
-        }
+        rootContent
         .background(RaverTheme.background.ignoresSafeArea())
         .raverSystemNavigation(title: LT("上传活动", "Upload Event", "イベントをアップロード"))
         .toolbar {
@@ -81,6 +64,9 @@ struct EventUploadFlowView: View {
             ) { result in
                 viewModel.applyLocationPickerResult(result)
             }
+        }
+        .sheet(item: $selectedWeekForEditing) { selection in
+            weekEditorSheet(for: selection)
         }
         .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredCreateDraft) {
             Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
@@ -126,8 +112,8 @@ struct EventUploadFlowView: View {
             basicStep
         case .time:
             timeStep
-        case .location:
-            locationStep
+        case .timetable:
+            timetableStep
         case .lineup:
             lineupStep
         case .review:
@@ -135,19 +121,81 @@ struct EventUploadFlowView: View {
         }
     }
 
+    private var rootContent: some View {
+        VStack(spacing: 0) {
+            if let success = viewModel.submitSuccess {
+                successView(success)
+            } else {
+                editorContent
+            }
+        }
+    }
+
+    private var editorContent: some View {
+        VStack(spacing: 0) {
+            EventUploadProgressHeader(currentStep: viewModel.draft.currentStep)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    content
+                }
+                .padding(20)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
+            }
+            EventUploadBottomBar(
+                canGoBack: viewModel.draft.currentStep.previous != nil,
+                isFinalStep: viewModel.draft.currentStep == .review,
+                isBusy: viewModel.isSubmitting,
+                onBack: viewModel.goBack,
+                onNext: viewModel.advance
+            )
+        }
+    }
+
     private var mediaStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(
+                LT("活动图片", "Event Images", "イベント画像"),
+                subtitle: LT("海报为必填，其余图片可选。图片上传仅支持从相册选择。", "Poster is required. Other images are optional. Uploads currently use photo library only.", "ポスターは必須です。他の画像は任意です。アップロードは写真ライブラリ選択のみ対応します。")
+            )
+
+            LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                ForEach(EventUploadImageZone.allCases) { zone in
+                    EventUploadImageZoneCard(
+                        zone: zone,
+                        images: viewModel.draft.imageZones[zone] ?? [],
+                        isRequired: zone == .poster,
+                        onPicked: { items in
+                            await viewModel.addPickedImages(zone: zone, items: items)
+                        },
+                        onDelete: { imageID in
+                            viewModel.removeImage(zone: zone, imageID: imageID)
+                        },
+                        onMove: { imageID, direction in
+                            viewModel.moveImage(zone: zone, imageID: imageID, direction: direction)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var basicStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             Button {
                 viewModel.tapAIPlaceholder()
             } label: {
-                Label(LT("AI 智能识别", "AI Recognition", "AI認識"), systemImage: "sparkles")
+                Label(LT("AI 一键补充", "AI Autofill", "AI自動補完"), systemImage: "sparkles")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
                     .background(
                         LinearGradient(
-                            colors: [.pink, .purple, .blue, .cyan],
+                            colors: [.pink, .orange, .blue, .cyan],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -155,39 +203,14 @@ struct EventUploadFlowView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.55), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.45), lineWidth: 1)
                     )
-                    .shadow(color: RaverTheme.accent.opacity(0.25), radius: 14, x: 0, y: 8)
             }
             .buttonStyle(.plain)
 
-            ForEach(EventUploadImageZone.allCases) { zone in
-                EventUploadImageZoneCard(
-                    zone: zone,
-                    images: viewModel.draft.imageZones[zone] ?? [],
-                    isRequired: zone == .poster,
-                    onPicked: { items in
-                        await viewModel.addPickedImages(zone: zone, items: items)
-                    },
-                    onReplace: { imageID, item in
-                        await viewModel.replaceImage(zone: zone, imageID: imageID, item: item)
-                    },
-                    onDelete: { imageID in
-                        viewModel.removeImage(zone: zone, imageID: imageID)
-                    },
-                    onMove: { imageID, direction in
-                        viewModel.moveImage(zone: zone, imageID: imageID, direction: direction)
-                    }
-                )
-            }
-        }
-    }
-
-    private var basicStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
             sectionTitle(
                 LT("基础信息", "Basics", "基本情報"),
-                subtitle: LT("先把用户判断活动是否值得去的核心信息填清楚。", "Start with the essentials people need to understand the event.", "イベントを理解するための基本情報を入力します。")
+                subtitle: LT("先把活动名称、地点、时区和发布来源补清楚。", "Fill in the core event details, location, timezone, and source info first.", "イベント名、場所、タイムゾーン、出典情報を先に入力します。")
             )
 
             uploadTextField(
@@ -238,97 +261,7 @@ struct EventUploadFlowView: View {
                 axis: .vertical
             )
 
-            Text(preferredLanguageHint)
-                .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
-        }
-    }
-
-    private var timeStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionTitle(
-                LT("时间与时区", "Time & Time Zone", "時間とタイムゾーン"),
-                subtitle: LT("支持单日、多日和多 Week，跨天时间表默认按凌晨 6 点切日。", "Supports single-day, multi-day, and multi-week events. Overnight timetable rollover defaults to 6 AM.", "1日、複数日、複数Weekに対応します。深夜越えの切替は標準で朝6時です。")
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                fieldTitle(LT("活动跨度", "Schedule Mode", "開催期間"), isRequired: false)
-                HStack(spacing: 8) {
-                    ForEach(EventUploadScheduleMode.allCases) { mode in
-                        Button {
-                            viewModel.updateScheduleMode(mode)
-                        } label: {
-                            Text(mode.title)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(viewModel.draft.scheduleMode == mode ? .white : RaverTheme.primaryText)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    viewModel.draft.scheduleMode == mode ? RaverTheme.accent : RaverTheme.card,
-                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            DatePicker(
-                LT("开始日期", "Start Date", "開始日"),
-                selection: dateBinding(\.startDate),
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
-            .tint(RaverTheme.accent)
-            .padding(12)
-            .background(fieldBackground)
-
-            DatePicker(
-                LT("结束日期", "End Date", "終了日"),
-                selection: dateBinding(\.endDate),
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
-            .tint(RaverTheme.accent)
-            .padding(12)
-            .background(fieldBackground)
-
             timeZoneSearchSection
-
-            timeZonePreviewSection
-
-            Stepper(value: dayRolloverBinding, in: 0...12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(LT("跨天切日时间", "Overnight Rollover", "日付切替時刻"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                    Text(LT("凌晨 \(viewModel.draft.dayRolloverHour):00 前仍算前一日", "Before \(viewModel.draft.dayRolloverHour):00 counts as the previous event day", "\(viewModel.draft.dayRolloverHour):00 前は前日の扱い"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                }
-            }
-            .tint(RaverTheme.accent)
-            .padding(12)
-            .background(fieldBackground)
-
-            if viewModel.draft.endDate < viewModel.draft.startDate {
-                Text(LT("结束日期不能早于开始日期。", "End date cannot be earlier than start date.", "終了日は開始日より前にできません。"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.red)
-            }
-        }
-    }
-
-    private var locationStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionTitle(
-                LT("地点", "Location", "場所"),
-                subtitle: LT("城市、国家和详细地址已在基础信息中作为必填项；坐标可选。", "City, country, and detailed address are required in Basics. Coordinates are optional.", "都市、国、詳細住所は基本情報で必須です。座標は任意です。")
-            )
 
             Button {
                 showLocationPicker = true
@@ -337,9 +270,9 @@ struct EventUploadFlowView: View {
                     Image(systemName: "map")
                         .font(.headline)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(LT("从地图选择位置", "Pick on Map", "地図で選択"))
+                        Text(LT("地图选点", "Pick on Map", "地図で選択"))
                             .font(.subheadline.weight(.bold))
-                        Text(LT("搜索场地、拖动地图或使用当前位置。", "Search venues, drag the map, or use current location.", "会場検索、地図移動、現在地を利用できます。"))
+                        Text(LT("地图位置与手填详细地址分开保存，这里只负责场地地点与坐标。", "Map location is stored separately from the manual detailed address. Use this for venue/place and coordinates only.", "地図位置は手入力の詳細住所とは別保存です。ここでは会場・地点と座標のみ設定します。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
@@ -358,32 +291,346 @@ struct EventUploadFlowView: View {
             }
             .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 8) {
-                fieldTitle(LT("位置摘要", "Location Summary", "場所の概要"), isRequired: false)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(viewModel.locationSummary)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    if let coordinateSummary = viewModel.coordinateSummary {
-                        Text(coordinateSummary)
+            if let coordinateSummary = viewModel.coordinateSummary {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !viewModel.draft.pickedPlaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(viewModel.draft.pickedPlaceName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                    }
+                    if !viewModel.draft.pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(viewModel.draft.pickedMapAddress)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(coordinateSummary)
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                )
+            }
+
+            organizerSearchSection
+
+            uploadTextField(
+                title: LT("原文链接", "Source URL", "原文リンク"),
+                text: sourceURLBinding
+            )
+
+            Text(preferredLanguageHint)
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+        }
+    }
+
+    private var timeStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(
+                LT("活动周期", "Schedule", "開催期間"),
+                subtitle: LT("支持单日、多日和多 Week。多 Week 可继续拆分到每周范围。", "Supports single-day, multi-day, and multi-week schedules.", "1日、複数日、複数Weekに対応します。")
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(LT("周期概览", "Schedule Overview", "開催概要"))
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(LT("先确认活动跨越几天，再决定是否拆成多个 Week。", "Confirm the event span first, then decide whether to split it into multiple weeks.", "まず開催日数を確定し、その後で複数Weekに分割するか決めます。"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(scheduleHeroValue)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(RaverTheme.accent)
+                        Text(scheduleHeroLabel)
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(fieldBackground)
+
+                HStack(spacing: 10) {
+                    scheduleSummaryChip(title: LT("当前模式", "Mode", "現在のモード"), value: viewModel.draft.scheduleMode.title)
+                    scheduleSummaryChip(title: LT("Week 数量", "Weeks", "Week数"), value: "\(displayWeekRanges.count)")
+                }
+            }
+            .padding(16)
+            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                fieldTitle(LT("活动跨度", "Schedule Mode", "開催期間"), isRequired: false)
+                HStack(spacing: 8) {
+                    ForEach(EventUploadScheduleMode.allCases) { mode in
+                        scheduleModeCard(mode)
+                    }
+                }
             }
 
             HStack(spacing: 12) {
-                uploadTextField(
-                    title: LT("纬度（可选）", "Latitude (Optional)", "緯度（任意）"),
-                    text: coordinateBinding(\.latitude)
+                scheduleDateCard(
+                    title: LT("开始日期", "Start Date", "開始日"),
+                    subtitle: LT("活动开始", "Event start", "開始日"),
+                    selection: dateBinding(\.startDate)
                 )
-                uploadTextField(
-                    title: LT("经度（可选）", "Longitude (Optional)", "経度（任意）"),
-                    text: coordinateBinding(\.longitude)
+                scheduleDateCard(
+                    title: LT("结束日期", "End Date", "終了日"),
+                    subtitle: LT("活动结束", "Event end", "終了日"),
+                    selection: dateBinding(\.endDate)
                 )
+            }
+
+            if viewModel.draft.scheduleMode == .multiWeek {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(LT("每周的日期", "Weekly ranges", "週ごとの日付"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Spacer()
+                        Text(LT("\(viewModel.draft.weekRanges.count) 个 Week", "\(viewModel.draft.weekRanges.count) weeks", "\(viewModel.draft.weekRanges.count)個のWeek"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+
+                    ForEach(Array(viewModel.draft.weekRanges.enumerated()), id: \.element.id) { index, week in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Week \(index + 1)")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Text(weekDateDurationSummary(week))
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                                Spacer()
+                                if viewModel.draft.weekRanges.count > 1 {
+                                    Button {
+                                        viewModel.removeWeekRange(id: week.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
+                            HStack(spacing: 10) {
+                                weekDateField(
+                                    title: LT("开始", "Start", "開始"),
+                                    selection: Binding(
+                                        get: { week.startDate },
+                                        set: { value in viewModel.updateWeekRange(id: week.id, startDate: value) }
+                                    )
+                                )
+
+                                Image(systemName: "arrow.right")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+
+                                weekDateField(
+                                    title: LT("结束", "End", "終了"),
+                                    selection: Binding(
+                                        get: { week.endDate },
+                                        set: { value in viewModel.updateWeekRange(id: week.id, endDate: value) }
+                                    )
+                                )
+                            }
+                        }
+                        .padding(14)
+                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                        )
+                    }
+
+                    Button {
+                        viewModel.addWeekRange()
+                    } label: {
+                        HStack {
+                            Label(LT("添加一周", "Add Week", "週を追加"), systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Text(LT("继续拆分活动周期", "Split the schedule further", "さらに期間を分割"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        .foregroundStyle(RaverTheme.accent)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                Text(LT("跨天切日时间", "Overnight Rollover", "日付切替時刻"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                HStack(spacing: 18) {
+                    Button {
+                        dayRolloverBinding.wrappedValue = max(dayRolloverBinding.wrappedValue - 1, 0)
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .frame(width: 34, height: 34)
+                            .background(RaverTheme.card, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    VStack(spacing: 4) {
+                        Text("\(viewModel.draft.dayRolloverHour):00")
+                            .font(.system(size: 26, weight: .bold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(LT("凌晨前仍归前一日", "Before this still counts as previous day", "この時刻前は前日扱い"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    Button {
+                        dayRolloverBinding.wrappedValue = min(dayRolloverBinding.wrappedValue + 1, 12)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(RaverTheme.accent, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            if viewModel.draft.endDate < viewModel.draft.startDate {
+                Text(LT("结束日期不能早于开始日期。", "End date cannot be earlier than start date.", "終了日は開始日より前にできません。"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var timetableStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(
+                LT("时间表", "Timetable", "タイムテーブル"),
+                subtitle: LT("先维护舞台顺序，再编辑各周的时间表。舞台顺序会影响活动页时间表展示。", "Set stage order first, then edit each week's timetable. Stage order affects schedule display.", "先にステージ順を設定し、その後各週のタイムテーブルを編集します。ステージ順は表示順に影響します。")
+            )
+
+            Button {
+                viewModel.addStage()
+            } label: {
+                Label(LT("添加舞台", "Add Stage", "ステージを追加"), systemImage: "plus")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(RaverTheme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if viewModel.draft.stageEntries.isEmpty {
+                Text(LT("至少需要 1 个舞台。如果舞台名称留空，活动页会默认显示为主舞台。", "At least one stage is required. Empty stage names default to Main Stage.", "少なくとも1つのステージが必要です。名前が空欄の場合はメインステージとして扱われます。"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(Array(viewModel.draft.stageEntries.enumerated()), id: \.offset) { index, _ in
+                        HStack(spacing: 10) {
+                            Text("Stage \(index + 1)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .frame(width: 58, alignment: .leading)
+
+                            TextField(
+                                LT("舞台名称（可选）", "Stage name (optional)", "ステージ名（任意）"),
+                                text: stageBinding(index)
+                            )
+                            .font(.body)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 11)
+                            .background(fieldBackground)
+
+                            Button {
+                                viewModel.removeStage(at: index)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 32, height: 32)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(LT("按 Week 编辑时间表", "Edit timetable by week", "Weekごとに編集"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                ForEach(Array(displayWeekRanges.enumerated()), id: \.element.id) { index, week in
+                    Button {
+                        selectedWeekForEditing = EventUploadWeekSelection(index: index, week: week)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Week \(index + 1)")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            Text(weekRangeSummary(week))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Text(weekTimetableSummary(for: index, week: week))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.accent)
+                            Text(LT("点击进入编辑这一周的节目单", "Tap to edit this week's schedule", "この週のタイムテーブルを編集"))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -391,30 +638,52 @@ struct EventUploadFlowView: View {
     private var reviewStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             sectionTitle(
-                LT("票务、预览与提交", "Tickets, Review & Submit", "チケット・確認・送信"),
-                subtitle: LT("首版只保留简单票价和购票链接；提交链路会在后续接入管理员直发/普通用户审核。", "First version keeps simple pricing and ticket URL. Final submit wiring comes next.", "初版は簡単な価格とチケットURLのみです。送信接続は次に実装します。")
+                LT("票务信息", "Tickets", "チケット"),
+                subtitle: LT("这里保留简单票价和单独一行的购票链接。下一步直接提交。", "Keep simple pricing here, with a dedicated ticket URL row.", "ここでは簡単な価格と独立したチケットURL行を入力します。")
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(LT("提交前检查", "Pre-submit Check", "送信前チェック"))
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(LT("这里汇总票务、基础信息和阵容状态，提交前再扫一眼。", "Review tickets, basics, and lineup status here before submitting.", "ここでチケット、基本情報、ラインナップ状態をまとめて確認できます。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(reviewCompletionValue)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(RaverTheme.accent)
+                        Text(LT("项已就绪", "items ready", "項目準備完了"))
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    reviewSummaryChip(title: LT("时间表节目", "Timetable Sets", "タイムテーブル"), value: "\(viewModel.draft.timetableSlots.count)")
+                    reviewSummaryChip(title: LT("仅阵容条目", "Lineup Only", "ラインナップのみ"), value: "\(viewModel.draft.lineupOnlySlots.count)")
+                    reviewSummaryChip(title: LT("图片数量", "Images", "画像"), value: "\(uploadedImageCount)")
+                }
+            }
+            .padding(16)
+            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
             )
 
             HStack(spacing: 12) {
-                uploadTextField(
-                    title: LT("最低价", "Min Price", "最低価格"),
-                    text: ticketBinding(\.priceMin)
-                )
-                uploadTextField(
-                    title: LT("最高价", "Max Price", "最高価格"),
-                    text: ticketBinding(\.priceMax)
-                )
+                ticketFieldCard(title: LT("最低价", "Min Price", "最低価格"), text: ticketBinding(\.priceMin))
+                ticketFieldCard(title: LT("最高价", "Max Price", "最高価格"), text: ticketBinding(\.priceMax))
             }
 
             HStack(spacing: 12) {
-                uploadTextField(
-                    title: LT("币种", "Currency", "通貨"),
-                    text: ticketBinding(\.currency)
-                )
-                uploadTextField(
-                    title: LT("购票链接", "Ticket URL", "チケットURL"),
-                    text: ticketBinding(\.ticketURL)
-                )
+                ticketFieldCard(title: LT("币种", "Currency", "通貨"), text: ticketBinding(\.currency))
+                ticketFieldCard(title: LT("购票链接", "Ticket URL", "チケットURL"), text: ticketBinding(\.ticketURL))
             }
 
             reviewCard(
@@ -445,11 +714,13 @@ struct EventUploadFlowView: View {
 
             reviewCard(
                 title: LT("阵容", "Lineup", "ラインナップ"),
-                rows: viewModel.draft.lineupSlots.map { slot in
+                rows: (viewModel.draft.timetableSlots.map { slot in
                     let name = EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames)
                     let stage = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
                     return stage.isEmpty ? name : "\(name) · \(stage)"
-                }
+                } + viewModel.draft.lineupOnlySlots.map { slot in
+                    EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames)
+                })
             )
         }
     }
@@ -457,98 +728,78 @@ struct EventUploadFlowView: View {
     private var lineupStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             sectionTitle(
-                LT("阵容与时间表", "Lineup & Timetable", "ラインナップとタイムテーブル"),
-                subtitle: LT("没有阵容可以直接跳过；先维护舞台，后续演出时间会挂到对应舞台。", "You can skip lineup for now. Stages are prepared first for later timetable slots.", "ラインナップがなければスキップできます。まずステージを準備します。")
+                LT("仅阵容信息", "Lineup Only", "ラインナップのみ"),
+                subtitle: LT("这一页用于没有舞台和具体演出时段时，只补充演出阵容。", "Use this page when you only know the lineup but not stage or set times yet.", "このページはステージや出演時間が未定で、ラインナップだけ分かっている場合に使います。")
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(LT("阵容概览", "Lineup Overview", "ラインナップ概要"))
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(LT("当你还不知道舞台和时间时，可以先把这一场的艺人阵容补齐。", "When stage and set times are still unknown, you can complete the lineup here first.", "ステージや出演時間が未定のときは、ここで先にラインナップを補完できます。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(viewModel.draft.lineupOnlySlots.count)")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(RaverTheme.accent)
+                        Text(LT("个阵容条目", "lineup items", "件のラインナップ"))
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+
+            HStack(spacing: 10) {
+                lineupSummaryChip(
+                    title: LT("已绑定 DJ", "Bound DJs", "紐付け済みDJ"),
+                    value: "\(lineupBoundDJCount)"
+                )
+                lineupSummaryChip(
+                    title: LT("待补全", "Incomplete", "未完了"),
+                    value: "\(lineupIncompleteCount)"
+                )
+            }
+            }
+            .padding(16)
+            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
             )
 
             Button {
-                viewModel.addStage()
+                viewModel.addLineupOnlySlot()
             } label: {
-                Label(LT("添加舞台", "Add Stage", "ステージを追加"), systemImage: "plus")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(RaverTheme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            if viewModel.draft.stageEntries.isEmpty {
-                Text(LT("尚未添加舞台。没有阵容或时间表时可以继续下一步。", "No stages yet. You can continue if lineup or timetable is not available.", "ステージ未追加です。ラインナップやタイムテーブルがなければ次へ進めます。"))
-                    .font(.subheadline)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(Array(viewModel.draft.stageEntries.enumerated()), id: \.offset) { index, _ in
-                        HStack(spacing: 10) {
-                            TextField(
-                                LT("舞台 \(index + 1)", "Stage \(index + 1)", "ステージ \(index + 1)"),
-                                text: stageBinding(index)
-                            )
-                            .font(.body)
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 11)
-                            .background(fieldBackground)
-
-                            Button {
-                                viewModel.removeStage(at: index)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(.red)
-                                    .frame(width: 38, height: 38)
-                                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-
-                            VStack(spacing: 4) {
-                                Button {
-                                    viewModel.moveStage(at: index, direction: -1)
-                                } label: {
-                                    Image(systemName: "chevron.up")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(RaverTheme.secondaryText)
-                                        .frame(width: 30, height: 18)
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(index == 0)
-
-                                Button {
-                                    viewModel.moveStage(at: index, direction: 1)
-                                } label: {
-                                    Image(systemName: "chevron.down")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(RaverTheme.secondaryText)
-                                        .frame(width: 30, height: 18)
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(index == viewModel.draft.stageEntries.count - 1)
-                            }
-                        }
-                    }
+                HStack {
+                    Label(LT("添加阵容", "Add Lineup", "ラインナップを追加"), systemImage: "music.mic")
+                        .font(.subheadline.weight(.bold))
+                    Spacer()
+                    Text(LT("还不知道时间和舞台也可以先录入", "You can add it before stage/time is known", "時間やステージが未定でも先に追加可能"))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.78))
                 }
-            }
-
-            Button {
-                viewModel.addLineupSlot()
-            } label: {
-                Label(LT("添加演出", "Add Act", "出演を追加"), systemImage: "music.mic")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(RaverTheme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
             }
             .buttonStyle(.plain)
 
-            if !viewModel.draft.lineupSlots.isEmpty {
+            if !viewModel.draft.lineupOnlySlots.isEmpty {
                 VStack(spacing: 12) {
-                    ForEach(viewModel.draft.lineupSlots) { slot in
-                        lineupSlotEditor(slot)
+                    ForEach(viewModel.draft.lineupOnlySlots) { slot in
+                        lineupOnlySlotEditor(slot)
                     }
                 }
             }
@@ -556,36 +807,57 @@ struct EventUploadFlowView: View {
             Button {
                 viewModel.tapLineupImportPlaceholder()
             } label: {
-                Label(LT("阵容图识别入口", "Lineup Image Import", "ラインナップ画像認識"), systemImage: "sparkles")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(RaverTheme.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(RaverTheme.cardBorder, lineWidth: 1)
-                    )
+                HStack {
+                    Label(LT("AI 识别阵容图", "AI Lineup Import", "AIラインナップ認識"), systemImage: "sparkles")
+                        .font(.subheadline.weight(.bold))
+                    Spacer()
+                    Text(LT("保留入口，后续接入", "Reserved for a later hookup", "後続で接続予定"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+                .foregroundStyle(RaverTheme.accent)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                )
             }
             .buttonStyle(.plain)
         }
     }
 
-    private func lineupSlotEditor(_ slot: EventUploadLineupSlotDraft) -> some View {
+    private func lineupOnlySlotEditor(_ slot: EventUploadLineupOnlySlotDraft) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames).isEmpty ? LT("未命名演出", "Untitled Act", "未命名の出演") : EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames))
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .lineLimit(1)
+            HStack(spacing: 10) {
+                VStack(spacing: 0) {
+                    Text(slot.actType.title)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                    Text("\(slot.actType.performerCount)")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.84))
+                }
+                .frame(width: 56, height: 48)
+                .background(RaverTheme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames).isEmpty ? LT("未命名阵容", "Untitled Lineup", "未命名ラインナップ") : EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                    Text(lineupBindingSummary(slot))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
                 Spacer()
                 Button {
-                    viewModel.removeLineupSlot(id: slot.id)
+                    viewModel.removeLineupOnlySlot(id: slot.id)
                 } label: {
                     Image(systemName: "trash")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.red)
-                        .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.plain)
             }
@@ -597,19 +869,346 @@ struct EventUploadFlowView: View {
             }
             .pickerStyle(.segmented)
 
+            HStack(spacing: 8) {
+                metaTag(LT("仅录阵容", "Lineup Only", "ラインナップのみ"), tint: RaverTheme.accent.opacity(0.14), foreground: RaverTheme.accent)
+                metaTag(LT("不填写舞台与时间", "No stage or time", "ステージ・時間なし"), tint: RaverTheme.background, foreground: RaverTheme.secondaryText)
+            }
+
+            ForEach(0..<slot.actType.performerCount, id: \.self) { index in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        lineupOnlyPerformerAvatar(slot, index: index)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(slot.actType == .solo ? LT("DJ / 艺人名称", "Artist / DJ Name", "DJ / アーティスト名") : LT("成员 \(index + 1)", "Member \(index + 1)", "メンバー \(index + 1)"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            Text(lineupOnlyBindingState(slot, index: index))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        Spacer()
+                    }
+
+                    TextField(
+                        slot.actType == .solo ? LT("输入 DJ / 艺人名称", "Enter artist / DJ name", "DJ / アーティスト名を入力") : LT("输入成员名称", "Enter member name", "メンバー名を入力"),
+                        text: lineupOnlyPerformerBinding(slot.id, performerIndex: index)
+                    )
+                    .font(.body)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    lineupOnlyDJSearchSection(slot, performerIndex: index)
+                }
+            }
+        }
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var lineupBoundDJCount: Int {
+        viewModel.draft.lineupOnlySlots.reduce(into: 0) { partial, slot in
+            partial += slot.performerDJIDs.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.count
+        }
+    }
+
+    private var lineupIncompleteCount: Int {
+        viewModel.draft.lineupOnlySlots.reduce(into: 0) { partial, slot in
+            let names = slot.performerNames
+                .prefix(slot.actType.performerCount)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if names.count != slot.actType.performerCount || names.contains(where: { $0.isEmpty }) {
+                partial += 1
+            }
+        }
+    }
+
+    private func lineupSummaryChip(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func lineupBindingSummary(_ slot: EventUploadLineupOnlySlotDraft) -> String {
+        let boundCount = slot.performerDJIDs.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.count
+        return LT("已绑定 \(boundCount) / \(slot.actType.performerCount)", "\(boundCount) / \(slot.actType.performerCount) bound", "\(slot.actType.performerCount)人中 \(boundCount) 人を紐付け")
+    }
+
+    private func lineupOnlyBindingState(_ slot: EventUploadLineupOnlySlotDraft, index: Int) -> String {
+        let bound = slot.performerDJIDs.indices.contains(index)
+            ? slot.performerDJIDs[index]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            : false
+        return bound ? LT("已绑定 DJ 词条", "Bound to DJ entry", "DJエントリ紐付け済み") : LT("可手填，也可绑定 DJ 库", "Manual or DJ binding", "手入力またはDJ紐付け")
+    }
+
+    private func lineupOnlyPerformerAvatar(_ slot: EventUploadLineupOnlySlotDraft, index: Int) -> some View {
+        let name = slot.performerNames.indices.contains(index) ? slot.performerNames[index] : ""
+        let avatarURL = slot.performerAvatarURLs.indices.contains(index) ? slot.performerAvatarURLs[index] : nil
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return Group {
+            if let avatarURL,
+               let resolved = AppConfig.resolvedDJAvatarURLString(avatarURL, size: .small),
+               !resolved.isEmpty {
+                AsyncImage(url: URL(string: resolved)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        lineupAvatarFallback(trimmed: trimmed)
+                    }
+                }
+            } else {
+                lineupAvatarFallback(trimmed: trimmed)
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func lineupAvatarFallback(trimmed: String) -> some View {
+        ZStack {
+            Circle()
+                .fill(RaverTheme.background)
+            Text(String(trimmed.prefix(1)).uppercased())
+                .font(.caption.weight(.bold))
+                .foregroundStyle(RaverTheme.accent)
+        }
+    }
+
+    private func metaTag(_ title: String, tint: Color, foreground: Color) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(tint, in: Capsule())
+    }
+
+    private var scheduleHeroValue: String {
+        let calendar = Calendar.current
+        let days = max((calendar.dateComponents([.day], from: calendar.startOfDay(for: viewModel.draft.startDate), to: calendar.startOfDay(for: max(viewModel.draft.endDate, viewModel.draft.startDate))).day ?? 0) + 1, 1)
+        return "\(days)"
+    }
+
+    private var scheduleHeroLabel: String {
+        LT("总天数", "total days", "総日数")
+    }
+
+    private func scheduleSummaryChip(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func scheduleModeCard(_ mode: EventUploadScheduleMode) -> some View {
+        Button {
+            viewModel.updateScheduleMode(mode)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(mode.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(scheduleModeSubtitle(mode))
+                    .font(.caption2)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(viewModel.draft.scheduleMode == mode ? .white : RaverTheme.primaryText)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .padding(12)
+            .background(
+                viewModel.draft.scheduleMode == mode ? RaverTheme.accent : RaverTheme.card,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(viewModel.draft.scheduleMode == mode ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func scheduleModeSubtitle(_ mode: EventUploadScheduleMode) -> String {
+        switch mode {
+        case .singleDay:
+            return LT("单天活动", "One day only", "1日のみ")
+        case .multiDay:
+            return LT("连续多天", "Multiple continuous days", "連続する複数日")
+        case .multiWeek:
+            return LT("按多个 Week 管理", "Manage by multiple weeks", "複数Weekで管理")
+        }
+    }
+
+    private func scheduleDateCard(title: String, subtitle: String, selection: Binding<Date>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            DatePicker(
+                subtitle,
+                selection: selection,
+                displayedComponents: [.date]
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+            .tint(RaverTheme.accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func weekDateField(title: String, selection: Binding<Date>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            DatePicker(
+                "",
+                selection: selection,
+                displayedComponents: [.date]
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+            .tint(RaverTheme.accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func weekDateDurationSummary(_ week: EventUploadWeekRangeDraft) -> String {
+        let days = max((Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: week.startDate), to: Calendar.current.startOfDay(for: max(week.endDate, week.startDate))).day ?? 0) + 1, 1)
+        return LT("\(days) 天", "\(days) days", "\(days)日")
+    }
+
+    private var uploadedImageCount: Int {
+        EventUploadImageZone.allCases.reduce(into: 0) { partial, zone in
+            partial += viewModel.draft.imageZones[zone]?.count ?? 0
+        }
+    }
+
+    private var reviewCompletionValue: String {
+        let filled = [
+            !viewModel.draft.posterImages.isEmpty,
+            !viewModel.draft.name.primaryValue(preferredLanguage: viewModel.draft.preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            !viewModel.locationSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            !viewModel.draft.timeZoneIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            !viewModel.draft.ticket.ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.draft.ticket.priceMin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.draft.ticket.priceMax.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ].filter { $0 }.count
+        return "\(filled)"
+    }
+
+    private func reviewSummaryChip(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func ticketFieldCard(title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            TextField(title, text: text)
+                .font(.body)
+                .foregroundStyle(RaverTheme.primaryText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func timetableSlotEditor(_ slot: EventUploadLineupSlotDraft) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames).isEmpty ? LT("未命名演出", "Untitled Act", "未命名の出演") : EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                Spacer()
+                Button {
+                    viewModel.removeTimetableSlot(id: slot.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.red)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Picker(LT("演出形式", "Act Type", "出演形式"), selection: timetableActTypeBinding(slot.id)) {
+                ForEach(EventLineupActType.allCases) { type in
+                    Text(type.title).tag(type)
+                }
+            }
+            .pickerStyle(.segmented)
+
             ForEach(0..<slot.actType.performerCount, id: \.self) { index in
                 uploadTextField(
                     title: slot.actType == .solo ? LT("DJ 名称", "DJ Name", "DJ名") : LT("DJ \(index + 1)", "DJ \(index + 1)", "DJ \(index + 1)"),
-                    text: lineupPerformerBinding(slot.id, performerIndex: index),
+                    text: timetablePerformerBinding(slot.id, performerIndex: index),
                     isRequired: true
                 )
-                lineupDJSearchSection(slot, performerIndex: index)
+                timetableDJSearchSection(slot, performerIndex: index)
             }
 
             if !viewModel.draft.stageEntries.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     fieldTitle(LT("舞台", "Stage", "ステージ"), isRequired: true)
-                    Picker(LT("舞台", "Stage", "ステージ"), selection: lineupStageBinding(slot.id)) {
+                    Picker(LT("舞台", "Stage", "ステージ"), selection: timetableStageBinding(slot.id)) {
                         Text(LT("选择舞台", "Choose Stage", "ステージを選択")).tag("")
                         ForEach(viewModel.draft.stageEntries, id: \.self) { stage in
                             Text(stage).tag(stage)
@@ -626,7 +1225,7 @@ struct EventUploadFlowView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 fieldTitle(LT("演出日", "Event Day", "出演日"), isRequired: false)
-                Picker(LT("演出日", "Event Day", "出演日"), selection: lineupDayBinding(slot.id)) {
+                Picker(LT("演出日", "Event Day", "出演日"), selection: timetableDayBinding(slot.id)) {
                     ForEach(lineupDayOptions) { option in
                         Text(option.title).tag(option.dayIndex)
                     }
@@ -639,35 +1238,26 @@ struct EventUploadFlowView: View {
                 .background(fieldBackground)
             }
 
-            Toggle(isOn: lineupTimedBinding(slot.id)) {
-                Text(LT("填写演出时间", "Set Time", "時間を設定"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-            }
-            .tint(RaverTheme.accent)
+            HStack(spacing: 12) {
+                DatePicker(
+                    LT("开始", "Start", "開始"),
+                    selection: timetableTimeBinding(slot.id, keyPath: \.startTime),
+                    displayedComponents: [.hourAndMinute]
+                )
+                .datePickerStyle(.compact)
+                .tint(RaverTheme.accent)
 
-            if slot.startTime != nil || slot.endTime != nil {
-                HStack(spacing: 12) {
-                    DatePicker(
-                        LT("开始", "Start", "開始"),
-                        selection: lineupTimeBinding(slot.id, keyPath: \.startTime),
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(RaverTheme.accent)
-
-                    DatePicker(
-                        LT("结束", "End", "終了"),
-                        selection: lineupTimeBinding(slot.id, keyPath: \.endTime),
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(RaverTheme.accent)
-                }
-                Text(LT("结束时间不晚于开始时间时，会按次日结束保存。", "If the end time is not later than the start time, it is saved as ending the next day.", "終了時刻が開始時刻以前の場合、翌日終了として保存します。"))
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
+                DatePicker(
+                    LT("结束", "End", "終了"),
+                    selection: timetableTimeBinding(slot.id, keyPath: \.endTime),
+                    displayedComponents: [.hourAndMinute]
+                )
+                .datePickerStyle(.compact)
+                .tint(RaverTheme.accent)
             }
+            Text(LT("这里填写的是时间表，演出时间必填。结束时间不晚于开始时间时，会按次日结束保存。", "Timetable entries require start and end time. If the end time is not later than the start time, it is saved as ending the next day.", "ここはタイムテーブル入力のため、開始・終了時刻は必須です。終了時刻が開始時刻以前の場合、翌日終了として保存します。"))
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
         }
         .padding(14)
         .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -677,7 +1267,7 @@ struct EventUploadFlowView: View {
         )
     }
 
-    private func lineupDJSearchSection(_ slot: EventUploadLineupSlotDraft, performerIndex: Int) -> some View {
+    private func timetableDJSearchSection(_ slot: EventUploadLineupSlotDraft, performerIndex: Int) -> some View {
         let key = viewModel.djSearchKey(slotID: slot.id, performerIndex: performerIndex)
         let isSearching = viewModel.searchingDJKeys.contains(key)
         let selectedDJID = slot.performerDJIDs.indices.contains(performerIndex) ? slot.performerDJIDs[performerIndex] : nil
@@ -686,7 +1276,7 @@ struct EventUploadFlowView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Button {
-                    Task { await viewModel.searchLineupDJ(slotID: slot.id, performerIndex: performerIndex) }
+                    Task { await viewModel.searchTimetableDJ(slotID: slot.id, performerIndex: performerIndex) }
                 } label: {
                     Label(
                         isSearching ? LT("搜索中", "Searching", "検索中") : LT("绑定 DJ 库", "Bind DJ", "DJを紐付け"),
@@ -702,7 +1292,7 @@ struct EventUploadFlowView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.green)
                     Button {
-                        viewModel.clearLineupDJBinding(slotID: slot.id, performerIndex: performerIndex)
+                        viewModel.clearTimetableDJBinding(slotID: slot.id, performerIndex: performerIndex)
                     } label: {
                         Image(systemName: "xmark.circle")
                             .font(.caption.weight(.bold))
@@ -715,7 +1305,7 @@ struct EventUploadFlowView: View {
                 VStack(spacing: 6) {
                     ForEach(results.prefix(8)) { dj in
                         Button {
-                            viewModel.applyLineupDJ(dj, slotID: slot.id, performerIndex: performerIndex)
+                            viewModel.applyTimetableDJ(dj, slotID: slot.id, performerIndex: performerIndex)
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "music.mic.circle.fill")
@@ -748,22 +1338,103 @@ struct EventUploadFlowView: View {
 
     private func reviewCard(title: String, rows: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(RaverTheme.primaryText)
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Text("\(rows.isEmpty ? 1 : rows.count)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(RaverTheme.background, in: Capsule())
+            }
             ForEach(rows.isEmpty ? [LT("未填写", "Not set", "未入力")] : rows, id: \.self) { row in
                 Text(row)
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
-        .padding(14)
-        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(16)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(RaverTheme.cardBorder, lineWidth: 1)
         )
+    }
+
+    private func lineupOnlyDJSearchSection(_ slot: EventUploadLineupOnlySlotDraft, performerIndex: Int) -> some View {
+        let key = viewModel.djSearchKey(slotID: slot.id, performerIndex: performerIndex)
+        let isSearching = viewModel.searchingDJKeys.contains(key)
+        let selectedDJID = slot.performerDJIDs.indices.contains(performerIndex) ? slot.performerDJIDs[performerIndex] : nil
+        let results = viewModel.djSearchResults[key] ?? []
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    Task { await viewModel.searchLineupOnlyDJ(slotID: slot.id, performerIndex: performerIndex) }
+                } label: {
+                    Label(
+                        isSearching ? LT("搜索中", "Searching", "検索中") : LT("绑定 DJ 库", "Bind DJ", "DJを紐付け"),
+                        systemImage: "magnifyingglass"
+                    )
+                    .font(.caption.weight(.bold))
+                }
+                .buttonStyle(.bordered)
+                .disabled(isSearching)
+
+                if selectedDJID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                    Label(LT("已绑定", "Bound", "紐付け済み"), systemImage: "checkmark.seal.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.green)
+                    Button {
+                        viewModel.clearLineupOnlyDJBinding(slotID: slot.id, performerIndex: performerIndex)
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                            .font(.caption.weight(.bold))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if !results.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(results.prefix(8)) { dj in
+                        Button {
+                            viewModel.applyLineupOnlyDJ(dj, slotID: slot.id, performerIndex: performerIndex)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "music.mic.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(RaverTheme.accent)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(dj.name)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Text(dj.country ?? dj.slug ?? dj.id)
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Image(systemName: "plus.circle")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     private func sectionTitle(_ title: String, subtitle: String) -> some View {
@@ -809,12 +1480,25 @@ struct EventUploadFlowView: View {
                 Button {
                     viewModel.closeAfterSuccess()
                 } label: {
-                    Text(LT("返回活动页", "Back to Events", "イベントページへ戻る"))
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(RaverTheme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    HStack {
+                        Text(LT("返回活动页", "Back to Events", "イベントページへ戻る"))
+                            .font(.headline.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
                 }
                 .buttonStyle(.plain)
 
@@ -997,6 +1681,99 @@ struct EventUploadFlowView: View {
         }
     }
 
+    private var organizerBinding: Binding<String> {
+        Binding {
+            viewModel.draft.organizerName
+        } set: { value in
+            viewModel.updateOrganizerName(value)
+        }
+    }
+
+    private var organizerSearchSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            fieldTitle(LT("主办方", "Organizer", "主催者"), isRequired: false)
+            TextField(LT("输入主办方名称", "Enter organizer name", "主催者名を入力"), text: organizerBinding)
+                .font(.body)
+                .foregroundStyle(RaverTheme.primaryText)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(fieldBackground)
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await viewModel.searchOrganizers() }
+                } label: {
+                    Label(
+                        viewModel.isSearchingOrganizers ? LT("搜索中", "Searching", "検索中") : LT("搜索绑定主办方", "Search Organizer", "主催者を検索"),
+                        systemImage: "magnifyingglass"
+                    )
+                    .font(.caption.weight(.bold))
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isSearchingOrganizers)
+
+                if viewModel.draft.organizerFestivalID != nil {
+                    Button {
+                        viewModel.clearOrganizerBinding()
+                    } label: {
+                        Label(LT("取消绑定", "Clear Binding", "紐付け解除"), systemImage: "xmark.circle")
+                            .font(.caption.weight(.bold))
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            if viewModel.draft.organizerFestivalID != nil {
+                Text(LT("已绑定主办方词条，提交时会同步携带主办方 ID。", "Organizer entry is bound and its ID will be submitted.", "主催者エントリが紐付け済みで、送信時にIDも保存されます。"))
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+
+            if !viewModel.organizerSearchResults.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(viewModel.organizerSearchResults.prefix(8)) { festival in
+                        Button {
+                            viewModel.applyOrganizer(festival)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "building.2.crop.circle")
+                                    .font(.title3)
+                                    .foregroundStyle(RaverTheme.accent)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(festival.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? festival.name)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Text([festival.city, festival.country].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? $0 : nil }.joined(separator: " · "))
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Image(systemName: "plus.circle")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var sourceURLBinding: Binding<String> {
+        Binding {
+            viewModel.draft.sourceURL
+        } set: { value in
+            viewModel.updateSourceURL(value)
+        }
+    }
+
     private func dateBinding(_ keyPath: WritableKeyPath<EventUploadDraft, Date>) -> Binding<Date> {
         Binding {
             viewModel.draft[keyPath: keyPath]
@@ -1059,21 +1836,21 @@ struct EventUploadFlowView: View {
 
     private func lineupActTypeBinding(_ slotID: UUID) -> Binding<EventLineupActType> {
         Binding {
-            viewModel.draft.lineupSlots.first(where: { $0.id == slotID })?.actType ?? .solo
+            viewModel.draft.lineupOnlySlots.first(where: { $0.id == slotID })?.actType ?? .solo
         } set: { value in
-            viewModel.updateLineupSlot(id: slotID) { slot in
+            viewModel.updateLineupOnlySlot(id: slotID) { slot in
                 slot.actType = value
             }
         }
     }
 
-    private func lineupPerformerBinding(_ slotID: UUID, performerIndex: Int) -> Binding<String> {
+    private func lineupOnlyPerformerBinding(_ slotID: UUID, performerIndex: Int) -> Binding<String> {
         Binding {
-            guard let slot = viewModel.draft.lineupSlots.first(where: { $0.id == slotID }),
+            guard let slot = viewModel.draft.lineupOnlySlots.first(where: { $0.id == slotID }),
                   slot.performerNames.indices.contains(performerIndex) else { return "" }
             return slot.performerNames[performerIndex]
         } set: { value in
-            viewModel.updateLineupSlot(id: slotID) { slot in
+            viewModel.updateLineupOnlySlot(id: slotID) { slot in
                 while slot.performerNames.count <= performerIndex {
                     slot.performerNames.append("")
                 }
@@ -1082,21 +1859,46 @@ struct EventUploadFlowView: View {
         }
     }
 
-    private func lineupStageBinding(_ slotID: UUID) -> Binding<String> {
+    private func timetableActTypeBinding(_ slotID: UUID) -> Binding<EventLineupActType> {
         Binding {
-            viewModel.draft.lineupSlots.first(where: { $0.id == slotID })?.stageName ?? ""
+            viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?.actType ?? .solo
         } set: { value in
-            viewModel.updateLineupSlot(id: slotID) { slot in
+            viewModel.updateTimetableSlot(id: slotID) { slot in
+                slot.actType = value
+            }
+        }
+    }
+
+    private func timetablePerformerBinding(_ slotID: UUID, performerIndex: Int) -> Binding<String> {
+        Binding {
+            guard let slot = viewModel.draft.timetableSlots.first(where: { $0.id == slotID }),
+                  slot.performerNames.indices.contains(performerIndex) else { return "" }
+            return slot.performerNames[performerIndex]
+        } set: { value in
+            viewModel.updateTimetableSlot(id: slotID) { slot in
+                while slot.performerNames.count <= performerIndex {
+                    slot.performerNames.append("")
+                }
+                slot.performerNames[performerIndex] = value
+            }
+        }
+    }
+
+    private func timetableStageBinding(_ slotID: UUID) -> Binding<String> {
+        Binding {
+            viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?.stageName ?? ""
+        } set: { value in
+            viewModel.updateTimetableSlot(id: slotID) { slot in
                 slot.stageName = value
             }
         }
     }
 
-    private func lineupDayBinding(_ slotID: UUID) -> Binding<Int> {
+    private func timetableDayBinding(_ slotID: UUID) -> Binding<Int> {
         Binding {
-            viewModel.draft.lineupSlots.first(where: { $0.id == slotID })?.dayIndex ?? 1
+            viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?.dayIndex ?? 1
         } set: { value in
-            viewModel.updateLineupSlot(id: slotID) { slot in
+            viewModel.updateTimetableSlot(id: slotID) { slot in
                 slot.dayIndex = value
                 slot.startTime = alignLineupDate(slot.startTime, toDayIndex: value)
                 slot.endTime = alignLineupDate(slot.endTime, toDayIndex: value)
@@ -1104,20 +1906,12 @@ struct EventUploadFlowView: View {
         }
     }
 
-    private func lineupTimedBinding(_ slotID: UUID) -> Binding<Bool> {
+    private func timetableTimeBinding(_ slotID: UUID, keyPath: WritableKeyPath<EventUploadLineupSlotDraft, Date?>) -> Binding<Date> {
         Binding {
-            guard let slot = viewModel.draft.lineupSlots.first(where: { $0.id == slotID }) else { return false }
-            return slot.startTime != nil || slot.endTime != nil
+            viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?[keyPath: keyPath]
+                ?? alignLineupClock(Date(), toDayIndex: viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?.dayIndex ?? 1)
         } set: { value in
-            viewModel.setLineupSlotTimed(id: slotID, isTimed: value)
-        }
-    }
-
-    private func lineupTimeBinding(_ slotID: UUID, keyPath: WritableKeyPath<EventUploadLineupSlotDraft, Date?>) -> Binding<Date> {
-        Binding {
-            viewModel.draft.lineupSlots.first(where: { $0.id == slotID })?[keyPath: keyPath] ?? Date()
-        } set: { value in
-            viewModel.updateLineupSlot(id: slotID) { slot in
+            viewModel.updateTimetableSlot(id: slotID) { slot in
                 slot[keyPath: keyPath] = alignLineupClock(value, toDayIndex: slot.dayIndex)
             }
         }
@@ -1154,6 +1948,95 @@ struct EventUploadFlowView: View {
         return alignLineupClock(value, toDayIndex: dayIndex)
     }
 
+    private var displayWeekRanges: [EventUploadWeekRangeDraft] {
+        if viewModel.draft.scheduleMode == .multiWeek {
+            return viewModel.draft.weekRanges
+        }
+        return [EventUploadWeekRangeDraft(startDate: viewModel.draft.startDate, endDate: viewModel.draft.endDate)]
+    }
+
+    private var normalizedStageEntries: [String] {
+        if viewModel.draft.stageEntries.isEmpty {
+            return [LT("主舞台", "Main Stage", "メインステージ")]
+        }
+        return viewModel.draft.stageEntries.enumerated().map { index, _ in
+            viewModel.normalizedStageName(at: index)
+        }
+    }
+
+    private func weekRangeSummary(_ week: EventUploadWeekRangeDraft) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return "\(formatter.string(from: week.startDate)) - \(formatter.string(from: week.endDate))"
+    }
+
+    private func weekTimetableSummary(for weekIndex: Int, week: EventUploadWeekRangeDraft) -> String {
+        let dayIndexes = Set(weekDayOptions(for: EventUploadWeekSelection(index: weekIndex, week: week)).map(\.dayIndex))
+        let count = viewModel.draft.timetableSlots.filter { dayIndexes.contains($0.dayIndex) }.count
+        return LT("已安排 \(count) 个节目", "\(count) sets scheduled", "\(count) 件のセットを登録済み")
+    }
+
+    private func weekDayOptions(for selection: EventUploadWeekSelection) -> [EventUploadDayOption] {
+        lineupDayOptions.filter { option in
+            option.date >= startOfDay(selection.week.startDate) && option.date <= endOfDay(selection.week.endDate)
+        }
+    }
+
+    private func startOfDay(_ date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
+        return calendar.startOfDay(for: date)
+    }
+
+    private func endOfDay(_ date: Date) -> Date {
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
+        let start = calendar.startOfDay(for: date)
+        return calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? date
+    }
+
+    private func weekEditorSheet(for selection: EventUploadWeekSelection) -> some View {
+        EventUploadWeekTimetableEditorSheet(
+            selection: selection,
+            stageNames: normalizedStageEntries,
+            slots: viewModel.draft.timetableSlots,
+            dayOptions: weekDayOptions(for: selection),
+            weekSummaryText: weekRangeSummary(selection.week),
+            lineupSummaryText: weekTimetableSummary(for: selection.index, week: selection.week),
+            isExpanded: { expandedTimetableSlots.contains($0) },
+            onToggleExpanded: toggleTimetableSlotExpansion,
+            onAddSlot: { stageName, dayIndex in
+                viewModel.addTimetableSlot(stageName: stageName, dayIndex: dayIndex)
+            },
+            actTypeBinding: timetableActTypeBinding,
+            performerBinding: timetablePerformerBinding,
+            stageBinding: timetableStageBinding,
+            dayBinding: timetableDayBinding,
+            timeBinding: timetableTimeBinding,
+            searchSection: { slot, index in
+                AnyView(timetableDJSearchSection(slot, performerIndex: index))
+            },
+            onDelete: deleteTimetableSlotFromWeekEditor
+        )
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func toggleTimetableSlotExpansion(_ slotID: UUID) {
+        if expandedTimetableSlots.contains(slotID) {
+            expandedTimetableSlots.remove(slotID)
+        } else {
+            expandedTimetableSlots.insert(slotID)
+        }
+    }
+
+    private func deleteTimetableSlotFromWeekEditor(_ slotID: UUID) {
+        viewModel.removeTimetableSlot(id: slotID)
+        expandedTimetableSlots.remove(slotID)
+    }
+
     private func placeholderStep(title: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
@@ -1173,9 +2056,510 @@ struct EventUploadFlowView: View {
     }
 }
 
+private extension EventUploadFlowView {
+    func hideKeyboard() {
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
+    }
+}
+
 private struct EventUploadDayOption: Identifiable, Hashable {
     var id: Int { dayIndex }
     let dayIndex: Int
     let title: String
     let date: Date
+}
+
+private struct EventUploadWeekSelection: Identifiable, Hashable {
+    var id: UUID { week.id }
+    let index: Int
+    let week: EventUploadWeekRangeDraft
+}
+
+private struct EventUploadWeekTimetableEditorSheet: View {
+    let selection: EventUploadWeekSelection
+    let stageNames: [String]
+    let slots: [EventUploadLineupSlotDraft]
+    let dayOptions: [EventUploadDayOption]
+    let weekSummaryText: String
+    let lineupSummaryText: String
+    let isExpanded: (UUID) -> Bool
+    let onToggleExpanded: (UUID) -> Void
+    let onAddSlot: (String, Int) -> Void
+    let actTypeBinding: (UUID) -> Binding<EventLineupActType>
+    let performerBinding: (UUID, Int) -> Binding<String>
+    let stageBinding: (UUID) -> Binding<String>
+    let dayBinding: (UUID) -> Binding<Int>
+    let timeBinding: (UUID, WritableKeyPath<EventUploadLineupSlotDraft, Date?>) -> Binding<Date>
+    let searchSection: (EventUploadLineupSlotDraft, Int) -> AnyView
+    let onDelete: (UUID) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedStage: String = ""
+    @State private var selectedDayIndex: Int = 1
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Week \(selection.index + 1)")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(weekSummaryText)
+                                    .font(.subheadline)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text(lineupSummaryText)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                Text(LT("\(stageNames.count) 个舞台", "\(stageNames.count) stages", "\(stageNames.count)ステージ"))
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            statChip(title: LT("当前舞台", "Current Stage", "現在のステージ"), value: selectedStage)
+                            statChip(title: LT("当前日期", "Current Day", "現在の日"), value: selectedDayLabel)
+                        }
+                    }
+                    .padding(16)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                    )
+
+                    if !stageNames.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(LT("舞台顺序", "Stage Order", "ステージ順"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(Array(stageNames.enumerated()), id: \.offset) { index, stage in
+                                        Button {
+                                            selectedStage = stage
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                Text("\(index + 1)")
+                                                    .font(.caption2.weight(.bold))
+                                                    .foregroundStyle(selectedStage == stage ? .white.opacity(0.82) : RaverTheme.secondaryText)
+                                                Text(stage)
+                                                    .font(.caption.weight(.semibold))
+                                            }
+                                            .foregroundStyle(selectedStage == stage ? .white : RaverTheme.primaryText)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                selectedStage == stage ? RaverTheme.accent : RaverTheme.card,
+                                                in: Capsule()
+                                            )
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(selectedStage == stage ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                            Text(LT("这里的顺序会直接影响活动详情页 timetable 展示顺序。", "This order directly affects timetable display order on the event page.", "この順序はイベント詳細ページのタイムテーブル表示順に反映されます。"))
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+
+                    if !dayOptions.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(LT("Week 日期", "Week Days", "Weekの日付"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(dayOptions) { option in
+                                        Button {
+                                            selectedDayIndex = option.dayIndex
+                                        } label: {
+                                            VStack(spacing: 2) {
+                                                Text(option.title)
+                                                    .font(.caption.weight(.semibold))
+                                                Text(shortDate(option.date))
+                                                    .font(.caption2)
+                                            }
+                                            .foregroundStyle(selectedDayIndex == option.dayIndex ? .white : RaverTheme.primaryText)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                selectedDayIndex == option.dayIndex ? RaverTheme.accent : RaverTheme.card,
+                                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                    .stroke(selectedDayIndex == option.dayIndex ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Button {
+                        onAddSlot(selectedStage, selectedDayIndex)
+                    } label: {
+                        HStack {
+                            Label(LT("在当前 Week 添加节目", "Add Set in This Week", "このWeekにセットを追加"), systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.bold))
+                            Spacer()
+                            Text(selectedDayLabel)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.76))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(
+                                colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(LT("节目列表", "Set List", "セット一覧"))
+                                .font(.headline)
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Spacer()
+                            Text("\(filteredSlots.count)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(RaverTheme.card, in: Capsule())
+                        }
+
+                        Text(LT("已确认的节目默认折叠显示，点开后可以继续修改艺人和时间。", "Completed sets stay collapsed by default; expand to keep editing artists and time.", "入力済みセットは既定で折りたたまれ、開くと出演者と時間を編集できます。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+
+                    if filteredSlots.isEmpty {
+                        Text(LT("这个 Week 这一舞台下还没有节目。", "No sets yet for this week and stage.", "このWeekとステージにはまだセットがありません。"))
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(filteredSlots) { slot in
+                                slotCard(slot)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(RaverTheme.background.ignoresSafeArea())
+            .navigationTitle(LT("编辑时间表", "Edit Timetable", "タイムテーブル編集"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(LT("完成", "Done", "完了")) {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                if selectedStage.isEmpty {
+                    selectedStage = stageNames.first ?? ""
+                }
+                if let firstDay = dayOptions.first {
+                    selectedDayIndex = firstDay.dayIndex
+                }
+            }
+        }
+    }
+
+    private var filteredSlots: [EventUploadLineupSlotDraft] {
+        slots.filter { slot in
+            let normalizedStage = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? LT("主舞台", "Main Stage", "メインステージ")
+                : slot.stageName
+            return normalizedStage == selectedStage && slot.dayIndex == selectedDayIndex
+        }
+        .sorted { lhs, rhs in
+            (lhs.startTime ?? .distantPast) < (rhs.startTime ?? .distantPast)
+        }
+    }
+
+    private var selectedDayLabel: String {
+        dayOptions.first(where: { $0.dayIndex == selectedDayIndex })?.title ?? LT("未选择日期", "No day selected", "日付未選択")
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
+    }
+
+    private func slotCard(_ slot: EventUploadLineupSlotDraft) -> some View {
+        let expanded = isExpanded(slot.id) || !isCollapsedEligible(slot)
+        return VStack(alignment: .leading, spacing: 12) {
+            Button {
+                onToggleExpanded(slot.id)
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    timeBadge(slot)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 10) {
+                            performerAvatarStack(slot)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(displayName(slot))
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(1)
+                                Text(secondarySummary(slot))
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(2)
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            metaChip(timeSummary(slot), tint: RaverTheme.accent.opacity(0.16), foreground: RaverTheme.accent)
+                            metaChip(stageSummary(slot), tint: RaverTheme.background, foreground: RaverTheme.secondaryText)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .padding(.top, 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                Picker(LT("演出形式", "Act Type", "出演形式"), selection: actTypeBinding(slot.id)) {
+                    ForEach(EventLineupActType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                ForEach(0..<slot.actType.performerCount, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField(
+                            slot.actType == .solo ? LT("DJ 名称", "DJ Name", "DJ名") : LT("DJ \(index + 1)", "DJ \(index + 1)", "DJ \(index + 1)"),
+                            text: performerBinding(slot.id, index)
+                        )
+                        .font(.body)
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
+                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        searchSection(slot, index)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    DatePicker(
+                        LT("开始", "Start", "開始"),
+                        selection: timeBinding(slot.id, \.startTime),
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .datePickerStyle(.compact)
+                    .tint(RaverTheme.accent)
+
+                    DatePicker(
+                        LT("结束", "End", "終了"),
+                        selection: timeBinding(slot.id, \.endTime),
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .datePickerStyle(.compact)
+                    .tint(RaverTheme.accent)
+                }
+
+                HStack {
+                    Spacer()
+                    Button(role: .destructive) {
+                        onDelete(slot.id)
+                    } label: {
+                        Label(LT("删除节目", "Delete Set", "セットを削除"), systemImage: "trash")
+                            .font(.caption.weight(.bold))
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func statChip(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value.isEmpty ? "-" : value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func isCollapsedEligible(_ slot: EventUploadLineupSlotDraft) -> Bool {
+        let names = slot.performerNames
+            .prefix(slot.actType.performerCount)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return !names.contains(where: { $0.isEmpty }) && slot.startTime != nil && slot.endTime != nil
+    }
+
+    private func displayName(_ slot: EventUploadLineupSlotDraft) -> String {
+        let name = EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames)
+        return name.isEmpty ? LT("未命名演出", "Untitled Act", "未命名の出演") : name
+    }
+
+    private func secondarySummary(_ slot: EventUploadLineupSlotDraft) -> String {
+        let members = slot.performerNames
+            .prefix(slot.actType.performerCount)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard members.count > 1 else {
+            return LT("已添加 DJ", "DJ added", "DJ追加済み")
+        }
+        return members.joined(separator: " · ")
+    }
+
+    private func stageSummary(_ slot: EventUploadLineupSlotDraft) -> String {
+        let stage = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return stage.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : stage
+    }
+
+    private func timeSummary(_ slot: EventUploadLineupSlotDraft) -> String {
+        guard let start = slot.startTime, let end = slot.endTime else {
+            return LT("请填写演出时间", "Set start and end time", "出演時間を入力してください")
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "HH:mm"
+        return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
+    }
+
+    private func timeBadgePrimary(_ slot: EventUploadLineupSlotDraft) -> String {
+        guard let start = slot.startTime else { return "--:--" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: start)
+    }
+
+    private func timeBadgeSecondary(_ slot: EventUploadLineupSlotDraft) -> String {
+        guard let end = slot.endTime else { return "--:--" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: end)
+    }
+
+    private func timeBadge(_ slot: EventUploadLineupSlotDraft) -> some View {
+        VStack(spacing: 1) {
+            Text(timeBadgePrimary(slot))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+            Text(timeBadgeSecondary(slot))
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .frame(width: 60, height: 56)
+        .background(
+            LinearGradient(
+                colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.74)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+    }
+
+    private func performerAvatarStack(_ slot: EventUploadLineupSlotDraft) -> some View {
+        HStack(spacing: -10) {
+            ForEach(Array(slot.performerNames.prefix(slot.actType.performerCount).enumerated()), id: \.offset) { index, name in
+                performerAvatar(name: name, avatarURL: slot.performerAvatarURLs.indices.contains(index) ? slot.performerAvatarURLs[index] : nil, index: index)
+            }
+        }
+        .padding(.trailing, 8)
+    }
+
+    private func performerAvatar(name: String, avatarURL: String?, index: Int) -> some View {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Group {
+            if let avatarURL,
+               let resolved = AppConfig.resolvedDJAvatarURLString(avatarURL, size: .small),
+               !resolved.isEmpty {
+                AsyncImage(url: URL(string: resolved)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        avatarFallback(trimmed: trimmed, index: index)
+                    }
+                }
+            } else {
+                avatarFallback(trimmed: trimmed, index: index)
+            }
+        }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(RaverTheme.card, lineWidth: 2)
+        )
+    }
+
+    private func metaChip(_ title: String, tint: Color, foreground: Color) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(tint, in: Capsule())
+    }
+
+    private func avatarFallback(trimmed: String, index: Int) -> some View {
+        ZStack {
+            Circle()
+                .fill(index == 0 ? RaverTheme.accent.opacity(0.22) : RaverTheme.background)
+            Text(String(trimmed.prefix(1)).uppercased())
+                .font(.caption.weight(.bold))
+                .foregroundStyle(index == 0 ? RaverTheme.accent : RaverTheme.secondaryText)
+        }
+    }
 }

@@ -12,12 +12,12 @@ enum EventUploadImageZone: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .poster: return "Poster"
-        case .lineup: return "Lineup"
-        case .timetable: return "Timetable"
-        case .cover: return "Cover"
-        case .map: return "Map"
-        case .other: return "Other"
+        case .poster: return LT("海报", "Poster", "ポスター")
+        case .lineup: return LT("阵容图", "Lineup", "ラインナップ")
+        case .timetable: return LT("时间表", "Timetable", "タイムテーブル")
+        case .cover: return LT("封面", "Cover", "カバー")
+        case .map: return LT("地图", "Map", "地図")
+        case .other: return LT("其他相关", "Other", "その他")
         }
     }
 
@@ -112,11 +112,18 @@ struct EventUploadTicketDraft: Hashable, Codable {
     var ticketURL: String = ""
 }
 
+struct EventUploadWeekRangeDraft: Identifiable, Hashable, Codable {
+    var id: UUID = UUID()
+    var startDate: Date
+    var endDate: Date
+}
+
 struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
     var actType: EventLineupActType = .solo
     var performerNames: [String] = [""]
     var performerDJIDs: [String?] = [nil]
+    var performerAvatarURLs: [String?] = [nil]
     var stageName: String = ""
     var dayIndex: Int = 1
     var startTime: Date?
@@ -130,11 +137,47 @@ struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
         if performerDJIDs.count < count {
             performerDJIDs.append(contentsOf: Array(repeating: nil, count: count - performerDJIDs.count))
         }
+        if performerAvatarURLs.count < count {
+            performerAvatarURLs.append(contentsOf: Array(repeating: nil, count: count - performerAvatarURLs.count))
+        }
         if performerNames.count > count {
             performerNames = Array(performerNames.prefix(count))
         }
         if performerDJIDs.count > count {
             performerDJIDs = Array(performerDJIDs.prefix(count))
+        }
+        if performerAvatarURLs.count > count {
+            performerAvatarURLs = Array(performerAvatarURLs.prefix(count))
+        }
+    }
+}
+
+struct EventUploadLineupOnlySlotDraft: Identifiable, Hashable, Codable {
+    var id: UUID = UUID()
+    var actType: EventLineupActType = .solo
+    var performerNames: [String] = [""]
+    var performerDJIDs: [String?] = [nil]
+    var performerAvatarURLs: [String?] = [nil]
+
+    mutating func normalizePerformers() {
+        let count = actType.performerCount
+        if performerNames.count < count {
+            performerNames.append(contentsOf: Array(repeating: "", count: count - performerNames.count))
+        }
+        if performerDJIDs.count < count {
+            performerDJIDs.append(contentsOf: Array(repeating: nil, count: count - performerDJIDs.count))
+        }
+        if performerAvatarURLs.count < count {
+            performerAvatarURLs.append(contentsOf: Array(repeating: nil, count: count - performerAvatarURLs.count))
+        }
+        if performerNames.count > count {
+            performerNames = Array(performerNames.prefix(count))
+        }
+        if performerDJIDs.count > count {
+            performerDJIDs = Array(performerDJIDs.prefix(count))
+        }
+        if performerAvatarURLs.count > count {
+            performerAvatarURLs = Array(performerAvatarURLs.prefix(count))
         }
     }
 }
@@ -148,11 +191,17 @@ struct EventUploadDraft: Hashable, Codable {
     var name = EventUploadLocalizedFields()
     var description = EventUploadLocalizedFields()
     var eventType = ""
+    var organizerFestivalID: String?
+    var organizerName = ""
+    var sourceURL = ""
     var city = EventUploadLocalizedFields()
     var country = EventUploadLocalizedFields()
     var detailAddress = EventUploadLocalizedFields()
     var startDate = Date()
     var endDate = Date()
+    var weekRanges: [EventUploadWeekRangeDraft] = [
+        EventUploadWeekRangeDraft(startDate: Date(), endDate: Date())
+    ]
     var timeZoneIdentifier = "Asia/Shanghai"
     var timeZoneSearchQuery = ""
     var selectedTimeZoneLookup: EventTimezoneLookupItem?
@@ -163,7 +212,8 @@ struct EventUploadDraft: Hashable, Codable {
     var pickedMapAddress = ""
     var pickedPlaceName = ""
     var stageEntries: [String] = []
-    var lineupSlots: [EventUploadLineupSlotDraft] = []
+    var timetableSlots: [EventUploadLineupSlotDraft] = []
+    var lineupOnlySlots: [EventUploadLineupOnlySlotDraft] = []
     var ticket = EventUploadTicketDraft()
     var dirty = false
     var updatedAt: Date? = Date()
@@ -180,6 +230,12 @@ struct EventUploadDraft: Hashable, Codable {
             ja: event.nameI18n?.ja ?? ""
         )
         draft.eventType = event.eventType ?? ""
+        draft.organizerFestivalID = event.wikiFestivalId ?? event.wikiFestival?.id
+        draft.organizerName = event.wikiFestival?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? event.wikiFestival?.name
+            ?? event.organizerName
+            ?? ""
+        draft.sourceURL = event.officialWebsite ?? ""
         draft.city = EventUploadLocalizedFields(
             zh: event.cityI18n?.zh ?? "",
             en: event.cityI18n?.en ?? event.city ?? "",
@@ -193,6 +249,7 @@ struct EventUploadDraft: Hashable, Codable {
         )
         draft.startDate = event.startDate
         draft.endDate = event.endDate
+        draft.weekRanges = [EventUploadWeekRangeDraft(startDate: event.startDate, endDate: event.endDate)]
         draft.timeZoneIdentifier = event.timeZone ?? draft.timeZoneIdentifier
         draft.timeZoneSearchQuery = event.timeZone ?? ""
         draft.dayRolloverHour = event.dayRolloverHour ?? 6
@@ -204,7 +261,8 @@ struct EventUploadDraft: Hashable, Codable {
             currency: event.ticketCurrency ?? "CNY",
             ticketURL: event.ticketUrl ?? ""
         )
-        draft.hydrateLineupSlots(from: event)
+        draft.hydrateTimetableSlots(from: event)
+        draft.hydrateLineupOnlySlots(from: event)
         draft.hydrateRemoteImages(from: event)
         return draft
     }
@@ -242,17 +300,18 @@ struct EventUploadDraft: Hashable, Codable {
         imageZones = next
     }
 
-    private mutating func hydrateLineupSlots(from event: WebEvent) {
+    private mutating func hydrateTimetableSlots(from event: WebEvent) {
         let parsedSlots = event.lineupSlots.sorted { lhs, rhs in
             if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
             return lhs.startTime < rhs.startTime
         }
-        lineupSlots = parsedSlots.map { slot in
+        timetableSlots = parsedSlots.map { slot in
             let act = EventLineupActCodec.parse(slot: slot)
             var draftSlot = EventUploadLineupSlotDraft(
                 actType: act.type,
                 performerNames: act.performers.map(\.name),
                 performerDJIDs: act.performers.map(\.djID),
+                performerAvatarURLs: act.performers.map(\.avatarUrl),
                 stageName: slot.stageName ?? "",
                 dayIndex: slot.festivalDayIndex ?? 1,
                 startTime: slot.startTime,
@@ -266,6 +325,25 @@ struct EventUploadDraft: Hashable, Codable {
         }
         if !stagesFromSlots.isEmpty {
             stageEntries = Array(NSOrderedSet(array: stagesFromSlots)) as? [String] ?? stagesFromSlots
+        }
+    }
+
+    private mutating func hydrateLineupOnlySlots(from event: WebEvent) {
+        let artists: [WebEventLineupArtist] = event.lineupArtists ?? []
+        let parsedArtists = artists.sorted(by: { (lhs: WebEventLineupArtist, rhs: WebEventLineupArtist) in
+            if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+            return lhs.djName < rhs.djName
+        })
+        lineupOnlySlots = parsedArtists.map { artist in
+            let act = EventLineupActCodec.parse(artist: artist)
+            var draftSlot = EventUploadLineupOnlySlotDraft(
+                actType: act.type,
+                performerNames: act.performers.map(\.name),
+                performerDJIDs: act.performers.map(\.djID),
+                performerAvatarURLs: act.performers.map(\.avatarUrl)
+            )
+            draftSlot.normalizePerformers()
+            return draftSlot
         }
     }
 }

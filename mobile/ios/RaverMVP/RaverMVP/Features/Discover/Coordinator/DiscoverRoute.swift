@@ -75,14 +75,8 @@ func makeDiscoverRouteDestination(
         DiscoverNewsDetailLoaderView(articleID: articleID, repository: appContainer.discoverNewsRepository)
 
     case .eventCreate:
-        if AppConfig.eventUploadFlowV2Enabled {
-            EventUploadFlowView(mode: .create, webService: appContainer.webService) {
-                NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
-            }
-        } else {
-            EventEditorView(mode: .create) {
-                NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
-            }
+        EventUploadFlowView(mode: .create, webService: appContainer.webService) {
+            NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
         }
 
     case .eventEdit(let eventID):
@@ -176,14 +170,8 @@ private struct DiscoverEventEditorLoaderView: View {
             Task { await loadEvent(force: true) }
         } content: {
             if let event {
-                if AppConfig.eventUploadFlowV2Enabled {
-                    EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
-                        NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
-                    }
-                } else {
-                    EventEditorView(mode: .edit(event)) {
-                        NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
-                    }
+                EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
+                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
                 }
             } else {
                 Color.clear

@@ -663,14 +663,8 @@ struct MainTabCoordinatorView: View {
                         .toolbar(.hidden, for: .navigationBar)
                 }
             case .publishEvent:
-                if AppConfig.eventUploadFlowV2Enabled {
-                    EventUploadFlowView(mode: .create, webService: appContainer.webService) {
-                        NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
-                    }
-                } else {
-                    EventEditorView(mode: .create) {
-                        NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
-                    }
+                EventUploadFlowView(mode: .create, webService: appContainer.webService) {
+                    NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
                 }
             case .uploadSet:
                 DJSetEditorView(mode: .create) {}
@@ -1909,14 +1903,8 @@ private struct ProfileEventEditorLoaderView: View {
         ) {
             try await eventReadRepository.fetchEvent(id: eventID)
         } content: { event in
-            if AppConfig.eventUploadFlowV2Enabled {
-                EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
-                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
-                }
-            } else {
-                EventEditorView(mode: .edit(event)) {
-                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
-                }
+            EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
+                NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
             }
         }
     }
