@@ -226,6 +226,47 @@ const fetchFestivalIDsByAliasContains = async (query: string, options: { exclude
   return rows.map((row) => row.id);
 };
 
+const fetchEventIDsByLocalizedTextContains = async (
+  query: string,
+  options: { excludeIDs?: string[]; limit?: number } = {}
+): Promise<string[]> => {
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "events"
+    WHERE (
+      COALESCE("name_i18n"::text, '') ILIKE ${`%${query}%`}
+      OR COALESCE("city_i18n"::text, '') ILIKE ${`%${query}%`}
+      OR COALESCE("country_i18n"::text, '') ILIKE ${`%${query}%`}
+      OR COALESCE("description_i18n"::text, '') ILIKE ${`%${query}%`}
+    )
+      ${options.excludeIDs?.length ? Prisma.sql`AND "id" NOT IN (${Prisma.join(options.excludeIDs)})` : Prisma.empty}
+    ORDER BY "updated_at" DESC
+    LIMIT ${options.limit ?? 50}
+  `);
+  return rows.map((row) => row.id);
+};
+
+const fetchFestivalIDsByLocalizedTextContains = async (
+  query: string,
+  options: { excludeIDs?: string[]; limit?: number } = {}
+): Promise<string[]> => {
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "wiki_festivals"
+    WHERE "is_active" = true
+      AND (
+        COALESCE("name_i18n"::text, '') ILIKE ${`%${query}%`}
+        OR COALESCE("city_i18n"::text, '') ILIKE ${`%${query}%`}
+        OR COALESCE("country_i18n"::text, '') ILIKE ${`%${query}%`}
+        OR COALESCE("description_i18n"::text, '') ILIKE ${`%${query}%`}
+      )
+      ${options.excludeIDs?.length ? Prisma.sql`AND "id" NOT IN (${Prisma.join(options.excludeIDs)})` : Prisma.empty}
+    ORDER BY "name" ASC
+    LIMIT ${options.limit ?? 50}
+  `);
+  return rows.map((row) => row.id);
+};
+
 const normalizeQuery = (value: string): string => value.trim().replace(/\s+/g, ' ');
 
 const normalizeText = (value: string | null | undefined): string =>
@@ -507,7 +548,11 @@ const loadRankingYearEntries = (boardId: string, year: number): RankingEntryReco
 };
 
 const searchEvents = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
-  const brandAliasIDs = await fetchFestivalIDsByAliasContains(query);
+  const [brandAliasIDs, localizedEventIDs, localizedFestivalIDs] = await Promise.all([
+    fetchFestivalIDsByAliasContains(query),
+    fetchEventIDsByLocalizedTextContains(query),
+    fetchFestivalIDsByLocalizedTextContains(query),
+  ]);
 
   const rows = await prisma.event.findMany({
     where: {
@@ -532,6 +577,8 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
             },
           },
         },
+        ...(localizedEventIDs.length > 0 ? [{ id: { in: localizedEventIDs } }] : []),
+        ...(localizedFestivalIDs.length > 0 ? [{ wikiFestivalId: { in: localizedFestivalIDs } }] : []),
         ...(brandAliasIDs.length > 0 ? [{ wikiFestivalId: { in: brandAliasIDs } }] : []),
       ],
     },
@@ -1170,6 +1217,10 @@ const searchLabels = async (query: string, limit: number, locale: GlobalSearchLo
 };
 
 const searchFestivals = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
+  const localizedFestivalIDs = await fetchFestivalIDsByLocalizedTextContains(query, {
+    limit: Math.max(limit * 2, 12),
+  });
+
   const festivals = await prisma.wikiFestival.findMany({
     where: {
       isActive: true,
@@ -1183,6 +1234,7 @@ const searchFestivals = async (query: string, limit: number, locale: GlobalSearc
             { city: containsInsensitive(query) },
             { tagline: containsInsensitive(query) },
             { introduction: containsInsensitive(query) },
+            ...(localizedFestivalIDs.length > 0 ? [{ id: { in: localizedFestivalIDs } }] : []),
           ],
         },
       ],
