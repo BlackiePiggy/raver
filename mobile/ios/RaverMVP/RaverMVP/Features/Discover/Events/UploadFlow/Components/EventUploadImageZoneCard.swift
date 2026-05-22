@@ -7,6 +7,8 @@ struct EventUploadImageZoneCard: View {
     let zone: EventUploadImageZone
     let images: [EventUploadImageDraft]
     let isRequired: Bool
+    let uploadingImageIDs: Set<UUID>
+    let failedImageIDs: Set<UUID>
     let onPicked: ([EventUploadPickedImageData]) async -> Void
     let onDelete: (UUID) -> Void
     let onMove: (UUID, Int) -> Void
@@ -183,6 +185,9 @@ struct EventUploadImageZoneCard: View {
                 .frame(width: thumbnailSize.width, height: thumbnailSize.height)
                 .clipShape(shape)
                 .contentShape(shape)
+                .overlay {
+                    thumbnailStatusOverlay(for: image)
+                }
         } else if let remoteURL = image.remoteURL,
                   let url = URL(string: AppConfig.resolvedURLString(remoteURL) ?? remoteURL) {
             AsyncImage(url: url) { phase in
@@ -203,6 +208,9 @@ struct EventUploadImageZoneCard: View {
             .background(RaverTheme.card)
             .clipShape(shape)
             .contentShape(shape)
+            .overlay {
+                thumbnailStatusOverlay(for: image)
+            }
         } else {
             Image(systemName: "photo")
                 .font(.caption.weight(.semibold))
@@ -212,6 +220,30 @@ struct EventUploadImageZoneCard: View {
                 .background(RaverTheme.card)
                 .clipShape(shape)
                 .contentShape(shape)
+                .overlay {
+                    thumbnailStatusOverlay(for: image)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func thumbnailStatusOverlay(for image: EventUploadImageDraft) -> some View {
+        if uploadingImageIDs.contains(image.id) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.black.opacity(0.38))
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
+            }
+        } else if failedImageIDs.contains(image.id) {
+            ZStack(alignment: .topTrailing) {
+                Color.clear
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(4)
+            }
         }
     }
 }

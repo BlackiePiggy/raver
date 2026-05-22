@@ -3,6 +3,12 @@ import Foundation
 final class LiveWebFeatureService: WebFeatureService {
     private static let userActionRefreshLeadTime: TimeInterval = 300
 
+    private struct DeleteEventImagesRequest: Encodable {
+        let eventId: String?
+        let draftId: String?
+        let urls: [String]
+    }
+
     private let baseURL: URL
     private let session: URLSession
     private let refreshGate = AppAuthRefreshGate.shared
@@ -270,11 +276,15 @@ final class LiveWebFeatureService: WebFeatureService {
         fileName: String,
         mimeType: String,
         eventID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse {
         var fields: [String: String] = [:]
         if let eventID, !eventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             fields["eventId"] = eventID
+        }
+        if let draftID, !draftID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["draftId"] = draftID
         }
         if let usage, !usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             fields["usage"] = usage
@@ -288,6 +298,27 @@ final class LiveWebFeatureService: WebFeatureService {
             fields: fields
         )
         return response.data
+    }
+
+    func deleteEventUploadedImages(
+        eventID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        let normalizedURLs = urls
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !normalizedURLs.isEmpty else { return }
+
+        let _: BFFEnvelope<GenericSuccess> = try await request(
+            path: "/v1/events/delete-images",
+            method: "POST",
+            body: DeleteEventImagesRequest(
+                eventId: eventID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                draftId: draftID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                urls: normalizedURLs
+            )
+        )
     }
 
     func uploadRatingImage(

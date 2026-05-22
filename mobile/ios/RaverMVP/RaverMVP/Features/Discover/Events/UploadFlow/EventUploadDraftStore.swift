@@ -6,7 +6,6 @@ final class EventUploadDraftStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let defaults: UserDefaults
-    private let draftTTL: TimeInterval = 14 * 24 * 60 * 60
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -16,12 +15,7 @@ final class EventUploadDraftStore {
 
     func load(mode: EventUploadMode, userID: String) -> EventUploadDraft? {
         guard let data = defaults.data(forKey: storageKey(mode: mode, userID: userID)) else { return nil }
-        guard let draft = try? decoder.decode(EventUploadDraft.self, from: data) else { return nil }
-        if let updatedAt = draft.updatedAt, Date().timeIntervalSince(updatedAt) > draftTTL {
-            clear(mode: mode, userID: userID, draftID: draft.id)
-            return nil
-        }
-        return draft
+        return try? decoder.decode(EventUploadDraft.self, from: data)
     }
 
     func save(_ draft: EventUploadDraft, userID: String) {

@@ -128,6 +128,15 @@ enum EventUploadMappers {
         )
     }
 
+    static func imageOnlyUpdateInput(from draft: EventUploadDraft) -> UpdateEventInput {
+        let create = createInput(from: draft)
+        return UpdateEventInput(
+            coverImageUrl: create.coverImageUrl ?? "",
+            lineupImageUrl: create.lineupImageUrl ?? "",
+            imageAssets: create.imageAssets ?? []
+        )
+    }
+
     private static func firstRemoteURL(in zone: EventUploadImageZone, draft: EventUploadDraft) -> String? {
         (draft.imageZones[zone] ?? [])
             .sorted { $0.sortOrder < $1.sortOrder }

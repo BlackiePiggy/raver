@@ -280,6 +280,7 @@ struct EventMediaRepositoryAdapter: EventMediaRepository, EventDiscussionMediaRe
             fileName: fileName,
             mimeType: mimeType,
             eventID: eventID,
+            draftID: nil,
             usage: usage
         )
     }

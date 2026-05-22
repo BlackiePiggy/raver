@@ -22,8 +22,14 @@ protocol WebFeatureService {
         fileName: String,
         mimeType: String,
         eventID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
+    func deleteEventUploadedImages(
+        eventID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws
     func uploadRatingImage(
         imageData: Data,
         fileName: String,
@@ -195,6 +201,7 @@ extension WebFeatureService {
             fileName: fileName,
             mimeType: mimeType,
             eventID: nil,
+            draftID: nil,
             usage: nil
         )
     }

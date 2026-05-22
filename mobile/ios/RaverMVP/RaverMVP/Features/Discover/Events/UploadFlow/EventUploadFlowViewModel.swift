@@ -32,7 +32,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var validationIssues: [EventUploadValidationIssue] = []
     @Published var statusMessage: String?
     @Published var submitSuccess: EventUploadSubmitSuccess?
-    @Published var shouldConfirmRestoredCreateDraft = false
+    @Published var shouldConfirmRestoredDraft = false
     @Published var timeZoneSearchResults: [EventTimezoneLookupItem] = []
     @Published var organizerSearchResults: [WebLearnFestival] = []
     @Published var djSearchResults: [String: [WebDJ]] = [:]
@@ -47,10 +47,13 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var djSearchFeedbacks: [String: InlineSearchFeedback] = [:]
     @Published var isSubmitting = false
     @Published private(set) var runningAIRecognitionKinds: Set<AIRecognitionKind> = []
+    @Published private(set) var uploadingImageIDs: Set<UUID> = []
+    @Published private(set) var failedImageIDs: Set<UUID> = []
 
     private let draftStore: EventUploadDraftStore
     private let webService: WebFeatureService
     private let userID: String
+    private let seedEvent: WebEvent?
     private let onSaved: () -> Void
     private var onDismiss: () -> Void
     private var draftSaveTask: Task<Void, Never>?
@@ -58,6 +61,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     private var organizerSearchTask: Task<Void, Never>?
     private var djSearchTasks: [String: Task<Void, Never>] = [:]
     private var aiRecognitionTasks: [AIRecognitionKind: Task<Void, Never>] = [:]
+    private var imageUploadTasks: [UUID: Task<Void, Never>] = [:]
     private var aiRecognitionJobIDs: [AIRecognitionKind: String] = [:]
     private var didDiscardDraft = false
 
@@ -73,21 +77,20 @@ final class EventUploadFlowViewModel: ObservableObject {
         self.userID = userID
         self.webService = webService
         self.draftStore = draftStore
+        self.seedEvent = event
         self.onSaved = onSaved
         self.onDismiss = onDismiss
-        var restoredCreateDraft = false
-        if let event {
-            self.draft = .edit(event: event)
-        } else if let saved = draftStore.load(mode: mode, userID: userID) {
+        var restoredDraft = false
+        if let saved = draftStore.load(mode: mode, userID: userID) {
             self.draft = saved
-            if case .create = saved.mode {
-                restoredCreateDraft = true
-            }
+            restoredDraft = true
+        } else if let event {
+            self.draft = .edit(event: event)
         } else {
             self.draft = .create()
             self.draft.mode = mode
         }
-        self.shouldConfirmRestoredCreateDraft = restoredCreateDraft
+        self.shouldConfirmRestoredDraft = restoredDraft
         EventUploadAnalytics.track("event_upload_v2_opened", properties: ["mode": draft.mode.storageKeyPart])
     }
 
@@ -108,9 +111,10 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
         if let next = draft.currentStep.next {
             EventUploadAnalytics.track("event_upload_v2_step_completed", properties: ["step": draft.currentStep.rawValue])
+            saveDraft(immediate: true)
             draft.currentStep = next
             EventUploadAnalytics.track("event_upload_v2_step_viewed", properties: ["step": next.rawValue])
-            saveDraft()
+            saveDraft(immediate: true)
         }
     }
 
@@ -150,12 +154,14 @@ final class EventUploadFlowViewModel: ObservableObject {
         onDismiss()
     }
 
-    func discardDraftAndClose() {
+    func discardDraftAndClose() async {
         didDiscardDraft = true
         draftSaveTask?.cancel()
+        cancelOutstandingImageUploads()
+        await cleanupOwnedRemoteImages()
         draftStore.clear(mode: draft.mode, userID: userID)
         draft.dirty = false
-        shouldConfirmRestoredCreateDraft = false
+        shouldConfirmRestoredDraft = false
         EventUploadAnalytics.track(
             "event_upload_v2_abandoned",
             properties: [
@@ -177,13 +183,23 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func continueRestoredDraft() {
-        shouldConfirmRestoredCreateDraft = false
+        shouldConfirmRestoredDraft = false
     }
 
-    func restartCreateDraft() {
-        draftStore.clear(mode: .create, userID: userID)
-        draft = .create()
-        shouldConfirmRestoredCreateDraft = false
+    func restartCreateDraft() async {
+        cancelOutstandingImageUploads()
+        await cleanupOwnedRemoteImages()
+        let mode = draft.mode
+        draftStore.clear(mode: mode, userID: userID)
+        if case .edit = mode, let seedEvent {
+            draft = .edit(event: seedEvent)
+        } else {
+            draft = .create()
+        }
+        draft.mode = mode
+        shouldConfirmRestoredDraft = false
+        uploadingImageIDs = []
+        failedImageIDs = []
         EventUploadAnalytics.track("event_upload_v2_draft_restarted", properties: ["mode": draft.mode.storageKeyPart])
     }
 
@@ -220,6 +236,7 @@ final class EventUploadFlowViewModel: ObservableObject {
 
         do {
             try await webService.prepareAuthenticatedRequestForUserAction(source: "event-upload-submit")
+            await waitForOutstandingImageUploads()
             try await uploadPendingImagesIfNeeded()
             switch draft.mode {
             case .create:
@@ -1465,9 +1482,11 @@ final class EventUploadFlowViewModel: ObservableObject {
                         localFileURL: localURL,
                         fileName: localURL.lastPathComponent,
                         mimeType: item.mimeType,
-                        sortOrder: nextOrder
+                        sortOrder: nextOrder,
+                        ownership: .pendingLocal
                     )
                 )
+                startImmediateUpload(for: zone, imageID: draft.imageZones[zone]?.last?.id)
                 addedCount += 1
             } catch {
                 statusMessage = LT("部分图片保存失败，请重试。", "Some images could not be saved. Please try again.", "一部の画像を保存できませんでした。再試行してください。")
@@ -1483,6 +1502,11 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func removeImage(zone: EventUploadImageZone, imageID: UUID) {
+        let removedImage = (draft.imageZones[zone] ?? []).first(where: { $0.id == imageID })
+        imageUploadTasks[imageID]?.cancel()
+        imageUploadTasks[imageID] = nil
+        uploadingImageIDs.remove(imageID)
+        failedImageIDs.remove(imageID)
         var images = draft.imageZones[zone] ?? []
         images.removeAll { $0.id == imageID }
         draft.imageZones[zone] = images.enumerated().map { index, image in
@@ -1493,6 +1517,14 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_image_removed", properties: ["zone": zone.rawValue])
+        if let removedImage {
+            Task {
+                if removedImage.ownership == .persistedEvent {
+                    await self.syncEditedEventImagesAfterRemovalIfNeeded()
+                }
+                await self.deleteUploadedImageIfNeeded(removedImage)
+            }
+        }
     }
 
     func replaceImage(zone: EventUploadImageZone, imageID: UUID, item: EventUploadPickedImageData) async {
@@ -1509,10 +1541,12 @@ final class EventUploadFlowViewModel: ObservableObject {
             images[index].remoteURL = nil
             images[index].fileName = localURL.lastPathComponent
             images[index].mimeType = item.mimeType
+            images[index].ownership = .pendingLocal
             draft.imageZones[zone] = images
             draft.dirty = true
             saveDraft()
             EventUploadAnalytics.track("event_upload_v2_image_replaced", properties: ["zone": zone.rawValue])
+            startImmediateUpload(for: zone, imageID: imageID)
         } catch {
             statusMessage = LT("图片替换失败，请重试。", "Image replacement failed. Please try again.", "画像の置き換えに失敗しました。再試行してください。")
         }
@@ -1535,6 +1569,12 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private func remoteURLForAIImage(_ image: EventUploadImageDraft) async throws -> String {
+        await waitForImageUploadIfNeeded(image.id)
+        if let latest = imageDraft(for: image.id, in: image.zone),
+           let remoteURL = latest.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !remoteURL.isEmpty {
+            return remoteURL
+        }
         if let remoteURL = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !remoteURL.isEmpty {
             return remoteURL
         }
@@ -1547,16 +1587,18 @@ final class EventUploadFlowViewModel: ObservableObject {
             fileName: image.fileName,
             mimeType: image.mimeType,
             eventID: eventIDForUpload,
+            draftID: draftIDForUpload,
             usage: image.zone.rawValue
         )
-        updateRemoteURL(upload.url, for: image)
+        updateRemoteURL(upload.url, ownership: uploadedOwnership, for: image)
         return upload.url
     }
 
-    private func updateRemoteURL(_ remoteURL: String, for image: EventUploadImageDraft) {
+    private func updateRemoteURL(_ remoteURL: String, ownership: EventUploadImageDraft.Ownership, for image: EventUploadImageDraft) {
         var images = draft.imageZones[image.zone] ?? []
         guard let index = images.firstIndex(where: { $0.id == image.id }) else { return }
         images[index].remoteURL = remoteURL
+        images[index].ownership = ownership
         draft.imageZones[image.zone] = images
         draft.dirty = true
         saveDraft()
@@ -1864,6 +1906,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private func uploadPendingImagesIfNeeded() async throws {
+        await waitForOutstandingImageUploads()
         for zone in EventUploadImageZone.allCases {
             var images = draft.imageZones[zone] ?? []
             var changed = false
@@ -1878,9 +1921,11 @@ final class EventUploadFlowViewModel: ObservableObject {
                     fileName: images[index].fileName,
                     mimeType: images[index].mimeType,
                     eventID: eventIDForUpload,
+                    draftID: draftIDForUpload,
                     usage: zone.rawValue
                 )
                 images[index].remoteURL = upload.url
+                images[index].ownership = uploadedOwnership
                 changed = true
             }
             if changed {
@@ -1895,6 +1940,169 @@ final class EventUploadFlowViewModel: ObservableObject {
             return eventID
         }
         return nil
+    }
+
+    private var draftIDForUpload: String? {
+        if case .create = draft.mode {
+            return draft.id.uuidString
+        }
+        return nil
+    }
+
+    private var uploadedOwnership: EventUploadImageDraft.Ownership {
+        switch draft.mode {
+        case .create:
+            return .createDraftUploaded
+        case .edit:
+            return .editDraftUploaded
+        }
+    }
+
+    private func imageDraft(for imageID: UUID, in zone: EventUploadImageZone) -> EventUploadImageDraft? {
+        (draft.imageZones[zone] ?? []).first(where: { $0.id == imageID })
+    }
+
+    private func startImmediateUpload(for zone: EventUploadImageZone, imageID: UUID?) {
+        guard let imageID,
+              let image = imageDraft(for: imageID, in: zone),
+              image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false,
+              let localFileURL = image.localFileURL
+        else { return }
+
+        imageUploadTasks[imageID]?.cancel()
+        uploadingImageIDs.insert(imageID)
+        failedImageIDs.remove(imageID)
+        let imageSnapshot = image
+        let uploadEventID = eventIDForUpload
+        let uploadDraftID = draftIDForUpload
+        let uploadOwnership = uploadedOwnership
+
+        imageUploadTasks[imageID] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.webService.prepareAuthenticatedRequestForUserAction(source: "event-upload-image")
+                let data = try Data(contentsOf: localFileURL)
+                let upload = try await self.webService.uploadEventImage(
+                    imageData: data,
+                    fileName: imageSnapshot.fileName,
+                    mimeType: imageSnapshot.mimeType,
+                    eventID: uploadEventID,
+                    draftID: uploadDraftID,
+                    usage: zone.rawValue
+                )
+                await MainActor.run {
+                    self.imageUploadTasks[imageID] = nil
+                    self.uploadingImageIDs.remove(imageID)
+                    if self.imageDraft(for: imageID, in: zone) != nil {
+                        self.updateRemoteURL(upload.url, ownership: uploadOwnership, for: imageSnapshot)
+                    } else {
+                        Task {
+                            await self.deleteUploadedImageIfNeeded(
+                                EventUploadImageDraft(
+                                    id: imageSnapshot.id,
+                                    zone: imageSnapshot.zone,
+                                    localFileURL: nil,
+                                    remoteURL: upload.url,
+                                    fileName: imageSnapshot.fileName,
+                                    mimeType: imageSnapshot.mimeType,
+                                    sortOrder: imageSnapshot.sortOrder,
+                                    ownership: uploadOwnership
+                                ),
+                                eventID: uploadEventID,
+                                draftID: uploadDraftID
+                            )
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.imageUploadTasks[imageID] = nil
+                    self.uploadingImageIDs.remove(imageID)
+                    guard !(error is CancellationError) else { return }
+                    self.failedImageIDs.insert(imageID)
+                    self.statusMessage = error.userFacingMessage ?? LT("图片上传失败，请稍后重试。", "Image upload failed. Please try again.", "画像のアップロードに失敗しました。もう一度お試しください。")
+                }
+            }
+        }
+    }
+
+    private func waitForOutstandingImageUploads() async {
+        let tasks = imageUploadTasks.values
+        for task in tasks {
+            await task.value
+        }
+    }
+
+    private func waitForImageUploadIfNeeded(_ imageID: UUID) async {
+        guard let task = imageUploadTasks[imageID] else { return }
+        await task.value
+    }
+
+    private func cancelOutstandingImageUploads() {
+        for task in imageUploadTasks.values {
+            task.cancel()
+        }
+        imageUploadTasks.removeAll()
+        uploadingImageIDs.removeAll()
+    }
+
+    private func cleanupOwnedRemoteImages() async {
+        let currentEventID = eventIDForUpload
+        let currentDraftID = draftIDForUpload
+        let images = EventUploadImageZone.allCases.flatMap { draft.imageZones[$0] ?? [] }
+        for image in images {
+            await deleteUploadedImageIfNeeded(image, eventID: currentEventID, draftID: currentDraftID)
+        }
+    }
+
+    private func syncEditedEventImagesAfterRemovalIfNeeded() async {
+        guard let eventID = eventIDForUpload else { return }
+        do {
+            _ = try await webService.updateEvent(
+                id: eventID,
+                input: EventUploadMappers.imageOnlyUpdateInput(from: draft)
+            )
+        } catch {
+            statusMessage = error.userFacingMessage ?? LT("删除活动图片失败，请稍后重试。", "Failed to delete event image. Please try again.", "イベント画像の削除に失敗しました。もう一度お試しください。")
+        }
+    }
+
+    private func deleteUploadedImageIfNeeded(
+        _ image: EventUploadImageDraft,
+        eventID: String? = nil,
+        draftID: String? = nil
+    ) async {
+        guard let remoteURL = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !remoteURL.isEmpty else {
+            return
+        }
+        do {
+            switch image.ownership {
+            case .createDraftUploaded:
+                try await webService.deleteEventUploadedImages(
+                    eventID: nil,
+                    draftID: draftID ?? self.draftIDForUpload ?? draft.id.uuidString,
+                    urls: [remoteURL]
+                )
+            case .editDraftUploaded:
+                guard let eventID = eventID ?? eventIDForUpload else { return }
+                try await webService.deleteEventUploadedImages(
+                    eventID: eventID,
+                    draftID: nil,
+                    urls: [remoteURL]
+                )
+            case .persistedEvent:
+                guard let eventID = eventID ?? eventIDForUpload else { return }
+                try await webService.deleteEventUploadedImages(
+                    eventID: eventID,
+                    draftID: nil,
+                    urls: [remoteURL]
+                )
+            case .pendingLocal:
+                return
+            }
+        } catch {
+            // Keep cleanup best-effort so draft UX is never blocked on remote cleanup.
+        }
     }
 
     private func scheduleTimeZoneSearch() {

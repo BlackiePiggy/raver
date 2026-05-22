@@ -811,6 +811,7 @@ actor MockWebFeatureService: WebFeatureService {
         fileName: String,
         mimeType: String,
         eventID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse {
         _ = imageData
@@ -823,7 +824,25 @@ actor MockWebFeatureService: WebFeatureService {
                 size: 1
             )
         }
+        if let draftID, !draftID.isEmpty {
+            return UploadMediaResponse(
+                url: "/uploads/events/drafts/\(draftID)/mock-\(fileName)",
+                fileName: fileName,
+                mimeType: mimeType,
+                size: 1
+            )
+        }
         return UploadMediaResponse(url: "/uploads/events/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)
+    }
+
+    func deleteEventUploadedImages(
+        eventID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        _ = eventID
+        _ = draftID
+        _ = urls
     }
 
     func uploadRatingImage(

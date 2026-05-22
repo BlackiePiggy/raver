@@ -1775,6 +1775,7 @@ struct MyPublishRatingUnit: Codable, Identifiable, Hashable {
 }
 
 struct UploadMediaResponse: Codable, Hashable {
+    var assetId: String? = nil
     var url: String
     var originalUrl: String? = nil
     var mediumUrl: String? = nil

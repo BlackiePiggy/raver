@@ -43,6 +43,13 @@ enum EventUploadImageZone: String, CaseIterable, Identifiable, Codable {
 }
 
 struct EventUploadImageDraft: Identifiable, Hashable, Codable {
+    enum Ownership: String, Codable {
+        case pendingLocal
+        case createDraftUploaded
+        case editDraftUploaded
+        case persistedEvent
+    }
+
     var id: UUID = UUID()
     var zone: EventUploadImageZone
     var localFileURL: URL?
@@ -50,6 +57,7 @@ struct EventUploadImageDraft: Identifiable, Hashable, Codable {
     var fileName: String
     var mimeType: String
     var sortOrder: Int
+    var ownership: Ownership = .pendingLocal
 }
 
 struct EventUploadPickedImageData {
@@ -500,7 +508,8 @@ struct EventUploadDraft: Hashable, Codable {
                     remoteURL: asset.url,
                     fileName: asset.fileName ?? "\(zone.rawValue)-\(index + 1).jpg",
                     mimeType: "image/jpeg",
-                    sortOrder: asset.sort ?? index + 1
+                    sortOrder: asset.sort ?? index + 1,
+                    ownership: .persistedEvent
                 )
             )
         }

@@ -1776,6 +1776,28 @@ const buildEventMediaObjectKey = (
   return `${ossEventsPrefix}/${safeEventId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
+const buildEventDraftMediaObjectKey = (
+  userId: string,
+  draftId: string,
+  fileName: string,
+  mimeType: string,
+  usage: string | null
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeUserId = sanitizeOssPathSegment(userId) || 'unknown-user';
+  const safeDraftId = sanitizeOssPathSegment(draftId) || 'unknown-draft';
+  const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
+  return `${ossEventsPrefix}/drafts/${safeUserId}/${safeDraftId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
 const buildRatingMediaObjectKey = (
   owner: {
     userId: string;
@@ -1835,6 +1857,13 @@ const isEventOssObjectKey = (objectKey: string, eventId: string): boolean => {
   const safeEventId = sanitizeOssPathSegment(eventId);
   if (!safeEventId) return false;
   return objectKey.startsWith(`${ossEventsPrefix}/${safeEventId}/`);
+};
+
+const isEventDraftOssObjectKey = (objectKey: string, userId: string, draftId: string): boolean => {
+  const safeUserId = sanitizeOssPathSegment(userId);
+  const safeDraftId = sanitizeOssPathSegment(draftId);
+  if (!safeUserId || !safeDraftId) return false;
+  return objectKey.startsWith(`${ossEventsPrefix}/drafts/${safeUserId}/${safeDraftId}/`);
 };
 
 const isDjAvatarOssObjectKey = (objectKey: string, djId: string): boolean => {
@@ -2905,6 +2934,64 @@ const uploadEventMediaToOss = async (
     metadata: {
       originalName: file.originalname,
       source: 'v1/events/upload-image',
+    },
+  });
+
+  return {
+    assetId: asset.id,
+    url,
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadEventDraftMediaToOss = async (
+  file: Express.Multer.File,
+  userId: string,
+  draftId: string,
+  usage: string | null
+): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error(ossConfigMissingMessage);
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildEventDraftMediaObjectKey(
+    userId,
+    draftId,
+    file.originalname || file.filename || 'image.jpg',
+    mimeType,
+    usage
+  );
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'event-draft',
+    ownerId: draftId,
+    purpose: usage || 'image',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/events/upload-image:draft',
     },
   });
 
@@ -8037,6 +8124,7 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
 
     const formBody = req.body as Record<string, unknown>;
     const eventId = typeof formBody.eventId === 'string' ? formBody.eventId.trim() : '';
+    const draftId = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
     const usage = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
 
     if (eventId) {
@@ -8068,6 +8156,12 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
       return;
     }
 
+    if (draftId) {
+      const uploaded = await uploadEventDraftMediaToOss(file, userId, draftId, usage || null);
+      ok(res, uploaded);
+      return;
+    }
+
     if (looksLikePostMediaName(file.originalname || '', 'image')) {
       const uploaded = await uploadPostMediaToOss(file, 'image', null, userId);
       ok(res, uploaded);
@@ -8092,6 +8186,130 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload event image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/delete-images', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const eventId = typeof body.eventId === 'string' ? body.eventId.trim() : '';
+    const draftId = typeof body.draftId === 'string' ? body.draftId.trim() : '';
+    const urls = Array.isArray(body.urls)
+      ? body.urls
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+      : [];
+
+    if (!eventId && !draftId) {
+      res.status(400).json({ error: 'eventId or draftId is required' });
+      return;
+    }
+    if (eventId && draftId) {
+      res.status(400).json({ error: 'eventId and draftId cannot be provided together' });
+      return;
+    }
+    if (!urls.length) {
+      ok(res, { success: true });
+      return;
+    }
+
+    if (draftId) {
+      const assets = await prisma.mediaAsset.findMany({
+        where: {
+          ownerType: 'event-draft',
+          ownerId: draftId,
+          uploadedById: userId,
+          url: { in: urls },
+          status: { in: ['active', 'replaced'] },
+        },
+        select: {
+          id: true,
+          url: true,
+          objectKey: true,
+        },
+      });
+
+      const keys = assets
+        .filter((asset) => typeof asset.objectKey === 'string' && isEventDraftOssObjectKey(asset.objectKey, userId, draftId))
+        .map((asset) => asset.objectKey as string);
+
+      for (const asset of assets) {
+        await mediaAssetService.markDeletedByUrl(asset.url);
+      }
+      await deleteOssObjects(keys);
+      ok(res, { success: true });
+      return;
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true, organizerId: true, coverImageUrl: true, lineupImageUrl: true, imageAssets: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const canManage = await canUserManageEvent(
+      userId,
+      authReq.user?.role ?? null,
+      event.organizerId,
+      authReq.user?.email ?? null
+    );
+    if (!canManage) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const protectedURLs = new Set<string>();
+    if (typeof event.coverImageUrl === 'string' && event.coverImageUrl.trim()) {
+      protectedURLs.add(event.coverImageUrl.trim().toLowerCase());
+    }
+    if (typeof event.lineupImageUrl === 'string' && event.lineupImageUrl.trim()) {
+      protectedURLs.add(event.lineupImageUrl.trim().toLowerCase());
+    }
+    const persistedAssets = parseEventImageAssets(event.imageAssets ?? []);
+    for (const asset of persistedAssets) {
+      const value = String(asset.url || '').trim().toLowerCase();
+      if (value) protectedURLs.add(value);
+    }
+
+    const deletableURLs = urls.filter((url) => !protectedURLs.has(url.toLowerCase()));
+    if (!deletableURLs.length) {
+      ok(res, { success: true });
+      return;
+    }
+
+    const assets = await prisma.mediaAsset.findMany({
+      where: {
+        ownerType: 'event',
+        ownerId: eventId,
+        url: { in: deletableURLs },
+        status: { in: ['active', 'replaced'] },
+      },
+      select: {
+        id: true,
+        url: true,
+        objectKey: true,
+      },
+    });
+
+    const keys = assets
+      .filter((asset) => typeof asset.objectKey === 'string' && isEventOssObjectKey(asset.objectKey, eventId))
+      .map((asset) => asset.objectKey as string);
+
+    for (const asset of assets) {
+      await mediaAssetService.markDeletedByUrl(asset.url);
+    }
+    await deleteOssObjects(keys);
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete event images error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

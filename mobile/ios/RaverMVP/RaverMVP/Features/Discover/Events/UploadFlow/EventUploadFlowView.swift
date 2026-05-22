@@ -196,15 +196,15 @@ struct EventUploadFlowView: View {
         .sheet(item: $activeWeekDatePicker) { target in
             weekDatePickerSheet(target: target)
         }
-        .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredCreateDraft) {
+        .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredDraft) {
             Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
-                viewModel.restartCreateDraft()
+                Task { await viewModel.restartCreateDraft() }
             }
             Button(LT("继续草稿", "Continue", "続ける"), role: .cancel) {
                 viewModel.continueRestoredDraft()
             }
         } message: {
-            Text(LT("已恢复上次未提交的新建活动草稿。", "Your previous unsent event draft was restored.", "未送信のイベント下書きを復元しました。"))
+            Text(restoredDraftMessage)
         }
         .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { viewModel.statusMessage != nil },
@@ -223,12 +223,19 @@ struct EventUploadFlowView: View {
                 viewModel.saveDraftAndClose()
             }
             Button(LT("放弃草稿", "Discard Draft", "下書きを破棄"), role: .destructive) {
-                viewModel.discardDraftAndClose()
+                Task { await viewModel.discardDraftAndClose() }
             }
             Button(LT("继续编辑", "Keep Editing", "編集を続ける"), role: .cancel) {}
         } message: {
             Text(LT("未提交的内容会保存在本地草稿中。", "Unsubmitted changes can be kept as a local draft.", "未送信の内容はローカル下書きとして保存できます。"))
         }
+    }
+
+    private var restoredDraftMessage: String {
+        if case .edit = viewModel.draft.mode {
+            return LT("已恢复上次未提交的活动编辑草稿。", "Your previous unsaved event edit draft was restored.", "前回の未保存イベント編集下書きを復元しました。")
+        }
+        return LT("已恢复上次未提交的新建活动草稿。", "Your previous unsent event draft was restored.", "未送信のイベント下書きを復元しました。")
     }
 
     @ViewBuilder
@@ -304,6 +311,8 @@ struct EventUploadFlowView: View {
                         zone: zone,
                         images: viewModel.draft.imageZones[zone] ?? [],
                         isRequired: false,
+                        uploadingImageIDs: viewModel.uploadingImageIDs,
+                        failedImageIDs: viewModel.failedImageIDs,
                         onPicked: { items in
                             await viewModel.addPickedImages(zone: zone, items: items)
                         },
