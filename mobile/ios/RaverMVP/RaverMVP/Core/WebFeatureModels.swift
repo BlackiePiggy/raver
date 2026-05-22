@@ -1797,6 +1797,72 @@ struct EventLineupImageImportResponse: Codable, Hashable {
     var lineupInfo: [EventLineupImageImportItem]
 }
 
+struct EventLineupAIImportRequest: Encodable {
+    var imageUrl: String
+    var fileType: String
+    var context: EventLineupAIImportContext
+}
+
+struct EventLineupAIImportContext: Codable, Hashable {
+    var preferredLanguage: String
+    var knownDJNames: [String]
+}
+
+struct EventLineupAIImportResponse: Codable, Hashable {
+    var rawJson: EventLineupAIResult
+}
+
+struct EventLineupAIImportJobResponse: Codable, Hashable {
+    var jobId: String
+    var status: String
+    var createdAt: String?
+    var updatedAt: String?
+    var startedAt: String?
+    var finishedAt: String?
+    var result: EventLineupAIImportResponse?
+    var error: String?
+}
+
+struct EventPosterAIImportRequest: Encodable {
+    var imageUrl: String
+    var fileType: String
+}
+
+struct EventPosterAIImportResponse: Codable, Hashable {
+    var rawJson: EventPosterAIResult
+
+    private enum CodingKeys: String, CodingKey {
+        case rawJson
+        case raw_json
+    }
+
+    init(rawJson: EventPosterAIResult) {
+        self.rawJson = rawJson
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        rawJson = try container.decodeIfPresent(EventPosterAIResult.self, forKey: .rawJson)
+            ?? container.decode(EventPosterAIResult.self, forKey: .raw_json)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rawJson, forKey: .rawJson)
+    }
+}
+
+struct EventPosterAIImportJobResponse: Codable, Hashable {
+    var jobId: String
+    var status: String
+    var createdAt: String?
+    var updatedAt: String?
+    var startedAt: String?
+    var finishedAt: String?
+    var result: EventPosterAIImportResponse?
+    var error: String?
+}
+
 struct EventTimetableImageImportRequest: Encodable {
     var imageUrl: String
     var fileType: String
@@ -1851,6 +1917,75 @@ struct DJExactMatchItem: Codable, Hashable, Identifiable {
     var avatarOriginalUrl: String?
     var avatarMediumUrl: String?
     var avatarSmallUrl: String?
+}
+
+struct EventLineupAIResult: Codable, Hashable {
+    var schemaVersion: String?
+    var imageType: String?
+    var items: [EventLineupAIItem]
+    var unparsedTexts: [String]?
+    var warnings: [String]?
+}
+
+struct EventLineupAIItem: Codable, Hashable, Identifiable {
+    var id: Int { order }
+    var order: Int
+    var performerType: String
+    var performerNames: [String]
+    var displayName: String
+    var rawText: String?
+    var confidence: Double?
+    var notes: [String]?
+}
+
+struct EventPosterAIResult: Codable, Hashable {
+    var schemaVersion: String?
+    var imageType: String?
+    var nameI18n: WebBiText
+    var cityI18n: WebBiText
+    var detailAddressI18n: WebBiText
+    var countryI18n: WebBiText
+    var timeZone: EventPosterAITimeZone
+    var schedule: EventPosterAISchedule
+    var ticketInfo: EventPosterAITicketInfo
+    var unparsedTexts: [String]?
+    var warnings: [String]?
+}
+
+struct EventPosterAITimeZone: Codable, Hashable {
+    var ianaName: String?
+    var displayName: String
+    var confidence: Double?
+    var source: String?
+}
+
+struct EventPosterAISchedule: Codable, Hashable {
+    var scheduleMode: String
+    var startDate: String?
+    var endDate: String?
+    var weekRanges: [EventPosterAIWeekRange]
+    var rawDateText: String?
+    var confidence: Double?
+}
+
+struct EventPosterAIWeekRange: Codable, Hashable, Identifiable {
+    var id: Int { weekIndex }
+    var weekIndex: Int
+    var startDate: String
+    var endDate: String
+}
+
+struct EventPosterAITicketInfo: Codable, Hashable {
+    var ticketUrl: String
+    var currency: String
+    var tiers: [EventPosterAITicketTier]
+}
+
+struct EventPosterAITicketTier: Codable, Hashable, Identifiable {
+    var id: String { "\(name)-\(priceText)" }
+    var name: String
+    var price: Double
+    var priceText: String
 }
 
 struct EventTimetableAIResult: Codable, Hashable {

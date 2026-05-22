@@ -1,6 +1,11 @@
 import Foundation
 import UIKit
 
+private struct ShareLinkErrorEnvelope: Codable {
+    let error: String
+    let code: String?
+}
+
 enum ShareTargetType: String, Codable, Hashable {
     case userCard = "user_card"
     case squadCard = "squad_card"
@@ -229,6 +234,41 @@ struct UniversalLinkRouter {
 final class LiveShareLinkService: ShareLinkService {
     private let baseURL: URL
     private let session: URLSession
+    private let refreshGate = AppAuthRefreshGate.shared
+    private var token: String? {
+        get { SessionTokenStore.shared.token }
+        set { SessionTokenStore.shared.token = newValue }
+    }
+    private var refreshToken: String? {
+        get { SessionTokenStore.shared.refreshToken }
+        set { SessionTokenStore.shared.refreshToken = newValue }
+    }
+    private var authenticatedRunner: AuthenticatedRequestRunner {
+        AuthenticatedRequestRunner(
+            session: session,
+            refreshGate: refreshGate,
+            refreshSession: { [weak self] in
+                guard let self else { throw ServiceError.unauthorized }
+                return try await self.refreshSessionInternal()
+            },
+            sessionExpirationReasonFromData: { [weak self] data in
+                self?.sessionExpirationReason(from: data) ?? .expired
+            },
+            sessionExpirationReasonFromError: { [weak self] error in
+                self?.sessionExpirationReason(from: error) ?? .expired
+            },
+            handleAccountInactive: { [weak self] notify in
+                self?.token = nil
+                self?.refreshToken = nil
+                if notify {
+                    self?.postSessionExpired(.accountInactive)
+                }
+            },
+            handleSessionExpired: { [weak self] reason in
+                self?.postSessionExpired(reason)
+            }
+        )
+    }
 
     init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -299,7 +339,10 @@ final class LiveShareLinkService: ShareLinkService {
     private func request<T: Decodable>(
         path: String,
         method: String,
-        body: Encodable? = nil
+        body: Encodable? = nil,
+        allowAuthRetry: Bool = true,
+        includeAccessToken: Bool = true,
+        postSessionExpiredOnUnauthorized: Bool = true
     ) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw ServiceError.invalidResponse
@@ -311,7 +354,7 @@ final class LiveShareLinkService: ShareLinkService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if let token = SessionTokenStore.shared.token, !token.isEmpty {
+        if includeAccessToken, let token, !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -319,10 +362,13 @@ final class LiveShareLinkService: ShareLinkService {
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ServiceError.invalidResponse
-        }
+        let (data, http) = try await authenticatedRunner.execute(
+            request: request,
+            path: path,
+            allowAuthRetry: allowAuthRetry,
+            includeAccessToken: includeAccessToken,
+            postSessionExpiredOnUnauthorized: postSessionExpiredOnUnauthorized
+        )
 
         if (200..<300).contains(http.statusCode) {
             do {
@@ -332,15 +378,65 @@ final class LiveShareLinkService: ShareLinkService {
             }
         }
 
-        if http.statusCode == 401 {
-            throw ServiceError.unauthorized
-        }
-
         if let serverError = try? JSONDecoder().decode(ShareLinkServerError.self, from: data) {
             throw ServiceError.message(serverError.message ?? serverError.error)
         }
 
         throw ServiceError.message(HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
+    }
+
+    private func refreshSessionInternal() async throws -> Session {
+        guard let currentRefreshToken = refreshToken, !currentRefreshToken.isEmpty else {
+            throw ServiceError.unauthorized
+        }
+
+        let refreshed: Session = try await request(
+            path: "/v1/auth/refresh",
+            method: "POST",
+            body: ["refreshToken": currentRefreshToken],
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+
+        SessionTokenStore.shared.storeSessionTokens(
+            accessToken: refreshed.token,
+            refreshToken: refreshed.refreshToken,
+            accessTokenExpiresIn: refreshed.accessTokenExpiresIn
+        )
+
+        NotificationCenter.default.post(name: .raverSessionRefreshed, object: refreshed)
+        return refreshed
+    }
+
+    private func postSessionExpired(_ reason: SessionExpirationReason) {
+        NotificationCenter.default.post(name: .raverSessionExpired, object: reason)
+    }
+
+    private func sessionExpirationReason(from error: Error) -> SessionExpirationReason {
+        if case ServiceError.accountInactive = error {
+            return .accountInactive
+        }
+        if case ServiceError.sessionExpired(let reason) = error {
+            return reason
+        }
+        return .expired
+    }
+
+    private func sessionExpirationReason(from data: Data) -> SessionExpirationReason {
+        guard let code = try? JSONDecoder().decode(ShareLinkErrorEnvelope.self, from: data).code else {
+            return .expired
+        }
+        switch code {
+        case "AUTH_SESSION_REVOKED":
+            return .revoked
+        case "AUTH_ACCOUNT_INACTIVE":
+            return .accountInactive
+        case "AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED":
+            return .expired
+        default:
+            return .expired
+        }
     }
 }
 

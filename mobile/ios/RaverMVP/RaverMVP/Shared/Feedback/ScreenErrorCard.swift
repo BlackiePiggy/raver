@@ -28,6 +28,7 @@ struct ScreenErrorCard: View {
                 HStack(spacing: 12) {
                     if let retryAction {
                         Button(retryTitle, action: retryAction)
+                            .frame(maxWidth: .infinity)
                             .buttonStyle(PrimaryButtonStyle())
                     }
 

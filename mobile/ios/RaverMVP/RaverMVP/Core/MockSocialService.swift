@@ -71,7 +71,7 @@ actor MockSocialService: SocialService {
         repostActionAtByPostID = seed.repostActionAtByPostID
     }
 
-    func restoreSession() async -> Session? {
+    func restoreSession() async throws -> Session? {
         guard SessionTokenStore.shared.token != nil, SessionTokenStore.shared.refreshToken != nil else {
             return nil
         }
@@ -397,9 +397,19 @@ actor MockSocialService: SocialService {
     }
 
     private func issueMockSession() -> Session {
-        SessionTokenStore.shared.token = mockAccessToken
-        SessionTokenStore.shared.refreshToken = mockRefreshToken
-        return Session(token: mockAccessToken, refreshToken: mockRefreshToken, user: currentUser, accountStatus: AccountEnforcementStatus.clear)
+        let session = Session(
+            token: mockAccessToken,
+            refreshToken: mockRefreshToken,
+            accessTokenExpiresIn: 900,
+            user: currentUser,
+            accountStatus: AccountEnforcementStatus.clear
+        )
+        SessionTokenStore.shared.storeSessionTokens(
+            accessToken: session.token,
+            refreshToken: session.refreshToken,
+            accessTokenExpiresIn: session.accessTokenExpiresIn
+        )
+        return session
     }
 
     func fetchTencentIMBootstrap() async throws -> TencentIMBootstrap {

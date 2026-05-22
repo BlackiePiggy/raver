@@ -16,12 +16,20 @@ enum ConversationType: String, Codable, CaseIterable, Identifiable {
 struct Session: Codable {
     let token: String
     let refreshToken: String?
+    let accessTokenExpiresIn: Int?
     let user: UserSummary
     let accountStatus: AccountEnforcementStatus?
 
-    init(token: String, refreshToken: String? = nil, user: UserSummary, accountStatus: AccountEnforcementStatus? = nil) {
+    init(
+        token: String,
+        refreshToken: String? = nil,
+        accessTokenExpiresIn: Int? = nil,
+        user: UserSummary,
+        accountStatus: AccountEnforcementStatus? = nil
+    ) {
         self.token = token
         self.refreshToken = refreshToken
+        self.accessTokenExpiresIn = accessTokenExpiresIn
         self.user = user
         self.accountStatus = accountStatus
     }
@@ -29,6 +37,7 @@ struct Session: Codable {
     private enum CodingKeys: String, CodingKey {
         case token
         case accessToken
+        case accessTokenExpiresIn
         case refreshToken
         case user
         case accountStatus
@@ -39,11 +48,13 @@ struct Session: Codable {
         let tokenValue = try container.decodeIfPresent(String.self, forKey: .token)
             ?? container.decode(String.self, forKey: .accessToken)
         let refreshTokenValue = try container.decodeIfPresent(String.self, forKey: .refreshToken)
+        let accessTokenExpiresInValue = try container.decodeIfPresent(Int.self, forKey: .accessTokenExpiresIn)
         let userValue = try container.decode(UserSummary.self, forKey: .user)
         let accountStatusValue = try container.decodeIfPresent(AccountEnforcementStatus.self, forKey: .accountStatus)
 
         token = tokenValue
         refreshToken = refreshTokenValue
+        accessTokenExpiresIn = accessTokenExpiresInValue
         user = userValue
         accountStatus = accountStatusValue
     }
@@ -52,6 +63,7 @@ struct Session: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(token, forKey: .token)
         try container.encodeIfPresent(refreshToken, forKey: .refreshToken)
+        try container.encodeIfPresent(accessTokenExpiresIn, forKey: .accessTokenExpiresIn)
         try container.encode(user, forKey: .user)
         try container.encodeIfPresent(accountStatus, forKey: .accountStatus)
     }

@@ -362,7 +362,7 @@ private struct LoginDevicesSettingsView: View {
             let result = try await appContainer.socialService.revokeAuthSession(sessionID: item.id)
             errorMessage = nil
             if result.revokedCurrent {
-                NotificationCenter.default.post(name: .raverSessionExpired, object: SessionExpirationReason.revoked)
+                appState.expireSession(.revoked)
                 return
             }
             await loadSessions()

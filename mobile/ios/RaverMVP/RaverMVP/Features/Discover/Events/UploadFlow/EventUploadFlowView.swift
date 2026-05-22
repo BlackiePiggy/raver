@@ -101,6 +101,7 @@ struct EventUploadFlowView: View {
     @StateObject private var viewModel: EventUploadFlowViewModel
     @State private var showLocationPicker = false
     @State private var showTimetableAIImportSheet = false
+    @State private var showLineupAIImportSheet = false
     @State private var showExitConfirmation = false
     @State private var selectedWeekForEditing: EventUploadWeekSelection?
     @State private var expandedTimetableSlots: Set<UUID> = []
@@ -175,6 +176,11 @@ struct EventUploadFlowView: View {
         }
         .sheet(isPresented: $showTimetableAIImportSheet) {
             EventUploadTimetableAIImportSheet(viewModel: viewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showLineupAIImportSheet) {
+            EventUploadLineupAIImportSheet(viewModel: viewModel)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -997,7 +1003,7 @@ struct EventUploadFlowView: View {
             )
 
             aiActionButton(title: LT("AI 识别阵容图", "AI Lineup Import", "AIラインナップ認識")) {
-                viewModel.tapLineupImportPlaceholder()
+                showLineupAIImportSheet = true
             }
 
             inlineInfoCard(
@@ -2776,6 +2782,672 @@ struct EventUploadFlowView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(RaverTheme.cardBorder, lineWidth: 1)
         )
+    }
+}
+
+private struct EventUploadLineupAIImportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: EventUploadFlowViewModel
+    @State private var selectedImageID: UUID?
+    @State private var isRunning = false
+    @State private var isAutoMatching = false
+    @State private var recognitionStartedAt: Date?
+    @State private var autoMatchStartedAt: Date?
+    @State private var statusMessage = LT("请选择一张已经上传到当前草稿里的阵容图。", "Choose one image from this draft for lineup recognition.", "この下書きに追加済みの画像からラインナップ認識に使う1枚を選んでください。")
+    @State private var statusIsError = false
+    @State private var resultItems: [EventUploadLineupAIEditableItem] = []
+    @State private var warnings: [String] = []
+    @State private var unparsedTexts: [String] = []
+    @State private var expandedItemIDs: Set<UUID> = []
+
+    private var images: [EventUploadImageDraft] {
+        viewModel.timetableAIImageCandidates
+    }
+
+    private var selectedImage: EventUploadImageDraft? {
+        guard let selectedImageID else { return nil }
+        return images.first { $0.id == selectedImageID }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    imagePickerSection
+                    statusSection
+                    if !resultItems.isEmpty {
+                        resultSection
+                    }
+                }
+                .padding(16)
+            }
+            .background(RaverTheme.background.ignoresSafeArea())
+            .navigationTitle(LT("AI 识别阵容图", "AI Lineup Import", "AIラインナップ認識"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(LT("关闭", "Close", "閉じる")) { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 10) {
+                        Button {
+                            Task { await autoMatchCurrentItems() }
+                        } label: {
+                            Label(LT("一键匹配", "Auto Match", "一括紐付け"), systemImage: "wand.and.stars")
+                        }
+                        .disabled(isRunning || isAutoMatching || resultItems.isEmpty)
+
+                        Button(LT("确认添加", "Apply", "追加")) {
+                            viewModel.applyLineupAIImportItems(resultItems)
+                            dismiss()
+                        }
+                        .disabled(isRunning || isAutoMatching || resultItems.isEmpty)
+                    }
+                }
+            }
+            .onAppear {
+                if selectedImageID == nil {
+                    selectedImageID = images.first(where: { $0.zone == .lineup })?.id ?? images.first?.id
+                }
+            }
+        }
+    }
+
+    private var imagePickerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(LT("选择识别图片", "Recognition Image", "認識する画像"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Button {
+                    Task { await runRecognition() }
+                } label: {
+                    Label(LT("确认并开始识别", "Run", "認識開始"), systemImage: "sparkles")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            LinearGradient(colors: [.pink, .orange, .blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: Capsule()
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isRunning || selectedImage == nil)
+            }
+
+            if images.isEmpty {
+                Text(LT("当前草稿还没有图片。请先回到第一页上传阵容图或相关图片。", "No images are available in this draft. Upload a lineup or related image first.", "この下書きには画像がありません。先に画像を追加してください。"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(images) { image in
+                        Button {
+                            guard !isRunning else { return }
+                            selectedImageID = image.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                imagePreview(image)
+                                Text(image.zone.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(1)
+                                Text(image.fileName)
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                            .padding(8)
+                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var statusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if isRunning || isAutoMatching {
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+                    HStack(spacing: 10) {
+                        AIThinkingIndicator()
+                        Spacer()
+                        Text(elapsedText(since: isRunning ? recognitionStartedAt : autoMatchStartedAt, now: timeline.date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            }
+            Text(statusMessage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(statusIsError ? Color.red : RaverTheme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(warnings, id: \.self) { warning in
+                Text(warning)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+            if !unparsedTexts.isEmpty {
+                Text(LT("未解析文本：", "Unparsed text:", "未解析テキスト：") + unparsedTexts.prefix(4).joined(separator: " / "))
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(statusIsError ? Color.red.opacity(0.45) : RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var resultSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(LT("识别结果", "Results", "認識結果"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Text(LT("共 \(resultItems.count) 个", "\(resultItems.count) items", "\(resultItems.count)件"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            Button {
+                Task { await autoMatchCurrentItems() }
+            } label: {
+                Label(LT("一键匹配当前列表中的 DJ", "Auto match DJs in current list", "現在のリストのDJを一括紐付け"), systemImage: "wand.and.stars")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        LinearGradient(colors: [.cyan, .blue, .purple, .pink], startPoint: .leading, endPoint: .trailing),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(isRunning || isAutoMatching || resultItems.isEmpty)
+
+            VStack(spacing: 12) {
+                ForEach(Array(resultItems.enumerated()), id: \.element.id) { index, item in
+                    resultCard(item, order: index + 1)
+                }
+            }
+        }
+    }
+
+    private func resultCard(_ item: EventUploadLineupAIEditableItem, order: Int) -> some View {
+        let expanded = expandedItemIDs.contains(item.id)
+        let names = performerNames(for: item)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Text("\(order)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(width: 18, alignment: .leading)
+
+                avatarStack(item: item, performerNames: names)
+
+                Text(displayName(for: item))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    expandedItemIDs.formSymmetricDifference([item.id])
+                } label: {
+                    Image(systemName: expanded ? "chevron.up" : "square.and.pencil")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(expanded ? RaverTheme.accent : RaverTheme.secondaryText)
+                        .frame(width: 30, height: 30)
+                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    resultItems.removeAll { $0.id == item.id }
+                    expandedItemIDs.remove(item.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.red)
+                        .frame(width: 28, height: 28)
+                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if expanded {
+                Picker(LT("演出形式", "Act Type", "出演形式"), selection: binding(for: item.id, keyPath: \.actType, default: .solo)) {
+                    ForEach(EventLineupActType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                ForEach(0..<item.actType.performerCount, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            performerAvatar(name: performerName(for: item, performerIndex: index), avatarURL: performerAvatarURL(for: item, performerIndex: index), index: index)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.actType == .solo ? LT("DJ / 艺人名称", "Artist / DJ Name", "DJ / アーティスト名") : LT("成员 \(index + 1)", "Member \(index + 1)", "メンバー \(index + 1)"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                Text(isBound(item, performerIndex: index) ? LT("已绑定 DJ 词条", "Bound to DJ entry", "DJエントリ紐付け済み") : LT("可手填，也可绑定 DJ 库", "Manual or DJ binding", "手入力またはDJ紐付け"))
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            Spacer()
+                            if isBound(item, performerIndex: index) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.green)
+                            }
+                        }
+
+                        aiImportDJSearchTextField(
+                            title: item.actType == .solo ? LT("输入 DJ / 艺人名称", "Enter artist / DJ name", "DJ / アーティスト名を入力") : LT("输入成员名称", "Enter member name", "メンバー名を入力"),
+                            text: performerNameBinding(itemID: item.id, performerIndex: index),
+                            isSearching: viewModel.aiImportSearchingDJKeys.contains(searchKey(itemID: item.id, performerIndex: index)),
+                            canClear: canClear(item, performerIndex: index),
+                            clearAction: { clearDJBinding(itemID: item.id, performerIndex: index) },
+                            action: {
+                                Task {
+                                    await viewModel.searchTimetableAIImportDJ(
+                                        query: performerName(for: item, performerIndex: index),
+                                        key: searchKey(itemID: item.id, performerIndex: index),
+                                        useInlineFeedback: true
+                                    )
+                                }
+                            }
+                        )
+
+                        djSearchSection(itemID: item.id, performerIndex: index)
+                    }
+                    .padding(12)
+                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                HStack {
+                    Spacer()
+                    Button {
+                        expandedItemIDs.remove(item.id)
+                    } label: {
+                        Label(LT("确认", "Confirm", "確認"), systemImage: "checkmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(RaverTheme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func imagePreview(_ image: EventUploadImageDraft) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(RaverTheme.background)
+            if let localFileURL = image.localFileURL,
+               let uiImage = UIImage(contentsOfFile: localFileURL.path) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else if let remoteURL = image.remoteURL,
+                      let url = URL(string: remoteURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let loaded):
+                        loaded.resizable().scaledToFill()
+                    default:
+                        Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            } else {
+                Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .frame(height: 104)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func runRecognition() async {
+        guard let selectedImage else { return }
+        isRunning = true
+        recognitionStartedAt = Date()
+        statusIsError = false
+        statusMessage = LT("已提交识别任务，AI 正在分析阵容图。", "Recognition task submitted. AI is analyzing the lineup image.", "認識タスクを送信しました。AIがラインナップ画像を解析しています。")
+        do {
+            let result = try await viewModel.recognizeLineupFromImage(selectedImage)
+            resultItems = result.items
+            warnings = result.warnings
+            unparsedTexts = result.unparsedTexts
+            expandedItemIDs = []
+            statusIsError = result.items.isEmpty
+            statusMessage = result.items.isEmpty
+                ? LT("没有识别到可用阵容。可以换一张更清晰的阵容图再试。", "No usable lineup items were recognized. Try a clearer lineup image.", "有効なラインナップを認識できませんでした。より鮮明な画像で再試行してください。")
+                : LT("识别完成。请检查并修正结果，确认后会增量添加到仅阵容信息。", "Recognition finished. Review and edit the results, then apply them to lineup only.", "認識が完了しました。結果を確認・修正してからラインナップのみに追加してください。")
+        } catch {
+            statusIsError = true
+            statusMessage = error.userFacingMessage ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。")
+        }
+        isRunning = false
+        recognitionStartedAt = nil
+    }
+
+    private func autoMatchCurrentItems() async {
+        guard !isAutoMatching else { return }
+        isAutoMatching = true
+        autoMatchStartedAt = Date()
+        statusIsError = false
+        statusMessage = LT("正在匹配当前列表中的 DJ 词条。", "Matching DJs in the current list.", "現在のリストのDJを紐付けています。")
+        resultItems = await viewModel.autoMatchLineupAIImportItems(resultItems)
+        statusMessage = LT("已完成自动匹配，可继续确认导入。", "Auto match finished. You can continue and apply.", "自動紐付けが完了しました。続けて適用できます。")
+        isAutoMatching = false
+        autoMatchStartedAt = nil
+    }
+
+    private func performerNames(for item: EventUploadLineupAIEditableItem) -> [String] {
+        item.performerNamesText
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func displayName(for item: EventUploadLineupAIEditableItem) -> String {
+        let composed = EventLineupActCodec.composeName(type: item.actType, performerNames: performerNames(for: item))
+        return composed.isEmpty ? LT("未命名阵容", "Untitled Lineup", "未命名ラインナップ") : composed
+    }
+
+    private func performerName(for item: EventUploadLineupAIEditableItem, performerIndex: Int) -> String {
+        let names = performerNames(for: item)
+        return names.indices.contains(performerIndex) ? names[performerIndex] : ""
+    }
+
+    private func performerAvatarURL(for item: EventUploadLineupAIEditableItem, performerIndex: Int) -> String? {
+        item.performerAvatarURLs.indices.contains(performerIndex) ? item.performerAvatarURLs[performerIndex] : nil
+    }
+
+    private func avatarStack(item: EventUploadLineupAIEditableItem, performerNames: [String]) -> some View {
+        HStack(spacing: -10) {
+            ForEach(Array(performerNames.prefix(item.actType.performerCount).enumerated()), id: \.offset) { index, name in
+                performerAvatar(name: name, avatarURL: item.performerAvatarURLs.indices.contains(index) ? item.performerAvatarURLs[index] : nil, index: index)
+            }
+        }
+        .padding(.trailing, 8)
+    }
+
+    private func performerAvatar(name: String, avatarURL: String?, index: Int) -> some View {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Group {
+            if let avatarURL,
+               let resolved = AppConfig.resolvedDJAvatarURLString(avatarURL, size: .small),
+               !resolved.isEmpty {
+                AsyncImage(url: URL(string: resolved)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        avatarFallback(trimmed: trimmed, index: index)
+                    }
+                }
+            } else {
+                avatarFallback(trimmed: trimmed, index: index)
+            }
+        }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(RaverTheme.card, lineWidth: 2))
+    }
+
+    private func avatarFallback(trimmed: String, index: Int) -> some View {
+        ZStack {
+            Circle().fill(index == 0 ? RaverTheme.accent.opacity(0.22) : RaverTheme.background)
+            Text(String(trimmed.prefix(1)).uppercased())
+                .font(.caption.weight(.bold))
+                .foregroundStyle(index == 0 ? RaverTheme.accent : RaverTheme.secondaryText)
+        }
+    }
+
+    private func isBound(_ item: EventUploadLineupAIEditableItem, performerIndex: Int) -> Bool {
+        item.performerDJIDs.indices.contains(performerIndex)
+            ? item.performerDJIDs[performerIndex]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            : false
+    }
+
+    private func canClear(_ item: EventUploadLineupAIEditableItem, performerIndex: Int) -> Bool {
+        !performerName(for: item, performerIndex: performerIndex).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isBound(item, performerIndex: performerIndex)
+    }
+
+    private func searchKey(itemID: UUID, performerIndex: Int) -> String {
+        "lineup-ai-\(itemID.uuidString)-\(performerIndex)"
+    }
+
+    private func performerNameBinding(itemID: UUID, performerIndex: Int) -> Binding<String> {
+        Binding {
+            guard let item = resultItems.first(where: { $0.id == itemID }) else { return "" }
+            return performerName(for: item, performerIndex: performerIndex)
+        } set: { newValue in
+            guard let index = resultItems.firstIndex(where: { $0.id == itemID }) else { return }
+            var names = performerNames(for: resultItems[index])
+            while names.count <= performerIndex {
+                names.append("")
+            }
+            names[performerIndex] = newValue
+            resultItems[index].performerNamesText = names.joined(separator: ", ")
+            while resultItems[index].performerDJIDs.count <= performerIndex {
+                resultItems[index].performerDJIDs.append(nil)
+            }
+            while resultItems[index].performerAvatarURLs.count <= performerIndex {
+                resultItems[index].performerAvatarURLs.append(nil)
+            }
+            resultItems[index].performerDJIDs[performerIndex] = nil
+            resultItems[index].performerAvatarURLs[performerIndex] = nil
+            Task {
+                await viewModel.searchTimetableAIImportDJ(
+                    query: newValue,
+                    key: searchKey(itemID: itemID, performerIndex: performerIndex),
+                    useInlineFeedback: true
+                )
+            }
+        }
+    }
+
+    private func applyDJBinding(_ dj: WebDJ, itemID: UUID, performerIndex: Int) {
+        guard let index = resultItems.firstIndex(where: { $0.id == itemID }) else { return }
+        var names = performerNames(for: resultItems[index])
+        while names.count <= performerIndex {
+            names.append("")
+        }
+        names[performerIndex] = dj.name
+        resultItems[index].performerNamesText = names.joined(separator: ", ")
+        while resultItems[index].performerDJIDs.count <= performerIndex {
+            resultItems[index].performerDJIDs.append(nil)
+        }
+        while resultItems[index].performerAvatarURLs.count <= performerIndex {
+            resultItems[index].performerAvatarURLs.append(nil)
+        }
+        resultItems[index].performerDJIDs[performerIndex] = dj.id
+        resultItems[index].performerAvatarURLs[performerIndex] = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl ?? dj.avatarOriginalUrl
+    }
+
+    private func clearDJBinding(itemID: UUID, performerIndex: Int) {
+        guard let index = resultItems.firstIndex(where: { $0.id == itemID }) else { return }
+        var names = performerNames(for: resultItems[index])
+        while names.count <= performerIndex {
+            names.append("")
+        }
+        names[performerIndex] = ""
+        resultItems[index].performerNamesText = names.joined(separator: ", ")
+        while resultItems[index].performerDJIDs.count <= performerIndex {
+            resultItems[index].performerDJIDs.append(nil)
+        }
+        while resultItems[index].performerAvatarURLs.count <= performerIndex {
+            resultItems[index].performerAvatarURLs.append(nil)
+        }
+        resultItems[index].performerDJIDs[performerIndex] = nil
+        resultItems[index].performerAvatarURLs[performerIndex] = nil
+        viewModel.aiImportDJSearchFeedbacks[searchKey(itemID: itemID, performerIndex: performerIndex)] = .idle
+        viewModel.aiImportDJSearchResults[searchKey(itemID: itemID, performerIndex: performerIndex)] = []
+    }
+
+    private func djSearchSection(itemID: UUID, performerIndex: Int) -> some View {
+        let key = searchKey(itemID: itemID, performerIndex: performerIndex)
+        let results = viewModel.aiImportDJSearchResults[key] ?? []
+        let feedback = viewModel.aiImportDJSearchFeedbacks[key] ?? .idle
+        let isSearching = viewModel.aiImportSearchingDJKeys.contains(key)
+        return aiImportDJSearchResultsList(results: results, feedback: feedback, isSearching: isSearching) { dj in
+            applyDJBinding(dj, itemID: itemID, performerIndex: performerIndex)
+        }
+    }
+
+    private func aiImportDJSearchTextField(
+        title: String,
+        text: Binding<String>,
+        isSearching: Bool,
+        canClear: Bool,
+        clearAction: @escaping () -> Void,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            ZStack(alignment: .trailing) {
+                TextField(title, text: text)
+                    .font(.body)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(.trailing, canClear ? 168 : 104)
+
+                HStack(spacing: 6) {
+                    if canClear {
+                        Button(action: clearAction) {
+                            Label(LT("清空", "Clear", "クリア"), systemImage: "xmark.circle")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background(RaverTheme.card, in: Capsule())
+                                .overlay(Capsule().stroke(RaverTheme.cardBorder, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Button(action: action) {
+                        Label(isSearching ? LT("搜索中", "Searching", "検索中") : LT("绑定", "Bind", "紐付け"), systemImage: "magnifyingglass")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(RaverTheme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSearching)
+                    .opacity(isSearching ? 0.72 : 1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func aiImportDJSearchResultsList(
+        results: [WebDJ],
+        feedback: EventUploadFlowViewModel.InlineSearchFeedback,
+        isSearching: Bool,
+        onSelect: @escaping (WebDJ) -> Void
+    ) -> some View {
+        if !results.isEmpty {
+            VStack(spacing: 6) {
+                ForEach(results.prefix(8)) { dj in
+                    Button {
+                        onSelect(dj)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "music.mic.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(RaverTheme.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(dj.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(dj.country ?? dj.slug ?? dj.id)
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Image(systemName: "plus.circle")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else if isSearching {
+            inlineSearchFeedbackRow(message: LT("正在搜索 DJ 库…", "Searching DJ library...", "DJライブラリを検索中..."), systemImage: "clock.arrow.circlepath", tint: RaverTheme.secondaryText)
+        } else if let message = feedback.message {
+            inlineSearchFeedbackRow(message: message, systemImage: feedback.isFailure ? "exclamationmark.triangle.fill" : "info.circle.fill", tint: feedback.isFailure ? .red : RaverTheme.secondaryText)
+        }
+    }
+
+    private func inlineSearchFeedbackRow(message: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.caption2)
+                .foregroundStyle(tint)
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func elapsedText(since start: Date?, now: Date) -> String {
+        guard let start else { return "00:00" }
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func binding<T>(for itemID: UUID, keyPath: WritableKeyPath<EventUploadLineupAIEditableItem, T>, default defaultValue: @autoclosure @escaping () -> T) -> Binding<T> {
+        Binding {
+            resultItems.first(where: { $0.id == itemID })?[keyPath: keyPath] ?? defaultValue()
+        } set: { newValue in
+            guard let index = resultItems.firstIndex(where: { $0.id == itemID }) else { return }
+            resultItems[index][keyPath: keyPath] = newValue
+        }
     }
 }
 

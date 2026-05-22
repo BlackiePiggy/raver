@@ -1,21 +1,6 @@
 import Foundation
 import Combine
 
-private actor AuthRefreshGate {
-    private var inFlightTask: Task<Session, Error>?
-
-    func run(_ operation: @escaping () async throws -> Session) async throws -> Session {
-        if let inFlightTask {
-            return try await inFlightTask.value
-        }
-
-        let task = Task { try await operation() }
-        inFlightTask = task
-        defer { inFlightTask = nil }
-        return try await task.value
-    }
-}
-
 private struct RegisterRequest: Encodable {
     let email: String
     let password: String
@@ -52,7 +37,7 @@ final class LiveSocialService: SocialService {
     private let baseURL: URL
     private let session: URLSession
     private let imSession = TencentIMSession.shared
-    private let refreshGate = AuthRefreshGate()
+    private let refreshGate = AppAuthRefreshGate.shared
     private var token: String? {
         get { SessionTokenStore.shared.token }
         set { SessionTokenStore.shared.token = newValue }
@@ -61,24 +46,60 @@ final class LiveSocialService: SocialService {
         get { SessionTokenStore.shared.refreshToken }
         set { SessionTokenStore.shared.refreshToken = newValue }
     }
+    private var authenticatedRunner: AuthenticatedRequestRunner {
+        AuthenticatedRequestRunner(
+            session: session,
+            refreshGate: refreshGate,
+            refreshSession: { [weak self] in
+                guard let self else { throw ServiceError.unauthorized }
+                return try await self.refreshSessionInternal()
+            },
+            sessionExpirationReasonFromData: { [weak self] data in
+                self?.sessionExpirationReason(from: data) ?? .expired
+            },
+            sessionExpirationReasonFromError: { [weak self] error in
+                self?.sessionExpirationReason(from: error) ?? .expired
+            },
+            handleAccountInactive: { [weak self] notify in
+                self?.token = nil
+                self?.refreshToken = nil
+                if notify {
+                    self?.postSessionExpired(.accountInactive)
+                }
+            },
+            handleSessionExpired: { [weak self] reason in
+                self?.postSessionExpired(reason)
+            }
+        )
+    }
+
+    private func persistSessionTokens(_ session: Session) {
+        SessionTokenStore.shared.storeSessionTokens(
+            accessToken: session.token,
+            refreshToken: session.refreshToken,
+            accessTokenExpiresIn: session.accessTokenExpiresIn
+        )
+    }
 
     init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session
     }
 
-    func restoreSession() async -> Session? {
+    func restoreSession() async throws -> Session? {
         guard refreshToken != nil else {
             return nil
         }
 
         do {
-            let refreshed = try await refreshGate.run { [weak self] in
+            return try await refreshGate.run { [weak self] in
                 guard let self else { throw ServiceError.unauthorized }
                 return try await self.refreshSessionInternal()
             }
-            return refreshed
         } catch {
+            if error.isRecoverableAuthTransportFailure {
+                throw error
+            }
             token = nil
             refreshToken = nil
             return nil
@@ -95,8 +116,7 @@ final class LiveSocialService: SocialService {
             includeAccessToken: false,
             postSessionExpiredOnUnauthorized: false
         )
-        token = sessionResponse.token
-        refreshToken = sessionResponse.refreshToken
+        persistSessionTokens(sessionResponse)
         return sessionResponse
     }
 
@@ -110,8 +130,7 @@ final class LiveSocialService: SocialService {
             includeAccessToken: false,
             postSessionExpiredOnUnauthorized: false
         )
-        token = sessionResponse.token
-        refreshToken = sessionResponse.refreshToken
+        persistSessionTokens(sessionResponse)
         return sessionResponse
     }
 
@@ -125,8 +144,7 @@ final class LiveSocialService: SocialService {
             includeAccessToken: false,
             postSessionExpiredOnUnauthorized: false
         )
-        token = sessionResponse.token
-        refreshToken = sessionResponse.refreshToken
+        persistSessionTokens(sessionResponse)
         return sessionResponse
     }
 
@@ -147,8 +165,7 @@ final class LiveSocialService: SocialService {
             includeAccessToken: false,
             postSessionExpiredOnUnauthorized: false
         )
-        token = sessionResponse.token
-        refreshToken = sessionResponse.refreshToken
+        persistSessionTokens(sessionResponse)
         return sessionResponse
     }
 
@@ -211,8 +228,7 @@ final class LiveSocialService: SocialService {
             includeAccessToken: false,
             postSessionExpiredOnUnauthorized: false
         )
-        token = sessionResponse.token
-        refreshToken = sessionResponse.refreshToken
+        persistSessionTokens(sessionResponse)
         return sessionResponse
     }
 
@@ -238,8 +254,7 @@ final class LiveSocialService: SocialService {
             includeAccessToken: false,
             postSessionExpiredOnUnauthorized: false
         )
-        token = sessionResponse.token
-        refreshToken = sessionResponse.refreshToken
+        persistSessionTokens(sessionResponse)
         return sessionResponse
     }
 
@@ -1506,19 +1521,8 @@ final class LiveSocialService: SocialService {
             postSessionExpiredOnUnauthorized: false
         )
 
-        token = refreshed.token
-        if let nextRefreshToken = refreshed.refreshToken, !nextRefreshToken.isEmpty {
-            refreshToken = nextRefreshToken
-        }
+        persistSessionTokens(refreshed)
         return refreshed
-    }
-
-    private func performRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ServiceError.invalidResponse
-        }
-        return (data, http)
     }
 
     private func request<T: Decodable>(
@@ -1548,68 +1552,13 @@ final class LiveSocialService: SocialService {
             urlRequest.httpBody = try JSONEncoder.raver.encode(AnyEncodable(body))
         }
 
-        var (data, http) = try await performRequest(urlRequest)
-
-        if http.statusCode == 401,
-           sessionExpirationReason(from: data) == .accountInactive {
-            if postSessionExpiredOnUnauthorized {
-                postSessionExpired(.accountInactive)
-            }
-            token = nil
-            refreshToken = nil
-            throw ServiceError.accountInactive
-        }
-
-        if http.statusCode == 401 {
-            let canRetryWithRefresh = allowAuthRetry && includeAccessToken && path != "/v1/auth/refresh"
-            if canRetryWithRefresh {
-                do {
-                    let refreshed = try await refreshGate.run { [weak self] in
-                        guard let self else { throw ServiceError.unauthorized }
-                        return try await self.refreshSessionInternal()
-                    }
-
-                    var retryRequest = urlRequest
-                    retryRequest.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
-                    (data, http) = try await performRequest(retryRequest)
-                    if http.statusCode == 401,
-                       sessionExpirationReason(from: data) == .accountInactive {
-                        if postSessionExpiredOnUnauthorized {
-                            postSessionExpired(.accountInactive)
-                        }
-                        token = nil
-                        refreshToken = nil
-                        throw ServiceError.accountInactive
-                    }
-                } catch {
-                    if case ServiceError.accountInactive = error {
-                        throw error
-                    }
-                    if case ServiceError.sessionExpired = error {
-                        throw error
-                    }
-                    let reason = sessionExpirationReason(from: error)
-                    if postSessionExpiredOnUnauthorized {
-                        postSessionExpired(reason)
-                    }
-                    throw ServiceError.sessionExpired(reason)
-                }
-            } else {
-                let reason = sessionExpirationReason(from: data)
-                if postSessionExpiredOnUnauthorized {
-                    postSessionExpired(reason)
-                }
-                throw ServiceError.sessionExpired(reason)
-            }
-        }
-
-        if http.statusCode == 401 {
-            let reason = sessionExpirationReason(from: data)
-            if postSessionExpiredOnUnauthorized {
-                postSessionExpired(reason)
-            }
-            throw ServiceError.sessionExpired(reason)
-        }
+        let (data, http) = try await authenticatedRunner.execute(
+            request: urlRequest,
+            path: path,
+            allowAuthRetry: allowAuthRetry,
+            includeAccessToken: includeAccessToken,
+            postSessionExpiredOnUnauthorized: postSessionExpiredOnUnauthorized
+        )
 
         guard (200...299).contains(http.statusCode) else {
             if let enforcementRestriction = try? JSONDecoder.raver.decode(AccountEnforcementRestrictionEnvelope.self, from: data),
@@ -1665,15 +1614,13 @@ final class LiveSocialService: SocialService {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (responseData, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ServiceError.invalidResponse
-        }
-
-        if http.statusCode == 401 {
-            NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
-            throw ServiceError.unauthorized
-        }
+        let (responseData, http) = try await authenticatedRunner.execute(
+            request: request,
+            path: path,
+            allowAuthRetry: true,
+            includeAccessToken: true,
+            postSessionExpiredOnUnauthorized: true
+        )
 
         guard (200...299).contains(http.statusCode) else {
             let message = String(data: responseData, encoding: .utf8) ?? "请求失败"

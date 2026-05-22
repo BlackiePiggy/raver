@@ -209,7 +209,7 @@ enum FeedMode: String, Codable, CaseIterable, Identifiable {
 }
 
 protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService {
-    func restoreSession() async -> Session?
+    func restoreSession() async throws -> Session?
     func login(username: String, password: String) async throws -> Session
     func loginWithEmailCode(email: String, code: String) async throws -> Session
     func loginWithSms(phoneNumber: String, code: String) async throws -> Session
@@ -700,6 +700,66 @@ enum ServiceError: LocalizedError {
 }
 
 extension Error {
+    var isRecoverableAuthTransportFailure: Bool {
+        if isUserInitiatedCancellation {
+            return true
+        }
+
+        if let urlError = self as? URLError {
+            switch urlError.code {
+            case .timedOut,
+                 .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed,
+                 .internationalRoamingOff,
+                 .callIsActive,
+                 .dataNotAllowed,
+                 .secureConnectionFailed,
+                 .serverCertificateHasBadDate,
+                 .serverCertificateUntrusted,
+                 .serverCertificateHasUnknownRoot,
+                 .serverCertificateNotYetValid:
+                return true
+            default:
+                break
+            }
+        }
+
+        let nsError = self as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let recoverableCodes: Set<Int> = [
+                NSURLErrorTimedOut,
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+                NSURLErrorInternationalRoamingOff,
+                NSURLErrorCallIsActive,
+                NSURLErrorDataNotAllowed,
+                NSURLErrorSecureConnectionFailed,
+                NSURLErrorServerCertificateHasBadDate,
+                NSURLErrorServerCertificateUntrusted,
+                NSURLErrorServerCertificateHasUnknownRoot,
+                NSURLErrorServerCertificateNotYetValid,
+            ]
+            return recoverableCodes.contains(nsError.code)
+        }
+
+        if let serviceError = self as? ServiceError {
+            switch serviceError {
+            case .message, .invalidResponse:
+                return true
+            default:
+                break
+            }
+        }
+
+        return false
+    }
+
     var isUserInitiatedCancellation: Bool {
         if self is CancellationError {
             return true

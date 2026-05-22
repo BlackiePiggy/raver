@@ -253,6 +253,40 @@ struct EventUploadTimetableAIImportResult: Hashable {
     var unparsedTexts: [String]
 }
 
+struct EventUploadLineupAIEditableItem: Identifiable, Hashable {
+    var id: UUID = UUID()
+    var actType: EventLineupActType
+    var performerNamesText: String
+    var performerDJIDs: [String?] = []
+    var performerAvatarURLs: [String?] = []
+    var confidence: Double?
+    var notes: [String]
+}
+
+struct EventUploadLineupAIImportResult: Hashable {
+    var items: [EventUploadLineupAIEditableItem]
+    var warnings: [String]
+    var unparsedTexts: [String]
+}
+
+struct EventUploadPosterAIImportResult: Hashable {
+    var name: EventUploadLocalizedFields
+    var city: EventUploadLocalizedFields
+    var detailAddress: EventUploadLocalizedFields
+    var country: EventUploadLocalizedFields
+    var timeZoneIdentifier: String?
+    var timeZoneDisplayName: String
+    var scheduleMode: EventUploadScheduleMode
+    var startDate: Date?
+    var endDate: Date?
+    var weekRanges: [EventUploadWeekRangeDraft]
+    var ticketURL: String
+    var ticketCurrency: String
+    var ticketTiers: [EventUploadTicketTierDraft]
+    var warnings: [String]
+    var unparsedTexts: [String]
+}
+
 struct EventUploadDraft: Hashable, Codable {
     var id: UUID = UUID()
     var mode: EventUploadMode = .create

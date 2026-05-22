@@ -1,6 +1,7 @@
 import Foundation
 
 protocol WebFeatureService {
+    func prepareAuthenticatedRequestForUserAction(source: String) async throws
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String?) async throws -> EventListPage
     func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
@@ -38,6 +39,10 @@ protocol WebFeatureService {
         startDate: Date?,
         endDate: Date?
     ) async throws -> EventLineupImageImportResponse
+    func createEventLineupImageImportJob(input: EventLineupAIImportRequest) async throws -> EventLineupAIImportJobResponse
+    func fetchEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse
+    func createEventPosterImageImportJob(input: EventPosterAIImportRequest) async throws -> EventPosterAIImportJobResponse
+    func fetchEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse
     func importEventTimetableFromImage(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportResponse
     func createEventTimetableImageImportJob(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportJobResponse
     func fetchEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse

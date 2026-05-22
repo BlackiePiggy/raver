@@ -1,24 +1,11 @@
 import Foundation
 
-private actor WebFeatureAuthRefreshGate {
-    private var inFlightTask: Task<Session, Error>?
-
-    func run(_ operation: @escaping () async throws -> Session) async throws -> Session {
-        if let inFlightTask {
-            return try await inFlightTask.value
-        }
-
-        let task = Task { try await operation() }
-        inFlightTask = task
-        defer { inFlightTask = nil }
-        return try await task.value
-    }
-}
-
 final class LiveWebFeatureService: WebFeatureService {
+    private static let userActionRefreshLeadTime: TimeInterval = 300
+
     private let baseURL: URL
     private let session: URLSession
-    private let refreshGate = WebFeatureAuthRefreshGate()
+    private let refreshGate = AppAuthRefreshGate.shared
     private var token: String? {
         get { SessionTokenStore.shared.token }
         set { SessionTokenStore.shared.token = newValue }
@@ -27,10 +14,53 @@ final class LiveWebFeatureService: WebFeatureService {
         get { SessionTokenStore.shared.refreshToken }
         set { SessionTokenStore.shared.refreshToken = newValue }
     }
+    private var authenticatedRunner: AuthenticatedRequestRunner {
+        AuthenticatedRequestRunner(
+            session: session,
+            refreshGate: refreshGate,
+            refreshSession: { [weak self] in
+                guard let self else { throw ServiceError.unauthorized }
+                return try await self.refreshSessionInternal()
+            },
+            sessionExpirationReasonFromData: { [weak self] data in
+                self?.sessionExpirationReason(from: data) ?? .expired
+            },
+            sessionExpirationReasonFromError: { [weak self] error in
+                self?.sessionExpirationReason(from: error) ?? .expired
+            },
+            handleAccountInactive: { [weak self] notify in
+                self?.token = nil
+                self?.refreshToken = nil
+                if notify {
+                    self?.postSessionExpired(.accountInactive)
+                }
+            },
+            handleSessionExpired: { [weak self] reason in
+                self?.postSessionExpired(reason)
+            }
+        )
+    }
 
     init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session
+    }
+
+    func prepareAuthenticatedRequestForUserAction(source: String) async throws {
+        guard refreshToken?.isEmpty == false else { return }
+        guard shouldRefreshAccessTokenBeforeUserAction() else { return }
+
+        do {
+            _ = try await refreshGate.run { [weak self] in
+                guard let self else { throw ServiceError.unauthorized }
+                return try await self.refreshSessionInternal()
+            }
+        } catch {
+            if error.isRecoverableAuthTransportFailure {
+                return
+            }
+            throw error
+        }
     }
 
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String? = nil) async throws -> EventListPage {
@@ -321,6 +351,44 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "POST",
             body: input,
             timeoutInterval: 120
+        )
+        return response.data
+    }
+
+    func createEventLineupImageImportJob(input: EventLineupAIImportRequest) async throws -> EventLineupAIImportJobResponse {
+        let response: BFFEnvelope<EventLineupAIImportJobResponse> = try await request(
+            path: "/v1/events/lineup/import-image/jobs",
+            method: "POST",
+            body: input,
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
+    func createEventPosterImageImportJob(input: EventPosterAIImportRequest) async throws -> EventPosterAIImportJobResponse {
+        let response: BFFEnvelope<EventPosterAIImportJobResponse> = try await request(
+            path: "/v1/events/poster/import-image/jobs",
+            method: "POST",
+            body: input,
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
+    func fetchEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse {
+        let response: BFFEnvelope<EventLineupAIImportJobResponse> = try await request(
+            path: "/v1/events/lineup/import-image/jobs/\(id)",
+            method: "GET",
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
+    func fetchEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse {
+        let response: BFFEnvelope<EventPosterAIImportJobResponse> = try await request(
+            path: "/v1/events/poster/import-image/jobs/\(id)",
+            method: "GET",
+            timeoutInterval: 30
         )
         return response.data
     }
@@ -1429,7 +1497,7 @@ final class LiveWebFeatureService: WebFeatureService {
         includeAccessToken: Bool = true,
         postSessionExpiredOnUnauthorized: Bool = true
     ) async throws -> T {
-        var request = try buildJSONRequest(
+        let request = try buildJSONRequest(
             path: path,
             method: method,
             queryItems: queryItems,
@@ -1437,37 +1505,13 @@ final class LiveWebFeatureService: WebFeatureService {
             timeoutInterval: timeoutInterval,
             includeAccessToken: includeAccessToken
         )
-        var (data, http) = try await performRequest(request)
-
-        if http.statusCode == 401,
-           sessionExpirationReason(from: data) == .accountInactive {
-            token = nil
-            refreshToken = nil
-            if postSessionExpiredOnUnauthorized {
-                postSessionExpired(.accountInactive)
-            }
-            throw ServiceError.accountInactive
-        }
-
-        if http.statusCode == 401,
-           allowAuthRetry,
-           includeAccessToken,
-           path != "/v1/auth/refresh" {
-            do {
-                let refreshed = try await refreshGate.run { [weak self] in
-                    guard let self else { throw ServiceError.unauthorized }
-                    return try await self.refreshSessionInternal()
-                }
-                request.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
-                (data, http) = try await performRequest(request)
-            } catch {
-                let reason = sessionExpirationReason(from: error)
-                if postSessionExpiredOnUnauthorized {
-                    postSessionExpired(reason)
-                }
-                throw ServiceError.sessionExpired(reason)
-            }
-        }
+        let (data, http) = try await authenticatedRunner.execute(
+            request: request,
+            path: path,
+            allowAuthRetry: allowAuthRetry,
+            includeAccessToken: includeAccessToken,
+            postSessionExpiredOnUnauthorized: postSessionExpiredOnUnauthorized
+        )
 
         return try decodeResponse(data: data, http: http, postSessionExpiredOnUnauthorized: postSessionExpiredOnUnauthorized)
     }
@@ -1486,12 +1530,20 @@ final class LiveWebFeatureService: WebFeatureService {
             postSessionExpiredOnUnauthorized: false
         )
 
-        token = refreshed.token
-        if let nextRefreshToken = refreshed.refreshToken, !nextRefreshToken.isEmpty {
-            refreshToken = nextRefreshToken
-        }
+        SessionTokenStore.shared.storeSessionTokens(
+            accessToken: refreshed.token,
+            refreshToken: refreshed.refreshToken,
+            accessTokenExpiresIn: refreshed.accessTokenExpiresIn
+        )
         NotificationCenter.default.post(name: .raverSessionRefreshed, object: refreshed)
         return refreshed
+    }
+
+    private func shouldRefreshAccessTokenBeforeUserAction(now: Date = Date()) -> Bool {
+        guard let expiresAt = SessionTokenStore.shared.accessTokenExpiresAt else {
+            return true
+        }
+        return expiresAt.timeIntervalSince(now) <= Self.userActionRefreshLeadTime
     }
 
     private func buildJSONRequest(
@@ -1535,7 +1587,7 @@ final class LiveWebFeatureService: WebFeatureService {
         fields: [String: String] = [:],
         timeoutInterval: TimeInterval = 30
     ) async throws -> T {
-        var request = try buildMultipartRequest(
+        let request = try buildMultipartRequest(
             path: path,
             data: data,
             fileName: fileName,
@@ -1545,30 +1597,13 @@ final class LiveWebFeatureService: WebFeatureService {
             timeoutInterval: timeoutInterval,
             includeAccessToken: true
         )
-        var (responseData, http) = try await performRequest(request)
-
-        if http.statusCode == 401,
-           sessionExpirationReason(from: responseData) == .accountInactive {
-            token = nil
-            refreshToken = nil
-            postSessionExpired(.accountInactive)
-            throw ServiceError.accountInactive
-        }
-
-        if http.statusCode == 401 {
-            do {
-                let refreshed = try await refreshGate.run { [weak self] in
-                    guard let self else { throw ServiceError.unauthorized }
-                    return try await self.refreshSessionInternal()
-                }
-                request.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
-                (responseData, http) = try await performRequest(request)
-            } catch {
-                let reason = sessionExpirationReason(from: error)
-                postSessionExpired(reason)
-                throw ServiceError.sessionExpired(reason)
-            }
-        }
+        let (responseData, http) = try await authenticatedRunner.execute(
+            request: request,
+            path: path,
+            allowAuthRetry: true,
+            includeAccessToken: true,
+            postSessionExpiredOnUnauthorized: true
+        )
 
         return try decodeResponse(data: responseData, http: http, postSessionExpiredOnUnauthorized: true)
     }
@@ -1612,14 +1647,6 @@ final class LiveWebFeatureService: WebFeatureService {
         request.httpBody = body
 
         return request
-    }
-
-    private func performRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ServiceError.invalidResponse
-        }
-        return (data, http)
     }
 
     private func buildURL(path: String, queryItems: [URLQueryItem]) throws -> URL {

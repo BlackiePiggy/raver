@@ -57,6 +57,7 @@
     "checkins:snapshots:rebuild": "ts-node src/scripts/checkin-rebuild-snapshots.ts",
     "auth:smoke": "ts-node src/scripts/auth-smoke.ts",
     "auth:integration": "ts-node src/scripts/auth-integration.ts",
+    "auth:env:lint": "ts-node src/scripts/auth-env-lint.ts",
     "phase5:canonical:regression": "ts-node src/scripts/phase5-canonical-regression.ts",
     "events:timetable-timezone:guardrails": "ts-node src/scripts/event-timetable-timezone-guardrails.ts",
     "phase5:query-plan-check": "ts-node src/scripts/phase5-query-plan-check.ts",

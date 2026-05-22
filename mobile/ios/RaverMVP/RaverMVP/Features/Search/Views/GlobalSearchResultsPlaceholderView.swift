@@ -251,23 +251,30 @@ struct GlobalSearchResultsView: View {
         if !viewModel.partialFailureTabs.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(viewModel.partialFailureTabs).sorted(by: { $0.rawValue < $1.rawValue }), id: \.self) { tab in
-                    Button {
-                        viewModel.retry(tab: tab)
-                    } label: {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle")
+                            Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption.weight(.bold))
-                            Text(LT("\(tab.title)结果加载失败，点此重试", "\(tab.title) results failed. Tap to retry.", "\(tab.title)結果の読み込みに失敗しました。タップして再試行"))
+                            Text(LT("\(tab.title)结果加载失败", "\(tab.title) results failed", "\(tab.title)結果の読み込みに失敗しました"))
                                 .font(.caption.weight(.semibold))
                             Spacer()
-                            Image(systemName: "arrow.clockwise")
-                                .font(.caption.weight(.bold))
                         }
                         .foregroundStyle(Color.orange)
-                        .padding(10)
-                        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .padding(.horizontal, 10)
+                        .padding(.top, 10)
+
+                        Button {
+                            viewModel.retry(tab: tab)
+                        } label: {
+                            Text(LT("重试", "Retry", "再試行"))
+                                .font(.caption.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 10)
                     }
-                    .buttonStyle(.plain)
+                    .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .accessibilityIdentifier("globalSearch.partialFailure.\(tab.rawValue)")
                 }
             }

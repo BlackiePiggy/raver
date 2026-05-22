@@ -28,6 +28,7 @@ import virtualAssetRoutes from './routes/virtual-asset.routes';
 import contentSubmissionRoutes from './routes/content-submission.routes';
 import djEnrichmentRoutes from './routes/dj-enrichment.routes';
 import { adminRoutes } from './modules/admin';
+import { assertAuthEnvReady, formatAuthEnvSummary } from './config/auth-env';
 import { startDjEnrichmentWorker } from './services/dj-enrichment.service';
 import { startMediaAssetPurgeScheduler } from './services/media-asset-purge.scheduler';
 import { isObjectStorageConfigured } from './services/media-storage.service';
@@ -161,7 +162,20 @@ app.use((err: Error, _req: Request, res: Response) => {
 });
 
 if (isProduction && !isObjectStorageConfigured()) {
-  console.error('❌ OSS is required in production. Set OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET.');
+  console.error('OSS is required in production. Set OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET.');
+  process.exit(1);
+}
+
+let authEnvSummary: string;
+try {
+  const authEnv = assertAuthEnvReady();
+  authEnvSummary = formatAuthEnvSummary(authEnv);
+  for (const warning of authEnv.warnings) {
+    console.warn(`Auth env warning: ${warning}`);
+  }
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message);
   process.exit(1);
 }
 
@@ -175,6 +189,7 @@ app.listen(port, () => {
     }
   }
   console.log(`🎵 RaveHub API Server running on http://localhost:${port}`);
+  console.log(`Auth env summary: ${authEnvSummary}`);
   startNotificationEventCountdownScheduler();
   startNotificationEventDailyDigestScheduler();
   startNotificationRouteDJReminderScheduler();

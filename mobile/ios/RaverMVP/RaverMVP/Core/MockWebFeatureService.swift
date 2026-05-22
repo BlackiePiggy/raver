@@ -420,6 +420,9 @@ actor MockWebFeatureService: WebFeatureService {
         ]
     }
 
+    func prepareAuthenticatedRequestForUserAction(source: String) async throws {
+    }
+
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String? = nil) async throws -> EventListPage {
         let normalized = search?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         let normalizedType = eventType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -949,6 +952,105 @@ actor MockWebFeatureService: WebFeatureService {
             finishedAt: ISO8601DateFormatter().string(from: Date()),
             result: result,
             error: nil
+        )
+    }
+
+    func createEventLineupImageImportJob(input: EventLineupAIImportRequest) async throws -> EventLineupAIImportJobResponse {
+        _ = input
+        let result = EventLineupAIImportResponse(
+            rawJson: EventLineupAIResult(
+                schemaVersion: "raver_lineup_ai_v1",
+                imageType: "lineup",
+                items: [
+                    EventLineupAIItem(
+                        order: 1,
+                        performerType: "solo",
+                        performerNames: ["Armin van Buuren"],
+                        displayName: "Armin van Buuren",
+                        rawText: "ARMIN VAN BUUREN",
+                        confidence: 0.98,
+                        notes: []
+                    ),
+                    EventLineupAIItem(
+                        order: 2,
+                        performerType: "b2b",
+                        performerNames: ["Charlotte de Witte", "Amelie Lens"],
+                        displayName: "Charlotte de Witte b2b Amelie Lens",
+                        rawText: "CHARLOTTE DE WITTE B2B AMELIE LENS",
+                        confidence: 0.94,
+                        notes: []
+                    )
+                ],
+                unparsedTexts: [],
+                warnings: []
+            )
+        )
+        return EventLineupAIImportJobResponse(
+            jobId: UUID().uuidString,
+            status: "succeeded",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            finishedAt: ISO8601DateFormatter().string(from: Date()),
+            result: result,
+            error: nil
+        )
+    }
+
+    func fetchEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse {
+        _ = id
+        return try await createEventLineupImageImportJob(
+            input: EventLineupAIImportRequest(
+                imageUrl: "/mock/lineup.jpg",
+                fileType: "image/jpeg",
+                context: EventLineupAIImportContext(preferredLanguage: "zh-Hans", knownDJNames: [])
+            )
+        )
+    }
+
+    func createEventPosterImageImportJob(input: EventPosterAIImportRequest) async throws -> EventPosterAIImportJobResponse {
+        _ = input
+        let result = EventPosterAIImportResponse(
+            rawJson: EventPosterAIResult(
+                schemaVersion: "raver_event_poster_ai_v1",
+                imageType: "poster_basic_info",
+                nameI18n: WebBiText(en: "A State of Trance - Celebrating 25 Years of ASOT", zh: "A State of Trance 25周年 ASOT", ja: "A State of Trance - ASOT 25周年"),
+                cityI18n: WebBiText(en: "Hong Kong", zh: "香港", ja: "香港"),
+                detailAddressI18n: WebBiText(en: "AsiaWorld-Expo, Hall 3", zh: "亚洲国际博览馆 3号馆", ja: "アジアワールドエキスポ ホール3"),
+                countryI18n: WebBiText(en: "CHN", zh: "中国", ja: "中国", enFull: "China"),
+                timeZone: EventPosterAITimeZone(ianaName: "Asia/Hong_Kong", displayName: "香港时间", confidence: 1, source: "city_inference"),
+                schedule: EventPosterAISchedule(
+                    scheduleMode: "singleDay",
+                    startDate: "2026-12-06",
+                    endDate: "2026-12-06",
+                    weekRanges: [],
+                    rawDateText: "12—06 2026",
+                    confidence: 0.9
+                ),
+                ticketInfo: EventPosterAITicketInfo(ticketUrl: "astateoftrance.com/hongkong", currency: "", tiers: []),
+                unparsedTexts: ["LIVE NATION ELECTRONIC ASIA", "INSOMNIAC", "KKTIX"],
+                warnings: ["未识别到明确票价信息", "日期仅显示月日年，无具体举办时间信息"]
+            )
+        )
+        return EventPosterAIImportJobResponse(
+            jobId: UUID().uuidString,
+            status: "succeeded",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            finishedAt: ISO8601DateFormatter().string(from: Date()),
+            result: result,
+            error: nil
+        )
+    }
+
+    func fetchEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse {
+        _ = id
+        return try await createEventPosterImageImportJob(
+            input: EventPosterAIImportRequest(
+                imageUrl: "/mock/poster.jpg",
+                fileType: "image/jpeg"
+            )
         )
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Network
 import OSLog
 import UIKit
 
@@ -854,11 +855,18 @@ final class AppState: ObservableObject {
         subsystem: Bundle.main.bundleIdentifier ?? "com.raver.mvp",
         category: "AppState"
     )
+    private static let proactiveRefreshLeadTime: TimeInterval = 120
+    private static func authLog(_ message: String) {
+        logger.info("[AuthSession] \(message, privacy: .public)")
+    }
     private static func pushRouteLog(_ message: String) {
         PushRouteTrace.log("SystemPushRoute", message)
     }
     @Published var session: Session? {
         didSet {
+            if let session {
+                SessionTokenStore.shared.recordAccessTokenIssued(expiresIn: session.accessTokenExpiresIn)
+            }
             syncSharedPushContext()
             accountEnforcementStatus = session?.accountStatus ?? .clear
             if session == nil {
@@ -896,6 +904,11 @@ final class AppState: ObservableObject {
     private var cachedFollowedBrandsUnread = 0
     private var latestPushToken: String?
     private var lastTencentIMBootstrapRefreshAt: Date?
+    private var lastProactiveSessionRefreshAt: Date?
+    private var proactiveSessionRefreshTask: Task<Void, Never>?
+    private let networkMonitor = NWPathMonitor()
+    private let networkMonitorQueue = DispatchQueue(label: "com.raver.auth.network-monitor")
+    private var wasNetworkSatisfied = false
     private var pendingSystemNotificationPayload: ([AnyHashable: Any], String)?
 
     init(service: SocialService) {
@@ -916,20 +929,14 @@ final class AppState: ObservableObject {
             .sink { [weak self] notification in
                 guard let self else { return }
                 let reason = (notification.object as? SessionExpirationReason) ?? .expired
-                self.session = nil
-                self.resetUnreadCounts()
-                SessionTokenStore.shared.clear()
-                self.errorMessage = reason.userFacingMessage
-                self.tencentIMBootstrap = nil
-                self.tencentIMSession.reset()
-                self.tencentIMBootstrapRefreshTask?.cancel()
-                self.tencentIMBootstrapRefreshTask = nil
+                self.expireSession(reason)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .raverSessionRefreshed)
             .sink { [weak self] notification in
                 guard let self, let refreshed = notification.object as? Session else { return }
+                Self.authLog("session refreshed notification received")
                 self.session = refreshed
                 self.errorMessage = nil
             }
@@ -939,6 +946,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 guard let self, self.session != nil else { return }
                 Task {
+                    await self.refreshSessionIfPossible(source: "didBecomeActive")
                     let shouldRefreshTencentBootstrap = self.shouldRefreshTencentIMBootstrapOnActive()
                     if shouldRefreshTencentBootstrap {
                         await self.refreshTencentIMBootstrap(source: "didBecomeActive")
@@ -1004,6 +1012,7 @@ final class AppState: ObservableObject {
         }
 
         syncSharedPushContext()
+        startNetworkMonitor()
 
         Task {
             await bootstrapSessionIfPossible()
@@ -1018,12 +1027,44 @@ final class AppState: ObservableObject {
         session == nil || isRegistrationOnboardingActive
     }
 
+    func expireSession(_ reason: SessionExpirationReason) {
+        Self.authLog("expire session reason=\(reason.rawValue)")
+        session = nil
+        resetUnreadCounts()
+        SessionTokenStore.shared.clear()
+        errorMessage = reason.userFacingMessage
+        tencentIMBootstrap = nil
+        tencentIMSession.reset()
+        tencentIMBootstrapRefreshTask?.cancel()
+        tencentIMBootstrapRefreshTask = nil
+        proactiveSessionRefreshTask?.cancel()
+        proactiveSessionRefreshTask = nil
+        lastProactiveSessionRefreshAt = nil
+    }
+
     private func bootstrapSessionIfPossible() async {
-        guard let restored = await service.restoreSession() else {
+        let restored: Session?
+        do {
+            restored = try await service.restoreSession()
+        } catch {
+            if error.isRecoverableAuthTransportFailure {
+                Self.authLog("bootstrap restore skipped after recoverable failure")
+                if SessionTokenStore.shared.refreshToken != nil {
+                    errorMessage = nil
+                }
+                isAuthBootstrapping = false
+                return
+            }
             isAuthBootstrapping = false
             return
         }
 
+        guard let restored else {
+            isAuthBootstrapping = false
+            return
+        }
+
+        Self.authLog("bootstrap restored session")
         session = restored
         flushPendingSystemNotificationPayloadIfPossible(trigger: "bootstrap-restore-session")
         errorMessage = nil
@@ -1037,6 +1078,88 @@ final class AppState: ObservableObject {
 
         isAuthBootstrapping = false
         refreshSessionSideEffectsInBackground(source: "bootstrap-restore-session")
+    }
+
+    private func refreshSessionIfPossible(
+        source: String,
+        minimumInterval: TimeInterval = 120,
+        force: Bool = false
+    ) async {
+        guard SessionTokenStore.shared.refreshToken != nil else { return }
+        if !force,
+           !shouldProactivelyRefreshAccessToken() {
+            return
+        }
+        if !force,
+           let lastProactiveSessionRefreshAt,
+           Date().timeIntervalSince(lastProactiveSessionRefreshAt) < minimumInterval {
+            return
+        }
+        if proactiveSessionRefreshTask != nil {
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.proactiveSessionRefreshTask = nil
+                self.lastProactiveSessionRefreshAt = Date()
+            }
+
+            do {
+                Self.authLog("proactive refresh start source=\(source)")
+                guard let refreshed = try await self.service.restoreSession() else { return }
+                self.session = refreshed
+                self.errorMessage = nil
+                Self.authLog("proactive refresh success source=\(source)")
+                self.refreshSessionSideEffectsInBackground(source: "session-refresh-\(source)")
+            } catch {
+                if error.isRecoverableAuthTransportFailure {
+                    Self.authLog("proactive refresh skipped after recoverable failure source=\(source)")
+                    return
+                }
+                if case ServiceError.accountInactive = error {
+                    Self.authLog("proactive refresh failed accountInactive source=\(source)")
+                    self.expireSession(.accountInactive)
+                    return
+                }
+                if case ServiceError.sessionExpired(let reason) = error {
+                    Self.authLog("proactive refresh failed sessionExpired reason=\(reason.rawValue) source=\(source)")
+                    self.expireSession(reason)
+                    return
+                }
+                if case ServiceError.unauthorized = error {
+                    Self.authLog("proactive refresh failed unauthorized source=\(source)")
+                    self.expireSession(.expired)
+                    return
+                }
+            }
+        }
+        proactiveSessionRefreshTask = task
+        await task.value
+    }
+
+    private func shouldProactivelyRefreshAccessToken(now: Date = Date()) -> Bool {
+        guard let expiresAt = SessionTokenStore.shared.accessTokenExpiresAt else {
+            return true
+        }
+        return expiresAt.timeIntervalSince(now) <= Self.proactiveRefreshLeadTime
+    }
+
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let isSatisfied = path.status == .satisfied
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let restoredNetwork = isSatisfied && !self.wasNetworkSatisfied
+                self.wasNetworkSatisfied = isSatisfied
+                guard restoredNetwork, self.session != nil else { return }
+                Self.authLog("network restored; scheduling proactive refresh")
+                await self.refreshSessionIfPossible(source: "network-restored", minimumInterval: 30)
+            }
+        }
+        networkMonitor.start(queue: networkMonitorQueue)
     }
 
     private func refreshSessionSideEffectsInBackground(source: String) {
@@ -1147,6 +1270,7 @@ final class AppState: ObservableObject {
         session = Session(
             token: current.token,
             refreshToken: current.refreshToken,
+            accessTokenExpiresIn: current.accessTokenExpiresIn,
             user: updatedUser,
             accountStatus: current.accountStatus
         )
@@ -1172,6 +1296,7 @@ final class AppState: ObservableObject {
         session = Session(
             token: current.token,
             refreshToken: current.refreshToken,
+            accessTokenExpiresIn: current.accessTokenExpiresIn,
             user: updatedUser,
             accountStatus: current.accountStatus
         )

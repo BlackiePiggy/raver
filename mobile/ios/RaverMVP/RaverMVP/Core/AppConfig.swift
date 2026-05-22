@@ -243,25 +243,15 @@ enum AppConfig {
     }
 
     static var guidanceEnabled: Bool {
-        if let env = guidanceEnabledFromEnvironment() {
 #if DEBUG
-            UserDefaults.standard.set(env, forKey: persistedGuidanceEnabledKey)
+        UserDefaults.standard.set(false, forKey: persistedGuidanceEnabledKey)
 #endif
-            return env
-        }
-
-#if DEBUG
-        if UserDefaults.standard.object(forKey: persistedGuidanceEnabledKey) != nil {
-            return UserDefaults.standard.bool(forKey: persistedGuidanceEnabledKey)
-        }
-#endif
-
-        return true
+        return false
     }
 
     static func setGuidanceEnabled(_ isEnabled: Bool) {
 #if DEBUG
-        UserDefaults.standard.set(isEnabled, forKey: persistedGuidanceEnabledKey)
+        UserDefaults.standard.set(false, forKey: persistedGuidanceEnabledKey)
 #endif
     }
 

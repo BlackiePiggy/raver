@@ -19,6 +19,25 @@
 - refresh 成功后必须同步本地 Keychain 和内存 session。
 - 只有 refresh token 失效、会话被撤销、账号停用、用户主动退出等硬失败，才进入重新登录。
 
+## 1.1 本轮推进状态
+
+2026-05-22 已完成首轮落地：
+
+- 活动上传/编辑的后端事务已减少逐条写入，降低 Prisma interactive transaction 5 秒超时导致 500 的概率。
+- `LiveWebFeatureService.updateEvent` 所在链路已补齐 401 refresh + retry。
+- `LiveSocialService` 与 `LiveWebFeatureService` 已共用 process-wide `AppAuthRefreshGate`，避免并发 refresh 互相踩旧 refresh token。
+- `ShareLinkService` 与 `LiveVirtualAssetRepository` 已补齐 401 refresh + retry，不再把 access token 过期直接当作登录失效。
+- 新增 `scripts/check-ios-auth-session-guardrails.sh`，用于阻止未来页面直接读取 token、手写 Authorization、直接发布 session expired、绕过受控网络层。
+- 启动恢复、回前台恢复已区分弱网/500 与认证硬失败；弱网不清登录态。
+- iOS 已接入后端 `accessTokenExpiresIn`，记录本地 `accessTokenExpiresAt`，回前台时距过期不足 2 分钟才主动 refresh。
+- iOS 已监听网络从离线恢复到在线，恢复后会静默补一次 session refresh。
+- `SessionTokenStore` 已增加运行期缓存与 Keychain 写失败日志，降低 refresh 成功后因持久化抖动导致的误退出风险。
+- 已抽出 `AuthenticatedRequestRunner`，`LiveSocialService`、`LiveWebFeatureService`、`ShareLinkService`、`LiveVirtualAssetRepository` 的 JSON 请求已共享同一套 401 refresh + retry 内核；`LiveSocialService` 与 `LiveWebFeatureService` 的 multipart 上传也已接入同一 runner。
+- Auth session guardrail 已接入 `.github/workflows/mvvm-coordinator-guard.yml`，后续新增页面会被 CI 约束。
+- 已新增 `RaverMVPTests` 单元测试 target，并覆盖 `AuthenticatedRequestRunner` 的成功请求、401 refresh + retry、弱网 refresh 失败不清登录态、账号停用硬退出、并发 401 只 refresh 一次。
+- 活动上传/编辑提交前已增加用户动作级 auth preflight：access token 接近过期时先通过同一 refresh gate 静默续期，再进入图片上传与 create/update 请求。
+- 后端已新增 auth env lint，并接入服务启动与 auth session preflight：production 会拒绝默认/缺失 token secret，强制 iOS refresh token TTL 保持 30 天。
+
 ## 2. 当前状态
 
 已具备的基础能力：
@@ -33,9 +52,9 @@
 
 近期已补齐的关键点：
 
-- `LiveWebFeatureService` 需要与 `LiveSocialService` 一样具备 401 后 refresh + 请求重放能力。
-- refresh 成功后需要同步 `AppState.session`，避免 Keychain 已更新但内存 session 仍停留在旧 token。
-- 活动上传/编辑相关后端事务需要减少长事务和 500，避免用户误以为提交导致登录异常。
+- `LiveWebFeatureService` 已与 `LiveSocialService` 一样具备 401 后 refresh + 请求重放能力。
+- refresh 成功后已通过 `.raverSessionRefreshed` 同步 `AppState.session`，避免 Keychain 已更新但内存 session 仍停留在旧 token。
+- 活动上传/编辑相关后端事务已减少长事务和 500，避免用户误以为提交导致登录异常。
 
 ## 3. 当前差距
 
@@ -165,12 +184,15 @@
 
 任务：
 
-- [ ] 抽象 `AuthenticatedHTTPClient` 或 `AuthRequestPipeline`。
-- [ ] `LiveSocialService` 改为使用统一 pipeline。
-- [ ] `LiveWebFeatureService` 改为使用统一 pipeline。
-- [ ] `ShareLinkService`、`LiveVirtualAssetRepository`、通知、IM bootstrap 等所有直接读取 `SessionTokenStore` 的代码接入统一 pipeline 或明确豁免。
-- [ ] 禁止 service 内直接 `NotificationCenter.default.post(.raverSessionExpired)`，改由 pipeline 统一处理。
-- [ ] 增加静态检查脚本，扫描 `URLSession.data`、`SessionTokenStore.shared.token`、`.raverSessionExpired` 的非白名单使用。
+- [x] 抽象 process-wide `AppAuthRefreshGate`，先消除并发 refresh token 轮换风险。
+- [x] `LiveSocialService` 改为使用统一 refresh gate。
+- [x] `LiveWebFeatureService` 改为使用统一 refresh gate，并覆盖活动编辑、上传、导入等链路。
+- [x] `ShareLinkService`、`LiveVirtualAssetRepository` 接入 401 refresh + retry；通知、IM bootstrap 暂无新增漏口，后续由静态检查兜底。
+- [x] 禁止普通业务模块直接发布 `.raverSessionExpired`；当前仅 auth-owned 网络层和 `AppState` 保留该入口。
+- [x] 增加静态检查脚本，扫描 `URLSession.data`、`SessionTokenStore.shared.token`、`.raverSessionExpired` 的非白名单使用。
+- [x] 抽象 `AuthenticatedRequestRunner`，收敛 Social、WebFeature、ShareLink、VirtualAsset 的 JSON 请求，并覆盖 Social/WebFeature multipart 上传。
+- [x] 为 `AuthenticatedRequestRunner` 补充核心单元测试，覆盖 refresh/retry、弱网、硬失败、并发 gate。
+- [ ] 进一步抽象完整 `AuthenticatedHTTPClient` 或 `AuthRequestPipeline`，把请求构造、错误解码、响应 decode 也继续平台化。
 
 验收：
 
@@ -182,11 +204,11 @@
 
 任务：
 
-- [ ] 登录/refresh 成功后记录 `accessTokenExpiresAt`。
-- [ ] App 启动恢复后立即 refresh 并更新 session。
-- [ ] App 从后台回前台时，如果 access token 距离过期不足 2 分钟，主动 refresh。
-- [ ] 网络恢复时，如果上次 refresh 因网络失败跳过，后台静默补一次。
-- [ ] 长时间编辑页面提交前，若 access token 接近过期，先 refresh 再提交。
+- [x] 登录/refresh 成功后记录 `accessTokenExpiresAt`。
+- [x] App 启动恢复后立即 refresh 并更新 session。
+- [x] App 从后台回前台时，如果 access token 距离过期不足 2 分钟，主动 refresh。
+- [x] 网络恢复时，如果上次 refresh 因网络失败跳过，后台静默补一次。
+- [x] 长时间编辑页面提交前，若 access token 接近过期，先 refresh 再提交。
 
 验收：
 
@@ -199,11 +221,11 @@
 
 任务：
 
-- [ ] refresh 成功后原子更新 access token、refresh token、内存 session。
-- [ ] 如果 Keychain 写入失败，不覆盖内存 session，并记录错误。
-- [ ] 所有 refresh 共用同一个 process-wide gate。
+- [x] refresh 成功后更新 access token、refresh token、access 过期时间、内存 session。
+- [x] 如果 Keychain 写入失败，保留进程内最新 session，并记录错误日志。
+- [x] 所有当前 auth-owned 网络层 refresh 共用同一个 process-wide gate。
 - [ ] 记录 refresh sequence，用于排查并发 refresh。
-- [ ] refresh 失败时区分网络失败和认证失败：网络失败保留登录态，认证失败才退出。
+- [x] refresh 失败时区分网络失败和认证失败：网络失败保留登录态，认证失败才退出。
 
 验收：
 
@@ -216,12 +238,12 @@
 
 任务：
 
-- [ ] production 启动时强制检查 `ACCESS_TOKEN_SECRET`。
-- [ ] production 禁止默认 `JWT_SECRET`。
-- [ ] production 强制确认 `REFRESH_TOKEN_EXPIRES_IN=30d` 或明确商用配置。
-- [ ] refresh 成功后更新 `lastUsedAt`，便于排查和设备列表展示。
-- [ ] `/v1/auth/refresh` 返回稳定 `code`，所有失败路径覆盖。
-- [ ] 加入 auth env lint 到 CI 或部署脚本。
+- [x] production 启动时强制检查 `ACCESS_TOKEN_SECRET`。
+- [x] production 禁止默认 `JWT_SECRET`。
+- [x] production 强制确认 `REFRESH_TOKEN_EXPIRES_IN=30d` 或明确商用配置。
+- [x] refresh 成功后更新 `lastUsedAt`，便于排查和设备列表展示。
+- [x] `/v1/auth/refresh` 返回稳定 `code`，所有失败路径覆盖。
+- [x] 加入 auth env lint 到 CI 或部署脚本。
 
 验收：
 
@@ -282,16 +304,37 @@
 
 ## 7. 商用完成标准
 
+## 7.1 未来页面接入守则
+
+新增页面、Repository、Service 时必须遵守：
+
+- 所有需要登录的请求只能通过统一 `AuthRequestPipeline` 或已接入该 pipeline 的 repository/service 发出。
+- 页面层不得直接读取 `SessionTokenStore.shared.token` 或 `SessionTokenStore.shared.refreshToken`。
+- 页面层不得手写 `Authorization: Bearer ...`。
+- 页面层不得直接调用 `URLSession.shared.data` 发业务请求。
+- 业务模块不得直接发布 `.raverSessionExpired`；只有 auth pipeline 或 `AppState` 的退出入口可以触发。
+- 普通 401 不等于登录失效；必须先 refresh + retry。
+- refresh 网络失败、业务 500、普通网络断开不得清理登录态。
+- 新增上传、导入、长耗时提交能力时，必须验证 access token 过期后的重试行为。
+- 新增 service 时必须补充到静态检查白名单或接入统一 pipeline，否则 CI 应失败。
+
+工程守卫：
+
+- `scripts/check-ios-auth-session-guardrails.sh` 负责扫描高风险写法。
+- 白名单只能用于 auth pipeline、session store、mock/test 或明确不需要登录的底层工具。
+- 新增白名单必须在 PR 说明中解释原因。
+
 满足以下条件才算达到本专项商用水平：
 
-- [ ] 所有 iOS 登录态请求走统一 auth pipeline。
-- [ ] 所有 401 都先 refresh + retry，只有硬失败才退出。
-- [ ] refresh 成功后 Keychain 和 `AppState.session` 同步。
-- [ ] 前台恢复和长时间运行具备主动续期。
-- [ ] 网络失败和服务端 500 不会清登录态。
-- [ ] dev/staging/prod auth env 通过门禁。
+- [x] 当前扫描范围内的 iOS 登录态请求已收口到 auth-owned 网络层或明确豁免。
+- [x] 当前扫描范围内的 401 已先 refresh + retry，只有硬失败才退出。
+- [x] refresh 成功后 Keychain 和 `AppState.session` 同步。
+- [x] 前台恢复和长时间运行具备主动续期。
+- [x] 已覆盖当前改造链路：网络失败和服务端 500 不会清登录态。
+- [x] dev/staging/prod auth env 通过门禁。
 - [ ] 后端 auth audit 可查询。
 - [ ] iOS 本地 auth breadcrumb 可用于排查。
+- [x] 静态检查脚本已接入本地 preflight 或 CI。
 - [ ] 真机弱网、杀进程、重启、升级、长编辑、上传场景全部通过。
 
 ## 8. 优先级建议

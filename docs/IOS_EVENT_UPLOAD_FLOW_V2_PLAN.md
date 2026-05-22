@@ -740,6 +740,15 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 时间表页 AI 识别等待态改为更具科技感的 thinking 动效。
 - [x] server 新增 `/v1/events/timetable/import-image` Coze 代理，透传 event 日期、时区、跨天切日与 Week 上下文，并通过 `pnpm build`。
 - [x] iOS 时间表 AI 识别接入后再次通过 iOS Debug simulator build。
+- [x] server 新增 `/v1/events/lineup/import-image/jobs` 与 `/v1/events/lineup/import-image/jobs/:jobId`，按 Coze lineup 工作流的 `image_url/file_type/context.preferred_language/known_dj_names` 格式提交异步识别任务。
+- [x] server lineup AI 结果归一化为 flat `items` schema，不引入 sections，也不产生 timetable 的 stage/date/time 字段，并通过 `pnpm build`。
+- [x] server Coze 配置拆分为 `COZE_TIMETABLE_WORKFLOW_*` 与 `COZE_LINEUP_WORKFLOW_*`，不再使用旧 `COZE_WORKFLOW_*` 兜底。
+- [x] iOS WebFeatureService 新增 lineup AI 异步 job 创建与轮询模型。
+- [x] V2 仅阵容页 AI 识别接入：支持从已上传图片选择、上传本地草稿图、调用 lineup Coze job、显示 thinking 动效与计时、在 sheet 内展示错误。
+- [x] V2 仅阵容页 AI 识别结果使用现有仅阵容卡片节奏：默认确认态，可展开编辑、删除、搜索绑定 DJ。
+- [x] V2 仅阵容页 AI 识别结果支持一键批量精确匹配 DJ，并按 performer 级写入 DJ id / avatar。
+- [x] V2 仅阵容页 AI 识别确认后只增量写入 `draft.lineupOnlySlots`，不写入 timetable。
+- [x] iOS lineup AI 接入后全量 Debug simulator build 通过；顺手修复了既有 `SocialService.swift` `Error` 到 `ServiceError` pattern match 的编译阻塞。
 
 ### 14. 收尾与切换
 

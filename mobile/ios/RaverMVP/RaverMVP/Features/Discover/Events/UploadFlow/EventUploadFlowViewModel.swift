@@ -210,6 +210,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         EventUploadAnalytics.track("event_upload_v2_submit_tapped", properties: ["mode": draft.mode.storageKeyPart])
 
         do {
+            try await webService.prepareAuthenticatedRequestForUserAction(source: "event-upload-submit")
             try await uploadPendingImagesIfNeeded()
             switch draft.mode {
             case .create:
@@ -509,6 +510,130 @@ final class EventUploadFlowViewModel: ObservableObject {
         return result
     }
 
+    func recognizeLineupFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadLineupAIImportResult {
+        EventUploadAnalytics.track("event_upload_v2_lineup_ai_started", properties: ["zone": image.zone.rawValue])
+        let remoteURL = try await remoteURLForAIImage(image)
+        let request = EventLineupAIImportRequest(
+            imageUrl: remoteURL,
+            fileType: image.mimeType,
+            context: lineupAIContext()
+        )
+        let job = try await webService.createEventLineupImageImportJob(input: request)
+        let response = try await waitForLineupAIImportJob(job.jobId)
+        let result = editableLineupImportResult(from: response.rawJson)
+        EventUploadAnalytics.track(
+            "event_upload_v2_lineup_ai_succeeded",
+            properties: ["itemCount": "\(result.items.count)", "warningCount": "\(result.warnings.count)"]
+        )
+        return result
+    }
+
+    func recognizePosterFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadPosterAIImportResult {
+        EventUploadAnalytics.track("event_upload_v2_poster_ai_started", properties: ["zone": image.zone.rawValue])
+        let remoteURL = try await remoteURLForAIImage(image)
+        let request = EventPosterAIImportRequest(
+            imageUrl: remoteURL,
+            fileType: image.mimeType
+        )
+        let job = try await webService.createEventPosterImageImportJob(input: request)
+        let response = try await waitForPosterAIImportJob(job.jobId)
+        let result = editablePosterImportResult(from: response.rawJson)
+        EventUploadAnalytics.track(
+            "event_upload_v2_poster_ai_succeeded",
+            properties: ["warningCount": "\(result.warnings.count)"]
+        )
+        return result
+    }
+
+    func applyLineupAIImportItems(_ items: [EventUploadLineupAIEditableItem]) {
+        guard !items.isEmpty else { return }
+
+        for imported in items {
+            let performerNames = lineupAIPerformerNames(from: imported)
+            let actType = normalizedActType(imported.actType, performerCount: performerNames.count)
+            var slot = EventUploadLineupOnlySlotDraft()
+            slot.actType = actType
+            slot.performerNames = Array(performerNames.prefix(actType.performerCount))
+            while slot.performerNames.count < actType.performerCount {
+                slot.performerNames.append("")
+            }
+            slot.performerDJIDs = lineupAIPerformerDJIDs(from: imported, count: actType.performerCount)
+            slot.performerAvatarURLs = lineupAIPerformerAvatarURLs(from: imported, count: actType.performerCount)
+            slot.normalizePerformers()
+            draft.lineupOnlySlots.append(slot)
+        }
+
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track("event_upload_v2_lineup_ai_applied", properties: ["itemCount": "\(items.count)"])
+    }
+
+    func applyPosterAIImportResult(_ result: EventUploadPosterAIImportResult) {
+        draft.name = result.name
+        draft.city = result.city
+        draft.detailAddress = result.detailAddress
+        draft.country = result.country
+        if let timeZoneIdentifier = result.timeZoneIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines), !timeZoneIdentifier.isEmpty {
+            draft.timeZoneIdentifier = timeZoneIdentifier
+        }
+        draft.scheduleMode = result.scheduleMode
+        if let startDate = result.startDate {
+            draft.startDate = startDate
+        }
+        if let endDate = result.endDate {
+            draft.endDate = endDate
+        }
+        if !result.weekRanges.isEmpty {
+            draft.weekRanges = result.weekRanges
+        } else {
+            draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+        }
+        draft.ticket.ticketURL = result.ticketURL
+        if !result.ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.ticket.currency = result.ticketCurrency
+        }
+        draft.ticket.tiers = result.ticketTiers
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track("event_upload_v2_poster_ai_applied", properties: ["warningCount": "\(result.warnings.count)"])
+    }
+
+    func autoMatchLineupAIImportItems(_ items: [EventUploadLineupAIEditableItem]) async -> [EventUploadLineupAIEditableItem] {
+        var nextItems = items
+        let unresolvedNames = nextItems.flatMap { item in
+            lineupAIPerformerNames(from: item)
+                .enumerated()
+                .compactMap { index, name in
+                    let bound = item.performerDJIDs.indices.contains(index)
+                        ? item.performerDJIDs[index]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                        : false
+                    return bound ? nil : name
+                }
+        }
+        guard !unresolvedNames.isEmpty else { return nextItems }
+
+        let resolved = await fetchBatchExactDJMatches(names: unresolvedNames)
+        guard !resolved.isEmpty else { return nextItems }
+
+        for itemIndex in nextItems.indices {
+            let performerNames = lineupAIPerformerNames(from: nextItems[itemIndex])
+            let performerCount = max(performerNames.count, nextItems[itemIndex].actType.performerCount)
+            ensureLineupAIImportCapacity(&nextItems[itemIndex], count: performerCount)
+            for performerIndex in performerNames.indices {
+                let bound = nextItems[itemIndex].performerDJIDs.indices.contains(performerIndex)
+                    ? nextItems[itemIndex].performerDJIDs[performerIndex]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    : false
+                guard !bound else { continue }
+                let key = normalizedDJLookupKey(performerNames[performerIndex])
+                guard let candidate = resolved[key] else { continue }
+                nextItems[itemIndex].performerDJIDs[performerIndex] = candidate.djId
+                nextItems[itemIndex].performerAvatarURLs[performerIndex] = candidate.avatarSmallUrl ?? candidate.avatarMediumUrl ?? candidate.avatarUrl ?? candidate.avatarOriginalUrl
+            }
+        }
+
+        return nextItems
+    }
+
     func applyTimetableAIImportSlots(_ slots: [EventUploadTimetableAIEditableSlot]) {
         let importSlots = slots
         guard !importSlots.isEmpty else { return }
@@ -609,6 +734,46 @@ final class EventUploadFlowViewModel: ObservableObject {
             }
         }
         throw ServiceError.message(LT("时间表识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for timetable recognition. Please try again on a stable network.", "タイムテーブル認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
+    }
+
+    private func waitForLineupAIImportJob(_ jobId: String) async throws -> EventLineupAIImportResponse {
+        let deadline = Date().addingTimeInterval(10 * 60)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            let job = try await webService.fetchEventLineupImageImportJob(id: jobId)
+            switch job.status {
+            case "succeeded":
+                if let result = job.result {
+                    return result
+                }
+                throw ServiceError.message(LT("阵容识别结果为空，请稍后重试。", "Lineup recognition returned an empty result. Please try again.", "ラインナップ認識結果が空です。もう一度お試しください。"))
+            case "failed":
+                throw ServiceError.message(job.error ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。"))
+            default:
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+        throw ServiceError.message(LT("阵容识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for lineup recognition. Please try again on a stable network.", "ラインナップ認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
+    }
+
+    private func waitForPosterAIImportJob(_ jobId: String) async throws -> EventPosterAIImportResponse {
+        let deadline = Date().addingTimeInterval(10 * 60)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            let job = try await webService.fetchEventPosterImageImportJob(id: jobId)
+            switch job.status {
+            case "succeeded":
+                if let result = job.result {
+                    return result
+                }
+                throw ServiceError.message(LT("活动信息识别结果为空，请稍后重试。", "Poster recognition returned an empty result. Please try again.", "イベント情報認識結果が空です。もう一度お試しください。"))
+            case "failed":
+                throw ServiceError.message(job.error ?? LT("活动信息识别失败，请稍后重试。", "Poster recognition failed. Please try again later.", "イベント情報認識に失敗しました。しばらくしてから再試行してください。"))
+            default:
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+        throw ServiceError.message(LT("活动信息识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for poster recognition. Please try again on a stable network.", "イベント情報認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
     }
 
     private func fetchBatchExactDJMatches(names: [String]) async -> [String: DJExactMatchItem] {
@@ -1229,6 +1394,24 @@ final class EventUploadFlowViewModel: ObservableObject {
         )
     }
 
+    private func lineupAIContext() -> EventLineupAIImportContext {
+        EventLineupAIImportContext(
+            preferredLanguage: lineupAIPreferredLanguageCode(),
+            knownDJNames: []
+        )
+    }
+
+    private func lineupAIPreferredLanguageCode() -> String {
+        switch draft.preferredLanguage {
+        case .zh:
+            return "zh-Hans"
+        case .ja:
+            return "ja"
+        case .en:
+            return "en"
+        }
+    }
+
     private func timetableAIWeekRanges(timeZone: TimeZone) -> [EventTimetableImageImportWeekRange] {
         let ranges: [EventUploadWeekRangeDraft] = draft.scheduleMode == .multiWeek
             ? draft.weekRanges
@@ -1290,6 +1473,98 @@ final class EventUploadFlowViewModel: ObservableObject {
         )
     }
 
+    private func editableLineupImportResult(from raw: EventLineupAIResult) -> EventUploadLineupAIImportResult {
+        let items = raw.items
+            .sorted { $0.order < $1.order }
+            .compactMap { item -> EventUploadLineupAIEditableItem? in
+                let names = item.performerNames
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let fallbackNames = item.displayName
+                    .split(separator: ",")
+                    .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let finalNames = names.isEmpty ? fallbackNames : names
+                guard !finalNames.isEmpty else { return nil }
+                let type = EventLineupActType(rawValue: item.performerType) ?? normalizedActType(.solo, performerCount: finalNames.count)
+                return EventUploadLineupAIEditableItem(
+                    actType: normalizedActType(type, performerCount: finalNames.count),
+                    performerNamesText: finalNames.joined(separator: ", "),
+                    performerDJIDs: Array(repeating: nil, count: max(1, finalNames.count)),
+                    performerAvatarURLs: Array(repeating: nil, count: max(1, finalNames.count)),
+                    confidence: item.confidence,
+                    notes: item.notes ?? []
+                )
+            }
+        return EventUploadLineupAIImportResult(
+            items: items,
+            warnings: raw.warnings ?? [],
+            unparsedTexts: raw.unparsedTexts ?? []
+        )
+    }
+
+    private func editablePosterImportResult(from raw: EventPosterAIResult) -> EventUploadPosterAIImportResult {
+        let timeZone = TimeZone(identifier: raw.timeZone.ianaName ?? draft.timeZoneIdentifier) ?? .current
+        let startDate = raw.schedule.startDate.flatMap { posterAIDate($0, timeZone: timeZone) }
+        let endDate = raw.schedule.endDate.flatMap { posterAIDate($0, timeZone: timeZone) }
+        let weekRanges = raw.schedule.weekRanges.compactMap { range -> EventUploadWeekRangeDraft? in
+            guard let start = posterAIDate(range.startDate, timeZone: timeZone),
+                  let end = posterAIDate(range.endDate, timeZone: timeZone) else {
+                return nil
+            }
+            return EventUploadWeekRangeDraft(startDate: start, endDate: end)
+        }
+        let ticketTiers = raw.ticketInfo.tiers.map { tier in
+            EventUploadTicketTierDraft(name: tier.name, price: tier.price > 0 ? String(format: "%.0f", tier.price) : tier.priceText)
+        }
+        return EventUploadPosterAIImportResult(
+            name: localizedFields(from: raw.nameI18n),
+            city: localizedFields(from: raw.cityI18n),
+            detailAddress: localizedFields(from: raw.detailAddressI18n),
+            country: localizedFields(from: raw.countryI18n),
+            timeZoneIdentifier: raw.timeZone.ianaName,
+            timeZoneDisplayName: raw.timeZone.displayName,
+            scheduleMode: posterAIScheduleMode(raw.schedule.scheduleMode),
+            startDate: startDate,
+            endDate: endDate,
+            weekRanges: weekRanges,
+            ticketURL: raw.ticketInfo.ticketUrl,
+            ticketCurrency: raw.ticketInfo.currency,
+            ticketTiers: ticketTiers,
+            warnings: raw.warnings ?? [],
+            unparsedTexts: raw.unparsedTexts ?? []
+        )
+    }
+
+    private func localizedFields(from text: WebBiText) -> EventUploadLocalizedFields {
+        EventUploadLocalizedFields(
+            zh: text.zh,
+            en: text.en,
+            ja: text.ja ?? "",
+            enFull: text.enFull ?? ""
+        )
+    }
+
+    private func posterAIScheduleMode(_ raw: String) -> EventUploadScheduleMode {
+        switch raw {
+        case "multiWeek":
+            return .multiWeek
+        case "multiDay":
+            return .multiDay
+        default:
+            return .singleDay
+        }
+    }
+
+    private func posterAIDate(_ raw: String, timeZone: TimeZone) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: raw)
+    }
+
     private func normalizedActType(_ type: EventLineupActType, performerCount: Int) -> EventLineupActType {
         if performerCount >= 3 { return .b3b }
         if performerCount == 2 { return .b2b }
@@ -1329,6 +1604,29 @@ final class EventUploadFlowViewModel: ObservableObject {
             .filter { !$0.isEmpty }
     }
 
+    private func lineupAIPerformerNames(from imported: EventUploadLineupAIEditableItem) -> [String] {
+        imported.performerNamesText
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func lineupAIPerformerDJIDs(from imported: EventUploadLineupAIEditableItem, count: Int) -> [String?] {
+        var values = Array(imported.performerDJIDs.prefix(count))
+        while values.count < count {
+            values.append(nil)
+        }
+        return values
+    }
+
+    private func lineupAIPerformerAvatarURLs(from imported: EventUploadLineupAIEditableItem, count: Int) -> [String?] {
+        var values = Array(imported.performerAvatarURLs.prefix(count))
+        while values.count < count {
+            values.append(nil)
+        }
+        return values
+    }
+
     private func timetableAIPerformerDJIDs(from imported: EventUploadTimetableAIEditableSlot, count: Int) -> [String?] {
         var values = Array(imported.performerDJIDs.prefix(count))
         while values.count < count {
@@ -1351,6 +1649,15 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
         if slot.performerAvatarURLs.count < count {
             slot.performerAvatarURLs.append(contentsOf: Array(repeating: nil, count: count - slot.performerAvatarURLs.count))
+        }
+    }
+
+    private func ensureLineupAIImportCapacity(_ item: inout EventUploadLineupAIEditableItem, count: Int) {
+        if item.performerDJIDs.count < count {
+            item.performerDJIDs.append(contentsOf: Array(repeating: nil, count: count - item.performerDJIDs.count))
+        }
+        if item.performerAvatarURLs.count < count {
+            item.performerAvatarURLs.append(contentsOf: Array(repeating: nil, count: count - item.performerAvatarURLs.count))
         }
     }
 

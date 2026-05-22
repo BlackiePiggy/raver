@@ -37,6 +37,9 @@ jobs:
       - name: Run coordinator route snapshot guard
         run: scripts/check-coordinator-route-snapshots.sh
 
+      - name: Run iOS auth session preflight
+        run: scripts/run-ios-auth-session-preflight.sh
+
   ios-simulator-build:
     name: Optional iOS Simulator Build
     runs-on: macos-latest

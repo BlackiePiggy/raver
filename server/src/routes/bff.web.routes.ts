@@ -1643,20 +1643,31 @@ const ossDjsPrefix = (cleanEnv(process.env.OSS_DJS_PREFIX) || 'wen-jasonlee/djs'
 const ossDjSetsPrefix = (cleanEnv(process.env.OSS_DJ_SETS_PREFIX) || 'wen-jasonlee/dj-sets').replace(/^\/+|\/+$/g, '');
 const ossRatingsPrefix = (cleanEnv(process.env.OSS_RATINGS_PREFIX) || 'wen-jasonlee/ratings').replace(/^\/+|\/+$/g, '');
 const ossWikiBrandsPrefix = (cleanEnv(process.env.OSS_WIKI_BRANDS_PREFIX) || 'wiki/brands').replace(/^\/+|\/+$/g, '');
-const cozeWorkflowRunUrl = cleanEnv(process.env.COZE_WORKFLOW_RUN_URL) || 'https://dxy8zryvs2.coze.site/run';
-const cozeWorkflowToken = cleanEnv(process.env.COZE_WORKFLOW_TOKEN);
-const cozeWorkflowImageField = cleanEnv(process.env.COZE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
+const parseCozeTimeoutMs = (value: unknown): number | null => {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
+    return Math.floor(parsed);
+  }
+  return null;
+};
+const cozeTimetableWorkflowRunUrl = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_RUN_URL);
+const cozeTimetableWorkflowToken = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_TOKEN);
+const cozeTimetableWorkflowImageField =
+  cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
+const cozeTimetableWorkflowTimeoutMs =
+  parseCozeTimeoutMs(process.env.COZE_TIMETABLE_WORKFLOW_TIMEOUT_MS) ?? 300_000;
+const cozeLineupWorkflowRunUrl = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_RUN_URL);
+const cozeLineupWorkflowToken = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_TOKEN);
+const cozeLineupWorkflowTimeoutMs =
+  parseCozeTimeoutMs(process.env.COZE_LINEUP_WORKFLOW_TIMEOUT_MS) ?? 300_000;
+const cozePosterWorkflowRunUrl = cleanEnv(process.env.COZE_POSTER_WORKFLOW_RUN_URL);
+const cozePosterWorkflowToken = cleanEnv(process.env.COZE_POSTER_WORKFLOW_TOKEN);
+const cozePosterWorkflowTimeoutMs =
+  parseCozeTimeoutMs(process.env.COZE_POSTER_WORKFLOW_TIMEOUT_MS) ?? 300_000;
 const cozePublicBaseUrl =
   cleanEnv(process.env.COZE_PUBLIC_BASE_URL) ||
   cleanEnv(process.env.PUBLIC_API_BASE_URL) ||
   cleanEnv(process.env.PUBLIC_BASE_URL);
-const cozeWorkflowTimeoutMs = (() => {
-  const parsed = Number(process.env.COZE_WORKFLOW_TIMEOUT_MS);
-  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
-    return Math.floor(parsed);
-  }
-  return 300_000;
-})();
 
 const currentRequestOrigin = (req: Request): string => {
   if (cozePublicBaseUrl) {
@@ -3337,11 +3348,54 @@ type TimetableImportJob = {
 const timetableImportJobs = new Map<string, TimetableImportJob>();
 const timetableImportJobRetentionMs = 30 * 60 * 1000;
 
+type LineupRecognitionContext = {
+  preferred_language?: string;
+  known_dj_names?: string[];
+};
+
+type LineupImportJob = {
+  id: string;
+  userId: string;
+  status: TimetableImportJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: { rawJson: unknown; rawResponse: unknown } | null;
+  error: string | null;
+};
+
+const lineupImportJobs = new Map<string, LineupImportJob>();
+
+type PosterImportJob = {
+  id: string;
+  userId: string;
+  status: TimetableImportJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: { rawJson: unknown; rawResponse: unknown } | null;
+  error: string | null;
+};
+
+const posterImportJobs = new Map<string, PosterImportJob>();
+
 const pruneTimetableImportJobs = (): void => {
   const now = Date.now();
   for (const [id, job] of timetableImportJobs.entries()) {
     if (now - Date.parse(job.createdAt) > timetableImportJobRetentionMs) {
       timetableImportJobs.delete(id);
+    }
+  }
+  for (const [id, job] of lineupImportJobs.entries()) {
+    if (now - Date.parse(job.createdAt) > timetableImportJobRetentionMs) {
+      lineupImportJobs.delete(id);
+    }
+  }
+  for (const [id, job] of posterImportJobs.entries()) {
+    if (now - Date.parse(job.createdAt) > timetableImportJobRetentionMs) {
+      posterImportJobs.delete(id);
     }
   }
 };
@@ -3723,32 +3777,34 @@ const runCozeLineupWorker = async (
   imageUrl: string,
   fileType: string
 ): Promise<{ normalizedText: string; lineupInfo: ImportedLineupItem[] }> => {
-  if (!cozeWorkflowToken) {
-    throw new Error('COZE_WORKFLOW_TOKEN is not configured');
+  if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
+    throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
   }
 
   const payload = {
-    [cozeWorkflowImageField]: {
-      url: imageUrl,
-      file_type: resolveCozeFileType(fileType),
+    image_url: imageUrl,
+    file_type: fileType || 'image',
+    context: {
+      preferred_language: 'zh-Hans',
+      known_dj_names: [],
     },
   };
 
   const startedAt = Date.now();
   console.info('[coze-lineup] run.start', {
-    runUrl: cozeWorkflowRunUrl,
+    runUrl: cozeLineupWorkflowRunUrl,
     imageUrl,
     fileType,
-    timeoutMs: cozeWorkflowTimeoutMs,
+    timeoutMs: cozeLineupWorkflowTimeoutMs,
   });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), cozeWorkflowTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), cozeLineupWorkflowTimeoutMs);
   let rawText = '';
   try {
-    const response = await fetch(cozeWorkflowRunUrl, {
+    const response = await fetch(cozeLineupWorkflowRunUrl, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${cozeWorkflowToken}`,
+        Authorization: `Bearer ${cozeLineupWorkflowToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -3765,7 +3821,7 @@ const runCozeLineupWorker = async (
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`COZE_WORKFLOW_TIMEOUT after ${cozeWorkflowTimeoutMs}ms`);
+      throw new Error(`COZE_LINEUP_WORKFLOW_TIMEOUT after ${cozeLineupWorkflowTimeoutMs}ms`);
     }
     throw error;
   } finally {
@@ -3779,6 +3835,17 @@ const runCozeLineupWorker = async (
 
   const lineupRaw = extractLineupInfo(parsed);
   let lineupInfo = normalizeImportedLineupItems(lineupRaw);
+  if (lineupInfo.length === 0) {
+    const normalized = normalizeLineupAIResult(extractLineupV2RawJson(parsed)) as {
+      items?: Array<{ displayName?: string; performerNames?: string[] }>;
+    };
+    lineupInfo = (normalized.items ?? []).flatMap((item, index) => {
+      const musician = sanitizeOptionalText(item.displayName) || (item.performerNames ?? []).join(' b2b ');
+      return musician
+        ? [{ id: `lineup-ai-${index + 1}`, musician, time: null, stage: null, date: null }]
+        : [];
+    });
+  }
   if (lineupInfo.length === 0) {
     const formattedOutput = extractFormattedOutputText(parsed);
     if (formattedOutput) {
@@ -3804,6 +3871,395 @@ const runCozeLineupWorker = async (
       2
     ),
     lineupInfo,
+  };
+};
+
+const extractLineupV2RawJson = (value: unknown): unknown => {
+  const parsed = typeof value === 'string' ? tryParseJsonFromText(value) ?? value : value;
+  const seen = new WeakSet<object>();
+
+  const walk = (node: unknown): unknown | null => {
+    if (typeof node === 'string') {
+      const nested = tryParseJsonFromText(node);
+      return nested === null ? null : walk(nested);
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = walk(item);
+        if (found !== null) return found;
+      }
+      return null;
+    }
+    if (!node || typeof node !== 'object') return null;
+    if (seen.has(node)) return null;
+    seen.add(node);
+
+    const record = node as Record<string, unknown>;
+    if (record.schema_version === 'raver_lineup_ai_v1' || record.schemaVersion === 'raver_lineup_ai_v1' || record.image_type === 'lineup' || record.imageType === 'lineup') {
+      return record;
+    }
+    if (record.raw_json !== undefined) {
+      const found = walk(record.raw_json);
+      if (found !== null) return found;
+    }
+    if (record.rawJson !== undefined) {
+      const found = walk(record.rawJson);
+      if (found !== null) return found;
+    }
+
+    for (const child of Object.values(record)) {
+      const found = walk(child);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+
+  return walk(parsed) ?? parsed;
+};
+
+const normalizeLineupAIResult = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object') return { items: [], warnings: [], unparsedTexts: [] };
+  const input = value as Record<string, unknown>;
+  const itemsInput = Array.isArray(input.items) ? input.items : [];
+  const items = itemsInput
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const performerNamesRaw = record.performer_names ?? record.performerNames;
+      const performerNames = Array.isArray(performerNamesRaw)
+        ? performerNamesRaw.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean)
+        : [];
+      const displayName = sanitizeOptionalText(record.display_name ?? record.displayName) || performerNames.join(' b2b ');
+      if (!displayName && performerNames.length === 0) return null;
+      const performerTypeRaw = sanitizeOptionalText(record.performer_type ?? record.performerType)?.toLowerCase();
+      const performerType = performerTypeRaw === 'b3b' || performerNames.length >= 3
+        ? 'b3b'
+        : performerTypeRaw === 'b2b' || performerNames.length === 2
+          ? 'b2b'
+          : 'solo';
+      const orderRaw = Number(record.order);
+      const confidenceRaw = Number(record.confidence);
+      return {
+        order: Number.isFinite(orderRaw) ? Math.max(1, Math.floor(orderRaw)) : index + 1,
+        performerType,
+        performerNames,
+        displayName,
+        rawText: sanitizeOptionalText(record.raw_text ?? record.rawText) ?? displayName,
+        confidence: Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : null,
+        notes: Array.isArray(record.notes)
+          ? record.notes.map((note) => (typeof note === 'string' ? note.trim() : '')).filter(Boolean)
+          : [],
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => a.order - b.order);
+
+  const stringArray = (raw: unknown): string[] => Array.isArray(raw)
+    ? raw.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : [];
+
+  return {
+    schemaVersion: sanitizeOptionalText(input.schema_version ?? input.schemaVersion) ?? 'raver_lineup_ai_v1',
+    imageType: sanitizeOptionalText(input.image_type ?? input.imageType) ?? 'lineup',
+    items,
+    unparsedTexts: stringArray(input.unparsed_texts ?? input.unparsedTexts),
+    warnings: stringArray(input.warnings),
+  };
+};
+
+const sanitizeLineupRecognitionContext = (value: unknown): LineupRecognitionContext => {
+  if (!value || typeof value !== 'object') return {};
+  const input = value as Record<string, unknown>;
+  const out: LineupRecognitionContext = {};
+  const preferredLanguage = sanitizeOptionalText(input.preferred_language ?? input.preferredLanguage);
+  if (preferredLanguage) out.preferred_language = preferredLanguage;
+  const knownNames = input.known_dj_names ?? input.knownDJNames;
+  if (Array.isArray(knownNames)) {
+    out.known_dj_names = knownNames
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 100);
+  }
+  return out;
+};
+
+const runCozeLineupV2Worker = async (
+  req: Request,
+  imageUrl: string,
+  fileType: string,
+  context: LineupRecognitionContext
+): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
+  if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
+    throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
+  }
+
+  const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
+  const payload = {
+    image_url: resolvedImageUrl,
+    file_type: fileType || 'image',
+    context,
+  };
+
+  const startedAt = Date.now();
+  console.info('[coze-lineup-v2] run.start', {
+    runUrl: cozeLineupWorkflowRunUrl,
+    imageUrl: resolvedImageUrl,
+    fileType,
+    timeoutMs: cozeLineupWorkflowTimeoutMs,
+    context,
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), cozeLineupWorkflowTimeoutMs);
+  let rawText = '';
+  try {
+    const response = await fetch(cozeLineupWorkflowRunUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cozeLineupWorkflowToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    rawText = await response.text();
+    console.info('[coze-lineup-v2] run.response', {
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      responseLength: rawText.length,
+    });
+    if (!response.ok) {
+      throw new Error(`Coze workflow request failed (${response.status}): ${rawText.slice(0, 500)}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`COZE_LINEUP_WORKFLOW_TIMEOUT after ${cozeLineupWorkflowTimeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const parsed = tryParseJsonFromText(rawText);
+  if (parsed === null) {
+    throw new Error('Coze workflow returned non-JSON content');
+  }
+
+  return {
+    rawJson: normalizeLineupAIResult(extractLineupV2RawJson(parsed)),
+    rawResponse: parsed,
+  };
+};
+
+const extractPosterRawJson = (value: unknown): unknown => {
+  const parsed = typeof value === 'string' ? tryParseJsonFromText(value) ?? value : value;
+  const seen = new WeakSet<object>();
+
+  const walk = (node: unknown): unknown | null => {
+    if (typeof node === 'string') {
+      const nested = tryParseJsonFromText(node);
+      return nested === null ? null : walk(nested);
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = walk(item);
+        if (found !== null) return found;
+      }
+      return null;
+    }
+    if (!node || typeof node !== 'object') return null;
+    if (seen.has(node)) return null;
+    seen.add(node);
+
+    const record = node as Record<string, unknown>;
+    if (
+      record.schema_version === 'raver_event_poster_ai_v1'
+      || record.schemaVersion === 'raver_event_poster_ai_v1'
+      || record.image_type === 'poster_basic_info'
+      || record.imageType === 'poster_basic_info'
+    ) {
+      return record;
+    }
+    if (record.raw_json !== undefined) {
+      const found = walk(record.raw_json);
+      if (found !== null) return found;
+    }
+    if (record.rawJson !== undefined) {
+      const found = walk(record.rawJson);
+      if (found !== null) return found;
+    }
+
+    for (const child of Object.values(record)) {
+      const found = walk(child);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+
+  return walk(parsed) ?? parsed;
+};
+
+const normalizePosterAIResult = (value: unknown): unknown => {
+  const emptyI18n = { zh: '', en: '', ja: '' };
+  const emptyCountry = { zh: '', en: '', ja: '', enFull: '' };
+  const stringArray = (raw: unknown): string[] => Array.isArray(raw)
+    ? raw.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : [];
+  const normalizeI18n = (raw: unknown, includeEnFull = false) => {
+    if (!raw || typeof raw !== 'object') {
+      return includeEnFull ? { ...emptyCountry } : { ...emptyI18n };
+    }
+    const input = raw as Record<string, unknown>;
+    const out: Record<string, string> = {
+      zh: sanitizeOptionalText(input.zh) ?? '',
+      en: sanitizeOptionalText(input.en) ?? '',
+      ja: sanitizeOptionalText(input.ja) ?? '',
+    };
+    if (includeEnFull) {
+      out.enFull = sanitizeOptionalText(input.enFull ?? input.en_full) ?? '';
+    }
+    return out;
+  };
+  const normalizeWeekRanges = (raw: unknown) => Array.isArray(raw)
+    ? raw.map((item, index) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+        const weekIndexRaw = Number(record.weekIndex ?? record.week_index);
+        const startDate = sanitizeOptionalText(record.startDate ?? record.start_date);
+        const endDate = sanitizeOptionalText(record.endDate ?? record.end_date);
+        if (!startDate || !endDate) return null;
+        return {
+          weekIndex: Number.isFinite(weekIndexRaw) ? Math.max(1, Math.floor(weekIndexRaw)) : index + 1,
+          startDate,
+          endDate,
+        };
+      }).filter((item): item is NonNullable<typeof item> => item !== null)
+    : [];
+
+  if (!value || typeof value !== 'object') {
+    return {
+      schemaVersion: 'raver_event_poster_ai_v1',
+      imageType: 'poster_basic_info',
+      nameI18n: { ...emptyI18n },
+      cityI18n: { ...emptyI18n },
+      detailAddressI18n: { ...emptyI18n },
+      countryI18n: { ...emptyCountry },
+      timeZone: { ianaName: null, displayName: '', confidence: 0, source: 'unknown' },
+      schedule: { scheduleMode: 'unknown', startDate: null, endDate: null, weekRanges: [], rawDateText: '', confidence: 0 },
+      ticketInfo: { ticketUrl: '', currency: '', tiers: [] },
+      unparsedTexts: [],
+      warnings: [],
+    };
+  }
+
+  const input = value as Record<string, unknown>;
+  const timeZoneInput = input.timeZone && typeof input.timeZone === 'object' ? input.timeZone as Record<string, unknown> : {};
+  const scheduleInput = input.schedule && typeof input.schedule === 'object' ? input.schedule as Record<string, unknown> : {};
+  const ticketInfoInput = input.ticketInfo && typeof input.ticketInfo === 'object' ? input.ticketInfo as Record<string, unknown> : {};
+  const tiers = Array.isArray(ticketInfoInput.tiers)
+    ? ticketInfoInput.tiers.map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+        const priceRaw = Number(record.price);
+        return {
+          name: sanitizeOptionalText(record.name) ?? '',
+          price: Number.isFinite(priceRaw) ? priceRaw : 0,
+          priceText: sanitizeOptionalText(record.priceText ?? record.price_text) ?? '',
+        };
+      }).filter((item): item is NonNullable<typeof item> => item !== null)
+    : [];
+
+  return {
+    schemaVersion: sanitizeOptionalText(input.schemaVersion ?? input.schema_version) ?? 'raver_event_poster_ai_v1',
+    imageType: sanitizeOptionalText(input.imageType ?? input.image_type) ?? 'poster_basic_info',
+    nameI18n: normalizeI18n(input.nameI18n ?? input.name_i18n),
+    cityI18n: normalizeI18n(input.cityI18n ?? input.city_i18n),
+    detailAddressI18n: normalizeI18n(input.detailAddressI18n ?? input.detail_address_i18n),
+    countryI18n: normalizeI18n(input.countryI18n ?? input.country_i18n, true),
+    timeZone: {
+      ianaName: sanitizeOptionalText(timeZoneInput.ianaName ?? timeZoneInput.iana_name),
+      displayName: sanitizeOptionalText(timeZoneInput.displayName ?? timeZoneInput.display_name) ?? '',
+      confidence: Number.isFinite(Number(timeZoneInput.confidence)) ? Math.max(0, Math.min(1, Number(timeZoneInput.confidence))) : 0,
+      source: sanitizeOptionalText(timeZoneInput.source) ?? 'unknown',
+    },
+    schedule: {
+      scheduleMode: sanitizeOptionalText(scheduleInput.scheduleMode ?? scheduleInput.schedule_mode) ?? 'unknown',
+      startDate: sanitizeOptionalText(scheduleInput.startDate ?? scheduleInput.start_date),
+      endDate: sanitizeOptionalText(scheduleInput.endDate ?? scheduleInput.end_date),
+      weekRanges: normalizeWeekRanges(scheduleInput.weekRanges ?? scheduleInput.week_ranges),
+      rawDateText: sanitizeOptionalText(scheduleInput.rawDateText ?? scheduleInput.raw_date_text) ?? '',
+      confidence: Number.isFinite(Number(scheduleInput.confidence)) ? Math.max(0, Math.min(1, Number(scheduleInput.confidence))) : 0,
+    },
+    ticketInfo: {
+      ticketUrl: sanitizeOptionalText(ticketInfoInput.ticketUrl ?? ticketInfoInput.ticket_url) ?? '',
+      currency: sanitizeOptionalText(ticketInfoInput.currency) ?? '',
+      tiers,
+    },
+    unparsedTexts: stringArray(input.unparsedTexts ?? input.unparsed_texts),
+    warnings: stringArray(input.warnings),
+  };
+};
+
+const runCozePosterWorker = async (
+  req: Request,
+  imageUrl: string,
+  fileType: string
+): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
+  if (!cozePosterWorkflowRunUrl || !cozePosterWorkflowToken) {
+    throw new Error('COZE_POSTER_WORKFLOW_RUN_URL or COZE_POSTER_WORKFLOW_TOKEN is not configured');
+  }
+
+  const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
+  const payload = {
+    image_url: resolvedImageUrl,
+    file_type: fileType || 'image/jpeg',
+  };
+
+  const startedAt = Date.now();
+  console.info('[coze-poster] run.start', {
+    runUrl: cozePosterWorkflowRunUrl,
+    imageUrl: resolvedImageUrl,
+    fileType,
+    timeoutMs: cozePosterWorkflowTimeoutMs,
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), cozePosterWorkflowTimeoutMs);
+  let rawText = '';
+  try {
+    const response = await fetch(cozePosterWorkflowRunUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cozePosterWorkflowToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    rawText = await response.text();
+    console.info('[coze-poster] run.response', {
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      responseLength: rawText.length,
+    });
+    if (!response.ok) {
+      throw new Error(`Coze workflow request failed (${response.status}): ${rawText.slice(0, 500)}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`COZE_POSTER_WORKFLOW_TIMEOUT after ${cozePosterWorkflowTimeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const parsed = tryParseJsonFromText(rawText);
+  if (parsed === null) {
+    throw new Error('Coze workflow returned non-JSON content');
+  }
+
+  return {
+    rawJson: normalizePosterAIResult(extractPosterRawJson(parsed)),
+    rawResponse: parsed,
   };
 };
 
@@ -3900,13 +4356,13 @@ const runCozeTimetableWorker = async (
   fileType: string,
   context: TimetableRecognitionContext
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
-  if (!cozeWorkflowToken) {
-    throw new Error('COZE_WORKFLOW_TOKEN is not configured');
+  if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
+    throw new Error('COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured');
   }
 
   const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
   const payload = {
-    [cozeWorkflowImageField]: {
+    [cozeTimetableWorkflowImageField]: {
       url: resolvedImageUrl,
       file_type: resolveCozeFileType(fileType),
     },
@@ -3915,20 +4371,20 @@ const runCozeTimetableWorker = async (
 
   const startedAt = Date.now();
   console.info('[coze-timetable] run.start', {
-    runUrl: cozeWorkflowRunUrl,
+    runUrl: cozeTimetableWorkflowRunUrl,
     imageUrl: resolvedImageUrl,
     fileType,
-    timeoutMs: cozeWorkflowTimeoutMs,
+    timeoutMs: cozeTimetableWorkflowTimeoutMs,
     context,
   });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), cozeWorkflowTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), cozeTimetableWorkflowTimeoutMs);
   let rawText = '';
   try {
-    const response = await fetch(cozeWorkflowRunUrl, {
+    const response = await fetch(cozeTimetableWorkflowRunUrl, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${cozeWorkflowToken}`,
+        Authorization: `Bearer ${cozeTimetableWorkflowToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -3945,7 +4401,7 @@ const runCozeTimetableWorker = async (
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`COZE_WORKFLOW_TIMEOUT after ${cozeWorkflowTimeoutMs}ms`);
+      throw new Error(`COZE_TIMETABLE_WORKFLOW_TIMEOUT after ${cozeTimetableWorkflowTimeoutMs}ms`);
     }
     throw error;
   } finally {
@@ -7620,9 +8076,9 @@ router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload
       res.status(503).json({ error: 'OSS is not configured for lineup image import' });
       return;
     }
-    if (!cozeWorkflowToken) {
+    if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
       await fs.promises.unlink(file.path).catch(() => undefined);
-      res.status(503).json({ error: 'COZE_WORKFLOW_TOKEN is not configured' });
+      res.status(503).json({ error: 'COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured' });
       return;
     }
 
@@ -7645,7 +8101,7 @@ router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload
       message,
       error,
     });
-    if (message.includes('COZE_WORKFLOW_TIMEOUT')) {
+    if (message.includes('WORKFLOW_TIMEOUT')) {
       res.status(504).json({ error: '阵容识别超时，请稍后重试或换一张更清晰的图' });
       return;
     }
@@ -13979,8 +14435,8 @@ router.post('/events/timetable/import-image', optionalAuth, async (req: Request,
     const userId = requireAuth(authReq, res);
     if (!userId) return;
 
-    if (!cozeWorkflowToken) {
-      res.status(503).json({ error: 'COZE_WORKFLOW_TOKEN is not configured' });
+    if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
+      res.status(503).json({ error: 'COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured' });
       return;
     }
 
@@ -14007,7 +14463,7 @@ router.post('/events/timetable/import-image', optionalAuth, async (req: Request,
       message,
       error,
     });
-    if (message.includes('COZE_WORKFLOW_TIMEOUT')) {
+    if (message.includes('WORKFLOW_TIMEOUT')) {
       res.status(504).json({ error: '时间表识别超时，请稍后重试或换一张更清晰的图' });
       return;
     }
@@ -14026,8 +14482,8 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
     const userId = requireAuth(authReq, res);
     if (!userId) return;
 
-    if (!cozeWorkflowToken) {
-      res.status(503).json({ error: 'COZE_WORKFLOW_TOKEN is not configured' });
+    if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
+      res.status(503).json({ error: 'COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured' });
       return;
     }
 
@@ -14079,7 +14535,7 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
         job.status = 'failed';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
-        job.error = message.includes('COZE_WORKFLOW_TIMEOUT')
+        job.error = message.includes('WORKFLOW_TIMEOUT')
           ? '时间表识别超时，请稍后重试或换一张更清晰的图'
           : message.startsWith('Coze workflow request failed')
             ? '时间表识别服务暂时不可用，请稍后重试'
@@ -14139,6 +14595,253 @@ router.get('/events/timetable/import-image/jobs/:jobId', optionalAuth, async (re
     });
   } catch (error) {
     console.error('BFF web get timetable import job error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const requestStartedAt = Date.now();
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
+      res.status(503).json({ error: 'COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+    const fileType = typeof body.fileType === 'string' ? body.fileType.trim() : 'image/jpeg';
+    const context = sanitizeLineupRecognitionContext(body.context);
+
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' });
+      return;
+    }
+
+    pruneTimetableImportJobs();
+    const now = new Date().toISOString();
+    const job: LineupImportJob = {
+      id: crypto.randomUUID(),
+      userId,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      startedAt: null,
+      finishedAt: null,
+      result: null,
+      error: null,
+    };
+    lineupImportJobs.set(job.id, job);
+
+    void (async () => {
+      const startedAt = new Date().toISOString();
+      job.status = 'running';
+      job.startedAt = startedAt;
+      job.updatedAt = startedAt;
+      try {
+        const imported = await runCozeLineupV2Worker(req, imageUrl, fileType, context);
+        const finishedAt = new Date().toISOString();
+        job.status = 'succeeded';
+        job.finishedAt = finishedAt;
+        job.updatedAt = finishedAt;
+        job.result = imported;
+        console.info('[lineup-import-job] request.success', {
+          jobId: job.id,
+          userId,
+          durationMs: Date.now() - Date.parse(startedAt),
+        });
+      } catch (error) {
+        const finishedAt = new Date().toISOString();
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        job.status = 'failed';
+        job.finishedAt = finishedAt;
+        job.updatedAt = finishedAt;
+        job.error = message.includes('WORKFLOW_TIMEOUT')
+          ? '阵容识别超时，请稍后重试或换一张更清晰的图'
+          : message.startsWith('Coze workflow request failed')
+            ? '阵容识别服务暂时不可用，请稍后重试'
+            : '阵容识别失败，请稍后重试';
+        console.error('BFF web lineup import job error:', {
+          jobId: job.id,
+          userId,
+          message,
+          error,
+        });
+      }
+    })();
+
+    console.info('[lineup-import-job] request.created', {
+      jobId: job.id,
+      userId,
+      durationMs: Date.now() - requestStartedAt,
+    });
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    });
+  } catch (error) {
+    console.error('BFF web create lineup import job error:', {
+      durationMs: Date.now() - requestStartedAt,
+      error,
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/lineup/import-image/jobs/:jobId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    pruneTimetableImportJobs();
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+    const job = lineupImportJobs.get(jobId);
+    if (!job || job.userId !== userId) {
+      res.status(404).json({ error: 'Lineup import job not found' });
+      return;
+    }
+
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      result: job.result,
+      error: job.error,
+    });
+  } catch (error) {
+    console.error('BFF web get lineup import job error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const requestStartedAt = Date.now();
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    if (!cozePosterWorkflowRunUrl || !cozePosterWorkflowToken) {
+      res.status(503).json({ error: 'COZE_POSTER_WORKFLOW_RUN_URL or COZE_POSTER_WORKFLOW_TOKEN is not configured' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+    const fileType = typeof body.fileType === 'string' ? body.fileType.trim() : 'image/jpeg';
+
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' });
+      return;
+    }
+
+    pruneTimetableImportJobs();
+    const now = new Date().toISOString();
+    const job: PosterImportJob = {
+      id: crypto.randomUUID(),
+      userId,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      startedAt: null,
+      finishedAt: null,
+      result: null,
+      error: null,
+    };
+    posterImportJobs.set(job.id, job);
+
+    void (async () => {
+      const startedAt = new Date().toISOString();
+      job.status = 'running';
+      job.startedAt = startedAt;
+      job.updatedAt = startedAt;
+      try {
+        const imported = await runCozePosterWorker(req, imageUrl, fileType);
+        const finishedAt = new Date().toISOString();
+        job.status = 'succeeded';
+        job.finishedAt = finishedAt;
+        job.updatedAt = finishedAt;
+        job.result = imported;
+        console.info('[poster-import-job] request.success', {
+          jobId: job.id,
+          userId,
+          durationMs: Date.now() - Date.parse(startedAt),
+        });
+      } catch (error) {
+        const finishedAt = new Date().toISOString();
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        job.status = 'failed';
+        job.finishedAt = finishedAt;
+        job.updatedAt = finishedAt;
+        job.error = message.includes('COZE_POSTER_WORKFLOW_TIMEOUT')
+          ? '活动信息识别超时，请稍后重试或换一张更清晰的图'
+          : message.startsWith('Coze workflow request failed')
+            ? '活动信息识别服务暂时不可用，请稍后重试'
+            : '活动信息识别失败，请稍后重试';
+        console.error('BFF web poster import job error:', {
+          jobId: job.id,
+          userId,
+          message,
+          error,
+        });
+      }
+    })();
+
+    console.info('[poster-import-job] request.created', {
+      jobId: job.id,
+      userId,
+      durationMs: Date.now() - requestStartedAt,
+    });
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    });
+  } catch (error) {
+    console.error('BFF web create poster import job error:', {
+      durationMs: Date.now() - requestStartedAt,
+      error,
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/poster/import-image/jobs/:jobId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    pruneTimetableImportJobs();
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+    const job = posterImportJobs.get(jobId);
+    if (!job || job.userId !== userId) {
+      res.status(404).json({ error: 'Poster import job not found' });
+      return;
+    }
+
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      result: job.result,
+      error: job.error,
+    });
+  } catch (error) {
+    console.error('BFF web get poster import job error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
