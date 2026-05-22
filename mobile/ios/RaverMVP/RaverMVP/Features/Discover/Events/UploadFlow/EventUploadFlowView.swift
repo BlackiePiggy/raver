@@ -1,6 +1,60 @@
 import SwiftUI
 import UIKit
 
+private enum EventUploadTimeDisplay {
+    static func clockRange(start: String, end: String) -> String? {
+        let startText = start.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endText = end.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !startText.isEmpty, !endText.isEmpty else { return nil }
+        return "\(clockText(from: startText)) - \(clockText(from: endText))"
+    }
+
+    static func clockRange(start: Date, end: Date, logicalDay: Date, timeZone: TimeZone) -> String {
+        "\(clockText(for: start, logicalDay: logicalDay, timeZone: timeZone)) - \(clockText(for: end, logicalDay: logicalDay, timeZone: timeZone))"
+    }
+
+    static func clockText(for date: Date, logicalDay: Date, timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let logicalStart = calendar.startOfDay(for: logicalDay)
+        let dateStart = calendar.startOfDay(for: date)
+        let dayOffset = max(0, calendar.dateComponents([.day], from: logicalStart, to: dateStart).day ?? 0)
+        let text = hhmmFormatter(timeZone: timeZone).string(from: date)
+        return prefix(dayOffset: dayOffset, text: text)
+    }
+
+    private static func clockText(from raw: String) -> String {
+        guard let parsed = parseClock(raw) else { return raw }
+        let text = String(format: "%02d:%02d", parsed.hour % 24, parsed.minute)
+        return prefix(dayOffset: parsed.hour / 24, text: text)
+    }
+
+    private static func prefix(dayOffset: Int, text: String) -> String {
+        guard dayOffset > 0 else { return text }
+        return LT("次日 \(text)", "Next day \(text)", "翌日 \(text)")
+    }
+
+    private static func parseClock(_ raw: String) -> (hour: Int, minute: Int)? {
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let hour = Int(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)),
+              let minute = Int(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)),
+              hour >= 0,
+              minute >= 0,
+              minute < 60
+        else { return nil }
+        return (hour, minute)
+    }
+
+    private static func hhmmFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }
+}
+
 struct EventUploadFlowView: View {
     private struct WeekDatePickerTarget: Identifiable {
         enum Field {
@@ -2510,8 +2564,8 @@ struct EventUploadFlowView: View {
         } set: { value in
             viewModel.updateTimetableSlot(id: slotID) { slot in
                 slot.dayIndex = value
-                slot.startTime = alignLineupDate(slot.startTime, toDayIndex: value)
-                slot.endTime = alignLineupDate(slot.endTime, toDayIndex: value)
+                slot.startTime = alignLineupDate(slot.startTime, toDayIndex: value, dayOffset: slot.startDayOffset)
+                slot.endTime = alignLineupDate(slot.endTime, toDayIndex: value, dayOffset: slot.endDayOffset)
             }
         }
     }
@@ -2522,7 +2576,23 @@ struct EventUploadFlowView: View {
                 ?? alignLineupClock(Date(), toDayIndex: viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?.dayIndex ?? 1)
         } set: { value in
             viewModel.updateTimetableSlot(id: slotID) { slot in
-                slot[keyPath: keyPath] = alignLineupClock(value, toDayIndex: slot.dayIndex)
+                let dayOffset = keyPath == \EventUploadLineupSlotDraft.startTime ? slot.startDayOffset : slot.endDayOffset
+                slot[keyPath: keyPath] = alignLineupClock(value, toDayIndex: slot.dayIndex, dayOffset: dayOffset)
+            }
+        }
+    }
+
+    private func timetableDayOffsetBinding(_ slotID: UUID, keyPath: WritableKeyPath<EventUploadLineupSlotDraft, EventUploadSlotDayOffset>) -> Binding<EventUploadSlotDayOffset> {
+        Binding {
+            viewModel.draft.timetableSlots.first(where: { $0.id == slotID })?[keyPath: keyPath] ?? .sameDay
+        } set: { value in
+            viewModel.updateTimetableSlot(id: slotID) { slot in
+                slot[keyPath: keyPath] = value
+                if keyPath == \EventUploadLineupSlotDraft.startDayOffset {
+                    slot.startTime = alignLineupDate(slot.startTime, toDayIndex: slot.dayIndex, dayOffset: value)
+                } else {
+                    slot.endTime = alignLineupDate(slot.endTime, toDayIndex: slot.dayIndex, dayOffset: value)
+                }
             }
         }
     }
@@ -2545,17 +2615,17 @@ struct EventUploadFlowView: View {
         }
     }
 
-    private func alignLineupClock(_ value: Date, toDayIndex dayIndex: Int) -> Date {
+    private func alignLineupClock(_ value: Date, toDayIndex dayIndex: Int, dayOffset: EventUploadSlotDayOffset = .sameDay) -> Date {
         var calendar = Calendar.current
         calendar.timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
         let components = calendar.dateComponents([.hour, .minute], from: value)
-        let baseDay = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0), to: calendar.startOfDay(for: viewModel.draft.startDate)) ?? viewModel.draft.startDate
+        let baseDay = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0) + dayOffset.rawValue, to: calendar.startOfDay(for: viewModel.draft.startDate)) ?? viewModel.draft.startDate
         return calendar.date(bySettingHour: components.hour ?? 0, minute: components.minute ?? 0, second: 0, of: baseDay) ?? value
     }
 
-    private func alignLineupDate(_ value: Date?, toDayIndex dayIndex: Int) -> Date? {
+    private func alignLineupDate(_ value: Date?, toDayIndex dayIndex: Int, dayOffset: EventUploadSlotDayOffset = .sameDay) -> Date? {
         guard let value else { return nil }
-        return alignLineupClock(value, toDayIndex: dayIndex)
+        return alignLineupClock(value, toDayIndex: dayIndex, dayOffset: dayOffset)
     }
 
     private var displayWeekRanges: [EventUploadWeekRangeDraft] {
@@ -2626,6 +2696,7 @@ struct EventUploadFlowView: View {
             stageBinding: timetableStageBinding,
             dayBinding: timetableDayBinding,
             timeBinding: timetableTimeBinding,
+            dayOffsetBinding: timetableDayOffsetBinding,
             isSearchingPerformer: { slot, index in
                 viewModel.searchingDJKeys.contains(viewModel.djSearchKey(slotID: slot.id, performerIndex: index))
             },
@@ -3132,7 +3203,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                         .lineLimit(1)
-                    Text(timeSummary(start: slot.startTimeText, end: slot.endTimeText))
+                    Text(timeSummary(for: slot))
                         .font(.caption2)
                         .foregroundStyle(RaverTheme.accent)
                         .lineLimit(1)
@@ -3220,13 +3291,17 @@ private struct EventUploadTimetableAIImportSheet: View {
                 }
 
                 HStack(spacing: 8) {
-                    TextField("Start", text: binding(for: slot.id, keyPath: \.startTimeText, default: ""))
-                    TextField("End", text: binding(for: slot.id, keyPath: \.endTimeText, default: ""))
+                    aiImportTimeColumn(
+                        title: LT("开始", "Start", "開始"),
+                        dayOffset: binding(for: slot.id, keyPath: \.startDayOffset, default: .sameDay),
+                        text: binding(for: slot.id, keyPath: \.startTimeText, default: "")
+                    )
+                    aiImportTimeColumn(
+                        title: LT("结束", "End", "終了"),
+                        dayOffset: binding(for: slot.id, keyPath: \.endDayOffset, default: .sameDay),
+                        text: binding(for: slot.id, keyPath: \.endTimeText, default: "")
+                    )
                 }
-                .font(.body.monospacedDigit())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 HStack {
                     Text("Week \(slot.weekIndex) · \(slot.dayLabel)")
@@ -3314,12 +3389,21 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private func timeSummary(start: String, end: String) -> String {
-        let startText = start.trimmingCharacters(in: .whitespacesAndNewlines)
-        let endText = end.trimmingCharacters(in: .whitespacesAndNewlines)
-        if startText.isEmpty || endText.isEmpty {
+        guard let range = EventUploadTimeDisplay.clockRange(start: start, end: end) else {
             return LT("请填写演出时间", "Set start and end time", "出演時間を入力してください")
         }
-        return "\(startText) - \(endText)"
+        return range
+    }
+
+    private func timeSummary(for slot: EventUploadTimetableAIEditableSlot) -> String {
+        let startText = slot.startTimeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endText = slot.endTimeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !startText.isEmpty, !endText.isEmpty else {
+            return LT("请填写演出时间", "Set start and end time", "出演時間を入力してください")
+        }
+        let start = slot.startDayOffset == .nextDay ? "\(24 + aiImportClockHour(startText)):\(aiImportClockMinuteText(startText))" : startText
+        let end = slot.endDayOffset == .nextDay ? "\(24 + aiImportClockHour(endText)):\(aiImportClockMinuteText(endText))" : endText
+        return timeSummary(start: start, end: end)
     }
 
     private func displayName(for slot: EventUploadTimetableAIEditableSlot) -> String {
@@ -3342,6 +3426,47 @@ private struct EventUploadTimetableAIImportSheet: View {
 
     private func aiImportPerformerAvatarURL(for slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> String? {
         slot.performerAvatarURLs.indices.contains(performerIndex) ? slot.performerAvatarURLs[performerIndex] : nil
+    }
+
+    private func aiImportClockHour(_ text: String) -> Int {
+        let parts = text.split(separator: ":", maxSplits: 1).map(String.init)
+        return parts.first.flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? 0
+    }
+
+    private func aiImportClockMinuteText(_ text: String) -> String {
+        let parts = text.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let minute = Int(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return "00" }
+        return String(format: "%02d", min(max(minute, 0), 59))
+    }
+
+    private func aiImportTimeColumn(
+        title: String,
+        dayOffset: Binding<EventUploadSlotDayOffset>,
+        text: Binding<String>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            Picker(title, selection: dayOffset) {
+                ForEach(EventUploadSlotDayOffset.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            TextField("HH:mm", text: text)
+                .font(.body.monospacedDigit())
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func aiImportSearchKey(slotID: UUID, performerIndex: Int) -> String {
@@ -3805,6 +3930,7 @@ private struct EventUploadWeekTimetableEditorSheet: View {
     let stageBinding: (UUID) -> Binding<String>
     let dayBinding: (UUID) -> Binding<Int>
     let timeBinding: (UUID, WritableKeyPath<EventUploadLineupSlotDraft, Date?>) -> Binding<Date>
+    let dayOffsetBinding: (UUID, WritableKeyPath<EventUploadLineupSlotDraft, EventUploadSlotDayOffset>) -> Binding<EventUploadSlotDayOffset>
     let isSearchingPerformer: (EventUploadLineupSlotDraft, Int) -> Bool
     let onSearchPerformer: (EventUploadLineupSlotDraft, Int) -> Void
     let onClearPerformer: (EventUploadLineupSlotDraft, Int) -> Void
@@ -4128,23 +4254,17 @@ private struct EventUploadWeekTimetableEditorSheet: View {
                 }
 
                 HStack(spacing: 12) {
-                    DatePicker(
-                        LT("开始", "Start", "開始"),
-                        selection: timeBinding(slot.id, \.startTime),
-                        displayedComponents: [.hourAndMinute]
+                    timetableDatePickerColumn(
+                        title: LT("开始", "Start", "開始"),
+                        dayOffset: dayOffsetBinding(slot.id, \.startDayOffset),
+                        selection: timeBinding(slot.id, \.startTime)
                     )
-                    .datePickerStyle(.compact)
-                    .tint(RaverTheme.accent)
-                    .environment(\.timeZone, eventTimeZone)
 
-                    DatePicker(
-                        LT("结束", "End", "終了"),
-                        selection: timeBinding(slot.id, \.endTime),
-                        displayedComponents: [.hourAndMinute]
+                    timetableDatePickerColumn(
+                        title: LT("结束", "End", "終了"),
+                        dayOffset: dayOffsetBinding(slot.id, \.endDayOffset),
+                        selection: timeBinding(slot.id, \.endTime)
                     )
-                    .datePickerStyle(.compact)
-                    .tint(RaverTheme.accent)
-                    .environment(\.timeZone, eventTimeZone)
                 }
 
                 if isCollapsedEligible(slot) {
@@ -4255,6 +4375,36 @@ private struct EventUploadWeekTimetableEditorSheet: View {
         return name.isEmpty ? LT("未命名演出", "Untitled Act", "未命名の出演") : name
     }
 
+    private func timetableDatePickerColumn(
+        title: String,
+        dayOffset: Binding<EventUploadSlotDayOffset>,
+        selection: Binding<Date>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            Picker(title, selection: dayOffset) {
+                ForEach(EventUploadSlotDayOffset.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            DatePicker(
+                title,
+                selection: selection,
+                displayedComponents: [.hourAndMinute]
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+            .tint(RaverTheme.accent)
+            .environment(\.timeZone, eventTimeZone)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func secondarySummary(_ slot: EventUploadLineupSlotDraft) -> String {
         let members = slot.performerNames
             .prefix(slot.actType.performerCount)
@@ -4272,14 +4422,12 @@ private struct EventUploadWeekTimetableEditorSheet: View {
     }
 
     private func timeSummary(_ slot: EventUploadLineupSlotDraft) -> String {
-        guard let start = slot.startTime, let end = slot.endTime else {
+        guard let start = slot.startTime,
+              let end = slot.endTime,
+              let logicalDay = dayOptions.first(where: { $0.dayIndex == slot.dayIndex })?.date else {
             return LT("请填写演出时间", "Set start and end time", "出演時間を入力してください")
         }
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.timeZone = eventTimeZone
-        formatter.dateFormat = "HH:mm"
-        return "\(formatter.string(from: start)) - \(formatter.string(from: end))"
+        return EventUploadTimeDisplay.clockRange(start: start, end: end, logicalDay: logicalDay, timeZone: eventTimeZone)
     }
 
     private func timeBadgePrimary(_ slot: EventUploadLineupSlotDraft) -> String {

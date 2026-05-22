@@ -541,8 +541,10 @@ final class EventUploadFlowViewModel: ObservableObject {
                 ? LT("主舞台", "Main Stage", "メインステージ")
                 : imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
             slot.dayIndex = max(1, imported.dayIndex)
-            slot.startTime = timetableAIClockDate(imported.startTimeText, dayIndex: slot.dayIndex)
-            slot.endTime = timetableAIClockDate(imported.endTimeText, dayIndex: slot.dayIndex)
+            slot.startDayOffset = imported.startDayOffset
+            slot.endDayOffset = imported.endDayOffset
+            slot.startTime = timetableAIClockDate(imported.startTimeText, dayIndex: slot.dayIndex, dayOffset: imported.startDayOffset)
+            slot.endTime = timetableAIClockDate(imported.endTimeText, dayIndex: slot.dayIndex, dayOffset: imported.endDayOffset)
             slot.normalizePerformers()
             draft.timetableSlots.append(slot)
         }
@@ -793,6 +795,8 @@ final class EventUploadFlowViewModel: ObservableObject {
         ensureDefaultStageExistsIfNeeded()
         var slot = EventUploadLineupSlotDraft()
         slot.stageName = normalizedStageName(at: 0)
+        slot.startDayOffset = .sameDay
+        slot.endDayOffset = .sameDay
         slot.startTime = defaultLineupStartTime(dayIndex: 1)
         slot.endTime = defaultLineupEndTime(dayIndex: 1)
         draft.timetableSlots.append(slot)
@@ -809,6 +813,8 @@ final class EventUploadFlowViewModel: ObservableObject {
         let trimmedStage = stageName.trimmingCharacters(in: .whitespacesAndNewlines)
         slot.stageName = trimmedStage.isEmpty ? normalizedStageName(at: 0) : trimmedStage
         slot.dayIndex = max(dayIndex, 1)
+        slot.startDayOffset = .sameDay
+        slot.endDayOffset = .sameDay
         slot.startTime = defaultLineupStartTime(dayIndex: slot.dayIndex)
         slot.endTime = defaultLineupEndTime(dayIndex: slot.dayIndex)
         draft.timetableSlots.append(slot)
@@ -845,9 +851,13 @@ final class EventUploadFlowViewModel: ObservableObject {
             if isTimed {
                 slot.startTime = defaultLineupStartTime(dayIndex: slot.dayIndex)
                 slot.endTime = defaultLineupEndTime(dayIndex: slot.dayIndex)
+                slot.startDayOffset = .sameDay
+                slot.endDayOffset = .sameDay
             } else {
                 slot.startTime = nil
                 slot.endTime = nil
+                slot.startDayOffset = .sameDay
+                slot.endDayOffset = .sameDay
             }
         }
     }
@@ -1226,8 +1236,10 @@ final class EventUploadFlowViewModel: ObservableObject {
                                 performerNamesText: names.joined(separator: ", "),
                                 performerDJIDs: Array(repeating: nil, count: max(1, names.count)),
                                 performerAvatarURLs: Array(repeating: nil, count: max(1, names.count)),
-                                startTimeText: slot.normalizedStartTime ?? slot.startTimeText ?? "",
-                                endTimeText: slot.normalizedEndTime ?? slot.endTimeText ?? "",
+                                startTimeText: timetableAIEditableClockText(slot.normalizedStartTime ?? slot.startTimeText),
+                                endTimeText: timetableAIEditableClockText(slot.normalizedEndTime ?? slot.endTimeText),
+                                startDayOffset: timetableAISlotDayOffset(slot.normalizedStartTime ?? slot.startTimeText),
+                                endDayOffset: timetableAISlotDayOffset(slot.normalizedEndTime ?? slot.endTimeText),
                                 confidence: slot.confidence,
                                 notes: slot.notes ?? []
                             )
@@ -1247,6 +1259,32 @@ final class EventUploadFlowViewModel: ObservableObject {
         if performerCount >= 3 { return .b3b }
         if performerCount == 2 { return .b2b }
         return type == .solo ? .solo : type
+    }
+
+    private func timetableAISlotDayOffset(_ raw: String?) -> EventUploadSlotDayOffset {
+        guard let raw,
+              let (hour, _) = parseTimetableAIClock(raw)
+        else { return .sameDay }
+        return hour >= 24 ? .nextDay : .sameDay
+    }
+
+    private func timetableAIEditableClockText(_ raw: String?) -> String {
+        guard let raw,
+              let (hour, minute) = parseTimetableAIClock(raw)
+        else { return raw ?? "" }
+        return String(format: "%02d:%02d", hour % 24, minute)
+    }
+
+    private func parseTimetableAIClock(_ raw: String) -> (Int, Int)? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let hour = Int(parts[0]),
+              let minute = Int(parts[1]),
+              minute >= 0,
+              minute < 60
+        else { return nil }
+        return (hour, minute)
     }
 
     private func timetableAIPerformerNames(from imported: EventUploadTimetableAIEditableSlot) -> [String] {
@@ -1281,7 +1319,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    private func timetableAIClockDate(_ timeText: String, dayIndex: Int) -> Date? {
+    private func timetableAIClockDate(_ timeText: String, dayIndex: Int, dayOffset: EventUploadSlotDayOffset) -> Date? {
         let trimmed = timeText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
@@ -1295,9 +1333,9 @@ final class EventUploadFlowViewModel: ObservableObject {
 
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
-        let dayOffset = max(dayIndex - 1, 0) + rawHour / 24
+        let dayOffsetValue = max(dayIndex - 1, 0) + dayOffset.rawValue + rawHour / 24
         let hour = rawHour % 24
-        let baseDay = calendar.date(byAdding: .day, value: dayOffset, to: calendar.startOfDay(for: draft.startDate)) ?? draft.startDate
+        let baseDay = calendar.date(byAdding: .day, value: dayOffsetValue, to: calendar.startOfDay(for: draft.startDate)) ?? draft.startDate
         return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDay)
     }
 

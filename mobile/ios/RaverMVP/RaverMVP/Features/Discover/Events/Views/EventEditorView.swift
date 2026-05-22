@@ -4644,6 +4644,7 @@ struct EventLocationSearchCandidate: Identifiable {
     let title: String
     let subtitle: String
     let coordinate: CLLocationCoordinate2D?
+    let completion: MKLocalSearchCompletion?
 
     var displayLabel: String {
         let merged = [title, subtitle]
@@ -4651,6 +4652,16 @@ struct EventLocationSearchCandidate: Identifiable {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         return merged.isEmpty ? title : merged
+    }
+
+    func resolving(to coordinate: CLLocationCoordinate2D) -> EventLocationSearchCandidate {
+        EventLocationSearchCandidate(
+            id: id,
+            title: title,
+            subtitle: subtitle,
+            coordinate: coordinate,
+            completion: completion
+        )
     }
 }
 
@@ -4684,12 +4695,13 @@ final class EventLocationSearchModel: NSObject, ObservableObject, MKLocalSearchC
             queryCandidates = []
             return
         }
-        queryCandidates = completer.results.map { item in
+            queryCandidates = completer.results.map { item in
             EventLocationSearchCandidate(
                 id: "\(item.title)|\(item.subtitle)",
                 title: item.title,
                 subtitle: item.subtitle,
-                coordinate: nil
+                coordinate: nil,
+                completion: item
             )
         }
     }
@@ -4738,7 +4750,8 @@ final class EventLocationSearchModel: NSObject, ObservableObject, MKLocalSearchC
                         id: key,
                         title: title.isEmpty ? LT("附近地点", "Nearby place", "近くの場所") : title,
                         subtitle: subtitle,
-                        coordinate: coordinate
+                        coordinate: coordinate,
+                        completion: nil
                     )
                 )
                 if result.count >= 20 { break }
@@ -5020,12 +5033,20 @@ struct EventLocationPickerSheet: View {
         defer { isResolving = false }
 
         do {
-            let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = candidate.displayLabel
+            let request: MKLocalSearch.Request
+            if let completion = candidate.completion {
+                request = MKLocalSearch.Request(completion: completion)
+            } else {
+                let fallback = MKLocalSearch.Request()
+                fallback.naturalLanguageQuery = candidate.displayLabel
+                fallback.resultTypes = [.address, .pointOfInterest]
+                request = fallback
+            }
             request.resultTypes = [.address, .pointOfInterest]
             let response = try await MKLocalSearch(request: request).start()
-            if let coordinate = response.mapItems.first?.placemark.coordinate {
+            if let coordinate = resolvedCoordinate(from: response, candidate: candidate) {
                 pinCoordinate = coordinate
+                selectedCandidate = candidate.resolving(to: coordinate)
                 mapPosition = .region(
                     MKCoordinateRegion(
                         center: coordinate,
@@ -5046,37 +5067,52 @@ struct EventLocationPickerSheet: View {
 
         let coordinate = pinCoordinate
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedTitle = selectedCandidate?.title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let selectedSubtitle = selectedCandidate?.subtitle.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         var resolvedAddress = selectedCandidate?.displayLabel.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         var city: String?
         var country: String?
-        var placeName: String?
+        var placeName: String? = selectedTitle
 
         do {
             if let placemark = try await reverseGeocode(coordinate: coordinate) {
-                placeName = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                if placeName == nil {
+                    placeName = placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                }
                 city = (placemark.locality ?? placemark.subAdministrativeArea)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .nilIfEmpty
                 country = placemark.country?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
 
-                let components = [
-                    placemark.country,
-                    placemark.administrativeArea,
-                    placemark.locality,
-                    placemark.subLocality,
-                    placemark.thoroughfare,
-                    placemark.subThoroughfare,
-                    placemark.name
-                ]
-                let merged = components
-                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
-                if !merged.isEmpty {
-                    let unique = Array(NSOrderedSet(array: merged)) as? [String] ?? merged
-                    resolvedAddress = unique.joined(separator: " ")
+                if selectedSubtitle == nil || selectedSubtitle?.isEmpty == true {
+                    let components = [
+                        placemark.country,
+                        placemark.administrativeArea,
+                        placemark.locality,
+                        placemark.subLocality,
+                        placemark.thoroughfare,
+                        placemark.subThoroughfare,
+                        placemark.name
+                    ]
+                    let merged = components
+                        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+                    if !merged.isEmpty {
+                        let unique = Array(NSOrderedSet(array: merged)) as? [String] ?? merged
+                        resolvedAddress = unique.joined(separator: " ")
+                    }
                 }
             }
         } catch {
             // Keep coordinate-only selection available even if reverse geocoding fails.
+        }
+
+        if let selectedTitle {
+            placeName = selectedTitle
+        }
+        if let selectedSubtitle, !selectedSubtitle.isEmpty {
+            resolvedAddress = selectedSubtitle
+        } else if let selectedTitle, !selectedTitle.isEmpty, resolvedAddress.isEmpty {
+            resolvedAddress = selectedTitle
         }
 
         if resolvedAddress.isEmpty, !trimmedQuery.isEmpty {
@@ -5154,5 +5190,32 @@ struct EventLocationPickerSheet: View {
                 continuation.resume(returning: placemarks?.first)
             }
         }
+    }
+
+    private func resolvedCoordinate(from response: MKLocalSearch.Response, candidate: EventLocationSearchCandidate) -> CLLocationCoordinate2D? {
+        let normalizedTitle = candidate.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedSubtitle = candidate.subtitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        let bestItem = response.mapItems.first { item in
+            let itemTitle = (
+                item.name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                ?? item.placemark.name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                ?? ""
+            )
+            let subtitleParts = [
+                item.placemark.locality,
+                item.placemark.subLocality,
+                item.placemark.thoroughfare,
+                item.placemark.title
+            ]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            let itemSubtitle = subtitleParts.joined(separator: " ")
+
+            let titleMatched = normalizedTitle.isEmpty || itemTitle.contains(normalizedTitle) || normalizedTitle.contains(itemTitle)
+            let subtitleMatched = normalizedSubtitle.isEmpty || itemSubtitle.contains(normalizedSubtitle) || normalizedSubtitle.contains(itemSubtitle)
+            return titleMatched && subtitleMatched
+        }
+
+        return bestItem?.placemark.coordinate ?? response.mapItems.first?.placemark.coordinate
     }
 }

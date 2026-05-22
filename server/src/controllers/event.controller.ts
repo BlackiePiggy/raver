@@ -433,6 +433,16 @@ const applyFestivalDayIndexToDate = (
   timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
+const explicitFestivalDayCarryOffset = (
+  timeSource: Date,
+  eventStartDate: Date,
+  festivalDayIndex: number,
+  timeZone = DEFAULT_EVENT_TIME_ZONE
+): number => {
+  const logicalDay = applyFestivalDayIndexToDate(timeSource, eventStartDate, festivalDayIndex, timeZone);
+  return Math.max(0, diffEventDays(logicalDay, timeSource, timeZone));
+};
+
 const datePartsInTimeZone = (date: Date, timeZone: string): { year: number; month: number; day: number } => {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -568,8 +578,10 @@ const normalizeLineupSlots = (
       let endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedEnd.getTime() + 86_400_000);
 
       if (explicitFestivalDayIndex) {
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        const startCarryOffset = explicitFestivalDayCarryOffset(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        const endCarryOffset = explicitFestivalDayCarryOffset(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex + startCarryOffset, timeZone);
+        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex + endCarryOffset, timeZone);
         if (endTime < startTime) {
           endTime = new Date(endTime.getTime() + 86_400_000);
         }

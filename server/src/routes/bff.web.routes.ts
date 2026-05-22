@@ -1107,6 +1107,16 @@ const applyFestivalDayIndexToDate = (
   timeZone = DEFAULT_EVENT_TIME_ZONE
 ): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
 
+const explicitFestivalDayCarryOffset = (
+  timeSource: Date,
+  eventStartDate: Date,
+  festivalDayIndex: number,
+  timeZone = DEFAULT_EVENT_TIME_ZONE
+): number => {
+  const logicalDay = applyFestivalDayIndexToDate(timeSource, eventStartDate, festivalDayIndex, timeZone);
+  return Math.max(0, diffEventDays(logicalDay, timeSource, timeZone));
+};
+
 type ExistingLineupSlotForRebase = {
   id: string;
   festivalDayIndex: number | null;
@@ -1181,8 +1191,10 @@ const normalizeLineupSlots = (
       }
 
       if (explicitFestivalDayIndex) {
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        const startCarryOffset = explicitFestivalDayCarryOffset(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        const endCarryOffset = explicitFestivalDayCarryOffset(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
+        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex + startCarryOffset, timeZone);
+        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex + endCarryOffset, timeZone);
         if (endTime < startTime) {
           endTime = new Date(endTime.getTime() + 86_400_000);
         }

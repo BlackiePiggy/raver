@@ -149,6 +149,20 @@ struct EventUploadWeekRangeDraft: Identifiable, Hashable, Codable {
     var endDate: Date
 }
 
+enum EventUploadSlotDayOffset: Int, CaseIterable, Identifiable, Codable {
+    case sameDay = 0
+    case nextDay = 1
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .sameDay: return LT("当日", "Same Day", "当日")
+        case .nextDay: return LT("次日", "Next Day", "翌日")
+        }
+    }
+}
+
 struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
     var actType: EventLineupActType = .solo
@@ -157,6 +171,8 @@ struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
     var performerAvatarURLs: [String?] = [nil]
     var stageName: String = ""
     var dayIndex: Int = 1
+    var startDayOffset: EventUploadSlotDayOffset = .sameDay
+    var endDayOffset: EventUploadSlotDayOffset = .sameDay
     var startTime: Date?
     var endTime: Date?
 
@@ -225,6 +241,8 @@ struct EventUploadTimetableAIEditableSlot: Identifiable, Hashable {
     var performerAvatarURLs: [String?] = []
     var startTimeText: String
     var endTimeText: String
+    var startDayOffset: EventUploadSlotDayOffset = .sameDay
+    var endDayOffset: EventUploadSlotDayOffset = .sameDay
     var confidence: Double?
     var notes: [String]
 }
@@ -424,6 +442,7 @@ struct EventUploadDraft: Hashable, Codable {
             if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
             return lhs.startTime < rhs.startTime
         }
+        let eventTimeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
         timetableSlots = parsedSlots.map { slot in
             let act = EventLineupActCodec.parse(slot: slot)
             var draftSlot = EventUploadLineupSlotDraft(
@@ -433,6 +452,8 @@ struct EventUploadDraft: Hashable, Codable {
                 performerAvatarURLs: act.performers.map(\.avatarUrl),
                 stageName: slot.stageName ?? "",
                 dayIndex: slot.festivalDayIndex ?? 1,
+                startDayOffset: EventUploadDraft.slotDayOffset(for: slot.startTime, dayIndex: slot.festivalDayIndex ?? 1, eventStartDate: startDate, timeZone: eventTimeZone),
+                endDayOffset: EventUploadDraft.slotDayOffset(for: slot.endTime, dayIndex: slot.festivalDayIndex ?? 1, eventStartDate: startDate, timeZone: eventTimeZone),
                 startTime: slot.startTime,
                 endTime: slot.endTime
             )
@@ -449,6 +470,14 @@ struct EventUploadDraft: Hashable, Codable {
         if !mergedStages.isEmpty {
             stageEntries = Array(NSOrderedSet(array: mergedStages)) as? [String] ?? mergedStages
         }
+    }
+
+    private static func slotDayOffset(for date: Date, dayIndex: Int, eventStartDate: Date, timeZone: TimeZone) -> EventUploadSlotDayOffset {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let logicalDay = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0), to: calendar.startOfDay(for: eventStartDate)) ?? eventStartDate
+        let offset = calendar.dateComponents([.day], from: calendar.startOfDay(for: logicalDay), to: calendar.startOfDay(for: date)).day ?? 0
+        return offset > 0 ? .nextDay : .sameDay
     }
 
     private mutating func hydrateLineupOnlySlots(from event: WebEvent) {
