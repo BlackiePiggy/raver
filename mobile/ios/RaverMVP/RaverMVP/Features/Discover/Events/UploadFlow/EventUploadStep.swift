@@ -6,6 +6,7 @@ enum EventUploadStep: String, CaseIterable, Identifiable, Codable {
     case time
     case timetable
     case lineup
+    case tickets
     case review
 
     var id: String { rawValue }
@@ -17,7 +18,8 @@ enum EventUploadStep: String, CaseIterable, Identifiable, Codable {
         case .time: return LT("周期", "Schedule", "日程")
         case .timetable: return LT("时间表", "Timetable", "タイムテーブル")
         case .lineup: return LT("阵容", "Lineup", "ラインナップ")
-        case .review: return LT("票务", "Tickets", "チケット")
+        case .tickets: return LT("票务", "Tickets", "チケット")
+        case .review: return LT("检查", "Review", "確認")
         }
     }
 

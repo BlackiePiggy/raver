@@ -248,3 +248,46 @@ extension JSONEncoder {
         return encoder
     }
 }
+
+extension Date {
+    func eventArchiveDateText(in timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: self)
+    }
+
+    func normalizedEventArchiveDate(in timeZone: TimeZone) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day], from: self)
+        return calendar.date(from: DateComponents(
+            timeZone: timeZone,
+            year: components.year,
+            month: components.month,
+            day: components.day,
+            hour: 12,
+            minute: 0,
+            second: 0
+        )) ?? self
+    }
+
+    static func eventArchiveDate(from text: String, timeZone: TimeZone) -> Date? {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let match = normalized.wholeMatch(of: /(\d{4})-(\d{2})-(\d{2})/)
+        guard let match else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(
+            timeZone: timeZone,
+            year: Int(match.1),
+            month: Int(match.2),
+            day: Int(match.3),
+            hour: 12,
+            minute: 0,
+            second: 0
+        ))
+    }
+}

@@ -16,6 +16,25 @@
 - 对齐 `festival-viewer` 的六种图片分区：`poster / lineup / timetable / cover / map / other`。
 - 为后续直接替换当前上传页做隔离：新增和编辑入口都切 route 或 feature flag，不迁移旧页面内部状态。
 
+## 进度跟踪
+
+- [x] 新建独立 `EventUploadFlow`，与旧 `EventEditorView` 路由隔离
+- [x] 新增/编辑共用新上传 UI，并支持本地草稿恢复
+- [x] 第一页六种图片分区、单列布局、仅相册上传、双主题适配
+- [x] 基础信息页接入主办方绑定、时区绑定、详细地址与地图选点解耦
+- [x] 活动时间页支持单日 / 多日 / 多 Week 与高级跨天切日设置
+- [x] 时间表页支持 Week 维度编辑、舞台排序、节目折叠卡片编辑
+- [x] 仅阵容页支持单独维护 lineup，并与 timetable 路径分离
+- [x] 票务改为多票档录入，并新增提交前 review 页
+- [x] 搜索绑定改为实时候选 + 行内反馈，移除输入时全局 alert 打断键盘
+- [x] 编辑保存一致性补扫一轮：活动名、主办方、原文链接、时区、地图选点、详细地址回填与提交链路已对齐
+- [x] 活动日期/时区逻辑改为对齐 festival-viewer：按活动时区解释 date-only，避免 Seoul 等时区出现选 6/13 保存后变 6/14
+- [x] 多语言字段改为“默认仅编辑系统语言字段 + 可展开补充其他语言”，覆盖活动名称/城市/国家/详细地址
+- [x] 提交 mapper 移除自动把默认语言复制到其他语言字段的逻辑；未手填的多语言字段保持为空
+- [x] 时间表时间选择与展示改为显式使用活动时区，对齐 festival-viewer 的 wall-clock 语义
+- [ ] 对照 Discover「流派树」与 festival-viewer 继续细收搜索交互细节
+- [ ] 继续做一轮真机/模拟器走查，收剩余排版与交互边角
+
 ## 不做的事
 
 - 不在 V2 里直接删除或重构旧 `EventEditorView`。
@@ -67,7 +86,7 @@ HTML 原型是 10 步。我建议 App 端合并为 6 个主步骤，内部用可
    - 阵容图识别进入草稿，不直接写入最终表单，继续沿用当前“导入草稿可编辑再应用”的安全设计。
 
 7. **票务与提交**
-   - 只做简单票务：最低价、最高价、币种、跳转链接。
+   - 只做简单票务：多个可选票档、币种、跳转链接。
    - 购票链接保留独立一行输入。
    - 提交后根据 `CreateEventResult` 展示两种成功态：
      - 管理员直接创建：可返回活动页，也可进入活动详情。
@@ -244,14 +263,23 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 编辑回填：时区搜索词优先保持英文 / ASCII，避免 `Hong Kong` 被回填成 `香港` 导致再次提交异常
 - [x] lineup-only 数据结构支持 B2B / B3B 多成员：新增成员名与成员 DJ 绑定顺序字段，避免只保存第一个 DJ
 - [x] iOS 阵容 tab / 编辑回填支持从 `lineupArtists.members / djs / memberDjIds / memberNames` 恢复多成员头像、名称与绑定态
+- [x] 编辑保存一致性：`name` / `nameI18n` 已双写，避免只改当前语言后列表仍显示旧值
+- [x] 编辑保存一致性：主办方手填与绑定都已进入 iOS create/update payload，`wikiFestivalId` 与 `organizerName` 可正确回填、改绑与清空
+- [x] 编辑保存一致性：原文链接字段改为对齐后端 `sourceEventUrl`，编辑回填优先读取 `sourceEventUrl`，旧数据兼容回退 `officialWebsite`
+- [x] 编辑保存一致性：上传流程在未提供“官网链接”UI 的前提下，不再在编辑提交时误覆盖后端 `officialWebsite`
+- [x] 编辑保存一致性：时区、地图选点、详细地址、城市国家的回填与清空链路已再核查一轮，并保留解耦关系
+- [x] 活动日期选择改造：Create / Update payload 提交日期时不再发本地时区 ISO 时间，而是像 festival-viewer 一样按活动时区编码为 `YYYY-MM-DD`
+- [x] 活动日期显示改造：时间页日期选择器、Week 日期选择器、Week 摘要、review 日期摘要均切到活动时区显示
+- [x] 活动日期回填改造：编辑已有 event 时，先按 event 自身时区归一化为 date-only 再进入表单，避免回填后日期偏移
+- [x] 活动时区切换改造：切换城市时区时保留用户已选的“日历日期”不变，仅重新按新时区解释并提交
 - [x] server canonical event artist 同步支持成员顺序、未绑定成员占位和成员名快照
 - [x] festival-viewer 的 `lineupArtists` 归一化与后端映射支持 `memberNames` / `memberDjIds`
 - [x] 活动上传链路中的 `lineupArtists` 已停止使用旧 `djIds`，统一迁移到 `memberDjIds / memberNames`
 - [x] 活动时间表槽位主链路已开始统一到 `memberDjIds / memberNames`，server / festival-viewer / iOS mapper 已同步
 - [x] 编辑活动提交流程已补齐 `lineupSlots` 更新映射，避免 timetable 编辑不生效
 - [x] 第 1 页图片卡片继续收紧排版，与附件 html 的移动端层级更贴近（已按最新要求改回单列，并移除每个图名下的解释文字）
-- [ ] Week 时间表编辑页继续优化完成态卡片：已添加 DJ 展示为头像 + 名称 + 补充信息，减少编辑态挤占
-- [ ] Week 时间表编辑页继续优化操作流，避免展开/编辑/删除的逻辑别扭
+- [x] Week 时间表编辑页继续优化完成态卡片：已添加 DJ 展示为头像 + 名称 + 时间信息，减少编辑态挤占
+- [x] Week 时间表编辑页继续优化操作流，改为与 lineup-only 一致的展开 / 确定 / 收起 / 编辑节奏
 - [ ] lineup-only 页面继续向 festival-viewer 的纯阵容录入方式收口
 - [x] lineup-only 页面已继续向附件 html 第 8 页靠一轮：补齐更清晰的概览头部、计数摘要、阵容卡分层和成员绑定状态展示
 - [x] 第 5 页阵容概览已压缩成单行摘要，移除大面积统计块与说明文案
@@ -262,6 +290,11 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 第 4 页：Week 时间表编辑页顶部已收敛为 `Week X + 时间跨度`，移除多余概览信息
 - [x] 第 4 页：删除舞台时会同步清理相关 timetable 草稿，修复“已删光舞台仍提示至少添加 1 个舞台”的残留校验
 - [x] 第 4 页：时间表校验不再强制必须存在舞台；空舞台名按“主舞台”归一，时间表为空时可直接下一步
+- [x] 第 3 页：活动周期单日 / 多日 / 多 Week 卡片高度继续降低，单日日期选择器居中，并在日期附近展示当前绑定时区
+- [x] 第 4 页：舞台支持上下移动排序，多个舞台不允许重名，多个空舞台会按“主舞台”重复拦截
+- [x] 第 4 页：Week 编辑页的“在当前 Week 添加节目”按钮移到节目列表底部，新节目默认展开编辑
+- [x] 第 6 页：票务改为可跳过的多票档数组，票档名称可选、价格必填；提交前检查拆成独立最后一步
+- [x] 搜索体验：城市时区、主办方、DJ 绑定输入时会实时 debounce 给出候选结果
 - [ ] 第 5 页轻量卡片继续细修：补充更像附件 html 的收起态密度、按钮对齐与层级节奏
 - [ ] 最终再做一轮 Light / Dark 主题细节 polish
 - [x] 完整 build 验证并回填本 md 的最终状态
@@ -273,7 +306,7 @@ V2 新建和编辑活动仍走现有 BFF：
 - 地点：城市、国家、详细地址必填；地图坐标可选。
 - 阵容：没有阵容可以跳过；如果已有 pending lineup entry，必须确认或删除。
 - 时间表：支持跨天；`dayRolloverHour` 默认为 6，允许高级设置。
-- 票务：URL 格式校验；最低价/最高价必须是合法数字；币种标准化为大写。
+- 票务：URL 格式校验；票档可为空，新增票档后价格必须是合法数字，票档名称可选；币种标准化为大写。
 
 ## 主题与视觉
 
@@ -503,6 +536,14 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] 实现自动保存：字段变更 debounce 1 秒。
 - [x] 实现切后台自动保存。
 - [x] 实现离开页面前保存/放弃确认。
+- [x] 修复“放弃草稿”后页面 `onDisappear` 又把内存草稿重新保存的问题。
+- [x] 修复编辑活动时主办方 `wikiFestivalId` 未进入 update payload，导致绑定/解绑保存不生效的问题。
+- [x] 修复编辑活动回填时把活动地图坐标误当成城市时区候选坐标，导致不改内容直提也触发 timezone mismatch 的问题。
+- [x] 修复编辑活动详细地址仅从 `manualLocation.detailAddressI18n` 回填，历史数据只在 `formattedAddressI18n` 时显示为空的问题。
+- [x] 修复编辑活动地图选点仅依赖顶层 `latitude/longitude` 回填，`locationPoint.location` 存在时绑定态丢失的问题。
+- [x] 修复编辑活动多日事件重新进入时错误回填为单日模式的问题，并让舞台顺序优先尊重服务端 `stageOrder`。
+- [x] 补齐地图选点绑定态清空入口，并让 edit 提交时能显式清空 `locationPoint / latitude / longitude`。
+- [x] 修复编辑活动名称只更新 `name` 未同步 `nameI18n`，导致展示层继续被旧本地化名称覆盖的问题。
 - [x] 实现草稿 14 天过期清理。
 - [x] 实现提交成功后清理草稿。
 - [x] 实现新建活动“继续上次草稿/重新开始”提示。
@@ -539,7 +580,10 @@ V2 新建和编辑活动仍走现有 BFF：
 
 - [x] 实现单日/多日/多 Week 模式选择。
 - [x] 实现开始日期、结束日期选择。
+- [x] 单日日期选择器居中展示，并在日期附近展示当前绑定时区。
 - [x] 实现城市时区搜索，复用 `/v1/event-timezones/search`。
+- [x] 城市时区输入时实时 debounce 展示候选结果。
+- [x] 城市时区标题旁补充英文城市名搜索提示，例如香港使用 Hong Kong。
 - [x] 实现新建活动必须从候选确认时区；编辑旧活动允许保留已有 timezone，修改时需重新搜索确认。
 - [x] 实现跨时区日期预览。
 - [x] 实现 `dayRolloverHour` 默认 6。
@@ -560,8 +604,10 @@ V2 新建和编辑活动仍走现有 BFF：
 
 - [x] 实现舞台列表新增、删除。
 - [x] 实现舞台列表排序。
+- [x] 实现舞台重名拦截，多个空舞台按“主舞台”重复处理。
 - [x] 实现 lineup 手动添加 DJ。
 - [x] 实现 DJ 库搜索绑定。
+- [x] DJ 名称输入时实时 debounce 展示候选结果。
 - [x] 实现 solo/b2b/group act type。
 - [x] 实现无阵容跳过。
 - [x] 实现 timetable slot 的 day/stage/start/end 编辑；舞台为空时默认主舞台。
@@ -573,11 +619,12 @@ V2 新建和编辑活动仍走现有 BFF：
 
 ### 9. Step 6 票务、预览与提交
 
-- [x] 实现最低价输入。
-- [x] 实现最高价输入。
+- [x] 实现多个票档手动添加。
+- [x] 实现票档名称可选、票档价格校验。
 - [x] 实现币种输入并标准化大写。
 - [x] 实现票务跳转链接输入。
 - [x] 实现 URL 格式校验。
+- [x] 票务页和提交前检查页拆分为两个独立步骤。
 - [x] 实现最终预览：媒体、基础、时间地点、阵容/舞台、票务。
 - [x] 预览页错误能跳回对应步骤。
 - [x] 管理员提交走直接创建/更新链路。
@@ -662,6 +709,7 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] V2 时间页跨时区日期预览接入后再次通过 iOS Debug simulator build。
 - [x] V2 切后台保存和离开前保存/放弃确认接入后再次通过 iOS Debug simulator build。
 - [x] V2 字段变更 1 秒 debounce 自动保存接入后再次通过 iOS Debug simulator build。
+- [x] V2 每页大标题下方说明文案移除，减少移动端页面占用。
 - [x] 后端 create 对所有角色强制 poster 资产后通过 `pnpm build`。
 - [x] V2 最终回归再次通过 iOS Debug simulator build。
 - [x] 活动列表右下角 +、Discover 编辑、Profile 发布/编辑入口默认直连 V2 后再次通过 iOS Debug simulator build。
@@ -673,6 +721,11 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] `festival-viewer` 本轮 `memberDjIds / memberNames` 迁移后再次通过 `node --check`。
 - [x] server 本轮 `memberDjIds / memberNames` 迁移后再次通过 `pnpm build`。
 - [x] iOS 本轮 `memberDjIds / memberNames` 迁移后已清理连带页面的旧 `slot.djIds` 引用，并再次通过全量 build。
+- [x] iOS 多语言展开输入与“只填当前语言不自动补齐其他语言”本轮改造后再次通过 iOS Debug simulator build。
+- [x] 时间表页与仅阵容页 AI 入口样式已统一为基础信息页同款渐变按钮，并补充“可跳过”提示。
+- [x] 时间表页 AI 识别正式接入：支持从草稿图片选择、上传本地草稿图、调用 Coze 时间表识别代理、在 sheet 内展示/编辑识别结果并增量写入 timetable。
+- [x] server 新增 `/v1/events/timetable/import-image` Coze 代理，透传 event 日期、时区、跨天切日与 Week 上下文，并通过 `pnpm build`。
+- [x] iOS 时间表 AI 识别接入后再次通过 iOS Debug simulator build。
 
 ### 14. 收尾与切换
 

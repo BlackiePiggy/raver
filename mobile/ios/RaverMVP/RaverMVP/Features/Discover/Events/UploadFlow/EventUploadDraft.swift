@@ -64,6 +64,10 @@ struct EventUploadLocalizedFields: Hashable, Codable {
     var ja: String = ""
     var enFull: String = ""
 
+    var hasAnyValue: Bool {
+        [zh, en, ja, enFull].contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     func primaryValue(preferredLanguage: EventUploadPreferredLanguage) -> String {
         switch preferredLanguage {
         case .zh: return zh.eventUploadNilIfBlank ?? en.eventUploadNilIfBlank ?? ja.eventUploadNilIfBlank ?? enFull
@@ -72,16 +76,24 @@ struct EventUploadLocalizedFields: Hashable, Codable {
         }
     }
 
-    func currentValue(preferredLanguage: EventUploadPreferredLanguage) -> String {
-        switch preferredLanguage {
+    func value(for language: EventUploadPreferredLanguage) -> String {
+        switch language {
         case .zh: return zh
         case .en: return en
         case .ja: return ja
         }
     }
 
+    func currentValue(preferredLanguage: EventUploadPreferredLanguage) -> String {
+        value(for: preferredLanguage)
+    }
+
     mutating func setCurrentValue(_ value: String, preferredLanguage: EventUploadPreferredLanguage) {
-        switch preferredLanguage {
+        setValue(value, for: preferredLanguage)
+    }
+
+    mutating func setValue(_ value: String, for language: EventUploadPreferredLanguage) {
+        switch language {
         case .zh:
             zh = value
         case .en:
@@ -89,6 +101,15 @@ struct EventUploadLocalizedFields: Hashable, Codable {
         case .ja:
             ja = value
         }
+    }
+
+    func secondaryValueCount(excluding preferredLanguage: EventUploadPreferredLanguage, includeEnglishFull: Bool = false) -> Int {
+        var count = 0
+        if preferredLanguage != .zh, !zh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
+        if preferredLanguage != .en, !en.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
+        if preferredLanguage != .ja, !ja.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
+        if includeEnglishFull, !enFull.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
+        return count
     }
 }
 
@@ -105,11 +126,21 @@ enum EventUploadPreferredLanguage: String, Codable {
     }
 }
 
+struct EventUploadTicketTierDraft: Identifiable, Hashable, Codable {
+    var id: UUID = UUID()
+    var name: String = ""
+    var price: String = ""
+}
+
 struct EventUploadTicketDraft: Hashable, Codable {
-    var priceMin: String = ""
-    var priceMax: String = ""
     var currency: String = "CNY"
     var ticketURL: String = ""
+    var tiers: [EventUploadTicketTierDraft] = []
+
+    var hasTicketInfo: Bool {
+        !ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || tiers.contains { !$0.price.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
 }
 
 struct EventUploadWeekRangeDraft: Identifiable, Hashable, Codable {
@@ -182,6 +213,27 @@ struct EventUploadLineupOnlySlotDraft: Identifiable, Hashable, Codable {
     }
 }
 
+struct EventUploadTimetableAIEditableSlot: Identifiable, Hashable {
+    var id: UUID = UUID()
+    var selected: Bool = true
+    var weekIndex: Int
+    var dayIndex: Int
+    var dayLabel: String
+    var stageName: String
+    var actType: EventLineupActType
+    var performerNamesText: String
+    var startTimeText: String
+    var endTimeText: String
+    var confidence: Double?
+    var notes: [String]
+}
+
+struct EventUploadTimetableAIImportResult: Hashable {
+    var slots: [EventUploadTimetableAIEditableSlot]
+    var warnings: [String]
+    var unparsedTexts: [String]
+}
+
 struct EventUploadDraft: Hashable, Codable {
     var id: UUID = UUID()
     var mode: EventUploadMode = .create
@@ -236,7 +288,7 @@ struct EventUploadDraft: Hashable, Codable {
             ?? event.wikiFestival?.name
             ?? event.organizerName
             ?? ""
-        draft.sourceURL = event.officialWebsite ?? ""
+        draft.sourceURL = event.sourceEventUrl ?? event.officialWebsite ?? ""
         draft.city = EventUploadLocalizedFields(
             zh: event.cityI18n?.zh ?? "",
             en: event.cityI18n?.en ?? event.city ?? "",
@@ -248,20 +300,27 @@ struct EventUploadDraft: Hashable, Codable {
             ja: event.countryI18n?.ja ?? "",
             enFull: event.countryI18n?.enFull ?? ""
         )
+        let detailAddressText = event.manualLocation?.detailAddressI18n ?? event.manualLocation?.formattedAddressI18n
         draft.detailAddress = EventUploadLocalizedFields(
-            zh: event.manualLocation?.detailAddressI18n?.zh ?? "",
-            en: event.manualLocation?.detailAddressI18n?.en ?? "",
-            ja: event.manualLocation?.detailAddressI18n?.ja ?? "",
-            enFull: event.manualLocation?.detailAddressI18n?.enFull ?? ""
+            zh: detailAddressText?.zh ?? "",
+            en: detailAddressText?.en ?? "",
+            ja: detailAddressText?.ja ?? "",
+            enFull: detailAddressText?.enFull ?? ""
         )
-        draft.startDate = event.startDate
-        draft.endDate = event.endDate
-        draft.weekRanges = [EventUploadWeekRangeDraft(startDate: event.startDate, endDate: event.endDate)]
         draft.timeZoneIdentifier = event.timeZone ?? draft.timeZoneIdentifier
-        if let eventTimeZone = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines), !eventTimeZone.isEmpty {
+        let eventTimeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
+        let normalizedStartDate = event.startDate.normalizedEventArchiveDate(in: eventTimeZone)
+        let normalizedEndDate = event.endDate.normalizedEventArchiveDate(in: eventTimeZone)
+        draft.startDate = normalizedStartDate
+        draft.endDate = normalizedEndDate
+        draft.weekRanges = [EventUploadWeekRangeDraft(startDate: normalizedStartDate, endDate: normalizedEndDate)]
+        var eventCalendar = Calendar(identifier: .gregorian)
+        eventCalendar.timeZone = eventTimeZone
+        draft.scheduleMode = eventCalendar.isDate(normalizedStartDate, inSameDayAs: normalizedEndDate) ? .singleDay : .multiDay
+        if let eventTimeZoneID = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines), !eventTimeZoneID.isEmpty {
             let localizedCityEn = event.cityI18n?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let rawCity = event.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let fallbackCityFromTimeZone = eventTimeZone
+            let fallbackCityFromTimeZone = eventTimeZoneID
                 .split(separator: "/")
                 .last
                 .map { String($0).replacingOccurrences(of: "_", with: " ") } ?? ""
@@ -273,7 +332,7 @@ struct EventUploadDraft: Hashable, Codable {
                 ? (event.countryI18n?.en ?? event.country ?? "")
                 : (event.country ?? "")
             let effectiveCityName = cityName.isEmpty ? fallbackCityFromTimeZone : cityName
-            draft.timeZoneSearchQuery = effectiveCityName.isEmpty ? eventTimeZone : effectiveCityName
+            draft.timeZoneSearchQuery = effectiveCityName.isEmpty ? eventTimeZoneID : effectiveCityName
             draft.selectedTimeZoneLookup = EventTimezoneLookupItem(
                 city: effectiveCityName,
                 cityAscii: effectiveCityName,
@@ -283,26 +342,42 @@ struct EventUploadDraft: Hashable, Codable {
                 country: countryName,
                 iso2: "",
                 iso3: "",
-                timezone: eventTimeZone,
-                lat: event.latitude,
-                lng: event.longitude,
+                timezone: eventTimeZoneID,
+                lat: nil,
+                lng: nil,
                 population: nil,
                 label: [effectiveCityName, countryName].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.joined(separator: ", "),
                 matchSource: "event-edit-hydrate"
             )
         }
         draft.dayRolloverHour = event.dayRolloverHour ?? 6
-        draft.latitude = event.latitude
-        draft.longitude = event.longitude
+        draft.latitude = event.latitude ?? event.locationPoint?.location?.lat
+        draft.longitude = event.longitude ?? event.locationPoint?.location?.lng
         draft.pickedMapAddress = event.locationPoint?.formattedAddressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
             ?? event.locationPoint?.addressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
             ?? ""
         draft.pickedPlaceName = event.locationPoint?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? ""
+        let hydratedTicketTiers = event.ticketTiers
+            .sorted { $0.sortOrder < $1.sortOrder }
+            .map { tier in
+                EventUploadTicketTierDraft(
+                    name: tier.name,
+                    price: tier.price.map { String($0) } ?? ""
+                )
+            }
+        let fallbackTicketTiers: [EventUploadTicketTierDraft]
+        if hydratedTicketTiers.isEmpty {
+            fallbackTicketTiers = [event.ticketPriceMin, event.ticketPriceMax]
+                .compactMap { price in
+                    price.map { EventUploadTicketTierDraft(price: String($0)) }
+                }
+        } else {
+            fallbackTicketTiers = hydratedTicketTiers
+        }
         draft.ticket = EventUploadTicketDraft(
-            priceMin: event.ticketPriceMin.map { String($0) } ?? "",
-            priceMax: event.ticketPriceMax.map { String($0) } ?? "",
             currency: event.ticketCurrency ?? "CNY",
-            ticketURL: event.ticketUrl ?? ""
+            ticketURL: event.ticketUrl ?? "",
+            tiers: fallbackTicketTiers
         )
         draft.hydrateTimetableSlots(from: event)
         draft.hydrateLineupOnlySlots(from: event)
@@ -366,8 +441,12 @@ struct EventUploadDraft: Hashable, Codable {
         let stagesFromSlots = parsedSlots.compactMap { slot in
             slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines).eventUploadNilIfBlank
         }
-        if !stagesFromSlots.isEmpty {
-            stageEntries = Array(NSOrderedSet(array: stagesFromSlots)) as? [String] ?? stagesFromSlots
+        let stageOrderFromEvent = (event.stageOrder ?? []).compactMap { stage in
+            stage.trimmingCharacters(in: .whitespacesAndNewlines).eventUploadNilIfBlank
+        }
+        let mergedStages = stageOrderFromEvent + stagesFromSlots.filter { !stageOrderFromEvent.contains($0) }
+        if !mergedStages.isEmpty {
+            stageEntries = Array(NSOrderedSet(array: mergedStages)) as? [String] ?? mergedStages
         }
     }
 

@@ -291,6 +291,16 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func importEventTimetableFromImage(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportResponse {
+        let response: BFFEnvelope<EventTimetableImageImportResponse> = try await request(
+            path: "/v1/events/timetable/import-image",
+            method: "POST",
+            body: input,
+            timeoutInterval: 120
+        )
+        return response.data
+    }
+
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
         let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
             path: "/v1/feed/upload-image",
@@ -1360,7 +1370,8 @@ final class LiveWebFeatureService: WebFeatureService {
         path: String,
         method: String,
         queryItems: [URLQueryItem] = [],
-        body: Encodable? = nil
+        body: Encodable? = nil,
+        timeoutInterval: TimeInterval = 20
     ) async throws -> T {
         let url = try buildURL(path: path, queryItems: queryItems)
 #if DEBUG
@@ -1370,7 +1381,7 @@ final class LiveWebFeatureService: WebFeatureService {
 #endif
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 20
+        request.timeoutInterval = timeoutInterval
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")

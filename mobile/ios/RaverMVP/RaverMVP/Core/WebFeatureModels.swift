@@ -585,6 +585,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var imageAssets: [WebEventImageAsset]? = nil
     var eventType: String?
     var organizerName: String?
+    var sourceEventUrl: String? = nil
     var city: String?
     var country: String?
     var manualLocation: WebEventManualLocation? = nil
@@ -665,12 +666,15 @@ struct EventTimezoneLookupItem: Codable, Hashable, Identifiable {
     }
 }
 
-struct CreateEventInput: Codable {
+struct CreateEventInput: Encodable {
     var name: String
+    var nameI18n: WebBiText? = nil
     var wikiFestivalId: String? = nil
     var abbreviation: String? = nil
     var description: String?
     var eventType: String? = nil
+    var organizerName: String? = nil
+    var sourceEventUrl: String? = nil
     var city: String?
     var cityI18n: WebBiText? = nil
     var country: String?
@@ -703,6 +707,94 @@ struct CreateEventInput: Codable {
     var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case nameI18n
+        case wikiFestivalId
+        case abbreviation
+        case description
+        case eventType
+        case organizerName
+        case sourceEventUrl
+        case city
+        case cityI18n
+        case country
+        case countryI18n
+        case manualLocation
+        case locationPoint
+        case latitude
+        case longitude
+        case ticketUrl
+        case ticketCurrency
+        case ticketNotes
+        case officialWebsite
+        case startDate
+        case endDate
+        case timeZone
+        case timeZoneCity
+        case timeZoneProvince
+        case timeZoneCountry
+        case timeZoneStateAnsi
+        case timeZoneLat
+        case timeZoneLng
+        case startTime
+        case endTime
+        case dayRolloverHour
+        case stageOrder
+        case coverImageUrl
+        case lineupImageUrl
+        case imageAssets
+        case ticketTiers
+        case lineupArtists
+        case lineupSlots
+        case status
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        let resolvedTimeZone = TimeZone(identifier: timeZone ?? "") ?? TimeZone(identifier: "UTC") ?? .current
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(nameI18n, forKey: .nameI18n)
+        try container.encodeIfPresent(wikiFestivalId, forKey: .wikiFestivalId)
+        try container.encodeIfPresent(abbreviation, forKey: .abbreviation)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(eventType, forKey: .eventType)
+        try container.encodeIfPresent(organizerName, forKey: .organizerName)
+        try container.encodeIfPresent(sourceEventUrl, forKey: .sourceEventUrl)
+        try container.encodeIfPresent(city, forKey: .city)
+        try container.encodeIfPresent(cityI18n, forKey: .cityI18n)
+        try container.encodeIfPresent(country, forKey: .country)
+        try container.encodeIfPresent(countryI18n, forKey: .countryI18n)
+        try container.encodeIfPresent(manualLocation, forKey: .manualLocation)
+        try container.encodeIfPresent(locationPoint, forKey: .locationPoint)
+        try container.encodeIfPresent(latitude, forKey: .latitude)
+        try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(ticketUrl, forKey: .ticketUrl)
+        try container.encodeIfPresent(ticketCurrency, forKey: .ticketCurrency)
+        try container.encodeIfPresent(ticketNotes, forKey: .ticketNotes)
+        try container.encodeIfPresent(officialWebsite, forKey: .officialWebsite)
+        try container.encode(startDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .startDate)
+        try container.encode(endDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .endDate)
+        try container.encodeIfPresent(timeZone, forKey: .timeZone)
+        try container.encodeIfPresent(timeZoneCity, forKey: .timeZoneCity)
+        try container.encodeIfPresent(timeZoneProvince, forKey: .timeZoneProvince)
+        try container.encodeIfPresent(timeZoneCountry, forKey: .timeZoneCountry)
+        try container.encodeIfPresent(timeZoneStateAnsi, forKey: .timeZoneStateAnsi)
+        try container.encodeIfPresent(timeZoneLat, forKey: .timeZoneLat)
+        try container.encodeIfPresent(timeZoneLng, forKey: .timeZoneLng)
+        try container.encodeIfPresent(startTime, forKey: .startTime)
+        try container.encodeIfPresent(endTime, forKey: .endTime)
+        try container.encodeIfPresent(dayRolloverHour, forKey: .dayRolloverHour)
+        try container.encodeIfPresent(stageOrder, forKey: .stageOrder)
+        try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
+        try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
+        try container.encodeIfPresent(imageAssets, forKey: .imageAssets)
+        try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
+        try container.encodeIfPresent(lineupArtists, forKey: .lineupArtists)
+        try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
+        try container.encodeIfPresent(status, forKey: .status)
+    }
 }
 
 struct ContentSubmissionSummary: Codable, Identifiable, Hashable {
@@ -861,10 +953,13 @@ enum CreatePostResult: Decodable, Hashable {
 
 struct UpdateEventInput: Encodable {
     var name: String?
+    var nameI18n: WebBiText? = nil
     var wikiFestivalId: String? = nil
     var abbreviation: String? = nil
     var description: String?
     var eventType: String? = nil
+    var organizerName: String? = nil
+    var sourceEventUrl: String? = nil
     var city: String?
     var cityI18n: WebBiText? = nil
     var country: String?
@@ -900,13 +995,20 @@ struct UpdateEventInput: Encodable {
     var clearCityI18n: Bool = false
     var clearCountryI18n: Bool = false
     var clearManualLocation: Bool = false
+    var clearWikiFestivalId: Bool = false
+    var clearLocationPoint: Bool = false
+    var clearLatitude: Bool = false
+    var clearLongitude: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case name
+        case nameI18n
         case wikiFestivalId
         case abbreviation
         case description
         case eventType
+        case organizerName
+        case sourceEventUrl
         case city
         case cityI18n
         case country
@@ -943,11 +1045,19 @@ struct UpdateEventInput: Encodable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        let resolvedTimeZone = TimeZone(identifier: timeZone ?? "") ?? TimeZone(identifier: "UTC") ?? .current
         try container.encodeIfPresent(name, forKey: .name)
-        try container.encodeIfPresent(wikiFestivalId, forKey: .wikiFestivalId)
+        try container.encodeIfPresent(nameI18n, forKey: .nameI18n)
+        if clearWikiFestivalId {
+            try container.encodeNil(forKey: .wikiFestivalId)
+        } else {
+            try container.encodeIfPresent(wikiFestivalId, forKey: .wikiFestivalId)
+        }
         try container.encodeIfPresent(abbreviation, forKey: .abbreviation)
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(eventType, forKey: .eventType)
+        try container.encodeIfPresent(organizerName, forKey: .organizerName)
+        try container.encodeIfPresent(sourceEventUrl, forKey: .sourceEventUrl)
         try container.encodeIfPresent(city, forKey: .city)
         if clearCityI18n {
             try container.encodeNil(forKey: .cityI18n)
@@ -965,15 +1075,31 @@ struct UpdateEventInput: Encodable {
         } else {
             try container.encodeIfPresent(manualLocation, forKey: .manualLocation)
         }
-        try container.encodeIfPresent(locationPoint, forKey: .locationPoint)
-        try container.encodeIfPresent(latitude, forKey: .latitude)
-        try container.encodeIfPresent(longitude, forKey: .longitude)
+        if clearLocationPoint {
+            try container.encodeNil(forKey: .locationPoint)
+        } else {
+            try container.encodeIfPresent(locationPoint, forKey: .locationPoint)
+        }
+        if clearLatitude {
+            try container.encodeNil(forKey: .latitude)
+        } else {
+            try container.encodeIfPresent(latitude, forKey: .latitude)
+        }
+        if clearLongitude {
+            try container.encodeNil(forKey: .longitude)
+        } else {
+            try container.encodeIfPresent(longitude, forKey: .longitude)
+        }
         try container.encodeIfPresent(ticketUrl, forKey: .ticketUrl)
         try container.encodeIfPresent(ticketCurrency, forKey: .ticketCurrency)
         try container.encodeIfPresent(ticketNotes, forKey: .ticketNotes)
         try container.encodeIfPresent(officialWebsite, forKey: .officialWebsite)
-        try container.encodeIfPresent(startDate, forKey: .startDate)
-        try container.encodeIfPresent(endDate, forKey: .endDate)
+        if let startDate {
+            try container.encode(startDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .startDate)
+        }
+        if let endDate {
+            try container.encode(endDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .endDate)
+        }
         try container.encodeIfPresent(timeZone, forKey: .timeZone)
         try container.encodeIfPresent(timeZoneCity, forKey: .timeZoneCity)
         try container.encodeIfPresent(timeZoneProvince, forKey: .timeZoneProvince)
@@ -1669,6 +1795,74 @@ struct EventLineupImageImportItem: Codable, Hashable, Identifiable {
 struct EventLineupImageImportResponse: Codable, Hashable {
     var normalizedText: String
     var lineupInfo: [EventLineupImageImportItem]
+}
+
+struct EventTimetableImageImportRequest: Encodable {
+    var imageUrl: String
+    var fileType: String
+    var context: EventTimetableImageImportContext
+}
+
+struct EventTimetableImageImportContext: Codable, Hashable {
+    var eventStartDate: String
+    var eventEndDate: String
+    var eventTimeZone: String
+    var dayRolloverHour: Int
+    var weekRanges: [EventTimetableImageImportWeekRange]
+    var knownStageNames: [String]
+}
+
+struct EventTimetableImageImportWeekRange: Codable, Hashable {
+    var weekIndex: Int
+    var startDate: String
+    var endDate: String
+}
+
+struct EventTimetableImageImportResponse: Codable, Hashable {
+    var rawJson: EventTimetableAIResult
+}
+
+struct EventTimetableAIResult: Codable, Hashable {
+    var schemaVersion: String?
+    var imageType: String?
+    var weeks: [EventTimetableAIWeek]
+    var unparsedTexts: [String]?
+    var warnings: [String]?
+}
+
+struct EventTimetableAIWeek: Codable, Hashable, Identifiable {
+    var id: Int { weekIndex }
+    var weekIndex: Int
+    var days: [EventTimetableAIDay]
+}
+
+struct EventTimetableAIDay: Codable, Hashable, Identifiable {
+    var id: Int { festivalDayIndex }
+    var festivalDayIndex: Int
+    var dayLabel: String?
+    var dateText: String?
+    var stages: [EventTimetableAIStage]
+}
+
+struct EventTimetableAIStage: Codable, Hashable, Identifiable {
+    var id: String { "\(order)-\(stageName)" }
+    var stageName: String
+    var order: Int
+    var slots: [EventTimetableAISlot]
+}
+
+struct EventTimetableAISlot: Codable, Hashable {
+    var orderInStage: Int?
+    var performerType: String
+    var performerNames: [String]
+    var displayName: String
+    var rawTimeText: String?
+    var startTimeText: String?
+    var endTimeText: String?
+    var normalizedStartTime: String?
+    var normalizedEndTime: String?
+    var confidence: Double?
+    var notes: [String]?
 }
 
 struct SpotifyDJCandidate: Codable, Hashable, Identifiable {

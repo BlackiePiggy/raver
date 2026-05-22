@@ -35,27 +35,28 @@ enum EventUploadMappers {
         let country = draft.country.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let address = draft.detailAddress.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let timeZone = draft.timeZoneIdentifier.trimmed.eventUploadMapperNilIfBlank ?? "Asia/Shanghai"
-        let ticketMin = Double(draft.ticket.priceMin.trimmed)
-        let ticketMax = Double(draft.ticket.priceMax.trimmed)
-        let ticketTiers = ticketTierInputs(min: ticketMin, max: ticketMax, currency: draft.ticket.currency)
+        let ticketTiers = ticketTierInputs(from: draft.ticket)
 
         return CreateEventInput(
             name: name,
+            nameI18n: localizedText(from: draft.name, language: language),
             wikiFestivalId: draft.organizerFestivalID?.trimmed.eventUploadMapperNilIfBlank,
             abbreviation: draft.abbreviation.trimmed.eventUploadMapperNilIfBlank,
             description: nil,
             eventType: EventTypeOption.submissionValue(for: draft.eventType),
+            organizerName: draft.organizerName.trimmed.eventUploadMapperNilIfBlank,
+            sourceEventUrl: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
             city: city,
             cityI18n: localizedText(from: draft.city, language: language),
             country: country,
             countryI18n: localizedText(from: draft.country, language: language),
-            manualLocation: manualLocation(address: address),
+            manualLocation: manualLocation(address: address, language: language),
             locationPoint: locationPoint(from: draft, address: address, city: city),
             latitude: draft.latitude,
             longitude: draft.longitude,
             ticketUrl: draft.ticket.ticketURL.trimmed.eventUploadMapperNilIfBlank,
             ticketCurrency: draft.ticket.currency.trimmed.uppercased().eventUploadMapperNilIfBlank,
-            officialWebsite: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
+            officialWebsite: nil,
             startDate: draft.startDate,
             endDate: draft.endDate,
             timeZone: timeZone,
@@ -79,11 +80,16 @@ enum EventUploadMappers {
 
     static func updateInput(from draft: EventUploadDraft) -> UpdateEventInput {
         let create = createInput(from: draft)
+        let shouldSubmitTimeZoneSelection = draft.selectedTimeZoneLookup?.matchSource != "event-edit-hydrate"
         return UpdateEventInput(
             name: create.name,
+            nameI18n: create.nameI18n,
+            wikiFestivalId: create.wikiFestivalId,
             abbreviation: create.abbreviation ?? "",
             description: create.description ?? "",
             eventType: create.eventType,
+            organizerName: create.organizerName ?? "",
+            sourceEventUrl: create.sourceEventUrl ?? "",
             city: create.city,
             cityI18n: create.cityI18n,
             country: create.country,
@@ -95,16 +101,16 @@ enum EventUploadMappers {
             ticketUrl: create.ticketUrl ?? "",
             ticketCurrency: create.ticketCurrency ?? "",
             ticketNotes: "",
-            officialWebsite: create.officialWebsite ?? "",
+            officialWebsite: nil,
             startDate: create.startDate,
             endDate: create.endDate,
             timeZone: create.timeZone,
-            timeZoneCity: create.timeZoneCity,
-            timeZoneProvince: create.timeZoneProvince,
-            timeZoneCountry: create.timeZoneCountry,
-            timeZoneStateAnsi: create.timeZoneStateAnsi,
-            timeZoneLat: create.timeZoneLat,
-            timeZoneLng: create.timeZoneLng,
+            timeZoneCity: shouldSubmitTimeZoneSelection ? create.timeZoneCity : nil,
+            timeZoneProvince: shouldSubmitTimeZoneSelection ? create.timeZoneProvince : nil,
+            timeZoneCountry: shouldSubmitTimeZoneSelection ? create.timeZoneCountry : nil,
+            timeZoneStateAnsi: shouldSubmitTimeZoneSelection ? create.timeZoneStateAnsi : nil,
+            timeZoneLat: shouldSubmitTimeZoneSelection ? create.timeZoneLat : nil,
+            timeZoneLng: shouldSubmitTimeZoneSelection ? create.timeZoneLng : nil,
             dayRolloverHour: create.dayRolloverHour,
             stageOrder: create.stageOrder,
             coverImageUrl: create.coverImageUrl ?? "",
@@ -114,7 +120,11 @@ enum EventUploadMappers {
             lineupArtists: create.lineupArtists,
             lineupSlots: create.lineupSlots,
             status: create.status,
-            clearManualLocation: create.manualLocation == nil
+            clearManualLocation: create.manualLocation == nil,
+            clearWikiFestivalId: create.wikiFestivalId == nil,
+            clearLocationPoint: create.locationPoint == nil,
+            clearLatitude: create.latitude == nil,
+            clearLongitude: create.longitude == nil
         )
     }
 
@@ -126,19 +136,28 @@ enum EventUploadMappers {
     }
 
     private static func localizedText(from fields: EventUploadLocalizedFields, language: EventUploadPreferredLanguage) -> WebBiText? {
-        let primary = fields.primaryValue(preferredLanguage: language).trimmed
-        guard !primary.isEmpty else { return nil }
-        return WebBiText(
-            en: fields.en.trimmed.eventUploadMapperNilIfBlank ?? primary,
-            zh: fields.zh.trimmed.eventUploadMapperNilIfBlank ?? primary,
-            ja: fields.ja.trimmed.eventUploadMapperNilIfBlank,
-            enFull: fields.enFull.trimmed.eventUploadMapperNilIfBlank
+        let en = fields.en.trimmed
+        let zh = fields.zh.trimmed
+        let ja = fields.ja.trimmed.eventUploadMapperNilIfBlank
+        let enFull = fields.enFull.trimmed.eventUploadMapperNilIfBlank
+        guard !en.isEmpty || !zh.isEmpty || ja != nil || enFull != nil else {
+            let primary = fields.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
+            return primary.map { localizedSingleText($0, language: language) }
+        }
+        let text = WebBiText(
+            en: en,
+            zh: zh,
+            ja: ja,
+            enFull: enFull
         )
+        return text
     }
 
-    private static func manualLocation(address: String?) -> WebEventManualLocation? {
+    private static func manualLocation(address: String?, language: EventUploadPreferredLanguage) -> WebEventManualLocation? {
         guard let address else { return nil }
-        let text = WebBiText(en: address, zh: address)
+        let trimmed = address.trimmed
+        guard !trimmed.isEmpty else { return nil }
+        let text = localizedSingleText(trimmed, language: language)
         return WebEventManualLocation(
             detailAddressI18n: text,
             formattedAddressI18n: text,
@@ -149,9 +168,9 @@ enum EventUploadMappers {
     private static func locationPoint(from draft: EventUploadDraft, address: String?, city: String?) -> WebEventLocationPoint? {
         guard let latitude = draft.latitude, let longitude = draft.longitude else { return nil }
         let addressText = (draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank ?? address)
-            .map { WebBiText(en: $0, zh: $0) }
+            .map { localizedSingleText($0, language: draft.preferredLanguage) }
         let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank
-            .map { WebBiText(en: $0, zh: $0) }
+            .map { localizedSingleText($0, language: draft.preferredLanguage) }
         return WebEventLocationPoint(
             provider: "apple-mapkit",
             sourceMode: "ios-event-upload-v2",
@@ -161,6 +180,17 @@ enum EventUploadMappers {
             formattedAddressI18n: addressText,
             city: city
         )
+    }
+
+    private static func localizedSingleText(_ value: String, language: EventUploadPreferredLanguage) -> WebBiText {
+        switch language {
+        case .zh:
+            return WebBiText(en: "", zh: value)
+        case .en:
+            return WebBiText(en: value, zh: "")
+        case .ja:
+            return WebBiText(en: "", zh: "", ja: value)
+        }
     }
 
     private static func normalizedStages(from draft: EventUploadDraft) -> [String]? {
@@ -175,14 +205,16 @@ enum EventUploadMappers {
         index == 0 ? LT("主舞台", "Main Stage", "メインステージ") : LT("舞台 \(index + 1)", "Stage \(index + 1)", "ステージ \(index + 1)")
     }
 
-    private static func ticketTierInputs(min: Double?, max: Double?, currency: String) -> [EventTicketTierInput]? {
-        let normalizedCurrency = currency.trimmed.uppercased().eventUploadMapperNilIfBlank
-        var tiers: [EventTicketTierInput] = []
-        if let min {
-            tiers.append(EventTicketTierInput(name: "Min", price: min, currency: normalizedCurrency, sortOrder: 1))
-        }
-        if let max, max != min {
-            tiers.append(EventTicketTierInput(name: "Max", price: max, currency: normalizedCurrency, sortOrder: 2))
+    private static func ticketTierInputs(from ticket: EventUploadTicketDraft) -> [EventTicketTierInput]? {
+        let normalizedCurrency = ticket.currency.trimmed.uppercased().eventUploadMapperNilIfBlank
+        let tiers = ticket.tiers.enumerated().compactMap { index, tier -> EventTicketTierInput? in
+            guard let price = Double(tier.price.trimmed) else { return nil }
+            return EventTicketTierInput(
+                name: tier.name.trimmed.eventUploadMapperNilIfBlank ?? LT("票档 \(index + 1)", "Tier \(index + 1)", "券種 \(index + 1)"),
+                price: price,
+                currency: normalizedCurrency,
+                sortOrder: index + 1
+            )
         }
         return tiers.isEmpty ? nil : tiers
     }

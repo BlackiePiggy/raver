@@ -53,7 +53,16 @@ enum EventUploadValidation {
         }
         if !draft.ticket.ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            URL(string: draft.ticket.ticketURL) == nil {
-            issues.append(.init(step: .review, message: LT("请填写有效的购票链接。", "Enter a valid ticket URL.", "有効なチケットURLを入力してください。")))
+            issues.append(.init(step: .tickets, message: LT("请填写有效的购票链接。", "Enter a valid ticket URL.", "有効なチケットURLを入力してください。")))
+        }
+        for (index, tier) in draft.ticket.tiers.enumerated() {
+            let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = tier.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty && price.isEmpty {
+                issues.append(.init(step: .tickets, message: LT("第 \(index + 1) 个票档请填写价格，或删除这个票档。", "Ticket tier #\(index + 1) needs a price, or remove it.", "\(index + 1)番目の券種に価格を入力するか削除してください。")))
+            } else if !price.isEmpty && Double(price) == nil {
+                issues.append(.init(step: .tickets, message: LT("第 \(index + 1) 个票档价格格式不正确。", "Ticket tier #\(index + 1) has an invalid price.", "\(index + 1)番目の券種価格の形式が正しくありません。")))
+            }
         }
 
         return issues

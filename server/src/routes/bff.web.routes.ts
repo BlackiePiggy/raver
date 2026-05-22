@@ -3268,6 +3268,19 @@ type ImportedLineupItem = {
   date: string | null;
 };
 
+type TimetableRecognitionContext = {
+  eventStartDate?: string;
+  eventEndDate?: string;
+  eventTimeZone?: string;
+  dayRolloverHour?: number;
+  weekRanges?: Array<{
+    weekIndex?: number;
+    startDate?: string;
+    endDate?: string;
+  }>;
+  knownStageNames?: string[];
+};
+
 type SpotifyDJSearchItem = {
   spotifyId: string;
   name: string;
@@ -3726,6 +3739,160 @@ const runCozeLineupWorker = async (
       2
     ),
     lineupInfo,
+  };
+};
+
+const extractTimetableRawJson = (value: unknown): unknown => {
+  const parsed = typeof value === 'string' ? tryParseJsonFromText(value) ?? value : value;
+  const seen = new WeakSet<object>();
+
+  const walk = (node: unknown): unknown | null => {
+    if (typeof node === 'string') {
+      const nested = tryParseJsonFromText(node);
+      return nested === null ? null : walk(nested);
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const found = walk(item);
+        if (found !== null) return found;
+      }
+      return null;
+    }
+    if (!node || typeof node !== 'object') return null;
+    if (seen.has(node)) return null;
+    seen.add(node);
+
+    const record = node as Record<string, unknown>;
+    if (record.schemaVersion === 'raver_timetable_ai_v2' || record.imageType === 'timetable') {
+      return record;
+    }
+    if (record.raw_json !== undefined) {
+      const found = walk(record.raw_json);
+      if (found !== null) return found;
+    }
+    if (record.rawJson !== undefined) {
+      const found = walk(record.rawJson);
+      if (found !== null) return found;
+    }
+
+    for (const child of Object.values(record)) {
+      const found = walk(child);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+
+  return walk(parsed) ?? parsed;
+};
+
+const sanitizeTimetableRecognitionContext = (value: unknown): TimetableRecognitionContext => {
+  if (!value || typeof value !== 'object') return {};
+  const input = value as Record<string, unknown>;
+  const out: TimetableRecognitionContext = {};
+
+  for (const key of ['eventStartDate', 'eventEndDate', 'eventTimeZone'] as const) {
+    const raw = input[key];
+    if (typeof raw === 'string' && raw.trim()) {
+      out[key] = raw.trim();
+    }
+  }
+
+  const rollover = Number(input.dayRolloverHour);
+  if (Number.isFinite(rollover)) {
+    out.dayRolloverHour = Math.max(0, Math.min(12, Math.floor(rollover)));
+  }
+
+  if (Array.isArray(input.weekRanges)) {
+    out.weekRanges = input.weekRanges
+      .map((item, index) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+        const weekIndex = Number(record.weekIndex);
+        const startDate = typeof record.startDate === 'string' ? record.startDate.trim() : '';
+        const endDate = typeof record.endDate === 'string' ? record.endDate.trim() : '';
+        return {
+          weekIndex: Number.isFinite(weekIndex) ? Math.max(1, Math.floor(weekIndex)) : index + 1,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }
+
+  if (Array.isArray(input.knownStageNames)) {
+    out.knownStageNames = input.knownStageNames
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 50);
+  }
+
+  return out;
+};
+
+const runCozeTimetableWorker = async (
+  imageUrl: string,
+  fileType: string,
+  context: TimetableRecognitionContext
+): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
+  if (!cozeWorkflowToken) {
+    throw new Error('COZE_WORKFLOW_TOKEN is not configured');
+  }
+
+  const payload = {
+    [cozeWorkflowImageField]: {
+      url: imageUrl,
+      file_type: resolveCozeFileType(fileType),
+    },
+    context,
+  };
+
+  const startedAt = Date.now();
+  console.info('[coze-timetable] run.start', {
+    runUrl: cozeWorkflowRunUrl,
+    imageUrl,
+    fileType,
+    timeoutMs: cozeWorkflowTimeoutMs,
+    context,
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), cozeWorkflowTimeoutMs);
+  let rawText = '';
+  try {
+    const response = await fetch(cozeWorkflowRunUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cozeWorkflowToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    rawText = await response.text();
+    console.info('[coze-timetable] run.response', {
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      responseLength: rawText.length,
+    });
+    if (!response.ok) {
+      throw new Error(`Coze workflow request failed (${response.status}): ${rawText.slice(0, 500)}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`COZE_WORKFLOW_TIMEOUT after ${cozeWorkflowTimeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const parsed = tryParseJsonFromText(rawText);
+  if (parsed === null) {
+    throw new Error('Coze workflow returned non-JSON content');
+  }
+
+  return {
+    rawJson: extractTimetableRawJson(parsed),
+    rawResponse: parsed,
   };
 };
 
@@ -13649,6 +13816,53 @@ router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (
     });
   } catch (error) {
     console.error('BFF web upsert ranking year error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/timetable/import-image', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const requestStartedAt = Date.now();
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    if (!cozeWorkflowToken) {
+      res.status(503).json({ error: 'COZE_WORKFLOW_TOKEN is not configured' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+    const fileType = typeof body.fileType === 'string' ? body.fileType.trim() : 'image';
+    const context = sanitizeTimetableRecognitionContext(body.context);
+
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' });
+      return;
+    }
+
+    const imported = await runCozeTimetableWorker(imageUrl, fileType, context);
+    console.info('[timetable-import] request.success', {
+      userId,
+      durationMs: Date.now() - requestStartedAt,
+    });
+    ok(res, imported);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    console.error('BFF web timetable import image error:', {
+      durationMs: Date.now() - requestStartedAt,
+      message,
+      error,
+    });
+    if (message.includes('COZE_WORKFLOW_TIMEOUT')) {
+      res.status(504).json({ error: '时间表识别超时，请稍后重试或换一张更清晰的图' });
+      return;
+    }
+    if (message.startsWith('Coze workflow request failed')) {
+      res.status(502).json({ error: '时间表识别服务暂时不可用，请稍后重试' });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -893,6 +893,51 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func importEventTimetableFromImage(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportResponse {
+        _ = input
+        return EventTimetableImageImportResponse(
+            rawJson: EventTimetableAIResult(
+                schemaVersion: "raver_timetable_ai_v2",
+                imageType: "timetable",
+                weeks: [
+                    EventTimetableAIWeek(
+                        weekIndex: 1,
+                        days: [
+                            EventTimetableAIDay(
+                                festivalDayIndex: 1,
+                                dayLabel: "DAY 1",
+                                dateText: nil,
+                                stages: [
+                                    EventTimetableAIStage(
+                                        stageName: "Main Stage",
+                                        order: 1,
+                                        slots: [
+                                            EventTimetableAISlot(
+                                                orderInStage: 1,
+                                                performerType: "solo",
+                                                performerNames: ["ARTBAT"],
+                                                displayName: "ARTBAT",
+                                                rawTimeText: "19:00 - 20:00",
+                                                startTimeText: "19:00",
+                                                endTimeText: "20:00",
+                                                normalizedStartTime: "19:00",
+                                                normalizedEndTime: "20:00",
+                                                confidence: 0.96,
+                                                notes: []
+                                            )
+                                        ]
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ],
+                unparsedTexts: [],
+                warnings: []
+            )
+        )
+    }
+
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
         _ = imageData
         return UploadMediaResponse(url: "/uploads/feed/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)

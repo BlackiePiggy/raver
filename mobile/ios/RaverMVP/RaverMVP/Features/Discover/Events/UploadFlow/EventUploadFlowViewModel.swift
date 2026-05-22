@@ -2,6 +2,26 @@ import Foundation
 
 @MainActor
 final class EventUploadFlowViewModel: ObservableObject {
+    enum InlineSearchFeedback: Equatable {
+        case idle
+        case empty(message: String)
+        case failure(message: String)
+
+        var message: String? {
+            switch self {
+            case .idle:
+                return nil
+            case .empty(let message), .failure(let message):
+                return message
+            }
+        }
+
+        var isFailure: Bool {
+            if case .failure = self { return true }
+            return false
+        }
+    }
+
     @Published var draft: EventUploadDraft
     @Published var validationIssues: [EventUploadValidationIssue] = []
     @Published var statusMessage: String?
@@ -13,6 +33,9 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var searchingDJKeys: Set<String> = []
     @Published var isSearchingTimeZones = false
     @Published var isSearchingOrganizers = false
+    @Published var timeZoneSearchFeedback: InlineSearchFeedback = .idle
+    @Published var organizerSearchFeedback: InlineSearchFeedback = .idle
+    @Published var djSearchFeedbacks: [String: InlineSearchFeedback] = [:]
     @Published var isSubmitting = false
 
     private let draftStore: EventUploadDraftStore
@@ -21,6 +44,10 @@ final class EventUploadFlowViewModel: ObservableObject {
     private let onSaved: () -> Void
     private var onDismiss: () -> Void
     private var draftSaveTask: Task<Void, Never>?
+    private var timeZoneSearchTask: Task<Void, Never>?
+    private var organizerSearchTask: Task<Void, Never>?
+    private var djSearchTasks: [String: Task<Void, Never>] = [:]
+    private var didDiscardDraft = false
 
     init(
         mode: EventUploadMode = .create,
@@ -83,6 +110,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func saveDraft(immediate: Bool = false) {
+        guard !didDiscardDraft else { return }
         draftSaveTask?.cancel()
         if immediate {
             persistDraftNow()
@@ -111,7 +139,11 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func discardDraftAndClose() {
+        didDiscardDraft = true
+        draftSaveTask?.cancel()
         draftStore.clear(mode: draft.mode, userID: userID)
+        draft.dirty = false
+        shouldConfirmRestoredCreateDraft = false
         EventUploadAnalytics.track(
             "event_upload_v2_abandoned",
             properties: [
@@ -122,6 +154,14 @@ final class EventUploadFlowViewModel: ObservableObject {
             ]
         )
         onDismiss()
+    }
+
+    func handleDisappear() {
+        guard !didDiscardDraft else { return }
+        if submitSuccess == nil {
+            saveDraft(immediate: true)
+        }
+        markAbandonedIfNeeded()
     }
 
     func continueRestoredDraft() {
@@ -148,6 +188,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private func persistDraftNow() {
+        guard !didDiscardDraft else { return }
         draftStore.save(draft, userID: userID)
         EventUploadAnalytics.track("event_upload_v2_draft_saved", properties: ["mode": draft.mode.storageKeyPart])
     }
@@ -205,6 +246,25 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
+    func updateLocalizedField(
+        _ keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>,
+        language: EventUploadPreferredLanguage,
+        value: String
+    ) {
+        draft[keyPath: keyPath].setValue(value, for: language)
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateLocalizedEnglishFullField(
+        _ keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>,
+        value: String
+    ) {
+        draft[keyPath: keyPath].enFull = value
+        draft.dirty = true
+        saveDraft()
+    }
+
     func updateEventType(_ value: String) {
         draft.eventType = value
         draft.dirty = true
@@ -221,14 +281,20 @@ final class EventUploadFlowViewModel: ObservableObject {
         guard draft.organizerFestivalID == nil else { return }
         draft.organizerName = value
         organizerSearchResults = []
+        organizerSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
+        scheduleOrganizerSearch()
     }
 
-    func searchOrganizers() async {
+    func searchOrganizers(showEmptyMessage: Bool = true, useInlineFeedback: Bool = false) async {
         let trimmed = draft.organizerName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            statusMessage = LT("请先输入主办方名称。", "Enter an organizer name first.", "先に主催者名を入力してください。")
+            organizerSearchResults = []
+            organizerSearchFeedback = .idle
+            if showEmptyMessage {
+                statusMessage = LT("请先输入主办方名称。", "Enter an organizer name first.", "先に主催者名を入力してください。")
+            }
             return
         }
         isSearchingOrganizers = true
@@ -236,11 +302,21 @@ final class EventUploadFlowViewModel: ObservableObject {
         do {
             organizerSearchResults = try await webService.fetchLearnFestivals(search: trimmed)
             if organizerSearchResults.isEmpty {
-                statusMessage = LT("没有找到匹配主办方，当前会按手动名称保存。", "No matching organizer found. The current text will be saved as a manual name.", "一致する主催者が見つかりませんでした。現在のテキストを手入力名として保存します。")
+                let message = LT("没有找到匹配主办方，当前会按手动名称保存。", "No matching organizer found. The current text will be saved as a manual name.", "一致する主催者が見つかりませんでした。現在のテキストを手入力名として保存します。")
+                organizerSearchFeedback = .empty(message: message)
+                if showEmptyMessage && !useInlineFeedback {
+                    statusMessage = message
+                }
+            } else {
+                organizerSearchFeedback = .idle
             }
         } catch {
             organizerSearchResults = []
-            statusMessage = error.userFacingMessage ?? LT("搜索主办方失败，请稍后重试。", "Failed to search organizers. Please try again.", "主催者検索に失敗しました。もう一度お試しください。")
+            let message = error.userFacingMessage ?? LT("搜索主办方失败，请稍后重试。", "Failed to search organizers. Please try again.", "主催者検索に失敗しました。もう一度お試しください。")
+            organizerSearchFeedback = .failure(message: message)
+            if !useInlineFeedback {
+                statusMessage = message
+            }
         }
     }
 
@@ -250,6 +326,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             ? (festival.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? festival.name)
             : festival.name
         organizerSearchResults = []
+        organizerSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_organizer_bound", properties: ["festivalID": festival.id])
@@ -258,6 +335,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     func clearOrganizerBinding() {
         draft.organizerFestivalID = nil
         organizerSearchResults = []
+        organizerSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
     }
@@ -277,7 +355,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func updateDate(_ keyPath: WritableKeyPath<EventUploadDraft, Date>, value: Date) {
-        draft[keyPath: keyPath] = value
+        draft[keyPath: keyPath] = normalizedEventDate(value)
         syncWeekRangesWithEventDates()
         draft.dirty = true
         saveDraft()
@@ -285,8 +363,8 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func addWeekRange() {
         let anchor = draft.weekRanges.last?.endDate ?? draft.endDate
-        let nextStart = Calendar.current.date(byAdding: .day, value: 1, to: anchor) ?? anchor
-        let nextEnd = Calendar.current.date(byAdding: .day, value: 2, to: nextStart) ?? nextStart
+        let nextStart = normalizedEventDate(addingDays: 1, to: anchor) ?? anchor
+        let nextEnd = normalizedEventDate(addingDays: 1, to: nextStart) ?? nextStart
         draft.weekRanges.append(EventUploadWeekRangeDraft(startDate: nextStart, endDate: nextEnd))
         recalculateEventDateBoundsFromWeeks()
         draft.dirty = true
@@ -304,10 +382,10 @@ final class EventUploadFlowViewModel: ObservableObject {
     func updateWeekRange(id: UUID, startDate: Date? = nil, endDate: Date? = nil) {
         guard let index = draft.weekRanges.firstIndex(where: { $0.id == id }) else { return }
         if let startDate {
-            draft.weekRanges[index].startDate = startDate
+            draft.weekRanges[index].startDate = normalizedEventDate(startDate)
         }
         if let endDate {
-            draft.weekRanges[index].endDate = endDate
+            draft.weekRanges[index].endDate = normalizedEventDate(endDate)
         }
         if draft.weekRanges[index].endDate < draft.weekRanges[index].startDate {
             draft.weekRanges[index].endDate = draft.weekRanges[index].startDate
@@ -321,6 +399,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         guard draft.selectedTimeZoneLookup == nil else { return }
         draft.timeZoneIdentifier = value.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.selectedTimeZoneLookup = nil
+        timeZoneSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
     }
@@ -329,14 +408,20 @@ final class EventUploadFlowViewModel: ObservableObject {
         guard draft.selectedTimeZoneLookup == nil else { return }
         draft.timeZoneSearchQuery = value
         draft.selectedTimeZoneLookup = nil
+        timeZoneSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
+        scheduleTimeZoneSearch()
     }
 
-    func searchEventTimeZones() async {
+    func searchEventTimeZones(showEmptyMessage: Bool = true, useInlineFeedback: Bool = false) async {
         let trimmed = draft.timeZoneSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            statusMessage = LT("请先输入城市名。", "Enter a city first.", "先に都市名を入力してください。")
+            timeZoneSearchResults = []
+            timeZoneSearchFeedback = .idle
+            if showEmptyMessage {
+                statusMessage = LT("请先输入城市名。", "Enter a city first.", "先に都市名を入力してください。")
+            }
             return
         }
         isSearchingTimeZones = true
@@ -345,27 +430,32 @@ final class EventUploadFlowViewModel: ObservableObject {
             let results = try await webService.searchEventTimezones(query: trimmed, limit: 8)
             timeZoneSearchResults = results
             if results.isEmpty {
-                statusMessage = LT("没有匹配结果，请尝试英文城市名、州缩写或国家名。", "No matches found. Try an English city name, state code, or country.", "一致する結果がありません。英語の都市名、州コード、または国名でお試しください。")
+                let message = LT("没有匹配结果，请尝试英文城市名、州缩写或国家名。", "No matches found. Try an English city name, state code, or country.", "一致する結果がありません。英語の都市名、州コード、または国名でお試しください。")
+                timeZoneSearchFeedback = .empty(message: message)
+                if showEmptyMessage && !useInlineFeedback {
+                    statusMessage = message
+                }
+            } else {
+                timeZoneSearchFeedback = .idle
             }
         } catch {
             timeZoneSearchResults = []
-            statusMessage = error.userFacingMessage ?? LT("搜索城市时区失败，请稍后重试。", "Failed to search event timezones. Please try again.", "都市タイムゾーンの検索に失敗しました。もう一度お試しください。")
+            let message = error.userFacingMessage ?? LT("搜索城市时区失败，请稍后重试。", "Failed to search event timezones. Please try again.", "都市タイムゾーンの検索に失敗しました。もう一度お試しください。")
+            timeZoneSearchFeedback = .failure(message: message)
+            if !useInlineFeedback {
+                statusMessage = message
+            }
         }
     }
 
     func applyTimeZoneSelection(_ item: EventTimezoneLookupItem) {
+        rebaseDraftDatesPreservingWallDate(to: item.timezone)
         draft.selectedTimeZoneLookup = item
         draft.timeZoneIdentifier = item.timezone
         draft.timeZoneSearchQuery = item.cityAscii.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.city : item.cityAscii
         timeZoneSearchResults = []
 
-        if draft.city.primaryValue(preferredLanguage: draft.preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.city.setCurrentValue(item.cityAscii.isEmpty ? item.city : item.cityAscii, preferredLanguage: draft.preferredLanguage)
-        }
-        if draft.country.primaryValue(preferredLanguage: draft.preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.country.setCurrentValue(item.country, preferredLanguage: draft.preferredLanguage)
-        }
-
+        timeZoneSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_timezone_selected", properties: ["timezone": item.timezone])
@@ -375,6 +465,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.selectedTimeZoneLookup = nil
         draft.timeZoneSearchQuery = ""
         timeZoneSearchResults = []
+        timeZoneSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
     }
@@ -388,6 +479,77 @@ final class EventUploadFlowViewModel: ObservableObject {
     func tapAIPlaceholder() {
         EventUploadAnalytics.track("event_upload_v2_ai_placeholder_tapped", properties: ["step": draft.currentStep.rawValue])
         statusMessage = LT("AI 识别即将支持。", "AI recognition is coming soon.", "AI認識は近日対応予定です。")
+    }
+
+    var timetableAIImageCandidates: [EventUploadImageDraft] {
+        EventUploadImageZone.allCases.flatMap { zone in
+            (draft.imageZones[zone] ?? [])
+                .sorted { $0.sortOrder < $1.sortOrder }
+        }
+    }
+
+    func recognizeTimetableFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadTimetableAIImportResult {
+        EventUploadAnalytics.track("event_upload_v2_timetable_ai_started", properties: ["zone": image.zone.rawValue])
+        let remoteURL = try await remoteURLForAIImage(image)
+        let request = EventTimetableImageImportRequest(
+            imageUrl: remoteURL,
+            fileType: image.mimeType,
+            context: timetableAIContext()
+        )
+        let response = try await webService.importEventTimetableFromImage(input: request)
+        let result = editableTimetableImportResult(from: response.rawJson)
+        EventUploadAnalytics.track(
+            "event_upload_v2_timetable_ai_succeeded",
+            properties: ["slotCount": "\(result.slots.count)", "warningCount": "\(result.warnings.count)"]
+        )
+        return result
+    }
+
+    func applyTimetableAIImportSlots(_ slots: [EventUploadTimetableAIEditableSlot]) {
+        let selectedSlots = slots.filter { $0.selected }
+        guard !selectedSlots.isEmpty else { return }
+
+        var knownStages = draft.stageEntries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        for stage in selectedSlots.map(\.stageName) {
+            let trimmed = stage.trimmingCharacters(in: .whitespacesAndNewlines)
+            let comparable = trimmed.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : trimmed
+            let exists = knownStages.contains { existing in
+                let normalizedExisting = existing.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : existing
+                return normalizedExisting.caseInsensitiveCompare(comparable) == .orderedSame
+            }
+            if !exists {
+                draft.stageEntries.append(trimmed)
+                knownStages.append(trimmed)
+            }
+        }
+
+        for imported in selectedSlots {
+            let performerNames = imported.performerNamesText
+                .split(separator: ",")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let actType = normalizedActType(imported.actType, performerCount: performerNames.count)
+            var slot = EventUploadLineupSlotDraft()
+            slot.actType = actType
+            slot.performerNames = Array(performerNames.prefix(actType.performerCount))
+            while slot.performerNames.count < actType.performerCount {
+                slot.performerNames.append("")
+            }
+            slot.performerDJIDs = Array(repeating: nil, count: actType.performerCount)
+            slot.performerAvatarURLs = Array(repeating: nil, count: actType.performerCount)
+            slot.stageName = imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? LT("主舞台", "Main Stage", "メインステージ")
+                : imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
+            slot.dayIndex = max(1, imported.dayIndex)
+            slot.startTime = timetableAIClockDate(imported.startTimeText, dayIndex: slot.dayIndex)
+            slot.endTime = timetableAIClockDate(imported.endTimeText, dayIndex: slot.dayIndex)
+            slot.normalizePerformers()
+            draft.timetableSlots.append(slot)
+        }
+
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track("event_upload_v2_timetable_ai_applied", properties: ["slotCount": "\(selectedSlots.count)"])
     }
 
     var locationSummary: String {
@@ -407,10 +569,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     var reviewDateRange: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return "\(formatter.string(from: draft.startDate)) - \(formatter.string(from: draft.endDate))"
+        draft.startDate.appLocalizedDateRangeText(to: draft.endDate, timeZone: eventTimeZone)
     }
 
     func tapLocationPickerPlaceholder() {
@@ -439,6 +598,15 @@ final class EventUploadFlowViewModel: ObservableObject {
         EventUploadAnalytics.track("event_upload_v2_location_picked", properties: ["hasCoordinate": "true"])
     }
 
+    func clearLocationBinding() {
+        draft.latitude = nil
+        draft.longitude = nil
+        draft.pickedMapAddress = ""
+        draft.pickedPlaceName = ""
+        draft.dirty = true
+        saveDraft()
+    }
+
     func updateCoordinate(_ keyPath: WritableKeyPath<EventUploadDraft, Double?>, rawValue: String) {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         draft[keyPath: keyPath] = trimmed.isEmpty ? nil : Double(trimmed)
@@ -452,6 +620,28 @@ final class EventUploadFlowViewModel: ObservableObject {
             next = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         }
         draft.ticket[keyPath: keyPath] = next
+        draft.dirty = true
+        saveDraft()
+    }
+
+    @discardableResult
+    func addTicketTier() -> UUID {
+        let tier = EventUploadTicketTierDraft()
+        draft.ticket.tiers.append(tier)
+        draft.dirty = true
+        saveDraft()
+        return tier.id
+    }
+
+    func removeTicketTier(id: UUID) {
+        draft.ticket.tiers.removeAll { $0.id == id }
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateTicketTier(id: UUID, mutate: (inout EventUploadTicketTierDraft) -> Void) {
+        guard let index = draft.ticket.tiers.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&draft.ticket.tiers[index])
         draft.dirty = true
         saveDraft()
     }
@@ -508,12 +698,28 @@ final class EventUploadFlowViewModel: ObservableObject {
         EventUploadAnalytics.track("event_upload_v2_stage_reordered", properties: ["count": "\(draft.stageEntries.count)"])
     }
 
+    var stageNameValidationMessage: String? {
+        let normalized = draft.stageEntries.enumerated().map { index, value in
+            normalizedStageName(at: index).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        let unique = Set(normalized)
+        guard unique.count == normalized.count else {
+            return LT("不同舞台不能使用相同名称；空舞台名都会视为主舞台。", "Stage names must be unique. Empty stage names all count as Main Stage.", "ステージ名は重複できません。空欄はすべてメインステージ扱いです。")
+        }
+        return nil
+    }
+
+    var canOpenTimetableWeekEditor: Bool {
+        stageNameValidationMessage == nil
+    }
+
     func tapLineupImportPlaceholder() {
         EventUploadAnalytics.track("event_upload_v2_lineup_import_placeholder_tapped", properties: ["step": draft.currentStep.rawValue])
         statusMessage = LT("阵容图识别会在后续接入。当前可以先维护舞台。", "Lineup image import will be wired later. You can set up stages for now.", "ラインナップ画像認識は後続で接続します。今はステージを設定できます。")
     }
 
-    func addTimetableSlot() {
+    @discardableResult
+    func addTimetableSlot() -> UUID {
         ensureDefaultStageExistsIfNeeded()
         var slot = EventUploadLineupSlotDraft()
         slot.stageName = normalizedStageName(at: 0)
@@ -523,9 +729,11 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_lineup_slot_added", properties: ["count": "\(draft.timetableSlots.count)"])
+        return slot.id
     }
 
-    func addTimetableSlot(stageName: String, dayIndex: Int) {
+    @discardableResult
+    func addTimetableSlot(stageName: String, dayIndex: Int) -> UUID {
         ensureDefaultStageExistsIfNeeded()
         var slot = EventUploadLineupSlotDraft()
         let trimmedStage = stageName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -544,6 +752,7 @@ final class EventUploadFlowViewModel: ObservableObject {
                 "dayIndex": "\(slot.dayIndex)",
             ]
         )
+        return slot.id
     }
 
     func removeTimetableSlot(id: UUID) {
@@ -597,26 +806,57 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
-    func searchTimetableDJ(slotID: UUID, performerIndex: Int) async {
+    func searchTimetableDJ(slotID: UUID, performerIndex: Int, useInlineFeedback: Bool = false) async {
         guard let slot = draft.timetableSlots.first(where: { $0.id == slotID }),
               slot.performerNames.indices.contains(performerIndex) else { return }
         let query = slot.performerNames[performerIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
         guard !query.isEmpty else {
-            statusMessage = LT("请先输入 DJ 名称。", "Enter a DJ name first.", "先にDJ名を入力してください。")
+            djSearchResults[key] = []
+            djSearchFeedbacks[key] = .idle
+            if !useInlineFeedback {
+                statusMessage = LT("请先输入 DJ 名称。", "Enter a DJ name first.", "先にDJ名を入力してください。")
+            }
             return
         }
-        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
         searchingDJKeys.insert(key)
         defer { searchingDJKeys.remove(key) }
         do {
             let page = try await webService.fetchDJs(page: 1, limit: 8, search: query, sortBy: "relevance")
             djSearchResults[key] = page.items
             if page.items.isEmpty {
-                statusMessage = LT("未找到匹配 DJ，可继续使用手动名称。", "No matching DJs found. You can keep the manual name.", "一致するDJが見つかりません。手入力名のまま続行できます。")
+                let message = LT("未找到匹配 DJ，可继续使用手动名称。", "No matching DJs found. You can keep the manual name.", "一致するDJが見つかりません。手入力名のまま続行できます。")
+                djSearchFeedbacks[key] = .empty(message: message)
+                if !useInlineFeedback {
+                    statusMessage = message
+                }
+            } else {
+                djSearchFeedbacks[key] = .idle
             }
         } catch {
             djSearchResults[key] = []
-            statusMessage = error.userFacingMessage ?? LT("搜索 DJ 失败，请稍后重试。", "Failed to search DJs. Please try again.", "DJ検索に失敗しました。もう一度お試しください。")
+            let message = error.userFacingMessage ?? LT("搜索 DJ 失败，请稍后重试。", "Failed to search DJs. Please try again.", "DJ検索に失敗しました。もう一度お試しください。")
+            djSearchFeedbacks[key] = .failure(message: message)
+            if !useInlineFeedback {
+                statusMessage = message
+            }
+        }
+    }
+
+    func scheduleTimetableDJSearch(slotID: UUID, performerIndex: Int) {
+        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
+        djSearchTasks[key]?.cancel()
+        guard let slot = draft.timetableSlots.first(where: { $0.id == slotID }),
+              slot.performerNames.indices.contains(performerIndex),
+              !slot.performerNames[performerIndex].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            djSearchResults[key] = []
+            djSearchFeedbacks[key] = .idle
+            return
+        }
+        djSearchTasks[key] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.searchTimetableDJ(slotID: slotID, performerIndex: performerIndex, useInlineFeedback: true)
         }
     }
 
@@ -636,6 +876,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             slot.performerAvatarURLs[performerIndex] = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl ?? dj.avatarOriginalUrl
         }
         djSearchResults[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = []
+        djSearchFeedbacks[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = .idle
         EventUploadAnalytics.track("event_upload_v2_lineup_dj_bound", properties: ["slotID": slotID.uuidString])
     }
 
@@ -650,25 +891,60 @@ final class EventUploadFlowViewModel: ObservableObject {
             slot.performerDJIDs[performerIndex] = nil
             slot.performerAvatarURLs[performerIndex] = nil
         }
+        djSearchFeedbacks[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = .idle
     }
 
-    func searchLineupOnlyDJ(slotID: UUID, performerIndex: Int) async {
+    func searchLineupOnlyDJ(slotID: UUID, performerIndex: Int, useInlineFeedback: Bool = false) async {
         guard let slot = draft.lineupOnlySlots.first(where: { $0.id == slotID }),
               slot.performerNames.indices.contains(performerIndex) else { return }
         let query = slot.performerNames[performerIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
         guard !query.isEmpty else {
-            statusMessage = LT("请先输入 DJ 名称。", "Enter a DJ name first.", "先にDJ名を入力してください。")
+            djSearchResults[key] = []
+            djSearchFeedbacks[key] = .idle
+            if !useInlineFeedback {
+                statusMessage = LT("请先输入 DJ 名称。", "Enter a DJ name first.", "先にDJ名を入力してください。")
+            }
             return
         }
-        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
         searchingDJKeys.insert(key)
         defer { searchingDJKeys.remove(key) }
         do {
             let page = try await webService.fetchDJs(page: 1, limit: 8, search: query, sortBy: "relevance")
             djSearchResults[key] = page.items
+            if page.items.isEmpty {
+                let message = LT("未找到匹配 DJ，可继续使用手动名称。", "No matching DJs found. You can keep the manual name.", "一致するDJが見つかりません。手入力名のまま続行できます。")
+                djSearchFeedbacks[key] = .empty(message: message)
+                if !useInlineFeedback {
+                    statusMessage = message
+                }
+            } else {
+                djSearchFeedbacks[key] = .idle
+            }
         } catch {
             djSearchResults[key] = []
-            statusMessage = error.userFacingMessage ?? LT("搜索 DJ 失败，请稍后重试。", "Failed to search DJs. Please try again.", "DJ検索に失敗しました。もう一度お試しください。")
+            let message = error.userFacingMessage ?? LT("搜索 DJ 失败，请稍后重试。", "Failed to search DJs. Please try again.", "DJ検索に失敗しました。もう一度お試しください。")
+            djSearchFeedbacks[key] = .failure(message: message)
+            if !useInlineFeedback {
+                statusMessage = message
+            }
+        }
+    }
+
+    func scheduleLineupOnlyDJSearch(slotID: UUID, performerIndex: Int) {
+        let key = djSearchKey(slotID: slotID, performerIndex: performerIndex)
+        djSearchTasks[key]?.cancel()
+        guard let slot = draft.lineupOnlySlots.first(where: { $0.id == slotID }),
+              slot.performerNames.indices.contains(performerIndex),
+              !slot.performerNames[performerIndex].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            djSearchResults[key] = []
+            djSearchFeedbacks[key] = .idle
+            return
+        }
+        djSearchTasks[key] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.searchLineupOnlyDJ(slotID: slotID, performerIndex: performerIndex, useInlineFeedback: true)
         }
     }
 
@@ -688,6 +964,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             slot.performerAvatarURLs[performerIndex] = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl ?? dj.avatarOriginalUrl
         }
         djSearchResults[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = []
+        djSearchFeedbacks[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = .idle
     }
 
     func clearLineupOnlyDJBinding(slotID: UUID, performerIndex: Int) {
@@ -701,6 +978,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             slot.performerDJIDs[performerIndex] = nil
             slot.performerAvatarURLs[performerIndex] = nil
         }
+        djSearchFeedbacks[djSearchKey(slotID: slotID, performerIndex: performerIndex)] = .idle
     }
 
     func djSearchKey(slotID: UUID, performerIndex: Int) -> String {
@@ -794,6 +1072,131 @@ final class EventUploadFlowViewModel: ObservableObject {
         EventUploadAnalytics.track("event_upload_v2_image_reordered", properties: ["zone": zone.rawValue])
     }
 
+    private func remoteURLForAIImage(_ image: EventUploadImageDraft) async throws -> String {
+        if let remoteURL = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !remoteURL.isEmpty {
+            return remoteURL
+        }
+        guard let localFileURL = image.localFileURL else {
+            throw ServiceError.message(LT("这张图片还没有可识别的远程地址，请重新选择图片。", "This image is not available for recognition yet. Please choose another image.", "この画像はまだ認識に使えるURLがありません。別の画像を選択してください。"))
+        }
+        let data = try Data(contentsOf: localFileURL)
+        let upload = try await webService.uploadEventImage(
+            imageData: data,
+            fileName: image.fileName,
+            mimeType: image.mimeType,
+            eventID: eventIDForUpload,
+            usage: image.zone.rawValue
+        )
+        updateRemoteURL(upload.url, for: image)
+        return upload.url
+    }
+
+    private func updateRemoteURL(_ remoteURL: String, for image: EventUploadImageDraft) {
+        var images = draft.imageZones[image.zone] ?? []
+        guard let index = images.firstIndex(where: { $0.id == image.id }) else { return }
+        images[index].remoteURL = remoteURL
+        draft.imageZones[image.zone] = images
+        draft.dirty = true
+        saveDraft()
+    }
+
+    private func timetableAIContext() -> EventTimetableImageImportContext {
+        let timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
+        return EventTimetableImageImportContext(
+            eventStartDate: eventUploadDateString(draft.startDate, timeZone: timeZone),
+            eventEndDate: eventUploadDateString(draft.endDate, timeZone: timeZone),
+            eventTimeZone: draft.timeZoneIdentifier,
+            dayRolloverHour: draft.dayRolloverHour,
+            weekRanges: timetableAIWeekRanges(timeZone: timeZone),
+            knownStageNames: draft.stageEntries
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+    }
+
+    private func timetableAIWeekRanges(timeZone: TimeZone) -> [EventTimetableImageImportWeekRange] {
+        let ranges: [EventUploadWeekRangeDraft] = draft.scheduleMode == .multiWeek
+            ? draft.weekRanges
+            : [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+        return ranges.enumerated().map { index, range in
+            EventTimetableImageImportWeekRange(
+                weekIndex: index + 1,
+                startDate: eventUploadDateString(range.startDate, timeZone: timeZone),
+                endDate: eventUploadDateString(range.endDate, timeZone: timeZone)
+            )
+        }
+    }
+
+    private func eventUploadDateString(_ date: Date, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private func editableTimetableImportResult(from raw: EventTimetableAIResult) -> EventUploadTimetableAIImportResult {
+        var slots: [EventUploadTimetableAIEditableSlot] = []
+        for week in raw.weeks.sorted(by: { $0.weekIndex < $1.weekIndex }) {
+            for day in week.days.sorted(by: { $0.festivalDayIndex < $1.festivalDayIndex }) {
+                for stage in day.stages.sorted(by: { $0.order < $1.order }) {
+                    for slot in stage.slots.sorted(by: { ($0.orderInStage ?? 0) < ($1.orderInStage ?? 0) }) {
+                        let names = slot.performerNames
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                        let type = EventLineupActType(rawValue: slot.performerType) ?? normalizedActType(.solo, performerCount: names.count)
+                        slots.append(
+                            EventUploadTimetableAIEditableSlot(
+                                weekIndex: week.weekIndex,
+                                dayIndex: max(1, day.festivalDayIndex),
+                                dayLabel: day.dayLabel ?? day.dateText ?? "Day \(day.festivalDayIndex)",
+                                stageName: stage.stageName,
+                                actType: normalizedActType(type, performerCount: names.count),
+                                performerNamesText: names.joined(separator: ", "),
+                                startTimeText: slot.normalizedStartTime ?? slot.startTimeText ?? "",
+                                endTimeText: slot.normalizedEndTime ?? slot.endTimeText ?? "",
+                                confidence: slot.confidence,
+                                notes: slot.notes ?? []
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return EventUploadTimetableAIImportResult(
+            slots: slots,
+            warnings: raw.warnings ?? [],
+            unparsedTexts: raw.unparsedTexts ?? []
+        )
+    }
+
+    private func normalizedActType(_ type: EventLineupActType, performerCount: Int) -> EventLineupActType {
+        if performerCount >= 3 { return .b3b }
+        if performerCount == 2 { return .b2b }
+        return type == .solo ? .solo : type
+    }
+
+    private func timetableAIClockDate(_ timeText: String, dayIndex: Int) -> Date? {
+        let trimmed = timeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let rawHour = Int(parts[0]),
+              let minute = Int(parts[1]),
+              minute >= 0,
+              minute < 60 else {
+            return nil
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
+        let dayOffset = max(dayIndex - 1, 0) + rawHour / 24
+        let hour = rawHour % 24
+        let baseDay = calendar.date(byAdding: .day, value: dayOffset, to: calendar.startOfDay(for: draft.startDate)) ?? draft.startDate
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDay)
+    }
+
     private func uploadPendingImagesIfNeeded() async throws {
         for zone in EventUploadImageZone.allCases {
             var images = draft.imageZones[zone] ?? []
@@ -826,6 +1229,36 @@ final class EventUploadFlowViewModel: ObservableObject {
             return eventID
         }
         return nil
+    }
+
+    private func scheduleTimeZoneSearch() {
+        timeZoneSearchTask?.cancel()
+        let query = draft.timeZoneSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            timeZoneSearchResults = []
+            timeZoneSearchFeedback = .idle
+            return
+        }
+        timeZoneSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.searchEventTimeZones(showEmptyMessage: false, useInlineFeedback: true)
+        }
+    }
+
+    private func scheduleOrganizerSearch() {
+        organizerSearchTask?.cancel()
+        let query = draft.organizerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            organizerSearchResults = []
+            organizerSearchFeedback = .idle
+            return
+        }
+        organizerSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.searchOrganizers(showEmptyMessage: false, useInlineFeedback: true)
+        }
     }
 
     private func ensureDefaultStageExistsIfNeeded() {
@@ -864,7 +1297,11 @@ final class EventUploadFlowViewModel: ObservableObject {
     private func recalculateEventDateBoundsFromWeeks() {
         guard !draft.weekRanges.isEmpty else { return }
         let normalized = draft.weekRanges.map { range in
-            EventUploadWeekRangeDraft(id: range.id, startDate: min(range.startDate, range.endDate), endDate: max(range.startDate, range.endDate))
+            EventUploadWeekRangeDraft(
+                id: range.id,
+                startDate: normalizedEventDate(min(range.startDate, range.endDate)),
+                endDate: normalizedEventDate(max(range.startDate, range.endDate))
+            )
         }
         draft.weekRanges = normalized.sorted { $0.startDate < $1.startDate }
         if let first = draft.weekRanges.first {
@@ -889,6 +1326,39 @@ final class EventUploadFlowViewModel: ObservableObject {
         let startDay = calendar.startOfDay(for: draft.startDate)
         let day = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0), to: startDay) ?? startDay
         return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+    }
+
+    private var eventTimeZone: TimeZone {
+        TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
+    }
+
+    private func normalizedEventDate(_ value: Date) -> Date {
+        value.normalizedEventArchiveDate(in: eventTimeZone)
+    }
+
+    private func normalizedEventDate(addingDays days: Int, to value: Date) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = eventTimeZone
+        guard let next = calendar.date(byAdding: .day, value: days, to: value) else { return nil }
+        return next.normalizedEventArchiveDate(in: eventTimeZone)
+    }
+
+    private func rebaseDraftDatesPreservingWallDate(to nextTimeZoneIdentifier: String) {
+        let previousTimeZone = eventTimeZone
+        let nextTimeZone = TimeZone(identifier: nextTimeZoneIdentifier) ?? previousTimeZone
+        let startText = draft.startDate.eventArchiveDateText(in: previousTimeZone)
+        let endText = draft.endDate.eventArchiveDateText(in: previousTimeZone)
+        draft.startDate = Date.eventArchiveDate(from: startText, timeZone: nextTimeZone) ?? draft.startDate.normalizedEventArchiveDate(in: nextTimeZone)
+        draft.endDate = Date.eventArchiveDate(from: endText, timeZone: nextTimeZone) ?? draft.endDate.normalizedEventArchiveDate(in: nextTimeZone)
+        draft.weekRanges = draft.weekRanges.map { range in
+            let start = range.startDate.eventArchiveDateText(in: previousTimeZone)
+            let end = range.endDate.eventArchiveDateText(in: previousTimeZone)
+            return EventUploadWeekRangeDraft(
+                id: range.id,
+                startDate: Date.eventArchiveDate(from: start, timeZone: nextTimeZone) ?? range.startDate.normalizedEventArchiveDate(in: nextTimeZone),
+                endDate: Date.eventArchiveDate(from: end, timeZone: nextTimeZone) ?? range.endDate.normalizedEventArchiveDate(in: nextTimeZone)
+            )
+        }
     }
 }
 
