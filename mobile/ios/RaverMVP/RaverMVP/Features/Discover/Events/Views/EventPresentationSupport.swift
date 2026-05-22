@@ -160,8 +160,11 @@ extension WebEvent {
         if normalized == "luall" || normalized.contains("lineup") {
             return "lineup"
         }
-        if normalized.contains("cover") || normalized.contains("poster") {
+        if normalized.contains("cover") {
             return "cover"
+        }
+        if normalized.contains("poster") {
+            return "poster"
         }
         return "other"
     }
@@ -180,6 +183,13 @@ extension WebEvent {
         return result
     }
 
+    var posterAssetURLs: [String] {
+        let fromAssets = normalizedImageAssets
+            .filter { normalizedAssetBucket($0.type) == "poster" }
+            .map(\.url)
+        return dedupedURLs(fromAssets)
+    }
+
     var lineupAssetURLs: [String] {
         let fromAssets = normalizedImageAssets
             .filter { normalizedAssetBucket($0.type) == "lineup" }
@@ -195,7 +205,7 @@ extension WebEvent {
     }
 
     var cardImageURL: String? {
-        lineupAssetURLs.first ?? coverAssetURL
+        posterAssetURLs.first ?? lineupAssetURLs.first ?? coverAssetURL
     }
 
     var coverAssetURL: String? {
@@ -210,7 +220,7 @@ extension WebEvent {
         if trimmedCover?.isEmpty == false {
             return trimmedCover
         }
-        return lineupAssetURLs.first
+        return lineupAssetURLs.first ?? posterAssetURLs.first
     }
 }
 

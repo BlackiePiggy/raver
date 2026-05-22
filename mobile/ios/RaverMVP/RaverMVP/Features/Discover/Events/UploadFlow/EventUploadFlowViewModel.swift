@@ -474,6 +474,18 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
+    func setTimeZoneSearchSession(
+        query: String,
+        selectedLookup: EventTimezoneLookupItem?,
+        results: [EventTimezoneLookupItem] = [],
+        feedback: InlineSearchFeedback = .idle
+    ) {
+        draft.timeZoneSearchQuery = query
+        draft.selectedTimeZoneLookup = selectedLookup
+        timeZoneSearchResults = results
+        timeZoneSearchFeedback = feedback
+    }
+
     func updateDayRolloverHour(_ value: Int) {
         draft.dayRolloverHour = min(max(value, 0), 12)
         draft.dirty = true
@@ -596,6 +608,32 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_poster_ai_applied", properties: ["warningCount": "\(result.warnings.count)"])
+    }
+
+    func applyPosterAIEditableResult(_ result: EventUploadPosterAIEditableResult) {
+        applyPosterAIImportResult(
+            EventUploadPosterAIImportResult(
+                name: result.name,
+                city: result.city,
+                detailAddress: result.detailAddress,
+                country: result.country,
+                timeZoneIdentifier: result.timeZoneIdentifier,
+                timeZoneDisplayName: result.timeZoneDisplayName,
+                scheduleMode: result.scheduleMode,
+                startDate: result.startDate,
+                endDate: result.endDate,
+                weekRanges: result.weekRanges,
+                ticketURL: result.ticketURL,
+                ticketCurrency: result.ticketCurrency,
+                ticketTiers: result.ticketTiers,
+                warnings: result.warnings,
+                unparsedTexts: result.unparsedTexts
+            )
+        )
+        draft.selectedTimeZoneLookup = result.selectedTimeZoneLookup
+        draft.timeZoneSearchQuery = result.timeZoneSearchQuery
+        draft.dirty = true
+        saveDraft()
     }
 
     func autoMatchLineupAIImportItems(_ items: [EventUploadLineupAIEditableItem]) async -> [EventUploadLineupAIEditableItem] {

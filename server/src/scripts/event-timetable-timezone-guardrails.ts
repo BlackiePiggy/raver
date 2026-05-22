@@ -58,6 +58,13 @@ const main = (): void => {
     'event start-date rebase preserves event-local wall clock'
   );
 
+  const monthBoundaryStart = startOfEventDay(parseEventDateInput('2026-01-31', amsterdam, 'start')!, amsterdam);
+  assertIso(
+    setEventDayAndKeepTime(day1Start!, monthBoundaryStart, 2, amsterdam),
+    '2026-02-01T16:00:00.000Z',
+    'festival day rebase crosses month boundaries without producing invalid dates'
+  );
+
   assertIso(
     parseEventDateInput('2026-06-01T17:00:00', 'America/New_York', 'start'),
     '2026-06-01T21:00:00.000Z',

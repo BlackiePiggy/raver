@@ -2,6 +2,8 @@ import PhotosUI
 import SwiftUI
 
 struct EventUploadImageZoneCard: View {
+    private let thumbnailSize = CGSize(width: 64, height: 64)
+
     let zone: EventUploadImageZone
     let images: [EventUploadImageDraft]
     let isRequired: Bool
@@ -102,6 +104,7 @@ struct EventUploadImageZoneCard: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 9)
                         .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -175,7 +178,7 @@ struct EventUploadImageZoneCard: View {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
-                .frame(width: 48, height: 48)
+                .frame(width: thumbnailSize.width, height: thumbnailSize.height)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if let remoteURL = image.remoteURL,
                   let url = URL(string: AppConfig.resolvedURLString(remoteURL) ?? remoteURL) {
@@ -191,14 +194,14 @@ struct EventUploadImageZoneCard: View {
                         .foregroundStyle(RaverTheme.accent)
                 }
             }
-            .frame(width: 48, height: 48)
+            .frame(width: thumbnailSize.width, height: thumbnailSize.height)
             .background(RaverTheme.card)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else {
             Image(systemName: "photo")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.accent)
-                .frame(width: 48, height: 48)
+                .frame(width: thumbnailSize.width, height: thumbnailSize.height)
                 .background(RaverTheme.card)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }

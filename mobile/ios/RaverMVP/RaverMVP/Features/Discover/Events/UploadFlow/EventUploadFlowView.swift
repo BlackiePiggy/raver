@@ -295,7 +295,7 @@ struct EventUploadFlowView: View {
         VStack(alignment: .leading, spacing: 16) {
             sectionTitle(
                 LT("活动图片", "Event Images", "イベント画像"),
-                subtitle: LT("海报为必填，其余图片可选。图片上传仅支持从相册选择。", "Poster is required. Other images are optional. Uploads currently use photo library only.", "ポスターは必須です。他の画像は任意です。アップロードは写真ライブラリ選択のみ対応します。")
+                subtitle: LT("Poster、阵容图、Cover 至少上传 1 张即可，其余图片可选。图片上传仅支持从相册选择。", "Upload at least one Poster, Lineup, or Cover image. Other images are optional. Uploads currently use photo library only.", "Poster、ラインナップ、Cover のいずれか1枚以上を追加してください。他の画像は任意です。アップロードは写真ライブラリ選択のみ対応します。")
             )
 
             LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
@@ -303,7 +303,7 @@ struct EventUploadFlowView: View {
                     EventUploadImageZoneCard(
                         zone: zone,
                         images: viewModel.draft.imageZones[zone] ?? [],
-                        isRequired: zone == .poster,
+                        isRequired: false,
                         onPicked: { items in
                             await viewModel.addPickedImages(zone: zone, items: items)
                         },
@@ -1435,7 +1435,7 @@ struct EventUploadFlowView: View {
 
     private var reviewCompletionValue: String {
         let filled = [
-            !viewModel.draft.posterImages.isEmpty,
+            viewModel.draft.hasRequiredEntryImage,
             !viewModel.draft.name.primaryValue(preferredLanguage: viewModel.draft.preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             !viewModel.locationSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             !viewModel.draft.timeZoneIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -2799,7 +2799,8 @@ private struct EventUploadPosterAIImportSheet: View {
     @State private var recognitionStartedAt: Date?
     @State private var statusMessage = LT("请选择一张已经上传到当前草稿里的活动海报或相关图片。", "Choose one uploaded poster or related image from this draft.", "この下書きに追加済みのポスターまたは関連画像を1枚選んでください。")
     @State private var statusIsError = false
-    @State private var result: EventUploadPosterAIImportResult?
+    @State private var result: EventUploadPosterAIEditableResult?
+    @State private var expandedLocalizedFieldKeys: Set<String> = []
 
     private var images: [EventUploadImageDraft] {
         viewModel.timetableAIImageCandidates
@@ -2832,7 +2833,7 @@ private struct EventUploadPosterAIImportSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(LT("应用结果", "Apply", "適用")) {
                         guard let result else { return }
-                        viewModel.applyPosterAIImportResult(result)
+                        viewModel.applyPosterAIEditableResult(result)
                         dismiss()
                     }
                     .disabled(isRunning || result == nil)
@@ -2947,57 +2948,46 @@ private struct EventUploadPosterAIImportSheet: View {
         )
     }
 
-    private func resultSection(_ result: EventUploadPosterAIImportResult) -> some View {
+    private func resultSection(_ result: EventUploadPosterAIEditableResult) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(LT("识别结果", "Results", "認識結果"))
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
 
-            posterFieldCard(title: LT("活动名称", "Event Name", "イベント名"), value: primaryText(result.name))
-            posterFieldCard(title: LT("城市", "City", "都市"), value: primaryText(result.city))
-            posterFieldCard(title: LT("详细地址", "Detail Address", "詳細住所"), value: primaryText(result.detailAddress))
-            posterFieldCard(title: LT("国家", "Country", "国"), value: primaryText(result.country, fallback: result.country.enFull))
-            posterFieldCard(
-                title: LT("时区", "Timezone", "タイムゾーン"),
-                value: result.timeZoneIdentifier ?? "",
-                secondary: result.timeZoneDisplayName
+            posterLocalizedFieldCard(
+                title: LT("活动名称", "Event Name", "イベント名"),
+                field: \.name,
+                fieldKey: "poster-ai-name",
+                includeEnglishFull: false,
+                axis: .horizontal
             )
-            posterFieldCard(
-                title: LT("活动日期", "Schedule", "日程"),
-                value: posterScheduleText(result),
-                secondary: posterModeText(result.scheduleMode)
+            posterLocalizedFieldCard(
+                title: LT("城市", "City", "都市"),
+                field: \.city,
+                fieldKey: "poster-ai-city",
+                includeEnglishFull: false,
+                axis: .horizontal
             )
+            posterTimeZoneCard
+            posterLocalizedFieldCard(
+                title: LT("详细地址", "Detail Address", "詳細住所"),
+                field: \.detailAddress,
+                fieldKey: "poster-ai-detail-address",
+                includeEnglishFull: false,
+                axis: .vertical
+            )
+            posterLocalizedFieldCard(
+                title: LT("国家", "Country", "国"),
+                field: \.country,
+                fieldKey: "poster-ai-country",
+                includeEnglishFull: true,
+                axis: .horizontal
+            )
+            posterScheduleCard
             if !result.ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !result.ticketTiers.isEmpty {
-                posterFieldCard(
-                    title: LT("票务信息", "Ticket Info", "チケット情報"),
-                    value: result.ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("已识别票档", "Ticket tiers recognized", "券種を認識済み") : result.ticketURL,
-                    secondary: posterTicketText(result)
-                )
+                posterTicketCard
             }
         }
-    }
-
-    private func posterFieldCard(title: String, value: String, secondary: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(RaverTheme.secondaryText)
-            Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("未识别", "Not recognized", "未認識") : value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(RaverTheme.primaryText)
-            if let secondary, !secondary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(secondary)
-                    .font(.caption2)
-                    .foregroundStyle(RaverTheme.secondaryText)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(RaverTheme.cardBorder, lineWidth: 1)
-        )
     }
 
     private func runRecognition() async {
@@ -3008,7 +2998,26 @@ private struct EventUploadPosterAIImportSheet: View {
         statusMessage = LT("已提交识别任务，AI 正在补充活动基础信息。", "Recognition task submitted. AI is filling the event basics.", "認識タスクを送信しました。AIがイベント基本情報を補完しています。")
         do {
             let recognized = try await viewModel.recognizePosterFromImage(selectedImage)
-            result = recognized
+            result = EventUploadPosterAIEditableResult(
+                name: recognized.name,
+                city: recognized.city,
+                detailAddress: recognized.detailAddress,
+                country: recognized.country,
+                timeZoneIdentifier: recognized.timeZoneIdentifier,
+                timeZoneDisplayName: recognized.timeZoneDisplayName,
+                selectedTimeZoneLookup: nil,
+                timeZoneSearchQuery: primaryText(recognized.city),
+                scheduleMode: recognized.scheduleMode,
+                startDate: recognized.startDate,
+                endDate: recognized.endDate,
+                weekRanges: recognized.weekRanges,
+                ticketURL: recognized.ticketURL,
+                ticketCurrency: recognized.ticketCurrency,
+                ticketTiers: recognized.ticketTiers,
+                warnings: recognized.warnings,
+                unparsedTexts: recognized.unparsedTexts
+            )
+            syncPosterTimeZoneSession()
             statusIsError = false
             statusMessage = LT("识别完成。请检查结果，确认后会回填到第二页表单。", "Recognition finished. Review the result, then apply it to the basics form.", "認識が完了しました。結果を確認してから基本情報フォームへ反映してください。")
         } catch {
@@ -3052,7 +3061,7 @@ private struct EventUploadPosterAIImportSheet: View {
         return fallback
     }
 
-    private func posterScheduleText(_ result: EventUploadPosterAIImportResult) -> String {
+    private func posterScheduleText(_ result: EventUploadPosterAIEditableResult) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = TimeZone(identifier: result.timeZoneIdentifier ?? viewModel.draft.timeZoneIdentifier) ?? .current
@@ -3078,7 +3087,7 @@ private struct EventUploadPosterAIImportSheet: View {
         }
     }
 
-    private func posterTicketText(_ result: EventUploadPosterAIImportResult) -> String {
+    private func posterTicketText(_ result: EventUploadPosterAIEditableResult) -> String {
         let tierNames = result.ticketTiers.compactMap { tier -> String? in
             let name = tier.name.trimmingCharacters(in: .whitespacesAndNewlines)
             let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3093,6 +3102,469 @@ private struct EventUploadPosterAIImportSheet: View {
         guard let start else { return "00:00" }
         let seconds = max(0, Int(now.timeIntervalSince(start)))
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func posterLocalizedFieldCard(
+        title: String,
+        field: WritableKeyPath<EventUploadPosterAIEditableResult, EventUploadLocalizedFields>,
+        fieldKey: String,
+        includeEnglishFull: Bool,
+        axis: Axis
+    ) -> some View {
+        let fields = result?[keyPath: field] ?? EventUploadLocalizedFields()
+        return LocalizedExpandableFieldSection(
+            title: title,
+            isRequired: false,
+            axis: axis,
+            includeEnglishFull: includeEnglishFull,
+            expanded: posterLocalizedExpansionBinding(for: fieldKey),
+            primaryPlaceholder: title,
+            primaryBinding: Binding {
+                primaryText(fields, fallback: includeEnglishFull ? fields.enFull : "")
+            } set: { newValue in
+                guard var fields = result?[keyPath: field] else { return }
+                fields.setCurrentValue(newValue, preferredLanguage: viewModel.draft.preferredLanguage)
+                result?[keyPath: field] = fields
+            },
+            zhBinding: posterLocalizedValueBinding(field: field, language: .zh),
+            enBinding: posterLocalizedValueBinding(field: field, language: .en),
+            jaBinding: posterLocalizedValueBinding(field: field, language: .ja),
+            englishFullBinding: includeEnglishFull ? posterLocalizedEnglishFullBinding(field: field) : nil,
+            extraCount: fields.secondaryValueCount(excluding: viewModel.draft.preferredLanguage, includeEnglishFull: includeEnglishFull),
+            preferredLanguage: viewModel.draft.preferredLanguage
+        )
+    }
+
+    private func posterLocalizedValueBinding(
+        field: WritableKeyPath<EventUploadPosterAIEditableResult, EventUploadLocalizedFields>,
+        language: EventUploadPreferredLanguage
+    ) -> Binding<String> {
+        Binding {
+            result?[keyPath: field].value(for: language) ?? ""
+        } set: { newValue in
+            guard var fields = result?[keyPath: field] else { return }
+            fields.setValue(newValue, for: language)
+            result?[keyPath: field] = fields
+        }
+    }
+
+    private func posterLocalizedEnglishFullBinding(
+        field: WritableKeyPath<EventUploadPosterAIEditableResult, EventUploadLocalizedFields>
+    ) -> Binding<String> {
+        Binding {
+            result?[keyPath: field].enFull ?? ""
+        } set: { newValue in
+            guard var fields = result?[keyPath: field] else { return }
+            fields.enFull = newValue
+            result?[keyPath: field] = fields
+        }
+    }
+
+    private func posterLocalizedExpansionBinding(for key: String) -> Binding<Bool> {
+        Binding {
+            expandedLocalizedFieldKeys.contains(key)
+        } set: { isExpanded in
+            if isExpanded {
+                expandedLocalizedFieldKeys.insert(key)
+            } else {
+                expandedLocalizedFieldKeys.remove(key)
+            }
+        }
+    }
+
+    private var posterTimeZoneCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(LT("城市时区", "City Time Zone", "都市タイムゾーン"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            posterLockedSearchField(
+                title: LT("输入城市或城市+州/国家", "Enter city or city + state/country", "都市または都市+州/国を入力"),
+                text: posterTimeZoneQueryBinding,
+                isLocked: result?.selectedTimeZoneLookup != nil,
+                lockedLabel: LT("已绑定", "Bound", "紐付け済み"),
+                actionTitle: viewModel.isSearchingTimeZones ? LT("搜索中", "Searching", "検索中") : LT("搜索", "Search", "検索"),
+                actionSystemImage: "magnifyingglass",
+                isActionBusy: viewModel.isSearchingTimeZones,
+                clearTitle: LT("清空", "Clear", "クリア"),
+                canClear: result?.selectedTimeZoneLookup != nil || !(result?.timeZoneSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                clearAction: clearPosterTimeZoneSelection
+            ) {
+                syncPosterTimeZoneSession()
+                Task { await searchPosterTimeZones() }
+            }
+
+            Text(posterTimeZoneSummary)
+                .font(.caption)
+                .foregroundStyle(result?.selectedTimeZoneLookup != nil ? .green : RaverTheme.secondaryText)
+
+            if let item = result?.selectedTimeZoneLookup {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(item.timezone)
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            if !viewModel.timeZoneSearchResults.isEmpty, result?.selectedTimeZoneLookup == nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(viewModel.timeZoneSearchResults.prefix(8)) { item in
+                        Button {
+                            applyPosterTimeZoneSelection(item)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.label)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(item.timezone)
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else if result?.selectedTimeZoneLookup == nil,
+                      let message = viewModel.timeZoneSearchFeedback.message,
+                      !viewModel.isSearchingTimeZones {
+                posterInlineSearchFeedbackRow(
+                    message: message,
+                    systemImage: viewModel.timeZoneSearchFeedback.isFailure ? "exclamationmark.triangle.fill" : "mappin.and.ellipse",
+                    tint: viewModel.timeZoneSearchFeedback.isFailure ? .orange : RaverTheme.secondaryText
+                )
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var posterScheduleCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(LT("活动日期", "Schedule", "日程"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            Picker(LT("活动模式", "Schedule Mode", "日程モード"), selection: posterScheduleModeBinding) {
+                ForEach(EventUploadScheduleMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            HStack(spacing: 10) {
+                DatePicker("", selection: posterStartDateBinding, displayedComponents: [.date])
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                DatePicker("", selection: posterEndDateBinding, displayedComponents: [.date])
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+            }
+
+            if let result {
+                Text("\(posterModeText(result.scheduleMode)) · \(posterScheduleText(result))")
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var posterTicketCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(LT("票务信息", "Ticket Info", "チケット情報"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+
+            TextField(
+                LT("购票链接", "Ticket URL", "チケットURL"),
+                text: Binding {
+                    result?.ticketURL ?? ""
+                } set: { newValue in
+                    result?.ticketURL = newValue
+                }
+            )
+            .font(.body)
+            .foregroundStyle(RaverTheme.primaryText)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            TextField(
+                LT("币种", "Currency", "通貨"),
+                text: Binding {
+                    result?.ticketCurrency ?? ""
+                } set: { newValue in
+                    result?.ticketCurrency = newValue.uppercased()
+                }
+            )
+            .font(.body)
+            .foregroundStyle(RaverTheme.primaryText)
+            .textInputAutocapitalization(.characters)
+            .autocorrectionDisabled()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if let result, !result.ticketTiers.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(Array(result.ticketTiers.enumerated()), id: \.element.id) { _, tier in
+                        HStack(spacing: 10) {
+                            TextField(
+                                LT("票档名称", "Tier Name", "券種名"),
+                                text: posterTicketTierNameBinding(tier.id)
+                            )
+                            .font(.body)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 11)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                            TextField(
+                                LT("价格", "Price", "価格"),
+                                text: posterTicketTierPriceBinding(tier.id)
+                            )
+                            .font(.body)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .keyboardType(.decimalPad)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 11)
+                            .frame(width: 110)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
+                }
+                Text(posterTicketText(result))
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var posterTimeZoneQueryBinding: Binding<String> {
+        Binding {
+            result?.timeZoneSearchQuery ?? ""
+        } set: { newValue in
+            result?.timeZoneSearchQuery = newValue
+            result?.selectedTimeZoneLookup = nil
+            result?.timeZoneIdentifier = nil
+            result?.timeZoneDisplayName = ""
+            viewModel.setTimeZoneSearchSession(query: newValue, selectedLookup: nil)
+        }
+    }
+
+    private var posterScheduleModeBinding: Binding<EventUploadScheduleMode> {
+        Binding {
+            result?.scheduleMode ?? .singleDay
+        } set: { newValue in
+            result?.scheduleMode = newValue
+        }
+    }
+
+    private var posterStartDateBinding: Binding<Date> {
+        Binding {
+            result?.startDate ?? Date()
+        } set: { newValue in
+            result?.startDate = newValue
+            if let endDate = result?.endDate, endDate < newValue {
+                result?.endDate = newValue
+            }
+        }
+    }
+
+    private var posterEndDateBinding: Binding<Date> {
+        Binding {
+            result?.endDate ?? result?.startDate ?? Date()
+        } set: { newValue in
+            let start = result?.startDate ?? newValue
+            result?.endDate = max(newValue, start)
+        }
+    }
+
+    private var posterTimeZoneSummary: String {
+        if let item = result?.selectedTimeZoneLookup {
+            return "\(item.label) · \(item.timezone)"
+        }
+        if let identifier = result?.timeZoneIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines), !identifier.isEmpty {
+            let displayName = result?.timeZoneDisplayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return displayName.isEmpty ? identifier : "\(displayName) · \(identifier)"
+        }
+        return LT("请搜索城市并确认活动时区。", "Search a city and confirm the event timezone.", "都市を検索してイベントのタイムゾーンを確認してください。")
+    }
+
+    private func searchPosterTimeZones() async {
+        syncPosterTimeZoneSession()
+        await viewModel.searchEventTimeZones(showEmptyMessage: false, useInlineFeedback: true)
+    }
+
+    private func syncPosterTimeZoneSession() {
+        viewModel.setTimeZoneSearchSession(
+            query: result?.timeZoneSearchQuery ?? "",
+            selectedLookup: result?.selectedTimeZoneLookup
+        )
+    }
+
+    private func applyPosterTimeZoneSelection(_ item: EventTimezoneLookupItem) {
+        result?.selectedTimeZoneLookup = item
+        result?.timeZoneIdentifier = item.timezone
+        result?.timeZoneDisplayName = item.label
+        result?.timeZoneSearchQuery = item.cityAscii.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.city : item.cityAscii
+        viewModel.setTimeZoneSearchSession(query: result?.timeZoneSearchQuery ?? "", selectedLookup: item)
+    }
+
+    private func clearPosterTimeZoneSelection() {
+        result?.selectedTimeZoneLookup = nil
+        result?.timeZoneIdentifier = nil
+        result?.timeZoneDisplayName = ""
+        result?.timeZoneSearchQuery = ""
+        viewModel.setTimeZoneSearchSession(query: "", selectedLookup: nil)
+    }
+
+    private func posterTicketTierNameBinding(_ tierID: UUID) -> Binding<String> {
+        Binding {
+            result?.ticketTiers.first(where: { $0.id == tierID })?.name ?? ""
+        } set: { newValue in
+            guard let index = result?.ticketTiers.firstIndex(where: { $0.id == tierID }) else { return }
+            result?.ticketTiers[index].name = newValue
+        }
+    }
+
+    private func posterTicketTierPriceBinding(_ tierID: UUID) -> Binding<String> {
+        Binding {
+            result?.ticketTiers.first(where: { $0.id == tierID })?.price ?? ""
+        } set: { newValue in
+            guard let index = result?.ticketTiers.firstIndex(where: { $0.id == tierID }) else { return }
+            result?.ticketTiers[index].price = newValue
+        }
+    }
+
+    private func posterLockedSearchField(
+        title: String,
+        text: Binding<String>,
+        isLocked: Bool,
+        lockedLabel: String,
+        actionTitle: String,
+        actionSystemImage: String,
+        isActionBusy: Bool,
+        clearTitle: String,
+        canClear: Bool,
+        clearAction: @escaping () -> Void,
+        action: @escaping () -> Void
+    ) -> some View {
+        ZStack(alignment: .trailing) {
+            TextField(title, text: text)
+                .font(.body)
+                .foregroundStyle(isLocked ? RaverTheme.secondaryText : RaverTheme.primaryText)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .disabled(isLocked)
+                .padding(.trailing, canClear ? 166 : 92)
+
+            HStack(spacing: 6) {
+                if canClear {
+                    Button(action: clearAction) {
+                        Label(clearTitle, systemImage: "xmark.circle")
+                            .font(.caption.weight(.bold))
+                            .labelStyle(.titleAndIcon)
+                            .lineLimit(1)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 7)
+                            .background(RaverTheme.background, in: Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                } else if isLocked {
+                    HStack(spacing: 5) {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2.weight(.bold))
+                        Text(lockedLabel)
+                            .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.12), in: Capsule())
+                }
+
+                Button(action: action) {
+                    Label(actionTitle, systemImage: actionSystemImage)
+                        .font(.caption.weight(.bold))
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(RaverTheme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(isActionBusy || isLocked)
+                .opacity((isActionBusy || isLocked) ? 0.56 : 1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isLocked ? RaverTheme.card.opacity(0.72) : RaverTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isLocked ? Color.green.opacity(0.35) : RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func posterInlineSearchFeedbackRow(message: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

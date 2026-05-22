@@ -199,6 +199,9 @@ export const parseEventDateInput = (
 };
 
 export const startOfEventDay = (date: Date, timeZoneRaw: unknown): Date => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return new Date(NaN);
+  }
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -224,13 +227,19 @@ export const setEventDayAndKeepTime = (
   festivalDayIndex: number,
   timeZoneRaw: unknown
 ): Date => {
+  if (
+    !(timeSource instanceof Date)
+    || Number.isNaN(timeSource.getTime())
+    || !(eventStartDate instanceof Date)
+    || Number.isNaN(eventStartDate.getTime())
+  ) {
+    return new Date(NaN);
+  }
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const dateParts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(eventStartDate);
+  const eventStartDay = startOfEventDay(eventStartDate, timeZone);
+  if (Number.isNaN(eventStartDay.getTime())) {
+    return new Date(NaN);
+  }
   const timeParts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hourCycle: 'h23',
@@ -238,12 +247,22 @@ export const setEventDayAndKeepTime = (
     minute: '2-digit',
     second: '2-digit',
   }).formatToParts(timeSource);
-  const dateValues = Object.fromEntries(dateParts.map((part) => [part.type, part.value]));
   const timeValues = Object.fromEntries(timeParts.map((part) => [part.type, part.value]));
+  const targetDay = new Date(eventStartDay.getTime() + Math.max(0, festivalDayIndex - 1) * 86_400_000);
+  if (Number.isNaN(targetDay.getTime())) {
+    return new Date(NaN);
+  }
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(targetDay);
+  const dateValues = Object.fromEntries(dateParts.map((part) => [part.type, part.value]));
   const base = zonedTimeToUtc({
     year: Number(dateValues.year),
     month: Number(dateValues.month),
-    day: Number(dateValues.day) + Math.max(0, festivalDayIndex - 1),
+    day: Number(dateValues.day),
     hour: Number(timeValues.hour),
     minute: Number(timeValues.minute),
     second: Number(timeValues.second),
@@ -253,8 +272,19 @@ export const setEventDayAndKeepTime = (
 };
 
 export const diffEventDays = (from: Date, to: Date, timeZoneRaw: unknown): number => {
+  if (
+    !(from instanceof Date)
+    || Number.isNaN(from.getTime())
+    || !(to instanceof Date)
+    || Number.isNaN(to.getTime())
+  ) {
+    return 0;
+  }
   const fromStart = startOfEventDay(from, timeZoneRaw).getTime();
   const toStart = startOfEventDay(to, timeZoneRaw).getTime();
+  if (Number.isNaN(fromStart) || Number.isNaN(toStart)) {
+    return 0;
+  }
   return Math.floor((toStart - fromStart) / 86_400_000);
 };
 

@@ -11,8 +11,8 @@ enum EventUploadValidation {
         var issues: [EventUploadValidationIssue] = []
         let language = draft.preferredLanguage
 
-        if draft.posterImages.isEmpty {
-            issues.append(.init(step: .media, message: LT("请至少上传 1 张 Poster 海报。", "Add at least one Poster image.", "Poster画像を1枚以上追加してください。")))
+        if !draft.hasRequiredEntryImage {
+            issues.append(.init(step: .media, message: LT("请至少上传 1 张 Poster、阵容图或 Cover。", "Add at least one Poster, Lineup, or Cover image.", "Poster、ラインナップ、またはCover画像を1枚以上追加してください。")))
         }
         if draft.name.primaryValue(preferredLanguage: language).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             issues.append(.init(step: .basic, message: LT("请填写活动名称。", "Enter an event name.", "イベント名を入力してください。")))

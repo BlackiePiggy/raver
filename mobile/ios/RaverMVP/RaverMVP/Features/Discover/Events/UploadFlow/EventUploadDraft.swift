@@ -287,6 +287,26 @@ struct EventUploadPosterAIImportResult: Hashable {
     var unparsedTexts: [String]
 }
 
+struct EventUploadPosterAIEditableResult: Hashable {
+    var name: EventUploadLocalizedFields
+    var city: EventUploadLocalizedFields
+    var detailAddress: EventUploadLocalizedFields
+    var country: EventUploadLocalizedFields
+    var timeZoneIdentifier: String?
+    var timeZoneDisplayName: String
+    var selectedTimeZoneLookup: EventTimezoneLookupItem?
+    var timeZoneSearchQuery: String
+    var scheduleMode: EventUploadScheduleMode
+    var startDate: Date?
+    var endDate: Date?
+    var weekRanges: [EventUploadWeekRangeDraft]
+    var ticketURL: String
+    var ticketCurrency: String
+    var ticketTiers: [EventUploadTicketTierDraft]
+    var warnings: [String]
+    var unparsedTexts: [String]
+}
+
 struct EventUploadDraft: Hashable, Codable {
     var id: UUID = UUID()
     var mode: EventUploadMode = .create
@@ -440,6 +460,22 @@ struct EventUploadDraft: Hashable, Codable {
 
     var posterImages: [EventUploadImageDraft] {
         imageZones[.poster] ?? []
+    }
+
+    var lineupImages: [EventUploadImageDraft] {
+        imageZones[.lineup] ?? []
+    }
+
+    var coverImages: [EventUploadImageDraft] {
+        imageZones[.cover] ?? []
+    }
+
+    var requiredEntryImages: [EventUploadImageDraft] {
+        posterImages + lineupImages + coverImages
+    }
+
+    var hasRequiredEntryImage: Bool {
+        !requiredEntryImages.isEmpty
     }
 
     static func emptyImageZones() -> [EventUploadImageZone: [EventUploadImageDraft]] {
