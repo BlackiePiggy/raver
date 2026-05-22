@@ -31,6 +31,9 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var organizerSearchResults: [WebLearnFestival] = []
     @Published var djSearchResults: [String: [WebDJ]] = [:]
     @Published var searchingDJKeys: Set<String> = []
+    @Published var aiImportDJSearchResults: [String: [WebDJ]] = [:]
+    @Published var aiImportSearchingDJKeys: Set<String> = []
+    @Published var aiImportDJSearchFeedbacks: [String: InlineSearchFeedback] = [:]
     @Published var isSearchingTimeZones = false
     @Published var isSearchingOrganizers = false
     @Published var timeZoneSearchFeedback: InlineSearchFeedback = .idle
@@ -506,11 +509,11 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func applyTimetableAIImportSlots(_ slots: [EventUploadTimetableAIEditableSlot]) {
-        let selectedSlots = slots.filter { $0.selected }
-        guard !selectedSlots.isEmpty else { return }
+        let importSlots = slots
+        guard !importSlots.isEmpty else { return }
 
         var knownStages = draft.stageEntries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        for stage in selectedSlots.map(\.stageName) {
+        for stage in importSlots.map(\.stageName) {
             let trimmed = stage.trimmingCharacters(in: .whitespacesAndNewlines)
             let comparable = trimmed.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : trimmed
             let exists = knownStages.contains { existing in
@@ -523,11 +526,8 @@ final class EventUploadFlowViewModel: ObservableObject {
             }
         }
 
-        for imported in selectedSlots {
-            let performerNames = imported.performerNamesText
-                .split(separator: ",")
-                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+        for imported in importSlots {
+            let performerNames = timetableAIPerformerNames(from: imported)
             let actType = normalizedActType(imported.actType, performerCount: performerNames.count)
             var slot = EventUploadLineupSlotDraft()
             slot.actType = actType
@@ -535,8 +535,8 @@ final class EventUploadFlowViewModel: ObservableObject {
             while slot.performerNames.count < actType.performerCount {
                 slot.performerNames.append("")
             }
-            slot.performerDJIDs = Array(repeating: nil, count: actType.performerCount)
-            slot.performerAvatarURLs = Array(repeating: nil, count: actType.performerCount)
+            slot.performerDJIDs = timetableAIPerformerDJIDs(from: imported, count: actType.performerCount)
+            slot.performerAvatarURLs = timetableAIPerformerAvatarURLs(from: imported, count: actType.performerCount)
             slot.stageName = imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? LT("主舞台", "Main Stage", "メインステージ")
                 : imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -549,7 +549,77 @@ final class EventUploadFlowViewModel: ObservableObject {
 
         draft.dirty = true
         saveDraft()
-        EventUploadAnalytics.track("event_upload_v2_timetable_ai_applied", properties: ["slotCount": "\(selectedSlots.count)"])
+        EventUploadAnalytics.track("event_upload_v2_timetable_ai_applied", properties: ["slotCount": "\(importSlots.count)"])
+    }
+
+    func autoMatchTimetableAIImportSlots(_ slots: [EventUploadTimetableAIEditableSlot]) async -> [EventUploadTimetableAIEditableSlot] {
+        var nextSlots = slots
+        let unresolvedNames = nextSlots.flatMap { slot in
+            timetableAIPerformerNames(from: slot)
+                .enumerated()
+                .compactMap { index, name in
+                    let bound = slot.performerDJIDs.indices.contains(index)
+                        ? slot.performerDJIDs[index]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                        : false
+                    return bound ? nil : name
+                }
+        }
+        guard !unresolvedNames.isEmpty else { return nextSlots }
+
+        let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
+            let page = try await webService.fetchDJs(page: 1, limit: 20, search: keyword, sortBy: "name")
+            return page.items
+        }
+        guard !resolved.isEmpty else { return nextSlots }
+
+        for slotIndex in nextSlots.indices {
+            let performerNames = timetableAIPerformerNames(from: nextSlots[slotIndex])
+            let performerCount = max(performerNames.count, nextSlots[slotIndex].actType.performerCount)
+            ensureTimetableAIImportCapacity(&nextSlots[slotIndex], count: performerCount)
+            for performerIndex in performerNames.indices {
+                let bound = nextSlots[slotIndex].performerDJIDs.indices.contains(performerIndex)
+                    ? nextSlots[slotIndex].performerDJIDs[performerIndex]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    : false
+                guard !bound else { continue }
+                let key = normalizedDJLookupKey(performerNames[performerIndex])
+                guard let candidate = resolved[key] else { continue }
+                nextSlots[slotIndex].performerDJIDs[performerIndex] = candidate.id
+                nextSlots[slotIndex].performerAvatarURLs[performerIndex] = candidate.avatarSmallUrl ?? candidate.avatarMediumUrl ?? candidate.avatarUrl ?? candidate.avatarOriginalUrl
+            }
+        }
+
+        return nextSlots
+    }
+
+    func searchTimetableAIImportDJ(query: String, key: String, useInlineFeedback: Bool = false) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            aiImportDJSearchResults[key] = []
+            aiImportDJSearchFeedbacks[key] = .idle
+            return
+        }
+        aiImportSearchingDJKeys.insert(key)
+        defer { aiImportSearchingDJKeys.remove(key) }
+        do {
+            let page = try await webService.fetchDJs(page: 1, limit: 8, search: trimmed, sortBy: "relevance")
+            aiImportDJSearchResults[key] = page.items
+            if page.items.isEmpty {
+                let message = LT("未找到匹配 DJ，可继续使用手动名称。", "No matching DJs found. You can keep the manual name.", "一致するDJが見つかりません。手入力名のまま続行できます。")
+                aiImportDJSearchFeedbacks[key] = .empty(message: message)
+                if !useInlineFeedback {
+                    statusMessage = message
+                }
+            } else {
+                aiImportDJSearchFeedbacks[key] = .idle
+            }
+        } catch {
+            aiImportDJSearchResults[key] = []
+            let message = error.userFacingMessage ?? LT("搜索 DJ 失败，请稍后重试。", "Failed to search DJs. Please try again.", "DJ検索に失敗しました。もう一度お試しください。")
+            aiImportDJSearchFeedbacks[key] = .failure(message: message)
+            if !useInlineFeedback {
+                statusMessage = message
+            }
+        }
     }
 
     var locationSummary: String {
@@ -1150,10 +1220,12 @@ final class EventUploadFlowViewModel: ObservableObject {
                             EventUploadTimetableAIEditableSlot(
                                 weekIndex: week.weekIndex,
                                 dayIndex: max(1, day.festivalDayIndex),
-                                dayLabel: day.dayLabel ?? day.dateText ?? "Day \(day.festivalDayIndex)",
+                                dayLabel: "Day \(max(1, day.festivalDayIndex))",
                                 stageName: stage.stageName,
                                 actType: normalizedActType(type, performerCount: names.count),
                                 performerNamesText: names.joined(separator: ", "),
+                                performerDJIDs: Array(repeating: nil, count: max(1, names.count)),
+                                performerAvatarURLs: Array(repeating: nil, count: max(1, names.count)),
                                 startTimeText: slot.normalizedStartTime ?? slot.startTimeText ?? "",
                                 endTimeText: slot.normalizedEndTime ?? slot.endTimeText ?? "",
                                 confidence: slot.confidence,
@@ -1175,6 +1247,38 @@ final class EventUploadFlowViewModel: ObservableObject {
         if performerCount >= 3 { return .b3b }
         if performerCount == 2 { return .b2b }
         return type == .solo ? .solo : type
+    }
+
+    private func timetableAIPerformerNames(from imported: EventUploadTimetableAIEditableSlot) -> [String] {
+        imported.performerNamesText
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func timetableAIPerformerDJIDs(from imported: EventUploadTimetableAIEditableSlot, count: Int) -> [String?] {
+        var values = Array(imported.performerDJIDs.prefix(count))
+        while values.count < count {
+            values.append(nil)
+        }
+        return values
+    }
+
+    private func timetableAIPerformerAvatarURLs(from imported: EventUploadTimetableAIEditableSlot, count: Int) -> [String?] {
+        var values = Array(imported.performerAvatarURLs.prefix(count))
+        while values.count < count {
+            values.append(nil)
+        }
+        return values
+    }
+
+    private func ensureTimetableAIImportCapacity(_ slot: inout EventUploadTimetableAIEditableSlot, count: Int) {
+        if slot.performerDJIDs.count < count {
+            slot.performerDJIDs.append(contentsOf: Array(repeating: nil, count: count - slot.performerDJIDs.count))
+        }
+        if slot.performerAvatarURLs.count < count {
+            slot.performerAvatarURLs.append(contentsOf: Array(repeating: nil, count: count - slot.performerAvatarURLs.count))
+        }
     }
 
     private func timetableAIClockDate(_ timeText: String, dayIndex: Int) -> Date? {

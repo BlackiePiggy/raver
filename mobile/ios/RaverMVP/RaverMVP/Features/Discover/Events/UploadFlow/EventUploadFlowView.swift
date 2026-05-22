@@ -2692,6 +2692,13 @@ private struct EventUploadTimetableAIImportSheet: View {
     @State private var resultSlots: [EventUploadTimetableAIEditableSlot] = []
     @State private var warnings: [String] = []
     @State private var unparsedTexts: [String] = []
+    @State private var selectedWeekIndex: Int?
+    @State private var selectedDayIndex: Int?
+    @State private var selectedStageName: String?
+    @State private var expandedSlotIDs: Set<UUID> = []
+    @State private var isAutoMatching = false
+    @State private var recognitionStartedAt: Date?
+    @State private var autoMatchStartedAt: Date?
 
     private var images: [EventUploadImageDraft] {
         viewModel.timetableAIImageCandidates
@@ -2709,6 +2716,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                     imagePickerSection
                     statusSection
                     if !resultSlots.isEmpty {
+                        filterSection
                         resultSection
                     }
                 }
@@ -2724,11 +2732,20 @@ private struct EventUploadTimetableAIImportSheet: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(LT("确认添加", "Apply", "追加")) {
-                        viewModel.applyTimetableAIImportSlots(resultSlots)
-                        dismiss()
+                    HStack(spacing: 10) {
+                        Button {
+                            Task { await autoMatchCurrentSlots() }
+                        } label: {
+                            Label(LT("一键匹配", "Auto Match", "一括紐付け"), systemImage: "wand.and.stars")
+                        }
+                        .disabled(isRunning || isAutoMatching || resultSlots.isEmpty)
+
+                        Button(LT("确认添加", "Apply", "追加")) {
+                            viewModel.applyTimetableAIImportSlots(resultSlots)
+                            dismiss()
+                        }
+                        .disabled(isRunning || isAutoMatching || resultSlots.isEmpty)
                     }
-                    .disabled(isRunning || !resultSlots.contains(where: { $0.selected }))
                 }
             }
             .onAppear {
@@ -2808,9 +2825,16 @@ private struct EventUploadTimetableAIImportSheet: View {
 
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if isRunning {
-                ProgressView()
-                    .tint(RaverTheme.accent)
+            if isRunning || isAutoMatching {
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+                    HStack(spacing: 10) {
+                        AIThinkingIndicator()
+                        Spacer()
+                        Text(elapsedText(since: isRunning ? recognitionStartedAt : autoMatchStartedAt, now: timeline.date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
             }
             Text(statusMessage)
                 .font(.caption.weight(.semibold))
@@ -2835,92 +2859,18 @@ private struct EventUploadTimetableAIImportSheet: View {
         )
     }
 
-    private var resultSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(LT("识别结果", "Results", "認識結果"))
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                Spacer()
-                Text(LT("已选 \(resultSlots.filter(\.selected).count) / \(resultSlots.count)", "\(resultSlots.filter(\.selected).count) / \(resultSlots.count) selected", "\(resultSlots.filter(\.selected).count) / \(resultSlots.count)選択"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-            }
-
-            ForEach($resultSlots) { $slot in
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle(isOn: $slot.selected) {
-                        Text(slot.performerNamesText.isEmpty ? LT("未命名节目", "Untitled Set", "名称未設定") : slot.performerNamesText)
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .lineLimit(2)
-                    }
-                    .toggleStyle(.switch)
-                    .tint(RaverTheme.accent)
-
-                    Picker(LT("演出形式", "Act Type", "出演形式"), selection: $slot.actType) {
-                        ForEach(EventLineupActType.allCases) { type in
-                            Text(type.title).tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    TextField(LT("艺人名称，多个用逗号分隔", "Artist names, comma separated", "アーティスト名、カンマ区切り"), text: $slot.performerNamesText)
-                        .font(.body)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                    HStack(spacing: 8) {
-                        TextField(LT("舞台", "Stage", "ステージ"), text: $slot.stageName)
-                        TextField("Day", value: $slot.dayIndex, format: .number)
-                            .keyboardType(.numberPad)
-                            .frame(width: 58)
-                    }
-                    .font(.body)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                    HStack(spacing: 8) {
-                        TextField("Start", text: $slot.startTimeText)
-                        TextField("End", text: $slot.endTimeText)
-                    }
-                    .font(.body.monospacedDigit())
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                    HStack {
-                        Text("Week \(slot.weekIndex) · \(slot.dayLabel)")
-                        Spacer()
-                        if let confidence = slot.confidence {
-                            Text("\(Int(confidence * 100))%")
-                        }
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                }
-                .padding(12)
-                .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
-                )
-            }
-        }
-    }
-
     private func runRecognition() async {
         guard let selectedImage else { return }
         isRunning = true
+        recognitionStartedAt = Date()
         statusIsError = false
         statusMessage = LT("正在上传图片并识别时间表，这可能需要几十秒。", "Uploading and recognizing the timetable. This may take a little while.", "画像をアップロードしてタイムテーブルを認識しています。少し時間がかかる場合があります。")
         do {
-            let result = try await viewModel.recognizeTimetableFromImage(selectedImage)
+                let result = try await viewModel.recognizeTimetableFromImage(selectedImage)
             resultSlots = result.slots
             warnings = result.warnings
             unparsedTexts = result.unparsedTexts
+            configureResultFilters()
             statusIsError = result.slots.isEmpty
             statusMessage = result.slots.isEmpty
                 ? LT("没有识别到可用节目。可以换一张更清晰的时间表图再试。", "No usable timetable sets were recognized. Try a clearer timetable image.", "有効なタイムテーブル項目を認識できませんでした。より鮮明な画像で再試行してください。")
@@ -2930,6 +2880,59 @@ private struct EventUploadTimetableAIImportSheet: View {
             statusMessage = error.userFacingMessage ?? LT("时间表识别失败，请稍后重试。", "Timetable recognition failed. Please try again later.", "タイムテーブル認識に失敗しました。しばらくしてから再試行してください。")
         }
         isRunning = false
+        recognitionStartedAt = nil
+    }
+
+    private var filterSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            filterRow(
+                title: "Week",
+                values: availableWeeks,
+                selectedValue: Binding(
+                    get: { selectedWeekIndex },
+                    set: { value in
+                        selectedWeekIndex = value
+                        syncAIResultScope()
+                    }
+                ),
+                label: { "Week \($0)" },
+                value: { $0 }
+            )
+
+            filterRow(
+                title: LT("Day", "Day", "Day"),
+                values: availableDays,
+                selectedValue: Binding(
+                    get: { selectedDayIndex },
+                    set: { value in
+                        selectedDayIndex = value
+                        syncAIResultScope()
+                    }
+                ),
+                label: { dayLabel(for: $0) },
+                value: { $0.dayIndex }
+            )
+
+            filterRow(
+                title: LT("舞台", "Stage", "ステージ"),
+                values: availableStages,
+                selectedValue: Binding(
+                    get: { selectedStageName },
+                    set: { value in
+                        selectedStageName = value
+                        syncAIResultScope()
+                    }
+                ),
+                label: { $0 },
+                value: { $0 }
+            )
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -2960,6 +2963,686 @@ private struct EventUploadTimetableAIImportSheet: View {
         }
         .frame(height: 104)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var availableWeeks: [Int] {
+        Array(Set(resultSlots.map(\.weekIndex))).sorted()
+    }
+
+    private var availableDays: [EventUploadTimetableAIEditableSlot] {
+        filteredByWeek
+            .reduce(into: [Int: EventUploadTimetableAIEditableSlot]()) { dict, slot in
+                if dict[slot.dayIndex] == nil {
+                    dict[slot.dayIndex] = slot
+                }
+            }
+            .values
+            .sorted {
+                if $0.dayIndex != $1.dayIndex { return $0.dayIndex < $1.dayIndex }
+                return $0.dayLabel < $1.dayLabel
+            }
+    }
+
+    private var availableStages: [String] {
+        let values = filteredByWeekAndDay.map { $0.stageName.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return Array(Set(values.filter { !$0.isEmpty })).sorted()
+    }
+
+    private var filteredByWeek: [EventUploadTimetableAIEditableSlot] {
+        guard let selectedWeekIndex else { return resultSlots }
+        return resultSlots.filter { $0.weekIndex == selectedWeekIndex }
+    }
+
+    private var filteredByWeekAndDay: [EventUploadTimetableAIEditableSlot] {
+        filteredByWeek.filter { selectedDayIndex == nil || $0.dayIndex == selectedDayIndex }
+    }
+
+    private var visibleSlots: [EventUploadTimetableAIEditableSlot] {
+        filteredByWeekAndDay.filter { slot in
+            guard let selectedStageName else { return true }
+            return slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines) == selectedStageName
+        }
+    }
+
+    private func configureResultFilters() {
+        selectedWeekIndex = availableWeeks.first
+        selectedDayIndex = availableDays.first?.dayIndex
+        selectedStageName = availableStages.first
+        expandedSlotIDs = []
+    }
+
+    private func syncAIResultScope() {
+        if let selectedWeekIndex, !availableWeeks.contains(selectedWeekIndex) {
+            self.selectedWeekIndex = availableWeeks.first
+        }
+        if let selectedDayIndex, !availableDays.contains(where: { $0.dayIndex == selectedDayIndex }) {
+            self.selectedDayIndex = availableDays.first?.dayIndex
+        }
+        if let selectedStageName, !availableStages.contains(selectedStageName) {
+            self.selectedStageName = availableStages.first
+        }
+    }
+
+    private func dayLabel(for slot: EventUploadTimetableAIEditableSlot) -> String {
+        "Day \(slot.dayIndex)"
+    }
+
+    private func filterRow<Item: Hashable, Selection: Hashable>(
+        title: String,
+        values: [Item],
+        selectedValue: Binding<Selection?>,
+        label: @escaping (Item) -> String,
+        value: @escaping (Item) -> Selection
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(values, id: \.self) { item in
+                        let itemValue = value(item)
+                        Button {
+                            selectedValue.wrappedValue = itemValue
+                        } label: {
+                            Text(label(item))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(selectedValue.wrappedValue == itemValue ? .white : RaverTheme.primaryText)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(
+                                    selectedValue.wrappedValue == itemValue ? RaverTheme.accent : RaverTheme.card,
+                                    in: Capsule()
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(selectedValue.wrappedValue == itemValue ? Color.clear : RaverTheme.cardBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var resultSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(LT("识别结果", "Results", "認識結果"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Text(LT("共 \(resultSlots.count) 条", "\(resultSlots.count) items", "\(resultSlots.count)件"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            Button {
+                Task { await autoMatchCurrentSlots() }
+            } label: {
+                Label(LT("一键匹配当前列表中的 DJ", "Auto match DJs in current list", "現在のリストのDJを一括紐付け"), systemImage: "wand.and.stars")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        LinearGradient(
+                            colors: [.cyan, .blue, .purple, .pink],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(isRunning || isAutoMatching || resultSlots.isEmpty)
+
+            if visibleSlots.isEmpty {
+                Text(LT("当前筛选下没有结果。", "No results in the current filter.", "現在の絞り込み条件では結果がありません。"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(Array(visibleSlots.enumerated()), id: \.element.id) { index, slot in
+                        timetableAIResultCard(slot, order: index + 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private func timetableAIResultCard(_ slot: EventUploadTimetableAIEditableSlot, order: Int) -> some View {
+        let expanded = expandedSlotIDs.contains(slot.id)
+        let performerNames = timetableAIPerformerNames(for: slot)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Text("\(order)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(width: 18, alignment: .leading)
+
+                performerAvatarStack(slot: slot, performerNames: performerNames)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(displayName(for: slot))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                    Text(timeSummary(start: slot.startTimeText, end: slot.endTimeText))
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.accent)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    expandedSlotIDs.formSymmetricDifference([slot.id])
+                } label: {
+                    Image(systemName: expanded ? "chevron.up" : "square.and.pencil")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(expanded ? RaverTheme.accent : RaverTheme.secondaryText)
+                        .frame(width: 30, height: 30)
+                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    resultSlots.removeAll { $0.id == slot.id }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.red)
+                        .frame(width: 28, height: 28)
+                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if expanded {
+                Picker(LT("演出形式", "Act Type", "出演形式"), selection: binding(for: slot.id, keyPath: \.actType, default: .solo)) {
+                    ForEach(EventLineupActType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                ForEach(0..<slot.actType.performerCount, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            performerAvatar(
+                                name: aiImportPerformerName(for: slot, performerIndex: index),
+                                avatarURL: aiImportPerformerAvatarURL(for: slot, performerIndex: index),
+                                index: index
+                            )
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(slot.actType == .solo ? LT("DJ / 艺人名称", "Artist / DJ Name", "DJ / アーティスト名") : LT("成员 \(index + 1)", "Member \(index + 1)", "メンバー \(index + 1)"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                Text(aiImportBindingState(for: slot, performerIndex: index))
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            Spacer()
+                            if aiImportIsBound(slot, performerIndex: index) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.green)
+                            }
+                        }
+
+                        aiImportDJSearchTextField(
+                            title: slot.actType == .solo ? LT("输入 DJ / 艺人名称", "Enter artist / DJ name", "DJ / アーティスト名を入力") : LT("输入成员名称", "Enter member name", "メンバー名を入力"),
+                            text: aiImportPerformerNameBinding(slotID: slot.id, performerIndex: index),
+                            isSearching: viewModel.aiImportSearchingDJKeys.contains(aiImportSearchKey(slotID: slot.id, performerIndex: index)),
+                            canClear: aiImportCanClear(slot, performerIndex: index),
+                            clearAction: {
+                                aiImportClearDJBinding(slotID: slot.id, performerIndex: index)
+                            },
+                            action: {
+                                Task {
+                                    await viewModel.searchTimetableAIImportDJ(
+                                        query: aiImportPerformerName(for: slot, performerIndex: index),
+                                        key: aiImportSearchKey(slotID: slot.id, performerIndex: index),
+                                        useInlineFeedback: true
+                                    )
+                                }
+                            }
+                        )
+
+                        aiImportDJSearchSection(slotID: slot.id, performerIndex: index)
+                    }
+                    .padding(12)
+                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                HStack(spacing: 8) {
+                    TextField("Start", text: binding(for: slot.id, keyPath: \.startTimeText, default: ""))
+                    TextField("End", text: binding(for: slot.id, keyPath: \.endTimeText, default: ""))
+                }
+                .font(.body.monospacedDigit())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                HStack {
+                    Text("Week \(slot.weekIndex) · \(slot.dayLabel)")
+                    Spacer()
+                    if let confidence = slot.confidence {
+                        Text("\(Int(confidence * 100))%")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+
+                HStack {
+                    Spacer()
+                    Button {
+                        expandedSlotIDs.remove(slot.id)
+                    } label: {
+                        Label(LT("确认", "Confirm", "確認"), systemImage: "checkmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(RaverTheme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func performerAvatarStack(slot: EventUploadTimetableAIEditableSlot, performerNames: [String]) -> some View {
+        HStack(spacing: -10) {
+            ForEach(Array(performerNames.prefix(slot.actType.performerCount).enumerated()), id: \.offset) { index, name in
+                performerAvatar(
+                    name: name,
+                    avatarURL: slot.performerAvatarURLs.indices.contains(index) ? slot.performerAvatarURLs[index] : nil,
+                    index: index
+                )
+            }
+        }
+        .padding(.trailing, 8)
+    }
+
+    private func performerAvatar(name: String, avatarURL: String?, index: Int) -> some View {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Group {
+            if let avatarURL,
+               let resolved = AppConfig.resolvedDJAvatarURLString(avatarURL, size: .small),
+               !resolved.isEmpty {
+                AsyncImage(url: URL(string: resolved)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        avatarFallback(trimmed: trimmed, index: index)
+                    }
+                }
+            } else {
+                avatarFallback(trimmed: trimmed, index: index)
+            }
+        }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(RaverTheme.card, lineWidth: 2)
+        )
+    }
+
+    private func avatarFallback(trimmed: String, index: Int) -> some View {
+        ZStack {
+            Circle()
+                .fill(index == 0 ? RaverTheme.accent.opacity(0.22) : RaverTheme.background)
+            Text(String(trimmed.prefix(1)).uppercased())
+                .font(.caption.weight(.bold))
+                .foregroundStyle(index == 0 ? RaverTheme.accent : RaverTheme.secondaryText)
+        }
+    }
+
+    private func timeSummary(start: String, end: String) -> String {
+        let startText = start.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endText = end.trimmingCharacters(in: .whitespacesAndNewlines)
+        if startText.isEmpty || endText.isEmpty {
+            return LT("请填写演出时间", "Set start and end time", "出演時間を入力してください")
+        }
+        return "\(startText) - \(endText)"
+    }
+
+    private func displayName(for slot: EventUploadTimetableAIEditableSlot) -> String {
+        let names = timetableAIPerformerNames(for: slot)
+        let composed = EventLineupActCodec.composeName(type: slot.actType, performerNames: names)
+        return composed.isEmpty ? LT("未命名演出", "Untitled Act", "未命名の出演") : composed
+    }
+
+    private func timetableAIPerformerNames(for slot: EventUploadTimetableAIEditableSlot) -> [String] {
+        slot.performerNamesText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func aiImportPerformerName(for slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> String {
+        let names = timetableAIPerformerNames(for: slot)
+        return names.indices.contains(performerIndex) ? names[performerIndex] : ""
+    }
+
+    private func aiImportPerformerAvatarURL(for slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> String? {
+        slot.performerAvatarURLs.indices.contains(performerIndex) ? slot.performerAvatarURLs[performerIndex] : nil
+    }
+
+    private func aiImportSearchKey(slotID: UUID, performerIndex: Int) -> String {
+        "ai-\(slotID.uuidString)-\(performerIndex)"
+    }
+
+    private func aiImportIsBound(_ slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> Bool {
+        slot.performerDJIDs.indices.contains(performerIndex)
+            ? slot.performerDJIDs[performerIndex]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            : false
+    }
+
+    private func aiImportBindingState(for slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> String {
+        aiImportIsBound(slot, performerIndex: performerIndex)
+            ? LT("已绑定 DJ 词条", "Bound to DJ entry", "DJエントリ紐付け済み")
+            : LT("可手填，也可绑定 DJ 库", "Manual or DJ binding", "手入力またはDJ紐付け")
+    }
+
+    private func aiImportCanClear(_ slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> Bool {
+        let nameFilled = !aiImportPerformerName(for: slot, performerIndex: performerIndex).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return nameFilled || aiImportIsBound(slot, performerIndex: performerIndex)
+    }
+
+    private func aiImportPerformerNameBinding(slotID: UUID, performerIndex: Int) -> Binding<String> {
+        Binding {
+            guard let slot = resultSlots.first(where: { $0.id == slotID }) else { return "" }
+            return aiImportPerformerName(for: slot, performerIndex: performerIndex)
+        } set: { newValue in
+            guard let index = resultSlots.firstIndex(where: { $0.id == slotID }) else { return }
+            var names = timetableAIPerformerNames(for: resultSlots[index])
+            while names.count <= performerIndex {
+                names.append("")
+            }
+            names[performerIndex] = newValue
+            resultSlots[index].performerNamesText = names.joined(separator: ", ")
+            while resultSlots[index].performerDJIDs.count <= performerIndex {
+                resultSlots[index].performerDJIDs.append(nil)
+            }
+            while resultSlots[index].performerAvatarURLs.count <= performerIndex {
+                resultSlots[index].performerAvatarURLs.append(nil)
+            }
+            resultSlots[index].performerDJIDs[performerIndex] = nil
+            resultSlots[index].performerAvatarURLs[performerIndex] = nil
+            Task {
+                await viewModel.searchTimetableAIImportDJ(
+                    query: newValue,
+                    key: aiImportSearchKey(slotID: slotID, performerIndex: performerIndex),
+                    useInlineFeedback: true
+                )
+            }
+        }
+    }
+
+    private func aiImportApplyDJBinding(_ dj: WebDJ, slotID: UUID, performerIndex: Int) {
+        guard let index = resultSlots.firstIndex(where: { $0.id == slotID }) else { return }
+        while resultSlots[index].performerDJIDs.count <= performerIndex {
+            resultSlots[index].performerDJIDs.append(nil)
+        }
+        while resultSlots[index].performerAvatarURLs.count <= performerIndex {
+            resultSlots[index].performerAvatarURLs.append(nil)
+        }
+        resultSlots[index].performerDJIDs[performerIndex] = dj.id
+        resultSlots[index].performerAvatarURLs[performerIndex] = dj.avatarSmallUrl ?? dj.avatarMediumUrl ?? dj.avatarUrl ?? dj.avatarOriginalUrl
+    }
+
+    private func aiImportClearDJBinding(slotID: UUID, performerIndex: Int) {
+        guard let index = resultSlots.firstIndex(where: { $0.id == slotID }) else { return }
+        while resultSlots[index].performerDJIDs.count <= performerIndex {
+            resultSlots[index].performerDJIDs.append(nil)
+        }
+        while resultSlots[index].performerAvatarURLs.count <= performerIndex {
+            resultSlots[index].performerAvatarURLs.append(nil)
+        }
+        resultSlots[index].performerDJIDs[performerIndex] = nil
+        resultSlots[index].performerAvatarURLs[performerIndex] = nil
+    }
+
+    private func aiImportDJSearchSection(slotID: UUID, performerIndex: Int) -> some View {
+        let key = aiImportSearchKey(slotID: slotID, performerIndex: performerIndex)
+        let results = viewModel.aiImportDJSearchResults[key] ?? []
+        let feedback = viewModel.aiImportDJSearchFeedbacks[key] ?? .idle
+        let isSearching = viewModel.aiImportSearchingDJKeys.contains(key)
+        return aiImportDJSearchResultsList(results: results, feedback: feedback, isSearching: isSearching) { dj in
+            aiImportApplyDJBinding(dj, slotID: slotID, performerIndex: performerIndex)
+        }
+    }
+
+    private func aiImportDJSearchTextField(
+        title: String,
+        text: Binding<String>,
+        isSearching: Bool,
+        canClear: Bool,
+        clearAction: @escaping () -> Void,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            ZStack(alignment: .trailing) {
+                TextField(title, text: text)
+                    .font(.body)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(.trailing, canClear ? 168 : 104)
+
+                HStack(spacing: 6) {
+                    if canClear {
+                        Button(action: clearAction) {
+                            Label(LT("清空", "Clear", "クリア"), systemImage: "xmark.circle")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background(RaverTheme.card, in: Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Button(action: action) {
+                        Label(isSearching ? LT("搜索中", "Searching", "検索中") : LT("绑定", "Bind", "紐付け"), systemImage: "magnifyingglass")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(RaverTheme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSearching)
+                    .opacity(isSearching ? 0.72 : 1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func aiImportDJSearchResultsList(
+        results: [WebDJ],
+        feedback: EventUploadFlowViewModel.InlineSearchFeedback,
+        isSearching: Bool,
+        onSelect: @escaping (WebDJ) -> Void
+    ) -> some View {
+        if !results.isEmpty {
+            VStack(spacing: 6) {
+                ForEach(results.prefix(8)) { dj in
+                    Button {
+                        onSelect(dj)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "music.mic.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(RaverTheme.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(dj.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(dj.country ?? dj.slug ?? dj.id)
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Image(systemName: "plus.circle")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else if isSearching {
+            aiImportInlineSearchFeedbackRow(
+                message: LT("正在搜索 DJ 库…", "Searching DJ library...", "DJライブラリを検索中..."),
+                systemImage: "clock.arrow.circlepath",
+                tint: RaverTheme.secondaryText
+            )
+        } else if let message = feedback.message {
+            aiImportInlineSearchFeedbackRow(
+                message: message,
+                systemImage: feedback.isFailure ? "exclamationmark.triangle.fill" : "info.circle.fill",
+                tint: feedback.isFailure ? .red : RaverTheme.secondaryText
+            )
+        }
+    }
+
+    private func aiImportInlineSearchFeedbackRow(message: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.caption2)
+                .foregroundStyle(tint)
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func autoMatchCurrentSlots() async {
+        guard !isAutoMatching else { return }
+        isAutoMatching = true
+        autoMatchStartedAt = Date()
+        statusIsError = false
+        statusMessage = LT("正在匹配当前列表中的 DJ 词条。", "Matching DJs in the current list.", "現在のリストのDJを紐付けています。")
+        let matched = await viewModel.autoMatchTimetableAIImportSlots(resultSlots)
+        resultSlots = matched
+        configureResultFilters()
+        statusMessage = LT("已完成自动匹配，可继续确认导入。", "Auto match finished. You can continue and apply.", "自動紐付けが完了しました。続けて適用できます。")
+        isAutoMatching = false
+        autoMatchStartedAt = nil
+    }
+
+    private func elapsedText(since start: Date?, now: Date) -> String {
+        guard let start else { return "00:00" }
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func binding<T>(for slotID: UUID, keyPath: WritableKeyPath<EventUploadTimetableAIEditableSlot, T>, default defaultValue: @autoclosure @escaping () -> T) -> Binding<T> {
+        Binding {
+            resultSlots.first(where: { $0.id == slotID })?[keyPath: keyPath] ?? defaultValue()
+        } set: { newValue in
+            guard let index = resultSlots.firstIndex(where: { $0.id == slotID }) else { return }
+            resultSlots[index][keyPath: keyPath] = newValue
+        }
+    }
+}
+
+private struct AIThinkingIndicator: View {
+    @State private var pulse = false
+    @State private var spin = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [.cyan, .blue, .purple, .pink, .cyan],
+                            center: .center
+                        ),
+                        lineWidth: 2.2
+                    )
+                    .frame(width: 34, height: 34)
+                    .rotationEffect(.degrees(spin ? 360 : 0))
+                Image(systemName: "sparkles")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+            .onAppear {
+                withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
+                    spin = true
+                }
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(LT("AI 正在思考", "AI is thinking", "AIが考え中"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                HStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Circle()
+                            .fill(index == 1 ? Color.cyan : Color.purple)
+                            .frame(width: 5, height: 5)
+                            .opacity(pulse ? 0.35 : 1)
+                            .scaleEffect(pulse ? 1.2 : 0.8)
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [.cyan.opacity(0.7), .blue.opacity(0.7), .purple.opacity(0.7)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 }
 

@@ -32,7 +32,9 @@
 - [x] 多语言字段改为“默认仅编辑系统语言字段 + 可展开补充其他语言”，覆盖活动名称/城市/国家/详细地址
 - [x] 提交 mapper 移除自动把默认语言复制到其他语言字段的逻辑；未手填的多语言字段保持为空
 - [x] 时间表时间选择与展示改为显式使用活动时区，对齐 festival-viewer 的 wall-clock 语义
-- [ ] 对照 Discover「流派树」与 festival-viewer 继续细收搜索交互细节
+- [x] AI 时间表识别结果页改为默认折叠确认态，并支持行内 DJ 搜索、候选绑定、自动匹配与计时反馈
+- [x] AI 时间表识别结果页的 Day 标签以 `festivalDayIndex` 为准展示为数字 Day，避免回显 weekday 文本
+- [ ] 对照 Discover「流派树」与 iOS 上传页继续细收搜索交互细节
 - [ ] 继续做一轮真机/模拟器走查，收剩余排版与交互边角
 
 ## 不做的事
@@ -724,6 +726,9 @@ V2 新建和编辑活动仍走现有 BFF：
 - [x] iOS 多语言展开输入与“只填当前语言不自动补齐其他语言”本轮改造后再次通过 iOS Debug simulator build。
 - [x] 时间表页与仅阵容页 AI 入口样式已统一为基础信息页同款渐变按钮，并补充“可跳过”提示。
 - [x] 时间表页 AI 识别正式接入：支持从草稿图片选择、上传本地草稿图、调用 Coze 时间表识别代理、在 sheet 内展示/编辑识别结果并增量写入 timetable。
+- [x] 时间表页 AI 识别结果展示改为沿用现有 timetable 页面结构：先选 Week，再选 Day，再选舞台，下面继续沿用 Week 编辑页同款节目卡片节奏。
+- [x] 时间表页 AI 识别结果新增一键匹配当前列表 DJ，并绑定 performer 级 DJ id / avatar。
+- [x] 时间表页 AI 识别等待态改为更具科技感的 thinking 动效。
 - [x] server 新增 `/v1/events/timetable/import-image` Coze 代理，透传 event 日期、时区、跨天切日与 Week 上下文，并通过 `pnpm build`。
 - [x] iOS 时间表 AI 识别接入后再次通过 iOS Debug simulator build。
 

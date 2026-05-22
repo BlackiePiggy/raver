@@ -215,13 +215,14 @@ struct EventUploadLineupOnlySlotDraft: Identifiable, Hashable, Codable {
 
 struct EventUploadTimetableAIEditableSlot: Identifiable, Hashable {
     var id: UUID = UUID()
-    var selected: Bool = true
     var weekIndex: Int
     var dayIndex: Int
     var dayLabel: String
     var stageName: String
     var actType: EventLineupActType
     var performerNamesText: String
+    var performerDJIDs: [String?] = []
+    var performerAvatarURLs: [String?] = []
     var startTimeText: String
     var endTimeText: String
     var confidence: Double?
