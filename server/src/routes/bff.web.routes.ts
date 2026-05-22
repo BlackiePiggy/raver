@@ -1655,7 +1655,7 @@ const cozeWorkflowTimeoutMs = (() => {
   if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
     return Math.floor(parsed);
   }
-  return 120_000;
+  return 300_000;
 })();
 
 const currentRequestOrigin = (req: Request): string => {
