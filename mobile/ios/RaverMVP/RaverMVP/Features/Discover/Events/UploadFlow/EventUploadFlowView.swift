@@ -3079,16 +3079,20 @@ private struct EventUploadPosterAIImportSheet: View {
     }
 
     private func posterTicketText(_ result: EventUploadPosterAIImportResult) -> String {
-        let tierNames = result.ticketTiers
-            .map { tier in
-                let name = tier.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty || !price.isEmpty else { return nil }
-                return [name, price].filter { !$0.isEmpty }.joined(separator: " · ")
-            }
-            .compactMap { $0 }
+        let tierNames = result.ticketTiers.compactMap { tier -> String? in
+            let name = tier.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty || !price.isEmpty else { return nil }
+            return [name, price].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
         let suffix = result.ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines)
         return ([suffix] + tierNames).filter { !$0.isEmpty }.joined(separator: " / ")
+    }
+
+    private func elapsedText(since start: Date?, now: Date) -> String {
+        guard let start else { return "00:00" }
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 }
 

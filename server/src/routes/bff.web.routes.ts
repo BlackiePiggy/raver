@@ -3381,6 +3381,17 @@ type PosterImportJob = {
 
 const posterImportJobs = new Map<string, PosterImportJob>();
 
+const logImportJobLifecycle = (
+  kind: 'timetable' | 'lineup' | 'poster',
+  phase: 'created' | 'running' | 'succeeded' | 'failed' | 'polled' | 'missing',
+  payload: Record<string, unknown>
+): void => {
+  console.info(`[${kind}-import-job] ${phase}`, {
+    pid: process.pid,
+    ...payload,
+  });
+};
+
 const pruneTimetableImportJobs = (): void => {
   const now = Date.now();
   for (const [id, job] of timetableImportJobs.entries()) {
@@ -14511,12 +14522,24 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
       error: null,
     };
     timetableImportJobs.set(job.id, job);
+    logImportJobLifecycle('timetable', 'created', {
+      jobId: job.id,
+      userId,
+      status: job.status,
+      hasContext: Boolean(context),
+      fileType,
+    });
 
     void (async () => {
       const startedAt = new Date().toISOString();
       job.status = 'running';
       job.startedAt = startedAt;
       job.updatedAt = startedAt;
+      logImportJobLifecycle('timetable', 'running', {
+        jobId: job.id,
+        userId,
+        status: job.status,
+      });
       try {
         const imported = await runCozeTimetableWorker(req, imageUrl, fileType, context);
         const finishedAt = new Date().toISOString();
@@ -14524,9 +14547,11 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
         job.result = imported;
-        console.info('[timetable-import-job] request.success', {
+        logImportJobLifecycle('timetable', 'succeeded', {
           jobId: job.id,
           userId,
+          status: job.status,
+          hasResult: Boolean(job.result),
           durationMs: Date.now() - Date.parse(startedAt),
         });
       } catch (error) {
@@ -14540,6 +14565,12 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
           : message.startsWith('Coze workflow request failed')
             ? '时间表识别服务暂时不可用，请稍后重试'
             : '时间表识别失败，请稍后重试';
+        logImportJobLifecycle('timetable', 'failed', {
+          jobId: job.id,
+          userId,
+          status: job.status,
+          errorMessage: message,
+        });
         console.error('BFF web timetable import job error:', {
           jobId: job.id,
           userId,
@@ -14549,10 +14580,10 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
       }
     })();
 
-    console.info('[timetable-import-job] request.created', {
+    logImportJobLifecycle('timetable', 'created', {
       jobId: job.id,
       userId,
-      durationMs: Date.now() - requestStartedAt,
+      requestDurationMs: Date.now() - requestStartedAt,
     });
     ok(res, {
       jobId: job.id,
@@ -14579,9 +14610,20 @@ router.get('/events/timetable/import-image/jobs/:jobId', optionalAuth, async (re
     const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const job = timetableImportJobs.get(jobId);
     if (!job || job.userId !== userId) {
+      logImportJobLifecycle('timetable', 'missing', {
+        jobId,
+        userId,
+      });
       res.status(404).json({ error: 'Timetable import job not found' });
       return;
     }
+    logImportJobLifecycle('timetable', 'polled', {
+      jobId: job.id,
+      userId,
+      status: job.status,
+      hasResult: Boolean(job.result),
+      hasError: Boolean(job.error),
+    });
 
     ok(res, {
       jobId: job.id,
@@ -14635,12 +14677,24 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
       error: null,
     };
     lineupImportJobs.set(job.id, job);
+    logImportJobLifecycle('lineup', 'created', {
+      jobId: job.id,
+      userId,
+      status: job.status,
+      knownDJNamesCount: context.known_dj_names?.length ?? 0,
+      fileType,
+    });
 
     void (async () => {
       const startedAt = new Date().toISOString();
       job.status = 'running';
       job.startedAt = startedAt;
       job.updatedAt = startedAt;
+      logImportJobLifecycle('lineup', 'running', {
+        jobId: job.id,
+        userId,
+        status: job.status,
+      });
       try {
         const imported = await runCozeLineupV2Worker(req, imageUrl, fileType, context);
         const finishedAt = new Date().toISOString();
@@ -14648,9 +14702,11 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
         job.result = imported;
-        console.info('[lineup-import-job] request.success', {
+        logImportJobLifecycle('lineup', 'succeeded', {
           jobId: job.id,
           userId,
+          status: job.status,
+          hasResult: Boolean(job.result),
           durationMs: Date.now() - Date.parse(startedAt),
         });
       } catch (error) {
@@ -14664,6 +14720,12 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
           : message.startsWith('Coze workflow request failed')
             ? '阵容识别服务暂时不可用，请稍后重试'
             : '阵容识别失败，请稍后重试';
+        logImportJobLifecycle('lineup', 'failed', {
+          jobId: job.id,
+          userId,
+          status: job.status,
+          errorMessage: message,
+        });
         console.error('BFF web lineup import job error:', {
           jobId: job.id,
           userId,
@@ -14673,10 +14735,10 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
       }
     })();
 
-    console.info('[lineup-import-job] request.created', {
+    logImportJobLifecycle('lineup', 'created', {
       jobId: job.id,
       userId,
-      durationMs: Date.now() - requestStartedAt,
+      requestDurationMs: Date.now() - requestStartedAt,
     });
     ok(res, {
       jobId: job.id,
@@ -14703,9 +14765,20 @@ router.get('/events/lineup/import-image/jobs/:jobId', optionalAuth, async (req: 
     const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const job = lineupImportJobs.get(jobId);
     if (!job || job.userId !== userId) {
+      logImportJobLifecycle('lineup', 'missing', {
+        jobId,
+        userId,
+      });
       res.status(404).json({ error: 'Lineup import job not found' });
       return;
     }
+    logImportJobLifecycle('lineup', 'polled', {
+      jobId: job.id,
+      userId,
+      status: job.status,
+      hasResult: Boolean(job.result),
+      hasError: Boolean(job.error),
+    });
 
     ok(res, {
       jobId: job.id,
@@ -14758,12 +14831,23 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
       error: null,
     };
     posterImportJobs.set(job.id, job);
+    logImportJobLifecycle('poster', 'created', {
+      jobId: job.id,
+      userId,
+      status: job.status,
+      fileType,
+    });
 
     void (async () => {
       const startedAt = new Date().toISOString();
       job.status = 'running';
       job.startedAt = startedAt;
       job.updatedAt = startedAt;
+      logImportJobLifecycle('poster', 'running', {
+        jobId: job.id,
+        userId,
+        status: job.status,
+      });
       try {
         const imported = await runCozePosterWorker(req, imageUrl, fileType);
         const finishedAt = new Date().toISOString();
@@ -14771,9 +14855,11 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
         job.result = imported;
-        console.info('[poster-import-job] request.success', {
+        logImportJobLifecycle('poster', 'succeeded', {
           jobId: job.id,
           userId,
+          status: job.status,
+          hasResult: Boolean(job.result),
           durationMs: Date.now() - Date.parse(startedAt),
         });
       } catch (error) {
@@ -14787,6 +14873,12 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
           : message.startsWith('Coze workflow request failed')
             ? '活动信息识别服务暂时不可用，请稍后重试'
             : '活动信息识别失败，请稍后重试';
+        logImportJobLifecycle('poster', 'failed', {
+          jobId: job.id,
+          userId,
+          status: job.status,
+          errorMessage: message,
+        });
         console.error('BFF web poster import job error:', {
           jobId: job.id,
           userId,
@@ -14796,10 +14888,10 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
       }
     })();
 
-    console.info('[poster-import-job] request.created', {
+    logImportJobLifecycle('poster', 'created', {
       jobId: job.id,
       userId,
-      durationMs: Date.now() - requestStartedAt,
+      requestDurationMs: Date.now() - requestStartedAt,
     });
     ok(res, {
       jobId: job.id,
@@ -14826,9 +14918,20 @@ router.get('/events/poster/import-image/jobs/:jobId', optionalAuth, async (req: 
     const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const job = posterImportJobs.get(jobId);
     if (!job || job.userId !== userId) {
+      logImportJobLifecycle('poster', 'missing', {
+        jobId,
+        userId,
+      });
       res.status(404).json({ error: 'Poster import job not found' });
       return;
     }
+    logImportJobLifecycle('poster', 'polled', {
+      jobId: job.id,
+      userId,
+      status: job.status,
+      hasResult: Boolean(job.result),
+      hasError: Boolean(job.error),
+    });
 
     ok(res, {
       jobId: job.id,

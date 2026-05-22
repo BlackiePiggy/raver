@@ -758,21 +758,79 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     private func waitForPosterAIImportJob(_ jobId: String) async throws -> EventPosterAIImportResponse {
         let deadline = Date().addingTimeInterval(10 * 60)
+        var attempt = 0
         while Date() < deadline {
             try Task.checkCancellation()
-            let job = try await webService.fetchEventPosterImageImportJob(id: jobId)
+            attempt += 1
+            let job: EventPosterAIImportJobResponse
+            do {
+                job = try await webService.fetchEventPosterImageImportJob(id: jobId)
+            } catch {
+                AuthSessionBreadcrumbStore.shared.record(
+                    "poster_ai_job.poll_failed",
+                    source: "event_upload",
+                    path: "/v1/events/poster/import-image/jobs/\(jobId)",
+                    error: error,
+                    metadata: [
+                        "jobId": jobId,
+                        "attempt": "\(attempt)"
+                    ]
+                )
+                throw error
+            }
+            AuthSessionBreadcrumbStore.shared.record(
+                "poster_ai_job.polled",
+                source: "event_upload",
+                path: "/v1/events/poster/import-image/jobs/\(jobId)",
+                metadata: [
+                    "jobId": jobId,
+                    "attempt": "\(attempt)",
+                    "status": job.status,
+                    "hasResult": job.result == nil ? "false" : "true",
+                    "hasError": (job.error?.isEmpty == false) ? "true" : "false"
+                ]
+            )
             switch job.status {
             case "succeeded":
                 if let result = job.result {
+                    AuthSessionBreadcrumbStore.shared.record(
+                        "poster_ai_job.completed",
+                        source: "event_upload",
+                        path: "/v1/events/poster/import-image/jobs/\(jobId)",
+                        metadata: [
+                            "jobId": jobId,
+                            "attempt": "\(attempt)",
+                            "status": job.status
+                        ]
+                    )
                     return result
                 }
                 throw ServiceError.message(LT("活动信息识别结果为空，请稍后重试。", "Poster recognition returned an empty result. Please try again.", "イベント情報認識結果が空です。もう一度お試しください。"))
             case "failed":
+                AuthSessionBreadcrumbStore.shared.record(
+                    "poster_ai_job.failed",
+                    source: "event_upload",
+                    path: "/v1/events/poster/import-image/jobs/\(jobId)",
+                    metadata: [
+                        "jobId": jobId,
+                        "attempt": "\(attempt)",
+                        "status": job.status,
+                        "message": job.error ?? ""
+                    ]
+                )
                 throw ServiceError.message(job.error ?? LT("活动信息识别失败，请稍后重试。", "Poster recognition failed. Please try again later.", "イベント情報認識に失敗しました。しばらくしてから再試行してください。"))
             default:
                 try await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
+        AuthSessionBreadcrumbStore.shared.record(
+            "poster_ai_job.timeout",
+            source: "event_upload",
+            path: "/v1/events/poster/import-image/jobs/\(jobId)",
+            metadata: [
+                "jobId": jobId,
+            ]
+        )
         throw ServiceError.message(LT("活动信息识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for poster recognition. Please try again on a stable network.", "イベント情報認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
     }
 
