@@ -8168,22 +8168,9 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
       return;
     }
 
-    if (!shouldAllowLocalUploadFallback()) {
-      await fs.promises.unlink(file.path).catch(() => undefined);
-      res.status(503).json({ error: 'Object storage is required for event image upload' });
-      return;
-    }
-
-    const uploaded = await saveUploadedFileToLocalMediaAsset(file, {
-      ownerType: 'event',
-      ownerId: null,
-      purpose: usage || 'image',
-      uploadedById: userId,
-      localDir: eventUploadDir,
-      publicSubdir: 'events',
-      source: 'v1/events/upload-image:local-fallback',
-    });
-    ok(res, uploaded);
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    res.status(503).json({ error: 'OSS is required for event image upload' });
+    return;
   } catch (error) {
     console.error('BFF web upload event image error:', error);
     res.status(500).json({ error: 'Internal server error' });

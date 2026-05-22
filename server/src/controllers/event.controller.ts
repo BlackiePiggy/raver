@@ -1,12 +1,9 @@
 import { Request, Response } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
-import path from 'path';
 import { AuthRequest } from '../middleware/auth';
 import {
   buildMediaObjectKey,
   isObjectStorageConfigured,
-  saveBufferToLocalUploads,
-  shouldAllowLocalUploadFallback,
   uploadBufferToObjectStorage,
 } from '../services/media-storage.service';
 import { mediaAssetService } from '../services/media-asset.service';
@@ -1502,36 +1499,28 @@ export const uploadEventImage = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    if (!isObjectStorageConfigured() && !shouldAllowLocalUploadFallback()) {
+    if (!isObjectStorageConfigured()) {
       res.status(503).json({ error: 'Object storage is not configured for uploads' });
       return;
     }
 
-    const uploaded = isObjectStorageConfigured()
-      ? await uploadBufferToObjectStorage({
-          buffer: file.buffer,
-          mimeType: file.mimetype || 'image/jpeg',
-          objectKey: buildMediaObjectKey(
-            process.env.OSS_EVENTS_PREFIX || 'wen-jasonlee/events',
-            (req.body?.eventId as string | undefined) || 'legacy-api',
-            (req.body?.usage as string | undefined) || 'image',
-            file.originalname || 'image.jpg',
-            file.mimetype || 'image/jpeg'
-          ),
-        })
-      : await saveBufferToLocalUploads({
-          buffer: file.buffer,
-          localDir: path.join(process.cwd(), 'uploads', 'events'),
-          publicSubdir: 'events',
-          originalName: file.originalname || 'image.jpg',
-          mimeType: file.mimetype || 'image/jpeg',
-        });
+    const uploaded = await uploadBufferToObjectStorage({
+      buffer: file.buffer,
+      mimeType: file.mimetype || 'image/jpeg',
+      objectKey: buildMediaObjectKey(
+        process.env.OSS_EVENTS_PREFIX || 'wen-jasonlee/events',
+        (req.body?.eventId as string | undefined) || 'legacy-api',
+        (req.body?.usage as string | undefined) || 'image',
+        file.originalname || 'image.jpg',
+        file.mimetype || 'image/jpeg'
+      ),
+    });
     const asset = await mediaAssetService.register({
       ownerType: 'event',
       ownerId: typeof req.body?.eventId === 'string' ? req.body.eventId : null,
       purpose: typeof req.body?.usage === 'string' && req.body.usage.trim() ? req.body.usage.trim() : 'image',
-      provider: 'objectKey' in uploaded ? 'oss' : 'local',
-      objectKey: 'objectKey' in uploaded ? uploaded.objectKey : null,
+      provider: 'oss',
+      objectKey: uploaded.objectKey,
       url: uploaded.url,
       mimeType: file.mimetype || 'image/jpeg',
       sizeBytes: file.size,
@@ -1545,7 +1534,7 @@ export const uploadEventImage = async (req: AuthRequest, res: Response): Promise
     res.status(201).json({
       assetId: asset.id,
       url: uploaded.url,
-      filename: 'fileName' in uploaded ? uploaded.fileName : uploaded.objectKey.split('/').pop(),
+      filename: uploaded.objectKey.split('/').pop(),
       originalName: file.originalname,
       size: file.size,
       mimeType: file.mimetype,
