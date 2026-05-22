@@ -1695,6 +1695,59 @@ const resolvePublicImageUrlForCoze = (req: Request, imageUrl: string): string =>
   return trimmed;
 };
 
+const buildCozeImportObjectKey = (
+  scope: 'lineup' | 'poster' | 'timetable',
+  fileName: string,
+  mimeType: string
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  return `${ossEventsPrefix}/${scope}-imports/${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const isLegacyCozeUploadUrl = (req: Request, imageUrl: string): boolean => {
+  const trimmed = imageUrl.trim();
+  if (!trimmed) return false;
+
+  let pathname = '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const currentOrigin = currentRequestOrigin(req);
+      const parsedOrigin = `${parsed.protocol}//${parsed.host}`;
+      if (currentOrigin && parsedOrigin !== currentOrigin) return false;
+      pathname = parsed.pathname;
+    } catch (_error) {
+      return false;
+    }
+  } else if (trimmed.startsWith('/')) {
+    pathname = trimmed;
+  } else {
+    return false;
+  }
+
+  return pathname.startsWith('/uploads/');
+};
+
+const ensureCozeAccessibleImageUrl = async (
+  req: Request,
+  imageUrl: string,
+  _fileType: string,
+  scope: 'lineup' | 'poster' | 'timetable'
+): Promise<string> => {
+  if (isLegacyCozeUploadUrl(req, imageUrl)) {
+    throw new Error(`Legacy /uploads image URLs are no longer supported for Coze ${scope} imports`);
+  }
+  return resolvePublicImageUrlForCoze(req, imageUrl);
+};
+
 const postMediaOssClient =
   ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
     ? new OSS({
@@ -3357,19 +3410,6 @@ const uploadWikiBrandMediaToOss = async (
   };
 };
 
-const buildLineupImportObjectKey = (fileName: string, mimeType: string): string => {
-  const rawExt = path.extname(fileName || '').toLowerCase();
-  const mimeExt = mimeType.includes('png')
-    ? '.png'
-    : mimeType.includes('webp')
-      ? '.webp'
-      : mimeType.includes('gif')
-        ? '.gif'
-        : '.jpg';
-  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
-  return `${ossEventsPrefix}/lineup-imports/${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
-};
-
 const uploadLineupImportImageToOss = async (
   file: Express.Multer.File
 ): Promise<{ url: string; objectKey: string; mimeType: string }> => {
@@ -3379,7 +3419,7 @@ const uploadLineupImportImageToOss = async (
   }
 
   const mimeType = file.mimetype || 'image/jpeg';
-  const objectKey = buildLineupImportObjectKey(file.originalname || file.filename || 'lineup.jpg', mimeType);
+  const objectKey = buildCozeImportObjectKey('lineup', file.originalname || file.filename || 'lineup.jpg', mimeType);
 
   let putResult: { url?: string };
   try {
@@ -4118,7 +4158,7 @@ const runCozeLineupV2Worker = async (
     throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
   }
 
-  const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
+  const resolvedImageUrl = await ensureCozeAccessibleImageUrl(req, imageUrl, fileType, 'lineup');
   const payload = {
     image_url: resolvedImageUrl,
     file_type: fileType || 'image',
@@ -4344,7 +4384,7 @@ const runCozePosterWorker = async (
     throw new Error('COZE_POSTER_WORKFLOW_RUN_URL or COZE_POSTER_WORKFLOW_TOKEN is not configured');
   }
 
-  const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
+  const resolvedImageUrl = await ensureCozeAccessibleImageUrl(req, imageUrl, fileType, 'poster');
   const payload = {
     image_url: resolvedImageUrl,
     file_type: fileType || 'image/jpeg',
@@ -4507,7 +4547,7 @@ const runCozeTimetableWorker = async (
     throw new Error('COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured');
   }
 
-  const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
+  const resolvedImageUrl = await ensureCozeAccessibleImageUrl(req, imageUrl, fileType, 'timetable');
   const payload = {
     [cozeTimetableWorkflowImageField]: {
       url: resolvedImageUrl,
