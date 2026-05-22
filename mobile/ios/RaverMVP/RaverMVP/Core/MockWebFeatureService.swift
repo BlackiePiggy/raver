@@ -938,6 +938,62 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func createEventTimetableImageImportJob(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportJobResponse {
+        let result = try await importEventTimetableFromImage(input: input)
+        return EventTimetableImageImportJobResponse(
+            jobId: UUID().uuidString,
+            status: "succeeded",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            finishedAt: ISO8601DateFormatter().string(from: Date()),
+            result: result,
+            error: nil
+        )
+    }
+
+    func fetchEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse {
+        _ = id
+        return try await createEventTimetableImageImportJob(
+            input: EventTimetableImageImportRequest(
+                imageUrl: "/mock/timetable.jpg",
+                fileType: "image/jpeg",
+                context: EventTimetableImageImportContext(
+                    eventStartDate: "2026-01-01",
+                    eventEndDate: "2026-01-01",
+                    eventTimeZone: "Asia/Shanghai",
+                    dayRolloverHour: 6,
+                    weekRanges: [
+                        EventTimetableImageImportWeekRange(weekIndex: 1, startDate: "2026-01-01", endDate: "2026-01-01")
+                    ],
+                    knownStageNames: []
+                )
+            )
+        )
+    }
+
+    func matchExactDJs(names: [String]) async throws -> [DJExactMatchItem] {
+        let normalizedNames = names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        return zip(names, normalizedNames).compactMap { original, normalized in
+            guard let dj = djs.first(where: { item in
+                item.name.lowercased() == normalized
+                    || (item.aliases ?? []).contains(where: { $0.lowercased() == normalized })
+            }) else {
+                return nil
+            }
+            return DJExactMatchItem(
+                query: original,
+                djId: dj.id,
+                name: dj.name,
+                aliases: dj.aliases,
+                avatarUrl: dj.avatarUrl,
+                avatarOriginalUrl: dj.avatarOriginalUrl,
+                avatarMediumUrl: dj.avatarMediumUrl,
+                avatarSmallUrl: dj.avatarSmallUrl
+            )
+        }
+    }
+
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
         _ = imageData
         return UploadMediaResponse(url: "/uploads/feed/mock-\(fileName)", fileName: fileName, mimeType: mimeType, size: 1)

@@ -3320,6 +3320,32 @@ type TimetableRecognitionContext = {
   knownStageNames?: string[];
 };
 
+type TimetableImportJobStatus = 'pending' | 'running' | 'succeeded' | 'failed';
+
+type TimetableImportJob = {
+  id: string;
+  userId: string;
+  status: TimetableImportJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: { rawJson: unknown; rawResponse: unknown } | null;
+  error: string | null;
+};
+
+const timetableImportJobs = new Map<string, TimetableImportJob>();
+const timetableImportJobRetentionMs = 30 * 60 * 1000;
+
+const pruneTimetableImportJobs = (): void => {
+  const now = Date.now();
+  for (const [id, job] of timetableImportJobs.entries()) {
+    if (now - Date.parse(job.createdAt) > timetableImportJobRetentionMs) {
+      timetableImportJobs.delete(id);
+    }
+  }
+};
+
 type SpotifyDJSearchItem = {
   spotifyId: string;
   name: string;
@@ -7974,6 +8000,91 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     );
   } catch (error) {
     console.error('BFF web djs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/djs/match-exact', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+    const body = req.body as Record<string, unknown>;
+    const rawNames = Array.isArray(body.names) ? body.names : [];
+    const names = rawNames
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 200);
+
+    const uniqueNames: string[] = [];
+    const seen = new Set<string>();
+    for (const name of names) {
+      const key = name.toLocaleLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniqueNames.push(name);
+    }
+
+    if (uniqueNames.length === 0) {
+      ok(res, { matches: [] });
+      return;
+    }
+
+    const values = Prisma.join(
+      uniqueNames.map((name, index) => Prisma.sql`(${name}, ${name.toLocaleLowerCase()}, ${index})`)
+    );
+
+    const rows = await prisma.$queryRaw<Array<{
+      query: string;
+      query_order: number;
+      id: string;
+      name: string;
+      aliases: string[];
+      avatar_url: string | null;
+    }>>(Prisma.sql`
+      WITH input("query", "norm", "query_order") AS (
+        VALUES ${values}
+      ),
+      matched AS (
+        SELECT DISTINCT ON (input."norm")
+          input."query",
+          input."query_order",
+          "d"."id",
+          "d"."name",
+          "d"."aliases",
+          "d"."avatar_url",
+          CASE
+            WHEN lower("d"."name") = input."norm" THEN 0
+            ELSE 1
+          END AS "match_rank"
+        FROM input
+        JOIN "djs" AS "d"
+          ON lower("d"."name") = input."norm"
+          OR EXISTS (
+            SELECT 1
+            FROM unnest("d"."aliases") AS "alias"
+            WHERE lower("alias") = input."norm"
+          )
+        ORDER BY input."norm", "match_rank" ASC, "d"."follower_count" DESC, "d"."name" ASC
+      )
+      SELECT "query", "query_order", "id", "name", "aliases", "avatar_url"
+      FROM matched
+      ORDER BY "query_order" ASC
+    `);
+
+    ok(res, {
+      matches: rows.map((row) => ({
+        query: row.query,
+        djId: row.id,
+        name: row.name,
+        aliases: Array.isArray(row.aliases) ? row.aliases : [],
+        avatarUrl: row.avatar_url,
+        avatarOriginalUrl: row.avatar_url,
+        avatarMediumUrl: buildOssAvatarVariantUrl(row.avatar_url, row.id, 'medium'),
+        avatarSmallUrl: buildOssAvatarVariantUrl(row.avatar_url, row.id, 'small'),
+      })),
+    });
+  } catch (error) {
+    console.error('BFF web match exact DJs error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -13904,6 +14015,130 @@ router.post('/events/timetable/import-image', optionalAuth, async (req: Request,
       res.status(502).json({ error: '时间表识别服务暂时不可用，请稍后重试' });
       return;
     }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const requestStartedAt = Date.now();
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    if (!cozeWorkflowToken) {
+      res.status(503).json({ error: 'COZE_WORKFLOW_TOKEN is not configured' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+    const fileType = typeof body.fileType === 'string' ? body.fileType.trim() : 'image';
+    const context = sanitizeTimetableRecognitionContext(body.context);
+
+    if (!imageUrl) {
+      res.status(400).json({ error: 'imageUrl is required' });
+      return;
+    }
+
+    pruneTimetableImportJobs();
+    const now = new Date().toISOString();
+    const job: TimetableImportJob = {
+      id: crypto.randomUUID(),
+      userId,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      startedAt: null,
+      finishedAt: null,
+      result: null,
+      error: null,
+    };
+    timetableImportJobs.set(job.id, job);
+
+    void (async () => {
+      const startedAt = new Date().toISOString();
+      job.status = 'running';
+      job.startedAt = startedAt;
+      job.updatedAt = startedAt;
+      try {
+        const imported = await runCozeTimetableWorker(req, imageUrl, fileType, context);
+        const finishedAt = new Date().toISOString();
+        job.status = 'succeeded';
+        job.finishedAt = finishedAt;
+        job.updatedAt = finishedAt;
+        job.result = imported;
+        console.info('[timetable-import-job] request.success', {
+          jobId: job.id,
+          userId,
+          durationMs: Date.now() - Date.parse(startedAt),
+        });
+      } catch (error) {
+        const finishedAt = new Date().toISOString();
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        job.status = 'failed';
+        job.finishedAt = finishedAt;
+        job.updatedAt = finishedAt;
+        job.error = message.includes('COZE_WORKFLOW_TIMEOUT')
+          ? '时间表识别超时，请稍后重试或换一张更清晰的图'
+          : message.startsWith('Coze workflow request failed')
+            ? '时间表识别服务暂时不可用，请稍后重试'
+            : '时间表识别失败，请稍后重试';
+        console.error('BFF web timetable import job error:', {
+          jobId: job.id,
+          userId,
+          message,
+          error,
+        });
+      }
+    })();
+
+    console.info('[timetable-import-job] request.created', {
+      jobId: job.id,
+      userId,
+      durationMs: Date.now() - requestStartedAt,
+    });
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    });
+  } catch (error) {
+    console.error('BFF web create timetable import job error:', {
+      durationMs: Date.now() - requestStartedAt,
+      error,
+    });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/timetable/import-image/jobs/:jobId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    pruneTimetableImportJobs();
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+    const job = timetableImportJobs.get(jobId);
+    if (!job || job.userId !== userId) {
+      res.status(404).json({ error: 'Timetable import job not found' });
+      return;
+    }
+
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      result: job.result,
+      error: job.error,
+    });
+  } catch (error) {
+    console.error('BFF web get timetable import job error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

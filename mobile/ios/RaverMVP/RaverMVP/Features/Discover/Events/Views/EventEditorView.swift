@@ -2533,9 +2533,11 @@ struct EventEditorView: View {
         let draft = makeTimeDraft(from: slot)
         let start = draft.startText.isEmpty ? "--:--" : draft.startText
         let end = draft.endText.isEmpty ? "--:--" : draft.endText
-        let daySuffix = draft.endNextDay ? LT(" 次日", " +1d", " 翌日") : ""
+        let range = draft.endNextDay
+            ? LT("\(start)-次日\(end)", "\(start)-Next day \(end)", "\(start)-翌日\(end)")
+            : "\(start)-\(end)"
         let duration = draft.durationText.isEmpty ? "--" : draft.durationText
-        return LT("\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration)分", "\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration) min", "\(dayMenuTitle(for: slot)) · \(start)-\(end)\(daySuffix) · \(duration)分")
+        return LT("\(dayMenuTitle(for: slot)) · \(range) · \(duration)分", "\(dayMenuTitle(for: slot)) · \(range) · \(duration) min", "\(dayMenuTitle(for: slot)) · \(range) · \(duration)分")
     }
 
     private func daySelectionBinding(for slot: Binding<EditableLineupSlot>) -> Binding<String> {

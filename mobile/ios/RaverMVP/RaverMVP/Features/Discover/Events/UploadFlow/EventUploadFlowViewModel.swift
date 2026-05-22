@@ -499,7 +499,8 @@ final class EventUploadFlowViewModel: ObservableObject {
             fileType: image.mimeType,
             context: timetableAIContext()
         )
-        let response = try await webService.importEventTimetableFromImage(input: request)
+        let job = try await webService.createEventTimetableImageImportJob(input: request)
+        let response = try await waitForTimetableAIImportJob(job.jobId)
         let result = editableTimetableImportResult(from: response.rawJson)
         EventUploadAnalytics.track(
             "event_upload_v2_timetable_ai_succeeded",
@@ -568,10 +569,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
         guard !unresolvedNames.isEmpty else { return nextSlots }
 
-        let resolved = await fetchExactDJMatches(names: unresolvedNames) { keyword in
-            let page = try await webService.fetchDJs(page: 1, limit: 20, search: keyword, sortBy: "name")
-            return page.items
-        }
+        let resolved = await fetchBatchExactDJMatches(names: unresolvedNames)
         guard !resolved.isEmpty else { return nextSlots }
 
         for slotIndex in nextSlots.indices {
@@ -585,12 +583,49 @@ final class EventUploadFlowViewModel: ObservableObject {
                 guard !bound else { continue }
                 let key = normalizedDJLookupKey(performerNames[performerIndex])
                 guard let candidate = resolved[key] else { continue }
-                nextSlots[slotIndex].performerDJIDs[performerIndex] = candidate.id
+                nextSlots[slotIndex].performerDJIDs[performerIndex] = candidate.djId
                 nextSlots[slotIndex].performerAvatarURLs[performerIndex] = candidate.avatarSmallUrl ?? candidate.avatarMediumUrl ?? candidate.avatarUrl ?? candidate.avatarOriginalUrl
             }
         }
 
         return nextSlots
+    }
+
+    private func waitForTimetableAIImportJob(_ jobId: String) async throws -> EventTimetableImageImportResponse {
+        let deadline = Date().addingTimeInterval(10 * 60)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            let job = try await webService.fetchEventTimetableImageImportJob(id: jobId)
+            switch job.status {
+            case "succeeded":
+                if let result = job.result {
+                    return result
+                }
+                throw ServiceError.message(LT("时间表识别结果为空，请稍后重试。", "Timetable recognition returned an empty result. Please try again.", "タイムテーブル認識結果が空です。もう一度お試しください。"))
+            case "failed":
+                throw ServiceError.message(job.error ?? LT("时间表识别失败，请稍后重试。", "Timetable recognition failed. Please try again later.", "タイムテーブル認識に失敗しました。しばらくしてから再試行してください。"))
+            default:
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+        throw ServiceError.message(LT("时间表识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for timetable recognition. Please try again on a stable network.", "タイムテーブル認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
+    }
+
+    private func fetchBatchExactDJMatches(names: [String]) async -> [String: DJExactMatchItem] {
+        do {
+            let matches = try await webService.matchExactDJs(names: names)
+            var resolved: [String: DJExactMatchItem] = [:]
+            for match in matches {
+                resolved[normalizedDJLookupKey(match.query)] = match
+                resolved[normalizedDJLookupKey(match.name)] = match
+                for alias in match.aliases ?? [] {
+                    resolved[normalizedDJLookupKey(alias)] = match
+                }
+            }
+            return resolved
+        } catch {
+            return [:]
+        }
     }
 
     func searchTimetableAIImportDJ(query: String, key: String, useInlineFeedback: Bool = false) async {

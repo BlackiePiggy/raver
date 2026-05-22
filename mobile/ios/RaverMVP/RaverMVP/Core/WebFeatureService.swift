@@ -39,6 +39,9 @@ protocol WebFeatureService {
         endDate: Date?
     ) async throws -> EventLineupImageImportResponse
     func importEventTimetableFromImage(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportResponse
+    func createEventTimetableImageImportJob(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportJobResponse
+    func fetchEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse
+    func matchExactDJs(names: [String]) async throws -> [DJExactMatchItem]
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func uploadWikiBrandImage(

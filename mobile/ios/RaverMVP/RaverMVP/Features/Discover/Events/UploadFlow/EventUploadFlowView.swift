@@ -6,11 +6,27 @@ private enum EventUploadTimeDisplay {
         let startText = start.trimmingCharacters(in: .whitespacesAndNewlines)
         let endText = end.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !startText.isEmpty, !endText.isEmpty else { return nil }
-        return "\(clockText(from: startText)) - \(clockText(from: endText))"
+        guard let startClock = clockParts(from: startText),
+              let endClock = clockParts(from: endText) else {
+            return "\(startText)-\(endText)"
+        }
+        return clockRangeText(
+            startText: String(format: "%02d:%02d", startClock.hour % 24, startClock.minute),
+            startDayOffset: startClock.hour / 24,
+            endText: String(format: "%02d:%02d", endClock.hour % 24, endClock.minute),
+            endDayOffset: endClock.hour / 24
+        )
     }
 
     static func clockRange(start: Date, end: Date, logicalDay: Date, timeZone: TimeZone) -> String {
-        "\(clockText(for: start, logicalDay: logicalDay, timeZone: timeZone)) - \(clockText(for: end, logicalDay: logicalDay, timeZone: timeZone))"
+        let startDayOffset = dayOffset(for: start, logicalDay: logicalDay, timeZone: timeZone)
+        let endDayOffset = dayOffset(for: end, logicalDay: logicalDay, timeZone: timeZone)
+        return clockRangeText(
+            startText: hhmmFormatter(timeZone: timeZone).string(from: start),
+            startDayOffset: startDayOffset,
+            endText: hhmmFormatter(timeZone: timeZone).string(from: end),
+            endDayOffset: endDayOffset
+        )
     }
 
     static func clockText(for date: Date, logicalDay: Date, timeZone: TimeZone) -> String {
@@ -23,18 +39,28 @@ private enum EventUploadTimeDisplay {
         return prefix(dayOffset: dayOffset, text: text)
     }
 
-    private static func clockText(from raw: String) -> String {
-        guard let parsed = parseClock(raw) else { return raw }
-        let text = String(format: "%02d:%02d", parsed.hour % 24, parsed.minute)
-        return prefix(dayOffset: parsed.hour / 24, text: text)
+    private static func dayOffset(for date: Date, logicalDay: Date, timeZone: TimeZone) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let logicalStart = calendar.startOfDay(for: logicalDay)
+        let dateStart = calendar.startOfDay(for: date)
+        return max(0, calendar.dateComponents([.day], from: logicalStart, to: dateStart).day ?? 0)
+    }
+
+    private static func clockRangeText(startText: String, startDayOffset: Int, endText: String, endDayOffset: Int) -> String {
+        if startDayOffset == endDayOffset {
+            let start = startDayOffset > 0 ? prefix(dayOffset: startDayOffset, text: startText) : startText
+            return "\(start)-\(endText)"
+        }
+        return "\(prefix(dayOffset: startDayOffset, text: startText))-\(prefix(dayOffset: endDayOffset, text: endText))"
     }
 
     private static func prefix(dayOffset: Int, text: String) -> String {
         guard dayOffset > 0 else { return text }
-        return LT("次日 \(text)", "Next day \(text)", "翌日 \(text)")
+        return LT("次日\(text)", "Next day \(text)", "翌日\(text)")
     }
 
-    private static func parseClock(_ raw: String) -> (hour: Int, minute: Int)? {
+    private static func clockParts(from raw: String) -> (hour: Int, minute: Int)? {
         let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2,
               let hour = Int(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -2935,7 +2961,7 @@ private struct EventUploadTimetableAIImportSheet: View {
         isRunning = true
         recognitionStartedAt = Date()
         statusIsError = false
-        statusMessage = LT("正在上传图片并识别时间表，这可能需要几十秒。", "Uploading and recognizing the timetable. This may take a little while.", "画像をアップロードしてタイムテーブルを認識しています。少し時間がかかる場合があります。")
+        statusMessage = LT("已提交识别任务，AI 正在分析时间表。这个过程可以稍等一会儿。", "Recognition task submitted. AI is analyzing the timetable.", "認識タスクを送信しました。AIがタイムテーブルを解析しています。")
         do {
                 let result = try await viewModel.recognizeTimetableFromImage(selectedImage)
             resultSlots = result.slots

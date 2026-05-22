@@ -1822,6 +1822,37 @@ struct EventTimetableImageImportResponse: Codable, Hashable {
     var rawJson: EventTimetableAIResult
 }
 
+struct EventTimetableImageImportJobResponse: Codable, Hashable {
+    var jobId: String
+    var status: String
+    var createdAt: String?
+    var updatedAt: String?
+    var startedAt: String?
+    var finishedAt: String?
+    var result: EventTimetableImageImportResponse?
+    var error: String?
+}
+
+struct DJExactMatchRequest: Encodable {
+    var names: [String]
+}
+
+struct DJExactMatchResponse: Codable, Hashable {
+    var matches: [DJExactMatchItem]
+}
+
+struct DJExactMatchItem: Codable, Hashable, Identifiable {
+    var id: String { djId }
+    var query: String
+    var djId: String
+    var name: String
+    var aliases: [String]?
+    var avatarUrl: String?
+    var avatarOriginalUrl: String?
+    var avatarMediumUrl: String?
+    var avatarSmallUrl: String?
+}
+
 struct EventTimetableAIResult: Codable, Hashable {
     var schemaVersion: String?
     var imageType: String?

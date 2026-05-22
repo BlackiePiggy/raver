@@ -1,8 +1,32 @@
 import Foundation
 
+private actor WebFeatureAuthRefreshGate {
+    private var inFlightTask: Task<Session, Error>?
+
+    func run(_ operation: @escaping () async throws -> Session) async throws -> Session {
+        if let inFlightTask {
+            return try await inFlightTask.value
+        }
+
+        let task = Task { try await operation() }
+        inFlightTask = task
+        defer { inFlightTask = nil }
+        return try await task.value
+    }
+}
+
 final class LiveWebFeatureService: WebFeatureService {
     private let baseURL: URL
     private let session: URLSession
+    private let refreshGate = WebFeatureAuthRefreshGate()
+    private var token: String? {
+        get { SessionTokenStore.shared.token }
+        set { SessionTokenStore.shared.token = newValue }
+    }
+    private var refreshToken: String? {
+        get { SessionTokenStore.shared.refreshToken }
+        set { SessionTokenStore.shared.refreshToken = newValue }
+    }
 
     init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -301,6 +325,25 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func createEventTimetableImageImportJob(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportJobResponse {
+        let response: BFFEnvelope<EventTimetableImageImportJobResponse> = try await request(
+            path: "/v1/events/timetable/import-image/jobs",
+            method: "POST",
+            body: input,
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
+    func fetchEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse {
+        let response: BFFEnvelope<EventTimetableImageImportJobResponse> = try await request(
+            path: "/v1/events/timetable/import-image/jobs/\(id)",
+            method: "GET",
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse {
         let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
             path: "/v1/feed/upload-image",
@@ -359,6 +402,16 @@ final class LiveWebFeatureService: WebFeatureService {
         }
         let response: BFFEnvelope<BFFItems<WebDJ>> = try await request(path: "/v1/djs", method: "GET", queryItems: queryItems)
         return DJListPage(items: response.data.items.map(localizedDJ), pagination: response.pagination)
+    }
+
+    func matchExactDJs(names: [String]) async throws -> [DJExactMatchItem] {
+        let response: BFFEnvelope<DJExactMatchResponse> = try await request(
+            path: "/v1/djs/match-exact",
+            method: "POST",
+            body: DJExactMatchRequest(names: names),
+            timeoutInterval: 30
+        )
+        return response.data.matches
     }
 
     func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ] {
@@ -1371,8 +1424,84 @@ final class LiveWebFeatureService: WebFeatureService {
         method: String,
         queryItems: [URLQueryItem] = [],
         body: Encodable? = nil,
-        timeoutInterval: TimeInterval = 20
+        timeoutInterval: TimeInterval = 20,
+        allowAuthRetry: Bool = true,
+        includeAccessToken: Bool = true,
+        postSessionExpiredOnUnauthorized: Bool = true
     ) async throws -> T {
+        var request = try buildJSONRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            body: body,
+            timeoutInterval: timeoutInterval,
+            includeAccessToken: includeAccessToken
+        )
+        var (data, http) = try await performRequest(request)
+
+        if http.statusCode == 401,
+           sessionExpirationReason(from: data) == .accountInactive {
+            token = nil
+            refreshToken = nil
+            if postSessionExpiredOnUnauthorized {
+                postSessionExpired(.accountInactive)
+            }
+            throw ServiceError.accountInactive
+        }
+
+        if http.statusCode == 401,
+           allowAuthRetry,
+           includeAccessToken,
+           path != "/v1/auth/refresh" {
+            do {
+                let refreshed = try await refreshGate.run { [weak self] in
+                    guard let self else { throw ServiceError.unauthorized }
+                    return try await self.refreshSessionInternal()
+                }
+                request.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
+                (data, http) = try await performRequest(request)
+            } catch {
+                let reason = sessionExpirationReason(from: error)
+                if postSessionExpiredOnUnauthorized {
+                    postSessionExpired(reason)
+                }
+                throw ServiceError.sessionExpired(reason)
+            }
+        }
+
+        return try decodeResponse(data: data, http: http, postSessionExpiredOnUnauthorized: postSessionExpiredOnUnauthorized)
+    }
+
+    private func refreshSessionInternal() async throws -> Session {
+        guard let currentRefreshToken = refreshToken, !currentRefreshToken.isEmpty else {
+            throw ServiceError.unauthorized
+        }
+
+        let refreshed: Session = try await request(
+            path: "/v1/auth/refresh",
+            method: "POST",
+            body: ["refreshToken": currentRefreshToken],
+            allowAuthRetry: false,
+            includeAccessToken: false,
+            postSessionExpiredOnUnauthorized: false
+        )
+
+        token = refreshed.token
+        if let nextRefreshToken = refreshed.refreshToken, !nextRefreshToken.isEmpty {
+            refreshToken = nextRefreshToken
+        }
+        NotificationCenter.default.post(name: .raverSessionRefreshed, object: refreshed)
+        return refreshed
+    }
+
+    private func buildJSONRequest(
+        path: String,
+        method: String,
+        queryItems: [URLQueryItem],
+        body: Encodable?,
+        timeoutInterval: TimeInterval,
+        includeAccessToken: Bool
+    ) throws -> URLRequest {
         let url = try buildURL(path: path, queryItems: queryItems)
 #if DEBUG
         if path.hasPrefix("/v1/events/"), method == "GET" {
@@ -1387,16 +1516,14 @@ final class LiveWebFeatureService: WebFeatureService {
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
         request.setValue(AppLanguagePreference.current.effectiveLanguage.localeIdentifier, forHTTPHeaderField: "Accept-Language")
-        if let token = SessionTokenStore.shared.token {
+        if includeAccessToken, let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
         if let body {
             request.httpBody = try JSONEncoder.raver.encode(AnyEncodable(body))
         }
-
-        let (data, response) = try await session.data(for: request)
-        return try decodeResponse(data: data, response: response)
+        return request
     }
 
     private func uploadMultipart<T: Decodable>(
@@ -1408,6 +1535,54 @@ final class LiveWebFeatureService: WebFeatureService {
         fields: [String: String] = [:],
         timeoutInterval: TimeInterval = 30
     ) async throws -> T {
+        var request = try buildMultipartRequest(
+            path: path,
+            data: data,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: fieldName,
+            fields: fields,
+            timeoutInterval: timeoutInterval,
+            includeAccessToken: true
+        )
+        var (responseData, http) = try await performRequest(request)
+
+        if http.statusCode == 401,
+           sessionExpirationReason(from: responseData) == .accountInactive {
+            token = nil
+            refreshToken = nil
+            postSessionExpired(.accountInactive)
+            throw ServiceError.accountInactive
+        }
+
+        if http.statusCode == 401 {
+            do {
+                let refreshed = try await refreshGate.run { [weak self] in
+                    guard let self else { throw ServiceError.unauthorized }
+                    return try await self.refreshSessionInternal()
+                }
+                request.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
+                (responseData, http) = try await performRequest(request)
+            } catch {
+                let reason = sessionExpirationReason(from: error)
+                postSessionExpired(reason)
+                throw ServiceError.sessionExpired(reason)
+            }
+        }
+
+        return try decodeResponse(data: responseData, http: http, postSessionExpiredOnUnauthorized: true)
+    }
+
+    private func buildMultipartRequest(
+        path: String,
+        data: Data,
+        fileName: String,
+        mimeType: String,
+        fieldName: String,
+        fields: [String: String],
+        timeoutInterval: TimeInterval,
+        includeAccessToken: Bool
+    ) throws -> URLRequest {
         let url = try buildURL(path: path, queryItems: [])
         let boundary = "Boundary-\(UUID().uuidString)"
 
@@ -1418,7 +1593,7 @@ final class LiveWebFeatureService: WebFeatureService {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        if let token = SessionTokenStore.shared.token {
+        if includeAccessToken, let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -1436,8 +1611,15 @@ final class LiveWebFeatureService: WebFeatureService {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (responseData, response) = try await session.data(for: request)
-        return try decodeResponse(data: responseData, response: response)
+        return request
+    }
+
+    private func performRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ServiceError.invalidResponse
+        }
+        return (data, http)
     }
 
     private func buildURL(path: String, queryItems: [URLQueryItem]) throws -> URL {
@@ -1628,14 +1810,17 @@ final class LiveWebFeatureService: WebFeatureService {
         ]
     }
 
-    private func decodeResponse<T: Decodable>(data: Data, response: URLResponse) throws -> T {
-        guard let http = response as? HTTPURLResponse else {
-            throw ServiceError.invalidResponse
-        }
-
+    private func decodeResponse<T: Decodable>(
+        data: Data,
+        http: HTTPURLResponse,
+        postSessionExpiredOnUnauthorized: Bool
+    ) throws -> T {
         if http.statusCode == 401 {
-            NotificationCenter.default.post(name: .raverSessionExpired, object: nil)
-            throw ServiceError.unauthorized
+            let reason = sessionExpirationReason(from: data)
+            if postSessionExpiredOnUnauthorized {
+                postSessionExpired(reason)
+            }
+            throw ServiceError.sessionExpired(reason)
         }
 
         if http.statusCode == 304 {
@@ -1648,8 +1833,9 @@ final class LiveWebFeatureService: WebFeatureService {
                 throw ServiceError.accountEnforcementRestricted(enforcementRestriction.toRestriction())
             }
             if let apiError = try? JSONDecoder.raver.decode(BFFErrorResponse.self, from: data),
-               !apiError.error.isEmpty {
-                throw ServiceError.message(apiError.error)
+               let error = apiError.error,
+               !error.isEmpty {
+                throw ServiceError.message(error)
             }
             let message = String(data: data, encoding: .utf8) ?? "请求失败"
             throw ServiceError.message(message)
@@ -1663,6 +1849,40 @@ final class LiveWebFeatureService: WebFeatureService {
         } catch {
             print("Web BFF decode error:", error)
             throw ServiceError.message("接口返回格式不匹配，请检查 Web BFF 契约")
+        }
+    }
+
+    private func postSessionExpired(_ reason: SessionExpirationReason) {
+        NotificationCenter.default.post(name: .raverSessionExpired, object: reason)
+    }
+
+    private func sessionExpirationReason(from error: Error) -> SessionExpirationReason {
+        if case ServiceError.accountInactive = error {
+            return .accountInactive
+        }
+        if case ServiceError.sessionExpired(let reason) = error {
+            return reason
+        }
+        return .expired
+    }
+
+    private func sessionExpirationReason(from data: Data) -> SessionExpirationReason {
+        guard let code = try? JSONDecoder.raver.decode(BFFErrorResponse.self, from: data).code else {
+            return .expired
+        }
+        switch code {
+        case "AUTH_SESSION_REVOKED":
+            return .revoked
+        case "AUTH_SESSION_IDLE_EXPIRED":
+            return .idleTimeout
+        case "AUTH_SESSION_ABSOLUTE_EXPIRED":
+            return .absoluteTimeout
+        case "AUTH_ACCOUNT_INACTIVE", "ACCOUNT_INACTIVE":
+            return .accountInactive
+        case "AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED", "AUTH_REFRESH_EXPIRED", "AUTH_REFRESH_TOKEN_MISSING":
+            return .expired
+        default:
+            return .unknown
         }
     }
 }
@@ -1696,7 +1916,8 @@ private struct VideoPreviewPayload: Decodable {
 }
 
 private struct BFFErrorResponse: Decodable {
-    var error: String
+    var error: String?
+    var code: String?
 }
 
 private struct AccountEnforcementRestrictionEnvelope: Decodable {

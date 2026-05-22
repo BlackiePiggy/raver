@@ -226,36 +226,77 @@ export const syncCanonicalEventLineupAndTimetable = async (
   await tx.eventStage.deleteMany({ where: { eventId } });
 
   const canonicalArtists = normalizeCanonicalLineupArtists(artists, slots);
+  type EventArtistRow = {
+    id: string;
+    eventId: string;
+    displayName: string;
+    normalizedName: string;
+    actType: string;
+    primaryDjId: string | null;
+    billingOrder: number;
+    sourceType: string;
+    isTimetableOnly: boolean;
+  };
+  type EventArtistMemberRow = {
+    eventArtistId: string;
+    djId: string | null;
+    memberNameSnapshot: string;
+    memberOrder: number;
+    role: string;
+  };
+  type EventStageRow = {
+    id: string;
+    eventId: string;
+    name: string;
+    normalizedName: string;
+    sortOrder: number;
+  };
+  type EventPerformanceRow = {
+    id: string;
+    eventId: string;
+    eventArtistId: string;
+    stageId: string | null;
+    displayNameSnapshot: string;
+    festivalDayIndex: number | null;
+    startAt: Date;
+    endAt: Date;
+    sortOrder: number;
+    status: string;
+    sourceType: string;
+  };
+
   const artistIdsByKey = new Map<string, string>();
+  const artistRows: EventArtistRow[] = [];
+  const memberRows: EventArtistMemberRow[] = [];
   for (const [index, artist] of canonicalArtists.entries()) {
     const memberDjIds = normalizeMemberDjIds(artist);
     const memberIds = uniqueIds(memberDjIds);
     const memberNames = normalizeMemberNames(artist);
     const memberCount = Math.max(memberDjIds.length, memberIds.length, memberNames.length, 1);
-    const created = await tx.eventArtist.create({
-      data: {
-        ...(artist.id ? { id: artist.id } : {}),
-        eventId,
-        displayName: artist.djName,
-        normalizedName: normalizeCanonicalLineupName(artist.djName),
-        actType: memberCount > 1 ? 'group' : 'solo',
-        primaryDjId: artist.djId,
-        billingOrder: artist.sortOrder || index + 1,
-        sourceType: 'manual',
-        isTimetableOnly: false,
-        members: {
-          create: Array.from({ length: memberCount }).map((_, memberIndex) => ({
-            djId: memberDjIds[memberIndex] ?? null,
-            memberNameSnapshot: memberNames[memberIndex] ?? artist.djName,
-            memberOrder: memberIndex + 1,
-            role: 'performer',
-          })),
-        },
-      },
+    const createdId = artist.id || crypto.randomUUID();
+    artistRows.push({
+      id: createdId,
+      eventId,
+      displayName: artist.djName,
+      normalizedName: normalizeCanonicalLineupName(artist.djName),
+      actType: memberCount > 1 ? 'group' : 'solo',
+      primaryDjId: artist.djId,
+      billingOrder: artist.sortOrder || index + 1,
+      sourceType: 'manual',
+      isTimetableOnly: false,
     });
-    artistIdsByKey.set(canonicalLineupKey(artist), created.id);
-    artistIdsByKey.set(`name:${normalizeCanonicalLineupName(artist.djName)}`, created.id);
-    if (artist.djId) artistIdsByKey.set(`id:${artist.djId}`, created.id);
+    for (const [memberIndex] of Array.from({ length: memberCount }).entries()) {
+      memberRows.push({
+        eventArtistId: createdId,
+        djId: memberDjIds[memberIndex] ?? null,
+        memberNameSnapshot: memberNames[memberIndex] ?? artist.djName,
+        memberOrder: memberIndex + 1,
+        role: 'performer',
+      });
+    }
+    artistIdsByKey.set(canonicalLineupKey(artist), createdId);
+    artistIdsByKey.set(`name:${normalizeCanonicalLineupName(artist.djName)}`, createdId);
+    if (artist.djId) artistIdsByKey.set(`id:${artist.djId}`, createdId);
   }
 
   const orderedStageNames = uniqueIds([
@@ -263,19 +304,21 @@ export const syncCanonicalEventLineupAndTimetable = async (
     ...slots.map((slot) => slot.stageName).filter((value): value is string => Boolean(value)),
   ]);
   const stageIdsByName = new Map<string, string>();
+  const stageRows: EventStageRow[] = [];
   for (const [index, name] of orderedStageNames.entries()) {
     const normalizedName = normalizeCanonicalLineupName(name);
-    const stage = await tx.eventStage.create({
-      data: {
-        eventId,
-        name,
-        normalizedName,
-        sortOrder: index + 1,
-      },
+    const stageId = crypto.randomUUID();
+    stageRows.push({
+      id: stageId,
+      eventId,
+      name,
+      normalizedName,
+      sortOrder: index + 1,
     });
-    stageIdsByName.set(normalizedName, stage.id);
+    stageIdsByName.set(normalizedName, stageId);
   }
 
+  const performanceRows: EventPerformanceRow[] = [];
   for (const [index, slot] of slots.entries()) {
     const slotName = slot.djName || 'Unknown DJ';
     let eventArtistId =
@@ -287,46 +330,57 @@ export const syncCanonicalEventLineupAndTimetable = async (
       const memberDjIds = slot.memberDjIds?.length ? slot.memberDjIds : (slot.djId ? [slot.djId] : []);
       const memberIds = uniqueIds(memberDjIds);
       const memberNames = splitCollaborativeLineupName(slotName);
-      const created = await tx.eventArtist.create({
-        data: {
-          eventId,
-          displayName: slotName,
-          normalizedName: normalizeCanonicalLineupName(slotName),
-          actType: memberIds.length > 1 ? 'group' : 'solo',
-          primaryDjId: slot.djId,
-          billingOrder: canonicalArtists.length + index + 1,
-          sourceType: 'manual',
-          isTimetableOnly: true,
-          members: {
-            create: Array.from({ length: Math.max(memberDjIds.length, memberNames.length, 1) }).map((_, memberIndex) => ({
-              djId: memberDjIds[memberIndex] ?? null,
-              memberNameSnapshot: memberNames[memberIndex] ?? slotName,
-              memberOrder: memberIndex + 1,
-              role: 'performer',
-            })),
-          },
-        },
+      eventArtistId = crypto.randomUUID();
+      artistRows.push({
+        id: eventArtistId,
+        eventId,
+        displayName: slotName,
+        normalizedName: normalizeCanonicalLineupName(slotName),
+        actType: memberIds.length > 1 ? 'group' : 'solo',
+        primaryDjId: slot.djId,
+        billingOrder: canonicalArtists.length + index + 1,
+        sourceType: 'manual',
+        isTimetableOnly: true,
       });
-      eventArtistId = created.id;
-      artistIdsByKey.set(`name:${normalizeCanonicalLineupName(slotName)}`, created.id);
-      if (slot.djId) artistIdsByKey.set(`id:${slot.djId}`, created.id);
+      for (const [memberIndex] of Array.from({ length: Math.max(memberDjIds.length, memberNames.length, 1) }).entries()) {
+        memberRows.push({
+          eventArtistId,
+          djId: memberDjIds[memberIndex] ?? null,
+          memberNameSnapshot: memberNames[memberIndex] ?? slotName,
+          memberOrder: memberIndex + 1,
+          role: 'performer',
+        });
+      }
+      artistIdsByKey.set(`name:${normalizeCanonicalLineupName(slotName)}`, eventArtistId);
+      if (slot.djId) artistIdsByKey.set(`id:${slot.djId}`, eventArtistId);
     }
 
     const stageId = slot.stageName ? stageIdsByName.get(normalizeCanonicalLineupName(slot.stageName)) ?? null : null;
-    await tx.eventPerformance.create({
-      data: {
-        ...(slot.id ? { id: slot.id } : {}),
-        eventId,
-        eventArtistId,
-        stageId,
-        displayNameSnapshot: slotName,
-        festivalDayIndex: slot.festivalDayIndex ?? null,
-        startAt: slot.startTime,
-        endAt: slot.endTime,
-        sortOrder: slot.sortOrder || index + 1,
-        status: 'scheduled',
-        sourceType: 'manual',
-      },
+    performanceRows.push({
+      id: slot.id || crypto.randomUUID(),
+      eventId,
+      eventArtistId,
+      stageId,
+      displayNameSnapshot: slotName,
+      festivalDayIndex: slot.festivalDayIndex ?? null,
+      startAt: slot.startTime,
+      endAt: slot.endTime,
+      sortOrder: slot.sortOrder || index + 1,
+      status: 'scheduled',
+      sourceType: 'manual',
     });
+  }
+
+  if (artistRows.length > 0) {
+    await tx.eventArtist.createMany({ data: artistRows });
+  }
+  if (memberRows.length > 0) {
+    await tx.eventArtistMember.createMany({ data: memberRows });
+  }
+  if (stageRows.length > 0) {
+    await tx.eventStage.createMany({ data: stageRows });
+  }
+  if (performanceRows.length > 0) {
+    await tx.eventPerformance.createMany({ data: performanceRows });
   }
 };

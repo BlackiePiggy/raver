@@ -101,13 +101,55 @@ private enum EventTimeZoneDisplay {
     }
 
     static func slotTimeRange(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
+        let timeZone = eventTimeZone(for: event) ?? event.eventTimeZone
+        let dayIndex = EventLogicalDayResolver.dayIndex(
+            for: slot,
+            eventStartDate: event.startDate,
+            dayRolloverHour: event.dayRolloverHour,
+            timeZone: timeZone
+        )
+        let logicalDay = EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: event.startDate, timeZone: timeZone)
+        let eventText = slotTimeRangeText(start: slot.startTime, end: slot.endTime, logicalDay: logicalDay, timeZone: timeZone)
+        return "\(eventText) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
+    }
+
+    static func slotTimeRangeText(start: Date, end: Date, logicalDay: Date, timeZone: TimeZone) -> String {
+        let formatter = hourMinuteFormatter(timeZone: timeZone)
+        let startDayOffset = dayOffset(for: start, logicalDay: logicalDay, timeZone: timeZone)
+        let endDayOffset = dayOffset(for: end, logicalDay: logicalDay, timeZone: timeZone)
+        let startText = formatter.string(from: start)
+        let endText = formatter.string(from: end)
+        if startDayOffset == endDayOffset {
+            let start = startDayOffset > 0 ? dayPrefix(dayOffset: startDayOffset, text: startText) : startText
+            return "\(start)-\(endText)"
+        }
+        return "\(dayPrefix(dayOffset: startDayOffset, text: startText))-\(dayPrefix(dayOffset: endDayOffset, text: endText))"
+    }
+
+    private static func dayOffset(for date: Date, logicalDay: Date, timeZone: TimeZone) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return max(
+            0,
+            calendar.dateComponents(
+                [.day],
+                from: calendar.startOfDay(for: logicalDay),
+                to: calendar.startOfDay(for: date)
+            ).day ?? 0
+        )
+    }
+
+    private static func dayPrefix(dayOffset: Int, text: String) -> String {
+        guard dayOffset > 0 else { return text }
+        return LT("次日\(text)", "Next day \(text)", "翌日\(text)")
+    }
+
+    private static func hourMinuteFormatter(timeZone: TimeZone) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
-        let timeZone = eventTimeZone(for: event) ?? event.eventTimeZone
         formatter.timeZone = timeZone
-        let eventText = "\(formatter.string(from: slot.startTime)) - \(formatter.string(from: slot.endTime))"
-        return "\(eventText) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
+        return formatter
     }
 }
 
@@ -6763,6 +6805,7 @@ private final class EventTimelineBoardLayoutCache {
             stageOrder: event.stageOrder ?? [],
             availableWidth: availableWidth,
             maxVisibleStages: maxVisibleStages,
+            logicalDay: day.date,
             timeZone: event.eventTimeZone
         )
         key = cacheKey
@@ -6806,7 +6849,7 @@ private final class EventTimelineBoardLayoutCache {
                 top: startY,
                 height: max(44, endY - startY),
                 displayName: act.displayName,
-                timeRangeText: EventTimelineBoardView.cardTimeRangeText(for: slot, timeZone: timeZone)
+                timeRangeText: EventTimelineBoardView.cardTimeRangeText(for: slot, logicalDay: layout.logicalDay, timeZone: timeZone)
             )
         }
     }
@@ -6872,6 +6915,7 @@ private struct EventTimelineLayout {
     let requiresHorizontalScroll: Bool
     let rangeStart: Date
     let rangeEnd: Date
+    let logicalDay: Date
     let timelineSpanHeight: CGFloat
     let bodyHeight: CGFloat
     let tickDates: [Date]
@@ -6881,6 +6925,7 @@ private struct EventTimelineLayout {
         stageOrder: [String] = [],
         availableWidth: CGFloat,
         maxVisibleStages: Int = Self.maxVisibleStageCount,
+        logicalDay: Date,
         timeZone: TimeZone = .current
     ) {
 #if DEBUG
@@ -6934,6 +6979,7 @@ private struct EventTimelineLayout {
         let bounds = Self.timeBounds(for: normalizedSlots, timeZone: timeZone)
         rangeStart = bounds.start
         rangeEnd = bounds.end
+        self.logicalDay = logicalDay
         let totalHours = max(bounds.end.timeIntervalSince(bounds.start) / 3600, 1)
         timelineSpanHeight = max(760, CGFloat(totalHours) * Self.pixelsPerHour)
         bodyHeight = Self.timelineTopInset + timelineSpanHeight + Self.timelineBottomInset
@@ -7361,9 +7407,13 @@ private struct EventTimelineBoardView: View {
         )
     }
 
-    fileprivate static func cardTimeRangeText(for slot: WebEventLineupSlot, timeZone: TimeZone) -> String {
-        let formatter = cardTimeFormatter(timeZone: timeZone)
-        return "\(formatter.string(from: slot.startTime))-\(formatter.string(from: slot.endTime))"
+    fileprivate static func cardTimeRangeText(for slot: WebEventLineupSlot, logicalDay: Date, timeZone: TimeZone) -> String {
+        EventTimeZoneDisplay.slotTimeRangeText(
+            start: slot.startTime,
+            end: slot.endTime,
+            logicalDay: logicalDay,
+            timeZone: timeZone
+        )
     }
 
     private static func axisTimeFormatter(timeZone: TimeZone) -> DateFormatter {

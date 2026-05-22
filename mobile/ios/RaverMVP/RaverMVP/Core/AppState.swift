@@ -927,6 +927,14 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .raverSessionRefreshed)
+            .sink { [weak self] notification in
+                guard let self, let refreshed = notification.object as? Session else { return }
+                self.session = refreshed
+                self.errorMessage = nil
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 guard let self, self.session != nil else { return }
@@ -2001,5 +2009,6 @@ final class AppState: ObservableObject {
 
 extension Notification.Name {
     static let raverSessionExpired = Notification.Name("raver.session.expired")
+    static let raverSessionRefreshed = Notification.Name("raver.session.refreshed")
     static let raverCommunityUnreadDidChange = Notification.Name("raver.community.unreadDidChange")
 }
