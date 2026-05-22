@@ -92,6 +92,7 @@ import {
 } from '../services/media-storage.service';
 import { mediaAssetService } from '../services/media-asset.service';
 import { virtualAssetService } from '../services/virtual-asset.service';
+import { authAuditService, getClientIpForAuthAudit, type AuthAuditOutcome } from '../services/auth-audit.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -1052,8 +1053,6 @@ const clearRateBucket = (store: Map<string, RateLimitBucket>, key: string): void
   store.delete(key);
 };
 
-type AuthAuditOutcome = 'success' | 'failed' | 'blocked';
-
 const maskIdentifier = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return 'unknown';
@@ -1069,24 +1068,11 @@ const writeAuthAuditLog = (
     userId?: string | null;
     identifier?: string | null;
     errorCode?: string | null;
+    refreshTokenId?: string | null;
     detail?: Record<string, unknown>;
   }
 ): void => {
-  const traceId =
-    (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
-    (typeof req.headers['x-correlation-id'] === 'string' && req.headers['x-correlation-id']) ||
-    null;
-  console.info('[auth-audit]', {
-    traceId,
-    action: payload.action,
-    outcome: payload.outcome,
-    userId: payload.userId || null,
-    identifier: payload.identifier ? maskIdentifier(payload.identifier) : null,
-    errorCode: payload.errorCode || null,
-    ip: getClientIp(req),
-    userAgent: req.headers['user-agent'] || null,
-    ...(payload.detail || {}),
-  });
+  authAuditService.record(req, payload);
 };
 
 const parseBool = (value: string | null | undefined, fallback: boolean): boolean => {
@@ -1098,15 +1084,7 @@ const parseBool = (value: string | null | undefined, fallback: boolean): boolean
 };
 
 const getClientIp = (req: Request): string => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    const first = forwarded.split(',')[0].trim();
-    if (first) return first;
-  }
-  if (Array.isArray(forwarded) && forwarded.length > 0 && forwarded[0].trim()) {
-    return forwarded[0].trim();
-  }
-  return req.socket.remoteAddress || 'unknown';
+  return getClientIpForAuthAudit(req);
 };
 
 const normalizePhoneNumber = (value: unknown): string | null => {
@@ -4747,6 +4725,14 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
         outcome: 'failed',
         userId: current?.userId || null,
         errorCode: sessionExpiryFailure,
+        refreshTokenId: current?.id || null,
+        detail: {
+          clientType: current?.clientType || null,
+          platform: current?.platform || null,
+          appVersion: current?.appVersion || null,
+          deviceId: current?.deviceId || null,
+          deviceName: current?.deviceName || null,
+        },
       });
       res.status(401).json({
         error: sessionExpiryFailure === 'AUTH_ACCOUNT_INACTIVE'
@@ -4780,6 +4766,14 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
         outcome: 'blocked',
         userId: activeRefreshSession.userId,
         errorCode: 'AUTH_ACCOUNT_ENFORCEMENT_BLOCKED',
+        refreshTokenId: activeRefreshSession.id,
+        detail: {
+          clientType: activeRefreshSession.clientType,
+          platform: activeRefreshSession.platform,
+          appVersion: activeRefreshSession.appVersion,
+          deviceId: activeRefreshSession.deviceId,
+          deviceName: activeRefreshSession.deviceName,
+        },
       });
       return;
     }
@@ -4834,6 +4828,15 @@ router.post('/auth/refresh', async (req: Request, res: Response): Promise<void> 
       action: 'auth.refresh',
       outcome: 'success',
       userId: activeRefreshSession.userId,
+      refreshTokenId: createdNextToken.id,
+      detail: {
+        previousRefreshTokenId: activeRefreshSession.id,
+        clientType: activeRefreshSession.clientType,
+        platform: activeRefreshSession.platform,
+        appVersion: activeRefreshSession.appVersion,
+        deviceId: activeRefreshSession.deviceId,
+        deviceName: activeRefreshSession.deviceName,
+      },
     });
     res.json({
       token: accessToken,

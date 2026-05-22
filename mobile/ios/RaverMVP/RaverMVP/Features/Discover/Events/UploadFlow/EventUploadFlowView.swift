@@ -100,6 +100,7 @@ struct EventUploadFlowView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: EventUploadFlowViewModel
     @State private var showLocationPicker = false
+    @State private var showPosterAIImportSheet = false
     @State private var showTimetableAIImportSheet = false
     @State private var showLineupAIImportSheet = false
     @State private var showExitConfirmation = false
@@ -173,6 +174,11 @@ struct EventUploadFlowView: View {
             ) { result in
                 viewModel.applyLocationPickerResult(result)
             }
+        }
+        .sheet(isPresented: $showPosterAIImportSheet) {
+            EventUploadPosterAIImportSheet(viewModel: viewModel)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showTimetableAIImportSheet) {
             EventUploadTimetableAIImportSheet(viewModel: viewModel)
@@ -316,7 +322,7 @@ struct EventUploadFlowView: View {
     private var basicStep: some View {
         VStack(alignment: .leading, spacing: 16) {
             aiActionButton(title: LT("AI 一键补充", "AI Autofill", "AI自動補完")) {
-                viewModel.tapAIPlaceholder()
+                showPosterAIImportSheet = true
             }
 
             sectionTitle(
@@ -2785,6 +2791,307 @@ struct EventUploadFlowView: View {
     }
 }
 
+private struct EventUploadPosterAIImportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: EventUploadFlowViewModel
+    @State private var selectedImageID: UUID?
+    @State private var isRunning = false
+    @State private var recognitionStartedAt: Date?
+    @State private var statusMessage = LT("请选择一张已经上传到当前草稿里的活动海报或相关图片。", "Choose one uploaded poster or related image from this draft.", "この下書きに追加済みのポスターまたは関連画像を1枚選んでください。")
+    @State private var statusIsError = false
+    @State private var result: EventUploadPosterAIImportResult?
+
+    private var images: [EventUploadImageDraft] {
+        viewModel.timetableAIImageCandidates
+    }
+
+    private var selectedImage: EventUploadImageDraft? {
+        guard let selectedImageID else { return nil }
+        return images.first { $0.id == selectedImageID }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    imagePickerSection
+                    statusSection
+                    if let result {
+                        resultSection(result)
+                    }
+                }
+                .padding(16)
+            }
+            .background(RaverTheme.background.ignoresSafeArea())
+            .navigationTitle(LT("AI 补充活动信息", "AI Event Autofill", "AIイベント補完"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(LT("关闭", "Close", "閉じる")) { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(LT("应用结果", "Apply", "適用")) {
+                        guard let result else { return }
+                        viewModel.applyPosterAIImportResult(result)
+                        dismiss()
+                    }
+                    .disabled(isRunning || result == nil)
+                }
+            }
+            .onAppear {
+                if selectedImageID == nil {
+                    selectedImageID = images.first(where: { $0.zone == .poster })?.id ?? images.first?.id
+                }
+            }
+        }
+    }
+
+    private var imagePickerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(LT("选择识别图片", "Recognition Image", "認識する画像"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                Button {
+                    Task { await runRecognition() }
+                } label: {
+                    Label(LT("确认并开始识别", "Run", "認識開始"), systemImage: "sparkles")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            LinearGradient(colors: [.pink, .orange, .blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: Capsule()
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isRunning || selectedImage == nil)
+            }
+
+            if images.isEmpty {
+                Text(LT("当前草稿还没有图片。请先回到第一页上传活动海报或相关图片。", "No images are available in this draft. Upload a poster or related image first.", "この下書きには画像がありません。先にポスターや関連画像を追加してください。"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(images) { image in
+                        Button {
+                            guard !isRunning else { return }
+                            selectedImageID = image.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                posterAIImagePreview(image)
+                                Text(image.zone.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .lineLimit(1)
+                                Text(image.fileName)
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                            .padding(8)
+                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var statusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if isRunning {
+                TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+                    HStack(spacing: 10) {
+                        AIThinkingIndicator()
+                        Spacer()
+                        Text(elapsedText(since: recognitionStartedAt, now: timeline.date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            }
+            Text(statusMessage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(statusIsError ? Color.red : RaverTheme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let result {
+                ForEach(result.warnings, id: \.self) { warning in
+                    Text(warning)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+                if !result.unparsedTexts.isEmpty {
+                    Text(LT("未解析文本：", "Unparsed text:", "未解析テキスト：") + result.unparsedTexts.prefix(4).joined(separator: " / "))
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(statusIsError ? Color.red.opacity(0.45) : RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func resultSection(_ result: EventUploadPosterAIImportResult) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(LT("识别结果", "Results", "認識結果"))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(RaverTheme.primaryText)
+
+            posterFieldCard(title: LT("活动名称", "Event Name", "イベント名"), value: primaryText(result.name))
+            posterFieldCard(title: LT("城市", "City", "都市"), value: primaryText(result.city))
+            posterFieldCard(title: LT("详细地址", "Detail Address", "詳細住所"), value: primaryText(result.detailAddress))
+            posterFieldCard(title: LT("国家", "Country", "国"), value: primaryText(result.country, fallback: result.country.enFull))
+            posterFieldCard(
+                title: LT("时区", "Timezone", "タイムゾーン"),
+                value: result.timeZoneIdentifier ?? "",
+                secondary: result.timeZoneDisplayName
+            )
+            posterFieldCard(
+                title: LT("活动日期", "Schedule", "日程"),
+                value: posterScheduleText(result),
+                secondary: posterModeText(result.scheduleMode)
+            )
+            if !result.ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !result.ticketTiers.isEmpty {
+                posterFieldCard(
+                    title: LT("票务信息", "Ticket Info", "チケット情報"),
+                    value: result.ticketURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("已识别票档", "Ticket tiers recognized", "券種を認識済み") : result.ticketURL,
+                    secondary: posterTicketText(result)
+                )
+            }
+        }
+    }
+
+    private func posterFieldCard(title: String, value: String, secondary: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LT("未识别", "Not recognized", "未認識") : value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+            if let secondary, !secondary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(secondary)
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func runRecognition() async {
+        guard let selectedImage else { return }
+        isRunning = true
+        recognitionStartedAt = Date()
+        statusIsError = false
+        statusMessage = LT("已提交识别任务，AI 正在补充活动基础信息。", "Recognition task submitted. AI is filling the event basics.", "認識タスクを送信しました。AIがイベント基本情報を補完しています。")
+        do {
+            let recognized = try await viewModel.recognizePosterFromImage(selectedImage)
+            result = recognized
+            statusIsError = false
+            statusMessage = LT("识别完成。请检查结果，确认后会回填到第二页表单。", "Recognition finished. Review the result, then apply it to the basics form.", "認識が完了しました。結果を確認してから基本情報フォームへ反映してください。")
+        } catch {
+            result = nil
+            statusIsError = true
+            statusMessage = error.userFacingMessage ?? LT("活动信息识别失败，请稍后重试。", "Event info recognition failed. Please try again later.", "イベント情報認識に失敗しました。しばらくしてから再試行してください。")
+        }
+        isRunning = false
+        recognitionStartedAt = nil
+    }
+
+    @ViewBuilder
+    private func posterAIImagePreview(_ image: EventUploadImageDraft) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(RaverTheme.background)
+            if let localFileURL = image.localFileURL,
+               let uiImage = UIImage(contentsOfFile: localFileURL.path) {
+                Image(uiImage: uiImage).resizable().scaledToFill()
+            } else if let remoteURL = image.remoteURL,
+                      let url = URL(string: remoteURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let loaded):
+                        loaded.resizable().scaledToFill()
+                    default:
+                        Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            } else {
+                Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .frame(height: 104)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func primaryText(_ fields: EventUploadLocalizedFields, fallback: String = "") -> String {
+        let current = fields.primaryValue(preferredLanguage: viewModel.draft.preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !current.isEmpty { return current }
+        return fallback
+    }
+
+    private func posterScheduleText(_ result: EventUploadPosterAIImportResult) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: result.timeZoneIdentifier ?? viewModel.draft.timeZoneIdentifier) ?? .current
+        formatter.locale = Locale.current
+        formatter.dateStyle = .medium
+        guard let startDate = result.startDate else {
+            return LT("未识别到明确日期", "No clear date recognized", "明確な日付を認識できませんでした")
+        }
+        guard let endDate = result.endDate else {
+            return formatter.string(from: startDate)
+        }
+        return startDate.appLocalizedDateRangeText(to: endDate, timeZone: formatter.timeZone)
+    }
+
+    private func posterModeText(_ mode: EventUploadScheduleMode) -> String {
+        switch mode {
+        case .singleDay:
+            return LT("单日活动", "Single-day event", "単日イベント")
+        case .multiDay:
+            return LT("多日活动", "Multi-day event", "複数日イベント")
+        case .multiWeek:
+            return LT("多 Week 活动", "Multi-week event", "複数Weekイベント")
+        }
+    }
+
+    private func posterTicketText(_ result: EventUploadPosterAIImportResult) -> String {
+        let tierNames = result.ticketTiers
+            .map { tier in
+                let name = tier.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty || !price.isEmpty else { return nil }
+                return [name, price].filter { !$0.isEmpty }.joined(separator: " · ")
+            }
+            .compactMap { $0 }
+        let suffix = result.ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ([suffix] + tierNames).filter { !$0.isEmpty }.joined(separator: " / ")
+    }
+}
+
 private struct EventUploadLineupAIImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: EventUploadFlowViewModel
@@ -3144,9 +3451,13 @@ private struct EventUploadLineupAIImportSheet: View {
             unparsedTexts = result.unparsedTexts
             expandedItemIDs = []
             statusIsError = result.items.isEmpty
-            statusMessage = result.items.isEmpty
-                ? LT("没有识别到可用阵容。可以换一张更清晰的阵容图再试。", "No usable lineup items were recognized. Try a clearer lineup image.", "有効なラインナップを認識できませんでした。より鮮明な画像で再試行してください。")
-                : LT("识别完成。请检查并修正结果，确认后会增量添加到仅阵容信息。", "Recognition finished. Review and edit the results, then apply them to lineup only.", "認識が完了しました。結果を確認・修正してからラインナップのみに追加してください。")
+            if result.items.isEmpty {
+                statusMessage = LT("没有识别到可用阵容。可以换一张更清晰的阵容图再试。", "No usable lineup items were recognized. Try a clearer lineup image.", "有効なラインナップを認識できませんでした。より鮮明な画像で再試行してください。")
+            } else {
+                statusMessage = LT("识别完成，正在自动匹配 DJ 词条。", "Recognition finished. Auto-matching DJs now.", "認識が完了しました。DJを自動紐付けしています。")
+                await autoMatchCurrentItems()
+                statusMessage = LT("识别完成。请检查并修正结果，确认后会增量添加到仅阵容信息。", "Recognition finished. Review and edit the results, then apply them to lineup only.", "認識が完了しました。結果を確認・修正してからラインナップのみに追加してください。")
+            }
         } catch {
             statusIsError = true
             statusMessage = error.userFacingMessage ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。")

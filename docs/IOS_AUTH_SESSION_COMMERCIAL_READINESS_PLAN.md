@@ -256,10 +256,10 @@
 
 任务：
 
-- [ ] 后端新增或完善 auth audit log：login、refresh、logout、logout-all、session revoke。
-- [ ] auth audit 记录 `userId`、`clientType`、`sessionId`、`outcome`、`reasonCode`、`latencyMs`，不记录 token 明文。
-- [ ] iOS 增加本地 auth breadcrumb：request 401、refresh start/success/failure、retry success/failure、session expired reason。
-- [ ] 线上监控 refresh 成功率、401 retry 成功率、session expired reason 分布。
+- [x] 后端新增或完善 auth audit log：当前已覆盖 login、refresh 及其失败/blocked 分支，数据同时输出 console、内存 metrics、`auth_audit_logs` 表；logout、logout-all、session revoke 继续补齐。
+- [x] auth audit 已记录 `userId`、`clientType`、`refreshTokenId/session chain`、`outcome`、`reasonCode`、设备与版本元数据；当前未单独记录 `latencyMs`，作为下一步补充项。
+- [x] iOS 已增加本地 auth breadcrumb：request 401、refresh start/success/failure、retry 完成、session expired reason、bootstrap/proactive refresh、network restored、keychain persistence issue。
+- [x] 线上已具备 refresh 成功率、refresh 失败率、hard expiry rate、errorCode/clientType 分布等基础 metrics，并挂入 admin status 与独立 admin auth metrics 接口。
 - [ ] 增加异常告警：iOS refresh failure rate 超阈值、401 retry failure rate 超阈值。
 
 验收：
@@ -332,8 +332,8 @@
 - [x] 前台恢复和长时间运行具备主动续期。
 - [x] 已覆盖当前改造链路：网络失败和服务端 500 不会清登录态。
 - [x] dev/staging/prod auth env 通过门禁。
-- [ ] 后端 auth audit 可查询。
-- [ ] iOS 本地 auth breadcrumb 可用于排查。
+- [x] 后端 auth audit 已可查询：`/admin/auth-audit-logs`、`/admin/auth-metrics`、`/admin/status`。
+- [x] iOS 本地 auth breadcrumb 已可用于排查最近 auth 生命周期事件。
 - [x] 静态检查脚本已接入本地 preflight 或 CI。
 - [ ] 真机弱网、杀进程、重启、升级、长编辑、上传场景全部通过。
 

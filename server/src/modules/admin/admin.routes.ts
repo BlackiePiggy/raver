@@ -12,6 +12,7 @@ import { adminMediaAssetsService } from './admin-media-assets.service';
 import { adminStatusService } from './admin-status.service';
 import { accountEnforcementService } from '../../services/account-enforcement.service';
 import { accountDeletionService } from '../../services/account-deletion.service';
+import { authAuditService, type AuthAuditOutcome } from '../../services/auth-audit.service';
 import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { notificationCenterService } from '../../modules/notifications';
@@ -923,6 +924,37 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req: AuthRequest, r
   } catch (error) {
     console.error('Fetch admin audit logs error:', error);
     res.status(500).json({ error: 'Failed to fetch admin audit logs' });
+  }
+});
+
+router.get('/auth-audit-logs', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const outcome = firstQueryValue(query.outcome)?.trim() as AuthAuditOutcome | undefined;
+    const result = await authAuditService.listLogs({
+      limit: parseLimit(query.limit, 100, 200),
+      userId: firstQueryValue(query.userId)?.trim(),
+      action: firstQueryValue(query.action)?.trim(),
+      outcome: outcome && ['success', 'failed', 'blocked'].includes(outcome) ? outcome : undefined,
+      errorCode: firstQueryValue(query.errorCode)?.trim(),
+      clientType: firstQueryValue(query.clientType)?.trim(),
+      before: parseDateCursor(query.before || query.cursor),
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Fetch auth audit logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch auth audit logs' });
+  }
+});
+
+router.get('/auth-metrics', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const windowHours = Number(firstQueryValue(query.windowHours) || 24);
+    res.json({ success: true, metrics: authAuditService.getMetrics(windowHours) });
+  } catch (error) {
+    console.error('Fetch auth metrics error:', error);
+    res.status(500).json({ error: 'Failed to fetch auth metrics' });
   }
 });
 

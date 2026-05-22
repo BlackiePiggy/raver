@@ -8,6 +8,7 @@ import {
 import { getSmsMetrics } from '../../services/sms/sms-metrics';
 import { getSmsProviderStatus } from '../../services/sms/sms-provider';
 import { getFirebasePhoneAuthStatus } from '../../services/firebase-phone-auth.service';
+import { authAuditService } from '../../services/auth-audit.service';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +39,7 @@ export const adminStatusService = {
     const outboxWorker = getNotificationOutboxWorkerStatus();
     const smsProvider = getSmsProviderStatus();
     const smsMetrics = getSmsMetrics(windowHours);
+    const authMetrics = authAuditService.getMetrics(windowHours);
     const firebasePhoneAuth = getFirebasePhoneAuthStatus();
     const notificationStatus: AdminHealthStatus =
       delivery.alerts.triggeredCount > 0 || (apns.enabled && !apns.configured) ? 'degraded' : 'healthy';
@@ -74,6 +76,9 @@ export const adminStatusService = {
         provider: smsProvider,
         firebasePhoneAuth,
         metrics: smsMetrics,
+      },
+      authSession: {
+        metrics: authMetrics,
       },
     };
   },

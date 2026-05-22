@@ -859,6 +859,21 @@ final class AppState: ObservableObject {
     private static func authLog(_ message: String) {
         logger.info("[AuthSession] \(message, privacy: .public)")
     }
+    private static func authBreadcrumb(
+        _ event: String,
+        source: String? = nil,
+        reason: SessionExpirationReason? = nil,
+        error: Error? = nil,
+        metadata: [String: String] = [:]
+    ) {
+        AuthSessionBreadcrumbStore.shared.record(
+            event,
+            source: source,
+            reason: reason,
+            error: error,
+            metadata: metadata
+        )
+    }
     private static func pushRouteLog(_ message: String) {
         PushRouteTrace.log("SystemPushRoute", message)
     }
@@ -929,6 +944,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] notification in
                 guard let self else { return }
                 let reason = (notification.object as? SessionExpirationReason) ?? .expired
+                Self.authBreadcrumb("notification.session_expired", reason: reason)
                 self.expireSession(reason)
             }
             .store(in: &cancellables)
@@ -937,6 +953,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] notification in
                 guard let self, let refreshed = notification.object as? Session else { return }
                 Self.authLog("session refreshed notification received")
+                Self.authBreadcrumb("notification.session_refreshed")
                 self.session = refreshed
                 self.errorMessage = nil
             }
@@ -1029,6 +1046,7 @@ final class AppState: ObservableObject {
 
     func expireSession(_ reason: SessionExpirationReason) {
         Self.authLog("expire session reason=\(reason.rawValue)")
+        Self.authBreadcrumb("session.expire", reason: reason)
         session = nil
         resetUnreadCounts()
         SessionTokenStore.shared.clear()
@@ -1049,22 +1067,26 @@ final class AppState: ObservableObject {
         } catch {
             if error.isRecoverableAuthTransportFailure {
                 Self.authLog("bootstrap restore skipped after recoverable failure")
+                Self.authBreadcrumb("bootstrap.restore.recoverable_failure", error: error)
                 if SessionTokenStore.shared.refreshToken != nil {
                     errorMessage = nil
                 }
                 isAuthBootstrapping = false
                 return
             }
+            Self.authBreadcrumb("bootstrap.restore.failed", error: error)
             isAuthBootstrapping = false
             return
         }
 
         guard let restored else {
+            Self.authBreadcrumb("bootstrap.restore.empty")
             isAuthBootstrapping = false
             return
         }
 
         Self.authLog("bootstrap restored session")
+        Self.authBreadcrumb("bootstrap.restore.success")
         session = restored
         flushPendingSystemNotificationPayloadIfPossible(trigger: "bootstrap-restore-session")
         errorMessage = nil
@@ -1108,31 +1130,38 @@ final class AppState: ObservableObject {
 
             do {
                 Self.authLog("proactive refresh start source=\(source)")
+                Self.authBreadcrumb("proactive_refresh.start", source: source)
                 guard let refreshed = try await self.service.restoreSession() else { return }
                 self.session = refreshed
                 self.errorMessage = nil
                 Self.authLog("proactive refresh success source=\(source)")
+                Self.authBreadcrumb("proactive_refresh.success", source: source)
                 self.refreshSessionSideEffectsInBackground(source: "session-refresh-\(source)")
             } catch {
                 if error.isRecoverableAuthTransportFailure {
                     Self.authLog("proactive refresh skipped after recoverable failure source=\(source)")
+                    Self.authBreadcrumb("proactive_refresh.recoverable_failure", source: source, error: error)
                     return
                 }
                 if case ServiceError.accountInactive = error {
                     Self.authLog("proactive refresh failed accountInactive source=\(source)")
+                    Self.authBreadcrumb("proactive_refresh.hard_failure", source: source, reason: .accountInactive, error: error)
                     self.expireSession(.accountInactive)
                     return
                 }
                 if case ServiceError.sessionExpired(let reason) = error {
                     Self.authLog("proactive refresh failed sessionExpired reason=\(reason.rawValue) source=\(source)")
+                    Self.authBreadcrumb("proactive_refresh.hard_failure", source: source, reason: reason, error: error)
                     self.expireSession(reason)
                     return
                 }
                 if case ServiceError.unauthorized = error {
                     Self.authLog("proactive refresh failed unauthorized source=\(source)")
+                    Self.authBreadcrumb("proactive_refresh.hard_failure", source: source, reason: .expired, error: error)
                     self.expireSession(.expired)
                     return
                 }
+                Self.authBreadcrumb("proactive_refresh.failed_unclassified", source: source, error: error)
             }
         }
         proactiveSessionRefreshTask = task
@@ -1156,6 +1185,7 @@ final class AppState: ObservableObject {
                 self.wasNetworkSatisfied = isSatisfied
                 guard restoredNetwork, self.session != nil else { return }
                 Self.authLog("network restored; scheduling proactive refresh")
+                Self.authBreadcrumb("network.restored")
                 await self.refreshSessionIfPossible(source: "network-restored", minimumInterval: 30)
             }
         }

@@ -75,6 +75,10 @@ final class SessionTokenStore {
 
     func markRecoverablePersistenceIssue(_ message: String) {
         Self.logger.error("[AuthSession] keychain persistence issue: \(message, privacy: .public)")
+        AuthSessionBreadcrumbStore.shared.record(
+            "token_store.persistence_issue",
+            metadata: ["message": message]
+        )
     }
 
     func recordAccessTokenIssued(expiresIn seconds: Int?, now: Date = Date()) {
@@ -86,6 +90,7 @@ final class SessionTokenStore {
     }
 
     func clear() {
+        AuthSessionBreadcrumbStore.shared.record("token_store.clear")
         lock.lock()
         cachedToken = nil
         cachedRefreshToken = nil
@@ -116,6 +121,11 @@ final class SessionTokenStore {
             try write(account: account, value: value)
         } catch {
             Self.logger.error("[AuthSession] keychain write failed account=\(account, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            AuthSessionBreadcrumbStore.shared.record(
+                "token_store.keychain_write_failed",
+                error: error,
+                metadata: ["account": account]
+            )
         }
     }
 

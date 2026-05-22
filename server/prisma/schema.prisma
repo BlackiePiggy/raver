@@ -98,6 +98,7 @@ model User {
   uploadedPhotos                   SquadAlbumPhoto[]
   wikiFestivalContributions        WikiFestivalContributor[]
   authRefreshTokens                AuthRefreshToken[]
+  authAuditLogs                    AuthAuditLog[]
   createdShareLinks                ShareLink[]                       @relation("ShareLinkCreator")
   shareLinkEvents                  ShareLinkEvent[]
   sentInviteReferrals              InviteReferral[]                  @relation("InviteReferralInviter")
@@ -2554,6 +2555,34 @@ model AdminAuditLog {
   @@index([action, createdAt])
   @@index([targetType, targetId])
   @@map("admin_audit_logs")
+}
+
+model AuthAuditLog {
+  id               String   @id @default(uuid())
+  traceId          String?  @map("trace_id")
+  action           String
+  outcome          String
+  userId           String?  @map("user_id")
+  identifierMasked String?  @map("identifier_masked")
+  errorCode        String?  @map("error_code")
+  refreshTokenId   String?  @map("refresh_token_id")
+  clientType       String?  @map("client_type")
+  platform         String?
+  appVersion       String?  @map("app_version")
+  deviceId         String?  @map("device_id")
+  deviceName       String?  @map("device_name")
+  ipAddress        String?  @map("ip_address")
+  userAgent        String?  @map("user_agent")
+  detail           Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, outcome, createdAt])
+  @@index([errorCode, createdAt])
+  @@index([clientType, createdAt])
+  @@map("auth_audit_logs")
 }
 
 model AuthRefreshToken {

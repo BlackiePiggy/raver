@@ -21,6 +21,12 @@ struct AuthenticatedRequestRunner {
 
         if http.statusCode == 401,
            sessionExpirationReasonFromData(data) == .accountInactive {
+            AuthSessionBreadcrumbStore.shared.record(
+                "request.unauthorized.account_inactive",
+                path: path,
+                statusCode: http.statusCode,
+                reason: .accountInactive
+            )
             handleAccountInactive(postSessionExpiredOnUnauthorized)
             throw ServiceError.accountInactive
         }
@@ -29,14 +35,33 @@ struct AuthenticatedRequestRunner {
            allowAuthRetry,
            includeAccessToken,
            path != "/v1/auth/refresh" {
+            AuthSessionBreadcrumbStore.shared.record(
+                "request.unauthorized.refresh_start",
+                path: path,
+                statusCode: http.statusCode,
+                reason: sessionExpirationReasonFromData(data)
+            )
             do {
                 let refreshed = try await refreshGate.run {
                     try await refreshSession()
                 }
+                AuthSessionBreadcrumbStore.shared.record("request.unauthorized.refresh_success", path: path)
                 request.setValue("Bearer \(refreshed.token)", forHTTPHeaderField: "Authorization")
                 (data, http) = try await performRequest(request)
+                AuthSessionBreadcrumbStore.shared.record(
+                    "request.retry.completed",
+                    path: path,
+                    statusCode: http.statusCode,
+                    reason: http.statusCode == 401 ? sessionExpirationReasonFromData(data) : nil
+                )
                 if http.statusCode == 401,
                    sessionExpirationReasonFromData(data) == .accountInactive {
+                    AuthSessionBreadcrumbStore.shared.record(
+                        "request.retry.account_inactive",
+                        path: path,
+                        statusCode: http.statusCode,
+                        reason: .accountInactive
+                    )
                     handleAccountInactive(postSessionExpiredOnUnauthorized)
                     throw ServiceError.accountInactive
                 }
@@ -48,9 +73,20 @@ struct AuthenticatedRequestRunner {
                     throw error
                 }
                 if error.isRecoverableAuthTransportFailure {
+                    AuthSessionBreadcrumbStore.shared.record(
+                        "request.refresh.recoverable_failure",
+                        path: path,
+                        error: error
+                    )
                     throw error
                 }
                 let reason = sessionExpirationReasonFromError(error)
+                AuthSessionBreadcrumbStore.shared.record(
+                    "request.refresh.hard_failure",
+                    path: path,
+                    reason: reason,
+                    error: error
+                )
                 if postSessionExpiredOnUnauthorized {
                     handleSessionExpired(reason)
                 }
@@ -60,6 +96,12 @@ struct AuthenticatedRequestRunner {
 
         if http.statusCode == 401 {
             let reason = sessionExpirationReasonFromData(data)
+            AuthSessionBreadcrumbStore.shared.record(
+                "request.unauthorized.final",
+                path: path,
+                statusCode: http.statusCode,
+                reason: reason
+            )
             if postSessionExpiredOnUnauthorized {
                 handleSessionExpired(reason)
             }
