@@ -1634,6 +1634,10 @@ const ossWikiBrandsPrefix = (cleanEnv(process.env.OSS_WIKI_BRANDS_PREFIX) || 'wi
 const cozeWorkflowRunUrl = cleanEnv(process.env.COZE_WORKFLOW_RUN_URL) || 'https://dxy8zryvs2.coze.site/run';
 const cozeWorkflowToken = cleanEnv(process.env.COZE_WORKFLOW_TOKEN);
 const cozeWorkflowImageField = cleanEnv(process.env.COZE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
+const cozePublicBaseUrl =
+  cleanEnv(process.env.COZE_PUBLIC_BASE_URL) ||
+  cleanEnv(process.env.PUBLIC_API_BASE_URL) ||
+  cleanEnv(process.env.PUBLIC_BASE_URL);
 const cozeWorkflowTimeoutMs = (() => {
   const parsed = Number(process.env.COZE_WORKFLOW_TIMEOUT_MS);
   if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
@@ -1641,6 +1645,29 @@ const cozeWorkflowTimeoutMs = (() => {
   }
   return 120_000;
 })();
+
+const currentRequestOrigin = (req: Request): string => {
+  if (cozePublicBaseUrl) {
+    return cozePublicBaseUrl.replace(/\/+$/g, '');
+  }
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
+  return host ? `${protocol}://${host}` : '';
+};
+
+const resolvePublicImageUrlForCoze = (req: Request, imageUrl: string): string => {
+  const trimmed = imageUrl.trim();
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/')) {
+    const origin = currentRequestOrigin(req);
+    return origin ? `${origin}${trimmed}` : trimmed;
+  }
+  return trimmed;
+};
 
 const postMediaOssClient =
   ossRegion && ossAccessKeyId && ossAccessKeySecret && ossBucket
@@ -3830,6 +3857,7 @@ const sanitizeTimetableRecognitionContext = (value: unknown): TimetableRecogniti
 };
 
 const runCozeTimetableWorker = async (
+  req: Request,
   imageUrl: string,
   fileType: string,
   context: TimetableRecognitionContext
@@ -3838,9 +3866,10 @@ const runCozeTimetableWorker = async (
     throw new Error('COZE_WORKFLOW_TOKEN is not configured');
   }
 
+  const resolvedImageUrl = resolvePublicImageUrlForCoze(req, imageUrl);
   const payload = {
     [cozeWorkflowImageField]: {
-      url: imageUrl,
+      url: resolvedImageUrl,
       file_type: resolveCozeFileType(fileType),
     },
     context,
@@ -3849,7 +3878,7 @@ const runCozeTimetableWorker = async (
   const startedAt = Date.now();
   console.info('[coze-timetable] run.start', {
     runUrl: cozeWorkflowRunUrl,
-    imageUrl,
+    imageUrl: resolvedImageUrl,
     fileType,
     timeoutMs: cozeWorkflowTimeoutMs,
     context,
@@ -13842,7 +13871,7 @@ router.post('/events/timetable/import-image', optionalAuth, async (req: Request,
       return;
     }
 
-    const imported = await runCozeTimetableWorker(imageUrl, fileType, context);
+    const imported = await runCozeTimetableWorker(req, imageUrl, fileType, context);
     console.info('[timetable-import] request.success', {
       userId,
       durationMs: Date.now() - requestStartedAt,
