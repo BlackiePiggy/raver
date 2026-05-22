@@ -2828,7 +2828,14 @@ private struct EventUploadPosterAIImportSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(LT("关闭", "Close", "閉じる")) { dismiss() }
+                    Button(LT("关闭", "Close", "閉じる")) {
+                        Task {
+                            if isRunning {
+                                await viewModel.cancelAIRecognition(.poster)
+                            }
+                            dismiss()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(LT("应用结果", "Apply", "適用")) {
@@ -2885,6 +2892,7 @@ private struct EventUploadPosterAIImportSheet: View {
                             guard !isRunning else { return }
                             selectedImageID = image.id
                         } label: {
+                            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
                             VStack(alignment: .leading, spacing: 8) {
                                 posterAIImagePreview(image)
                                 Text(image.zone.title)
@@ -2897,11 +2905,12 @@ private struct EventUploadPosterAIImportSheet: View {
                                     .lineLimit(1)
                             }
                             .padding(8)
-                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(RaverTheme.card, in: shape)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                shape
                                     .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
                             )
+                            .contentShape(shape)
                         }
                         .buttonStyle(.plain)
                     }
@@ -2921,6 +2930,23 @@ private struct EventUploadPosterAIImportSheet: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
+                }
+                HStack {
+                    Spacer()
+                    Button {
+                        Task {
+                            await viewModel.cancelAIRecognition(.poster)
+                            isRunning = false
+                            recognitionStartedAt = nil
+                            statusIsError = false
+                            statusMessage = LT("已取消当前识别任务。", "Current recognition task cancelled.", "現在の認識タスクをキャンセルしました。")
+                        }
+                    } label: {
+                        Label(LT("取消识别", "Cancel", "キャンセル"), systemImage: "xmark.circle")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             Text(statusMessage)
@@ -3031,28 +3057,41 @@ private struct EventUploadPosterAIImportSheet: View {
 
     @ViewBuilder
     private func posterAIImagePreview(_ image: EventUploadImageDraft) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            shape
                 .fill(RaverTheme.background)
+                .allowsHitTesting(false)
             if let localFileURL = image.localFileURL,
                let uiImage = UIImage(contentsOfFile: localFileURL.path) {
-                Image(uiImage: uiImage).resizable().scaledToFill()
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .allowsHitTesting(false)
             } else if let remoteURL = image.remoteURL,
                       let url = URL(string: remoteURL) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let loaded):
-                        loaded.resizable().scaledToFill()
+                        loaded
+                            .resizable()
+                            .scaledToFill()
+                            .allowsHitTesting(false)
                     default:
-                        Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+                        Image(systemName: "photo")
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .allowsHitTesting(false)
                     }
                 }
             } else {
-                Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+                Image(systemName: "photo")
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .allowsHitTesting(false)
             }
         }
         .frame(height: 104)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(shape)
+        .contentShape(shape)
     }
 
     private func primaryText(_ fields: EventUploadLocalizedFields, fallback: String = "") -> String {
@@ -3609,7 +3648,14 @@ private struct EventUploadLineupAIImportSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(LT("关闭", "Close", "閉じる")) { dismiss() }
+                    Button(LT("关闭", "Close", "閉じる")) {
+                        Task {
+                            if isRunning {
+                                await viewModel.cancelAIRecognition(.lineup)
+                            }
+                            dismiss()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 10) {
@@ -3674,6 +3720,7 @@ private struct EventUploadLineupAIImportSheet: View {
                             guard !isRunning else { return }
                             selectedImageID = image.id
                         } label: {
+                            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
                             VStack(alignment: .leading, spacing: 8) {
                                 imagePreview(image)
                                 Text(image.zone.title)
@@ -3686,11 +3733,12 @@ private struct EventUploadLineupAIImportSheet: View {
                                     .lineLimit(1)
                             }
                             .padding(8)
-                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(RaverTheme.card, in: shape)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                shape
                                     .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
                             )
+                            .contentShape(shape)
                         }
                         .buttonStyle(.plain)
                     }
@@ -3709,6 +3757,25 @@ private struct EventUploadLineupAIImportSheet: View {
                         Text(elapsedText(since: isRunning ? recognitionStartedAt : autoMatchStartedAt, now: timeline.date))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+                if isRunning {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task {
+                                await viewModel.cancelAIRecognition(.lineup)
+                                isRunning = false
+                                recognitionStartedAt = nil
+                                statusIsError = false
+                                statusMessage = LT("已取消当前识别任务。", "Current recognition task cancelled.", "現在の認識タスクをキャンセルしました。")
+                            }
+                        } label: {
+                            Label(LT("取消识别", "Cancel", "キャンセル"), systemImage: "xmark.circle")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -3890,28 +3957,41 @@ private struct EventUploadLineupAIImportSheet: View {
 
     @ViewBuilder
     private func imagePreview(_ image: EventUploadImageDraft) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            shape
                 .fill(RaverTheme.background)
+                .allowsHitTesting(false)
             if let localFileURL = image.localFileURL,
                let uiImage = UIImage(contentsOfFile: localFileURL.path) {
-                Image(uiImage: uiImage).resizable().scaledToFill()
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .allowsHitTesting(false)
             } else if let remoteURL = image.remoteURL,
                       let url = URL(string: remoteURL) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let loaded):
-                        loaded.resizable().scaledToFill()
+                        loaded
+                            .resizable()
+                            .scaledToFill()
+                            .allowsHitTesting(false)
                     default:
-                        Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+                        Image(systemName: "photo")
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .allowsHitTesting(false)
                     }
                 }
             } else {
-                Image(systemName: "photo").foregroundStyle(RaverTheme.secondaryText)
+                Image(systemName: "photo")
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .allowsHitTesting(false)
             }
         }
         .frame(height: 104)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(shape)
+        .contentShape(shape)
     }
 
     private func runRecognition() async {
@@ -4284,7 +4364,12 @@ private struct EventUploadTimetableAIImportSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(LT("关闭", "Close", "閉じる")) {
-                        dismiss()
+                        Task {
+                            if isRunning {
+                                await viewModel.cancelAIRecognition(.timetable)
+                            }
+                            dismiss()
+                        }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -4354,6 +4439,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                             guard !isRunning else { return }
                             selectedImageID = image.id
                         } label: {
+                            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
                             VStack(alignment: .leading, spacing: 8) {
                                 timetableAIImagePreview(image)
                                 Text(image.zone.title)
@@ -4366,11 +4452,12 @@ private struct EventUploadTimetableAIImportSheet: View {
                                     .lineLimit(1)
                             }
                             .padding(8)
-                            .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(RaverTheme.card, in: shape)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                shape
                                     .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
                             )
+                            .contentShape(shape)
                         }
                         .buttonStyle(.plain)
                     }
@@ -4389,6 +4476,25 @@ private struct EventUploadTimetableAIImportSheet: View {
                         Text(elapsedText(since: isRunning ? recognitionStartedAt : autoMatchStartedAt, now: timeline.date))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+                if isRunning {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Task {
+                                await viewModel.cancelAIRecognition(.timetable)
+                                isRunning = false
+                                recognitionStartedAt = nil
+                                statusIsError = false
+                                statusMessage = LT("已取消当前识别任务。", "Current recognition task cancelled.", "現在の認識タスクをキャンセルしました。")
+                            }
+                        } label: {
+                            Label(LT("取消识别", "Cancel", "キャンセル"), systemImage: "xmark.circle")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -4493,32 +4599,41 @@ private struct EventUploadTimetableAIImportSheet: View {
 
     @ViewBuilder
     private func timetableAIImagePreview(_ image: EventUploadImageDraft) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            shape
                 .fill(RaverTheme.background)
+                .allowsHitTesting(false)
             if let localFileURL = image.localFileURL,
                let uiImage = UIImage(contentsOfFile: localFileURL.path) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
+                    .allowsHitTesting(false)
             } else if let remoteURL = image.remoteURL,
                       let url = URL(string: remoteURL) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let loaded):
-                        loaded.resizable().scaledToFill()
+                        loaded
+                            .resizable()
+                            .scaledToFill()
+                            .allowsHitTesting(false)
                     default:
                         Image(systemName: "photo")
                             .foregroundStyle(RaverTheme.secondaryText)
+                            .allowsHitTesting(false)
                     }
                 }
             } else {
                 Image(systemName: "photo")
                     .foregroundStyle(RaverTheme.secondaryText)
+                    .allowsHitTesting(false)
             }
         }
         .frame(height: 104)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(shape)
+        .contentShape(shape)
     }
 
     private var availableWeeks: [Int] {

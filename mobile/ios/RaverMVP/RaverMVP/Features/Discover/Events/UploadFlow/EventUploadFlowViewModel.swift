@@ -2,6 +2,12 @@ import Foundation
 
 @MainActor
 final class EventUploadFlowViewModel: ObservableObject {
+    enum AIRecognitionKind: String {
+        case poster
+        case lineup
+        case timetable
+    }
+
     enum InlineSearchFeedback: Equatable {
         case idle
         case empty(message: String)
@@ -40,6 +46,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var organizerSearchFeedback: InlineSearchFeedback = .idle
     @Published var djSearchFeedbacks: [String: InlineSearchFeedback] = [:]
     @Published var isSubmitting = false
+    @Published private(set) var runningAIRecognitionKinds: Set<AIRecognitionKind> = []
 
     private let draftStore: EventUploadDraftStore
     private let webService: WebFeatureService
@@ -50,6 +57,8 @@ final class EventUploadFlowViewModel: ObservableObject {
     private var timeZoneSearchTask: Task<Void, Never>?
     private var organizerSearchTask: Task<Void, Never>?
     private var djSearchTasks: [String: Task<Void, Never>] = [:]
+    private var aiRecognitionTasks: [AIRecognitionKind: Task<Void, Never>] = [:]
+    private var aiRecognitionJobIDs: [AIRecognitionKind: String] = [:]
     private var didDiscardDraft = false
 
     init(
@@ -506,55 +515,92 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func recognizeTimetableFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadTimetableAIImportResult {
         EventUploadAnalytics.track("event_upload_v2_timetable_ai_started", properties: ["zone": image.zone.rawValue])
-        let remoteURL = try await remoteURLForAIImage(image)
-        let request = EventTimetableImageImportRequest(
-            imageUrl: remoteURL,
-            fileType: image.mimeType,
-            context: timetableAIContext()
-        )
-        let job = try await webService.createEventTimetableImageImportJob(input: request)
-        let response = try await waitForTimetableAIImportJob(job.jobId)
-        let result = editableTimetableImportResult(from: response.rawJson)
-        EventUploadAnalytics.track(
-            "event_upload_v2_timetable_ai_succeeded",
-            properties: ["slotCount": "\(result.slots.count)", "warningCount": "\(result.warnings.count)"]
-        )
+        let result = try await withAIRecognitionTask(.timetable) { [self] in
+            let remoteURL = try await self.remoteURLForAIImage(image)
+            let request = EventTimetableImageImportRequest(
+                imageUrl: remoteURL,
+                fileType: image.mimeType,
+                context: self.timetableAIContext()
+            )
+            let job = try await self.webService.createEventTimetableImageImportJob(input: request)
+            self.aiRecognitionJobIDs[.timetable] = job.jobId
+            let response = try await self.waitForTimetableAIImportJob(job.jobId)
+            let result = self.editableTimetableImportResult(from: response.rawJson)
+            EventUploadAnalytics.track(
+                "event_upload_v2_timetable_ai_succeeded",
+                properties: ["slotCount": "\(result.slots.count)", "warningCount": "\(result.warnings.count)"]
+            )
+            return result
+        }
         return result
     }
 
     func recognizeLineupFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadLineupAIImportResult {
         EventUploadAnalytics.track("event_upload_v2_lineup_ai_started", properties: ["zone": image.zone.rawValue])
-        let remoteURL = try await remoteURLForAIImage(image)
-        let request = EventLineupAIImportRequest(
-            imageUrl: remoteURL,
-            fileType: image.mimeType,
-            context: lineupAIContext()
-        )
-        let job = try await webService.createEventLineupImageImportJob(input: request)
-        let response = try await waitForLineupAIImportJob(job.jobId)
-        let result = editableLineupImportResult(from: response.rawJson)
-        EventUploadAnalytics.track(
-            "event_upload_v2_lineup_ai_succeeded",
-            properties: ["itemCount": "\(result.items.count)", "warningCount": "\(result.warnings.count)"]
-        )
+        let result = try await withAIRecognitionTask(.lineup) { [self] in
+            let remoteURL = try await self.remoteURLForAIImage(image)
+            let request = EventLineupAIImportRequest(
+                imageUrl: remoteURL,
+                fileType: image.mimeType,
+                context: self.lineupAIContext()
+            )
+            let job = try await self.webService.createEventLineupImageImportJob(input: request)
+            self.aiRecognitionJobIDs[.lineup] = job.jobId
+            let response = try await self.waitForLineupAIImportJob(job.jobId)
+            let result = self.editableLineupImportResult(from: response.rawJson)
+            EventUploadAnalytics.track(
+                "event_upload_v2_lineup_ai_succeeded",
+                properties: ["itemCount": "\(result.items.count)", "warningCount": "\(result.warnings.count)"]
+            )
+            return result
+        }
         return result
     }
 
     func recognizePosterFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadPosterAIImportResult {
         EventUploadAnalytics.track("event_upload_v2_poster_ai_started", properties: ["zone": image.zone.rawValue])
-        let remoteURL = try await remoteURLForAIImage(image)
-        let request = EventPosterAIImportRequest(
-            imageUrl: remoteURL,
-            fileType: image.mimeType
-        )
-        let job = try await webService.createEventPosterImageImportJob(input: request)
-        let response = try await waitForPosterAIImportJob(job.jobId)
-        let result = editablePosterImportResult(from: response.rawJson)
-        EventUploadAnalytics.track(
-            "event_upload_v2_poster_ai_succeeded",
-            properties: ["warningCount": "\(result.warnings.count)"]
-        )
+        let result = try await withAIRecognitionTask(.poster) { [self] in
+            let remoteURL = try await self.remoteURLForAIImage(image)
+            let request = EventPosterAIImportRequest(
+                imageUrl: remoteURL,
+                fileType: image.mimeType
+            )
+            let job = try await self.webService.createEventPosterImageImportJob(input: request)
+            self.aiRecognitionJobIDs[.poster] = job.jobId
+            let response = try await self.waitForPosterAIImportJob(job.jobId)
+            let result = self.editablePosterImportResult(from: response.rawJson)
+            EventUploadAnalytics.track(
+                "event_upload_v2_poster_ai_succeeded",
+                properties: ["warningCount": "\(result.warnings.count)"]
+            )
+            return result
+        }
         return result
+    }
+
+    func isAIRecognitionRunning(_ kind: AIRecognitionKind) -> Bool {
+        runningAIRecognitionKinds.contains(kind)
+    }
+
+    func cancelAIRecognition(_ kind: AIRecognitionKind) async {
+        aiRecognitionTasks[kind]?.cancel()
+        aiRecognitionTasks[kind] = nil
+        let jobID = aiRecognitionJobIDs[kind]
+        aiRecognitionJobIDs[kind] = nil
+        runningAIRecognitionKinds.remove(kind)
+        guard let jobID else { return }
+        do {
+            switch kind {
+            case .poster:
+                _ = try await webService.cancelEventPosterImageImportJob(id: jobID)
+            case .lineup:
+                _ = try await webService.cancelEventLineupImageImportJob(id: jobID)
+            case .timetable:
+                _ = try await webService.cancelEventTimetableImageImportJob(id: jobID)
+            }
+        } catch {
+            statusMessage = error.userFacingMessage ?? LT("取消识别失败，请稍后重试。", "Failed to cancel recognition. Please try again.", "認識のキャンセルに失敗しました。もう一度お試しください。")
+        }
     }
 
     func applyLineupAIImportItems(_ items: [EventUploadLineupAIEditableItem]) {
@@ -767,6 +813,8 @@ final class EventUploadFlowViewModel: ObservableObject {
                 throw ServiceError.message(LT("时间表识别结果为空，请稍后重试。", "Timetable recognition returned an empty result. Please try again.", "タイムテーブル認識結果が空です。もう一度お試しください。"))
             case "failed":
                 throw ServiceError.message(job.error ?? LT("时间表识别失败，请稍后重试。", "Timetable recognition failed. Please try again later.", "タイムテーブル認識に失敗しました。しばらくしてから再試行してください。"))
+            case "cancelled":
+                throw CancellationError()
             default:
                 try await Task.sleep(nanoseconds: 2_000_000_000)
             }
@@ -787,6 +835,8 @@ final class EventUploadFlowViewModel: ObservableObject {
                 throw ServiceError.message(LT("阵容识别结果为空，请稍后重试。", "Lineup recognition returned an empty result. Please try again.", "ラインナップ認識結果が空です。もう一度お試しください。"))
             case "failed":
                 throw ServiceError.message(job.error ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。"))
+            case "cancelled":
+                throw CancellationError()
             default:
                 try await Task.sleep(nanoseconds: 2_000_000_000)
             }
@@ -857,6 +907,8 @@ final class EventUploadFlowViewModel: ObservableObject {
                     ]
                 )
                 throw ServiceError.message(job.error ?? LT("活动信息识别失败，请稍后重试。", "Poster recognition failed. Please try again later.", "イベント情報認識に失敗しました。しばらくしてから再試行してください。"))
+            case "cancelled":
+                throw CancellationError()
             default:
                 try await Task.sleep(nanoseconds: 2_000_000_000)
             }
@@ -886,6 +938,40 @@ final class EventUploadFlowViewModel: ObservableObject {
             return resolved
         } catch {
             return [:]
+        }
+    }
+
+    private func withAIRecognitionTask<T>(
+        _ kind: AIRecognitionKind,
+        operation: @escaping @MainActor () async throws -> T
+    ) async throws -> T {
+        aiRecognitionTasks[kind]?.cancel()
+        aiRecognitionJobIDs[kind] = nil
+        runningAIRecognitionKinds.insert(kind)
+
+        let task = Task<T, Error> {
+            try await operation()
+        }
+        aiRecognitionTasks[kind] = Task<Void, Never> {
+            _ = try? await task.value
+        }
+
+        do {
+            let value = try await task.value
+            aiRecognitionTasks[kind] = nil
+            aiRecognitionJobIDs[kind] = nil
+            runningAIRecognitionKinds.remove(kind)
+            return value
+        } catch is CancellationError {
+            aiRecognitionTasks[kind] = nil
+            aiRecognitionJobIDs[kind] = nil
+            runningAIRecognitionKinds.remove(kind)
+            throw ServiceError.message(LT("已取消当前识别任务。", "Current recognition task cancelled.", "現在の認識タスクをキャンセルしました。"))
+        } catch {
+            aiRecognitionTasks[kind] = nil
+            aiRecognitionJobIDs[kind] = nil
+            runningAIRecognitionKinds.remove(kind)
+            throw error
         }
     }
 

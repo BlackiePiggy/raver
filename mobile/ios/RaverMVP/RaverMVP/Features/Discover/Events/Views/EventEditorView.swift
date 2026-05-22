@@ -4242,24 +4242,29 @@ struct EventEditorView: View {
 
     @ViewBuilder
     private func eventImagePreview(selectedData: Data?, remoteURL: String) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         if let selectedData,
            let image = UIImage(data: selectedData) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
+                .allowsHitTesting(false)
                 .frame(height: 150)
                 .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(shape)
+                .contentShape(shape)
         } else if let resolved = AppConfig.resolvedURLString(remoteURL),
                   URL(string: resolved) != nil {
             ImageLoaderView(urlString: resolved)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    shape
                         .fill(RaverTheme.card)
                 )
+                .allowsHitTesting(false)
             .frame(height: 150)
             .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(shape)
+            .contentShape(shape)
         }
     }
 

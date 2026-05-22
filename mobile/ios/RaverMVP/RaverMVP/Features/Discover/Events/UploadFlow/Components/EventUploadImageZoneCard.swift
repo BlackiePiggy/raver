@@ -173,13 +173,16 @@ struct EventUploadImageZoneCard: View {
 
     @ViewBuilder
     private func thumbnail(for image: EventUploadImageDraft) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         if let localFileURL = image.localFileURL,
            let uiImage = UIImage(contentsOfFile: localFileURL.path) {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
+                .allowsHitTesting(false)
                 .frame(width: thumbnailSize.width, height: thumbnailSize.height)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(shape)
+                .contentShape(shape)
         } else if let remoteURL = image.remoteURL,
                   let url = URL(string: AppConfig.resolvedURLString(remoteURL) ?? remoteURL) {
             AsyncImage(url: url) { phase in
@@ -188,22 +191,27 @@ struct EventUploadImageZoneCard: View {
                     loadedImage
                         .resizable()
                         .scaledToFill()
+                        .allowsHitTesting(false)
                 default:
                     Image(systemName: "photo")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(RaverTheme.accent)
+                        .allowsHitTesting(false)
                 }
             }
             .frame(width: thumbnailSize.width, height: thumbnailSize.height)
             .background(RaverTheme.card)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(shape)
+            .contentShape(shape)
         } else {
             Image(systemName: "photo")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.accent)
+                .allowsHitTesting(false)
                 .frame(width: thumbnailSize.width, height: thumbnailSize.height)
                 .background(RaverTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(shape)
+                .contentShape(shape)
         }
     }
 }

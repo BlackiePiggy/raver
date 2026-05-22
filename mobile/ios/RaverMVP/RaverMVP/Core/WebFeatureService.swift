@@ -41,11 +41,14 @@ protocol WebFeatureService {
     ) async throws -> EventLineupImageImportResponse
     func createEventLineupImageImportJob(input: EventLineupAIImportRequest) async throws -> EventLineupAIImportJobResponse
     func fetchEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse
+    func cancelEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse
     func createEventPosterImageImportJob(input: EventPosterAIImportRequest) async throws -> EventPosterAIImportJobResponse
     func fetchEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse
+    func cancelEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse
     func importEventTimetableFromImage(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportResponse
     func createEventTimetableImageImportJob(input: EventTimetableImageImportRequest) async throws -> EventTimetableImageImportJobResponse
     func fetchEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse
+    func cancelEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse
     func matchExactDJs(names: [String]) async throws -> [DJExactMatchItem]
     func uploadPostImage(imageData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse
     func uploadPostVideo(videoData: Data, fileName: String, mimeType: String) async throws -> UploadMediaResponse

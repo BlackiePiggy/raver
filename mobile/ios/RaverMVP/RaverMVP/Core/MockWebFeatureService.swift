@@ -1008,6 +1008,19 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func cancelEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse {
+        EventLineupAIImportJobResponse(
+            jobId: id,
+            status: "cancelled",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            finishedAt: ISO8601DateFormatter().string(from: Date()),
+            result: nil,
+            error: LT("任务已取消", "Task cancelled", "タスクをキャンセルしました")
+        )
+    }
+
     func createEventPosterImageImportJob(input: EventPosterAIImportRequest) async throws -> EventPosterAIImportJobResponse {
         _ = input
         let result = EventPosterAIImportResponse(
@@ -1054,6 +1067,19 @@ actor MockWebFeatureService: WebFeatureService {
         )
     }
 
+    func cancelEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse {
+        EventPosterAIImportJobResponse(
+            jobId: id,
+            status: "cancelled",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            finishedAt: ISO8601DateFormatter().string(from: Date()),
+            result: nil,
+            error: LT("任务已取消", "Task cancelled", "タスクをキャンセルしました")
+        )
+    }
+
     func fetchEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse {
         _ = id
         return try await createEventTimetableImageImportJob(
@@ -1071,6 +1097,19 @@ actor MockWebFeatureService: WebFeatureService {
                     knownStageNames: []
                 )
             )
+        )
+    }
+
+    func cancelEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse {
+        EventTimetableImageImportJobResponse(
+            jobId: id,
+            status: "cancelled",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            updatedAt: ISO8601DateFormatter().string(from: Date()),
+            startedAt: ISO8601DateFormatter().string(from: Date()),
+            finishedAt: ISO8601DateFormatter().string(from: Date()),
+            result: nil,
+            error: LT("任务已取消", "Task cancelled", "タスクをキャンセルしました")
         )
     }
 

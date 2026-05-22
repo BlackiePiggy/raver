@@ -384,10 +384,28 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func cancelEventLineupImageImportJob(id: String) async throws -> EventLineupAIImportJobResponse {
+        let response: BFFEnvelope<EventLineupAIImportJobResponse> = try await request(
+            path: "/v1/events/lineup/import-image/jobs/\(id)",
+            method: "DELETE",
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
     func fetchEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse {
         let response: BFFEnvelope<EventPosterAIImportJobResponse> = try await request(
             path: "/v1/events/poster/import-image/jobs/\(id)",
             method: "GET",
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
+    func cancelEventPosterImageImportJob(id: String) async throws -> EventPosterAIImportJobResponse {
+        let response: BFFEnvelope<EventPosterAIImportJobResponse> = try await request(
+            path: "/v1/events/poster/import-image/jobs/\(id)",
+            method: "DELETE",
             timeoutInterval: 30
         )
         return response.data
@@ -407,6 +425,15 @@ final class LiveWebFeatureService: WebFeatureService {
         let response: BFFEnvelope<EventTimetableImageImportJobResponse> = try await request(
             path: "/v1/events/timetable/import-image/jobs/\(id)",
             method: "GET",
+            timeoutInterval: 30
+        )
+        return response.data
+    }
+
+    func cancelEventTimetableImageImportJob(id: String) async throws -> EventTimetableImageImportJobResponse {
+        let response: BFFEnvelope<EventTimetableImageImportJobResponse> = try await request(
+            path: "/v1/events/timetable/import-image/jobs/\(id)",
+            method: "DELETE",
             timeoutInterval: 30
         )
         return response.data

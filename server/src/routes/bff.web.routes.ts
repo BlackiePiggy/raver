@@ -3331,9 +3331,9 @@ type TimetableRecognitionContext = {
   knownStageNames?: string[];
 };
 
-type TimetableImportJobStatus = 'pending' | 'running' | 'succeeded' | 'failed';
+type TimetableImportJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
-type TimetableImportJob = {
+type BaseImportJob = {
   id: string;
   userId: string;
   status: TimetableImportJobStatus;
@@ -3341,8 +3341,12 @@ type TimetableImportJob = {
   updatedAt: string;
   startedAt: string | null;
   finishedAt: string | null;
-  result: { rawJson: unknown; rawResponse: unknown } | null;
   error: string | null;
+  abortController?: AbortController | null;
+};
+
+type TimetableImportJob = BaseImportJob & {
+  result: { rawJson: unknown; rawResponse: unknown } | null;
 };
 
 const timetableImportJobs = new Map<string, TimetableImportJob>();
@@ -3353,43 +3357,51 @@ type LineupRecognitionContext = {
   known_dj_names?: string[];
 };
 
-type LineupImportJob = {
-  id: string;
-  userId: string;
-  status: TimetableImportJobStatus;
-  createdAt: string;
-  updatedAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
+type LineupImportJob = BaseImportJob & {
   result: { rawJson: unknown; rawResponse: unknown } | null;
-  error: string | null;
 };
 
 const lineupImportJobs = new Map<string, LineupImportJob>();
 
-type PosterImportJob = {
-  id: string;
-  userId: string;
-  status: TimetableImportJobStatus;
-  createdAt: string;
-  updatedAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
+type PosterImportJob = BaseImportJob & {
   result: { rawJson: unknown; rawResponse: unknown } | null;
-  error: string | null;
 };
 
 const posterImportJobs = new Map<string, PosterImportJob>();
 
 const logImportJobLifecycle = (
   kind: 'timetable' | 'lineup' | 'poster',
-  phase: 'created' | 'running' | 'succeeded' | 'failed' | 'polled' | 'missing',
+  phase: 'created' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'polled' | 'missing',
   payload: Record<string, unknown>
 ): void => {
   console.info(`[${kind}-import-job] ${phase}`, {
     pid: process.pid,
     ...payload,
   });
+};
+
+const cancelImportJob = (
+  kind: 'timetable' | 'lineup' | 'poster',
+  job: BaseImportJob,
+  userId: string
+): boolean => {
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
+    return false;
+  }
+  const cancelledAt = new Date().toISOString();
+  job.status = 'cancelled';
+  job.updatedAt = cancelledAt;
+  job.finishedAt = cancelledAt;
+  job.error = '任务已取消';
+  const controller = job.abortController;
+  job.abortController = null;
+  controller?.abort();
+  logImportJobLifecycle(kind, 'cancelled', {
+    jobId: job.id,
+    userId,
+    status: job.status,
+  });
+  return true;
 };
 
 const pruneTimetableImportJobs = (): void => {
@@ -3786,7 +3798,8 @@ const resolveCozeFileType = (value: string): 'image' | 'video' | 'audio' | 'docu
 
 const runCozeLineupWorker = async (
   imageUrl: string,
-  fileType: string
+  fileType: string,
+  signal?: AbortSignal
 ): Promise<{ normalizedText: string; lineupInfo: ImportedLineupItem[] }> => {
   if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
     throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
@@ -3809,6 +3822,13 @@ const runCozeLineupWorker = async (
     timeoutMs: cozeLineupWorkflowTimeoutMs,
   });
   const controller = new AbortController();
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), cozeLineupWorkflowTimeoutMs);
   let rawText = '';
   try {
@@ -3832,6 +3852,9 @@ const runCozeLineupWorker = async (
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      if (signal?.aborted) {
+        throw new Error('COZE_JOB_CANCELLED');
+      }
       throw new Error(`COZE_LINEUP_WORKFLOW_TIMEOUT after ${cozeLineupWorkflowTimeoutMs}ms`);
     }
     throw error;
@@ -3998,7 +4021,8 @@ const runCozeLineupV2Worker = async (
   req: Request,
   imageUrl: string,
   fileType: string,
-  context: LineupRecognitionContext
+  context: LineupRecognitionContext,
+  signal?: AbortSignal
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
   if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
     throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
@@ -4020,6 +4044,13 @@ const runCozeLineupV2Worker = async (
     context,
   });
   const controller = new AbortController();
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), cozeLineupWorkflowTimeoutMs);
   let rawText = '';
   try {
@@ -4043,6 +4074,9 @@ const runCozeLineupV2Worker = async (
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      if (signal?.aborted) {
+        throw new Error('COZE_JOB_CANCELLED');
+      }
       throw new Error(`COZE_LINEUP_WORKFLOW_TIMEOUT after ${cozeLineupWorkflowTimeoutMs}ms`);
     }
     throw error;
@@ -4213,7 +4247,8 @@ const normalizePosterAIResult = (value: unknown): unknown => {
 const runCozePosterWorker = async (
   req: Request,
   imageUrl: string,
-  fileType: string
+  fileType: string,
+  signal?: AbortSignal
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
   if (!cozePosterWorkflowRunUrl || !cozePosterWorkflowToken) {
     throw new Error('COZE_POSTER_WORKFLOW_RUN_URL or COZE_POSTER_WORKFLOW_TOKEN is not configured');
@@ -4233,6 +4268,13 @@ const runCozePosterWorker = async (
     timeoutMs: cozePosterWorkflowTimeoutMs,
   });
   const controller = new AbortController();
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), cozePosterWorkflowTimeoutMs);
   let rawText = '';
   try {
@@ -4256,6 +4298,9 @@ const runCozePosterWorker = async (
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      if (signal?.aborted) {
+        throw new Error('COZE_JOB_CANCELLED');
+      }
       throw new Error(`COZE_POSTER_WORKFLOW_TIMEOUT after ${cozePosterWorkflowTimeoutMs}ms`);
     }
     throw error;
@@ -4365,7 +4410,8 @@ const runCozeTimetableWorker = async (
   req: Request,
   imageUrl: string,
   fileType: string,
-  context: TimetableRecognitionContext
+  context: TimetableRecognitionContext,
+  signal?: AbortSignal
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
   if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
     throw new Error('COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured');
@@ -4389,6 +4435,13 @@ const runCozeTimetableWorker = async (
     context,
   });
   const controller = new AbortController();
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), cozeTimetableWorkflowTimeoutMs);
   let rawText = '';
   try {
@@ -4412,6 +4465,9 @@ const runCozeTimetableWorker = async (
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      if (signal?.aborted) {
+        throw new Error('COZE_JOB_CANCELLED');
+      }
       throw new Error(`COZE_TIMETABLE_WORKFLOW_TIMEOUT after ${cozeTimetableWorkflowTimeoutMs}ms`);
     }
     throw error;
@@ -14520,6 +14576,7 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
       finishedAt: null,
       result: null,
       error: null,
+      abortController: null,
     };
     timetableImportJobs.set(job.id, job);
     logImportJobLifecycle('timetable', 'created', {
@@ -14532,21 +14589,28 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
 
     void (async () => {
       const startedAt = new Date().toISOString();
+      const controller = new AbortController();
       job.status = 'running';
       job.startedAt = startedAt;
       job.updatedAt = startedAt;
+      job.abortController = controller;
       logImportJobLifecycle('timetable', 'running', {
         jobId: job.id,
         userId,
         status: job.status,
       });
       try {
-        const imported = await runCozeTimetableWorker(req, imageUrl, fileType, context);
+        const imported = await runCozeTimetableWorker(req, imageUrl, fileType, context, controller.signal);
+        if (controller.signal.aborted) {
+          job.abortController = null;
+          return;
+        }
         const finishedAt = new Date().toISOString();
         job.status = 'succeeded';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
         job.result = imported;
+        job.abortController = null;
         logImportJobLifecycle('timetable', 'succeeded', {
           jobId: job.id,
           userId,
@@ -14555,11 +14619,16 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
           durationMs: Date.now() - Date.parse(startedAt),
         });
       } catch (error) {
+        if (controller.signal.aborted || (error instanceof Error && error.message === 'COZE_JOB_CANCELLED')) {
+          job.abortController = null;
+          return;
+        }
         const finishedAt = new Date().toISOString();
         const message = error instanceof Error ? error.message : 'Unknown error';
         job.status = 'failed';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
+        job.abortController = null;
         job.error = message.includes('WORKFLOW_TIMEOUT')
           ? '时间表识别超时，请稍后重试或换一张更清晰的图'
           : message.startsWith('Coze workflow request failed')
@@ -14641,6 +14710,34 @@ router.get('/events/timetable/import-image/jobs/:jobId', optionalAuth, async (re
   }
 });
 
+router.delete('/events/timetable/import-image/jobs/:jobId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    pruneTimetableImportJobs();
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+    const job = timetableImportJobs.get(jobId);
+    if (!job || job.userId !== userId) {
+      res.status(404).json({ error: 'Timetable import job not found' });
+      return;
+    }
+
+    cancelImportJob('timetable', job, userId);
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      updatedAt: job.updatedAt,
+      finishedAt: job.finishedAt,
+      error: job.error,
+    });
+  } catch (error) {
+    console.error('BFF web cancel timetable import job error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   const requestStartedAt = Date.now();
   try {
@@ -14675,6 +14772,7 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
       finishedAt: null,
       result: null,
       error: null,
+      abortController: null,
     };
     lineupImportJobs.set(job.id, job);
     logImportJobLifecycle('lineup', 'created', {
@@ -14687,21 +14785,28 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
 
     void (async () => {
       const startedAt = new Date().toISOString();
+      const controller = new AbortController();
       job.status = 'running';
       job.startedAt = startedAt;
       job.updatedAt = startedAt;
+      job.abortController = controller;
       logImportJobLifecycle('lineup', 'running', {
         jobId: job.id,
         userId,
         status: job.status,
       });
       try {
-        const imported = await runCozeLineupV2Worker(req, imageUrl, fileType, context);
+        const imported = await runCozeLineupV2Worker(req, imageUrl, fileType, context, controller.signal);
+        if (controller.signal.aborted) {
+          job.abortController = null;
+          return;
+        }
         const finishedAt = new Date().toISOString();
         job.status = 'succeeded';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
         job.result = imported;
+        job.abortController = null;
         logImportJobLifecycle('lineup', 'succeeded', {
           jobId: job.id,
           userId,
@@ -14710,11 +14815,16 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
           durationMs: Date.now() - Date.parse(startedAt),
         });
       } catch (error) {
+        if (controller.signal.aborted || (error instanceof Error && error.message === 'COZE_JOB_CANCELLED')) {
+          job.abortController = null;
+          return;
+        }
         const finishedAt = new Date().toISOString();
         const message = error instanceof Error ? error.message : 'Unknown error';
         job.status = 'failed';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
+        job.abortController = null;
         job.error = message.includes('WORKFLOW_TIMEOUT')
           ? '阵容识别超时，请稍后重试或换一张更清晰的图'
           : message.startsWith('Coze workflow request failed')
@@ -14796,6 +14906,34 @@ router.get('/events/lineup/import-image/jobs/:jobId', optionalAuth, async (req: 
   }
 });
 
+router.delete('/events/lineup/import-image/jobs/:jobId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    pruneTimetableImportJobs();
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+    const job = lineupImportJobs.get(jobId);
+    if (!job || job.userId !== userId) {
+      res.status(404).json({ error: 'Lineup import job not found' });
+      return;
+    }
+
+    cancelImportJob('lineup', job, userId);
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      updatedAt: job.updatedAt,
+      finishedAt: job.finishedAt,
+      error: job.error,
+    });
+  } catch (error) {
+    console.error('BFF web cancel lineup import job error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   const requestStartedAt = Date.now();
   try {
@@ -14829,6 +14967,7 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
       finishedAt: null,
       result: null,
       error: null,
+      abortController: null,
     };
     posterImportJobs.set(job.id, job);
     logImportJobLifecycle('poster', 'created', {
@@ -14840,21 +14979,28 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
 
     void (async () => {
       const startedAt = new Date().toISOString();
+      const controller = new AbortController();
       job.status = 'running';
       job.startedAt = startedAt;
       job.updatedAt = startedAt;
+      job.abortController = controller;
       logImportJobLifecycle('poster', 'running', {
         jobId: job.id,
         userId,
         status: job.status,
       });
       try {
-        const imported = await runCozePosterWorker(req, imageUrl, fileType);
+        const imported = await runCozePosterWorker(req, imageUrl, fileType, controller.signal);
+        if (controller.signal.aborted) {
+          job.abortController = null;
+          return;
+        }
         const finishedAt = new Date().toISOString();
         job.status = 'succeeded';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
         job.result = imported;
+        job.abortController = null;
         logImportJobLifecycle('poster', 'succeeded', {
           jobId: job.id,
           userId,
@@ -14863,11 +15009,16 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
           durationMs: Date.now() - Date.parse(startedAt),
         });
       } catch (error) {
+        if (controller.signal.aborted || (error instanceof Error && error.message === 'COZE_JOB_CANCELLED')) {
+          job.abortController = null;
+          return;
+        }
         const finishedAt = new Date().toISOString();
         const message = error instanceof Error ? error.message : 'Unknown error';
         job.status = 'failed';
         job.finishedAt = finishedAt;
         job.updatedAt = finishedAt;
+        job.abortController = null;
         job.error = message.includes('COZE_POSTER_WORKFLOW_TIMEOUT')
           ? '活动信息识别超时，请稍后重试或换一张更清晰的图'
           : message.startsWith('Coze workflow request failed')
@@ -14945,6 +15096,34 @@ router.get('/events/poster/import-image/jobs/:jobId', optionalAuth, async (req: 
     });
   } catch (error) {
     console.error('BFF web get poster import job error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/events/poster/import-image/jobs/:jobId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    pruneTimetableImportJobs();
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+    const job = posterImportJobs.get(jobId);
+    if (!job || job.userId !== userId) {
+      res.status(404).json({ error: 'Poster import job not found' });
+      return;
+    }
+
+    cancelImportJob('poster', job, userId);
+    ok(res, {
+      jobId: job.id,
+      status: job.status,
+      updatedAt: job.updatedAt,
+      finishedAt: job.finishedAt,
+      error: job.error,
+    });
+  } catch (error) {
+    console.error('BFF web cancel poster import job error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
