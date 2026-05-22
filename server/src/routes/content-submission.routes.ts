@@ -50,11 +50,12 @@ const eventImageAssetsFromPayload = (value: unknown): Prisma.InputJsonValue[] =>
     .filter((item): item is Prisma.InputJsonObject => item !== null);
 };
 
-const hasRequiredEventPosterAsset = (assets: Prisma.InputJsonValue[]): boolean =>
+const hasRequiredEventPrimaryImageAsset = (assets: Prisma.InputJsonValue[]): boolean =>
   assets.some((asset) => {
     if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return false;
     const row = asset as Record<string, unknown>;
     const type = cleanText(row.type)?.toLowerCase();
+    if (type === 'cover' || type === 'luall') return true;
     const label = cleanText(row.label)?.toUpperCase() || '';
     const fileName = cleanText(row.fileName)?.toLowerCase() || '';
     return type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));
@@ -337,8 +338,8 @@ const createEventFromSubmission = async (payload: Prisma.JsonObject, submitterId
     throw new Error('活动名称、开始日期和结束日期不能为空');
   }
   const imageAssets = eventImageAssetsFromPayload(payload.imageAssets);
-  if (!hasRequiredEventPosterAsset(imageAssets)) {
-    throw new Error('活动海报不能为空');
+  if (!hasRequiredEventPrimaryImageAsset(imageAssets)) {
+    throw new Error('至少需要上传一张海报、阵容图或封面图');
   }
 
   const slug = await uniqueEventSlug(name, cleanText(payload.slug));

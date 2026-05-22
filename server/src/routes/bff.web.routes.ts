@@ -954,8 +954,11 @@ const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
     .filter((item): item is EventImageAssetPayload => item !== null);
 };
 
-const hasRequiredEventPosterAsset = (assets: EventImageAssetPayload[]): boolean =>
+const hasRequiredEventPrimaryImageAsset = (assets: EventImageAssetPayload[]): boolean =>
   assets.some((asset) => {
+    if (asset.type === 'cover' || asset.type === 'luall') {
+      return true;
+    }
     const label = normalizeEventText(asset.label).toUpperCase();
     const fileName = normalizeEventText(asset.fileName).toLowerCase();
     return asset.type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));
@@ -7348,8 +7351,8 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     }
 
     const submittedImageAssets = parseEventImageAssets(body.imageAssets);
-    if (!hasRequiredEventPosterAsset(submittedImageAssets)) {
-      res.status(400).json({ error: 'Poster image is required' });
+    if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
+      res.status(400).json({ error: 'At least one poster, lineup, or cover image is required' });
       return;
     }
 
