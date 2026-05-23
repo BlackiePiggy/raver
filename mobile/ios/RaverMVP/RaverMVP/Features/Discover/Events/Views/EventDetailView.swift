@@ -1565,8 +1565,12 @@ struct EventDetailView: View {
     @State private var relatedArticlesLoadFailed = false
     @State private var relatedRatingEventsLoadFailed = false
     @State private var relatedEventSetsLoadFailed = false
-    @State private var isLoadingEventLineupBundle = false
-    @State private var didLoadEventLineupBundle = false
+    @State private var isLoadingEventLineup = false
+    @State private var didLoadEventLineup = false
+    @State private var eventLineupLoadFailed = false
+    @State private var isLoadingEventSchedule = false
+    @State private var didLoadEventSchedule = false
+    @State private var eventScheduleLoadFailed = false
     @State private var visibleEventDiscussionCount = 10
     @State private var relatedArticlesNextCursor: String?
     @State private var relatedRatingsPage = 0
@@ -2935,6 +2939,51 @@ struct EventDetailView: View {
         .padding(.vertical, 8)
     }
 
+    private func lineupTabSkeletonView(cardWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                ForEach(0..<6, id: \.self) { _ in
+                    VStack(spacing: 8) {
+                        Circle()
+                            .fill(RaverTheme.card)
+                            .frame(width: 52, height: 52)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(RaverTheme.card)
+                            .frame(width: 44, height: 10)
+                    }
+                }
+            }
+
+            ForEach(0..<2, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(RaverTheme.card)
+                    .frame(width: cardWidth, height: cardWidth * 0.72)
+            }
+        }
+        .redacted(reason: .placeholder)
+        .padding(.vertical, 4)
+    }
+
+    private var scheduleTabSkeletonView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                ForEach(0..<2, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(RaverTheme.card)
+                        .frame(width: 42, height: 34)
+                }
+            }
+
+            ForEach(0..<4, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(RaverTheme.card)
+                    .frame(height: 112)
+            }
+        }
+        .redacted(reason: .placeholder)
+        .padding(.vertical, 4)
+    }
+
     @ViewBuilder
     private var eventNewsTabContent: some View {
         if isLoadingRelatedArticles && relatedArticles.isEmpty {
@@ -3459,71 +3508,82 @@ struct EventDetailView: View {
         }
         let lineupDJs = lineupDJEntries(for: event, sortMode: lineupSortMode)
         let hasLineupDJs = !lineupDJs.isEmpty
+        let hasLineupContent = !allLineupMediaURLs.isEmpty || hasLineupDJs
 
-        lineupDJsStrip(event: event, djs: lineupDJs)
+        if !didLoadEventLineup && !eventLineupLoadFailed {
+            lineupTabSkeletonView(cardWidth: cardWidth)
+        } else if eventLineupLoadFailed && !hasLineupContent {
+            eventTabLoadPlaceholder(
+                title: LT("正在加载阵容...", "Loading lineup...", "ラインナップを読み込み中..."),
+                didFail: true,
+                retry: { await loadEventLineupIfNeeded(force: true) }
+            )
+        } else {
+            lineupDJsStrip(event: event, djs: lineupDJs)
 
-        if !allLineupMediaURLs.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(LT("活动阵容图", "活动阵容图", "イベントラインナップ画像"))
-                    .font(.headline)
+            if !allLineupMediaURLs.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(LT("活动阵容图", "活动阵容图", "イベントラインナップ画像"))
+                        .font(.headline)
 
-                ForEach(Array(allLineupMediaURLs.enumerated()), id: \.offset) { index, rawURL in
-                    if allLineupMediaURLs.count > 1 {
-                        if index < lineupImageURLs.count {
-                            Text(lineupImageURLs.count > 1 ? "Lineup \(index + 1)" : "Lineup")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        } else {
-                            Text(timetableImageURLs.count > 1 ? "Timetable \(index - lineupImageURLs.count + 1)" : "Timetable")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                    }
-
-                    if let resolved = AppConfig.resolvedURLString(rawURL),
-                       let url = URL(string: resolved) {
-                        Button {
-                            selectedLineupMedia = FullscreenMediaSelection(id: index)
-                        } label: {
-                            WebImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: lineupImageWidth)
-                            } placeholder: {
-                                RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
-                                    .fill(RaverTheme.card)
-                                    .frame(width: lineupImageWidth, height: lineupImageWidth * 0.75)
-                                    .overlay {
-                                        ProgressView()
-                                    }
+                    ForEach(Array(allLineupMediaURLs.enumerated()), id: \.offset) { index, rawURL in
+                        if allLineupMediaURLs.count > 1 {
+                            if index < lineupImageURLs.count {
+                                Text(lineupImageURLs.count > 1 ? "Lineup \(index + 1)" : "Lineup")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            } else {
+                                Text(timetableImageURLs.count > 1 ? "Timetable \(index - lineupImageURLs.count + 1)" : "Timetable")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
                             }
-                            .clipShape(
-                                RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
-                            )
                         }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, -1)
-                    } else {
-                        RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
-                            .fill(RaverTheme.card)
-                            .frame(width: lineupImageWidth)
-                            .frame(minHeight: 180)
+
+                        if let resolved = AppConfig.resolvedURLString(rawURL),
+                           let url = URL(string: resolved) {
+                            Button {
+                                selectedLineupMedia = FullscreenMediaSelection(id: index)
+                            } label: {
+                                WebImage(url: url) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: lineupImageWidth)
+                                } placeholder: {
+                                    RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
+                                        .fill(RaverTheme.card)
+                                        .frame(width: lineupImageWidth, height: lineupImageWidth * 0.75)
+                                        .overlay {
+                                            ProgressView()
+                                        }
+                                }
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
+                                )
+                            }
+                            .buttonStyle(.plain)
                             .padding(.horizontal, -1)
+                        } else {
+                            RoundedRectangle(cornerRadius: lineupImageCornerRadius, style: .continuous)
+                                .fill(RaverTheme.card)
+                                .frame(width: lineupImageWidth)
+                                .frame(minHeight: 180)
+                                .padding(.horizontal, -1)
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fullScreenCover(item: $selectedLineupMedia) { selection in
+                    FullscreenMediaViewer(items: lineupPreviewItems, initialIndex: selection.id)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fullScreenCover(item: $selectedLineupMedia) { selection in
-                FullscreenMediaViewer(items: lineupPreviewItems, initialIndex: selection.id)
-            }
-        }
 
-        if allLineupMediaURLs.isEmpty && !hasLineupDJs {
-            Text(LT("暂无阵容信息", "暂无阵容信息", "ラインナップ情報はまだありません"))
-                .font(.subheadline)
-                .foregroundStyle(RaverTheme.secondaryText)
-                .padding(.vertical, 8)
+            if !hasLineupContent && didLoadEventLineup {
+                Text(LT("暂无阵容信息", "暂无阵容信息", "ラインナップ情報はまだありません"))
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.vertical, 8)
+            }
         }
     }
 
@@ -3541,7 +3601,15 @@ struct EventDetailView: View {
             .filter { $0.endTime > $0.startTime }
             .sorted(by: { $0.startTime < $1.startTime })
 
-        if scheduledSlots.isEmpty {
+        if !didLoadEventSchedule && scheduledSlots.isEmpty && !eventScheduleLoadFailed {
+            scheduleTabSkeletonView
+        } else if eventScheduleLoadFailed && scheduledSlots.isEmpty {
+            eventTabLoadPlaceholder(
+                title: LT("正在加载时间表...", "Loading timetable...", "タイムテーブルを読み込み中..."),
+                didFail: true,
+                retry: { await loadEventScheduleIfNeeded(force: true) }
+            )
+        } else if scheduledSlots.isEmpty && didLoadEventSchedule {
             Text(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"))
                 .font(.subheadline)
                 .foregroundStyle(RaverTheme.secondaryText)
@@ -5615,8 +5683,10 @@ struct EventDetailView: View {
 
             var loadedEvent = try await eventTask
             if let existing = event {
-                if didLoadEventLineupBundle {
+                if didLoadEventLineup {
                     loadedEvent.lineupArtists = existing.lineupArtists
+                }
+                if didLoadEventSchedule {
                     loadedEvent.lineupSlots = existing.lineupSlots
                 }
             }
@@ -5691,37 +5761,58 @@ struct EventDetailView: View {
         case .sets:
             visibleRelatedSetCount = 10
             await loadRelatedSetsIfNeeded()
-        case .lineup, .schedule:
-            await loadEventLineupBundleIfNeeded()
+        case .lineup:
+            await loadEventLineupIfNeeded()
+        case .schedule:
+            await loadEventScheduleIfNeeded()
         case .info:
             return
         }
     }
 
     @MainActor
-    private func loadEventLineupBundleIfNeeded(force: Bool = false) async {
-        guard force || !didLoadEventLineupBundle else { return }
-        guard !isLoadingEventLineupBundle else { return }
-        isLoadingEventLineupBundle = true
-        defer { isLoadingEventLineupBundle = false }
+    private func loadEventLineupIfNeeded(force: Bool = false) async {
+        guard force || !didLoadEventLineup else { return }
+        guard !isLoadingEventLineup else { return }
+        isLoadingEventLineup = true
+        eventLineupLoadFailed = false
+        defer { isLoadingEventLineup = false }
 
         do {
-            async let lineupTask = eventReadRepository.fetchEventLineup(eventID: eventID)
-            async let timetableTask = eventReadRepository.fetchEventTimetable(eventID: eventID)
-            let lineupArtists = try await lineupTask
-            let timetableSlots = try await timetableTask
-
+            let lineupArtists = try await eventReadRepository.fetchEventLineup(eventID: eventID)
             guard var currentEvent = event else { return }
             currentEvent.lineupArtists = lineupArtists
-            currentEvent.lineupSlots = timetableSlots
             event = currentEvent
-            didLoadEventLineupBundle = true
+            didLoadEventLineup = true
             invalidateLineupEntriesCache()
             await persistCurrentManualCacheSnapshotIfPossible()
         } catch is CancellationError {
             return
         } catch {
-            // Keep lightweight event visible; we'll retry the next time the tab is opened.
+            eventLineupLoadFailed = true
+        }
+    }
+
+    @MainActor
+    private func loadEventScheduleIfNeeded(force: Bool = false) async {
+        guard force || !didLoadEventSchedule else { return }
+        guard !isLoadingEventSchedule else { return }
+        isLoadingEventSchedule = true
+        eventScheduleLoadFailed = false
+        defer { isLoadingEventSchedule = false }
+
+        do {
+            let timetableSlots = try await eventReadRepository.fetchEventTimetable(eventID: eventID)
+            guard var currentEvent = event else { return }
+            currentEvent.lineupSlots = timetableSlots
+            event = currentEvent
+            didLoadEventSchedule = true
+            invalidateLineupEntriesCache()
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            eventScheduleLoadFailed = true
         }
     }
 
@@ -5930,6 +6021,12 @@ struct EventDetailView: View {
     private func applyManualCacheSnapshot(_ snapshot: EventManualCacheSnapshot) {
         event = snapshot.event
         invalidateLineupEntriesCache()
+        didLoadEventLineup = snapshot.event.lineupArtists != nil
+        didLoadEventSchedule = !snapshot.event.lineupSlots.isEmpty
+        eventLineupLoadFailed = false
+        eventScheduleLoadFailed = false
+        isLoadingEventLineup = false
+        isLoadingEventSchedule = false
         relatedRatingEvents = snapshot.relatedRatingEvents
         relatedEventSets = snapshot.relatedEventSets
         relatedArticles = snapshot.relatedNewsArticles

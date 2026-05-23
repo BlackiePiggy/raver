@@ -541,16 +541,10 @@ final class EventUploadFlowViewModel: ObservableObject {
     func recognizeTimetableFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadTimetableAIImportResult {
         EventUploadAnalytics.track("event_upload_v2_timetable_ai_started", properties: ["zone": image.zone.rawValue])
         let result = try await withAIRecognitionTask(.timetable) { [self] in
-            let remoteURL = try await self.remoteURLForAIImage(image)
-            let request = EventTimetableImageImportRequest(
-                imageUrl: remoteURL,
-                fileType: image.mimeType,
-                context: self.timetableAIContext()
-            )
-            let job = try await self.webService.createEventTimetableImageImportJob(input: request)
+            let job = try await self.createTimetableAIImportJob(for: image)
             self.aiRecognitionJobIDs[.timetable] = job.jobId
             let response = try await self.waitForTimetableAIImportJob(job.jobId)
-            let result = self.editableTimetableImportResult(from: response.rawJson)
+            let result = self.editableTimetableImportResult(from: response)
             EventUploadAnalytics.track(
                 "event_upload_v2_timetable_ai_succeeded",
                 properties: ["slotCount": "\(result.slots.count)", "warningCount": "\(result.warnings.count)"]
@@ -563,16 +557,10 @@ final class EventUploadFlowViewModel: ObservableObject {
     func recognizeLineupFromImage(_ image: EventUploadImageDraft) async throws -> EventUploadLineupAIImportResult {
         EventUploadAnalytics.track("event_upload_v2_lineup_ai_started", properties: ["zone": image.zone.rawValue])
         let result = try await withAIRecognitionTask(.lineup) { [self] in
-            let remoteURL = try await self.remoteURLForAIImage(image)
-            let request = EventLineupAIImportRequest(
-                imageUrl: remoteURL,
-                fileType: image.mimeType,
-                context: self.lineupAIContext()
-            )
-            let job = try await self.webService.createEventLineupImageImportJob(input: request)
+            let job = try await self.createLineupAIImportJob(for: image)
             self.aiRecognitionJobIDs[.lineup] = job.jobId
             let response = try await self.waitForLineupAIImportJob(job.jobId)
-            let result = self.editableLineupImportResult(from: response.rawJson)
+            let result = self.editableLineupImportResult(from: response)
             EventUploadAnalytics.track(
                 "event_upload_v2_lineup_ai_succeeded",
                 properties: ["itemCount": "\(result.items.count)", "warningCount": "\(result.warnings.count)"]
@@ -823,6 +811,42 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
 
         return nextSlots
+    }
+
+    func createTimetableAIImportJob(for image: EventUploadImageDraft) async throws -> EventTimetableImageImportJobResponse {
+        let remoteURL = try await remoteURLForAIImage(image)
+        let request = EventTimetableImageImportRequest(
+            imageUrl: remoteURL,
+            fileType: image.mimeType,
+            context: timetableAIContext()
+        )
+        return try await webService.createEventTimetableImageImportJob(input: request)
+    }
+
+    func fetchTimetableAIImportJob(id: String) async throws -> EventTimetableImageImportJobResponse {
+        try await webService.fetchEventTimetableImageImportJob(id: id)
+    }
+
+    func cancelTimetableAIImportJob(id: String) async throws {
+        _ = try await webService.cancelEventTimetableImageImportJob(id: id)
+    }
+
+    func createLineupAIImportJob(for image: EventUploadImageDraft) async throws -> EventLineupAIImportJobResponse {
+        let remoteURL = try await remoteURLForAIImage(image)
+        let request = EventLineupAIImportRequest(
+            imageUrl: remoteURL,
+            fileType: image.mimeType,
+            context: lineupAIContext()
+        )
+        return try await webService.createEventLineupImageImportJob(input: request)
+    }
+
+    func editableTimetableImportResult(from response: EventTimetableImageImportResponse) -> EventUploadTimetableAIImportResult {
+        editableTimetableImportResult(from: response.rawJson)
+    }
+
+    func editableLineupImportResult(from response: EventLineupAIImportResponse) -> EventUploadLineupAIImportResult {
+        editableLineupImportResult(from: response.rawJson)
     }
 
     private func waitForTimetableAIImportJob(_ jobId: String) async throws -> EventTimetableImageImportResponse {
