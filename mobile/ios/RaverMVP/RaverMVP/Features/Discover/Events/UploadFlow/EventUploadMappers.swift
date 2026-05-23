@@ -119,6 +119,7 @@ enum EventUploadMappers {
             ticketTiers: create.ticketTiers,
             lineupArtists: create.lineupArtists,
             lineupSlots: create.lineupSlots,
+            baseEventUpdatedAt: draft.incrementalBaseline?.eventUpdatedAt,
             status: create.status,
             clearManualLocation: create.manualLocation == nil,
             clearWikiFestivalId: create.wikiFestivalId == nil,

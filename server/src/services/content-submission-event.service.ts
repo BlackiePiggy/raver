@@ -19,8 +19,8 @@ import {
   syncCanonicalEventLineupAndTimetable,
 } from './event-lineup-canonical.service';
 
-const EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS = 30_000;
-const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 10_000;
+const EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS = 120_000;
+const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 30_000;
 
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 
@@ -30,11 +30,60 @@ const cleanText = (value: unknown): string | undefined => {
   return trimmed || undefined;
 };
 
+export class EventSubmissionConflictError extends Error {
+  readonly code = 'EVENT_SUBMISSION_STALE_EDIT';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventSubmissionConflictError';
+  }
+}
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
+const dateFromUnknown = (value: unknown): Date | null => {
+  if (typeof value !== 'string' && !(value instanceof Date)) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const jsonObjectOrNull = (value: unknown): Prisma.JsonObject | null =>
   isPlainObject(value) ? value as Prisma.JsonObject : null;
+
+const validateBaseEventRevision = (
+  payload: Prisma.JsonObject,
+  currentUpdatedAt: Date
+): void => {
+  const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  if (!targetEventId) return;
+  const baseEventUpdatedAt = dateFromUnknown(payload.baseEventUpdatedAt);
+  if (!baseEventUpdatedAt) {
+    throw new EventSubmissionConflictError('编辑基线已失效，请重新打开活动后再提交');
+  }
+  if (baseEventUpdatedAt.getTime() !== currentUpdatedAt.getTime()) {
+    throw new EventSubmissionConflictError('活动在你编辑期间已被更新，请刷新最新内容后重新编辑提交');
+  }
+};
+
+export const assertEventSubmissionBaseRevision = async (
+  db: PrismaClient,
+  payload: Prisma.JsonObject
+): Promise<void> => {
+  const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  if (!targetEventId) return;
+  const existing = await db.event.findUnique({
+    where: { id: targetEventId },
+    select: {
+      id: true,
+      updatedAt: true,
+    },
+  });
+  if (!existing) {
+    throw new Error('待更新的活动不存在');
+  }
+  validateBaseEventRevision(payload, existing.updatedAt);
+};
 
 const decimalOrNull = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
@@ -380,6 +429,112 @@ const relinkSlotsToAlignedArtists = (
   }));
 };
 
+const cloneArtistInput = (artist: CanonicalLineupArtistInput): CanonicalLineupArtistInput => ({
+  id: artist.id,
+  djId: artist.djId,
+  memberDjIds: [...(artist.memberDjIds ?? [])],
+  memberNames: [...(artist.memberNames ?? [])],
+  djName: artist.djName,
+  sortOrder: artist.sortOrder,
+});
+
+const syncLineupArtistsForAffectedTimetableKeys = (
+  currentArtists: CanonicalLineupArtistInput[],
+  currentSlots: CanonicalLineupSlotInput[],
+  affectedKeys: Set<string>
+): CanonicalLineupArtistInput[] => {
+  if (affectedKeys.size === 0) return currentArtists;
+
+  const slotArtists = normalizeCanonicalLineupArtists([], currentSlots);
+  const slotArtistByKey = new Map<string, CanonicalLineupArtistInput>();
+  for (const artist of slotArtists) {
+    slotArtistByKey.set(lineupIdentityKey(artist), artist);
+  }
+
+  const currentByKey = new Map<string, CanonicalLineupArtistInput>();
+  for (const artist of currentArtists) {
+    currentByKey.set(lineupIdentityKey(artist), artist);
+  }
+
+  const result = currentArtists
+    .filter((artist) => !affectedKeys.has(lineupIdentityKey(artist)))
+    .map(cloneArtistInput);
+
+  const removedAffectedArtists = currentArtists
+    .filter((artist) => affectedKeys.has(lineupIdentityKey(artist)) && !slotArtistByKey.has(lineupIdentityKey(artist)))
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const reusableSortOrders = removedAffectedArtists.map((artist) => artist.sortOrder).filter((value) => Number.isFinite(value));
+  let nextSortOrder = result.reduce((max, artist) => Math.max(max, artist.sortOrder), 0);
+
+  for (const slotArtist of slotArtists) {
+    const key = lineupIdentityKey(slotArtist);
+    if (!affectedKeys.has(key)) continue;
+    const existing = currentByKey.get(key);
+    const reusedSortOrder = reusableSortOrders.shift();
+    const sortOrder = existing?.sortOrder
+      ?? reusedSortOrder
+      ?? ++nextSortOrder;
+    result.push({
+      ...slotArtist,
+      id: existing?.id,
+      sortOrder,
+    });
+    nextSortOrder = Math.max(nextSortOrder, sortOrder);
+  }
+
+  return result
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((artist, index) => ({ ...artist, sortOrder: artist.sortOrder || index + 1 }));
+};
+
+const collectAffectedTimetableIdentityKeys = (
+  previousSlots: CanonicalLineupSlotInput[],
+  nextSlots: CanonicalLineupSlotInput[]
+): Set<string> => {
+  const affected = new Set<string>();
+  const previousById = new Map(previousSlots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
+  const nextById = new Map(nextSlots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
+
+  for (const [id, previous] of previousById) {
+    const next = nextById.get(id);
+    if (!next) {
+      affected.add(lineupIdentityKey({
+        djId: previous.djId,
+        memberDjIds: previous.memberDjIds,
+        djName: previous.djName,
+      }));
+      continue;
+    }
+    const previousKey = lineupIdentityKey({
+      djId: previous.djId,
+      memberDjIds: previous.memberDjIds,
+      djName: previous.djName,
+    });
+    const nextKey = lineupIdentityKey({
+      djId: next.djId,
+      memberDjIds: next.memberDjIds,
+      djName: next.djName,
+    });
+    if (previousKey !== nextKey) {
+      affected.add(previousKey);
+      affected.add(nextKey);
+    }
+  }
+
+  for (const next of nextSlots) {
+    if (!next.id || previousById.has(next.id)) continue;
+    affected.add(lineupIdentityKey({
+      djId: next.djId,
+      memberDjIds: next.memberDjIds,
+      djName: next.djName,
+    }));
+  }
+
+  return affected;
+};
+
 export const buildAlignedLineupArtistsFromTimetablePayload = (
   payload: Prisma.JsonObject,
   eventStartDate: Date,
@@ -485,6 +640,7 @@ const applySubmissionLineupPatch = async (
   const snapshot: CanonicalLineupSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
   let artists = snapshot.artists.slice();
   let slots = snapshot.slots.slice();
+  const affectedTimetableIdentityKeys = new Set<string>();
   let stageOrder = normalizeEventStageOrder(payload.stageOrder);
   if (stageOrder.length === 0) stageOrder = snapshot.stageOrder.slice();
 
@@ -546,6 +702,11 @@ const applySubmissionLineupPatch = async (
       const slotPayload = jsonObjectOrNull(rawChange.slot);
       const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], eventStartDate, dayRolloverHour, timeZone);
       if (normalized.length === 0) throw new Error('新增 time slot 缺少艺人或时间信息');
+      affectedTimetableIdentityKeys.add(lineupIdentityKey({
+        djId: normalized[0].djId,
+        memberDjIds: normalized[0].memberDjIds,
+        djName: normalized[0].djName,
+      }));
       slots.push({
         ...normalized[0],
         sortOrder: normalized[0].sortOrder || slots.length + 1,
@@ -556,6 +717,11 @@ const applySubmissionLineupPatch = async (
     const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
     const existing = slotById().get(slotId);
     if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
+    affectedTimetableIdentityKeys.add(lineupIdentityKey({
+      djId: existing.djId,
+      memberDjIds: existing.memberDjIds,
+      djName: existing.djName,
+    }));
 
     if (op === 'delete') {
       slots = slots.filter((slot) => slot.id !== slotId);
@@ -567,6 +733,11 @@ const applySubmissionLineupPatch = async (
       if (!patch) throw new Error('time slot 更新缺少 patch 内容');
       const normalized = normalizeSubmissionLineupSlots([{ ...existing, ...patch, id: slotId }], eventStartDate, dayRolloverHour, timeZone);
       if (normalized.length === 0) throw new Error(`time slot 更新内容无效：${slotId}`);
+      affectedTimetableIdentityKeys.add(lineupIdentityKey({
+        djId: normalized[0].djId,
+        memberDjIds: normalized[0].memberDjIds,
+        djName: normalized[0].djName,
+      }));
       slots = slots.map((slot) => slot.id === slotId ? { ...normalized[0], id: slotId } : slot);
       continue;
     }
@@ -620,8 +791,8 @@ const applySubmissionLineupPatch = async (
     artists.slice().sort((a, b) => a.sortOrder - b.sortOrder),
     normalizedSlots
   );
-  const finalArtists = normalizedSlots.length > 0
-    ? mergeAlignedLineupArtists(normalizedArtists, normalizeCanonicalLineupArtists([], normalizedSlots))
+  const finalArtists = affectedTimetableIdentityKeys.size > 0
+    ? syncLineupArtistsForAffectedTimetableKeys(normalizedArtists, normalizedSlots, affectedTimetableIdentityKeys)
     : normalizedArtists;
   const finalSlots = relinkSlotsToAlignedArtists(normalizedSlots, finalArtists);
 
@@ -649,10 +820,15 @@ const syncSubmissionEventLineupAndTimetable = async (
     return;
   }
 
+  const snapshot: CanonicalLineupSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
   const submittedArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
+  const normalizedArtists = normalizeCanonicalLineupArtists(submittedArtists, slots);
+  const affectedIdentityKeys = collectAffectedTimetableIdentityKeys(snapshot.slots, slots);
   const artists = slots.length > 0
-    ? mergeAlignedLineupArtists(submittedArtists, normalizeCanonicalLineupArtists([], slots))
+    ? (affectedIdentityKeys.size > 0
+      ? syncLineupArtistsForAffectedTimetableKeys(normalizedArtists, slots, affectedIdentityKeys)
+      : normalizedArtists)
     : normalizeCanonicalLineupArtists(submittedArtists, slots);
   const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
@@ -663,6 +839,14 @@ const syncSubmissionEventLineupAndTimetable = async (
 
   await syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
 };
+
+const runEventSubmissionTransaction = async <T>(
+  db: PrismaClient,
+  callback: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> => db.$transaction(callback, {
+  timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
+  maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
+});
 
 const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: string): Promise<string> => {
   const base = String(requestedSlug || name)
@@ -682,10 +866,20 @@ const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: s
 export async function createOrUpdateEventFromSubmission(
   db: PrismaClient,
   payload: Prisma.JsonObject,
-  submitterId: string
+  submitterId: string,
+  options: {
+    submissionId?: string;
+  } = {}
 ) {
   const name = cleanText(payload.name);
-  const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  let targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  if (!targetEventId && options.submissionId) {
+    const existingSubmission = await db.contentSubmission.findUnique({
+      where: { id: options.submissionId },
+      select: { createdEntityId: true },
+    });
+    targetEventId = cleanText(existingSubmission?.createdEntityId);
+  }
   const rawTimeZone = payload.timeZone ?? payload.timezone ?? payload.eventTimeZone;
   if (!isValidEventTimeZone(rawTimeZone)) {
     throw new Error('活动时区不能为空或格式不正确');
@@ -743,13 +937,17 @@ export async function createOrUpdateEventFromSubmission(
   if (targetEventId) {
     const existing = await db.event.findUnique({
       where: { id: targetEventId },
-      select: { id: true },
+      select: {
+        id: true,
+        updatedAt: true,
+      },
     });
     if (!existing) {
       throw new Error('待更新的活动不存在');
     }
+    validateBaseEventRevision(payload, existing.updatedAt);
 
-    return db.$transaction(async (tx) => {
+    await runEventSubmissionTransaction(db, async (tx) => {
       await tx.event.update({
         where: { id: targetEventId },
         data: {
@@ -760,6 +958,9 @@ export async function createOrUpdateEventFromSubmission(
           },
         },
       });
+    });
+
+    await runEventSubmissionTransaction(db, async (tx) => {
       await syncSubmissionEventLineupAndTimetable(
         tx,
         targetEventId,
@@ -768,17 +969,15 @@ export async function createOrUpdateEventFromSubmission(
         integerOrNull(payload.dayRolloverHour) ?? 6,
         timeZone
       );
-      return tx.event.findUniqueOrThrow({
-        where: { id: targetEventId },
-      });
-    }, {
-      timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
-      maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
+    });
+
+    return db.event.findUniqueOrThrow({
+      where: { id: targetEventId },
     });
   }
 
   const slug = await uniqueEventSlug(db, name, cleanText(payload.slug));
-  return db.$transaction(async (tx) => {
+  const created = await runEventSubmissionTransaction(db, async (tx) => {
     const created = await tx.event.create({
       data: {
         organizerId: submitterId,
@@ -791,6 +990,18 @@ export async function createOrUpdateEventFromSubmission(
           : undefined,
       } as any,
     });
+    if (options.submissionId) {
+      await tx.contentSubmission.update({
+        where: { id: options.submissionId },
+        data: {
+          createdEntityId: created.id,
+        },
+      });
+    }
+    return created;
+  });
+
+  await runEventSubmissionTransaction(db, async (tx) => {
     await syncSubmissionEventLineupAndTimetable(
       tx,
       created.id,
@@ -799,9 +1010,9 @@ export async function createOrUpdateEventFromSubmission(
       integerOrNull(payload.dayRolloverHour) ?? 6,
       timeZone
     );
-    return created;
-  }, {
-    timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
-    maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
+  });
+
+  return db.event.findUniqueOrThrow({
+    where: { id: created.id },
   });
 }

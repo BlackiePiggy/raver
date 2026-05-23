@@ -27,6 +27,17 @@ export type ContentSubmissionProcessingJobStatus =
 type ProcessSubmissionResult = {
   status: 'succeeded' | 'skipped' | 'failed';
   reason?: string;
+  submissionStatus?: ContentSubmissionTaskStatus;
+  createdEntityId?: string | null;
+  autoApproved?: boolean;
+  resumedFromStatus?: string;
+  phase?: string;
+  timings?: {
+    reviewingTransitionMs: number;
+    applyMs: number;
+    approvalFinalizeMs: number;
+    totalMs: number;
+  };
 };
 
 type RunWorkerOnceOptions = {
@@ -58,6 +69,21 @@ export type ContentSubmissionProcessingQueueStatus = {
   oldestQueuedAgeSeconds: number | null;
   staleRunningCount: number;
   staleLockThresholdSeconds: number;
+  latestJobs: Array<{
+    id: string;
+    submissionId: string;
+    status: string;
+    attempts: number;
+    maxAttempts: number;
+    lockedBy: string | null;
+    availableAt: Date;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    failedAt: Date | null;
+    updatedAt: Date;
+    lastError: string | null;
+    metadata: Prisma.JsonValue | null;
+  }>;
 };
 
 const typeLabelMap: Record<string, string> = {
@@ -95,6 +121,28 @@ const retryDelayMs = (attempts: number): number => {
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+const asJsonObject = (value: Prisma.JsonValue | null | undefined): Prisma.JsonObject => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Prisma.JsonObject;
+};
+
+const withDefinedJsonFields = (
+  value: Record<string, Prisma.InputJsonValue | Prisma.JsonValue | undefined>
+): Prisma.InputJsonObject => {
+  const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
+  return Object.fromEntries(entries) as Prisma.InputJsonObject;
+};
+
+const mergeJobMetadata = (
+  current: Prisma.JsonValue | null | undefined,
+  patch: Record<string, Prisma.InputJsonValue | Prisma.JsonValue | undefined>
+): Prisma.InputJsonObject => ({
+  ...asJsonObject(current),
+  ...withDefinedJsonFields(patch),
+});
 
 export async function publishContentSubmissionTaskNotification(input: {
   userId: string;
@@ -260,10 +308,13 @@ export async function processContentSubmission(
   input: {
     db?: PrismaClient;
     markFailedOnError?: boolean;
+    jobId?: string;
   } = {}
 ): Promise<ProcessSubmissionResult> {
+  const processStartedAt = Date.now();
   const db = input.db || prisma;
   const markFailedOnError = input.markFailedOnError ?? true;
+  const jobId = input.jobId;
   const submission = await db.contentSubmission.findUnique({
     where: { id: submissionId },
     select: {
@@ -273,6 +324,9 @@ export async function processContentSubmission(
       title: true,
       submitterId: true,
       payload: true,
+      reviewedAt: true,
+      reviewedBy: true,
+      createdEntityId: true,
       submitter: {
         select: {
           role: true,
@@ -282,7 +336,44 @@ export async function processContentSubmission(
   });
 
   if (!submission) return { status: 'skipped', reason: 'Submission not found' };
-  if (submission.status !== 'processing' && submission.status !== 'pending') {
+  const shouldAutoApprove =
+    submission.entityType === 'event'
+    && (submission.submitter?.role === 'admin' || submission.submitter?.role === 'operator');
+
+  if (submission.status === 'approved') {
+    return {
+      status: 'succeeded',
+      submissionStatus: 'approved',
+      createdEntityId: submission.createdEntityId,
+      autoApproved: shouldAutoApprove,
+      resumedFromStatus: 'approved',
+      phase: 'approved',
+      timings: {
+        reviewingTransitionMs: 0,
+        applyMs: 0,
+        approvalFinalizeMs: 0,
+        totalMs: Date.now() - processStartedAt,
+      },
+    };
+  }
+
+  if (submission.status === 'reviewing' && !shouldAutoApprove) {
+    return {
+      status: 'succeeded',
+      submissionStatus: 'reviewing',
+      autoApproved: false,
+      resumedFromStatus: 'reviewing',
+      phase: 'reviewing',
+      timings: {
+        reviewingTransitionMs: 0,
+        applyMs: 0,
+        approvalFinalizeMs: 0,
+        totalMs: Date.now() - processStartedAt,
+      },
+    };
+  }
+
+  if (submission.status !== 'processing' && submission.status !== 'pending' && submission.status !== 'reviewing') {
     return { status: 'skipped', reason: `Submission already ${submission.status}` };
   }
 
@@ -292,54 +383,107 @@ export async function processContentSubmission(
       throw new Error('Invalid submission payload');
     }
 
-    const updated = await db.contentSubmission.update({
-      where: { id: submission.id },
-      data: {
+    let reviewingTransitionMs = 0;
+    let resumedFromStatus: string | undefined;
+    let updated = {
+      id: submission.id,
+      entityType: submission.entityType,
+      title: submission.title,
+      submitterId: submission.submitterId,
+    };
+
+    const checkpointPhase = async (
+      phase: string,
+      patch: Record<string, Prisma.InputJsonValue | Prisma.JsonValue | undefined> = {}
+    ): Promise<void> => {
+      if (!jobId) return;
+      await db.contentSubmissionProcessingJob.update({
+        where: { id: jobId },
+        data: {
+          metadata: mergeJobMetadata(
+            (await db.contentSubmissionProcessingJob.findUnique({
+              where: { id: jobId },
+              select: { metadata: true },
+            }))?.metadata,
+            {
+              currentPhase: phase,
+              phaseUpdatedAt: new Date().toISOString(),
+              ...patch,
+            }
+          ),
+        },
+      });
+    };
+
+    if (submission.status === 'processing' || submission.status === 'pending') {
+      await checkpointPhase('transition_to_reviewing', {
+        resumedFromStatus: submission.status,
+      });
+      const reviewingTransitionStartedAt = Date.now();
+      updated = await db.contentSubmission.update({
+        where: { id: submission.id },
+        data: {
+          status: 'reviewing',
+          reviewReason: null,
+        },
+        select: {
+          id: true,
+          entityType: true,
+          title: true,
+          submitterId: true,
+        },
+      });
+      reviewingTransitionMs = Date.now() - reviewingTransitionStartedAt;
+      await checkpointPhase('reviewing_notified', {
+        reviewingTransitionMs,
+      });
+
+      await publishContentSubmissionTaskNotification({
+        userId: updated.submitterId,
+        entityType: updated.entityType,
         status: 'reviewing',
-        reviewReason: null,
-      },
-      select: {
-        id: true,
-        entityType: true,
-        title: true,
-        submitterId: true,
-      },
-    });
-
-    const shouldAutoApprove =
-      submission.entityType === 'event'
-      && (submission.submitter?.role === 'admin' || submission.submitter?.role === 'operator');
-
-    await publishContentSubmissionTaskNotification({
-      userId: updated.submitterId,
-      entityType: updated.entityType,
-      status: 'reviewing',
-      title: updated.title,
-      submissionId: updated.id,
-      payload: payload as Prisma.JsonObject,
-      ...(shouldAutoApprove
-        ? {
-            titleOverride: `${typeLabelMap[updated.entityType] || '内容'}处理完成`,
-            bodyOverride: `你提交的「${updated.title}」已完成处理，系统正在自动入库。`,
-            statusLabelOverride: '处理完成',
-          }
-        : {}),
-    });
+        title: updated.title,
+        submissionId: updated.id,
+        payload: payload as Prisma.JsonObject,
+        ...(shouldAutoApprove
+          ? {
+              titleOverride: `${typeLabelMap[updated.entityType] || '内容'}处理完成`,
+              bodyOverride: `你提交的「${updated.title}」已完成处理，系统正在自动入库。`,
+              statusLabelOverride: '处理完成',
+            }
+          : {}),
+      });
+    } else {
+      resumedFromStatus = submission.status;
+      await checkpointPhase('resume_from_reviewing', {
+        resumedFromStatus,
+      });
+    }
 
     if (shouldAutoApprove) {
+      await checkpointPhase('apply_canonical');
+      const applyStartedAt = Date.now();
       const created = await createOrUpdateEventFromSubmission(
         db,
         payload as any,
-        submission.submitterId
+        submission.submitterId,
+        { submissionId: submission.id }
       );
+      const applyMs = Date.now() - applyStartedAt;
+      await checkpointPhase('canonical_applied', {
+        applyMs,
+        createdEntityId: created.id,
+      });
 
+      await checkpointPhase('finalize_approved');
+      const approvalFinalizeStartedAt = Date.now();
       const approved = await db.contentSubmission.update({
         where: { id: submission.id },
         data: {
           status: 'approved',
           reviewReason: null,
-          reviewedAt: new Date(),
-          reviewedBy: submission.submitterId,
+          reviewedAt: submission.reviewedAt || new Date(),
+          reviewedBy: submission.reviewedBy || submission.submitterId,
           createdEntityId: created.id,
         },
         select: {
@@ -349,6 +493,11 @@ export async function processContentSubmission(
           submitterId: true,
           createdEntityId: true,
         },
+      });
+      const approvalFinalizeMs = Date.now() - approvalFinalizeStartedAt;
+      await checkpointPhase('approved', {
+        approvalFinalizeMs,
+        createdEntityId: approved.createdEntityId,
       });
 
       await publishContentSubmissionTaskNotification({
@@ -360,16 +509,55 @@ export async function processContentSubmission(
         createdEntityId: approved.createdEntityId,
         payload: payload as Prisma.JsonObject,
       });
+
+      return {
+        status: 'succeeded',
+        submissionStatus: 'approved',
+        createdEntityId: approved.createdEntityId,
+        autoApproved: true,
+        resumedFromStatus,
+        phase: 'approved',
+        timings: {
+          reviewingTransitionMs,
+          applyMs,
+          approvalFinalizeMs,
+          totalMs: Date.now() - processStartedAt,
+        },
+      };
     }
 
-    return { status: 'succeeded' };
+    return {
+      status: 'succeeded',
+      submissionStatus: 'reviewing',
+      autoApproved: false,
+      resumedFromStatus,
+      phase: 'reviewing',
+      timings: {
+        reviewingTransitionMs,
+        applyMs: 0,
+        approvalFinalizeMs: 0,
+        totalMs: Date.now() - processStartedAt,
+      },
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Submission processing failed';
     if (!markFailedOnError) {
       throw error;
     }
     await markContentSubmissionFailed(db, submission.id, message);
-    return { status: 'failed', reason: message };
+    return {
+      status: 'failed',
+      reason: message,
+      submissionStatus: 'failed',
+      autoApproved: false,
+      phase: 'failed',
+      timings: {
+        reviewingTransitionMs: 0,
+        applyMs: 0,
+        approvalFinalizeMs: 0,
+        totalMs: Date.now() - processStartedAt,
+      },
+    };
   }
 }
 
@@ -435,6 +623,17 @@ const claimContentSubmissionProcessingJobs = async (
         attempts: {
           increment: 1,
         },
+        metadata: mergeJobMetadata(candidate.metadata, {
+          workerId: options.workerId,
+          lastAttemptStartedAt: now.toISOString(),
+          lastAttemptFinishedAt: null,
+          lastResult: 'running',
+          phase: 'processing',
+          lastDurationMs: null,
+          lastError: null,
+          retryScheduledAt: null,
+          attemptNumber: candidate.attempts + 1,
+        }),
       },
     });
 
@@ -455,9 +654,16 @@ const completeJob = async (
   input: {
     error?: string | null;
     availableAt?: Date;
+    metadata?: Prisma.InputJsonObject;
   } = {}
 ): Promise<void> => {
   const now = new Date();
+  const existing = await db.contentSubmissionProcessingJob.findUnique({
+    where: { id: jobId },
+    select: {
+      metadata: true,
+    },
+  });
   await db.contentSubmissionProcessingJob.update({
     where: { id: jobId },
     data: {
@@ -468,6 +674,9 @@ const completeJob = async (
       completedAt: status === 'succeeded' || status === 'cancelled' ? now : undefined,
       failedAt: status === 'failed' ? now : undefined,
       lastError: input.error || null,
+      metadata: input.metadata
+        ? mergeJobMetadata(existing?.metadata, input.metadata)
+        : undefined,
     },
   });
 };
@@ -502,41 +711,91 @@ export async function runContentSubmissionProcessingWorkerOnce(
   for (const job of jobs) {
     report.processedJobs += 1;
     const startedAt = Date.now();
+    const attemptStartedAt = new Date();
     try {
       const result = await processContentSubmission(job.submissionId, {
         db,
         markFailedOnError: false,
+        jobId: job.id,
+      });
+      const durationMs = Date.now() - startedAt;
+      const metadata = withDefinedJsonFields({
+        workerId,
+        lastAttemptStartedAt: attemptStartedAt.toISOString(),
+        lastAttemptFinishedAt: new Date().toISOString(),
+        lastResult: result.status,
+        phase: result.phase
+          ?? (result.submissionStatus === 'approved'
+            ? 'approved'
+            : result.submissionStatus === 'reviewing'
+              ? 'reviewing'
+              : result.status),
+        lastSubmissionStatus: result.submissionStatus ?? null,
+        lastDurationMs: durationMs,
+        lastError: result.reason ?? null,
+        createdEntityId: result.createdEntityId ?? null,
+        autoApproved: result.autoApproved ?? null,
+        resumedFromStatus: result.resumedFromStatus ?? null,
+        phaseTimings: result.timings
+          ? withDefinedJsonFields({
+              reviewingTransitionMs: result.timings.reviewingTransitionMs,
+              applyMs: result.timings.applyMs,
+              approvalFinalizeMs: result.timings.approvalFinalizeMs,
+              totalMs: result.timings.totalMs,
+            })
+          : null,
+        retryScheduledAt: null,
       });
       if (result.status === 'skipped') {
         report.skippedJobs += 1;
         await completeJob(db, job.id, 'cancelled', {
           error: result.reason || null,
+          metadata,
         });
       } else {
         report.succeededJobs += 1;
-        await completeJob(db, job.id, 'succeeded');
+        await completeJob(db, job.id, 'succeeded', {
+          metadata,
+        });
       }
       console.log('[content-submission-worker] processed', {
         workerId,
         jobId: job.id,
         submissionId: job.submissionId,
         result: result.status,
-        durationMs: Date.now() - startedAt,
+        submissionStatus: result.submissionStatus,
+        durationMs,
+        phaseTimings: result.timings,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Submission processing failed';
       const shouldRetry = job.attempts < job.maxAttempts;
+      const durationMs = Date.now() - startedAt;
+      const retryAt = shouldRetry ? new Date(Date.now() + retryDelayMs(job.attempts)) : undefined;
+      const metadata = withDefinedJsonFields({
+        workerId,
+        lastAttemptStartedAt: attemptStartedAt.toISOString(),
+        lastAttemptFinishedAt: new Date().toISOString(),
+        lastResult: shouldRetry ? 'retrying' : 'failed',
+        phase: shouldRetry ? 'retrying' : 'failed',
+        lastSubmissionStatus: shouldRetry ? 'processing' : 'failed',
+        lastDurationMs: durationMs,
+        lastError: message,
+        retryScheduledAt: retryAt?.toISOString() ?? null,
+      });
       if (shouldRetry) {
         report.retryingJobs += 1;
         await completeJob(db, job.id, 'retrying', {
           error: message,
-          availableAt: new Date(Date.now() + retryDelayMs(job.attempts)),
+          availableAt: retryAt,
+          metadata,
         });
       } else {
         report.failedJobs += 1;
         await markContentSubmissionFailed(db, job.submissionId, message);
         await completeJob(db, job.id, 'failed', {
           error: message,
+          metadata,
         });
       }
       errors.push(`job=${job.id} submission=${job.submissionId} error=${message}`);
@@ -547,8 +806,9 @@ export async function runContentSubmissionProcessingWorkerOnce(
         attempts: job.attempts,
         maxAttempts: job.maxAttempts,
         retrying: shouldRetry,
-        durationMs: Date.now() - startedAt,
+        durationMs,
         error: message,
+        retryAt: retryAt?.toISOString() ?? null,
       });
     }
   }
@@ -578,7 +838,7 @@ export async function getContentSubmissionProcessingQueueStatus(
     30 * 60
   );
 
-  const [grouped, oldestQueued, staleRunningCount] = await Promise.all([
+  const [grouped, oldestQueued, staleRunningCount, latestJobs] = await Promise.all([
     db.contentSubmissionProcessingJob.groupBy({
       by: ['status'],
       _count: {
@@ -604,6 +864,28 @@ export async function getContentSubmissionProcessingQueueStatus(
         lockedAt: {
           lt: new Date(checkedAt.getTime() - staleLockMs),
         },
+      },
+    }),
+    db.contentSubmissionProcessingJob.findMany({
+      orderBy: [
+        { updatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: 5,
+      select: {
+        id: true,
+        submissionId: true,
+        status: true,
+        attempts: true,
+        maxAttempts: true,
+        lockedBy: true,
+        availableAt: true,
+        startedAt: true,
+        completedAt: true,
+        failedAt: true,
+        updatedAt: true,
+        lastError: true,
+        metadata: true,
       },
     }),
   ]);
@@ -648,6 +930,7 @@ export async function getContentSubmissionProcessingQueueStatus(
     oldestQueuedAgeSeconds,
     staleRunningCount,
     staleLockThresholdSeconds: Math.floor(staleLockMs / 1000),
+    latestJobs,
   };
 }
 

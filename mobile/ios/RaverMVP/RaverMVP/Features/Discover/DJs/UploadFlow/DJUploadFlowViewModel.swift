@@ -183,8 +183,8 @@ final class DJUploadFlowViewModel: ObservableObject {
             name: draft.primaryName,
             nameI18n: webBiText(from: draft.name),
             spotifyId: draft.spotifyId.nilIfBlank,
-            aliases: splitList(draft.aliasesText),
-            genres: splitList(draft.genresText),
+            aliases: normalizedList(draft.aliases),
+            genres: normalizedList(draft.genres),
             bio: draft.bio.primaryValue(preferredLanguage: draft.preferredLanguage).nilIfBlank,
             bioI18n: webBiText(from: draft.bio),
             country: draft.country.primaryValue(preferredLanguage: draft.preferredLanguage).nilIfBlank,
@@ -217,8 +217,8 @@ final class DJUploadFlowViewModel: ObservableObject {
         UpdateDJInput(
             name: draft.primaryName,
             nameI18n: webBiText(from: draft.name),
-            aliases: splitList(draft.aliasesText),
-            genres: splitList(draft.genresText),
+            aliases: normalizedList(draft.aliases),
+            genres: normalizedList(draft.genres),
             bio: draft.bio.primaryValue(preferredLanguage: draft.preferredLanguage).nilIfBlank,
             bioI18n: webBiText(from: draft.bio),
             avatarUrl: draft.avatar?.remoteURL,
@@ -246,9 +246,8 @@ final class DJUploadFlowViewModel: ObservableObject {
         )
     }
 
-    private func splitList(_ value: String) -> [String]? {
-        let items = value
-            .split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "\n" })
+    private func normalizedList(_ values: [String]) -> [String]? {
+        let items = values
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return items.isEmpty ? nil : items

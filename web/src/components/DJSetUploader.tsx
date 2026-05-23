@@ -776,9 +776,9 @@ export default function DJSetUploader() {
     'w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue';
   const panelClassName = 'rounded-2xl border border-bg-primary bg-bg-primary/40 p-4';
   const primaryActionClassName =
-    'px-5 py-2.5 rounded-lg bg-primary-blue hover:bg-primary-purple text-white transition-colors disabled:opacity-50 disabled:hover:bg-primary-blue';
+    'px-5 py-2.5 rounded-lg bg-primary-blue hover:bg-primary-purple text-white disabled:opacity-50';
   const secondaryActionClassName =
-    'px-5 py-2.5 rounded-lg border border-bg-primary text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50';
+    'px-5 py-2.5 rounded-lg border border-bg-primary text-text-secondary hover:text-text-primary disabled:opacity-50';
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -1127,11 +1127,11 @@ export default function DJSetUploader() {
                   )}
 
                   <div className="flex items-center gap-3">
-                    <button type="button" onClick={() => setActiveStep(Math.max(1, activeStep - 1))} className={secondaryActionClassName}>
-                      上一步
-                    </button>
                     <button type="submit" disabled={loading || !readyToSubmit} className={primaryActionClassName}>
                       {loading ? '创建中...' : '创建 DJ Set'}
+                    </button>
+                    <button type="button" onClick={() => setActiveStep(Math.max(1, activeStep - 1))} className={secondaryActionClassName}>
+                      上一步
                     </button>
                   </div>
                 </div>
@@ -1140,11 +1140,11 @@ export default function DJSetUploader() {
 
             {activeStep < 4 && (
               <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setActiveStep((prev) => Math.max(1, prev - 1))} disabled={activeStep === 1} className={secondaryActionClassName}>
-                  上一步
-                </button>
                 <button type="button" onClick={() => setActiveStep((prev) => Math.min(4, prev + 1))} disabled={!canAdvanceStep} className={primaryActionClassName}>
                   下一步
+                </button>
+                <button type="button" onClick={() => setActiveStep((prev) => Math.max(1, prev - 1))} disabled={activeStep === 1} className={secondaryActionClassName}>
+                  上一步
                 </button>
               </div>
             )}

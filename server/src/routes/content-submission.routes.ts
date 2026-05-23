@@ -9,7 +9,9 @@ import { contentCompliance } from '../utils/content-compliance';
 import { syncNewsBindings, syncPostBindings } from '../services/content-bindings.service';
 import {
   autoAlignEventLineupToTimetablePayload,
+  assertEventSubmissionBaseRevision,
   createOrUpdateEventFromSubmission,
+  EventSubmissionConflictError,
 } from '../services/content-submission-event.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
@@ -175,6 +177,9 @@ const ensureSubmissionPayload = (entityType: string, payload: Prisma.InputJsonOb
 };
 
 const normalizeEventSubmissionPayload = (payload: Prisma.InputJsonObject): Prisma.InputJsonObject => {
+  if (cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId)) {
+    return payload;
+  }
   const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
   const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
   const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
@@ -630,10 +635,17 @@ const createIDFromSubmission = async (payload: Prisma.JsonObject, submitterId: s
   });
 };
 
-const createEntityFromSubmission = async (entityType: string, payload: Prisma.JsonObject, submitterId: string) => {
+const createEntityFromSubmission = async (
+  entityType: string,
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  options: {
+    submissionId?: string;
+  } = {}
+) => {
   switch (entityType) {
     case 'event':
-      return createOrUpdateEventFromSubmission(prisma, payload, submitterId);
+      return createOrUpdateEventFromSubmission(prisma, payload, submitterId, options);
     case 'dj':
       return createDJFromSubmission(payload, submitterId);
     case 'news':
@@ -768,6 +780,12 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
     }
     const rawPayload = toJsonObject(req.body.payload);
     const normalizedPayload = entityType === 'event' ? normalizeEventSubmissionPayload(rawPayload) : rawPayload;
+    if (entityType === 'event') {
+      await assertEventSubmissionBaseRevision(
+        prisma,
+        normalizedPayload as unknown as Prisma.JsonObject
+      );
+    }
     const payloadWithSummary = attachContentSubmissionChangeSummary(entityType, normalizedPayload);
     const validationError = ensureSubmissionPayload(entityType, payloadWithSummary);
     if (validationError) {
@@ -798,6 +816,10 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
     });
   } catch (error) {
     console.error('Create content submission error:', error);
+    if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({ error: error.message, code: error.code });
+      return;
+    }
     res.status(500).json({ error: '提交审核失败' });
   }
 });
@@ -1083,7 +1105,9 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
     let createdEntityId: string | null = null;
     if (decision === 'approved') {
       const payload = current.payload as Prisma.JsonObject;
-      const created = await createEntityFromSubmission(current.entityType, payload, current.submitterId);
+      const created = await createEntityFromSubmission(current.entityType, payload, current.submitterId, {
+        submissionId: current.id,
+      });
       createdEntityId = created.id;
       if (current.entityType === 'dj' && createdEntityId) {
         try {
@@ -1146,6 +1170,10 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
     res.json({ message: decision === 'approved' ? '审核通过，内容已入库' : '审核未通过，结果已反馈给用户', submission: updated });
   } catch (error) {
     console.error('Review content submission error:', error);
+    if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({ error: error.message, code: error.code });
+      return;
+    }
     res.status(500).json({ error: error instanceof Error ? error.message : '审核处理失败' });
   }
 });

@@ -76,8 +76,8 @@ struct DJUploadDraft: Identifiable, Hashable, Codable {
     var currentStep: DJUploadStep = .identity
     var preferredLanguage: EventUploadPreferredLanguage = .current
     var name: EventUploadLocalizedFields = EventUploadLocalizedFields()
-    var aliasesText: String = ""
-    var genresText: String = ""
+    var aliases: [String] = []
+    var genres: [String] = []
     var bio: EventUploadLocalizedFields = EventUploadLocalizedFields()
     var country: EventUploadLocalizedFields = EventUploadLocalizedFields()
     var avatar: DJUploadImageDraft?
@@ -160,8 +160,8 @@ struct DJUploadDraft: Identifiable, Hashable, Codable {
             ja: dj.nameI18n?.ja ?? "",
             enFull: dj.nameI18n?.enFull ?? ""
         )
-        draft.aliasesText = (dj.aliases ?? []).joined(separator: ", ")
-        draft.genresText = (dj.genres ?? []).joined(separator: ", ")
+        draft.aliases = dj.aliases ?? []
+        draft.genres = dj.genres ?? []
         draft.bio = EventUploadLocalizedFields(
             zh: dj.bioI18n?.zh ?? dj.bio ?? "",
             en: dj.bioI18n?.en ?? dj.bio ?? "",
@@ -198,5 +198,135 @@ struct DJUploadDraft: Identifiable, Hashable, Codable {
         draft.soundCloudFollowers = dj.soundCloudFollowers.map(String.init) ?? ""
         draft.soundCloudFavorites = dj.soundCloudFavorites.map(String.init) ?? ""
         return draft
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case mode
+        case currentStep
+        case preferredLanguage
+        case name
+        case aliases
+        case aliasesText
+        case genres
+        case genresText
+        case bio
+        case country
+        case avatar
+        case banner
+        case proofImage
+        case spotifyId
+        case spotifyUrl
+        case spotifyFollowers
+        case appleMusicId
+        case instagramUrl
+        case facebookUrl
+        case soundcloudUrl
+        case soundcloudId
+        case twitterUrl
+        case youtubeUrl
+        case neteaseUrl
+        case qqMusicUrl
+        case website
+        case otherPlatformUrl
+        case trackCount
+        case playlistCount
+        case soundCloudFollowers
+        case soundCloudFavorites
+        case dirty
+        case lastSavedAt
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        mode = try container.decodeIfPresent(DJUploadMode.self, forKey: .mode) ?? .create
+        currentStep = try container.decodeIfPresent(DJUploadStep.self, forKey: .currentStep) ?? .identity
+        preferredLanguage = try container.decodeIfPresent(EventUploadPreferredLanguage.self, forKey: .preferredLanguage) ?? .current
+        name = try container.decodeIfPresent(EventUploadLocalizedFields.self, forKey: .name) ?? EventUploadLocalizedFields()
+        aliases = Self.decodeStringList(container: container, listKey: .aliases, legacyTextKey: .aliasesText)
+        genres = Self.decodeStringList(container: container, listKey: .genres, legacyTextKey: .genresText)
+        bio = try container.decodeIfPresent(EventUploadLocalizedFields.self, forKey: .bio) ?? EventUploadLocalizedFields()
+        country = try container.decodeIfPresent(EventUploadLocalizedFields.self, forKey: .country) ?? EventUploadLocalizedFields()
+        avatar = try container.decodeIfPresent(DJUploadImageDraft.self, forKey: .avatar)
+        banner = try container.decodeIfPresent(DJUploadImageDraft.self, forKey: .banner)
+        proofImage = try container.decodeIfPresent(DJUploadImageDraft.self, forKey: .proofImage)
+        spotifyId = try container.decodeIfPresent(String.self, forKey: .spotifyId) ?? ""
+        spotifyUrl = try container.decodeIfPresent(String.self, forKey: .spotifyUrl) ?? ""
+        spotifyFollowers = try container.decodeIfPresent(String.self, forKey: .spotifyFollowers) ?? ""
+        appleMusicId = try container.decodeIfPresent(String.self, forKey: .appleMusicId) ?? ""
+        instagramUrl = try container.decodeIfPresent(String.self, forKey: .instagramUrl) ?? ""
+        facebookUrl = try container.decodeIfPresent(String.self, forKey: .facebookUrl) ?? ""
+        soundcloudUrl = try container.decodeIfPresent(String.self, forKey: .soundcloudUrl) ?? ""
+        soundcloudId = try container.decodeIfPresent(String.self, forKey: .soundcloudId) ?? ""
+        twitterUrl = try container.decodeIfPresent(String.self, forKey: .twitterUrl) ?? ""
+        youtubeUrl = try container.decodeIfPresent(String.self, forKey: .youtubeUrl) ?? ""
+        neteaseUrl = try container.decodeIfPresent(String.self, forKey: .neteaseUrl) ?? ""
+        qqMusicUrl = try container.decodeIfPresent(String.self, forKey: .qqMusicUrl) ?? ""
+        website = try container.decodeIfPresent(String.self, forKey: .website) ?? ""
+        otherPlatformUrl = try container.decodeIfPresent(String.self, forKey: .otherPlatformUrl) ?? ""
+        trackCount = try container.decodeIfPresent(String.self, forKey: .trackCount) ?? ""
+        playlistCount = try container.decodeIfPresent(String.self, forKey: .playlistCount) ?? ""
+        soundCloudFollowers = try container.decodeIfPresent(String.self, forKey: .soundCloudFollowers) ?? ""
+        soundCloudFavorites = try container.decodeIfPresent(String.self, forKey: .soundCloudFavorites) ?? ""
+        dirty = try container.decodeIfPresent(Bool.self, forKey: .dirty) ?? false
+        lastSavedAt = try container.decodeIfPresent(Date.self, forKey: .lastSavedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(mode, forKey: .mode)
+        try container.encode(currentStep, forKey: .currentStep)
+        try container.encode(preferredLanguage, forKey: .preferredLanguage)
+        try container.encode(name, forKey: .name)
+        try container.encode(aliases, forKey: .aliases)
+        try container.encode(genres, forKey: .genres)
+        try container.encode(bio, forKey: .bio)
+        try container.encode(country, forKey: .country)
+        try container.encodeIfPresent(avatar, forKey: .avatar)
+        try container.encodeIfPresent(banner, forKey: .banner)
+        try container.encodeIfPresent(proofImage, forKey: .proofImage)
+        try container.encode(spotifyId, forKey: .spotifyId)
+        try container.encode(spotifyUrl, forKey: .spotifyUrl)
+        try container.encode(spotifyFollowers, forKey: .spotifyFollowers)
+        try container.encode(appleMusicId, forKey: .appleMusicId)
+        try container.encode(instagramUrl, forKey: .instagramUrl)
+        try container.encode(facebookUrl, forKey: .facebookUrl)
+        try container.encode(soundcloudUrl, forKey: .soundcloudUrl)
+        try container.encode(soundcloudId, forKey: .soundcloudId)
+        try container.encode(twitterUrl, forKey: .twitterUrl)
+        try container.encode(youtubeUrl, forKey: .youtubeUrl)
+        try container.encode(neteaseUrl, forKey: .neteaseUrl)
+        try container.encode(qqMusicUrl, forKey: .qqMusicUrl)
+        try container.encode(website, forKey: .website)
+        try container.encode(otherPlatformUrl, forKey: .otherPlatformUrl)
+        try container.encode(trackCount, forKey: .trackCount)
+        try container.encode(playlistCount, forKey: .playlistCount)
+        try container.encode(soundCloudFollowers, forKey: .soundCloudFollowers)
+        try container.encode(soundCloudFavorites, forKey: .soundCloudFavorites)
+        try container.encode(dirty, forKey: .dirty)
+        try container.encodeIfPresent(lastSavedAt, forKey: .lastSavedAt)
+    }
+
+    private static func decodeStringList(
+        container: KeyedDecodingContainer<CodingKeys>,
+        listKey: CodingKeys,
+        legacyTextKey: CodingKeys
+    ) -> [String] {
+        if let items = try? container.decodeIfPresent([String].self, forKey: listKey) {
+            return items.map(normalizeListItem).filter { !$0.isEmpty }
+        }
+        let legacy = (try? container.decodeIfPresent(String.self, forKey: legacyTextKey)) ?? ""
+        return legacy
+            .split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "\n" })
+            .map { normalizeListItem(String($0)) }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func normalizeListItem(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -320,6 +320,7 @@ struct EventUploadPosterAIEditableResult: Hashable {
 
 struct EventUploadDraft: Hashable, Codable {
     struct IncrementalBaseline: Hashable, Codable {
+        var eventUpdatedAt: Date
         var lineupArtists: [EventLineupArtistInput] = []
         var lineupSlots: [EventLineupSlotInput] = []
         var stageOrder: [String] = []
@@ -473,6 +474,7 @@ struct EventUploadDraft: Hashable, Codable {
         draft.hydrateTimetableSlots(from: event)
         draft.hydrateLineupOnlySlots(from: event)
         draft.incrementalBaseline = IncrementalBaseline(
+            eventUpdatedAt: event.updatedAt,
             lineupArtists: EventUploadDraft.incrementalBaselineArtists(from: event),
             lineupSlots: EventUploadDraft.incrementalBaselineSlots(from: event),
             stageOrder: event.stageOrder ?? []

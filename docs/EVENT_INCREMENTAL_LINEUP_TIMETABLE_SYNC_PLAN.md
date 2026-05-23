@@ -560,7 +560,7 @@ Patch mode is enabled by:
 Rules:
 
 - `targetEventId` is required.
-- `baseEventUpdatedAt` is optional in the first rollout, but should become required for optimistic conflict detection later.
+- `baseEventUpdatedAt` is required for existing-event edits so stale drafts can be rejected safely.
 - `eventSnapshot` may contain normal event metadata fields and can continue to be applied with the existing event update path.
 - canonical child rows are changed only through `lineupChanges`, `timetableChanges`, and `stageChanges`.
 - all existing-row operations require stable backend row IDs from the edit draft.
@@ -827,6 +827,33 @@ Implementation note:
 - Added backend regression script `pnpm events:incremental-sync:regression`, covering direct canonical `99 + 1` artist/slot add, single-slot update, single artist/slot delete, manual-review-style patch apply, and normal review approval into storage. The script verifies existing artist/performance row IDs remain stable across non-destructive edits.
 - Optimized canonical artist member rewrites from per-artist delete/create loops to batched member deletes and `createMany`, reducing transaction pressure on high-cardinality events and preventing transaction expiry during 99-row regression runs.
 - Timetable is now the source of truth during submit and approval. BFF intake and worker ingestion auto-align lineup from timetable, and iOS submit no longer waits on a blocking alignment preview request.
+- Submission apply transactions now use a higher interactive transaction budget (`timeout: 120s`, `maxWait: 30s`) so 100+ DJ events do not fail near the old 30s cutoff while the incremental write path finishes.
+- The next commercial hardening step is shrinking write amplification further: batch hot-row updates, move from single huge apply transactions toward smaller idempotent phases, and replace timetable full-override semantics with targeted lineup sync when only part of timetable changes.
+
+## Long-term Commercial Hardening
+
+### Stage 1: Reduce write amplification inside the current worker
+
+- [x] Replace hot `eventPerformance.update()` loops with chunked batch updates.
+- [x] Replace hot `eventArtist.update()` loops with chunked batch updates.
+- [x] Replace hot `eventStage.update()` loops with chunked batch updates.
+- [x] Add regression coverage for partial timetable DJ edits on 100+ DJ events.
+
+### Stage 2: Move from timetable full-override to targeted lineup sync
+
+- [x] Keep the assumption that lineup and timetable are aligned before the edit starts.
+- [x] When a timetable slot changes DJ identity, update only the affected lineup artist rows.
+- [x] When the last timetable slot for one DJ is removed, remove only that DJ from lineup.
+- [x] When a DJ still has other timetable slots, preserve the lineup artist row.
+- [x] Persist and compare lineup/timetable revision metadata to reject stale edits safely.
+
+### Stage 3: Break one huge apply transaction into smaller idempotent phases
+
+- [x] Separate submission/job state changes from canonical event writes.
+- [x] Split edit-event apply into smaller idempotent transactions for base fields and canonical writes.
+- [x] Apply create-event base row and canonical writes in smaller retry-safe transactions with submission idempotency anchoring.
+- [x] Add reconciliation logic so failed mid-flight jobs can resume or retry without corrupting canonical rows.
+- [x] Add queue/job observability around phase duration, retry count, and queue age.
 
 ## Recommended Order Of Implementation
 
@@ -875,3 +902,13 @@ This sequence gives the fastest production win with the lowest migration risk.
 - [x] Design patch-based event edit submission phase
 - [x] Add backend patch parser and worker apply-patch path
 - [x] Add iOS patch payload generation for edit submissions
+- [x] Batch hot `eventPerformance` updates to reduce transaction round-trips
+- [x] Batch hot `eventArtist` updates to reduce transaction round-trips
+- [x] Batch hot `eventStage` updates to reduce transaction round-trips
+- [x] Replace timetable full-override sync with targeted lineup sync for partial timetable edits
+- [x] Split edit-event apply into smaller idempotent transaction phases
+- [x] Split create-event apply into smaller idempotent transaction phases
+- [x] Add worker/job observability metadata for latest attempt result, retry schedule, and phase timings
+- [x] Enforce `baseEventUpdatedAt` on event edit submissions and reject stale drafts with conflict
+- [x] Resume admin auto-approval jobs safely when a submission is already stuck in `reviewing`
+- [x] Persist explicit worker phase checkpoints around reviewing, canonical apply, and approval finalize

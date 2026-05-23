@@ -1,13 +1,17 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import {
   loadCanonicalEventLineupSnapshot,
   syncCanonicalEventLineupAndTimetable,
   type CanonicalLineupArtistInput,
   type CanonicalLineupSlotInput,
 } from '../services/event-lineup-canonical.service';
-import { createOrUpdateEventFromSubmission } from '../services/content-submission-event.service';
+import {
+  createOrUpdateEventFromSubmission,
+  EventSubmissionConflictError,
+} from '../services/content-submission-event.service';
+import { processContentSubmission } from '../services/content-submission-processing.service';
 
 const prisma = new PrismaClient();
 
@@ -93,6 +97,29 @@ const createRegressionUserAndEvent = async (suffix: string): Promise<{ userId: s
   });
 
   return { userId: user.id, eventId: event.id };
+};
+
+const createRegressionUser = async (
+  suffix: string,
+  role: 'user' | 'admin' | 'operator' = 'user'
+): Promise<string> => {
+  const user = await prisma.user.create({
+    data: {
+      username: `event_incremental_${role}_${suffix}`,
+      email: `event_incremental_${role}_${suffix}@example.com`,
+      passwordHash: 'regression-only',
+      displayName: `Event Incremental ${role} ${suffix}`,
+      displayNameNormalized: `event incremental ${role} ${suffix}`,
+      role,
+      isVerified: true,
+      regionCode: 'US',
+      birthYear: 1990,
+      ageBand: 'adult',
+      ageDeclaredAt: new Date(),
+    },
+    select: { id: true },
+  });
+  return user.id;
 };
 
 const seedNinetyNine = async (eventId: string, baseTime: Date): Promise<void> => {
@@ -198,12 +225,17 @@ const runDirectCanonicalRegression = async (eventId: string): Promise<void> => {
 const runManualReviewPatchRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('manual review patch apply path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  const eventBefore = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { updatedAt: true },
+  });
   const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
   const beforePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
   const artistName = 'Regression Manual Approval DJ';
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
+    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
     editMode: 'patch',
     name: `Event Incremental Regression Approved ${Date.now()}`,
     startDate: '2026-08-01',
@@ -254,13 +286,23 @@ const runManualReviewPatchRegression = async (eventId: string, userId: string): 
 const runTimetableSourceOfTruthRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('timetable source of truth patch path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  const eventBefore = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { updatedAt: true },
+  });
   const slotToRewrite = before.slots[1];
   assert(Boolean(slotToRewrite?.id), 'timetable source of truth slot missing stable id');
+  assert(Boolean(slotToRewrite?.lineupArtistId), 'timetable source of truth slot missing linked lineup artist id');
   const previousArtistName = slotToRewrite.djName;
   const nextArtistName = 'Regression Timetable Source Of Truth DJ';
+  const unaffectedArtistIds = before.artists
+    .map((artist) => artist.id)
+    .filter((id): id is string => Boolean(id && id !== slotToRewrite.lineupArtistId));
+  const stablePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
+    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
     editMode: 'patch',
     name: `Event Incremental Timetable Source ${Date.now()}`,
     startDate: '2026-08-01',
@@ -294,11 +336,16 @@ const runTimetableSourceOfTruthRegression = async (eventId: string, userId: stri
   assert(after.slots.some((slot) => slot.id === slotToRewrite.id && slot.djName === nextArtistName), 'timetable source of truth did not update slot artist');
   assert(after.artists.some((artist) => artist.djName === nextArtistName), 'timetable source of truth did not auto-align lineup artist');
   assert(!after.artists.some((artist) => artist.djName === previousArtistName), 'timetable source of truth left stale lineup artist behind');
+  await assertExistingRowsStable(eventId, unaffectedArtistIds, stablePerformanceIds);
 };
 
 const runNormalReviewApprovalRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('normal review approval path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  const eventBefore = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { updatedAt: true },
+  });
   const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
   const beforePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
   const slotToUpdate = before.slots[0];
@@ -307,6 +354,7 @@ const runNormalReviewApprovalRegression = async (eventId: string, userId: string
   const nextEnd = minutesAfter(slotToUpdate.endTime, 5);
   const payload = {
     targetEventId: eventId,
+    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
     editMode: 'patch',
     name: `Event Incremental Normal Review ${Date.now()}`,
     startDate: '2026-08-01',
@@ -370,6 +418,254 @@ const runNormalReviewApprovalRegression = async (eventId: string, userId: string
   assert(approved?.createdEntityId === eventId, 'normal review submission did not link approved event');
 };
 
+const runFullPayloadTargetedSyncRegression = async (eventId: string, userId: string): Promise<void> => {
+  logStep('full payload targeted sync path');
+  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  const eventBefore = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { updatedAt: true },
+  });
+  const slotToRewrite = before.slots[2];
+  assert(Boolean(slotToRewrite?.id), 'full payload targeted sync slot missing stable id');
+  assert(Boolean(slotToRewrite?.lineupArtistId), 'full payload targeted sync slot missing lineup artist id');
+  const previousArtistName = slotToRewrite.djName;
+  const nextArtistName = 'Regression Full Payload Targeted Sync DJ';
+  const unaffectedArtistIds = before.artists
+    .map((artist) => artist.id)
+    .filter((id): id is string => Boolean(id && id !== slotToRewrite.lineupArtistId));
+  const stablePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
+
+  await createOrUpdateEventFromSubmission(prisma, {
+    targetEventId: eventId,
+    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
+    name: `Event Incremental Full Payload ${Date.now()}`,
+    startDate: '2026-08-01',
+    endDate: '2026-08-02',
+    timeZone: 'Asia/Shanghai',
+    imageAssets: [
+      {
+        type: 'poster',
+        label: 'POSTER',
+        url: 'https://example.com/regression-poster.jpg',
+      },
+    ],
+    lineupArtists: before.artists.map((artist) => ({
+      id: artist.id,
+      djId: artist.djId,
+      memberDjIds: artist.memberDjIds,
+      memberNames: artist.memberNames,
+      djName: artist.djName,
+      sortOrder: artist.sortOrder,
+    })),
+    lineupSlots: before.slots.map((slot) => ({
+      id: slot.id,
+      lineupArtistId: slot.lineupArtistId,
+      djId: slot.id === slotToRewrite.id ? null : slot.djId,
+      memberDjIds: slot.id === slotToRewrite.id ? [] : slot.memberDjIds,
+      djName: slot.id === slotToRewrite.id ? nextArtistName : slot.djName,
+      stageName: slot.stageName,
+      festivalDayIndex: slot.festivalDayIndex,
+      startTime: slot.startTime.toISOString(),
+      endTime: slot.endTime.toISOString(),
+      sortOrder: slot.sortOrder,
+    })),
+    stageOrder: before.stageOrder,
+  } as any, userId);
+
+  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  assert(after.slots.length === before.slots.length, 'full payload targeted sync changed slot count');
+  assert(after.artists.length === before.artists.length, 'full payload targeted sync changed artist count');
+  assert(after.slots.some((slot) => slot.id === slotToRewrite.id && slot.djName === nextArtistName), 'full payload targeted sync did not update slot artist');
+  assert(after.artists.some((artist) => artist.djName === nextArtistName), 'full payload targeted sync did not update affected lineup artist');
+  assert(!after.artists.some((artist) => artist.djName === previousArtistName), 'full payload targeted sync left stale lineup artist behind');
+  await assertExistingRowsStable(eventId, unaffectedArtistIds, stablePerformanceIds);
+};
+
+const runStaleEditConflictRegression = async (eventId: string, userId: string): Promise<void> => {
+  logStep('stale edit conflict path');
+  const eventBefore = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { updatedAt: true },
+  });
+  const staleBaseEventUpdatedAt = new Date(eventBefore.updatedAt.getTime() - 1000).toISOString();
+
+  let threwConflict = false;
+  try {
+    await createOrUpdateEventFromSubmission(prisma, {
+      targetEventId: eventId,
+      baseEventUpdatedAt: staleBaseEventUpdatedAt,
+      editMode: 'patch',
+      name: `Event Incremental Stale Conflict ${Date.now()}`,
+      startDate: '2026-08-01',
+      endDate: '2026-08-02',
+      timeZone: 'Asia/Shanghai',
+      imageAssets: [
+        {
+          type: 'poster',
+          label: 'POSTER',
+          url: 'https://example.com/regression-poster.jpg',
+        },
+      ],
+      timetableChanges: [],
+      stageOrder: ['Main Stage', 'Second Stage'],
+    }, userId);
+  } catch (error) {
+    threwConflict = error instanceof EventSubmissionConflictError;
+  }
+
+  assert(threwConflict, 'stale edit regression did not reject outdated baseEventUpdatedAt');
+};
+
+const runCreateSubmissionIdempotencyRegression = async (userId: string): Promise<void> => {
+  logStep('create submission idempotency path');
+  const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
+  const payload = {
+    name: `Event Incremental Create Idempotency ${suffix}`,
+    startDate: '2026-09-01',
+    endDate: '2026-09-02',
+    timeZone: 'Asia/Shanghai',
+    imageAssets: [
+      {
+        type: 'poster',
+        label: 'POSTER',
+        url: 'https://example.com/regression-poster.jpg',
+      },
+    ],
+    lineupArtists: [
+      {
+        djName: 'Create Idempotency DJ',
+        memberNames: ['Create Idempotency DJ'],
+        sortOrder: 1,
+      },
+    ],
+    lineupSlots: [
+      {
+        djName: 'Create Idempotency DJ',
+        memberDjIds: [],
+        stageName: 'Main Stage',
+        festivalDayIndex: 1,
+        startTime: '2026-09-01T18:00:00+08:00',
+        endTime: '2026-09-01T19:00:00+08:00',
+        sortOrder: 1,
+      },
+    ],
+    stageOrder: ['Main Stage'],
+  } as Prisma.JsonObject;
+
+  const submission = await prisma.contentSubmission.create({
+    data: {
+      submitterId: userId,
+      entityType: 'event',
+      status: 'processing',
+      title: payload.name as string,
+      payload,
+      reviewReason: null,
+    },
+    select: { id: true },
+  });
+
+  const first = await createOrUpdateEventFromSubmission(prisma, payload, userId, {
+    submissionId: submission.id,
+  });
+  const second = await createOrUpdateEventFromSubmission(prisma, payload, userId, {
+    submissionId: submission.id,
+  });
+
+  assert(first.id === second.id, 'create submission idempotency did not reuse the same event id');
+  const duplicateCount = await prisma.event.count({
+    where: {
+      organizerId: userId,
+      name: payload.name as string,
+    },
+  });
+  assert(duplicateCount === 1, `expected exactly one created event, got ${duplicateCount}`);
+
+  await prisma.contentSubmission.deleteMany({ where: { id: submission.id } });
+  await prisma.event.deleteMany({ where: { id: first.id } });
+};
+
+const runAutoApprovalResumeRegression = async (): Promise<void> => {
+  logStep('auto approval resume path');
+  const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
+  const adminUserId = await createRegressionUser(suffix, 'admin');
+  let submissionId = '';
+  let createdEventId = '';
+
+  try {
+    const payload = {
+      name: `Event Incremental Auto Resume ${suffix}`,
+      startDate: '2026-10-01',
+      endDate: '2026-10-02',
+      timeZone: 'Asia/Shanghai',
+      imageAssets: [
+        {
+          type: 'poster',
+          label: 'POSTER',
+          url: 'https://example.com/regression-poster.jpg',
+        },
+      ],
+      lineupArtists: [
+        {
+          djName: 'Auto Resume DJ',
+          memberNames: ['Auto Resume DJ'],
+          sortOrder: 1,
+        },
+      ],
+      lineupSlots: [
+        {
+          djName: 'Auto Resume DJ',
+          memberDjIds: [],
+          stageName: 'Main Stage',
+          festivalDayIndex: 1,
+          startTime: '2026-10-01T18:00:00+08:00',
+          endTime: '2026-10-01T19:00:00+08:00',
+          sortOrder: 1,
+        },
+      ],
+      stageOrder: ['Main Stage'],
+    } as Prisma.JsonObject;
+
+    const submission = await prisma.contentSubmission.create({
+      data: {
+        submitterId: adminUserId,
+        entityType: 'event',
+        status: 'reviewing',
+        title: payload.name as string,
+        payload,
+        reviewReason: null,
+      },
+      select: { id: true },
+    });
+    submissionId = submission.id;
+
+    const result = await processContentSubmission(submission.id, {
+      db: prisma,
+      markFailedOnError: false,
+    });
+    assert(result.status === 'succeeded', 'auto approval resume did not succeed');
+    assert(result.submissionStatus === 'approved', 'auto approval resume did not finalize approved state');
+
+    const updated = await prisma.contentSubmission.findUniqueOrThrow({
+      where: { id: submission.id },
+      select: {
+        status: true,
+        createdEntityId: true,
+      },
+    });
+    assert(updated.status === 'approved', 'auto approval resume left submission unapproved');
+    assert(Boolean(updated.createdEntityId), 'auto approval resume did not create or link event');
+    createdEventId = updated.createdEntityId || '';
+  } finally {
+    if (submissionId) {
+      await prisma.contentSubmission.deleteMany({ where: { id: submissionId } });
+    }
+    if (createdEventId) {
+      await prisma.event.deleteMany({ where: { id: createdEventId } });
+    }
+    await prisma.user.deleteMany({ where: { id: adminUserId } });
+  }
+};
+
 const cleanup = async (eventId: string, userId: string): Promise<void> => {
   await prisma.event.deleteMany({ where: { id: eventId } });
   await prisma.user.deleteMany({ where: { id: userId } });
@@ -387,6 +683,10 @@ const main = async (): Promise<void> => {
     await runManualReviewPatchRegression(eventId, userId);
     await runTimetableSourceOfTruthRegression(eventId, userId);
     await runNormalReviewApprovalRegression(eventId, userId);
+    await runFullPayloadTargetedSyncRegression(eventId, userId);
+    await runStaleEditConflictRegression(eventId, userId);
+    await runCreateSubmissionIdempotencyRegression(userId);
+    await runAutoApprovalResumeRegression();
     logStep('passed', { eventId });
   } finally {
     if (eventId && userId && process.env.EVENT_INCREMENTAL_REGRESSION_KEEP_DATA !== '1') {

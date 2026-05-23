@@ -102,6 +102,15 @@ const nullableString = (value: string | null | undefined): string | null => {
   return text || null;
 };
 
+const chunk = <T>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
+};
+
 const memberSignature = (members: Array<{ djId: string | null; memberNameSnapshot: string; memberOrder: number }>): string =>
   members
     .slice()
@@ -130,6 +139,74 @@ const performanceSemanticKey = (row: {
     dateTimeValue(row.startAt) ?? '',
     dateTimeValue(row.endAt) ?? '',
   ].join('|');
+
+const BULK_PERFORMANCE_UPDATE_BATCH_SIZE = 50;
+const BULK_ARTIST_UPDATE_BATCH_SIZE = 50;
+const BULK_STAGE_UPDATE_BATCH_SIZE = 50;
+
+const bulkUpdateEventArtists = async (
+  tx: Prisma.TransactionClient,
+  rows: CanonicalArtistRow[]
+): Promise<void> => {
+  if (rows.length === 0) return;
+
+  for (const batch of chunk(rows, BULK_ARTIST_UPDATE_BATCH_SIZE)) {
+    await Promise.all(batch.map((artist) => tx.eventArtist.update({
+      where: { id: artist.id },
+      data: {
+        displayName: artist.displayName,
+        normalizedName: artist.normalizedName,
+        actType: artist.actType,
+        primaryDjId: artist.primaryDjId,
+        billingOrder: artist.billingOrder,
+        sourceType: artist.sourceType,
+        isTimetableOnly: artist.isTimetableOnly,
+      },
+    })));
+  }
+};
+
+const bulkUpdateEventPerformances = async (
+  tx: Prisma.TransactionClient,
+  rows: CanonicalPerformanceRow[]
+): Promise<void> => {
+  if (rows.length === 0) return;
+
+  for (const batch of chunk(rows, BULK_PERFORMANCE_UPDATE_BATCH_SIZE)) {
+    await Promise.all(batch.map((performance) => tx.eventPerformance.update({
+      where: { id: performance.id },
+      data: {
+        eventArtistId: performance.eventArtistId,
+        stageId: performance.stageId,
+        displayNameSnapshot: performance.displayNameSnapshot,
+        festivalDayIndex: performance.festivalDayIndex,
+        startAt: performance.startAt,
+        endAt: performance.endAt,
+        sortOrder: performance.sortOrder,
+        status: performance.status,
+        sourceType: performance.sourceType,
+      },
+    })));
+  }
+};
+
+const bulkUpdateEventStages = async (
+  tx: Prisma.TransactionClient,
+  rows: CanonicalStageRow[]
+): Promise<void> => {
+  if (rows.length === 0) return;
+
+  for (const batch of chunk(rows, BULK_STAGE_UPDATE_BATCH_SIZE)) {
+    await Promise.all(batch.map((stage) => tx.eventStage.update({
+      where: { id: stage.id },
+      data: {
+        name: stage.name,
+        normalizedName: stage.normalizedName,
+        sortOrder: stage.sortOrder,
+      },
+    })));
+  }
+};
 
 const splitCollaborativeLineupName = (value: string): string[] => {
   const name = String(value || '').trim();
@@ -531,6 +608,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
   if (artistRowsToCreate.length > 0) {
     await tx.eventArtist.createMany({ data: artistRowsToCreate });
   }
+  const artistRowsToUpdate: CanonicalArtistRow[] = [];
   for (const artist of target.artistRows.filter((row) => existingArtistIds.has(row.id))) {
     const existing = existingArtistById.get(artist.id);
     if (!existing) continue;
@@ -543,20 +621,10 @@ export const syncCanonicalEventLineupAndTimetable = async (
       || existing.sourceType !== artist.sourceType
       || existing.isTimetableOnly !== artist.isTimetableOnly
     ) {
-      await tx.eventArtist.update({
-        where: { id: artist.id },
-        data: {
-          displayName: artist.displayName,
-          normalizedName: artist.normalizedName,
-          actType: artist.actType,
-          primaryDjId: artist.primaryDjId,
-          billingOrder: artist.billingOrder,
-          sourceType: artist.sourceType,
-          isTimetableOnly: artist.isTimetableOnly,
-        },
-      });
+      artistRowsToUpdate.push(artist);
     }
   }
+  await bulkUpdateEventArtists(tx, artistRowsToUpdate);
 
   const memberRowsToRewrite: CanonicalMemberRow[] = [];
   const artistIdsWithChangedMembers: string[] = [];
@@ -580,6 +648,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
   if (stageRowsToCreate.length > 0) {
     await tx.eventStage.createMany({ data: stageRowsToCreate });
   }
+  const stageRowsToUpdate: CanonicalStageRow[] = [];
   for (const stage of target.stageRows.filter((row) => existingStageIds.has(row.id))) {
     const existing = existingStageById.get(stage.id);
     if (!existing) continue;
@@ -588,22 +657,17 @@ export const syncCanonicalEventLineupAndTimetable = async (
       || existing.normalizedName !== stage.normalizedName
       || existing.sortOrder !== stage.sortOrder
     ) {
-      await tx.eventStage.update({
-        where: { id: stage.id },
-        data: {
-          name: stage.name,
-          normalizedName: stage.normalizedName,
-          sortOrder: stage.sortOrder,
-        },
-      });
+      stageRowsToUpdate.push(stage);
     }
   }
+  await bulkUpdateEventStages(tx, stageRowsToUpdate);
 
   const existingPerformanceIds = new Set(existingPerformances.map((performance) => performance.id));
   const performanceRowsToCreate = target.performanceRows.filter((performance) => !existingPerformanceIds.has(performance.id));
   if (performanceRowsToCreate.length > 0) {
     await tx.eventPerformance.createMany({ data: performanceRowsToCreate });
   }
+  const performanceRowsToUpdate: CanonicalPerformanceRow[] = [];
   for (const performance of target.performanceRows.filter((row) => existingPerformanceIds.has(row.id))) {
     const existing = existingPerformanceById.get(performance.id);
     if (!existing) continue;
@@ -618,22 +682,10 @@ export const syncCanonicalEventLineupAndTimetable = async (
       || existing.status !== performance.status
       || existing.sourceType !== performance.sourceType
     ) {
-      await tx.eventPerformance.update({
-        where: { id: performance.id },
-        data: {
-          eventArtistId: performance.eventArtistId,
-          stageId: performance.stageId,
-          displayNameSnapshot: performance.displayNameSnapshot,
-          festivalDayIndex: performance.festivalDayIndex,
-          startAt: performance.startAt,
-          endAt: performance.endAt,
-          sortOrder: performance.sortOrder,
-          status: performance.status,
-          sourceType: performance.sourceType,
-        },
-      });
+      performanceRowsToUpdate.push(performance);
     }
   }
+  await bulkUpdateEventPerformances(tx, performanceRowsToUpdate);
 
   if (artistsToDelete.length > 0) {
     await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistsToDelete } } });

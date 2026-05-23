@@ -512,6 +512,9 @@ const buildI18nReviewNotes = (entityType: string, payload: Record<string, unknow
 });
 
 const normalizeSubmittedEventLineupToTimetable = (payload: Record<string, unknown>): Record<string, unknown> => {
+  if (typeof payload.targetEventId === 'string' && payload.targetEventId.trim()) {
+    return payload;
+  }
   const { startDate, dayRolloverHour, timeZone } = resolveSubmittedEventTimelineContext(payload);
   if (!startDate) return payload;
   return autoAlignEventLineupToTimetablePayload(
@@ -7999,14 +8002,15 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
 
-    const normalizedBody = normalizeSubmittedEventLineupToTimetable(body);
-
     const submission = await createPendingContentSubmission({
       submitterId: userId,
       entityType: 'event',
       title: submittedName,
       payload: {
-        ...normalizedBody,
+        ...normalizeSubmittedEventLineupToTimetable({
+          ...body,
+          targetEventId: eventId,
+        }),
         targetEventId: eventId,
       },
     });
