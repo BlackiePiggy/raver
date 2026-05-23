@@ -66,6 +66,20 @@ struct ScreenStatusBanner: View {
     var action: (() -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
 
+    init(
+        message: String,
+        style: ScreenStatusBannerStyle = .info,
+        actionTitle: String? = nil,
+        onDismiss: (() -> Void)? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.message = message
+        self.style = style
+        self.actionTitle = actionTitle
+        self.action = action
+        self.onDismiss = onDismiss
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: style.iconName)

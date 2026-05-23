@@ -1604,6 +1604,7 @@ struct EventDetailView: View {
     @State private var eventDetailGuideStep: EventDetailGuidanceStep = .lineupTab
     @State private var scheduleViewMode: EventScheduleViewMode = .timeline
     @State private var selectedScheduleDayID: String?
+    @State private var selectedScheduleSearchResult: EventScheduleSearchResult?
 
     private static let relatedArticlesInitialCursor: String? = nil
     private static let relatedArticlesPageSizeHint = 5
@@ -1701,6 +1702,30 @@ struct EventDetailView: View {
         let id: String
         let name: String
         let slots: [WebEventLineupSlot]
+    }
+
+    fileprivate struct EventScheduleSearchResult: Identifiable, Hashable {
+        let id: String
+        let displayName: String
+        let dayID: String
+        let dayTitle: String
+        let stageKey: String
+        let stageName: String
+        let slot: WebEventLineupSlot
+        let act: EventLineupResolvedAct
+        let timeText: String
+        let searchableText: String
+
+        func score(for query: String) -> Int {
+            let normalizedName = displayName.lowercased()
+            let normalizedSearchable = searchableText.lowercased()
+            var score = 0
+            if normalizedName == query { score += 1200 }
+            if normalizedName.hasPrefix(query) { score += 700 }
+            if normalizedName.contains(query) { score += 420 }
+            if normalizedSearchable.contains(query) { score += 180 }
+            return score
+        }
     }
 
     private struct EventLiveStageAct: Identifiable, Hashable {
@@ -3606,6 +3631,7 @@ struct EventDetailView: View {
         let scheduledSlots = event.lineupSlots
             .filter { $0.endTime > $0.startTime }
             .sorted(by: { $0.startTime < $1.startTime })
+        let scheduleSearchResults = eventScheduleSearchIndex(event: event, scheduledSlots: scheduledSlots)
 
         if !didLoadEventSchedule && scheduledSlots.isEmpty && !eventScheduleLoadFailed {
             scheduleTabSkeletonView
@@ -3622,7 +3648,12 @@ struct EventDetailView: View {
                 .padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 12) {
-                scheduleViewModePicker
+                scheduleToolbar(searchResults: scheduleSearchResults)
+
+                if let selectedScheduleSearchResult {
+                    selectedScheduleSearchResultCard(selectedScheduleSearchResult)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
 
                 if scheduleViewMode == .timeline {
                     EventRoutineView(
@@ -3640,7 +3671,24 @@ struct EventDetailView: View {
                 }
             }
             .animation(.spring(response: 0.28, dampingFraction: 0.88), value: scheduleViewMode)
+            .animation(.spring(response: 0.24, dampingFraction: 0.88), value: selectedScheduleSearchResult?.id)
         }
+    }
+
+    private func scheduleToolbar(searchResults: [EventScheduleSearchResult]) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            scheduleViewModePicker
+
+            Spacer(minLength: 8)
+
+            EventScheduleSearchPanel(
+                results: searchResults,
+                selectedResultID: selectedScheduleSearchResult?.id,
+                onSelect: applyScheduleSearchResult,
+                onClearSelection: clearScheduleSearchResult
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var scheduleViewModePicker: some View {
@@ -3668,7 +3716,7 @@ struct EventDetailView: View {
                 .accessibilityLabel(mode.title)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 38, alignment: .leading)
     }
 
     @ViewBuilder
@@ -3714,7 +3762,7 @@ struct EventDetailView: View {
                 eventScheduleStageTabs(sections: sections, activeStageID: activeStageID)
 
                 ForEach(visibleSections) { section in
-                    eventScheduleStageSectionCard(section, event: event)
+                    eventScheduleStageSectionCard(section, event: event, highlightedSlotID: selectedScheduleSearchResult?.slot.id)
                 }
             }
             .onAppear {
@@ -3727,6 +3775,52 @@ struct EventDetailView: View {
                 selectedScheduleStageKey = nil
             }
         }
+    }
+
+    private func selectedScheduleSearchResultCard(_ result: EventScheduleSearchResult) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "scope")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(RaverTheme.accent)
+                .frame(width: 34, height: 34)
+                .background(
+                    Circle()
+                        .fill(RaverTheme.accent.opacity(0.14))
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result.displayName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+
+                Text("\(result.dayTitle) · \(result.stageName) · \(result.timeText)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                clearScheduleSearchResult()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(RaverTheme.secondaryText.opacity(0.72))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(RaverTheme.accent.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.accent.opacity(0.34), lineWidth: 1)
+        )
     }
 
     private func eventScheduleDayTabs(_ days: [EventScheduleDay]) -> some View {
@@ -3868,7 +3962,103 @@ struct EventDetailView: View {
         selectedScheduleStageKey = sections.first?.id
     }
 
-    private func eventScheduleStageSectionCard(_ section: EventScheduleStageSection, event: WebEvent) -> some View {
+    private func applyScheduleSearchResult(_ result: EventScheduleSearchResult) {
+        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.86)) {
+            selectedScheduleSearchResult = result
+            selectedScheduleDayID = result.dayID
+            selectedScheduleStageKey = result.stageKey
+            scheduleViewMode = .stageList
+        }
+    }
+
+    private func clearScheduleSearchResult() {
+        withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.88)) {
+            selectedScheduleSearchResult = nil
+        }
+    }
+
+    private func eventScheduleSearchIndex(event: WebEvent, scheduledSlots: [WebEventLineupSlot]) -> [EventScheduleSearchResult] {
+        let days = EventScheduleDay.build(
+            from: scheduledSlots,
+            anchorDate: event.startDate,
+            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+            dayRolloverHour: event.dayRolloverHour,
+            timeZone: event.eventTimeZone
+        )
+
+        var results: [EventScheduleSearchResult] = []
+        var seenIDs = Set<String>()
+
+        for day in days {
+            for slot in day.slots {
+                let act = EventLineupActCodec.parse(slot: slot)
+                let stageName = scheduleStageDisplayName(for: slot)
+                let stageKey = scheduleStageKey(for: slot)
+                let timeText = EventTimeZoneDisplay.slotTimeRange(slot, event: event)
+                let names = scheduleSearchNames(for: act)
+
+                for name in names {
+                    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmedName.isEmpty else { continue }
+                    let resultID = "\(slot.id)-\(trimmedName.lowercased())"
+                    guard seenIDs.insert(resultID).inserted else { continue }
+                    let searchableText = ([trimmedName, act.displayName, day.subtitleWithoutTimeZone, stageName, timeText] + act.performers.map(\.name))
+                        .joined(separator: " ")
+                    results.append(
+                        EventScheduleSearchResult(
+                            id: resultID,
+                            displayName: trimmedName,
+                            dayID: day.id,
+                            dayTitle: day.subtitleWithoutTimeZone,
+                            stageKey: stageKey,
+                            stageName: stageName,
+                            slot: slot,
+                            act: act,
+                            timeText: timeText,
+                            searchableText: searchableText
+                        )
+                    )
+                }
+            }
+        }
+
+        return results.sorted {
+            if $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedSame {
+                return $0.slot.startTime < $1.slot.startTime
+            }
+            return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    private func scheduleSearchNames(for act: EventLineupResolvedAct) -> [String] {
+        var names: [String] = []
+        var seen = Set<String>()
+
+        func append(_ value: String) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            guard seen.insert(trimmed.lowercased()).inserted else { return }
+            names.append(trimmed)
+        }
+
+        append(act.displayName)
+        for performer in act.performers {
+            append(performer.name)
+        }
+        return names
+    }
+
+    private func scheduleStageDisplayName(for slot: WebEventLineupSlot) -> String {
+        let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? LT("未知舞台", "Unknown Stage", "不明なステージ") : trimmed
+    }
+
+    private func scheduleStageKey(for slot: WebEventLineupSlot) -> String {
+        let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "__unknown_stage__" : trimmed.lowercased()
+    }
+
+    private func eventScheduleStageSectionCard(_ section: EventScheduleStageSection, event: WebEvent, highlightedSlotID: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(section.name)
@@ -3885,7 +4075,7 @@ struct EventDetailView: View {
 
             VStack(spacing: 0) {
                 ForEach(Array(section.slots.enumerated()), id: \.element.id) { index, slot in
-                    eventScheduleStageActRow(slot, event: event)
+                    eventScheduleStageActRow(slot, event: event, isHighlighted: slot.id == highlightedSlotID)
                         .overlay(alignment: .bottom) {
                             if index < section.slots.count - 1 {
                                 Divider().opacity(0.36)
@@ -3904,7 +4094,7 @@ struct EventDetailView: View {
         }
     }
 
-    private func eventScheduleStageActRow(_ slot: WebEventLineupSlot, event: WebEvent) -> some View {
+    private func eventScheduleStageActRow(_ slot: WebEventLineupSlot, event: WebEvent, isHighlighted: Bool = false) -> some View {
         let act = EventLineupActCodec.parse(slot: slot)
         let content = HStack(spacing: 12) {
             lineupActAvatars(act)
@@ -3935,6 +4125,14 @@ struct EventDetailView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHighlighted ? RaverTheme.accent.opacity(0.14) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(isHighlighted ? RaverTheme.accent.opacity(0.44) : Color.clear, lineWidth: 1)
+        )
         .contentShape(Rectangle())
 
         return Button {
@@ -3957,9 +4155,8 @@ struct EventDetailView: View {
         var displayNameByKey: [String: String] = [:]
 
         for slot in day.slots {
-            let trimmed = slot.stageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let displayName = trimmed.isEmpty ? LT("未知舞台", "Unknown Stage", "不明なステージ") : trimmed
-            let key = trimmed.isEmpty ? "__unknown_stage__" : trimmed.lowercased()
+            let displayName = scheduleStageDisplayName(for: slot)
+            let key = scheduleStageKey(for: slot)
             grouped[key, default: []].append(slot)
             displayNameByKey[key] = displayName
         }
@@ -4263,11 +4460,13 @@ struct EventDetailView: View {
     }
 
     private func heroSection(_ event: WebEvent) -> some View {
-        ZStack(alignment: .top) {
+        let coverURL = AppConfig.resolvedURLString(event.coverAssetURL)
+
+        return ZStack(alignment: .top) {
             GeometryReader { geo in
                 ZStack {
                     RaverTheme.card
-                    if let cover = AppConfig.resolvedURLString(event.coverAssetURL) {
+                    if let cover = coverURL {
                         Button {
                             selectedHeroMedia = FullscreenMediaSelection(id: 0)
                         } label: {
@@ -4352,6 +4551,11 @@ struct EventDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 360)
         .clipped()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard coverURL != nil else { return }
+            selectedHeroMedia = FullscreenMediaSelection(id: 0)
+        }
         .zIndex(1)
     }
 
@@ -7814,6 +8018,185 @@ private struct EventRouteSharePreviewCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(RaverTheme.cardBorder.opacity(0.45), lineWidth: 1)
         )
+    }
+}
+
+private struct EventScheduleSearchPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let results: [EventDetailView.EventScheduleSearchResult]
+    let selectedResultID: String?
+    let onSelect: (EventDetailView.EventScheduleSearchResult) -> Void
+    let onClearSelection: () -> Void
+
+    @State private var text = ""
+    @State private var candidates: [EventDetailView.EventScheduleSearchResult] = []
+    @State private var searchTask: Task<Void, Never>?
+    @FocusState private var searchFieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryText)
+
+                TextField(LT("搜 DJ", "Search DJ", "DJ検索"), text: $text)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(primaryText)
+                    .submitLabel(.search)
+                    .focused($searchFieldFocused)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button(LT("收起", "Done", "閉じる")) {
+                                searchFieldFocused = false
+                            }
+                        }
+                    }
+
+                if !text.isEmpty || selectedResultID != nil {
+                    Button {
+                        text = ""
+                        candidates = []
+                        onClearSelection()
+                        searchFieldFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 11)
+            .frame(width: 156, height: 38)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(searchFieldBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(searchFieldFocused ? RaverTheme.accent.opacity(0.48) : searchStroke, lineWidth: 1)
+            )
+
+            if !candidates.isEmpty {
+                VStack(spacing: 7) {
+                    ForEach(candidates) { result in
+                        Button {
+                            onSelect(result)
+                            text = ""
+                            candidates = []
+                            searchFieldFocused = false
+                        } label: {
+                            HStack(spacing: 9) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(result.displayName)
+                                        .font(.system(size: 13.5, weight: .semibold))
+                                        .foregroundStyle(primaryText)
+                                        .lineLimit(1)
+
+                                    Text("\(result.dayTitle) · \(result.stageName) · \(result.timeText)")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(secondaryText)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: 6)
+
+                                Image(systemName: "arrow.turn.down.left")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(RaverTheme.accent)
+                            }
+                            .padding(.horizontal, 11)
+                            .frame(width: 248, height: 48)
+                            .background(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(candidateBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .stroke(candidateStroke, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .zIndex(20)
+            }
+        }
+        .onChange(of: text) { _, value in
+            scheduleSearch(for: value)
+        }
+        .onChange(of: results) { _, _ in
+            scheduleSearch(for: text)
+        }
+        .onDisappear {
+            searchTask?.cancel()
+        }
+    }
+
+    private var primaryText: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.86)
+    }
+
+    private var secondaryText: Color {
+        colorScheme == .dark ? .white.opacity(0.58) : Color.black.opacity(0.50)
+    }
+
+    private var searchFieldBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.74)
+    }
+
+    private var searchStroke: Color {
+        colorScheme == .dark ? Color.white.opacity(0.13) : Color.black.opacity(0.08)
+    }
+
+    private var candidateBackground: Color {
+        colorScheme == .dark ? Color.black.opacity(0.82) : Color.white.opacity(0.96)
+    }
+
+    private var candidateStroke: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07)
+    }
+
+    private func scheduleSearch(for value: String) {
+        searchTask?.cancel()
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            candidates = []
+            return
+        }
+
+        let results = results
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+
+            let query = trimmed.lowercased()
+            let result = await Task.detached(priority: .userInitiated) {
+                EventScheduleSearchPanel.search(results: results, query: query)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            candidates = result
+        }
+    }
+
+    nonisolated private static func search(
+        results: [EventDetailView.EventScheduleSearchResult],
+        query: String
+    ) -> [EventDetailView.EventScheduleSearchResult] {
+        results
+            .map { result in (result, result.score(for: query)) }
+            .filter { $0.1 > 0 }
+            .sorted { lhs, rhs in
+                if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+                return lhs.0.slot.startTime < rhs.0.slot.startTime
+            }
+            .prefix(8)
+            .map(\.0)
     }
 }
 

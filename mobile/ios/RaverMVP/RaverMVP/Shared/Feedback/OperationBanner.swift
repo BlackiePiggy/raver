@@ -156,10 +156,10 @@ private struct OperationBannerHostModifier: ViewModifier {
             message: item.message,
             style: item.style.screenStyle,
             actionTitle: actionTitle,
-            action: action,
             onDismiss: {
                 center.dismiss()
-            }
+            },
+            action: action
         )
     }
 }

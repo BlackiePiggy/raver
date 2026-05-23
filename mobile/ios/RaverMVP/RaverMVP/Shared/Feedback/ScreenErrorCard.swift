@@ -8,6 +8,22 @@ struct ScreenErrorCard: View {
     var secondaryTitle: String? = nil
     var secondaryAction: (() -> Void)? = nil
 
+    init(
+        title: String = LT("加载失败", "Load Failed", "読み込みに失敗しました"),
+        message: String,
+        retryTitle: String = LT("重试", "Retry", "再試行"),
+        secondaryTitle: String? = nil,
+        secondaryAction: (() -> Void)? = nil,
+        retryAction: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.message = message
+        self.retryTitle = retryTitle
+        self.retryAction = retryAction
+        self.secondaryTitle = secondaryTitle
+        self.secondaryAction = secondaryAction
+    }
+
     var body: some View {
         GlassCard {
             VStack(spacing: 16) {

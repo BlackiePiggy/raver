@@ -35,6 +35,8 @@ targets:
           NSAllowsArbitraryLoads: true
         NSPhotoLibraryAddUsageDescription: Raver 需要保存分享海报到你的相册。
         NSPhotoLibraryUsageDescription: Raver 需要访问你的相册以保存分享海报。
+        NSCameraUsageDescription: Raver 需要使用相机来拍摄活动海报、阵容图、时间表或场地图。
+        NSMicrophoneUsageDescription: Raver 需要使用麦克风来录制和发送聊天语音消息。
         NSLocationWhenInUseUsageDescription: 加入小队线下活动后，Raver 需要使用你的定位来展示队友位置并记录活动轨迹。
         TencentIMAPNSBusinessID: "48505"
         CFBundleURLTypes:
@@ -55,6 +57,10 @@ targets:
         embed: true
       - target: RaverNotificationService
         embed: true
+    postBuildScripts:
+      - name: Generate Vendor dSYMs
+        script: ./scripts/generate_vendor_dsyms.sh
+        basedOnDependencyAnalysis: false
   RaverCountdownWidgets:
     type: app-extension
     platform: iOS

@@ -1268,13 +1268,13 @@ private struct DJWebCard: View {
 
                     HStack(spacing: 6) {
                         if dj.spotifyId != nil {
-                            tag("Spotify", color: .green)
+                            DJPlatformIcon(platform: .spotify, size: 24, logoPadding: 5)
                         }
                         if dj.soundcloudUrl != nil {
-                            tag("SoundCloud", color: .blue)
+                            DJPlatformIcon(platform: .soundcloud, size: 24, logoPadding: 5)
                         }
                         if dj.instagramUrl != nil {
-                            tag("Instagram", color: .pink)
+                            DJPlatformIcon(platform: .instagram, size: 24, logoPadding: 5)
                         }
                     }
                     .lineLimit(1)
@@ -1308,21 +1308,112 @@ private struct DJWebCard: View {
         DefaultDJAvatarPlaceholderView(size: Self.cardWidth, backgroundColor: RaverTheme.card, imageScale: 0.88)
     }
 
-    private func tag(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption2)
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.16))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
 }
 
 private struct DJWebMarqueeWidthKey: PreferenceKey {
     static var defaultValue: CGFloat = 1
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
+    }
+}
+
+private struct DJPlatformLink: Identifiable {
+    let platform: DJPlatformLogo
+    let url: URL
+
+    var id: String {
+        "\(platform.accessibilityTitle)-\(url.absoluteString)"
+    }
+}
+
+private enum DJPlatformLogo {
+    private static let logoBaseURL = "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/logos"
+
+    case spotify
+    case appleMusic
+    case instagram
+    case facebook
+    case soundcloud
+    case x
+    case youtube
+    case neteaseMusic
+    case qqMusic
+    case website
+
+    var logoURL: String {
+        switch self {
+        case .spotify: return "\(Self.logoBaseURL)/spotify.webp"
+        case .appleMusic: return "\(Self.logoBaseURL)/applemusic.webp"
+        case .instagram: return "\(Self.logoBaseURL)/instagram.webp"
+        case .facebook: return "\(Self.logoBaseURL)/facebook.webp"
+        case .soundcloud: return "\(Self.logoBaseURL)/soundcloud.webp"
+        case .x: return "\(Self.logoBaseURL)/x.webp"
+        case .youtube: return "\(Self.logoBaseURL)/youtube.webp"
+        case .neteaseMusic: return "\(Self.logoBaseURL)/neteasemusic.webp"
+        case .qqMusic: return "\(Self.logoBaseURL)/qqmusic.webp"
+        case .website: return "\(Self.logoBaseURL)/website.webp"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .spotify: return Color(red: 0.12, green: 0.74, blue: 0.32)
+        case .appleMusic: return Color(red: 0.98, green: 0.24, blue: 0.35)
+        case .instagram: return Color(red: 0.92, green: 0.24, blue: 0.58)
+        case .facebook: return Color(red: 0.08, green: 0.34, blue: 0.78)
+        case .soundcloud: return Color(red: 1.00, green: 0.42, blue: 0.08)
+        case .x: return Color(red: 0.12, green: 0.13, blue: 0.16)
+        case .youtube: return Color(red: 0.96, green: 0.08, blue: 0.10)
+        case .neteaseMusic: return Color(red: 0.86, green: 0.08, blue: 0.10)
+        case .qqMusic: return Color(red: 0.16, green: 0.58, blue: 0.98)
+        case .website: return Color(red: 0.44, green: 0.55, blue: 0.68)
+        }
+    }
+
+    var accessibilityTitle: String {
+        switch self {
+        case .spotify: return "Spotify"
+        case .appleMusic: return "Apple Music"
+        case .instagram: return "Instagram"
+        case .facebook: return "Facebook"
+        case .soundcloud: return "SoundCloud"
+        case .x: return "X"
+        case .youtube: return "YouTube"
+        case .neteaseMusic: return "NetEase Music"
+        case .qqMusic: return "QQ Music"
+        case .website: return LT("官网", "Website", "公式サイト")
+        }
+    }
+}
+
+private struct DJPlatformIcon: View {
+    let platform: DJPlatformLogo
+    var size: CGFloat = 36
+    var logoPadding: CGFloat = 7
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            platform.color.opacity(0.96),
+                            platform.color.opacity(0.58)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Circle()
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+
+            ImageLoaderView(urlString: platform.logoURL, resizingMode: .fit, showsIndicator: false)
+                .padding(logoPadding)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .shadow(color: platform.color.opacity(0.20), radius: size * 0.22, x: 0, y: size * 0.10)
+        .accessibilityHidden(true)
     }
 }
 
@@ -2907,12 +2998,13 @@ struct DJDetailView: View {
     private func heroSection(_ dj: WebDJ) -> some View {
         let livePerformances = currentPerformanceSnapshots(for: dj)
         let hasLivePerformances = !livePerformances.isEmpty
+        let imageURL = heroImageURL(for: dj)
 
         return ZStack(alignment: .top) {
             GeometryReader { geo in
                 ZStack {
                     RaverTheme.card
-                    if let imageURL = heroImageURL(for: dj) {
+                    if let imageURL {
                         Button {
                             selectedHeroMedia = FullscreenMediaSelection(id: 0)
                         } label: {
@@ -3019,6 +3111,11 @@ struct DJDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 360)
         .clipped()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard imageURL != nil else { return }
+            selectedHeroMedia = FullscreenMediaSelection(id: 0)
+        }
         .zIndex(1)
     }
 
@@ -3786,31 +3883,55 @@ struct DJDetailView: View {
     @ViewBuilder
     private func socialLinks(_ dj: WebDJ) -> some View {
         HStack(spacing: 8) {
-            if let spotifyID = dj.spotifyId, !spotifyID.isEmpty {
+            ForEach(djPlatformLinks(dj)) { link in
                 Button {
-                    openURL(URL(string: "https://open.spotify.com/artist/\(spotifyID)")!)
+                    openURL(link.url)
                 } label: {
-                    socialChip("Spotify", color: .green)
+                    DJPlatformIcon(platform: link.platform, size: 36, logoPadding: 7)
                 }
                 .buttonStyle(.plain)
-            }
-            if let ig = dj.instagramUrl, let url = URL(string: ig) {
-                Button {
-                    openURL(url)
-                } label: {
-                    socialChip("Instagram", color: .pink)
-                }
-                .buttonStyle(.plain)
-            }
-            if let sc = dj.soundcloudUrl, let url = URL(string: sc) {
-                Button {
-                    openURL(url)
-                } label: {
-                    socialChip("SoundCloud", color: .orange)
-                }
-                .buttonStyle(.plain)
+                .accessibilityLabel(link.platform.accessibilityTitle)
             }
         }
+    }
+
+    private func djPlatformLinks(_ dj: WebDJ) -> [DJPlatformLink] {
+        var links: [DJPlatformLink] = []
+        if let spotifyID = dj.spotifyId?.nilIfBlank,
+           let url = URL(string: dj.spotifyUrl?.nilIfBlank ?? "https://open.spotify.com/artist/\(spotifyID)") {
+            links.append(DJPlatformLink(platform: .spotify, url: url))
+        } else if let spotifyURL = dj.spotifyUrl?.nilIfBlank, let url = URL(string: spotifyURL) {
+            links.append(DJPlatformLink(platform: .spotify, url: url))
+        }
+        if let appleMusicID = dj.appleMusicId?.nilIfBlank,
+           let url = URL(string: "https://music.apple.com/artist/\(appleMusicID)") {
+            links.append(DJPlatformLink(platform: .appleMusic, url: url))
+        }
+        if let instagramURL = dj.instagramUrl?.nilIfBlank, let url = URL(string: instagramURL) {
+            links.append(DJPlatformLink(platform: .instagram, url: url))
+        }
+        if let facebookURL = dj.facebookUrl?.nilIfBlank, let url = URL(string: facebookURL) {
+            links.append(DJPlatformLink(platform: .facebook, url: url))
+        }
+        if let soundcloudURL = dj.soundcloudUrl?.nilIfBlank, let url = URL(string: soundcloudURL) {
+            links.append(DJPlatformLink(platform: .soundcloud, url: url))
+        }
+        if let twitterURL = dj.twitterUrl?.nilIfBlank, let url = URL(string: twitterURL) {
+            links.append(DJPlatformLink(platform: .x, url: url))
+        }
+        if let youtubeURL = dj.youtubeUrl?.nilIfBlank, let url = URL(string: youtubeURL) {
+            links.append(DJPlatformLink(platform: .youtube, url: url))
+        }
+        if let neteaseURL = dj.neteaseUrl?.nilIfBlank, let url = URL(string: neteaseURL) {
+            links.append(DJPlatformLink(platform: .neteaseMusic, url: url))
+        }
+        if let qqMusicURL = dj.qqMusicUrl?.nilIfBlank, let url = URL(string: qqMusicURL) {
+            links.append(DJPlatformLink(platform: .qqMusic, url: url))
+        }
+        if let websiteURL = dj.website?.nilIfBlank, let url = URL(string: websiteURL) {
+            links.append(DJPlatformLink(platform: .website, url: url))
+        }
+        return links
     }
 
     @ViewBuilder
@@ -4474,18 +4595,6 @@ struct DJDetailView: View {
         guard let best = progressCandidates.min(by: { $0.distance < $1.distance }) else { return }
         let clamped = min(max(best.progress, 0), CGFloat(max(0, DJDetailTab.allCases.count - 1)))
         pageProgress = clamped
-    }
-
-    private func socialChip(_ title: String, color: Color) -> some View {
-        Text(title)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(color.opacity(0.15))
-            )
     }
 
     private func setRow(_ set: WebDJSet) -> some View {

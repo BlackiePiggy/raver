@@ -669,11 +669,55 @@ struct DJUploadFlowView: View {
     }
 
     private func linkField(_ title: String, _ keyPath: WritableKeyPath<DJUploadDraft, String>) -> some View {
-        uploadTextField(
-            title: title,
-            text: textBinding(keyPath),
-            keyboardType: .URL
-        )
+        let text = textBinding(keyPath)
+        let platform = DJUploadLinkPlatform(title: title)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            fieldTitle(title, isRequired: false)
+
+            HStack(spacing: 10) {
+                platformLogo(platform)
+
+                HStack(spacing: 8) {
+                    TextField(title, text: text)
+                        .keyboardType(.URL)
+                        .font(.body)
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .lineLimit(1)
+
+                    linkFieldActionButton(
+                        systemImage: "doc.on.clipboard",
+                        accessibilityLabel: LT("粘贴", "Paste", "貼り付け")
+                    ) {
+                        if let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !pasted.isEmpty {
+                            text.wrappedValue = pasted
+                        }
+                    }
+
+                    linkFieldActionButton(
+                        systemImage: "xmark.circle.fill",
+                        accessibilityLabel: LT("清空", "Clear", "クリア")
+                    ) {
+                        text.wrappedValue = ""
+                    }
+                    .opacity(text.wrappedValue.isEmpty ? 0.38 : 1)
+                    .disabled(text.wrappedValue.isEmpty)
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
+                .frame(minHeight: 48)
+                .background(fieldBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(RaverTheme.cardBorder.opacity(0.76), lineWidth: 1)
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func statField(_ title: String, _ keyPath: WritableKeyPath<DJUploadDraft, String>) -> some View {
@@ -743,6 +787,57 @@ struct DJUploadFlowView: View {
 
     private var fieldBackground: some ShapeStyle {
         RaverTheme.card
+    }
+
+    private func platformLogo(_ platform: DJUploadLinkPlatform) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            platform.color.opacity(0.98),
+                            platform.color.opacity(0.62)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Circle()
+                .stroke(Color.white.opacity(0.28), lineWidth: 1)
+
+            if let logoURL = platform.logoURL {
+                ImageLoaderView(urlString: logoURL, resizingMode: .fit, showsIndicator: false)
+                    .padding(8)
+            } else if let symbol = platform.systemImage {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .black))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.white)
+            } else {
+                Text(platform.shortTitle)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 42, height: 42)
+        .shadow(color: platform.color.opacity(0.24), radius: 10, x: 0, y: 5)
+        .accessibilityHidden(true)
+    }
+
+    private func linkFieldActionButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(RaverTheme.secondaryText)
+                .frame(width: 28, height: 28)
+                .background(RaverTheme.background.opacity(0.86), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private func inlineInfoCard(_ message: String) -> some View {
@@ -849,6 +944,76 @@ private extension DJUploadFlowView {
 #if canImport(UIKit)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 #endif
+    }
+}
+
+private struct DJUploadLinkPlatform {
+    private static let logoBaseURL = "https://wen-jasonlee.oss-cn-shanghai.aliyuncs.com/logos"
+
+    let shortTitle: String
+    let color: Color
+    let systemImage: String?
+    let logoURL: String?
+
+    init(title: String) {
+        let normalized = title.lowercased()
+
+        if normalized.contains("spotify") {
+            shortTitle = "S"
+            color = Color(red: 0.12, green: 0.74, blue: 0.32)
+            systemImage = "music.note"
+            logoURL = "\(Self.logoBaseURL)/spotify.webp"
+        } else if normalized.contains("apple") {
+            shortTitle = "AM"
+            color = Color(red: 0.98, green: 0.24, blue: 0.35)
+            systemImage = "music.note.list"
+            logoURL = "\(Self.logoBaseURL)/applemusic.webp"
+        } else if normalized.contains("instagram") {
+            shortTitle = "IG"
+            color = Color(red: 0.92, green: 0.24, blue: 0.58)
+            systemImage = "camera.fill"
+            logoURL = "\(Self.logoBaseURL)/instagram.webp"
+        } else if normalized.contains("facebook") {
+            shortTitle = "f"
+            color = Color(red: 0.08, green: 0.34, blue: 0.78)
+            systemImage = nil
+            logoURL = "\(Self.logoBaseURL)/facebook.webp"
+        } else if normalized.contains("soundcloud") {
+            shortTitle = "SC"
+            color = Color(red: 1.00, green: 0.42, blue: 0.08)
+            systemImage = "cloud.fill"
+            logoURL = "\(Self.logoBaseURL)/soundcloud.webp"
+        } else if normalized.contains("twitter") || normalized.contains("x/") {
+            shortTitle = "X"
+            color = Color(red: 0.12, green: 0.13, blue: 0.16)
+            systemImage = nil
+            logoURL = "\(Self.logoBaseURL)/x.webp"
+        } else if normalized.contains("youtube") {
+            shortTitle = "YT"
+            color = Color(red: 0.96, green: 0.08, blue: 0.10)
+            systemImage = "play.fill"
+            logoURL = "\(Self.logoBaseURL)/youtube.webp"
+        } else if normalized.contains("netease") {
+            shortTitle = "NE"
+            color = Color(red: 0.86, green: 0.08, blue: 0.10)
+            systemImage = "record.circle.fill"
+            logoURL = "\(Self.logoBaseURL)/neteasemusic.webp"
+        } else if normalized.contains("qq") {
+            shortTitle = "QQ"
+            color = Color(red: 0.16, green: 0.58, blue: 0.98)
+            systemImage = "music.quarternote.3"
+            logoURL = "\(Self.logoBaseURL)/qqmusic.webp"
+        } else if normalized.contains("website") {
+            shortTitle = "WWW"
+            color = Color(red: 0.44, green: 0.55, blue: 0.68)
+            systemImage = "globe"
+            logoURL = "\(Self.logoBaseURL)/website.webp"
+        } else {
+            shortTitle = "URL"
+            color = RaverTheme.accent
+            systemImage = "link"
+            logoURL = nil
+        }
     }
 }
 

@@ -36,10 +36,12 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>加入小队线下活动后，Raver 需要使用你的定位来展示队友位置并记录活动轨迹。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Raver 需要使用相机来拍摄活动海报、阵容图、时间表或场地图。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>加入小队线下活动后，Raver 需要使用你的定位来展示队友位置并记录活动轨迹。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Raver 需要使用麦克风来录制和发送聊天语音消息。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Raver 需要保存分享海报到你的相册。</string>
 	<key>NSPhotoLibraryUsageDescription</key>

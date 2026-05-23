@@ -158,6 +158,9 @@ struct GlobalSearchItem: Identifiable, Codable, Hashable {
     let subtitle: String?
     let summary: String?
     let imageUrl: String?
+    let posterImageUrl: String?
+    let coverImageUrl: String?
+    let lineupImageUrl: String?
     let badgeText: String?
     let deeplink: String
     let relevanceScore: Double
@@ -167,6 +170,189 @@ struct GlobalSearchItem: Identifiable, Codable, Hashable {
 
     var tab: GlobalSearchTab {
         type.tab
+    }
+
+    var displayImageUrl: String? {
+        if type == .festival {
+            return Self.firstNonBlank([posterImageUrl, coverImageUrl, imageUrl, lineupImageUrl])
+        }
+        return Self.firstNonBlank([imageUrl, posterImageUrl, coverImageUrl, lineupImageUrl])
+    }
+
+    init(
+        id: String,
+        type: GlobalSearchItemType,
+        entityID: String,
+        title: String,
+        subtitle: String?,
+        summary: String?,
+        imageUrl: String?,
+        posterImageUrl: String? = nil,
+        coverImageUrl: String? = nil,
+        lineupImageUrl: String? = nil,
+        badgeText: String?,
+        deeplink: String,
+        relevanceScore: Double,
+        publishedAt: Date?,
+        updatedAt: Date?,
+        rankingYear: Int?
+    ) {
+        self.id = id
+        self.type = type
+        self.entityID = entityID
+        self.title = title
+        self.subtitle = subtitle
+        self.summary = summary
+        self.imageUrl = imageUrl
+        self.posterImageUrl = posterImageUrl
+        self.coverImageUrl = coverImageUrl
+        self.lineupImageUrl = lineupImageUrl
+        self.badgeText = badgeText
+        self.deeplink = deeplink
+        self.relevanceScore = relevanceScore
+        self.publishedAt = publishedAt
+        self.updatedAt = updatedAt
+        self.rankingYear = rankingYear
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case entityID
+        case entityId
+        case title
+        case subtitle
+        case summary
+        case imageUrl
+        case imageURL
+        case posterImageUrl
+        case posterImageURL
+        case posterUrl
+        case posterURL
+        case coverImageUrl
+        case coverImageURL
+        case coverUrl
+        case coverURL
+        case lineupImageUrl
+        case lineupImageURL
+        case lineupUrl
+        case lineupURL
+        case badgeText
+        case deeplink
+        case relevanceScore
+        case publishedAt
+        case updatedAt
+        case rankingYear
+    }
+
+    private enum SnakeCodingKeys: String, CodingKey {
+        case entityID = "entity_id"
+        case imageUrl = "image_url"
+        case posterImageUrl = "poster_image_url"
+        case posterUrl = "poster_url"
+        case coverImageUrl = "cover_image_url"
+        case coverUrl = "cover_url"
+        case lineupImageUrl = "lineup_image_url"
+        case lineupUrl = "lineup_url"
+        case badgeText = "badge_text"
+        case relevanceScore = "relevance_score"
+        case publishedAt = "published_at"
+        case updatedAt = "updated_at"
+        case rankingYear = "ranking_year"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let snakeContainer = try decoder.container(keyedBy: SnakeCodingKeys.self)
+
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decode(GlobalSearchItemType.self, forKey: .type)
+        entityID = try container.decodeIfPresent(String.self, forKey: .entityID)
+            ?? container.decodeIfPresent(String.self, forKey: .entityId)
+            ?? snakeContainer.decode(String.self, forKey: .entityID)
+        title = try container.decode(String.self, forKey: .title)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        imageUrl = try Self.decodeFirstString(
+            from: container,
+            keys: [.imageUrl, .imageURL]
+        ) ?? Self.decodeFirstString(
+            from: snakeContainer,
+            keys: [.imageUrl]
+        )
+        posterImageUrl = try Self.decodeFirstString(
+            from: container,
+            keys: [.posterImageUrl, .posterImageURL, .posterUrl, .posterURL]
+        ) ?? Self.decodeFirstString(
+            from: snakeContainer,
+            keys: [.posterImageUrl, .posterUrl]
+        )
+        coverImageUrl = try Self.decodeFirstString(
+            from: container,
+            keys: [.coverImageUrl, .coverImageURL, .coverUrl, .coverURL]
+        ) ?? Self.decodeFirstString(
+            from: snakeContainer,
+            keys: [.coverImageUrl, .coverUrl]
+        )
+        lineupImageUrl = try Self.decodeFirstString(
+            from: container,
+            keys: [.lineupImageUrl, .lineupImageURL, .lineupUrl, .lineupURL]
+        ) ?? Self.decodeFirstString(
+            from: snakeContainer,
+            keys: [.lineupImageUrl, .lineupUrl]
+        )
+        badgeText = try container.decodeIfPresent(String.self, forKey: .badgeText)
+            ?? snakeContainer.decodeIfPresent(String.self, forKey: .badgeText)
+        deeplink = try container.decode(String.self, forKey: .deeplink)
+        relevanceScore = try container.decodeIfPresent(Double.self, forKey: .relevanceScore)
+            ?? snakeContainer.decode(Double.self, forKey: .relevanceScore)
+        publishedAt = try container.decodeIfPresent(Date.self, forKey: .publishedAt)
+            ?? snakeContainer.decodeIfPresent(Date.self, forKey: .publishedAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+            ?? snakeContainer.decodeIfPresent(Date.self, forKey: .updatedAt)
+        rankingYear = try container.decodeIfPresent(Int.self, forKey: .rankingYear)
+            ?? snakeContainer.decodeIfPresent(Int.self, forKey: .rankingYear)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+        try container.encode(entityID, forKey: .entityID)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(subtitle, forKey: .subtitle)
+        try container.encodeIfPresent(summary, forKey: .summary)
+        try container.encodeIfPresent(imageUrl, forKey: .imageUrl)
+        try container.encodeIfPresent(posterImageUrl, forKey: .posterImageUrl)
+        try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
+        try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
+        try container.encodeIfPresent(badgeText, forKey: .badgeText)
+        try container.encode(deeplink, forKey: .deeplink)
+        try container.encode(relevanceScore, forKey: .relevanceScore)
+        try container.encodeIfPresent(publishedAt, forKey: .publishedAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(rankingYear, forKey: .rankingYear)
+    }
+
+    private static func firstNonBlank(_ values: [String?]) -> String? {
+        values.compactMap { value in
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed?.isEmpty == false ? trimmed : nil
+        }
+        .first
+    }
+
+    private static func decodeFirstString<Key: CodingKey>(
+        from container: KeyedDecodingContainer<Key>,
+        keys: [Key]
+    ) throws -> String? {
+        for key in keys {
+            if let value = try container.decodeIfPresent(String.self, forKey: key),
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 
     func appRoute() -> AppRoute? {

@@ -215,6 +215,17 @@ struct MyPublishesView: View {
             case .failed: return LT("处理失败", "Failed", "失敗")
             }
         }
+
+        var iconName: String {
+            switch self {
+            case .all: return "sparkles"
+            case .approved: return "checkmark.seal.fill"
+            case .processing: return "gearshape.2.fill"
+            case .reviewing: return "clock.fill"
+            case .rejected: return "xmark.seal.fill"
+            case .failed: return "exclamationmark.triangle.fill"
+            }
+        }
     }
 
     @Environment(\.appPush) private var appPush
@@ -237,21 +248,7 @@ struct MyPublishesView: View {
 
     var body: some View {
         List {
-            Picker(LT("发布类型", "Publish Type", "公開タイプ"), selection: $selectedTab) {
-                Text(LT("Sets", "Sets", "Sets")).tag(0)
-                Text("DJ").tag(1)
-                Text(LT("活动", "Events", "イベント")).tag(2)
-                Text(LT("打分", "Ratings", "評価")).tag(3)
-                Text(LT("资讯", "News", "ニュース")).tag(4)
-            }
-            .pickerStyle(.segmented)
-
-            Picker(LT("审核状态", "Review Status", "審査状態"), selection: $selectedReviewFilter) {
-                ForEach(ReviewFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
+            publishFilterControls
 
             if selectedTab == 0 {
                 if selectedReviewFilter != .approved {
@@ -499,6 +496,140 @@ struct MyPublishesView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+    }
+
+    private var publishFilterControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(LT("内容类型", "Content Type", "コンテンツ種別"), systemImage: "square.grid.2x2.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                RaverSegmentedControl(
+                    items: publishTabItems,
+                    selection: $selectedTab,
+                    title: publishTabTitle,
+                    iconName: publishTabIconName
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(LT("审核状态", "Review Status", "審査状態"), systemImage: "checklist.checked")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ReviewFilter.allCases) { filter in
+                            reviewFilterChip(filter)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                    .padding(.vertical, 1)
+                }
+                .scrollClipDisabled()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            RaverTheme.card.opacity(0.98),
+                            RaverTheme.cardBorder.opacity(0.28)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.72), lineWidth: 1)
+        )
+        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
+    }
+
+    private var publishTabItems: [Int] {
+        [0, 1, 2, 3, 4]
+    }
+
+    private func publishTabTitle(_ tab: Int) -> String {
+        switch tab {
+        case 0: return LT("Sets", "Sets", "Sets")
+        case 1: return "DJ"
+        case 2: return LT("活动", "Events", "イベント")
+        case 3: return LT("打分", "Ratings", "評価")
+        case 4: return LT("资讯", "News", "ニュース")
+        default: return ""
+        }
+    }
+
+    private func publishTabIconName(_ tab: Int) -> String? {
+        switch tab {
+        case 0: return "waveform"
+        case 1: return "headphones"
+        case 2: return "calendar"
+        case 3: return "star.leadinghalf.filled"
+        case 4: return "newspaper"
+        default: return nil
+        }
+    }
+
+    private func reviewFilterChip(_ filter: ReviewFilter) -> some View {
+        let isSelected = selectedReviewFilter == filter
+
+        return Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                selectedReviewFilter = filter
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: filter.iconName)
+                    .font(.system(size: 11, weight: .bold))
+                    .symbolRenderingMode(.hierarchical)
+
+                Text(filter.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .background {
+                if isSelected {
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    RaverTheme.tabBarSelectionStart,
+                                    RaverTheme.accent,
+                                    RaverTheme.tabBarSelectionEnd
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(RaverTheme.tabBarSelectionStroke, lineWidth: 1)
+                        )
+                        .shadow(color: RaverTheme.tabBarShadowAccent, radius: 10, x: 0, y: 5)
+                } else {
+                    Capsule(style: .continuous)
+                        .fill(RaverTheme.card.opacity(0.72))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(RaverTheme.cardBorder.opacity(0.62), lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func reviewSubmissionSection(entityType: String) -> some View {

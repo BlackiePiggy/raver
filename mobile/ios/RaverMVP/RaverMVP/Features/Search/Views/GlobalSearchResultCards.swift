@@ -66,7 +66,7 @@ struct GlobalSearchResultCard: View {
 
     private var thumbnail: some View {
         ZStack {
-            if let imageUrl = item.imageUrl {
+            if let imageUrl = item.displayImageUrl {
                 ImageLoaderView(urlString: imageUrl, resizingMode: .fill)
             } else {
                 LinearGradient(

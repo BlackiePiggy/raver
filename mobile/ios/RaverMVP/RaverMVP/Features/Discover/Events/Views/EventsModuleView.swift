@@ -637,8 +637,9 @@ struct EventsModuleView: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
                 .multilineTextAlignment(.leading)
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: 176, alignment: .leading)
 
             Button {
                 uploadPromptBubbleDismissed = true
@@ -655,7 +656,7 @@ struct EventsModuleView: View {
         .padding(.leading, 14)
         .padding(.trailing, 8)
         .padding(.vertical, 10)
-        .frame(width: 226, alignment: .leading)
+        .frame(maxWidth: 226, alignment: .leading)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)

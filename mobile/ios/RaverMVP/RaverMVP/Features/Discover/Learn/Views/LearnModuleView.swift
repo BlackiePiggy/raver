@@ -3255,7 +3255,7 @@ struct LearnLabelDetailView: View {
 
     let label: LearnLabel
 
-    @State private var previewImage: LearnLabelPreviewImage?
+    @State private var selectedHeroMedia: FullscreenMediaSelection?
     @State private var avatarLuminance: CGFloat?
     @State private var shareMorePresentation: LabelCardSharePresentation?
     @State private var isShareMorePanelVisible = false
@@ -3275,7 +3275,8 @@ struct LearnLabelDetailView: View {
                     .frame(maxWidth: .infinity)
                     .overlay {
                         Button {
-                            openPreview(urlString: label.backgroundUrl, title: LT("\(label.name) 背景图", "\(label.name) banner", "\(label.name) の背景画像"))
+                            guard destinationURL(label.backgroundUrl) != nil else { return }
+                            selectedHeroMedia = FullscreenMediaSelection(id: 0)
                         } label: {
                             headerBanner
                         }
@@ -3286,7 +3287,9 @@ struct LearnLabelDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .top, spacing: 14) {
                         Button {
-                            openPreview(urlString: label.avatarUrl, title: LT("\(label.name) 头像", "\(label.name) avatar", "\(label.name) のアバター"))
+                            let avatarIndex = destinationURL(label.backgroundUrl) == nil ? 0 : 1
+                            guard destinationURL(label.avatarUrl) != nil else { return }
+                            selectedHeroMedia = FullscreenMediaSelection(id: avatarIndex)
                         } label: {
                             Color.clear
                                 .aspectRatio(1, contentMode: .fit)
@@ -3370,8 +3373,8 @@ struct LearnLabelDetailView: View {
                 .buttonStyle(.plain)
             }
         }
-        .navigationDestination(item: $previewImage) { item in
-            LearnLabelImagePreviewView(item: item)
+        .fullScreenCover(item: $selectedHeroMedia) { selection in
+            FullscreenMediaViewer(items: labelPreviewItems, initialIndex: selection.id)
         }
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
@@ -3521,6 +3524,17 @@ struct LearnLabelDetailView: View {
         return URL(string: resolved)
     }
 
+    private var labelPreviewItems: [FullscreenMediaItem] {
+        var items: [FullscreenMediaItem] = []
+        if let bannerURL = destinationURL(label.backgroundUrl) {
+            items.append(FullscreenMediaItem(rawURL: bannerURL.absoluteString, index: items.count))
+        }
+        if let avatarURL = destinationURL(label.avatarUrl) {
+            items.append(FullscreenMediaItem(rawURL: avatarURL.absoluteString, index: items.count))
+        }
+        return items
+    }
+
     @ViewBuilder
     private var founderSection: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -3638,11 +3652,6 @@ struct LearnLabelDetailView: View {
         await MainActor.run {
             avatarLuminance = luminance
         }
-    }
-
-    private func openPreview(urlString: String?, title: String) {
-        guard let url = destinationURL(urlString) else { return }
-        previewImage = LearnLabelPreviewImage(title: title, url: url)
     }
 
     private func dismissShareMorePanel(after: (() -> Void)? = nil) {
@@ -5303,9 +5312,11 @@ struct LearnFestivalDetailView: View {
 
     @ViewBuilder
     private var heroSection: some View {
+        let backgroundURL = destinationURL(currentFestival.backgroundUrl)
+
         ZStack(alignment: .top) {
             GeometryReader { geo in
-                if let url = destinationURL(currentFestival.backgroundUrl) {
+                if let url = backgroundURL {
                     Button {
                         selectedHeroMedia = FullscreenMediaSelection(id: 0)
                     } label: {
@@ -5335,16 +5346,24 @@ struct LearnFestivalDetailView: View {
             VStack {
                 Spacer(minLength: 0)
                 HStack(alignment: .center, spacing: 12) {
-                    Color.clear
-                        .aspectRatio(1, contentMode: .fit)
-                        .frame(width: 88)
-                        .overlay { headerAvatar }
-                        .clipped()
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(LearnLabelAvatarStyling.borderColor(for: avatarLuminance), lineWidth: 1)
+                    Button {
+                        openPreview(
+                            urlString: currentFestival.avatarUrl,
+                            title: LT("\(currentFestival.name) Logo", "\(currentFestival.name) Logo", "\(currentFestival.name) のロゴ")
                         )
+                    } label: {
+                        Color.clear
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(width: 88)
+                            .overlay { headerAvatar }
+                            .clipped()
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(LearnLabelAvatarStyling.borderColor(for: avatarLuminance), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .top, spacing: 10) {
@@ -5409,6 +5428,11 @@ struct LearnFestivalDetailView: View {
         }
         .frame(height: 360)
         .clipped()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard backgroundURL != nil else { return }
+            selectedHeroMedia = FullscreenMediaSelection(id: 0)
+        }
         .zIndex(1)
     }
 
