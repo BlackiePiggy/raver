@@ -633,7 +633,7 @@ struct EventsModuleView: View {
 
     private var uploadEventPromptBubble: some View {
         HStack(alignment: .top, spacing: 10) {
-            Text(LT("没有找到理想的活动？我自己来添加", "Can't find the right event? Add it yourself", "理想のイベントがない？自分で追加"))
+            Text(LT("没有找？快来添加", "Can't find? Add it yourself", "理想のイベントがない？自分で追加"))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(RaverTheme.primaryText)
                 .multilineTextAlignment(.leading)
