@@ -1914,7 +1914,7 @@ struct ContentReviewsInboxView: View {
     }
 
     private func openReviewedContent(_ item: ContentReviewNotificationItem) {
-        guard item.isApproved, let id = item.createdEntityId else { return }
+        guard item.canOpenReviewedContent, let id = item.createdEntityId else { return }
         if item.entityType == "event" {
             appPush(.eventDetail(eventID: id))
         } else if item.entityType == "dj" {
@@ -1922,14 +1922,27 @@ struct ContentReviewsInboxView: View {
         }
     }
 
+    private func contentReviewAccentColor(for state: ContentReviewNotificationItem.ReviewState) -> Color {
+        switch state {
+        case .processing:
+            return .yellow
+        case .reviewing, .approved:
+            return .green
+        case .rejected, .failed:
+            return .red
+        }
+    }
+
     private func contentReviewRow(_ item: ContentReviewNotificationItem) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        let accentColor = contentReviewAccentColor(for: item.reviewState)
+
+        return HStack(alignment: .top, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(item.isApproved ? Color.green.opacity(0.14) : Color.red.opacity(0.12))
-                Image(systemName: item.isApproved ? "checkmark.seal.fill" : "xmark.seal.fill")
+                    .fill(accentColor.opacity(0.14))
+                Image(systemName: item.reviewState.iconName)
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(item.isApproved ? Color.green : Color.red)
+                    .foregroundStyle(accentColor)
             }
             .frame(width: 52, height: 52)
 
@@ -1947,9 +1960,9 @@ struct ContentReviewsInboxView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Text(item.isApproved ? LT("审核通过", "Approved", "承認済み") : LT("审核未通过", "Rejected", "却下"))
+                Text(item.statusTitle)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(item.isApproved ? Color.green : Color.red)
+                    .foregroundStyle(accentColor)
 
                 Text(item.body)
                     .font(.caption)

@@ -1742,6 +1742,7 @@ struct DJDetailView: View {
     @State private var spotifyDraftName = ""
     @State private var spotifyDraftAliases = ""
     @State private var spotifyDraftBio = ""
+    @State private var selectedHeroMedia: FullscreenMediaSelection?
     @State private var reportTarget: ReportSheetTarget?
     @State private var spotifyDraftCountry = ""
     @State private var isImportingSpotifyDJ = false
@@ -1901,6 +1902,11 @@ struct DJDetailView: View {
             }
             .environmentObject(appState)
             .presentationDetents([.large])
+        }
+        .fullScreenCover(item: $selectedHeroMedia) { selection in
+            if let dj, let imageURL = heroImageURL(for: dj) {
+                FullscreenMediaViewer(items: [FullscreenMediaItem(rawURL: imageURL, index: 0)], initialIndex: selection.id)
+            }
         }
         .task {
             await refreshManualCacheState()
@@ -2882,9 +2888,14 @@ struct DJDetailView: View {
                 ZStack {
                     RaverTheme.card
                     if let imageURL = heroImageURL(for: dj) {
-                        ImageLoaderView(urlString: imageURL)
-                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                            .background(RaverTheme.card)
+                        Button {
+                            selectedHeroMedia = FullscreenMediaSelection(id: 0)
+                        } label: {
+                            ImageLoaderView(urlString: imageURL)
+                                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                                .background(RaverTheme.card)
+                        }
+                        .buttonStyle(.plain)
                     } else {
                         LinearGradient(
                             colors: [Color(red: 0.42, green: 0.22, blue: 0.78), Color(red: 0.15, green: 0.45, blue: 1.0)],

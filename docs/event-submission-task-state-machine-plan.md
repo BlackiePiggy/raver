@@ -14,6 +14,7 @@
 - [x] Verify approved-only visibility rule for event list/search/detail exposure
 - [x] Add migration and rollout notes for old `pending` submissions
 - [x] Convert admin event create/edit flow to async auto-approve instead of synchronous bypass
+- [x] Update iOS review inbox cards to display all submission lifecycle states with distinct colors and labels
 
 ## Progress Notes
 
@@ -36,6 +37,7 @@
 - 2026-05-23: Identified and fixed the first large-payload ingestion bottleneck: event auto-ingest transactions now need an explicit longer timeout because canonical lineup/timetable rewrites can exceed Prisma's default 5-second interactive transaction window.
 - 2026-05-23: Increased event submission ingest transaction limits to `maxWait=10s` and `timeout=30s` so large event lineup/timetable rewrites stay atomic without hitting Prisma's default 5-second interactive transaction expiry.
 - 2026-05-23: Verified that content-review notifications were being persisted for admin submissions, then fixed the review inbox query path so `content_review` items are no longer filtered out by an outdated `community_interaction` type constraint.
+- 2026-05-23: Extended the review inbox API to expose `statusLabel`, and updated iOS review notification cards to render `处理中 / 处理完成 / 已入库 / 处理失败 / 审核通过 / 审核未通过` as first-class review-chain states instead of collapsing everything into pass/fail.
 
 ## Goal
 

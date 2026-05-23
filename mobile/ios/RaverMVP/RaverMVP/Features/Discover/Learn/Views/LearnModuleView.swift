@@ -4593,6 +4593,7 @@ struct LearnFestivalDetailView: View {
     @State private var currentFestival: LearnFestival
 
     @State private var previewImage: LearnLabelPreviewImage?
+    @State private var selectedHeroMedia: FullscreenMediaSelection?
     @State private var avatarLuminance: CGFloat?
     @State private var selectedTab: LearnFestivalDetailTab = .basic
     @State private var pageProgress: CGFloat = 0
@@ -4724,6 +4725,11 @@ struct LearnFestivalDetailView: View {
             }
             .environmentObject(appState)
             .presentationDetents([.large])
+        }
+        .fullScreenCover(item: $selectedHeroMedia) { selection in
+            if let url = destinationURL(currentFestival.backgroundUrl) {
+                FullscreenMediaViewer(items: [FullscreenMediaItem(rawURL: url.absoluteString, index: 0)], initialIndex: selection.id)
+            }
         }
         .task(id: currentFestival.id) {
             prepareFestivalEditDraft()
@@ -5300,10 +5306,15 @@ struct LearnFestivalDetailView: View {
         ZStack(alignment: .top) {
             GeometryReader { geo in
                 if let url = destinationURL(currentFestival.backgroundUrl) {
-                    ImageLoaderView(urlString: url.absoluteString)
-                        .background(fallbackBanner)
-                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                    .clipped()
+                    Button {
+                        selectedHeroMedia = FullscreenMediaSelection(id: 0)
+                    } label: {
+                        ImageLoaderView(urlString: url.absoluteString)
+                            .background(fallbackBanner)
+                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                            .clipped()
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     fallbackBanner
                         .frame(width: geo.size.width, height: geo.size.height, alignment: .top)

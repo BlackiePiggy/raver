@@ -1585,6 +1585,7 @@ struct EventDetailView: View {
     @State private var prefetchedLineupOverviewEventIDs: Set<String> = []
     @State private var venueMapContext: EventVenueMapContext?
     @State private var selectedLineupMedia: FullscreenMediaSelection?
+    @State private var selectedHeroMedia: FullscreenMediaSelection?
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
     @State private var bannerDismissToken = UUID()
@@ -2334,6 +2335,11 @@ struct EventDetailView: View {
             }
             .environmentObject(appState)
             .presentationDetents([.large])
+        }
+        .fullScreenCover(item: $selectedHeroMedia) { selection in
+            if let event, let cover = AppConfig.resolvedURLString(event.coverAssetURL) {
+                FullscreenMediaViewer(items: [FullscreenMediaItem(rawURL: cover, index: 0)], initialIndex: selection.id)
+            }
         }
         .task {
             await refreshManualCacheState()
@@ -4262,9 +4268,14 @@ struct EventDetailView: View {
                 ZStack {
                     RaverTheme.card
                     if let cover = AppConfig.resolvedURLString(event.coverAssetURL) {
-                        ImageLoaderView(urlString: cover)
-                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                            .background(RaverTheme.card)
+                        Button {
+                            selectedHeroMedia = FullscreenMediaSelection(id: 0)
+                        } label: {
+                            ImageLoaderView(urlString: cover)
+                                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                                .background(RaverTheme.card)
+                        }
+                        .buttonStyle(.plain)
                     } else {
                         LinearGradient(
                             colors: [RaverTheme.accent.opacity(0.35), RaverTheme.card],

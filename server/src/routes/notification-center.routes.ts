@@ -156,6 +156,7 @@ type ContentReviewInboxProjection = {
   submissionId: string;
   entityType: string;
   status: string;
+  statusLabel: string | null;
   title: string;
   body: string;
   reason: string | null;
@@ -195,6 +196,7 @@ const mapContentReviewInboxItem = (
     submissionId,
     entityType,
     status,
+    statusLabel: readString(metadata.statusLabel),
     title: row.title,
     body: row.body,
     reason: readString(metadata.reason),

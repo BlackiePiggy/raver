@@ -1229,6 +1229,7 @@ final class LiveSocialService: SocialService {
                 submissionId: item.submissionId,
                 entityType: item.entityType,
                 status: item.status,
+                statusLabel: item.statusLabel?.nilIfBlank,
                 title: item.title,
                 body: item.body,
                 reason: item.reason?.nilIfBlank,
@@ -2026,6 +2027,7 @@ private struct ContentReviewInboxItem: Decodable {
     let submissionId: String
     let entityType: String
     let status: String
+    let statusLabel: String?
     let title: String
     let body: String
     let reason: String?

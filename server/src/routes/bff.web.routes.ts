@@ -1688,6 +1688,7 @@ const selectEventListCardForWeb = {
   cityI18n: true,
   coverImageUrl: true,
   lineupImageUrl: true,
+  imageAssets: true,
   eventType: true,
   organizerName: true,
   venueName: true,

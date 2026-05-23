@@ -1523,10 +1523,39 @@ struct ContentReviewSummary: Codable, Hashable {
 }
 
 struct ContentReviewNotificationItem: Codable, Identifiable, Hashable {
+    enum ReviewState: String, Codable, Hashable {
+        case processing
+        case reviewing
+        case approved
+        case rejected
+        case failed
+
+        var defaultTitle: String {
+            switch self {
+            case .processing: return LT("处理中", "Processing", "処理中")
+            case .reviewing: return LT("审核中", "In Review", "審査中")
+            case .approved: return LT("已入库", "Published", "登録済み")
+            case .rejected: return LT("审核未通过", "Rejected", "却下")
+            case .failed: return LT("处理失败", "Processing Failed", "処理失敗")
+            }
+        }
+
+        var iconName: String {
+            switch self {
+            case .processing: return "clock.badge.exclamationmark.fill"
+            case .reviewing: return "checkmark.seal.fill"
+            case .approved: return "checkmark.seal.fill"
+            case .rejected: return "xmark.seal.fill"
+            case .failed: return "xmark.octagon.fill"
+            }
+        }
+    }
+
     let id: String
     var submissionId: String
     var entityType: String
     var status: String
+    var statusLabel: String?
     var title: String
     var body: String
     var reason: String?
@@ -1536,6 +1565,18 @@ struct ContentReviewNotificationItem: Codable, Identifiable, Hashable {
 
     var isApproved: Bool {
         status == "approved"
+    }
+
+    var reviewState: ReviewState {
+        ReviewState(rawValue: status) ?? (isApproved ? .approved : .rejected)
+    }
+
+    var statusTitle: String {
+        statusLabel?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? reviewState.defaultTitle
+    }
+
+    var canOpenReviewedContent: Bool {
+        reviewState == .approved && createdEntityId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank != nil
     }
 }
 
