@@ -89,8 +89,21 @@ final class EventUploadFlowViewModel: ObservableObject {
         self.onDismiss = onDismiss
         var restoredDraft = false
         if let saved = draftStore.load(mode: mode, userID: userID) {
-            self.draft = saved
-            restoredDraft = true
+            if let event, case .edit = mode, !Self.canRestoreEditDraft(saved, for: event) {
+                draftStore.clear(mode: mode, userID: userID)
+                self.draft = .edit(event: event)
+                EventUploadAnalytics.track(
+                    "event_upload_v2_stale_edit_draft_discarded",
+                    properties: [
+                        "mode": mode.storageKeyPart,
+                        "draftRevision": saved.incrementalBaseline?.eventRevision.map(String.init) ?? "nil",
+                        "eventRevision": event.revision.map(String.init) ?? "nil",
+                    ]
+                )
+            } else {
+                self.draft = saved
+                restoredDraft = true
+            }
         } else if let event {
             self.draft = .edit(event: event)
         } else {
@@ -99,6 +112,14 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
         self.shouldConfirmRestoredDraft = restoredDraft
         EventUploadAnalytics.track("event_upload_v2_opened", properties: ["mode": draft.mode.storageKeyPart])
+    }
+
+    private static func canRestoreEditDraft(_ draft: EventUploadDraft, for event: WebEvent) -> Bool {
+        guard let draftRevision = draft.incrementalBaseline?.eventRevision,
+              let eventRevision = event.revision else {
+            return false
+        }
+        return draftRevision == eventRevision
     }
 
     func advance() {
