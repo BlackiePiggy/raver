@@ -67,8 +67,12 @@ import {
   changeSummaryTextFromPayload,
 } from '../services/content-submission-change-summary.service';
 import {
+  ActiveEventEditSubmissionError,
+  assertNoActiveEventEditSubmission,
+  assertEventSubmissionBaseRevision,
   autoAlignEventLineupToTimetablePayload,
   buildAlignedLineupArtistsFromTimetablePayload,
+  EventSubmissionConflictError,
   formatEventLineupTimetableAlignmentError,
   validateEventLineupTimetableAlignment,
 } from '../services/content-submission-event.service';
@@ -571,6 +575,11 @@ const createPendingContentSubmission = async (input: {
     input.payload as Prisma.InputJsonObject
   );
   const submission = await prisma.$transaction(async (tx) => {
+    if (input.entityType === 'event') {
+      await assertNoActiveEventEditSubmission(tx, payloadWithSummary as Prisma.InputJsonObject, {
+        lockTargetEvent: true,
+      });
+    }
     const submission = await tx.contentSubmission.create({
       data: {
         submitterId: input.submitterId,
@@ -7949,6 +7958,14 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     acceptedSubmission(res, submission, '活动任务已提交，当前正在处理中，后续状态会通过通知更新');
     return;
   } catch (error) {
+    if (error instanceof ActiveEventEditSubmissionError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
     console.error('BFF web create event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -8015,20 +8032,39 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
 
+    const normalizedBody = {
+      ...normalizeSubmittedEventLineupToTimetable({
+        ...body,
+        targetEventId: eventId,
+      }),
+      targetEventId: eventId,
+    };
+    await assertEventSubmissionBaseRevision(prisma, normalizedBody as Prisma.JsonObject);
+
     const submission = await createPendingContentSubmission({
       submitterId: userId,
       entityType: 'event',
       title: submittedName,
-      payload: {
-        ...normalizeSubmittedEventLineupToTimetable({
-          ...body,
-          targetEventId: eventId,
-        }),
-        targetEventId: eventId,
-      },
+      payload: normalizedBody,
     });
     acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
+    if (error instanceof ActiveEventEditSubmissionError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
+    if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
     console.error('BFF web update event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

@@ -8,6 +8,8 @@ import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText,
 import { contentCompliance } from '../utils/content-compliance';
 import { syncNewsBindings, syncPostBindings } from '../services/content-bindings.service';
 import {
+  ActiveEventEditSubmissionError,
+  assertNoActiveEventEditSubmission,
   autoAlignEventLineupToTimetablePayload,
   assertEventSubmissionBaseRevision,
   createOrUpdateEventFromSubmission,
@@ -33,6 +35,7 @@ const prisma = new PrismaClient();
 const ENTITY_TYPES = new Set(['event', 'dj', 'news', 'set', 'brand', 'label', 'id', 'rating']);
 const STATUSES = new Set(['pending', 'processing', 'reviewing', 'approved', 'rejected', 'failed', 'cancelled']);
 const ACTIVE_REVIEWABLE_STATUSES = new Set(['pending', 'processing', 'reviewing']);
+const ACTIVE_PROCESSING_STATUSES = new Set(['pending', 'processing', 'reviewing']);
 
 const cleanText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -202,6 +205,11 @@ const createSubmissionWithVersion = async (input: {
   payload: Prisma.InputJsonObject;
 }) => {
   return prisma.$transaction(async (tx) => {
+    if (input.entityType === 'event') {
+      await assertNoActiveEventEditSubmission(tx, input.payload, {
+        lockTargetEvent: true,
+      });
+    }
     const submission = await tx.contentSubmission.create({
       data: {
         submitterId: input.submitterId,
@@ -724,11 +732,23 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       submission,
     });
   } catch (error) {
-    console.error('Create content submission error:', error);
-    if (error instanceof EventSubmissionConflictError) {
-      res.status(409).json({ error: error.message, code: error.code });
+    if (error instanceof ActiveEventEditSubmissionError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
       return;
     }
+    if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
+    console.error('Create content submission error:', error);
     res.status(500).json({ error: '提交审核失败' });
   }
 });
@@ -825,6 +845,10 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       res.status(409).json({ error: '已审核通过的内容不能重新提交' });
       return;
     }
+    if (ACTIVE_PROCESSING_STATUSES.has(current.status)) {
+      res.status(409).json({ error: '当前任务正在处理中，请等待状态更新后再重新提交' });
+      return;
+    }
     const rawPayload = toJsonObject(req.body.payload);
     const normalizedPayload = current.entityType === 'event' ? normalizeEventSubmissionPayload(rawPayload) : rawPayload;
     const payload = attachContentSubmissionChangeSummary(current.entityType, normalizedPayload);
@@ -837,6 +861,12 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
 
     const title = titleFromPayload(current.entityType, payload);
     const updated = await prisma.$transaction(async (tx) => {
+      if (current.entityType === 'event') {
+        await assertNoActiveEventEditSubmission(tx, payload, {
+          excludeSubmissionId: current.id,
+          lockTargetEvent: true,
+        });
+      }
       const latest = await (tx as any).contentSubmissionVersion.findFirst({
         where: { submissionId: current.id },
         orderBy: { version: 'desc' },
@@ -890,6 +920,22 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       submission: updated,
     });
   } catch (error) {
+    if (error instanceof ActiveEventEditSubmissionError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
+    if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
     console.error('Resubmit my content submission error:', error);
     res.status(500).json({ error: '重新提交失败' });
   }

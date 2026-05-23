@@ -49,17 +49,132 @@ export class EventSubmissionConflictError extends Error {
   }
 }
 
+export class ActiveEventEditSubmissionError extends Error {
+  readonly code = 'ACTIVE_EVENT_EDIT_SUBMISSION_EXISTS';
+  readonly details: {
+    targetEventId: string;
+    activeSubmissionId: string;
+    activeSubmissionStatus: string;
+  };
+
+  constructor(details: {
+    targetEventId: string;
+    activeSubmissionId: string;
+    activeSubmissionStatus: string;
+  }) {
+    super('该活动已有一个编辑任务正在处理中，请等待入库完成后再继续编辑');
+    this.name = 'ActiveEventEditSubmissionError';
+    this.details = details;
+  }
+}
+
+const ACTIVE_EVENT_EDIT_SUBMISSION_STATUSES = ['pending', 'processing', 'reviewing'] as const;
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
 const jsonObjectOrNull = (value: unknown): Prisma.JsonObject | null =>
   isPlainObject(value) ? value as Prisma.JsonObject : null;
 
+export const getEventEditTargetIdFromPayload = (payload: Prisma.JsonObject | Prisma.InputJsonObject): string | null =>
+  cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId) || null;
+
+const buildActiveEventEditSubmissionWhere = (
+  targetEventId: string,
+  excludeSubmissionId?: string
+): Prisma.ContentSubmissionWhereInput => ({
+  entityType: 'event',
+  status: { in: [...ACTIVE_EVENT_EDIT_SUBMISSION_STATUSES] },
+  ...(excludeSubmissionId ? { id: { not: excludeSubmissionId } } : {}),
+  OR: [
+    { payload: { path: ['targetEventId'], equals: targetEventId } },
+    { payload: { path: ['editTargetEventId'], equals: targetEventId } },
+  ],
+});
+
+const lockEventRowForEdit = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  targetEventId: string
+): Promise<void> => {
+  await db.$queryRaw(Prisma.sql`SELECT id FROM "events" WHERE id = ${targetEventId} FOR UPDATE`);
+};
+
+export const findActiveEventEditSubmission = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  targetEventId: string,
+  excludeSubmissionId?: string
+) => db.contentSubmission.findFirst({
+  where: buildActiveEventEditSubmissionWhere(targetEventId, excludeSubmissionId),
+  orderBy: [{ createdAt: 'asc' }],
+  select: {
+    id: true,
+    status: true,
+    title: true,
+    createdAt: true,
+  },
+});
+
+export const assertNoActiveEventEditSubmission = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  payload: Prisma.JsonObject | Prisma.InputJsonObject,
+  options: {
+    excludeSubmissionId?: string;
+    lockTargetEvent?: boolean;
+  } = {}
+): Promise<void> => {
+  const targetEventId = getEventEditTargetIdFromPayload(payload);
+  if (!targetEventId) return;
+  if (options.lockTargetEvent) {
+    await lockEventRowForEdit(db, targetEventId);
+  }
+  const active = await findActiveEventEditSubmission(db, targetEventId, options.excludeSubmissionId);
+  if (!active) return;
+  throw new ActiveEventEditSubmissionError({
+    targetEventId,
+    activeSubmissionId: active.id,
+    activeSubmissionStatus: active.status,
+  });
+};
+
+const cancelSupersededActiveEventEditSubmissions = async (
+  db: Prisma.TransactionClient,
+  targetEventId: string,
+  keepSubmissionId: string
+): Promise<void> => {
+  const superseded = await db.contentSubmission.findMany({
+    where: buildActiveEventEditSubmissionWhere(targetEventId, keepSubmissionId),
+    select: { id: true },
+  });
+  const ids = superseded.map((submission) => submission.id);
+  if (ids.length === 0) return;
+
+  await db.contentSubmission.updateMany({
+    where: { id: { in: ids } },
+    data: {
+      status: 'cancelled',
+      reviewReason: '活动已有更新版本入库，旧编辑任务已自动取消',
+    },
+  });
+  await db.contentSubmissionProcessingJob.updateMany({
+    where: {
+      submissionId: { in: ids },
+      status: { in: ['queued', 'retrying'] },
+    },
+    data: {
+      status: 'cancelled',
+      lockedBy: null,
+      lockedAt: null,
+      completedAt: new Date(),
+      lastError: 'Superseded by a newer event edit submission',
+    },
+  });
+};
+
 const validateBaseEventRevision = (
   payload: Prisma.JsonObject,
   currentRevision: number
 ): void => {
-  const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  const targetEventId = getEventEditTargetIdFromPayload(payload);
   if (!targetEventId) return;
   const baseEventRevision = integerOrNull(payload.baseEventRevision);
   if (baseEventRevision === null) {
@@ -82,7 +197,7 @@ export const assertEventSubmissionBaseRevision = async (
   db: PrismaClient,
   payload: Prisma.JsonObject
 ): Promise<void> => {
-  const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  const targetEventId = getEventEditTargetIdFromPayload(payload);
   if (!targetEventId) return;
   const existing = await db.event.findUnique({
     where: { id: targetEventId },
@@ -884,13 +999,13 @@ export async function createOrUpdateEventFromSubmission(
   } = {}
 ) {
   const name = cleanText(payload.name);
-  let targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+  let targetEventId = getEventEditTargetIdFromPayload(payload);
   if (!targetEventId && options.submissionId) {
     const existingSubmission = await db.contentSubmission.findUnique({
       where: { id: options.submissionId },
       select: { createdEntityId: true },
     });
-    targetEventId = cleanText(existingSubmission?.createdEntityId);
+    targetEventId = cleanText(existingSubmission?.createdEntityId) || null;
   }
   const rawTimeZone = payload.timeZone ?? payload.timezone ?? payload.eventTimeZone;
   if (!isValidEventTimeZone(rawTimeZone)) {
@@ -979,6 +1094,9 @@ export async function createOrUpdateEventFromSubmission(
         integerOrNull(payload.dayRolloverHour) ?? 6,
         timeZone
       );
+      if (options.submissionId) {
+        await cancelSupersededActiveEventEditSubmissions(tx, targetEventId, options.submissionId);
+      }
     });
 
     return db.event.findUniqueOrThrow({

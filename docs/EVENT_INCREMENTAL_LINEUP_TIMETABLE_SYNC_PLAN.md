@@ -828,6 +828,7 @@ Implementation note:
 - Optimized canonical artist member rewrites from per-artist delete/create loops to batched member deletes and `createMany`, reducing transaction pressure on high-cardinality events and preventing transaction expiry during 99-row regression runs.
 - Timetable is now the source of truth during submit and approval. BFF intake and worker ingestion auto-align lineup from timetable, and iOS submit no longer waits on a blocking alignment preview request.
 - Submission apply transactions now use a higher interactive transaction budget (`timeout: 120s`, `maxWait: 30s`) so 100+ DJ events do not fail near the old 30s cutoff while the incremental write path finishes.
+- Event edit conflict control now uses explicit `Event.revision` instead of `updatedAt`, rejects stale edit baselines, and prevents multiple active edit submissions for the same event while one task is `pending`, `processing`, or `reviewing`.
 - The next commercial hardening step is shrinking write amplification further: batch hot-row updates, move from single huge apply transactions toward smaller idempotent phases, and replace timetable full-override semantics with targeted lineup sync when only part of timetable changes.
 
 ## Long-term Commercial Hardening
@@ -846,6 +847,9 @@ Implementation note:
 - [x] When the last timetable slot for one DJ is removed, remove only that DJ from lineup.
 - [x] When a DJ still has other timetable slots, preserve the lineup artist row.
 - [x] Persist and compare lineup/timetable revision metadata to reject stale edits safely.
+- [x] Replace timestamp-based event edit locking with explicit event revision checks.
+- [x] Enforce one active edit submission per event with a server-side row lock.
+- [x] Cancel superseded active edit submissions after a newer edit is successfully ingested.
 
 ### Stage 3: Break one huge apply transaction into smaller idempotent phases
 
