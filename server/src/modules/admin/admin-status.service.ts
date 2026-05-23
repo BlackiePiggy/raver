@@ -9,6 +9,7 @@ import { getSmsMetrics } from '../../services/sms/sms-metrics';
 import { getSmsProviderStatus } from '../../services/sms/sms-provider';
 import { getFirebasePhoneAuthStatus } from '../../services/firebase-phone-auth.service';
 import { authAuditService } from '../../services/auth-audit.service';
+import { getContentSubmissionProcessingQueueStatus } from '../../services/content-submission-processing.service';
 
 const prisma = new PrismaClient();
 
@@ -29,10 +30,11 @@ const mergeStatus = (statuses: AdminHealthStatus[]): AdminHealthStatus => {
 export const adminStatusService = {
   async getStatus(input: { windowHours?: unknown } = {}) {
     const windowHours = normalizeWindowHours(input.windowHours);
-    const [delivery, notificationConfig, checkinProjection] = await Promise.all([
+    const [delivery, notificationConfig, checkinProjection, contentSubmissionProcessing] = await Promise.all([
       notificationCenterService.fetchDeliveryStats(windowHours),
       notificationCenterService.fetchAdminGlobalConfig(),
       getCheckinProjectionStatus(prisma),
+      getContentSubmissionProcessingQueueStatus(prisma),
     ]);
 
     const apns = getNotificationCenterAPNSStatus();
@@ -50,11 +52,17 @@ export const adminStatusService = {
           ? 'degraded'
           : 'healthy';
 
-    const overallStatus = mergeStatus([notificationStatus, checkinProjection.status, smsStatus]);
+    const overallStatus = mergeStatus([
+      notificationStatus,
+      checkinProjection.status,
+      smsStatus,
+      contentSubmissionProcessing.status,
+    ]);
     const alertReasons = [
       ...delivery.alerts.items.filter((item) => item.triggered).map((item) => `notification.${item.code}`),
       ...(apns.enabled && !apns.configured ? ['notification.apns_not_configured'] : []),
       ...checkinProjection.alertReasons.map((reason) => `checkin_projection.${reason}`),
+      ...contentSubmissionProcessing.alertReasons,
       ...(smsStatus !== 'healthy' ? ['auth_sms.status_attention'] : []),
       ...smsProvider.missingAliyunConfig.map((key) => `auth_sms.missing_${key.toLowerCase()}`),
     ];
@@ -71,6 +79,7 @@ export const adminStatusService = {
         outboxWorker,
       },
       checkinProjection,
+      contentSubmissionProcessing,
       authSms: {
         status: smsStatus,
         provider: smsProvider,

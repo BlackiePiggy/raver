@@ -2,6 +2,12 @@ import Foundation
 
 @MainActor
 final class EventUploadFlowViewModel: ObservableObject {
+    struct LineupTimetableAlignmentPrompt: Identifiable, Hashable {
+        var id = UUID()
+        var message: String
+        var alignedLineupArtists: [EventLineupArtistInput]
+    }
+
     enum AIRecognitionKind: String {
         case poster
         case lineup
@@ -32,6 +38,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var validationIssues: [EventUploadValidationIssue] = []
     @Published var statusMessage: String?
     @Published var submitSuccess: EventUploadSubmitSuccess?
+    @Published var lineupTimetableAlignmentPrompt: LineupTimetableAlignmentPrompt?
     @Published var shouldConfirmRestoredDraft = false
     @Published var timeZoneSearchResults: [EventTimezoneLookupItem] = []
     @Published var organizerSearchResults: [WebLearnFestival] = []
@@ -222,6 +229,10 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func submit() async {
+        await submit(skipLineupAlignmentPreview: false)
+    }
+
+    private func submit(skipLineupAlignmentPreview: Bool) async {
         guard !isSubmitting else { return }
         validationIssues = EventUploadValidation.issues(for: draft)
         if let firstIssue = validationIssues.first {
@@ -238,6 +249,17 @@ final class EventUploadFlowViewModel: ObservableObject {
             try await webService.prepareAuthenticatedRequestForUserAction(source: "event-upload-submit")
             await waitForOutstandingImageUploads()
             try await uploadPendingImagesIfNeeded()
+            if !skipLineupAlignmentPreview {
+                let preview = try await webService.previewEventLineupTimetableAlignment(input: EventUploadMappers.createInput(from: draft))
+                if !preview.aligned {
+                    lineupTimetableAlignmentPrompt = LineupTimetableAlignmentPrompt(
+                        message: preview.message ?? LT("阵容和时间表未对齐，请一键对齐后再提交。", "Lineup and timetable are not aligned. Align them before submitting.", "ラインナップとタイムテーブルが一致していません。送信前に揃えてください。"),
+                        alignedLineupArtists: preview.lineupArtists
+                    )
+                    EventUploadAnalytics.track("event_upload_v2_lineup_timetable_alignment_blocked", properties: ["mode": draft.mode.storageKeyPart])
+                    return
+                }
+            }
             switch draft.mode {
             case .create:
                 let result = try await webService.createEvent(input: EventUploadMappers.createInput(from: draft))
@@ -276,6 +298,65 @@ final class EventUploadFlowViewModel: ObservableObject {
             EventUploadAnalytics.track("event_upload_v2_submit_failed", properties: ["mode": draft.mode.storageKeyPart])
             statusMessage = error.userFacingMessage ?? LT("提交失败，请稍后重试。", "Submit failed. Please try again.", "送信に失敗しました。もう一度お試しください。")
         }
+    }
+
+    func applyLineupTimetableAlignmentAndSubmit() {
+        guard let prompt = lineupTimetableAlignmentPrompt else { return }
+        applyAlignedLineupArtists(prompt.alignedLineupArtists)
+        lineupTimetableAlignmentPrompt = nil
+        draft.dirty = true
+        saveDraft(immediate: true)
+        Task { await submit(skipLineupAlignmentPreview: true) }
+    }
+
+    func dismissLineupTimetableAlignmentPrompt() {
+        lineupTimetableAlignmentPrompt = nil
+        statusMessage = LT("请先让阵容和时间表中的 DJ 完全一致，再提交活动。", "Make the lineup and timetable DJs match before submitting.", "送信前にラインナップとタイムテーブルのDJを一致させてください。")
+    }
+
+    private func applyAlignedLineupArtists(_ artists: [EventLineupArtistInput]) {
+        draft.lineupOnlySlots = artists
+            .sorted { lhs, rhs in
+                (lhs.sortOrder ?? 0) == (rhs.sortOrder ?? 0)
+                    ? lhs.djName < rhs.djName
+                    : (lhs.sortOrder ?? 0) < (rhs.sortOrder ?? 0)
+            }
+            .map { artist in
+                let performerNames = (artist.memberNames ?? [])
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                let actType = alignmentActType(performerCount: max(performerNames.count, 1))
+                var slot = EventUploadLineupOnlySlotDraft(
+                    canonicalArtistId: artist.id,
+                    actType: actType,
+                    performerNames: performerNames.isEmpty ? [artist.djName] : performerNames,
+                    performerDJIDs: normalizedAlignmentMemberDJIDs(from: artist, performerCount: actType.performerCount),
+                    performerAvatarURLs: Array(repeating: nil, count: actType.performerCount)
+                )
+                slot.normalizePerformers()
+                return slot
+            }
+    }
+
+    private func normalizedAlignmentMemberDJIDs(from artist: EventLineupArtistInput, performerCount: Int) -> [String?] {
+        var ids = artist.memberDjIds ?? []
+        if ids.isEmpty {
+            ids = [artist.djId]
+        }
+        let normalized = ids.prefix(performerCount).map { id in
+            let trimmed = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if normalized.count >= performerCount {
+            return Array(normalized)
+        }
+        return normalized + Array(repeating: nil, count: performerCount - normalized.count)
+    }
+
+    private func alignmentActType(performerCount: Int) -> EventLineupActType {
+        if performerCount >= 3 { return .b3b }
+        if performerCount == 2 { return .b2b }
+        return .solo
     }
 
     func updateLocalizedField(_ keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>, value: String) {

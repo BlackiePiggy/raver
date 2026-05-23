@@ -817,6 +817,15 @@ actor MockWebFeatureService: WebFeatureService {
         return .created(events[idx])
     }
 
+    func previewEventLineupTimetableAlignment(input: CreateEventInput) async throws -> EventLineupTimetableAlignmentPreview {
+        EventLineupTimetableAlignmentPreview(
+            aligned: true,
+            issue: nil,
+            message: nil,
+            lineupArtists: input.lineupArtists ?? []
+        )
+    }
+
     func deleteEvent(id: String) async throws {
         guard let idx = events.firstIndex(where: { $0.id == id }) else {
             throw ServiceError.message("活动不存在")

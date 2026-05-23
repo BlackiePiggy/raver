@@ -62,6 +62,11 @@ import { notificationCenterService } from '../services/notification-center';
 import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { djEventBindingReviewService, type DJEventBindingTriggerSource } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
+import {
+  buildAlignedLineupArtistsFromTimetablePayload,
+  formatEventLineupTimetableAlignmentError,
+  validateEventLineupTimetableAlignment,
+} from '../services/content-submission-event.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -505,6 +510,57 @@ const buildI18nReviewNotes = (entityType: string, payload: Record<string, unknow
   compliance: contentCompliance.reviewNotes(entityType, payload),
 });
 
+const validateSubmittedEventLineupTimetableAlignment = (payload: Record<string, unknown>): string | null => {
+  const timeZone = normalizeEventTimeZone(
+    payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE
+  );
+  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
+  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
+  if (!startDate) return null;
+
+  const dayRolloverHourRaw = Number(payload.dayRolloverHour);
+  const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
+  const alignmentIssue = validateEventLineupTimetableAlignment(
+    payload as unknown as Prisma.JsonObject,
+    startDate,
+    dayRolloverHour,
+    timeZone
+  );
+  if (!alignmentIssue) return null;
+  return formatEventLineupTimetableAlignmentError(alignmentIssue);
+};
+
+const resolveSubmittedEventTimelineContext = (payload: Record<string, unknown>): {
+  startDate: Date | null;
+  dayRolloverHour: number;
+  timeZone: string;
+} => {
+  const timeZone = normalizeEventTimeZone(
+    payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE
+  );
+  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
+  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
+  const dayRolloverHourRaw = Number(payload.dayRolloverHour);
+  const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
+  return { startDate, dayRolloverHour, timeZone };
+};
+
+const mapAlignedLineupArtistForPayload = (artist: {
+  id?: string;
+  djId: string | null;
+  memberDjIds?: Array<string | null>;
+  memberNames?: string[];
+  djName: string;
+  sortOrder: number;
+}): Prisma.InputJsonObject => ({
+  ...(artist.id ? { id: artist.id } : {}),
+  djId: artist.djId,
+  memberDjIds: (artist.memberDjIds ?? []) as Prisma.InputJsonValue,
+  memberNames: (artist.memberNames ?? []) as Prisma.InputJsonValue,
+  djName: artist.djName,
+  sortOrder: artist.sortOrder,
+});
+
 const createPendingContentSubmission = async (input: {
   submitterId: string;
   entityType: 'event' | 'dj' | 'news' | 'set' | 'brand' | 'label' | 'id' | 'rating';
@@ -548,6 +604,7 @@ const createPendingContentSubmission = async (input: {
     rating: '打分',
   };
   const typeLabel = typeLabelMap[input.entityType] || '内容';
+  await scheduleContentSubmissionProcessingBestEffort(submission.id);
   await notificationCenterService.publish({
     category: 'content_review',
     targets: [{ userId: input.submitterId }],
@@ -572,7 +629,6 @@ const createPendingContentSubmission = async (input: {
     },
   });
 
-  scheduleContentSubmissionProcessingBestEffort(submission.id);
   return submission;
 };
 
@@ -1034,6 +1090,38 @@ const hasRequiredEventPrimaryImageAsset = (assets: EventImageAssetPayload[]): bo
     const fileName = normalizeEventText(asset.fileName).toLowerCase();
     return asset.type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));
   });
+
+const resolveEventImageAssetBucket = (asset: EventImageAssetPayload): 'poster' | 'cover' | 'lineup' | 'timetable' | 'other' => {
+  const type = normalizeEventText(asset.type).toLowerCase();
+  const label = normalizeEventText(asset.label).toLowerCase();
+  const fileName = normalizeEventText(asset.fileName).toLowerCase();
+  if (type === 'poster' || label.includes('poster') || fileName.startsWith('poster')) return 'poster';
+  if (type === 'cover' || label.includes('cover') || fileName.startsWith('cover')) return 'cover';
+  if (type === 'luall' || type.includes('lineup') || label.includes('line-up') || label.includes('lineup')) return 'lineup';
+  if (type === 'tt' || type.includes('timetable') || label.includes('timetable')) return 'timetable';
+  return 'other';
+};
+
+const sortEventImageAssetsForDisplay = (assets: EventImageAssetPayload[]): EventImageAssetPayload[] =>
+  [...assets].sort((a, b) => {
+    const aOrder = typeof a.sort === 'number' ? a.sort : typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+    const bOrder = typeof b.sort === 'number' ? b.sort : typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+    return aOrder - bOrder;
+  });
+
+const resolveEventCardImageUrl = (row: { imageAssets?: unknown; coverImageUrl?: unknown; lineupImageUrl?: unknown }): string | null => {
+  const assets = sortEventImageAssetsForDisplay(parseEventImageAssets(row.imageAssets ?? []));
+  const firstAssetUrl = (bucket: ReturnType<typeof resolveEventImageAssetBucket>) =>
+    assets.find((asset) => resolveEventImageAssetBucket(asset) === bucket)?.url ?? null;
+  return (
+    firstAssetUrl('poster') ||
+    normalizeEventText(row.coverImageUrl) ||
+    firstAssetUrl('cover') ||
+    normalizeEventText(row.lineupImageUrl) ||
+    firstAssetUrl('lineup') ||
+    null
+  );
+};
 
 type NormalizedLineupSlot = {
   djId: string | null;
@@ -5374,6 +5462,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     descriptionI18n: row.descriptionI18n ?? null,
     countryI18n: countryI18n ?? null,
     cityI18n: cityI18n ?? null,
+    cardImageUrl: resolveEventCardImageUrl(row),
     coverImageUrl: row.coverImageUrl,
     lineupImageUrl: row.lineupImageUrl,
     imageAssets: row.imageAssets ?? null,
@@ -5509,7 +5598,6 @@ const mapEventListCard = (row: any, complianceUser?: RegionalComplianceUser | nu
     const event = mapEvent(
       {
       ...row,
-      imageAssets: null,
       referenceLinks: [],
       socialLinks: null,
       ticketTiers: [],
@@ -5524,6 +5612,7 @@ const mapEventListCard = (row: any, complianceUser?: RegionalComplianceUser | nu
     );
     return {
       ...event,
+      imageAssets: null,
       lineupArtistCount: Number(row?._count?.canonicalArtists || 0),
       timetableSlotCount: Number(row?._count?.performances || 0),
     };
@@ -7765,6 +7854,7 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
 
 void [
   validateSubmittedEventTimezoneSelection,
+  validateSubmittedEventLineupTimetableAlignment,
   parseEventReferenceLinks,
   parseEventSocialLinks,
   normalizeEventStartDate,
@@ -7775,6 +7865,44 @@ void [
   deleteSingleEventOssObjectIfOwned,
   normalizeEventWikiFestivalId,
 ];
+
+router.post('/events/lineup-timetable-alignment/preview', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const body = req.body as Record<string, unknown>;
+    const { startDate, dayRolloverHour, timeZone } = resolveSubmittedEventTimelineContext(body);
+    if (!startDate) {
+      res.status(400).json({ error: 'Valid event startDate is required' });
+      return;
+    }
+
+    const issue = validateEventLineupTimetableAlignment(
+      body as unknown as Prisma.JsonObject,
+      startDate,
+      dayRolloverHour,
+      timeZone
+    );
+    const alignedLineupArtists = buildAlignedLineupArtistsFromTimetablePayload(
+      body as unknown as Prisma.JsonObject,
+      startDate,
+      dayRolloverHour,
+      timeZone
+    );
+
+    ok(res, {
+      aligned: issue === null,
+      issue,
+      message: issue ? formatEventLineupTimetableAlignmentError(issue) : null,
+      lineupArtists: alignedLineupArtists.map(mapAlignedLineupArtistForPayload),
+    });
+  } catch (error) {
+    console.error('BFF web lineup timetable alignment preview error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.post('/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -7800,6 +7928,12 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const submittedImageAssets = parseEventImageAssets(body.imageAssets);
     if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
       res.status(400).json({ error: 'At least one poster, lineup, or cover image is required' });
+      return;
+    }
+
+    const lineupAlignmentError = validateSubmittedEventLineupTimetableAlignment(body);
+    if (lineupAlignmentError) {
+      res.status(400).json({ error: lineupAlignmentError });
       return;
     }
 
@@ -7875,6 +8009,12 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     const submittedImageAssets = parseEventImageAssets(body.imageAssets);
     if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
       res.status(400).json({ error: 'At least one poster, lineup, or cover image is required' });
+      return;
+    }
+
+    const lineupAlignmentError = validateSubmittedEventLineupTimetableAlignment(body);
+    if (lineupAlignmentError) {
+      res.status(400).json({ error: lineupAlignmentError });
       return;
     }
 

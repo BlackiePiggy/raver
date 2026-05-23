@@ -7,9 +7,23 @@ import { notificationCenterService } from '../modules/notifications';
 import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText, triTextToJson } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
 import { syncNewsBindings, syncPostBindings } from '../services/content-bindings.service';
-import { createOrUpdateEventFromSubmission } from '../services/content-submission-event.service';
+import {
+  createOrUpdateEventFromSubmission,
+  formatEventLineupTimetableAlignmentError,
+  validateEventLineupTimetableAlignment,
+} from '../services/content-submission-event.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
+import {
+  attachContentSubmissionChangeSummary,
+  changeSummaryTextFromPayload,
+} from '../services/content-submission-change-summary.service';
+import {
+  DEFAULT_EVENT_TIME_ZONE,
+  normalizeEventTimeZone,
+  parseEventDateInput,
+  startOfEventDay,
+} from '../utils/event-timezone';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -154,6 +168,22 @@ const ensureSubmissionPayload = (entityType: string, payload: Prisma.InputJsonOb
   if (entityType === 'event') {
     if (!cleanText(payload.startDate) || !cleanText(payload.endDate)) {
       return '活动开始和结束日期不能为空';
+    }
+    const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
+    const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
+    const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
+    if (startDate) {
+      const dayRolloverHourRaw = Number(payload.dayRolloverHour);
+      const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
+      const alignmentIssue = validateEventLineupTimetableAlignment(
+        payload as unknown as Prisma.JsonObject,
+        startDate,
+        dayRolloverHour,
+        timeZone
+      );
+      if (alignmentIssue) {
+        return formatEventLineupTimetableAlignmentError(alignmentIssue);
+      }
     }
   }
   const complianceError = contentCompliance.validationError(entityType, payload);
@@ -633,6 +663,7 @@ const publishSubmissionStatusNotification = async (input: {
   submissionId: string;
   reason?: string | null;
   createdEntityId?: string | null;
+  payload?: Prisma.InputJsonObject | Prisma.JsonObject;
 }) => {
   const typeLabelMap: Record<string, string> = {
     event: '活动',
@@ -653,6 +684,7 @@ const publishSubmissionStatusNotification = async (input: {
     failed: { zh: '处理失败', en: 'failed', ja: '処理失敗' },
   } as const;
   const statusLabels = statusLabelMap[input.status];
+  const changeSummary = changeSummaryTextFromPayload(input.payload);
   const titleI18n = {
     zh: `${typeLabel}提交${statusLabels.zh}`,
     en: `${typeLabel} submission ${statusLabels.en}`,
@@ -690,6 +722,11 @@ const publishSubmissionStatusNotification = async (input: {
               ? `投稿「${input.title}」の処理に失敗しました：${input.reason || '後でもう一度お試しいただくか、サポートへお問い合わせください。'}`
               : `投稿「${input.title}」は承認されませんでした：${input.reason || 'より正確な情報を追加して再送信してください。'}`,
   };
+  if (changeSummary) {
+    bodyI18n.zh = `${bodyI18n.zh}\n变更摘要：${changeSummary}`;
+    bodyI18n.en = `${bodyI18n.en}\nChange summary: ${changeSummary}`;
+    bodyI18n.ja = `${bodyI18n.ja}\n変更概要：${changeSummary}`;
+  }
   await notificationCenterService.publish({
     category: 'content_review',
     targets: [{ userId: input.userId }],
@@ -732,7 +769,8 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       return;
     }
     const payload = toJsonObject(req.body.payload);
-    const validationError = ensureSubmissionPayload(entityType, payload);
+    const payloadWithSummary = attachContentSubmissionChangeSummary(entityType, payload);
+    const validationError = ensureSubmissionPayload(entityType, payloadWithSummary);
     if (validationError) {
       res.status(400).json({ error: validationError });
       return;
@@ -741,18 +779,19 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
     const submission = await createSubmissionWithVersion({
       submitterId: userId,
       entityType,
-      title: titleFromPayload(entityType, payload),
-      payload,
+      title: titleFromPayload(entityType, payloadWithSummary),
+      payload: payloadWithSummary,
     });
 
+    await scheduleContentSubmissionProcessingBestEffort(submission.id);
     await publishSubmissionStatusNotification({
       userId,
       entityType,
       status: 'processing',
       title: submission.title,
       submissionId: submission.id,
+      payload: payloadWithSummary,
     });
-    scheduleContentSubmissionProcessingBestEffort(submission.id);
 
     res.status(201).json({
       message: '任务已提交，当前正在处理中',
@@ -844,7 +883,6 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       return;
     }
 
-    const payload = toJsonObject(req.body.payload);
     const changeNote = cleanText(req.body.changeNote);
     const current = await prisma.contentSubmission.findFirst({
       where: { id: submissionId, submitterId: userId },
@@ -857,6 +895,8 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       res.status(409).json({ error: '已审核通过的内容不能重新提交' });
       return;
     }
+    const rawPayload = toJsonObject(req.body.payload);
+    const payload = attachContentSubmissionChangeSummary(current.entityType, rawPayload);
 
     const validationError = ensureSubmissionPayload(current.entityType, payload);
     if (validationError) {
@@ -904,14 +944,15 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       });
     });
 
+    await scheduleContentSubmissionProcessingBestEffort(updated.id);
     await publishSubmissionStatusNotification({
       userId,
       entityType: current.entityType,
       status: 'processing',
       title: updated.title,
       submissionId: updated.id,
+      payload,
     });
-    scheduleContentSubmissionProcessingBestEffort(updated.id);
 
     res.json({
       message: '任务已重新提交，当前正在处理中',

@@ -174,6 +174,7 @@ enum EventUploadSlotDayOffset: Int, CaseIterable, Identifiable, Codable {
 
 struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
+    var canonicalSlotId: String? = nil
     var actType: EventLineupActType = .solo
     var performerNames: [String] = [""]
     var performerDJIDs: [String?] = [nil]
@@ -210,6 +211,7 @@ struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
 
 struct EventUploadLineupOnlySlotDraft: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
+    var canonicalArtistId: String? = nil
     var actType: EventLineupActType = .solo
     var performerNames: [String] = [""]
     var performerDJIDs: [String?] = [nil]
@@ -317,6 +319,12 @@ struct EventUploadPosterAIEditableResult: Hashable {
 }
 
 struct EventUploadDraft: Hashable, Codable {
+    struct IncrementalBaseline: Hashable, Codable {
+        var lineupArtists: [EventLineupArtistInput] = []
+        var lineupSlots: [EventLineupSlotInput] = []
+        var stageOrder: [String] = []
+    }
+
     var id: UUID = UUID()
     var mode: EventUploadMode = .create
     var currentStep: EventUploadStep = .media
@@ -348,6 +356,7 @@ struct EventUploadDraft: Hashable, Codable {
     var stageEntries: [String] = []
     var timetableSlots: [EventUploadLineupSlotDraft] = []
     var lineupOnlySlots: [EventUploadLineupOnlySlotDraft] = []
+    var incrementalBaseline: IncrementalBaseline? = nil
     var ticket = EventUploadTicketDraft()
     var dirty = false
     var updatedAt: Date? = Date()
@@ -463,6 +472,11 @@ struct EventUploadDraft: Hashable, Codable {
         )
         draft.hydrateTimetableSlots(from: event)
         draft.hydrateLineupOnlySlots(from: event)
+        draft.incrementalBaseline = IncrementalBaseline(
+            lineupArtists: EventUploadDraft.incrementalBaselineArtists(from: event),
+            lineupSlots: EventUploadDraft.incrementalBaselineSlots(from: event),
+            stageOrder: event.stageOrder ?? []
+        )
         draft.hydrateRemoteImages(from: event)
         return draft
     }
@@ -526,6 +540,7 @@ struct EventUploadDraft: Hashable, Codable {
         timetableSlots = parsedSlots.map { slot in
             let act = EventLineupActCodec.parse(slot: slot)
             var draftSlot = EventUploadLineupSlotDraft(
+                canonicalSlotId: slot.id,
                 actType: act.type,
                 performerNames: act.performers.map(\.name),
                 performerDJIDs: act.performers.map(\.djID),
@@ -569,6 +584,7 @@ struct EventUploadDraft: Hashable, Codable {
         lineupOnlySlots = parsedArtists.map { artist in
             let act = EventLineupActCodec.parse(artist: artist)
             var draftSlot = EventUploadLineupOnlySlotDraft(
+                canonicalArtistId: artist.id,
                 actType: act.type,
                 performerNames: act.performers.map(\.name),
                 performerDJIDs: act.performers.map(\.djID),
@@ -577,6 +593,89 @@ struct EventUploadDraft: Hashable, Codable {
             draftSlot.normalizePerformers()
             return draftSlot
         }
+    }
+
+    private static func incrementalBaselineArtists(from event: WebEvent) -> [EventLineupArtistInput] {
+        (event.lineupArtists ?? [])
+            .sorted(by: { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+                return lhs.djName < rhs.djName
+            })
+            .map { artist in
+                EventLineupArtistInput(
+                    id: artist.id,
+                    djId: artist.djId,
+                    memberDjIds: artist.memberDjIds,
+                    memberNames: artist.memberNames,
+                    djName: artist.djName,
+                    sortOrder: artist.sortOrder
+                )
+            }
+    }
+
+    private static func incrementalBaselineSlots(from event: WebEvent) -> [EventLineupSlotInput] {
+        var artistIDsByKey: [String: String] = [:]
+        for artist in event.lineupArtists ?? [] {
+            let key = EventUploadDraft.incrementalArtistIdentityKey(
+                djName: artist.djName,
+                djId: artist.djId,
+                memberDjIds: artist.memberDjIds,
+                memberNames: artist.memberNames
+            )
+            artistIDsByKey[key] = artistIDsByKey[key] ?? artist.id
+        }
+        return event.lineupSlots
+            .sorted(by: { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+                return lhs.startTime < rhs.startTime
+            })
+            .map { slot in
+                EventLineupSlotInput(
+                    id: slot.id,
+                    lineupArtistId: artistIDsByKey[EventUploadDraft.incrementalArtistIdentityKey(
+                        djName: slot.djName,
+                        djId: slot.djId,
+                        memberDjIds: slot.memberDjIds,
+                        memberNames: slot.memberNames
+                    )] ?? nil,
+                    djId: slot.djId,
+                    memberDjIds: slot.memberDjIds,
+                    memberNames: slot.memberNames,
+                    festivalDayIndex: slot.festivalDayIndex,
+                    djName: slot.djName,
+                    stageName: slot.stageName,
+                    sortOrder: slot.sortOrder,
+                    startTime: slot.startTime,
+                    endTime: slot.endTime
+                )
+            }
+    }
+
+    private static func incrementalArtistIdentityKey(
+        djName: String,
+        djId: String?,
+        memberDjIds: [String?]?,
+        memberNames: [String]?
+    ) -> String {
+        let primaryDjID = djId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !primaryDjID.isEmpty {
+            return "dj:\(primaryDjID)"
+        }
+        let normalizedMemberDJIDs = (memberDjIds ?? [])
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+        if !normalizedMemberDJIDs.isEmpty {
+            return "members:\(normalizedMemberDJIDs.joined(separator: "|"))"
+        }
+        let normalizedMemberNames = (memberNames ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+            .sorted()
+        if !normalizedMemberNames.isEmpty {
+            return "names:\(normalizedMemberNames.joined(separator: "|"))"
+        }
+        return "name:\(djName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 }
 

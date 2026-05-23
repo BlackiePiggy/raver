@@ -19,6 +19,7 @@ protocol WebFeatureService {
     func unfavoriteEvent(eventID: String) async throws
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult
     func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent>
+    func previewEventLineupTimetableAlignment(input: CreateEventInput) async throws -> EventLineupTimetableAlignmentPreview
     func deleteEvent(id: String) async throws
     func uploadEventImage(
         imageData: Data,

@@ -327,6 +327,16 @@ final class LiveWebFeatureService: WebFeatureService {
         }
     }
 
+    func previewEventLineupTimetableAlignment(input: CreateEventInput) async throws -> EventLineupTimetableAlignmentPreview {
+        let response: BFFEnvelope<EventLineupTimetableAlignmentPreview> = try await request(
+            path: "/v1/events/lineup-timetable-alignment/preview",
+            method: "POST",
+            body: input,
+            timeoutInterval: Self.eventMutationTimeout
+        )
+        return response.data
+    }
+
     func deleteEvent(id: String) async throws {
         let _: BFFEnvelope<GenericSuccess> = try await request(path: "/v1/events/\(id)", method: "DELETE")
     }

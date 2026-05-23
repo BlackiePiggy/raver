@@ -11,8 +11,10 @@ import {
 } from '../utils/event-timezone';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 import {
+  type CanonicalLineupSnapshot,
   type CanonicalLineupArtistInput,
   type CanonicalLineupSlotInput,
+  loadCanonicalEventLineupSnapshot,
   normalizeCanonicalLineupArtists,
   syncCanonicalEventLineupAndTimetable,
 } from './event-lineup-canonical.service';
@@ -27,6 +29,12 @@ const cleanText = (value: unknown): string | undefined => {
   const trimmed = value.trim();
   return trimmed || undefined;
 };
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+const jsonObjectOrNull = (value: unknown): Prisma.JsonObject | null =>
+  isPlainObject(value) ? value as Prisma.JsonObject : null;
 
 const decimalOrNull = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
@@ -244,8 +252,12 @@ const normalizeSubmissionLineupSlots = (
       const memberDjIds = cleanedMemberDjIds.length ? cleanedMemberDjIds : (effectiveDjId ? [effectiveDjId] : []);
       const hasIdentity = djName.length > 0 || !!effectiveDjId || memberDjIds.some(Boolean);
       if (!hasIdentity) return null;
+      const slotId = cleanText(slot.id);
 
-      return {
+      const lineupArtistId = cleanText(slot.lineupArtistId);
+      const normalizedSlot: CanonicalLineupSlotInput = {
+        ...(slotId ? { id: slotId } : {}),
+        ...(lineupArtistId ? { lineupArtistId } : {}),
         djId: effectiveDjId,
         memberDjIds,
         djName: djName || 'Unknown DJ',
@@ -254,7 +266,8 @@ const normalizeSubmissionLineupSlots = (
         startTime,
         endTime,
         sortOrder: typeof slot.sortOrder === 'number' && Number.isFinite(slot.sortOrder) ? slot.sortOrder : index + 1,
-      } satisfies CanonicalLineupSlotInput;
+      };
+      return normalizedSlot;
     })
     .filter((slot): slot is CanonicalLineupSlotInput => slot !== null);
 };
@@ -273,7 +286,9 @@ const normalizeSubmissionLineupArtists = (
         const djName = String(row.djName ?? row.name ?? row.musician ?? row.artistName ?? '').trim();
         const primaryRaw = String(row.djId || '').trim();
         const djId = primaryRaw && !isLineupDjIdPlaceholder(primaryRaw) ? primaryRaw : null;
+        const artistId = cleanText(row.id);
         return {
+          ...(artistId ? { id: artistId } : {}),
           djId,
           memberDjIds: normalizeLineupMemberDjIdsInput(row, djId),
           memberNames: normalizeLineupMemberNamesInput(row, djName),
@@ -285,6 +300,303 @@ const normalizeSubmissionLineupArtists = (
   );
 };
 
+const lineupIdentityKey = (input: {
+  djId?: string | null;
+  memberDjIds?: Array<string | null>;
+  memberNames?: string[];
+  djName: string;
+}): string => {
+  const djId = cleanText(input.djId);
+  if (djId && !isLineupDjIdPlaceholder(djId)) return `dj:${djId}`;
+
+  const memberDjIds = Array.isArray(input.memberDjIds)
+    ? input.memberDjIds.map((id) => cleanText(id)).filter((id): id is string => Boolean(id && !isLineupDjIdPlaceholder(id)))
+    : [];
+  const uniqueMemberDjIds = Array.from(new Set(memberDjIds)).sort();
+  if (uniqueMemberDjIds.length > 0) return `members:${uniqueMemberDjIds.join('|')}`;
+
+  const memberNames = Array.isArray(input.memberNames)
+    ? input.memberNames.map((name) => cleanText(name)?.toLowerCase().replace(/\s+/g, ' ')).filter((name): name is string => Boolean(name))
+    : [];
+  const uniqueMemberNames = Array.from(new Set(memberNames)).sort();
+  if (uniqueMemberNames.length > 1) return `member-names:${uniqueMemberNames.join('|')}`;
+
+  return `name:${input.djName.trim().toLowerCase().replace(/\s+/g, ' ')}`;
+};
+
+const lineupIdentityLabel = (input: {
+  memberNames?: string[];
+  djName: string;
+}): string => {
+  const names = Array.isArray(input.memberNames)
+    ? input.memberNames.map((name) => cleanText(name)).filter(Boolean)
+    : [];
+  return names.length > 1 ? names.join(' b2b ') : input.djName;
+};
+
+export type EventLineupTimetableAlignmentIssue = {
+  missingFromLineup: string[];
+  extraInLineup: string[];
+};
+
+const mergeAlignedLineupArtists = (
+  currentArtists: CanonicalLineupArtistInput[],
+  timetableArtists: CanonicalLineupArtistInput[]
+): CanonicalLineupArtistInput[] => {
+  const currentByKey = new Map<string, CanonicalLineupArtistInput>();
+  for (const artist of currentArtists) {
+    currentByKey.set(lineupIdentityKey(artist), artist);
+  }
+
+  return timetableArtists
+    .map((artist, index) => {
+      const existing = currentByKey.get(lineupIdentityKey(artist));
+      return {
+        ...artist,
+        id: existing?.id,
+        sortOrder: existing?.sortOrder ?? index + 1,
+      };
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+export const buildAlignedLineupArtistsFromTimetablePayload = (
+  payload: Prisma.JsonObject,
+  eventStartDate: Date,
+  dayRolloverHour: number,
+  timeZone: string
+): CanonicalLineupArtistInput[] => {
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  const currentArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
+  const timetableArtists = normalizeCanonicalLineupArtists([], slots);
+  return mergeAlignedLineupArtists(currentArtists, timetableArtists);
+};
+
+export const validateEventLineupTimetableAlignment = (
+  payload: Prisma.JsonObject,
+  eventStartDate: Date,
+  dayRolloverHour: number,
+  timeZone: string
+): EventLineupTimetableAlignmentIssue | null => {
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  if (slots.length === 0) return null;
+
+  const artists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
+  const lineupByKey = new Map<string, string>();
+  for (const artist of artists) {
+    lineupByKey.set(lineupIdentityKey(artist), lineupIdentityLabel(artist));
+  }
+
+  const timetableArtists = normalizeCanonicalLineupArtists([], slots);
+  const timetableByKey = new Map<string, string>();
+  for (const artist of timetableArtists) {
+    timetableByKey.set(lineupIdentityKey(artist), lineupIdentityLabel(artist));
+  }
+
+  const missingFromLineup = Array.from(timetableByKey.entries())
+    .filter(([key]) => !lineupByKey.has(key))
+    .map(([, label]) => label);
+  const extraInLineup = Array.from(lineupByKey.entries())
+    .filter(([key]) => !timetableByKey.has(key))
+    .map(([, label]) => label);
+
+  if (missingFromLineup.length === 0 && extraInLineup.length === 0) return null;
+  return {
+    missingFromLineup,
+    extraInLineup,
+  };
+};
+
+export const formatEventLineupTimetableAlignmentError = (
+  issue: EventLineupTimetableAlignmentIssue
+): string => {
+  const parts = ['阵容和时间表未对齐。'];
+  if (issue.missingFromLineup.length > 0) {
+    parts.push(`时间表中有但阵容中缺少：${issue.missingFromLineup.join('、')}`);
+  }
+  if (issue.extraInLineup.length > 0) {
+    parts.push(`阵容中有但时间表中缺少：${issue.extraInLineup.join('、')}`);
+  }
+  parts.push('请一键将阵容与时间表对齐，或手动修改后再提交。');
+  return parts.join(' ');
+};
+
+const requirePatchId = (row: Record<string, unknown>, field: string, label: string): string => {
+  const id = cleanText(row[field]);
+  if (!id) {
+    throw new Error(`${label} 缺少稳定 ID，无法执行增量编辑`);
+  }
+  return id;
+};
+
+const applySubmissionLineupPatch = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  payload: Prisma.JsonObject,
+  eventStartDate: Date,
+  dayRolloverHour: number,
+  timeZone: string
+): Promise<{
+  artists: CanonicalLineupArtistInput[];
+  slots: CanonicalLineupSlotInput[];
+  stageOrder: string[];
+}> => {
+  const snapshot: CanonicalLineupSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
+  let artists = snapshot.artists.slice();
+  let slots = snapshot.slots.slice();
+  let stageOrder = normalizeEventStageOrder(payload.stageOrder);
+  if (stageOrder.length === 0) stageOrder = snapshot.stageOrder.slice();
+
+  const artistById = () => new Map(artists.map((artist) => [artist.id, artist]).filter((entry): entry is [string, CanonicalLineupArtistInput] => Boolean(entry[0])));
+  const slotById = () => new Map(slots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
+
+  const lineupChanges = Array.isArray(payload.lineupChanges) ? payload.lineupChanges : [];
+  for (const rawChange of lineupChanges) {
+    if (!isPlainObject(rawChange)) continue;
+    const op = cleanText(rawChange.op);
+    if (op === 'add') {
+      const artistPayload = jsonObjectOrNull(rawChange.artist);
+      const normalized = normalizeSubmissionLineupArtists(artistPayload ? [artistPayload] : [], []);
+      if (normalized.length === 0) throw new Error('新增艺人缺少名称或 DJ 信息');
+      artists.push({
+        ...normalized[0],
+        sortOrder: normalized[0].sortOrder || artists.length + 1,
+      });
+      continue;
+    }
+
+    const artistId = requirePatchId(rawChange, 'artistId', '艺人变更');
+    const existing = artistById().get(artistId);
+    if (!existing) throw new Error(`艺人不存在或已变化，无法执行增量编辑：${artistId}`);
+
+    if (op === 'delete') {
+      const linkedSlots = slots.filter((slot) => slot.lineupArtistId === artistId || (slot.id && slot.djName === existing.djName));
+      if (linkedSlots.length > 0) {
+        throw new Error(`艺人「${existing.djName}」仍被时间表引用，请先删除对应 time slot 后再删除艺人`);
+      }
+      artists = artists.filter((artist) => artist.id !== artistId);
+      continue;
+    }
+
+    if (op === 'update') {
+      const patch = jsonObjectOrNull(rawChange.patch);
+      if (!patch) throw new Error('艺人更新缺少 patch 内容');
+      const normalized = normalizeSubmissionLineupArtists([{ ...existing, ...patch, id: artistId }], []);
+      if (normalized.length === 0) throw new Error(`艺人更新内容无效：${artistId}`);
+      artists = artists.map((artist) => artist.id === artistId ? { ...normalized[0], id: artistId } : artist);
+      continue;
+    }
+
+    if (op === 'reorder') {
+      const sortOrder = integerOrNull(rawChange.sortOrder);
+      if (sortOrder === null) throw new Error('艺人排序变更缺少 sortOrder');
+      artists = artists.map((artist) => artist.id === artistId ? { ...artist, sortOrder } : artist);
+      continue;
+    }
+
+    throw new Error(`不支持的艺人增量操作：${op || 'unknown'}`);
+  }
+
+  const timetableChanges = Array.isArray(payload.timetableChanges) ? payload.timetableChanges : [];
+  for (const rawChange of timetableChanges) {
+    if (!isPlainObject(rawChange)) continue;
+    const op = cleanText(rawChange.op);
+    if (op === 'add') {
+      const slotPayload = jsonObjectOrNull(rawChange.slot);
+      const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], eventStartDate, dayRolloverHour, timeZone);
+      if (normalized.length === 0) throw new Error('新增 time slot 缺少艺人或时间信息');
+      slots.push({
+        ...normalized[0],
+        sortOrder: normalized[0].sortOrder || slots.length + 1,
+      });
+      continue;
+    }
+
+    const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
+    const existing = slotById().get(slotId);
+    if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
+
+    if (op === 'delete') {
+      slots = slots.filter((slot) => slot.id !== slotId);
+      continue;
+    }
+
+    if (op === 'update') {
+      const patch = jsonObjectOrNull(rawChange.patch);
+      if (!patch) throw new Error('time slot 更新缺少 patch 内容');
+      const normalized = normalizeSubmissionLineupSlots([{ ...existing, ...patch, id: slotId }], eventStartDate, dayRolloverHour, timeZone);
+      if (normalized.length === 0) throw new Error(`time slot 更新内容无效：${slotId}`);
+      slots = slots.map((slot) => slot.id === slotId ? { ...normalized[0], id: slotId } : slot);
+      continue;
+    }
+
+    if (op === 'reorder') {
+      const sortOrder = integerOrNull(rawChange.sortOrder);
+      if (sortOrder === null) throw new Error('time slot 排序变更缺少 sortOrder');
+      slots = slots.map((slot) => slot.id === slotId ? { ...slot, sortOrder } : slot);
+      continue;
+    }
+
+    throw new Error(`不支持的时间表增量操作：${op || 'unknown'}`);
+  }
+
+  const stageChanges = Array.isArray(payload.stageChanges) ? payload.stageChanges : [];
+  for (const rawChange of stageChanges) {
+    if (!isPlainObject(rawChange)) continue;
+    const op = cleanText(rawChange.op);
+    const stageName = cleanText(rawChange.name);
+    if (!stageName) throw new Error('舞台变更缺少 stage name');
+    const normalizedStageName = stageName.toLocaleLowerCase();
+
+    if (op === 'delete') {
+      if (rawChange.confirmDeleteLinkedPerformances !== true) {
+        throw new Error(`删除舞台「${stageName}」会删除该舞台下的全部演出，请确认后再提交`);
+      }
+      stageOrder = stageOrder.filter((name) => name.toLocaleLowerCase() !== normalizedStageName);
+      slots = slots.filter((slot) => (slot.stageName || '').toLocaleLowerCase() !== normalizedStageName);
+      continue;
+    }
+
+    if (op === 'rename') {
+      const nextName = cleanText(rawChange.nextName);
+      if (!nextName) throw new Error('舞台重命名缺少新名称');
+      if (!stageOrder.some((name) => name.toLocaleLowerCase() === normalizedStageName)) {
+        throw new Error(`舞台不存在或已变化，无法重命名：${stageName}`);
+      }
+      stageOrder = stageOrder.map((name) => name.toLocaleLowerCase() === normalizedStageName ? nextName : name);
+      slots = slots.map((slot) => (slot.stageName || '').toLocaleLowerCase() === normalizedStageName ? { ...slot, stageName: nextName } : slot);
+      continue;
+    }
+
+    throw new Error(`不支持的舞台增量操作：${op || 'unknown'}`);
+  }
+
+  const normalizedSlots = slots
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((slot, index) => ({ ...slot, sortOrder: slot.sortOrder || index + 1 }));
+  const normalizedArtists = normalizeCanonicalLineupArtists(
+    artists.slice().sort((a, b) => a.sortOrder - b.sortOrder),
+    normalizedSlots
+  );
+  const validationPayload = {
+    ...payload,
+    lineupArtists: normalizedArtists as unknown as Prisma.JsonValue,
+    lineupSlots: normalizedSlots as unknown as Prisma.JsonValue,
+    stageOrder: stageOrder as unknown as Prisma.JsonValue,
+  } as Prisma.JsonObject;
+  const alignmentIssue = validateEventLineupTimetableAlignment(validationPayload, eventStartDate, dayRolloverHour, timeZone);
+  if (alignmentIssue) {
+    throw new Error(formatEventLineupTimetableAlignmentError(alignmentIssue));
+  }
+
+  return {
+    artists: normalizedArtists,
+    slots: normalizedSlots,
+    stageOrder,
+  };
+};
+
 const syncSubmissionEventLineupAndTimetable = async (
   tx: Prisma.TransactionClient,
   eventId: string,
@@ -293,9 +605,22 @@ const syncSubmissionEventLineupAndTimetable = async (
   dayRolloverHour: number,
   timeZone: string
 ): Promise<void> => {
+  if (cleanText(payload.editMode) === 'patch') {
+    const patched = await applySubmissionLineupPatch(tx, eventId, payload, eventStartDate, dayRolloverHour, timeZone);
+    if (patched.slots.length === 0 && patched.artists.length === 0 && patched.stageOrder.length === 0) {
+      return;
+    }
+    await syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
+    return;
+  }
+
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
   const artists = normalizeSubmissionLineupArtists(payload.lineupArtists, slots);
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
+  const alignmentIssue = validateEventLineupTimetableAlignment(payload, eventStartDate, dayRolloverHour, timeZone);
+  if (alignmentIssue) {
+    throw new Error(formatEventLineupTimetableAlignmentError(alignmentIssue));
+  }
 
   if (slots.length === 0 && artists.length === 0 && stageOrder.length === 0) {
     return;

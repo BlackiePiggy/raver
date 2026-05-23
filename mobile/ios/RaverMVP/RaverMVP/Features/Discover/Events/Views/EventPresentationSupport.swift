@@ -187,7 +187,7 @@ extension WebEvent {
         let fromAssets = normalizedImageAssets
             .filter { normalizedAssetBucket($0.type) == "poster" }
             .map(\.url)
-        return dedupedURLs(fromAssets)
+        return dedupedURLs(fromAssets + [coverImageUrl ?? ""])
     }
 
     var lineupAssetURLs: [String] {
@@ -205,7 +205,11 @@ extension WebEvent {
     }
 
     var cardImageURL: String? {
-        posterAssetURLs.first ?? lineupAssetURLs.first ?? coverAssetURL
+        let serverCard = cardImageUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let serverCard, !serverCard.isEmpty {
+            return serverCard
+        }
+        return posterAssetURLs.first ?? coverAssetURL ?? lineupAssetURLs.first
     }
 
     var coverAssetURL: String? {
@@ -220,7 +224,7 @@ extension WebEvent {
         if trimmedCover?.isEmpty == false {
             return trimmedCover
         }
-        return lineupAssetURLs.first ?? posterAssetURLs.first
+        return posterAssetURLs.first ?? lineupAssetURLs.first
     }
 }
 
@@ -322,8 +326,9 @@ struct EventRow: View {
         guard event.id == "e87c26d3-a3eb-4ae5-a221-49e074ce905d" else { return }
         print(
             "[EventCardDebug] surface=\(surface) eventId=\(event.id) " +
-            "card=\(event.cardImageURL ?? "nil") cover=\(event.coverImageUrl ?? "nil") " +
-            "lineup=\(event.lineupImageUrl ?? "nil") posterAssets=\(event.posterAssetURLs.count) " +
+            "card=\(event.cardImageURL ?? "nil") coverAsset=\(event.coverAssetURL ?? "nil") " +
+            "cover=\(event.coverImageUrl ?? "nil") " +
+            "lineup=\(event.lineupImageUrl ?? "nil") posterCandidates=\(event.posterAssetURLs.count) " +
             "lineupAssets=\(event.lineupAssetURLs.count)"
         )
     }

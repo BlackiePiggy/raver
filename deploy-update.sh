@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BRANCH="${BRANCH:-codex/youtube-set}"
 API_NAME="${API_NAME:-raver-api}"
+CONTENT_SUBMISSION_WORKER_NAME="${CONTENT_SUBMISSION_WORKER_NAME:-raver-content-submission-worker}"
 WEB_NAME="${WEB_NAME:-raver-web}"
 WEBTOOL_NAME="${WEBTOOL_NAME:-raver-webtool}"
 API_PORT="${API_PORT:-3901}"
@@ -28,6 +29,8 @@ pnpm prisma migrate deploy
 pnpm prisma generate
 pnpm build
 pm2 restart "$API_NAME" --update-env || pm2 start "pnpm start" --name "$API_NAME"
+pm2 restart "$CONTENT_SUBMISSION_WORKER_NAME" --update-env \
+  || pm2 start "pnpm content-submissions:worker" --name "$CONTENT_SUBMISSION_WORKER_NAME"
 
 echo ""
 echo "🌐 update web"
@@ -54,6 +57,7 @@ fi
 echo ""
 echo "✅ deploy finished"
 echo "API:   pm2 logs $API_NAME --lines 100"
+echo "Worker: pm2 logs $CONTENT_SUBMISSION_WORKER_NAME --lines 100"
 echo "Web:   pm2 logs $WEB_NAME --lines 100"
 echo "Tool:  pm2 logs $WEBTOOL_NAME --lines 100"
 echo "Ports: $API_PORT / $WEBTOOL_PORT / 3000"

@@ -537,6 +537,13 @@ struct MyPublishesView: View {
                                 .foregroundStyle(RaverTheme.secondaryText)
                         }
 
+                        if let summary = item.changeSummaryText {
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+
                         Text((item.updatedAt ?? item.createdAt ?? Date()).appLocalizedYMDHMText())
                             .font(.caption2)
                             .foregroundStyle(RaverTheme.secondaryText)
@@ -778,6 +785,9 @@ struct ContentSubmissionDetailView: View {
                     }
                     if let reason = submission.reviewReason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
                         labeledRow(LT("审核备注", "Review Notes", "審査メモ"), reason)
+                    }
+                    if let summary = submission.changeSummaryText {
+                        labeledRow(LT("变更摘要", "Change Summary", "変更概要"), summary)
                     }
                 }
 
@@ -1140,5 +1150,32 @@ private extension ContentSubmissionJSONValue {
         case .null:
             return ""
         }
+    }
+}
+
+private extension ContentSubmissionDetail {
+    var changeSummaryText: String? {
+        payload.changeSummaryText
+    }
+}
+
+private extension ContentSubmissionSummary {
+    var changeSummaryText: String? {
+        payload?.changeSummaryText
+    }
+}
+
+private extension Dictionary where Key == String, Value == ContentSubmissionJSONValue {
+    var changeSummaryText: String? {
+        guard case .object(let summary)? = self["changeSummary"] else { return nil }
+        if case .string(let zh)? = summary["zh"] {
+            let trimmed = zh.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if case .string(let en)? = summary["en"] {
+            let trimmed = en.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return nil
     }
 }

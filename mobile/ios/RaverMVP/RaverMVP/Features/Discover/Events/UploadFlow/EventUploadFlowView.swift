@@ -214,6 +214,19 @@ struct EventUploadFlowView: View {
         } message: {
             Text(viewModel.statusMessage ?? "")
         }
+        .alert(LT("阵容和时间表未对齐", "Lineup Mismatch", "ラインナップ不一致"), isPresented: Binding(
+            get: { viewModel.lineupTimetableAlignmentPrompt != nil },
+            set: { if !$0 { viewModel.dismissLineupTimetableAlignmentPrompt() } }
+        )) {
+            Button(LT("一键对齐并提交", "Align & Submit", "揃えて送信")) {
+                viewModel.applyLineupTimetableAlignmentAndSubmit()
+            }
+            Button(LT("返回手动修改", "Edit Manually", "手動で修正"), role: .cancel) {
+                viewModel.dismissLineupTimetableAlignmentPrompt()
+            }
+        } message: {
+            Text(viewModel.lineupTimetableAlignmentPrompt?.message ?? "")
+        }
         .confirmationDialog(
             LT("保留草稿？", "Keep Draft?", "下書きを残しますか？"),
             isPresented: $showExitConfirmation,

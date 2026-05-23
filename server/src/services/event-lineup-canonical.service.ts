@@ -22,10 +22,52 @@ export type CanonicalLineupSlotInput = {
   sortOrder: number;
 };
 
-type CanonicalLineupSnapshot = {
+export type CanonicalLineupSnapshot = {
   artists: CanonicalLineupArtistInput[];
   slots: CanonicalLineupSlotInput[];
   stageOrder: string[];
+};
+
+type CanonicalArtistRow = {
+  id: string;
+  eventId: string;
+  displayName: string;
+  normalizedName: string;
+  actType: string;
+  primaryDjId: string | null;
+  billingOrder: number;
+  sourceType: string;
+  isTimetableOnly: boolean;
+};
+
+type CanonicalMemberRow = {
+  eventArtistId: string;
+  djId: string | null;
+  memberNameSnapshot: string;
+  memberOrder: number;
+  role: string;
+};
+
+type CanonicalStageRow = {
+  id: string;
+  eventId: string;
+  name: string;
+  normalizedName: string;
+  sortOrder: number;
+};
+
+type CanonicalPerformanceRow = {
+  id: string;
+  eventId: string;
+  eventArtistId: string;
+  stageId: string | null;
+  displayNameSnapshot: string;
+  festivalDayIndex: number | null;
+  startAt: Date;
+  endAt: Date;
+  sortOrder: number;
+  status: string;
+  sourceType: string;
 };
 
 const uniqueIds = (values: Array<string | null | undefined>): string[] => {
@@ -48,6 +90,46 @@ export const normalizeCanonicalLineupName = (value: string): string =>
 
 const canonicalLineupKey = (artist: Pick<CanonicalLineupArtistInput, 'djId' | 'djName'>): string =>
   artist.djId ? `id:${artist.djId}` : `name:${normalizeCanonicalLineupName(artist.djName)}`;
+
+const dateTimeValue = (value: Date | null | undefined): number | null => {
+  if (!value) return null;
+  const time = value.getTime();
+  return Number.isFinite(time) ? time : null;
+};
+
+const nullableString = (value: string | null | undefined): string | null => {
+  const text = String(value || '').trim();
+  return text || null;
+};
+
+const memberSignature = (members: Array<{ djId: string | null; memberNameSnapshot: string; memberOrder: number }>): string =>
+  members
+    .slice()
+    .sort((a, b) => a.memberOrder - b.memberOrder)
+    .map((member) => `${member.memberOrder}:${member.djId || ''}:${normalizeCanonicalLineupName(member.memberNameSnapshot || '')}`)
+    .join('|');
+
+const desiredMemberSignature = (members: CanonicalMemberRow[]): string =>
+  members
+    .slice()
+    .sort((a, b) => a.memberOrder - b.memberOrder)
+    .map((member) => `${member.memberOrder}:${member.djId || ''}:${normalizeCanonicalLineupName(member.memberNameSnapshot || '')}`)
+    .join('|');
+
+const performanceSemanticKey = (row: {
+  eventArtistId: string;
+  stageId: string | null;
+  festivalDayIndex: number | null;
+  startAt: Date | null;
+  endAt: Date | null;
+}): string =>
+  [
+    row.eventArtistId,
+    row.stageId || '',
+    row.festivalDayIndex ?? '',
+    dateTimeValue(row.startAt) ?? '',
+    dateTimeValue(row.endAt) ?? '',
+  ].join('|');
 
 const splitCollaborativeLineupName = (value: string): string[] => {
   const name = String(value || '').trim();
@@ -213,69 +295,30 @@ export const loadCanonicalEventLineupSnapshot = async (
   };
 };
 
-export const syncCanonicalEventLineupAndTimetable = async (
-  tx: Prisma.TransactionClient,
+const buildCanonicalTargetRows = (
   eventId: string,
   slots: CanonicalLineupSlotInput[],
   artists: CanonicalLineupArtistInput[],
   explicitStageOrder: string[] = []
-): Promise<void> => {
-  await tx.eventPerformance.deleteMany({ where: { eventId } });
-  await tx.eventArtistMember.deleteMany({ where: { eventArtist: { eventId } } });
-  await tx.eventArtist.deleteMany({ where: { eventId } });
-  await tx.eventStage.deleteMany({ where: { eventId } });
-
+): {
+  artistRows: CanonicalArtistRow[];
+  memberRows: CanonicalMemberRow[];
+  stageRows: CanonicalStageRow[];
+  performanceRows: CanonicalPerformanceRow[];
+} => {
   const canonicalArtists = normalizeCanonicalLineupArtists(artists, slots);
-  type EventArtistRow = {
-    id: string;
-    eventId: string;
-    displayName: string;
-    normalizedName: string;
-    actType: string;
-    primaryDjId: string | null;
-    billingOrder: number;
-    sourceType: string;
-    isTimetableOnly: boolean;
-  };
-  type EventArtistMemberRow = {
-    eventArtistId: string;
-    djId: string | null;
-    memberNameSnapshot: string;
-    memberOrder: number;
-    role: string;
-  };
-  type EventStageRow = {
-    id: string;
-    eventId: string;
-    name: string;
-    normalizedName: string;
-    sortOrder: number;
-  };
-  type EventPerformanceRow = {
-    id: string;
-    eventId: string;
-    eventArtistId: string;
-    stageId: string | null;
-    displayNameSnapshot: string;
-    festivalDayIndex: number | null;
-    startAt: Date;
-    endAt: Date;
-    sortOrder: number;
-    status: string;
-    sourceType: string;
-  };
-
   const artistIdsByKey = new Map<string, string>();
-  const artistRows: EventArtistRow[] = [];
-  const memberRows: EventArtistMemberRow[] = [];
+  const artistRows: CanonicalArtistRow[] = [];
+  const memberRows: CanonicalMemberRow[] = [];
+
   for (const [index, artist] of canonicalArtists.entries()) {
     const memberDjIds = normalizeMemberDjIds(artist);
     const memberIds = uniqueIds(memberDjIds);
     const memberNames = normalizeMemberNames(artist);
     const memberCount = Math.max(memberDjIds.length, memberIds.length, memberNames.length, 1);
-    const createdId = artist.id || crypto.randomUUID();
+    const artistId = artist.id || crypto.randomUUID();
     artistRows.push({
-      id: createdId,
+      id: artistId,
       eventId,
       displayName: artist.djName,
       normalizedName: normalizeCanonicalLineupName(artist.djName),
@@ -287,16 +330,16 @@ export const syncCanonicalEventLineupAndTimetable = async (
     });
     for (const [memberIndex] of Array.from({ length: memberCount }).entries()) {
       memberRows.push({
-        eventArtistId: createdId,
+        eventArtistId: artistId,
         djId: memberDjIds[memberIndex] ?? null,
         memberNameSnapshot: memberNames[memberIndex] ?? artist.djName,
         memberOrder: memberIndex + 1,
         role: 'performer',
       });
     }
-    artistIdsByKey.set(canonicalLineupKey(artist), createdId);
-    artistIdsByKey.set(`name:${normalizeCanonicalLineupName(artist.djName)}`, createdId);
-    if (artist.djId) artistIdsByKey.set(`id:${artist.djId}`, createdId);
+    artistIdsByKey.set(canonicalLineupKey(artist), artistId);
+    artistIdsByKey.set(`name:${normalizeCanonicalLineupName(artist.djName)}`, artistId);
+    if (artist.djId) artistIdsByKey.set(`id:${artist.djId}`, artistId);
   }
 
   const orderedStageNames = uniqueIds([
@@ -304,7 +347,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
     ...slots.map((slot) => slot.stageName).filter((value): value is string => Boolean(value)),
   ]);
   const stageIdsByName = new Map<string, string>();
-  const stageRows: EventStageRow[] = [];
+  const stageRows: CanonicalStageRow[] = [];
   for (const [index, name] of orderedStageNames.entries()) {
     const normalizedName = normalizeCanonicalLineupName(name);
     const stageId = crypto.randomUUID();
@@ -318,7 +361,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
     stageIdsByName.set(normalizedName, stageId);
   }
 
-  const performanceRows: EventPerformanceRow[] = [];
+  const performanceRows: CanonicalPerformanceRow[] = [];
   for (const [index, slot] of slots.entries()) {
     const slotName = slot.djName || 'Unknown DJ';
     let eventArtistId =
@@ -371,16 +414,232 @@ export const syncCanonicalEventLineupAndTimetable = async (
     });
   }
 
-  if (artistRows.length > 0) {
-    await tx.eventArtist.createMany({ data: artistRows });
+  return {
+    artistRows,
+    memberRows,
+    stageRows,
+    performanceRows,
+  };
+};
+
+export const syncCanonicalEventLineupAndTimetable = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  slots: CanonicalLineupSlotInput[],
+  artists: CanonicalLineupArtistInput[],
+  explicitStageOrder: string[] = []
+): Promise<void> => {
+  const existingArtists = await tx.eventArtist.findMany({
+    where: { eventId },
+    include: {
+      members: {
+        orderBy: { memberOrder: 'asc' },
+      },
+    },
+  });
+  const existingStages = await tx.eventStage.findMany({ where: { eventId } });
+  const existingPerformances = await tx.eventPerformance.findMany({ where: { eventId } });
+
+  const existingArtistById = new Map(existingArtists.map((artist) => [artist.id, artist]));
+  const existingArtistByKey = new Map<string, string>();
+  for (const artist of existingArtists) {
+    if (artist.primaryDjId) existingArtistByKey.set(`id:${artist.primaryDjId}`, artist.id);
+    const normalizedName = artist.normalizedName || normalizeCanonicalLineupName(artist.displayName);
+    existingArtistByKey.set(`name:${normalizedName}`, artist.id);
+    const memberIds = uniqueIds(artist.members.map((member) => member.djId));
+    if (memberIds.length > 1) existingArtistByKey.set(`group:${memberIds.sort().join('|')}`, artist.id);
+    const memberNames = artist.members.map((member) => normalizeCanonicalLineupName(member.memberNameSnapshot)).filter(Boolean);
+    if (memberNames.length > 1) existingArtistByKey.set(`fallback-group:${memberNames.sort().join('|')}`, artist.id);
   }
-  if (memberRows.length > 0) {
-    await tx.eventArtistMember.createMany({ data: memberRows });
+
+  const existingStageById = new Map(existingStages.map((stage) => [stage.id, stage]));
+  const existingStageByName = new Map(existingStages.map((stage) => [stage.normalizedName, stage]));
+
+  const target = buildCanonicalTargetRows(eventId, slots, artists, explicitStageOrder);
+
+  for (const artist of target.artistRows) {
+    if (existingArtistById.has(artist.id)) continue;
+    let matchedId: string | undefined;
+    if (artist.primaryDjId) matchedId = existingArtistByKey.get(`id:${artist.primaryDjId}`);
+    matchedId ||= existingArtistByKey.get(`name:${artist.normalizedName}`);
+    const desiredMembers = target.memberRows.filter((member) => member.eventArtistId === artist.id);
+    const memberIds = uniqueIds(desiredMembers.map((member) => member.djId));
+    if (!matchedId && memberIds.length > 1) matchedId = existingArtistByKey.get(`group:${memberIds.sort().join('|')}`);
+    const memberNames = desiredMembers.map((member) => normalizeCanonicalLineupName(member.memberNameSnapshot)).filter(Boolean);
+    if (!matchedId && memberNames.length > 1) matchedId = existingArtistByKey.get(`fallback-group:${memberNames.sort().join('|')}`);
+    if (!matchedId) continue;
+    const oldId = artist.id;
+    artist.id = matchedId;
+    for (const member of target.memberRows) {
+      if (member.eventArtistId === oldId) member.eventArtistId = matchedId;
+    }
+    for (const performance of target.performanceRows) {
+      if (performance.eventArtistId === oldId) performance.eventArtistId = matchedId;
+    }
   }
-  if (stageRows.length > 0) {
-    await tx.eventStage.createMany({ data: stageRows });
+
+  for (const stage of target.stageRows) {
+    if (existingStageById.has(stage.id)) continue;
+    const matched = existingStageByName.get(stage.normalizedName);
+    if (!matched) continue;
+    const oldId = stage.id;
+    stage.id = matched.id;
+    for (const performance of target.performanceRows) {
+      if (performance.stageId === oldId) performance.stageId = matched.id;
+    }
   }
-  if (performanceRows.length > 0) {
-    await tx.eventPerformance.createMany({ data: performanceRows });
+
+  const targetArtistIds = new Set(target.artistRows.map((artist) => artist.id));
+  const targetStageIds = new Set(target.stageRows.map((stage) => stage.id));
+  const targetPerformanceIds = new Set(target.performanceRows.map((performance) => performance.id));
+
+  const existingPerformanceById = new Map(existingPerformances.map((performance) => [performance.id, performance]));
+  const existingPerformanceBySemanticKey = new Map(existingPerformances.map((performance) => [
+    performanceSemanticKey({
+      eventArtistId: performance.eventArtistId,
+      stageId: performance.stageId,
+      festivalDayIndex: performance.festivalDayIndex,
+      startAt: performance.startAt,
+      endAt: performance.endAt,
+    }),
+    performance,
+  ]));
+  for (const performance of target.performanceRows) {
+    if (existingPerformanceById.has(performance.id)) continue;
+    const matched = existingPerformanceBySemanticKey.get(performanceSemanticKey(performance));
+    if (!matched) continue;
+    performance.id = matched.id;
+    targetPerformanceIds.add(matched.id);
+  }
+
+  const performancesToDelete = existingPerformances
+    .filter((performance) => !targetPerformanceIds.has(performance.id))
+    .map((performance) => performance.id);
+  if (performancesToDelete.length > 0) {
+    await tx.eventPerformance.deleteMany({ where: { id: { in: performancesToDelete } } });
+  }
+
+  const artistsToDelete = existingArtists
+    .filter((artist) => !targetArtistIds.has(artist.id))
+    .map((artist) => artist.id);
+  if (artistsToDelete.length > 0) {
+    await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistsToDelete } } });
+    await tx.eventArtist.deleteMany({ where: { id: { in: artistsToDelete } } });
+  }
+
+  const stagesToDelete = existingStages
+    .filter((stage) => !targetStageIds.has(stage.id))
+    .map((stage) => stage.id);
+  if (stagesToDelete.length > 0) {
+    await tx.eventStage.deleteMany({ where: { id: { in: stagesToDelete } } });
+  }
+
+  const existingArtistIds = new Set(existingArtists.map((artist) => artist.id));
+  const artistRowsToCreate = target.artistRows.filter((artist) => !existingArtistIds.has(artist.id));
+  if (artistRowsToCreate.length > 0) {
+    await tx.eventArtist.createMany({ data: artistRowsToCreate });
+  }
+  for (const artist of target.artistRows.filter((row) => existingArtistIds.has(row.id))) {
+    const existing = existingArtistById.get(artist.id);
+    if (!existing) continue;
+    if (
+      existing.displayName !== artist.displayName
+      || nullableString(existing.normalizedName) !== artist.normalizedName
+      || existing.actType !== artist.actType
+      || nullableString(existing.primaryDjId) !== nullableString(artist.primaryDjId)
+      || existing.billingOrder !== artist.billingOrder
+      || existing.sourceType !== artist.sourceType
+      || existing.isTimetableOnly !== artist.isTimetableOnly
+    ) {
+      await tx.eventArtist.update({
+        where: { id: artist.id },
+        data: {
+          displayName: artist.displayName,
+          normalizedName: artist.normalizedName,
+          actType: artist.actType,
+          primaryDjId: artist.primaryDjId,
+          billingOrder: artist.billingOrder,
+          sourceType: artist.sourceType,
+          isTimetableOnly: artist.isTimetableOnly,
+        },
+      });
+    }
+  }
+
+  const memberRowsToRewrite: CanonicalMemberRow[] = [];
+  const artistIdsWithChangedMembers: string[] = [];
+  for (const artist of target.artistRows) {
+    const desiredMembers = target.memberRows.filter((member) => member.eventArtistId === artist.id);
+    const existing = existingArtistById.get(artist.id);
+    if (!existing || memberSignature(existing.members) !== desiredMemberSignature(desiredMembers)) {
+      artistIdsWithChangedMembers.push(artist.id);
+      memberRowsToRewrite.push(...desiredMembers);
+    }
+  }
+  if (artistIdsWithChangedMembers.length > 0) {
+    await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistIdsWithChangedMembers } } });
+    if (memberRowsToRewrite.length > 0) {
+      await tx.eventArtistMember.createMany({ data: memberRowsToRewrite });
+    }
+  }
+
+  const existingStageIds = new Set(existingStages.map((stage) => stage.id));
+  const stageRowsToCreate = target.stageRows.filter((stage) => !existingStageIds.has(stage.id));
+  if (stageRowsToCreate.length > 0) {
+    await tx.eventStage.createMany({ data: stageRowsToCreate });
+  }
+  for (const stage of target.stageRows.filter((row) => existingStageIds.has(row.id))) {
+    const existing = existingStageById.get(stage.id);
+    if (!existing) continue;
+    if (
+      existing.name !== stage.name
+      || existing.normalizedName !== stage.normalizedName
+      || existing.sortOrder !== stage.sortOrder
+    ) {
+      await tx.eventStage.update({
+        where: { id: stage.id },
+        data: {
+          name: stage.name,
+          normalizedName: stage.normalizedName,
+          sortOrder: stage.sortOrder,
+        },
+      });
+    }
+  }
+
+  const existingPerformanceIds = new Set(existingPerformances.map((performance) => performance.id));
+  const performanceRowsToCreate = target.performanceRows.filter((performance) => !existingPerformanceIds.has(performance.id));
+  if (performanceRowsToCreate.length > 0) {
+    await tx.eventPerformance.createMany({ data: performanceRowsToCreate });
+  }
+  for (const performance of target.performanceRows.filter((row) => existingPerformanceIds.has(row.id))) {
+    const existing = existingPerformanceById.get(performance.id);
+    if (!existing) continue;
+    if (
+      existing.eventArtistId !== performance.eventArtistId
+      || nullableString(existing.stageId) !== nullableString(performance.stageId)
+      || existing.displayNameSnapshot !== performance.displayNameSnapshot
+      || existing.festivalDayIndex !== performance.festivalDayIndex
+      || dateTimeValue(existing.startAt) !== dateTimeValue(performance.startAt)
+      || dateTimeValue(existing.endAt) !== dateTimeValue(performance.endAt)
+      || existing.sortOrder !== performance.sortOrder
+      || existing.status !== performance.status
+      || existing.sourceType !== performance.sourceType
+    ) {
+      await tx.eventPerformance.update({
+        where: { id: performance.id },
+        data: {
+          eventArtistId: performance.eventArtistId,
+          stageId: performance.stageId,
+          displayNameSnapshot: performance.displayNameSnapshot,
+          festivalDayIndex: performance.festivalDayIndex,
+          startAt: performance.startAt,
+          endAt: performance.endAt,
+          sortOrder: performance.sortOrder,
+          status: performance.status,
+          sourceType: performance.sourceType,
+        },
+      });
+    }
   }
 };

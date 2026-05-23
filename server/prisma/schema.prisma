@@ -341,11 +341,40 @@ model ContentSubmission {
 
   submitter User                       @relation("UserContentSubmissions", fields: [submitterId], references: [id], onDelete: Cascade)
   versions  ContentSubmissionVersion[]
+  processingJobs ContentSubmissionProcessingJob[]
 
   @@index([submitterId, createdAt])
   @@index([entityType, status, createdAt])
   @@index([status, createdAt])
   @@map("content_submissions")
+}
+
+model ContentSubmissionProcessingJob {
+  id           String    @id @default(uuid())
+  submissionId String    @map("submission_id")
+  jobType      String    @default("process_submission") @map("job_type")
+  status       String    @default("queued")
+  priority     Int       @default(0)
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3) @map("max_attempts")
+  lockedBy     String?   @map("locked_by")
+  lockedAt     DateTime? @map("locked_at")
+  availableAt  DateTime  @default(now()) @map("available_at")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  failedAt     DateTime? @map("failed_at")
+  lastError    String?   @map("last_error") @db.Text
+  metadata     Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  submission ContentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, jobType])
+  @@index([status, availableAt, priority])
+  @@index([lockedAt])
+  @@index([submissionId])
+  @@map("content_submission_processing_jobs")
 }
 
 model ContentSubmissionVersion {

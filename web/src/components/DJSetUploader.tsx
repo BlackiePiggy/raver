@@ -229,11 +229,7 @@ function SectionCard({
   active?: boolean;
 }) {
   return (
-    <section
-      className={`rounded-2xl border p-5 shadow-[0_20px_60px_rgba(0,0,0,0.12)] ${
-        active ? 'border-primary-blue/35 bg-bg-secondary' : 'border-bg-tertiary bg-bg-secondary/90'
-      }`}
-    >
+    <section className={`rounded-xl border p-6 ${active ? 'border-bg-tertiary bg-bg-secondary' : 'border-bg-tertiary bg-bg-secondary'}`}>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-primary-blue">{step}</p>
@@ -276,14 +272,15 @@ export default function DJSetUploader() {
   const [activeStep, setActiveStep] = useState(1);
 
   const parsedVideo = useMemo(() => parseVideoUrl(videoUrl), [videoUrl]);
+  const readyToSubmit = Boolean(title.trim() && videoUrl.trim() && selectedDjIds.length > 0 && thumbnailUrl.trim());
   const steps = useMemo(
     () => [
       { id: 1, title: '基础信息', subtitle: '标题、封面和简介', done: Boolean(title.trim() && thumbnailUrl.trim()) },
-      { id: 2, title: 'DJ 关联', subtitle: '选择主 DJ 与补充成员', done: selectedDjIds.length > 0 },
-      { id: 3, title: '视频与预览', subtitle: '输入视频链接并确认预览', done: Boolean(videoUrl.trim()) },
-      { id: 4, title: '歌曲标记', subtitle: '批量导入或手动补全曲目', done: tracks.length > 0 },
+      { id: 2, title: 'DJ 与视频', subtitle: '关联 DJ 并确认视频来源', done: Boolean(selectedDjIds.length > 0 && videoUrl.trim()) },
+      { id: 3, title: '歌曲标记', subtitle: '批量导入并逐首校对曲目', done: tracks.length > 0 },
+      { id: 4, title: '检查提交', subtitle: '确认信息无误后创建 Set', done: readyToSubmit },
     ],
-    [title, thumbnailUrl, selectedDjIds.length, videoUrl, tracks.length]
+    [title, thumbnailUrl, selectedDjIds.length, videoUrl, tracks.length, readyToSubmit]
   );
   const completionCount = steps.filter((step) => step.done).length;
   const progressPercent = Math.round((completionCount / steps.length) * 100);
@@ -295,7 +292,6 @@ export default function DJSetUploader() {
     [selectedDjIds, djs]
   );
   const primaryDjName = selectedDjNames[0] || '未选择';
-  const readyToSubmit = Boolean(title.trim() && videoUrl.trim() && selectedDjIds.length > 0 && thumbnailUrl.trim());
   const filteredDJs = useMemo(() => {
     const keyword = djSearchKeyword.trim().toLowerCase();
     if (!keyword) {
@@ -768,566 +764,388 @@ export default function DJSetUploader() {
     }
   };
 
-  const currentStep = steps[activeStep - 1];
+  const canAdvanceStep =
+    (activeStep === 1 && Boolean(title.trim())) ||
+    (activeStep === 2 && Boolean(selectedDjIds.length && videoUrl.trim())) ||
+    (activeStep === 3 && Boolean(tracks.length || bulkTrackText.trim())) ||
+    activeStep === 4;
+
+  const inputClassName =
+    'w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue';
+  const textareaClassName =
+    'w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue';
+  const panelClassName = 'rounded-2xl border border-bg-primary bg-bg-primary/40 p-4';
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-bg-primary">
-      <div className="absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_55%),linear-gradient(180deg,rgba(15,23,42,0.9),transparent)]" />
-      <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary-blue">DJ Upload Flow</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">
-            上传 DJ Set
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
-            按步骤完成上传：先补齐基础信息，再关联 DJ，最后整理歌单并提交。整体会更清晰，也更像活动发布流程。
-          </p>
-        </div>
-
-        {user && (
-          <div className="mb-6 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-4 py-3 text-sm text-text-secondary backdrop-blur">
-            当前登录身份：<span className="font-semibold text-text-primary">{user.displayName || user.username}</span>
+    <div className="min-h-screen bg-bg-primary">
+      <div className="pt-[44px]">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary-blue">DJ 上传</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">上传 DJ Set</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">按步骤完成上传：先补齐基础信息，再关联 DJ，最后整理歌单并提交。</p>
           </div>
-        )}
 
-        <div className="mb-6 rounded-2xl border border-bg-tertiary bg-bg-secondary/80 p-4 backdrop-blur">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-text-primary">完成进度</p>
-              <p className="text-xs text-text-tertiary">
-                {completionCount}/{steps.length} 个步骤已完成
-              </p>
+          {user && (
+            <div className="mb-6 rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-4 py-3 text-sm text-text-secondary">
+              当前登录身份：<span className="font-semibold text-text-primary">{user.displayName || user.username}</span>
             </div>
-            <span className="text-xs text-text-secondary">{progressPercent}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-bg-primary">
-            <div className="h-full rounded-full bg-gradient-to-r from-primary-blue to-primary-purple" style={{ width: `${progressPercent}%` }} />
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-4">
-            {steps.map((step) => (
-              <button
-                key={step.id}
-                type="button"
-                onClick={() => setActiveStep(step.id)}
-                className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                  activeStep === step.id
-                    ? 'border-primary-blue/40 bg-primary-blue/10'
-                    : 'border-bg-primary bg-bg-primary/40 hover:border-bg-secondary'
-                }`}
-              >
-                <p className="text-xs uppercase tracking-[0.2em] text-text-tertiary">Step {step.id}</p>
-                <p className="mt-1 text-sm font-medium text-text-primary">{step.title}</p>
-                <p className="mt-1 text-xs text-text-tertiary">{step.subtitle}</p>
-                <p className={`mt-2 text-xs ${step.done ? 'text-accent-green' : 'text-text-tertiary'}`}>
-                  {step.done ? '已完成' : '进行中'}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {activeStep === 1 && (
-            <SectionCard
-              step="Step 01"
-              title="基础信息"
-              description="先把这张卡片打磨好：标题、封面、简介决定了整条 DJ Set 的第一印象。"
-              badge="先完成这里"
-              active
-            >
-              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-                <div className="space-y-5">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-text-primary">Set 标题</label>
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue"
-                      placeholder="例如：Boiler Room Berlin 2024"
-                      required
-                    />
-                    <p className="mt-1 text-xs text-text-tertiary">建议写清楚场景、地点或主题，方便搜索和识别。</p>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-text-primary">介绍</label>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="min-h-[120px] w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue"
-                      placeholder="补充一句这个 set 的风格、亮点、来源或者备注"
-                      rows={4}
-                    />
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
-                    thumbnailDragging
-                      ? 'border-primary-blue bg-primary-blue/10'
-                      : 'border-primary-blue/30 bg-primary-blue/5'
-                  }`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setThumbnailDragging(true);
-                  }}
-                  onDragLeave={() => setThumbnailDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setThumbnailDragging(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) {
-                      uploadThumbnail(file);
-                    }
-                  }}
-                >
-                  <label className="mb-2 block text-sm font-medium text-text-primary">DJ Set 封面</label>
-                  <p className="mb-4 text-xs leading-5 text-text-tertiary">上传后的封面会用于外层卡片展示，也会让整个页面看起来更完整。</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="cursor-pointer rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-2 text-sm text-text-primary transition-colors hover:border-primary-blue">
-                      {thumbnailUploading ? '上传中...' : '选择图片'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            uploadThumbnail(file);
-                          }
-                        }}
-                      />
-                    </label>
-                    <span className="text-xs text-text-tertiary">也可以直接拖拽到这里</span>
-                  </div>
-                  {thumbnailUrl ? (
-                    <div className="relative mt-4 aspect-video overflow-hidden rounded-xl border border-bg-primary">
-                      <Image src={thumbnailUrl} alt="视频封面" fill className="object-cover" sizes="480px" />
-                    </div>
-                  ) : (
-                    <div className="mt-4 flex aspect-video items-center justify-center rounded-xl border border-bg-primary bg-bg-primary/50 text-sm text-text-tertiary">
-                      还没有封面预览
-                    </div>
-                  )}
-                </div>
-              </div>
-            </SectionCard>
           )}
 
-          {activeStep === 2 && (
-            <SectionCard
-              step="Step 02"
-              title="DJ 关联与视频链接"
-              description="先把创作者和来源链接确认好，再进入后面的曲目整理。"
-              badge={`${selectedDjIds.length} 位 DJ`}
-              active
-            >
-              <div className="space-y-6">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-text-primary">DJ 关联</label>
-                  <div className="space-y-3">
-                    <p className="text-xs text-text-tertiary">可搜索 DJ 库并多选，第一位会作为主 DJ。</p>
-                    <input
-                      type="text"
-                      value={djSearchKeyword}
-                      onChange={(e) => setDjSearchKeyword(e.target.value)}
-                      className="w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue"
-                      placeholder="搜索 DJ 库（例如 Avicii / Martin Garrix）"
-                    />
-                    <div className="flex min-h-8 flex-wrap gap-2">
-                      {selectedDjIds.length === 0 ? (
-                        <span className="text-xs text-text-tertiary">尚未选择 DJ</span>
-                      ) : (
-                        selectedDjIds.map((id) => {
-                          const matched = djs.find((dj) => dj.id === id);
-                          return (
-                            <span key={id} className="inline-flex items-center gap-1 rounded-full border border-primary-blue/30 bg-primary-blue/15 px-3 py-1 text-xs text-primary-blue">
-                              <span>{matched?.name || id}</span>
-                              <button type="button" onClick={() => removeSelectedDj(id)} className="text-primary-blue hover:text-white" aria-label="remove dj">
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })
-                      )}
+          <div className="mb-6 rounded-xl border border-bg-tertiary bg-bg-secondary p-6">
+            <div className="mb-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-text-primary">完成进度</p>
+                <p className="text-xs text-text-tertiary">{completionCount}/{steps.length} 个步骤已完成</p>
+              </div>
+              <span className="text-xs text-text-secondary">{progressPercent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-bg-primary">
+              <div className="h-full rounded-full bg-gradient-to-r from-primary-blue to-primary-purple" style={{ width: progressPercent + '%' }} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+              {steps.map((step) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => setActiveStep(step.id)}
+                  className={
+                    activeStep === step.id
+                      ? 'rounded-xl border border-primary-blue/40 bg-primary-blue/10 px-3 py-3 text-left transition-colors'
+                      : 'rounded-xl border border-bg-primary bg-bg-primary/40 px-3 py-3 text-left transition-colors hover:border-bg-secondary'
+                  }
+                >
+                  <p className="text-xs uppercase tracking-[0.2em] text-text-tertiary">Step {step.id}</p>
+                  <p className="mt-1 text-sm font-medium text-text-primary">{step.title}</p>
+                  <p className="mt-1 text-xs text-text-tertiary">{step.subtitle}</p>
+                  <p className={step.done ? 'mt-2 text-xs text-accent-green' : 'mt-2 text-xs text-text-tertiary'}>{step.done ? '已完成' : '进行中'}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {activeStep === 1 && (
+              <SectionCard step="Step 01" title="基础信息" description="标题、封面和简介决定第一印象。" badge="先完成这里" active>
+                <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="space-y-5">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-text-primary">Set 标题</label>
+                      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={inputClassName} placeholder="例如：Boiler Room Berlin 2024" required />
+                      <p className="mt-1 text-xs text-text-tertiary">建议写清楚场景、地点或主题。</p>
                     </div>
-                    {djSearchKeyword.trim() && (
-                      <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-bg-primary bg-bg-primary/40 p-2">
-                        {filteredDJs.length === 0 ? (
-                          <p className="px-1 py-2 text-xs text-text-tertiary">DJ 库中暂无匹配结果，可在下方自定义添加。</p>
-                        ) : (
-                          filteredDJs.map((dj) => {
-                            const added = selectedDjIds.includes(dj.id);
-                            return (
-                              <div key={dj.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-bg-secondary/60">
-                                <span className="text-sm text-text-primary">{dj.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => addSelectedDj(dj.id)}
-                                  disabled={added}
-                                  className={`rounded-lg border px-3 py-1.5 text-xs ${
-                                    added
-                                      ? 'cursor-not-allowed border-bg-secondary bg-bg-primary text-text-tertiary'
-                                      : 'border-primary-blue/40 bg-primary-blue/10 text-primary-blue hover:bg-primary-blue/20'
-                                  }`}
-                                >
-                                  {added ? '已添加' : '添加'}
-                                </button>
-                              </div>
-                            );
-                          })
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-text-primary">介绍</label>
+                      <textarea value={description} onChange={(e) => setDescription(e.target.value)} className={`min-h-[120px] ${textareaClassName}`} placeholder="补充一句这个 set 的风格、亮点、来源或者备注" rows={4} />
+                    </div>
+                  </div>
+                  <div className={thumbnailDragging ? 'rounded-2xl border-2 border-dashed border-primary-blue bg-primary-blue/10 p-4 transition-colors' : 'rounded-2xl border-2 border-dashed border-primary-blue/30 bg-primary-blue/5 p-4 transition-colors'} onDragOver={(e) => { e.preventDefault(); setThumbnailDragging(true); }} onDragLeave={() => setThumbnailDragging(false)} onDrop={(e) => { e.preventDefault(); setThumbnailDragging(false); const file = e.dataTransfer.files?.[0]; if (file) uploadThumbnail(file); }}>
+                    <label className="mb-2 block text-sm font-medium text-text-primary">DJ Set 封面</label>
+                    <p className="mb-4 text-xs leading-5 text-text-tertiary">上传后的封面会用于外层卡片展示。</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="cursor-pointer rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-2 text-sm text-text-primary transition-colors hover:border-primary-blue">
+                        {thumbnailUploading ? '上传中...' : '选择图片'}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadThumbnail(file); }} />
+                      </label>
+                      <span className="text-xs text-text-tertiary">也可以直接拖拽到这里</span>
+                    </div>
+                    {thumbnailUrl ? <div className="relative mt-4 aspect-video overflow-hidden rounded-xl border border-bg-primary"><Image src={thumbnailUrl} alt="视频封面" fill className="object-cover" sizes="480px" /></div> : <div className="mt-4 flex aspect-video items-center justify-center rounded-xl border border-bg-primary bg-bg-primary/50 text-sm text-text-tertiary">还没有封面预览</div>}
+                  </div>
+                </div>
+              </SectionCard>
+            )}
+
+            {activeStep === 2 && (
+              <SectionCard step="Step 02" title="DJ 关联与视频链接" description="先把创作者和来源链接确认好。" badge={selectedDjIds.length + ' 位 DJ'} active>
+                <div className="space-y-6">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-text-primary">DJ 关联</label>
+                    <div className="space-y-3">
+                      <p className="text-xs text-text-tertiary">可搜索 DJ 库并多选，第一位会作为主 DJ。</p>
+                      <input type="text" value={djSearchKeyword} onChange={(e) => setDjSearchKeyword(e.target.value)} className={inputClassName} placeholder="搜索 DJ 库（例如 Avicii / Martin Garrix）" />
+                      <div className="flex min-h-8 flex-wrap gap-2">{selectedDjIds.length === 0 ? <span className="text-xs text-text-tertiary">尚未选择 DJ</span> : selectedDjIds.map((id) => { const matched = djs.find((dj) => dj.id === id); return <span key={id} className="inline-flex items-center gap-1 rounded-full border border-primary-blue/30 bg-primary-blue/15 px-3 py-1 text-xs text-primary-blue"><span>{matched?.name || id}</span><button type="button" onClick={() => removeSelectedDj(id)} className="text-primary-blue hover:text-white" aria-label="remove dj">×</button></span>; })}</div>
+                      {djSearchKeyword.trim() && <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-bg-primary bg-bg-primary/40 p-2">{filteredDJs.length === 0 ? <p className="px-1 py-2 text-xs text-text-tertiary">DJ 库中暂无匹配结果，可在下方自定义添加。</p> : filteredDJs.map((dj) => { const added = selectedDjIds.includes(dj.id); return <div key={dj.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-bg-secondary/60"><span className="text-sm text-text-primary">{dj.name}</span><button type="button" onClick={() => addSelectedDj(dj.id)} disabled={added} className={added ? 'rounded-lg border border-bg-secondary bg-bg-primary px-3 py-1.5 text-xs text-text-tertiary cursor-not-allowed' : 'rounded-lg border border-primary-blue/40 bg-primary-blue/10 px-3 py-1.5 text-xs text-primary-blue hover:bg-primary-blue/20'}>{added ? '已添加' : '添加'}</button></div>; })}</div>}
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]"><input type="text" value={customDJName} onChange={(e) => setCustomDJName(e.target.value)} className={inputClassName} placeholder="库中没有？输入 DJ 名称后添加" /><button type="button" onClick={addCustomDjToLibrary} disabled={addingCustomDj} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary transition-colors hover:border-primary-blue disabled:opacity-50">{addingCustomDj ? '添加中...' : '添加并选中'}</button></div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-text-primary">视频 URL</label>
+                    <div className="flex flex-col gap-2 md:flex-row"><input type="url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} className={`flex-1 ${inputClassName}`} placeholder="YouTube 或 Bilibili URL" required /><button type="button" onClick={handlePasteAndExtract} className="rounded-xl bg-primary-blue px-4 py-3 text-sm text-white transition-colors hover:bg-primary-purple">一键粘贴</button><button type="button" onClick={() => fetchVideoPreview(videoUrl)} disabled={previewLoading || !videoUrl} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary transition-colors disabled:opacity-50">{previewLoading ? '提取中...' : '提取信息'}</button></div>
+                    {previewMessage && <p className="mt-2 text-xs text-text-tertiary">{previewMessage}</p>}
+                  </div>
+                  <div className={panelClassName}><div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-sm font-medium text-text-primary">视频预览</h3>{parsedVideo && <span className="text-xs uppercase tracking-[0.18em] text-text-tertiary">{parsedVideo.platform}</span>}</div>{parsedVideo ? <iframe src={parsedVideo.embedUrl} className="aspect-video w-full rounded-xl border border-bg-primary" allowFullScreen /> : <p className="text-sm text-text-tertiary">请输入有效的 YouTube 或 Bilibili 链接以预览</p>}</div>
+                </div>
+              </SectionCard>
+            )}
+
+            {activeStep === 3 && (
+              <SectionCard step="Step 03" title="歌曲标记" description="批量导入后再做微调。" badge={tracks.length + ' 首歌曲'} active>
+                <div className="space-y-6">
+                  <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                    <div className={panelClassName}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-medium text-text-primary">批量粘贴歌单</h3>
+                          <p className="mt-1 text-xs text-text-tertiary">每行格式：`开始时间 - 歌手 - 歌曲名`，适合先快速导入。</p>
+                        </div>
+                        <button type="button" onClick={addTrack} className="rounded-xl bg-primary-purple px-4 py-2.5 text-sm text-white transition-colors hover:bg-primary-blue">
+                          + 手动添加歌曲
+                        </button>
+                      </div>
+                      <textarea
+                        value={bulkTrackText}
+                        onChange={(e) => setBulkTrackText(e.target.value)}
+                        className="mt-4 min-h-[220px] w-full rounded-xl border border-bg-secondary bg-bg-primary px-4 py-3 font-mono text-xs text-text-primary outline-none transition-colors focus:border-primary-blue"
+                        rows={8}
+                        placeholder={"0:00 - DAB THE SKY INTRO (In the End x Hero)\n1:40 - Said the Sky - Stay (Afinity Remix)\n2:32 - Said the Sky - Spider x Dabin - Holding On"}
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => parseBulkTracklist('replace')} className="rounded-xl bg-primary-blue px-4 py-2 text-xs text-white transition-colors hover:bg-primary-purple">
+                          解析并替换
+                        </button>
+                        <button type="button" onClick={() => parseBulkTracklist('append')} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-2 text-xs text-text-primary">
+                          解析并追加
+                        </button>
+                      </div>
+                      {bulkParseMessage && <p className="mt-2 text-xs text-text-secondary">{bulkParseMessage}</p>}
+                    </div>
+
+                    <div className={`${panelClassName} space-y-4`}>
+                      <div>
+                        <h3 className="text-sm font-medium text-text-primary">信息校对提示</h3>
+                        <p className="mt-1 text-xs leading-5 text-text-tertiary">导入后建议逐首确认时间、标题、艺人以及 Spotify / 网易云绑定，避免提交后再返工。</p>
+                      </div>
+                      <div className="rounded-xl border border-bg-secondary bg-bg-secondary/50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">Spotify 状态</p>
+                        <p className="mt-2 text-sm text-text-primary">
+                          {spotifyAuth.loading ? '检查中...' : spotifyAuth.authenticated ? '已完成鉴权，可直接搜索绑定' : '尚未鉴权'}
+                        </p>
+                        <p className="mt-1 text-xs text-text-tertiary">{spotifyAuth.message}</p>
+                        {!spotifyAuth.authenticated && spotifyAuth.hasCredentials && (
+                          <a
+                            href={spotifyAuth.authUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 inline-flex rounded-lg border border-primary-blue/30 bg-primary-blue/10 px-3 py-2 text-xs text-primary-blue transition-colors hover:bg-primary-blue/20"
+                          >
+                            去鉴权
+                          </a>
                         )}
                       </div>
-                    )}
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]">
-                      <input
-                        type="text"
-                        value={customDJName}
-                        onChange={(e) => setCustomDJName(e.target.value)}
-                        className="w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue"
-                        placeholder="库中没有？输入 DJ 名称后添加"
-                      />
-                      <button
-                        type="button"
-                        onClick={addCustomDjToLibrary}
-                        disabled={addingCustomDj}
-                        className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary transition-colors hover:border-primary-blue disabled:opacity-50"
-                      >
-                        {addingCustomDj ? '添加中...' : '添加并选中'}
-                      </button>
+                      <div className="rounded-xl border border-bg-secondary bg-bg-secondary/50 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">当前歌曲数</p>
+                        <p className="mt-2 text-2xl font-semibold text-text-primary">{tracks.length}</p>
+                        <p className="mt-1 text-xs text-text-tertiary">至少保留一首能让最终预览更完整。</p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-text-primary">视频 URL</label>
-                  <div className="flex flex-col gap-2 md:flex-row">
-                    <input
-                      type="url"
-                      value={videoUrl}
-                      onChange={(e) => setVideoUrl(e.target.value)}
-                      className="flex-1 rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue"
-                      placeholder="YouTube 或 Bilibili URL"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={handlePasteAndExtract}
-                      className="rounded-xl bg-primary-blue px-4 py-3 text-sm text-white transition-colors hover:bg-primary-purple"
-                    >
-                      一键粘贴
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fetchVideoPreview(videoUrl)}
-                      disabled={previewLoading || !videoUrl}
-                      className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary transition-colors disabled:opacity-50"
-                    >
-                      {previewLoading ? '提取中...' : '提取信息'}
-                    </button>
-                  </div>
-                  {previewMessage && <p className="mt-2 text-xs text-text-tertiary">{previewMessage}</p>}
-                </div>
-
-                <div className="rounded-2xl border border-bg-primary bg-bg-primary/40 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-medium text-text-primary">视频预览</h3>
-                    {parsedVideo && <span className="text-xs uppercase tracking-[0.18em] text-text-tertiary">{parsedVideo.platform}</span>}
-                  </div>
-                  {parsedVideo ? (
-                    <iframe src={parsedVideo.embedUrl} className="aspect-video w-full rounded-xl border border-bg-primary" allowFullScreen />
-                  ) : (
-                    <p className="text-sm text-text-tertiary">请输入有效的 YouTube 或 Bilibili 链接以预览</p>
-                  )}
-                </div>
-              </div>
-            </SectionCard>
-          )}
-
-          {activeStep === 3 && (
-            <SectionCard
-              step="Step 03"
-              title="歌曲标记"
-              description="这里是最重的内容，但我们把入口做轻：可以先批量粘贴，再按需微调单首歌曲。"
-              badge={`${tracks.length} 首歌曲`}
-              active
-            >
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-text-primary">批量粘贴歌单（推荐）</p>
-                    <p className="mt-1 text-xs text-text-tertiary">
-                      每行格式：<code>开始时间 - 歌手 - 歌曲名</code>，结束时间会自动按下一首推导。
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addTrack}
-                    className="rounded-xl bg-primary-purple px-4 py-2.5 text-sm text-white transition-colors hover:bg-primary-blue"
-                  >
-                    + 添加歌曲
-                  </button>
-                </div>
-
-                <div className="rounded-2xl border border-primary-blue/20 bg-primary-blue/8 p-4">
-                  <textarea
-                    value={bulkTrackText}
-                    onChange={(e) => setBulkTrackText(e.target.value)}
-                    className="w-full rounded-xl border border-bg-secondary bg-bg-primary px-4 py-3 font-mono text-xs text-text-primary outline-none transition-colors focus:border-primary-blue"
-                    rows={8}
-                    placeholder={`0:00 - DAB THE SKY INTRO (In the End x Hero)\n1:40 - Said the Sky - Stay (Afinity Remix)\n2:32 - Said the Sky - Spider x Dabin - Holding On`}
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => parseBulkTracklist('replace')} className="rounded-xl bg-primary-blue px-4 py-2 text-xs text-white transition-colors hover:bg-primary-purple">
-                      解析并替换
-                    </button>
-                    <button type="button" onClick={() => parseBulkTracklist('append')} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-2 text-xs text-text-primary">
-                      解析并追加
-                    </button>
-                  </div>
-                  {bulkParseMessage && <p className="mt-2 text-xs text-text-secondary">{bulkParseMessage}</p>}
-                </div>
-
-                <div className="rounded-2xl border border-bg-primary bg-bg-primary/40 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">Spotify 鉴权</p>
-                      <p className={`text-xs ${spotifyAuth.authenticated ? 'text-accent-green' : 'text-accent-red'}`}>
-                        {spotifyAuth.loading ? '检查中...' : spotifyAuth.message}
-                      </p>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-medium text-text-primary">逐首校对</h3>
+                        <p className="mt-1 text-xs text-text-tertiary">每首歌都带标题字段，方便继续完善平台链接和状态。</p>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={checkSpotifyAuth} className="rounded-xl border border-bg-primary px-3 py-2 text-xs text-text-secondary hover:text-text-primary">
-                        刷新状态
-                      </button>
-                      {!spotifyAuth.authenticated && (
-                        <a href={spotifyAuth.authUrl} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-[#1DB954] px-3 py-2 text-xs text-white hover:bg-[#1ed760]">
-                          去鉴权
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  {tracks.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-bg-primary bg-bg-primary/30 p-8 text-center text-sm text-text-tertiary">
-                      还没有歌曲条目，先从上面的批量导入开始。
-                    </div>
-                  ) : (
-                    tracks.map((track, index) => {
-                      const searchState = trackSearch[index] || emptySearchState;
-                      const hasSpotifyResults = searchState.spotifyResults.length > 0;
+                    {tracks.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-bg-primary bg-bg-primary/30 px-5 py-10 text-center text-sm text-text-tertiary">
+                        还没有歌曲。你可以先批量粘贴歌单，或者点击“手动添加歌曲”开始录入。
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {tracks.map((track, index) => {
+                          const searchState = trackSearch[index] || emptySearchState;
 
-                      return (
-                        <div key={index} className="rounded-2xl border border-bg-primary bg-bg-primary/40 p-4">
-                          <div className="mb-4 flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">Track {index + 1}</p>
-                              <p className="text-sm font-medium text-text-primary">{track.title || '未命名歌曲'}</p>
-                            </div>
-                            <button type="button" onClick={() => removeTrack(index)} className="text-sm text-accent-red hover:text-accent-red/80">
-                              删除
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div>
-                              <label className="mb-1 block text-sm text-text-secondary">开始时间</label>
-                              <input
-                                type="text"
-                                value={track.startTime}
-                                onChange={(e) => updateTrack(index, 'startTime', e.target.value)}
-                                className="w-full rounded-xl border border-bg-secondary bg-bg-secondary/60 px-3 py-2 text-text-primary outline-none focus:border-primary-blue"
-                                placeholder="0:00"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-sm text-text-secondary">结束时间</label>
-                              <input
-                                type="text"
-                                value={track.endTime || ''}
-                                onChange={(e) => updateTrack(index, 'endTime', e.target.value)}
-                                className="w-full rounded-xl border border-bg-secondary bg-bg-secondary/60 px-3 py-2 text-text-primary outline-none focus:border-primary-blue"
-                                placeholder="5:30"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-sm text-text-secondary">歌曲名</label>
-                              <input
-                                type="text"
-                                value={track.title}
-                                onChange={(e) => updateTrack(index, 'title', e.target.value)}
-                                className="w-full rounded-xl border border-bg-secondary bg-bg-secondary/60 px-3 py-2 text-text-primary outline-none focus:border-primary-blue"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-sm text-text-secondary">歌手名</label>
-                              <input
-                                type="text"
-                                value={track.artist}
-                                onChange={(e) => updateTrack(index, 'artist', e.target.value)}
-                                className="w-full rounded-xl border border-bg-secondary bg-bg-secondary/60 px-3 py-2 text-text-primary outline-none focus:border-primary-blue"
-                                required
-                              />
-                            </div>
-                            <div className="md:col-span-2">
-                              <label className="mb-1 block text-sm text-text-secondary">状态</label>
-                              <select
-                                value={track.status}
-                                onChange={(e) => updateTrack(index, 'status', e.target.value)}
-                                className="w-full rounded-xl border border-bg-secondary bg-bg-secondary/60 px-3 py-2 text-text-primary outline-none focus:border-primary-blue"
-                              >
-                                <option value="released">已发行</option>
-                                <option value="id">ID / 未发行</option>
-                                <option value="remix">Remix</option>
-                                <option value="edit">Edit</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 rounded-2xl border border-bg-primary bg-bg-secondary/40 p-4">
-                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                              <p className="text-sm font-medium text-text-primary">Spotify 搜索并绑定</p>
-                              <button
-                                type="button"
-                                onClick={() => searchSpotifyTrack(index)}
-                                disabled={searchState.loading || !spotifyAuth.authenticated}
-                                className="rounded-xl bg-[#1DB954] px-3 py-2 text-sm text-white transition-colors hover:bg-[#1ed760] disabled:bg-bg-secondary"
-                              >
-                                {searchState.loading ? '搜索中...' : '搜索 Spotify'}
-                              </button>
-                            </div>
-
-                            {track.spotifyUrl && (
-                              <div className="mb-3 flex w-fit items-center gap-2 rounded-full bg-[#1DB954]/20 px-3 py-1 text-xs text-[#1DB954]">
-                                <span>已绑定 Spotify: {track.spotifyId}</span>
-                                <button type="button" className="hover:text-white" onClick={() => clearSpotifyBinding(index)}>
-                                  移除
+                          return (
+                            <div key={`${track.position}-${index}`} className="rounded-2xl border border-bg-primary bg-bg-primary/30 p-4">
+                              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">Track {track.position}</p>
+                                  <h4 className="mt-1 text-sm font-medium text-text-primary">{track.title || '未命名歌曲'}</h4>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeTrack(index)}
+                                  className="rounded-lg border border-bg-primary bg-bg-tertiary px-3 py-2 text-xs text-text-secondary transition-colors hover:border-red-400 hover:text-red-300"
+                                >
+                                  删除
                                 </button>
                               </div>
-                            )}
 
-                            {searchState.error && <p className="mb-2 text-xs text-accent-red">{searchState.error}</p>}
-
-                            {hasSpotifyResults && (
-                              <div className="rounded-xl border border-bg-secondary bg-bg-primary p-3">
-                                <h4 className="mb-2 text-sm font-semibold text-[#1DB954]">Spotify 结果 ({searchState.spotifyResults.length})</h4>
-                                <div className="max-h-52 space-y-2 overflow-y-auto">
-                                  {searchState.spotifyResults.map((result) => (
-                                    <button
-                                      key={`spotify-${result.id}`}
-                                      type="button"
-                                      onClick={() => selectSpotifyResult(index, result)}
-                                      className="w-full rounded-lg border border-transparent p-2 text-left transition-colors hover:border-[#1DB954]/40 hover:bg-bg-secondary"
-                                    >
-                                      <p className="truncate text-sm text-text-primary">{result.name}</p>
-                                      <p className="truncate text-xs text-text-secondary">{result.artist}</p>
-                                      {result.album && <p className="truncate text-xs text-text-tertiary">{result.album}</p>}
-                                    </button>
-                                  ))}
+                              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-text-primary">开始时间</label>
+                                  <input type="text" value={track.startTime} onChange={(e) => updateTrack(index, 'startTime', e.target.value)} className={inputClassName} placeholder="0:00" />
+                                </div>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-text-primary">结束时间</label>
+                                  <input type="text" value={track.endTime || ''} onChange={(e) => updateTrack(index, 'endTime', e.target.value)} className={inputClassName} placeholder="可选，例如 2:35" />
+                                </div>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-text-primary">歌曲标题</label>
+                                  <input type="text" value={track.title} onChange={(e) => updateTrack(index, 'title', e.target.value)} className={inputClassName} placeholder="输入歌曲名" />
+                                </div>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-text-primary">艺人名称</label>
+                                  <input type="text" value={track.artist} onChange={(e) => updateTrack(index, 'artist', e.target.value)} className={inputClassName} placeholder="输入艺人名" />
                                 </div>
                               </div>
-                            )}
-                          </div>
 
-                          <div className="mt-4 rounded-2xl border border-bg-primary bg-bg-secondary/30 p-4">
-                            <label className="mb-2 block text-sm font-medium text-text-primary">网易云链接</label>
-                            <input
-                              type="url"
-                              value={track.neteaseUrl || ''}
-                              onChange={(e) => updateTrack(index, 'neteaseUrl', e.target.value)}
-                              className="w-full rounded-xl border border-bg-secondary bg-bg-secondary/60 px-3 py-2 text-text-primary outline-none focus:border-primary-blue"
-                              placeholder="https://music.163.com/#/song?id=..."
-                            />
-                            <p className="mt-1 text-xs text-text-tertiary">已解析网易云歌曲ID: {track.neteaseId || '未解析到'}</p>
-                          </div>
-                        </div>
-                      );
-                    })
+                              <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-text-primary">歌曲状态</label>
+                                    <select value={track.status} onChange={(e) => updateTrack(index, 'status', e.target.value)} className={inputClassName}>
+                                      <option value="released">Released</option>
+                                      <option value="id">ID / Unreleased</option>
+                                      <option value="remix">Remix / VIP / Flip</option>
+                                      <option value="edit">Edit / Mashup</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-text-primary">网易云链接</label>
+                                    <input type="url" value={track.neteaseUrl || ''} onChange={(e) => updateTrack(index, 'neteaseUrl', e.target.value)} className={inputClassName} placeholder="可选，粘贴网易云歌曲链接" />
+                                    {track.neteaseId && <p className="mt-1 text-xs text-text-tertiary">已识别歌曲 ID：{track.neteaseId}</p>}
+                                  </div>
+                                </div>
+
+                                <div className="rounded-xl border border-bg-secondary bg-bg-secondary/40 p-4">
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-medium text-text-primary">Spotify 绑定</p>
+                                      <p className="mt-1 text-xs text-text-tertiary">根据标题和艺人搜索后，选中最匹配的结果。</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => searchSpotifyTrack(index)}
+                                        disabled={searchState.loading}
+                                        className="rounded-lg bg-primary-blue px-3 py-2 text-xs text-white transition-colors hover:bg-primary-purple disabled:opacity-50"
+                                      >
+                                        {searchState.loading ? '搜索中...' : '搜索 Spotify'}
+                                      </button>
+                                      {track.spotifyId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => clearSpotifyBinding(index)}
+                                          className="rounded-lg border border-bg-primary bg-bg-tertiary px-3 py-2 text-xs text-text-secondary"
+                                        >
+                                          清除绑定
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {track.spotifyUrl && (
+                                    <a href={track.spotifyUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs text-primary-blue hover:text-white">
+                                      查看当前已绑定歌曲
+                                    </a>
+                                  )}
+
+                                  {searchState.error && <p className="mt-3 text-xs text-red-300">{searchState.error}</p>}
+
+                                  {searchState.spotifyResults.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      {searchState.spotifyResults.slice(0, 5).map((result) => {
+                                        const selected = track.spotifyId === result.id;
+
+                                        return (
+                                          <button
+                                            key={result.id}
+                                            type="button"
+                                            onClick={() => selectSpotifyResult(index, result)}
+                                            className={selected ? 'w-full rounded-xl border border-primary-blue/40 bg-primary-blue/10 p-3 text-left' : 'w-full rounded-xl border border-bg-primary bg-bg-primary/40 p-3 text-left transition-colors hover:border-primary-blue/30'}
+                                          >
+                                            <p className="text-sm font-medium text-text-primary">{result.name}</p>
+                                            <p className="mt-1 text-xs text-text-secondary">{result.artist}</p>
+                                            <p className="mt-1 text-xs text-text-tertiary">{result.album}</p>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+            )}
+
+            {activeStep === 4 && (
+              <SectionCard step="Step 04" title="检查并提交" description="最后快速看一眼关键内容。" badge={readyToSubmit ? '可以提交' : '仍有必填项'} active>
+                <div className="space-y-6">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className={panelClassName}>
+                      <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">基础信息</p>
+                      <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                        <p><span className="text-text-tertiary">标题：</span>{title || '未填写'}</p>
+                        <p><span className="text-text-tertiary">主 DJ：</span>{primaryDjName}</p>
+                        <p><span className="text-text-tertiary">视频：</span>{videoUrl || '未填写'}</p>
+                        <p><span className="text-text-tertiary">封面：</span>{thumbnailUrl ? '已上传' : '未上传'}</p>
+                      </div>
+                    </div>
+
+                    <div className={panelClassName}>
+                      <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">歌单状态</p>
+                      <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                        <p><span className="text-text-tertiary">歌曲数：</span>{tracks.length}</p>
+                        <p><span className="text-text-tertiary">Spotify：</span>{spotifyAuth.authenticated ? '已鉴权' : '未鉴权'}</p>
+                        <p><span className="text-text-tertiary">DJ 列表：</span>{selectedDjNames.length ? selectedDjNames.join(' · ') : '未选择'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {tracks.length > 0 && (
+                    <div className={panelClassName}>
+                      <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">曲目预览</p>
+                      <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                        {tracks.slice(0, 5).map((track) => (
+                          <p key={`${track.position}-${track.title}`}>
+                            <span className="text-text-tertiary">{track.position}. </span>
+                            {track.startTime || '--:--'} · {track.artist || '未知艺人'} - {track.title || '未命名歌曲'}
+                          </p>
+                        ))}
+                        {tracks.length > 5 && <p className="text-xs text-text-tertiary">其余 {tracks.length - 5} 首会一并提交。</p>}
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
-            </SectionCard>
-          )}
 
-          {activeStep === 4 && (
-            <SectionCard
-              step="Step 04"
-              title="检查并提交"
-              description="最后快速看一眼关键内容，确认没漏项后就可以提交。"
-              badge={readyToSubmit ? '可以提交' : '仍有必填项'}
-              active
-            >
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-bg-primary bg-bg-primary/40 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">基础信息</p>
-                  <div className="mt-3 space-y-2 text-sm text-text-secondary">
-                    <p><span className="text-text-tertiary">标题：</span>{title || '未填写'}</p>
-                    <p><span className="text-text-tertiary">主 DJ：</span>{primaryDjName}</p>
-                    <p><span className="text-text-tertiary">视频：</span>{videoUrl || '未填写'}</p>
-                    <p><span className="text-text-tertiary">封面：</span>{thumbnailUrl ? '已上传' : '未上传'}</p>
+                  {!readyToSubmit && (
+                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-text-secondary">
+                      还缺少必填项：标题、封面、视频链接或 DJ 关联。
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button type="button" onClick={() => setActiveStep(Math.max(1, activeStep - 1))} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary">
+                      上一步
+                    </button>
+                    <button type="submit" disabled={loading || !readyToSubmit} className="flex-1 rounded-xl bg-primary-purple px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue disabled:bg-bg-tertiary">
+                      {loading ? '创建中...' : '创建 DJ Set'}
+                    </button>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-bg-primary bg-bg-primary/40 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">歌单状态</p>
-                  <div className="mt-3 space-y-2 text-sm text-text-secondary">
-                    <p><span className="text-text-tertiary">歌曲数：</span>{tracks.length}</p>
-                    <p><span className="text-text-tertiary">Spotify：</span>{spotifyAuth.authenticated ? '已鉴权' : '未鉴权'}</p>
-                    <p><span className="text-text-tertiary">DJ 列表：</span>{selectedDjNames.length ? selectedDjNames.join(' · ') : '未选择'}</p>
-                  </div>
-                </div>
-              </div>
+              </SectionCard>
+            )}
 
-              {!readyToSubmit && (
-                <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-text-secondary">
-                  还缺少必填项：标题、封面、视频链接或 DJ 关联。
-                </div>
-              )}
-
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep(Math.max(1, activeStep - 1))}
-                  className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary"
-                >
+            {activeStep < 4 && (
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                <button type="button" onClick={() => setActiveStep((prev) => Math.max(1, prev - 1))} disabled={activeStep === 1} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary disabled:opacity-40">
                   上一步
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 rounded-xl bg-primary-purple px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue disabled:bg-bg-tertiary"
-                >
-                  {loading ? '创建中...' : '创建 DJ Set'}
+                <button type="button" onClick={() => setActiveStep((prev) => Math.min(4, prev + 1))} disabled={!canAdvanceStep} className="rounded-xl bg-primary-blue px-4 py-3 text-sm text-white transition-colors hover:bg-primary-purple disabled:opacity-40">
+                  下一步
                 </button>
               </div>
-            </SectionCard>
-          )}
-
-          {activeStep < 4 && (
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-              <button
-                type="button"
-                onClick={() => setActiveStep((prev) => Math.max(1, prev - 1))}
-                disabled={activeStep === 1}
-                className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary disabled:opacity-40"
-              >
-                上一步
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveStep((prev) => Math.min(4, prev + 1))}
-                disabled={(currentStep?.id === 1 && !title.trim()) || (currentStep?.id === 2 && selectedDjIds.length === 0) || (currentStep?.id === 3 && !videoUrl.trim())}
-                className="rounded-xl bg-primary-blue px-4 py-3 text-sm text-white transition-colors hover:bg-primary-purple disabled:opacity-40"
-              >
-                下一步
-              </button>
-            </div>
-          )}
-        </form>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   );

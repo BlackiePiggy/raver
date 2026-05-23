@@ -268,7 +268,7 @@ private struct DiscoverStandardEventCoverImage: View {
         print(
             "[EventCardDebug] surface=\(surface) eventId=\(event.id) " +
             "card=\(event.cardImageURL ?? "nil") cover=\(event.coverImageUrl ?? "nil") " +
-            "lineup=\(event.lineupImageUrl ?? "nil") posterAssets=\(event.posterAssetURLs.count) " +
+            "lineup=\(event.lineupImageUrl ?? "nil") posterCandidates=\(event.posterAssetURLs.count) " +
             "lineupAssets=\(event.lineupAssetURLs.count)"
         )
     }
