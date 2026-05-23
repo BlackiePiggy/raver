@@ -17,6 +17,7 @@ enum DiscoverRoute: Hashable {
 
 extension Notification.Name {
     static let discoverEventDidSave = Notification.Name("discoverEventDidSave")
+    static let contentSubmissionDidQueue = Notification.Name("contentSubmissionDidQueue")
     static let discoverNewsDidPublish = Notification.Name("discoverNewsDidPublish")
     static let discoverSetDidSave = Notification.Name("discoverSetDidSave")
     static let discoverFestivalDidSave = Notification.Name("discoverFestivalDidSave")
@@ -75,8 +76,8 @@ func makeDiscoverRouteDestination(
         DiscoverNewsDetailLoaderView(articleID: articleID, repository: appContainer.discoverNewsRepository)
 
     case .eventCreate:
-        EventUploadFlowView(mode: .create, webService: appContainer.webService) {
-            NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+        EventUploadFlowView(mode: .create, webService: appContainer.webService) { outcome in
+            postEventUploadOutcome(outcome)
         }
 
     case .eventEdit(let eventID):
@@ -170,8 +171,8 @@ private struct DiscoverEventEditorLoaderView: View {
             Task { await loadEvent(force: true) }
         } content: {
             if let event {
-                EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
-                    NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+                EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) { outcome in
+                    postEventUploadOutcome(outcome)
                 }
             } else {
                 Color.clear
@@ -192,6 +193,15 @@ private struct DiscoverEventEditorLoaderView: View {
         } catch {
             phase = .failure(message: error.userFacingMessage ?? LT("活动加载失败，请稍后重试", "Failed to load event. Please try again later.", "イベントを読み込めませんでした。時間をおいて再試行してください。"))
         }
+    }
+}
+
+private func postEventUploadOutcome(_ outcome: EventUploadSaveOutcome) {
+    switch outcome {
+    case .eventMutated(let eventID):
+        NotificationCenter.default.post(name: .discoverEventDidSave, object: eventID)
+    case .submissionQueued(let eventID):
+        NotificationCenter.default.post(name: .contentSubmissionDidQueue, object: eventID)
     }
 }
 

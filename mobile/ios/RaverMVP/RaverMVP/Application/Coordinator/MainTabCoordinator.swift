@@ -663,8 +663,8 @@ struct MainTabCoordinatorView: View {
                         .toolbar(.hidden, for: .navigationBar)
                 }
             case .publishEvent:
-                EventUploadFlowView(mode: .create, webService: appContainer.webService) {
-                    NotificationCenter.default.post(name: .discoverEventDidSave, object: nil)
+                EventUploadFlowView(mode: .create, webService: appContainer.webService) { outcome in
+                    postEventUploadOutcome(outcome)
                 }
             case .uploadSet:
                 DJSetEditorView(mode: .create) {}
@@ -1892,6 +1892,15 @@ private struct ProfileResourceLoaderView<Resource, Content: View>: View {
     }
 }
 
+private func postEventUploadOutcome(_ outcome: EventUploadSaveOutcome) {
+    switch outcome {
+    case .eventMutated(let eventID):
+        NotificationCenter.default.post(name: .discoverEventDidSave, object: eventID)
+    case .submissionQueued(let eventID):
+        NotificationCenter.default.post(name: .contentSubmissionDidQueue, object: eventID)
+    }
+}
+
 private struct ProfileEventEditorLoaderView: View {
     let eventID: String
     let eventReadRepository: EventReadRepository
@@ -1903,8 +1912,8 @@ private struct ProfileEventEditorLoaderView: View {
         ) {
             try await eventReadRepository.fetchEvent(id: eventID)
         } content: { event in
-            EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) {
-                NotificationCenter.default.post(name: .discoverEventDidSave, object: event.id)
+            EventUploadFlowView(mode: .edit(eventID: event.id), event: event, webService: webService) { outcome in
+                postEventUploadOutcome(outcome)
             }
         }
     }

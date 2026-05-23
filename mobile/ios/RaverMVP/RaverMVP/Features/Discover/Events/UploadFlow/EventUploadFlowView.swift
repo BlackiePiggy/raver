@@ -117,7 +117,7 @@ struct EventUploadFlowView: View {
         event: WebEvent? = nil,
         userID: String = "current",
         webService: WebFeatureService = AppEnvironment.sharedWebService,
-        onSaved: @escaping () -> Void = {}
+        onSaved: @escaping (EventUploadSaveOutcome) -> Void = { _ in }
     ) {
         _viewModel = StateObject(wrappedValue: EventUploadFlowViewModel(
             mode: mode,

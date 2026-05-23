@@ -61,7 +61,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     private let webService: WebFeatureService
     private let userID: String
     private let seedEvent: WebEvent?
-    private let onSaved: () -> Void
+    private let onSaved: (EventUploadSaveOutcome) -> Void
     private var onDismiss: () -> Void
     private var draftSaveTask: Task<Void, Never>?
     private var timeZoneSearchTask: Task<Void, Never>?
@@ -78,7 +78,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         userID: String = "current",
         webService: WebFeatureService = AppEnvironment.sharedWebService,
         draftStore: EventUploadDraftStore = .shared,
-        onSaved: @escaping () -> Void = {},
+        onSaved: @escaping (EventUploadSaveOutcome) -> Void = { _ in },
         onDismiss: @escaping () -> Void = {}
     ) {
         self.userID = userID
@@ -259,11 +259,13 @@ final class EventUploadFlowViewModel: ObservableObject {
                         title: LT("活动已发布", "Event Published", "イベントを公開しました"),
                         message: LT("活动已经出现在活动页，也可以在我的发布里继续管理。", "The event is live on the events page. You can also manage it from My Posts.", "イベントページに公開されました。マイ投稿からも管理できます。")
                     )
+                    onSaved(.eventMutated(eventID: nil))
                 case .submittedForReview:
                     submitSuccess = EventUploadSubmitSuccess(
                         title: LT("任务已提交", "Task Submitted", "タスクを送信しました"),
                         message: LT("当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。", "The task is now processing. Later updates will arrive through notifications and My Posts.", "現在処理中です。以降の更新は通知とマイ投稿で確認できます。")
                     )
+                    onSaved(.submissionQueued(eventID: nil))
                 }
             case .edit(let eventID):
                 let result = try await webService.updateEvent(id: eventID, input: EventUploadMappers.updateInput(from: draft))
@@ -274,15 +276,16 @@ final class EventUploadFlowViewModel: ObservableObject {
                         title: LT("活动已更新", "Event Updated", "イベントを更新しました"),
                         message: LT("更新已保存。你可以返回活动页查看最新内容，也可以在我的发布里继续管理。", "Your changes are saved. Return to the events page to view the latest content, or manage it from My Posts.", "更新を保存しました。イベントページで最新内容を確認するか、マイ投稿から管理できます。")
                     )
+                    onSaved(.eventMutated(eventID: eventID))
                 case .submittedForReview:
                     submitSuccess = EventUploadSubmitSuccess(
                         title: LT("编辑任务已提交", "Edit Task Submitted", "編集タスクを送信しました"),
                         message: LT("当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。", "The edit task is now processing. Later updates will arrive through notifications and My Posts.", "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。")
                     )
+                    onSaved(.submissionQueued(eventID: eventID))
                 }
             }
             EventUploadAnalytics.track("event_upload_v2_submit_succeeded", properties: ["mode": draft.mode.storageKeyPart])
-            onSaved()
         } catch {
             EventUploadAnalytics.track("event_upload_v2_submit_failed", properties: ["mode": draft.mode.storageKeyPart])
             statusMessage = error.userFacingMessage ?? LT("提交失败，请稍后重试。", "Submit failed. Please try again.", "送信に失敗しました。もう一度お試しください。")
@@ -2337,4 +2340,9 @@ struct EventUploadSubmitSuccess: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let message: String
+}
+
+enum EventUploadSaveOutcome: Equatable {
+    case eventMutated(eventID: String?)
+    case submissionQueued(eventID: String?)
 }
