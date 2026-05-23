@@ -358,6 +358,7 @@ struct EventUploadDraft: Hashable, Codable {
     var timetableSlots: [EventUploadLineupSlotDraft] = []
     var lineupOnlySlots: [EventUploadLineupOnlySlotDraft] = []
     var incrementalBaseline: IncrementalBaseline? = nil
+    var pendingSubmissionIdempotencyKey: String? = nil
     var ticket = EventUploadTicketDraft()
     var dirty = false
     var updatedAt: Date? = Date()

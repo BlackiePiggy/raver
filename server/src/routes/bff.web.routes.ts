@@ -564,17 +564,33 @@ const mapAlignedLineupArtistForPayload = (artist: {
   sortOrder: artist.sortOrder,
 });
 
+const cleanIdempotencyKey = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
 const createPendingContentSubmission = async (input: {
   submitterId: string;
   entityType: 'event' | 'dj' | 'news' | 'set' | 'brand' | 'label' | 'id' | 'rating';
   title: string;
   payload: Record<string, unknown>;
+  idempotencyKey?: string | null;
 }) => {
   const payloadWithSummary = attachContentSubmissionChangeSummary(
     input.entityType,
     input.payload as Prisma.InputJsonObject
   );
   const submission = await prisma.$transaction(async (tx) => {
+    if (input.idempotencyKey) {
+      const existing = await tx.contentSubmission.findFirst({
+        where: {
+          submitterId: input.submitterId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      });
+      if (existing) return existing;
+    }
     if (input.entityType === 'event') {
       await assertNoActiveEventEditSubmission(tx, payloadWithSummary as Prisma.InputJsonObject, {
         lockTargetEvent: true,
@@ -586,6 +602,7 @@ const createPendingContentSubmission = async (input: {
         entityType: input.entityType,
         title: input.title,
         payload: payloadWithSummary,
+        idempotencyKey: input.idempotencyKey || null,
         reviewNotes: buildI18nReviewNotes(input.entityType, payloadWithSummary),
         status: 'processing',
       },
@@ -7954,6 +7971,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       entityType: 'event',
       title: name,
       payload: normalizedBody,
+      idempotencyKey: cleanIdempotencyKey(body.idempotencyKey) || cleanIdempotencyKey(req.get('Idempotency-Key')),
     });
     acceptedSubmission(res, submission, '活动任务已提交，当前正在处理中，后续状态会通过通知更新');
     return;
@@ -8046,6 +8064,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       entityType: 'event',
       title: submittedName,
       payload: normalizedBody,
+      idempotencyKey: cleanIdempotencyKey(body.idempotencyKey) || cleanIdempotencyKey(req.get('Idempotency-Key')),
     });
     acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {

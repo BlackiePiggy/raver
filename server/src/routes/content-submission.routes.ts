@@ -203,8 +203,23 @@ const createSubmissionWithVersion = async (input: {
   entityType: string;
   title: string;
   payload: Prisma.InputJsonObject;
+  idempotencyKey?: string | null;
 }) => {
   return prisma.$transaction(async (tx) => {
+    if (input.idempotencyKey) {
+      const existing = await tx.contentSubmission.findFirst({
+        where: {
+          submitterId: input.submitterId,
+          idempotencyKey: input.idempotencyKey,
+        },
+        include: {
+          submitter: {
+            select: { id: true, username: true, displayName: true, avatarUrl: true },
+          },
+        },
+      });
+      if (existing) return existing;
+    }
     if (input.entityType === 'event') {
       await assertNoActiveEventEditSubmission(tx, input.payload, {
         lockTargetEvent: true,
@@ -216,6 +231,7 @@ const createSubmissionWithVersion = async (input: {
         entityType: input.entityType,
         title: input.title,
         payload: input.payload,
+        idempotencyKey: input.idempotencyKey || null,
         reviewNotes: buildI18nReviewNotes(input.entityType, input.payload),
         status: 'processing',
       },
@@ -715,6 +731,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       entityType,
       title: titleFromPayload(entityType, payloadWithSummary),
       payload: payloadWithSummary,
+      idempotencyKey: cleanText(req.body.idempotencyKey) || cleanText(req.get('Idempotency-Key')),
     });
 
     await scheduleContentSubmissionProcessingBestEffort(submission.id);

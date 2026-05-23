@@ -333,6 +333,7 @@ model ContentSubmission {
   payload         Json
   reviewReason    String?   @map("review_reason") @db.Text
   reviewNotes     Json?     @map("review_notes")
+  idempotencyKey  String?   @map("idempotency_key")
   reviewedAt      DateTime? @map("reviewed_at")
   reviewedBy      String?   @map("reviewed_by")
   createdEntityId String?   @map("created_entity_id")
@@ -346,6 +347,7 @@ model ContentSubmission {
   @@index([submitterId, createdAt])
   @@index([entityType, status, createdAt])
   @@index([status, createdAt])
+  @@unique([submitterId, idempotencyKey])
   @@map("content_submissions")
 }
 

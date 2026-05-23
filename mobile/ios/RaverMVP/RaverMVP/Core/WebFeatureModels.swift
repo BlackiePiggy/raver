@@ -746,6 +746,7 @@ struct CreateEventInput: Encodable {
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
+    var idempotencyKey: String? = nil
     var status: String?
 
     enum CodingKeys: String, CodingKey {
@@ -788,6 +789,7 @@ struct CreateEventInput: Encodable {
         case ticketTiers
         case lineupArtists
         case lineupSlots
+        case idempotencyKey
         case status
     }
 
@@ -833,6 +835,7 @@ struct CreateEventInput: Encodable {
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
         try container.encodeIfPresent(lineupArtists, forKey: .lineupArtists)
         try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
+        try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
         try container.encodeIfPresent(status, forKey: .status)
     }
 }
@@ -1036,6 +1039,7 @@ struct UpdateEventInput: Encodable {
     var lineupChanges: [EventLineupArtistPatchChange]? = nil
     var timetableChanges: [EventLineupSlotPatchChange]? = nil
     var stageChanges: [EventStagePatchChange]? = nil
+    var idempotencyKey: String? = nil
     var status: String?
     var clearCityI18n: Bool = false
     var clearCountryI18n: Bool = false
@@ -1090,6 +1094,7 @@ struct UpdateEventInput: Encodable {
         case lineupChanges
         case timetableChanges
         case stageChanges
+        case idempotencyKey
         case status
     }
 
@@ -1172,6 +1177,7 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(lineupChanges, forKey: .lineupChanges)
         try container.encodeIfPresent(timetableChanges, forKey: .timetableChanges)
         try container.encodeIfPresent(stageChanges, forKey: .stageChanges)
+        try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
         try container.encodeIfPresent(status, forKey: .status)
     }
 }

@@ -155,6 +155,9 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func saveDraft(immediate: Bool = false) {
         guard !didDiscardDraft else { return }
+        if !isSubmitting {
+            draft.pendingSubmissionIdempotencyKey = nil
+        }
         draftSaveTask?.cancel()
         if immediate {
             persistDraftNow()
@@ -264,6 +267,9 @@ final class EventUploadFlowViewModel: ObservableObject {
 
         isSubmitting = true
         defer { isSubmitting = false }
+        let idempotencyKey = draft.pendingSubmissionIdempotencyKey ?? UUID().uuidString
+        draft.pendingSubmissionIdempotencyKey = idempotencyKey
+        saveDraft(immediate: true)
         EventUploadAnalytics.track("event_upload_v2_submit_tapped", properties: ["mode": draft.mode.storageKeyPart])
 
         do {
@@ -272,7 +278,9 @@ final class EventUploadFlowViewModel: ObservableObject {
             try await uploadPendingImagesIfNeeded()
             switch draft.mode {
             case .create:
-                let result = try await webService.createEvent(input: EventUploadMappers.createInput(from: draft))
+                var input = EventUploadMappers.createInput(from: draft)
+                input.idempotencyKey = idempotencyKey
+                let result = try await webService.createEvent(input: input)
                 draftStore.clear(mode: draft.mode, userID: userID)
                 switch result {
                 case .created:
@@ -289,7 +297,9 @@ final class EventUploadFlowViewModel: ObservableObject {
                     onSaved(.submissionQueued(eventID: nil))
                 }
             case .edit(let eventID):
-                let result = try await webService.updateEvent(id: eventID, input: EventUploadMappers.updateInput(from: draft))
+                var input = EventUploadMappers.updateInput(from: draft)
+                input.idempotencyKey = idempotencyKey
+                let result = try await webService.updateEvent(id: eventID, input: input)
                 draftStore.clear(mode: draft.mode, userID: userID)
                 switch result {
                 case .created:
