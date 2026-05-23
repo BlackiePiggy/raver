@@ -1358,6 +1358,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             effectiveEndDate,
             typeof status === 'string' ? status : existing.status
           ),
+          revision: { increment: 1 },
         },
       });
       if (shouldSyncLineupArtists) {

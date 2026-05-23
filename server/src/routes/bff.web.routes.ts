@@ -5500,6 +5500,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     officialWebsite: row.officialWebsite,
     status: resolveEventStatus(new Date(row.startDate), new Date(row.endDate), row.status),
     isVerified: row.isVerified,
+    revision: typeof row.revision === 'number' ? row.revision : 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     organizer: mapUserLite(row.organizer),

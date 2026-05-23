@@ -633,17 +633,12 @@ struct EventsModuleView: View {
 
     private var uploadEventPromptBubble: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button {
-                discoverPush(.eventCreate)
-            } label: {
-                Text(LT("没有找到理想的活动？我自己来添加", "Can't find the right event? Add it yourself", "理想のイベントがない？自分で追加"))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
+            Text(LT("没有找到理想的活动？我自己来添加", "Can't find the right event? Add it yourself", "理想のイベントがない？自分で追加"))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 uploadPromptBubbleDismissed = true

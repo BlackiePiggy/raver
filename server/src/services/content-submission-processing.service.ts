@@ -796,8 +796,8 @@ export async function runContentSubmissionProcessingWorkerOnce(
         conflictDetails: error instanceof EventSubmissionConflictError && error.details
           ? withDefinedJsonFields({
               targetEventId: error.details.targetEventId ?? null,
-              baseEventUpdatedAt: error.details.baseEventUpdatedAt ?? null,
-              currentEventUpdatedAt: error.details.currentEventUpdatedAt ?? null,
+              baseEventRevision: error.details.baseEventRevision ?? null,
+              currentEventRevision: error.details.currentEventRevision ?? null,
             })
           : null,
         retryScheduledAt: retryAt?.toISOString() ?? null,

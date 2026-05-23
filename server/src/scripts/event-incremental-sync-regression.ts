@@ -227,7 +227,7 @@ const runManualReviewPatchRegression = async (eventId: string, userId: string): 
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   const eventBefore = await prisma.event.findUniqueOrThrow({
     where: { id: eventId },
-    select: { updatedAt: true },
+    select: { revision: true },
   });
   const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
   const beforePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
@@ -235,7 +235,7 @@ const runManualReviewPatchRegression = async (eventId: string, userId: string): 
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
-    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
+    baseEventRevision: eventBefore.revision,
     editMode: 'patch',
     name: `Event Incremental Regression Approved ${Date.now()}`,
     startDate: '2026-08-01',
@@ -288,7 +288,7 @@ const runTimetableSourceOfTruthRegression = async (eventId: string, userId: stri
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   const eventBefore = await prisma.event.findUniqueOrThrow({
     where: { id: eventId },
-    select: { updatedAt: true },
+    select: { revision: true },
   });
   const slotToRewrite = before.slots[1];
   assert(Boolean(slotToRewrite?.id), 'timetable source of truth slot missing stable id');
@@ -302,7 +302,7 @@ const runTimetableSourceOfTruthRegression = async (eventId: string, userId: stri
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
-    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
+    baseEventRevision: eventBefore.revision,
     editMode: 'patch',
     name: `Event Incremental Timetable Source ${Date.now()}`,
     startDate: '2026-08-01',
@@ -344,7 +344,7 @@ const runNormalReviewApprovalRegression = async (eventId: string, userId: string
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   const eventBefore = await prisma.event.findUniqueOrThrow({
     where: { id: eventId },
-    select: { updatedAt: true },
+    select: { revision: true },
   });
   const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
   const beforePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
@@ -354,7 +354,7 @@ const runNormalReviewApprovalRegression = async (eventId: string, userId: string
   const nextEnd = minutesAfter(slotToUpdate.endTime, 5);
   const payload = {
     targetEventId: eventId,
-    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
+    baseEventRevision: eventBefore.revision,
     editMode: 'patch',
     name: `Event Incremental Normal Review ${Date.now()}`,
     startDate: '2026-08-01',
@@ -423,7 +423,7 @@ const runFullPayloadTargetedSyncRegression = async (eventId: string, userId: str
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   const eventBefore = await prisma.event.findUniqueOrThrow({
     where: { id: eventId },
-    select: { updatedAt: true },
+    select: { revision: true },
   });
   const slotToRewrite = before.slots[2];
   assert(Boolean(slotToRewrite?.id), 'full payload targeted sync slot missing stable id');
@@ -437,7 +437,7 @@ const runFullPayloadTargetedSyncRegression = async (eventId: string, userId: str
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
-    baseEventUpdatedAt: eventBefore.updatedAt.toISOString(),
+    baseEventRevision: eventBefore.revision,
     name: `Event Incremental Full Payload ${Date.now()}`,
     startDate: '2026-08-01',
     endDate: '2026-08-02',
@@ -485,15 +485,15 @@ const runStaleEditConflictRegression = async (eventId: string, userId: string): 
   logStep('stale edit conflict path');
   const eventBefore = await prisma.event.findUniqueOrThrow({
     where: { id: eventId },
-    select: { updatedAt: true },
+    select: { revision: true },
   });
-  const staleBaseEventUpdatedAt = new Date(eventBefore.updatedAt.getTime() - 1000).toISOString();
+  const staleBaseEventRevision = Math.max(0, eventBefore.revision - 1);
 
   let threwConflict = false;
   try {
     await createOrUpdateEventFromSubmission(prisma, {
       targetEventId: eventId,
-      baseEventUpdatedAt: staleBaseEventUpdatedAt,
+      baseEventRevision: staleBaseEventRevision,
       editMode: 'patch',
       name: `Event Incremental Stale Conflict ${Date.now()}`,
       startDate: '2026-08-01',
@@ -513,7 +513,7 @@ const runStaleEditConflictRegression = async (eventId: string, userId: string): 
     threwConflict = error instanceof EventSubmissionConflictError;
   }
 
-  assert(threwConflict, 'stale edit regression did not reject outdated baseEventUpdatedAt');
+  assert(threwConflict, 'stale edit regression did not reject outdated baseEventRevision');
 };
 
 const runCreateSubmissionIdempotencyRegression = async (userId: string): Promise<void> => {

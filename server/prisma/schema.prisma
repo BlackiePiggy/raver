@@ -501,6 +501,7 @@ model Event {
   officialWebsite   String?  @map("official_website")
   status            String   @default("upcoming")
   isVerified        Boolean  @default(false) @map("is_verified")
+  revision          Int      @default(1)
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 

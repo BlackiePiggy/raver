@@ -34,14 +34,14 @@ export class EventSubmissionConflictError extends Error {
   readonly code = 'EVENT_SUBMISSION_STALE_EDIT';
   readonly details?: {
     targetEventId?: string;
-    baseEventUpdatedAt?: string | null;
-    currentEventUpdatedAt?: string | null;
+    baseEventRevision?: number | null;
+    currentEventRevision?: number | null;
   };
 
   constructor(message: string, details?: {
     targetEventId?: string;
-    baseEventUpdatedAt?: string | null;
-    currentEventUpdatedAt?: string | null;
+    baseEventRevision?: number | null;
+    currentEventRevision?: number | null;
   }) {
     super(message);
     this.name = 'EventSubmissionConflictError';
@@ -52,34 +52,28 @@ export class EventSubmissionConflictError extends Error {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 
-const dateFromUnknown = (value: unknown): Date | null => {
-  if (typeof value !== 'string' && !(value instanceof Date)) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
 const jsonObjectOrNull = (value: unknown): Prisma.JsonObject | null =>
   isPlainObject(value) ? value as Prisma.JsonObject : null;
 
 const validateBaseEventRevision = (
   payload: Prisma.JsonObject,
-  currentUpdatedAt: Date
+  currentRevision: number
 ): void => {
   const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
   if (!targetEventId) return;
-  const baseEventUpdatedAt = dateFromUnknown(payload.baseEventUpdatedAt);
-  if (!baseEventUpdatedAt) {
+  const baseEventRevision = integerOrNull(payload.baseEventRevision);
+  if (baseEventRevision === null) {
     throw new EventSubmissionConflictError('编辑基线已失效，请重新打开活动后再提交', {
       targetEventId,
-      baseEventUpdatedAt: cleanText(payload.baseEventUpdatedAt) || null,
-      currentEventUpdatedAt: currentUpdatedAt.toISOString(),
+      baseEventRevision: null,
+      currentEventRevision: currentRevision,
     });
   }
-  if (baseEventUpdatedAt.getTime() !== currentUpdatedAt.getTime()) {
+  if (baseEventRevision !== currentRevision) {
     throw new EventSubmissionConflictError('活动在你编辑期间已被更新，请刷新最新内容后重新编辑提交', {
       targetEventId,
-      baseEventUpdatedAt: baseEventUpdatedAt.toISOString(),
-      currentEventUpdatedAt: currentUpdatedAt.toISOString(),
+      baseEventRevision,
+      currentEventRevision: currentRevision,
     });
   }
 };
@@ -94,13 +88,13 @@ export const assertEventSubmissionBaseRevision = async (
     where: { id: targetEventId },
     select: {
       id: true,
-      updatedAt: true,
+      revision: true,
     },
   });
   if (!existing) {
     throw new Error('待更新的活动不存在');
   }
-  validateBaseEventRevision(payload, existing.updatedAt);
+  validateBaseEventRevision(payload, existing.revision);
 };
 
 const decimalOrNull = (value: unknown): number | null => {
@@ -957,28 +951,26 @@ export async function createOrUpdateEventFromSubmission(
       where: { id: targetEventId },
       select: {
         id: true,
-        updatedAt: true,
+        revision: true,
       },
     });
     if (!existing) {
       throw new Error('待更新的活动不存在');
     }
-    validateBaseEventRevision(payload, existing.updatedAt);
+    validateBaseEventRevision(payload, existing.revision);
 
     await runEventSubmissionTransaction(db, async (tx) => {
       await tx.event.update({
         where: { id: targetEventId },
         data: {
           ...eventData,
+          revision: { increment: 1 },
           ticketTiers: {
             deleteMany: {},
             create: ticketTiers,
           },
         },
       });
-    });
-
-    await runEventSubmissionTransaction(db, async (tx) => {
       await syncSubmissionEventLineupAndTimetable(
         tx,
         targetEventId,
@@ -1016,10 +1008,6 @@ export async function createOrUpdateEventFromSubmission(
         },
       });
     }
-    return created;
-  });
-
-  await runEventSubmissionTransaction(db, async (tx) => {
     await syncSubmissionEventLineupAndTimetable(
       tx,
       created.id,
@@ -1028,6 +1016,7 @@ export async function createOrUpdateEventFromSubmission(
       integerOrNull(payload.dayRolloverHour) ?? 6,
       timeZone
     );
+    return created;
   });
 
   return db.event.findUniqueOrThrow({

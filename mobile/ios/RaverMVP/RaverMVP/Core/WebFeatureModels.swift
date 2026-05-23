@@ -646,6 +646,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var officialWebsite: String?
     var status: String?
     var isVerified: Bool?
+    var revision: Int? = nil
     var createdAt: Date
     var updatedAt: Date
     var organizer: WebUserLite?
@@ -1030,7 +1031,7 @@ struct UpdateEventInput: Encodable {
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
-    var baseEventUpdatedAt: Date? = nil
+    var baseEventRevision: Int? = nil
     var editMode: String? = nil
     var lineupChanges: [EventLineupArtistPatchChange]? = nil
     var timetableChanges: [EventLineupSlotPatchChange]? = nil
@@ -1084,7 +1085,7 @@ struct UpdateEventInput: Encodable {
         case ticketTiers
         case lineupArtists
         case lineupSlots
-        case baseEventUpdatedAt
+        case baseEventRevision
         case editMode
         case lineupChanges
         case timetableChanges
@@ -1166,7 +1167,7 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
         try container.encodeIfPresent(lineupArtists, forKey: .lineupArtists)
         try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
-        try container.encodeIfPresent(baseEventUpdatedAt, forKey: .baseEventUpdatedAt)
+        try container.encodeIfPresent(baseEventRevision, forKey: .baseEventRevision)
         try container.encodeIfPresent(editMode, forKey: .editMode)
         try container.encodeIfPresent(lineupChanges, forKey: .lineupChanges)
         try container.encodeIfPresent(timetableChanges, forKey: .timetableChanges)

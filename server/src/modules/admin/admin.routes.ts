@@ -403,7 +403,7 @@ const applyContentModerationAction = async (input: {
       return { applied: true, previousState: currentState, nextState: { field: 'visibility', value: 'hidden' } };
     }
     if (input.report.targetType === 'event') {
-      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { status: 'hidden' } });
+      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { status: 'hidden', revision: { increment: 1 } } });
       return { applied: true, previousState: currentState, nextState: { field: 'status', value: 'hidden' } };
     }
     return { applied: false, previousState: currentState, nextState: null };
@@ -417,7 +417,7 @@ const applyContentModerationAction = async (input: {
     }
     if (input.report.targetType === 'event') {
       const restoreStatus = previousField === 'status' && previousValue && previousValue !== 'hidden' ? previousValue : 'upcoming';
-      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { status: restoreStatus } });
+      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { status: restoreStatus, revision: { increment: 1 } } });
       return { applied: true, previousState: { field: 'status', value: 'hidden' }, nextState: { field: 'status', value: restoreStatus } };
     }
     return { applied: false, previousState: null, nextState: null };
