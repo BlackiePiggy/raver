@@ -33,6 +33,8 @@
 - 2026-05-23: Added migration and rollout notes for legacy `pending` submissions, including compatibility mapping, release order, and operator-facing fallback guidance.
 - 2026-05-23: Started removing the admin synchronous bypass for event create/edit so admin accounts also receive the same task notifications, with processing completion auto-approving instead of waiting for manual review.
 - 2026-05-23: Converted admin event create/edit to the same async submission flow, and added automatic approval after processing so admin inbox now receives `处理中 -> 处理完成 -> 已入库` notifications without manual review.
+- 2026-05-23: Identified and fixed the first large-payload ingestion bottleneck: event auto-ingest transactions now need an explicit longer timeout because canonical lineup/timetable rewrites can exceed Prisma's default 5-second interactive transaction window.
+- 2026-05-23: Increased event submission ingest transaction limits to `maxWait=10s` and `timeout=30s` so large event lineup/timetable rewrites stay atomic without hitting Prisma's default 5-second interactive transaction expiry.
 
 ## Goal
 

@@ -17,6 +17,9 @@ import {
   syncCanonicalEventLineupAndTimetable,
 } from './event-lineup-canonical.service';
 
+const EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS = 30_000;
+const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 10_000;
+
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 
 const cleanText = (value: unknown): string | undefined => {
@@ -408,6 +411,9 @@ export async function createOrUpdateEventFromSubmission(
       return tx.event.findUniqueOrThrow({
         where: { id: targetEventId },
       });
+    }, {
+      timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
+      maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
     });
   }
 
@@ -434,5 +440,8 @@ export async function createOrUpdateEventFromSubmission(
       timeZone
     );
     return created;
+  }, {
+    timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
+    maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
   });
 }
