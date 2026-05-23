@@ -13,6 +13,7 @@ import {
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
 } from '../services/content-submission-event.service';
+import { createOrUpdateDJFromSubmission } from '../services/content-submission-dj.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
 import {
@@ -239,17 +240,6 @@ const slugify = (value: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'content';
 
-const uniqueDJSlug = async (name: string, requestedSlug?: string): Promise<string> => {
-  const base = slugify(requestedSlug || name) || `dj-${Date.now()}`;
-  let candidate = base;
-  let seq = 1;
-  while (await prisma.dJ.findUnique({ where: { slug: candidate }, select: { id: true } })) {
-    seq += 1;
-    candidate = `${base}-${seq}`;
-  }
-  return candidate;
-};
-
 const uniqueLabelSlug = async (name: string, requestedSlug?: string): Promise<string> => {
   const base = slugify(requestedSlug || name) || `label-${Date.now()}`;
   let candidate = base;
@@ -306,87 +296,6 @@ const stringArray = (value: unknown): string[] => {
 };
 
 const dateOrUndefined = (value: unknown): Date | undefined => dateFromPayload(value) ?? undefined;
-
-const createDJFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
-  const name = cleanText(payload.name);
-  if (!name) {
-    throw new Error('DJ 名称不能为空');
-  }
-  const avatarUrl = cleanText(payload.avatarUrl);
-  const proofImageUrl = cleanText(payload.proofImageUrl);
-  const hasProofLink = [
-    cleanText(payload.spotifyId),
-    cleanText(payload.spotifyUrl),
-    cleanText(payload.appleMusicId),
-    cleanText(payload.instagramUrl),
-    cleanText(payload.facebookUrl),
-    cleanText(payload.soundcloudUrl),
-    cleanText(payload.soundcloudId),
-    cleanText(payload.soundcloudid),
-    cleanText(payload.twitterUrl),
-    cleanText(payload.youtubeUrl),
-    cleanText(payload.neteaseUrl),
-    cleanText(payload.qqMusicUrl),
-    cleanText(payload.website),
-    cleanText(payload.otherPlatformUrl),
-  ].some(Boolean);
-  if (!avatarUrl) {
-    throw new Error('DJ 头像不能为空');
-  }
-  if (!hasProofLink && !proofImageUrl) {
-    throw new Error('至少需要一个平台链接或一张证明图片');
-  }
-  const existing = await prisma.dJ.findFirst({
-    where: { name: { equals: name, mode: 'insensitive' } },
-    select: { id: true },
-  });
-  if (existing) {
-    throw new Error('同名 DJ 已存在');
-  }
-
-  const slug = await uniqueDJSlug(name, cleanText(payload.slug));
-  return prisma.dJ.create({
-    data: {
-      name,
-      nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
-      aliases: stringArray(payload.aliases),
-      genres: stringArray(payload.genres),
-      slug,
-      bio: cleanText(payload.bio) || null,
-      bioI18n: triTextToJson(normalizeTriTextPayload(payload.bioI18n, cleanText(payload.bio) || '')),
-      avatarUrl,
-      avatarSourceUrl: avatarUrl,
-      bannerUrl: cleanText(payload.bannerUrl) || null,
-      country: cleanText(payload.country) || null,
-      countryI18n: triTextToJson(normalizeTriTextPayload(payload.countryI18n, cleanText(payload.country) || '')),
-      spotifyUrl: cleanText(payload.spotifyUrl) || null,
-      spotifyId: cleanText(payload.spotifyId) || null,
-      spotifyFollowers: integerOrNull(payload.spotifyFollowers),
-      appleMusicId: cleanText(payload.appleMusicId) || null,
-      soundcloudUrl: cleanText(payload.soundcloudUrl) || null,
-      soundcloudId: cleanText(payload.soundcloudId) || cleanText(payload.soundcloudid) || null,
-      instagramUrl: cleanText(payload.instagramUrl) || null,
-      facebookUrl: cleanText(payload.facebookUrl) || null,
-      twitterUrl: cleanText(payload.twitterUrl) || null,
-      youtubeUrl: cleanText(payload.youtubeUrl) || null,
-      neteaseUrl: cleanText(payload.neteaseUrl) || null,
-      qqMusicUrl: cleanText(payload.qqMusicUrl) || null,
-      website: cleanText(payload.website) || cleanText(payload.otherPlatformUrl) || null,
-      trackCount: integerOrNull(payload.trackCount),
-      playlistCount: integerOrNull(payload.playlistCount),
-      soundCloudFollowers:
-        integerOrNull(payload.soundCloudFollowers) ??
-        integerOrNull(payload.soundcloudFollowers) ??
-        integerOrNull(payload.followers_count),
-      soundCloudFavorites:
-        integerOrNull(payload.soundCloudFavorites) ??
-        integerOrNull(payload.soundcloudFavorites) ??
-        integerOrNull(payload.public_favorites_count),
-      isVerified: true,
-      contributors: { create: { userId: submitterId } },
-    } as any,
-  });
-};
 
 const createNewsFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
   const title = cleanText(payload.title) || titleFromPayload('news', payload);
@@ -647,7 +556,7 @@ const createEntityFromSubmission = async (
     case 'event':
       return createOrUpdateEventFromSubmission(prisma, payload, submitterId, options);
     case 'dj':
-      return createDJFromSubmission(payload, submitterId);
+      return createOrUpdateDJFromSubmission(prisma, payload, submitterId);
     case 'news':
       return createNewsFromSubmission(payload, submitterId);
     case 'set':

@@ -15,6 +15,30 @@ private struct DJCardSharePresentation: Identifiable {
     let payload: DJShareCardPayload
 }
 
+private func normalizedDJEditorUsername(_ username: String?) -> String? {
+    let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmed.isEmpty else { return nil }
+    return trimmed.lowercased()
+}
+
+private func canEditDJ(_ dj: WebDJ, currentUsername: String?) -> Bool {
+    if dj.canEdit == true || dj.isContributor == true {
+        return true
+    }
+
+    guard let normalizedCurrentUsername = normalizedDJEditorUsername(currentUsername) else {
+        return false
+    }
+
+    if normalizedDJEditorUsername(dj.uploadedByUsername) == normalizedCurrentUsername {
+        return true
+    }
+
+    return (dj.contributorUsernames ?? []).contains {
+        normalizedDJEditorUsername($0) == normalizedCurrentUsername
+    }
+}
+
 private struct DJSharePreviewCard: View {
     let payload: DJShareCardPayload
 
@@ -1924,14 +1948,15 @@ struct DJDetailView: View {
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
         .navigationDestination(isPresented: $showDJEditSheet) {
             if let dj {
-                DJUploadFlowView(
-                    mode: .edit(id: dj.id),
-                    initialDJ: dj,
+                ProfileDJEditorLoaderView(
+                    djID: dj.id,
+                    djReadRepository: djReadRepository,
+                    djImportRepository: djImportRepository,
+                    djCommandRepository: djCommandRepository,
+                    djMediaRepository: djMediaRepository,
                     userID: appState.session?.user.id ?? "anonymous",
-                    importRepository: djImportRepository,
-                    commandRepository: djCommandRepository,
-                    mediaRepository: djMediaRepository
-                ) { _ in
+                    currentUsername: appState.session?.user.username
+                ) {
                     Task { await load() }
                 }
             }
@@ -3249,15 +3274,13 @@ struct DJDetailView: View {
     private func shareMoreQuickActions(for dj: WebDJ?) -> [SharePanelQuickAction] {
         var actions: [SharePanelQuickAction] = []
 
-        if dj?.canEdit == true {
+        if let dj, canEditDJ(dj, currentUsername: appState.session?.user.username) {
             actions.append(
                 SharePanelQuickAction(
                     title: LT("编辑", "Edit", "編集"),
                     systemImage: "square.and.pencil",
                     accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
                 ) {
-                    guard let currentDJ = dj else { return }
-                    _ = currentDJ
                     showDJEditSheet = true
                 }
             )
@@ -4653,6 +4676,75 @@ struct DJDetailView: View {
                     .font(.title3)
                     .foregroundStyle(RaverTheme.secondaryText)
             )
+        }
+    }
+}
+
+private struct ProfileDJEditorLoaderView: View {
+    let djID: String
+    let djReadRepository: DJReadRepository
+    let djImportRepository: DJImportRepository
+    let djCommandRepository: DJCommandRepository
+    let djMediaRepository: DJMediaRepository
+    let userID: String
+    let currentUsername: String?
+    let onSaved: () -> Void
+
+    @State private var dj: WebDJ?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if let dj {
+                DJUploadFlowView(
+                    mode: .edit(id: dj.id),
+                    initialDJ: dj,
+                    userID: userID,
+                    importRepository: djImportRepository,
+                    commandRepository: djCommandRepository,
+                    mediaRepository: djMediaRepository
+                ) { _ in
+                    onSaved()
+                }
+            } else if let errorMessage {
+                ScreenErrorCard(
+                    title: LT("加载 DJ 失败", "Failed to Load DJ", "DJの読み込みに失敗しました"),
+                    message: errorMessage
+                ) {
+                    Task { await load() }
+                }
+                .padding(16)
+            } else {
+                ProgressView(LT("加载 DJ 中...", "Loading DJ...", "DJを読み込み中..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            await load()
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        guard isLoading || dj == nil else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let latestDJ = try await djReadRepository.fetchDJ(id: djID)
+            guard canEditDJ(latestDJ, currentUsername: currentUsername) else {
+                dj = nil
+                errorMessage = LT(
+                    "你当前没有编辑这个 DJ 的权限，或该条目状态已变更。",
+                    "You no longer have permission to edit this DJ, or its status has changed.",
+                    "このDJを編集する権限がないか、項目の状態が変更されました。"
+                )
+                return
+            }
+            dj = latestDJ
+        } catch {
+            errorMessage = error.userFacingMessage ?? LT("资源加载失败，请稍后重试。", "Failed to load resource. Please try again later.", "リソースを読み込めませんでした。時間をおいて再試行してください。")
         }
     }
 }

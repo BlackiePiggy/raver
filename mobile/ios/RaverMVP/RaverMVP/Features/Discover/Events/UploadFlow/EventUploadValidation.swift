@@ -7,6 +7,28 @@ struct EventUploadValidationIssue: Identifiable, Hashable {
 }
 
 enum EventUploadValidation {
+    private static func timetableSlotContext(
+        for slot: EventUploadLineupSlotDraft,
+        at index: Int,
+        in slots: [EventUploadLineupSlotDraft]
+    ) -> (stageName: String, stageOrder: Int, displayName: String) {
+        let normalizedStageName = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? LT("未命名舞台", "Unnamed Stage", "名称未設定ステージ")
+            : slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stageOrder = slots[..<index].filter { candidate in
+            candidate.dayIndex == slot.dayIndex
+                && candidate.stageName.trimmingCharacters(in: .whitespacesAndNewlines) == slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.count + 1
+        let performerNames = slot.performerNames
+            .prefix(slot.actType.performerCount)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let displayName = performerNames.isEmpty
+            ? LT("未填写 DJ", "Unnamed DJ", "未入力のDJ")
+            : EventLineupActCodec.composeName(type: slot.actType, performerNames: performerNames)
+        return (normalizedStageName, stageOrder, displayName)
+    }
+
     static func issues(for draft: EventUploadDraft) -> [EventUploadValidationIssue] {
         var issues: [EventUploadValidationIssue] = []
         let language = draft.preferredLanguage
@@ -33,14 +55,29 @@ enum EventUploadValidation {
             issues.append(.init(step: .basic, message: LT("请搜索城市并确认活动时区。", "Search a city and confirm the event timezone.", "都市を検索してイベントのタイムゾーンを確認してください。")))
         }
         for (index, slot) in draft.timetableSlots.enumerated() {
+            let context = timetableSlotContext(for: slot, at: index, in: draft.timetableSlots)
             let names = slot.performerNames
                 .prefix(slot.actType.performerCount)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             if names.count != slot.actType.performerCount || names.contains(where: { $0.isEmpty }) {
-                issues.append(.init(step: .timetable, message: LT("第 \(index + 1) 个时间表条目有未填写的 DJ，请补全或删除。", "Timetable item #\(index + 1) has empty DJ names. Complete or remove it.", "\(index + 1)番目のタイムテーブル項目に未入力のDJがあります。入力または削除してください。")))
+                issues.append(.init(
+                    step: .timetable,
+                    message: LT(
+                        "Day \(slot.dayIndex) 的「\(context.stageName)」第 \(context.stageOrder) 个 DJ 条目有未填写的艺人名称，请补全或删除。当前条目：\(context.displayName)。",
+                        "Day \(slot.dayIndex) \"\(context.stageName)\" DJ item #\(context.stageOrder) has empty artist names. Complete or remove it. Current item: \(context.displayName).",
+                        "Day \(slot.dayIndex)「\(context.stageName)」のDJ項目 \(context.stageOrder) 番に未入力のアーティスト名があります。入力するか削除してください。現在の項目: \(context.displayName)。"
+                    )
+                ))
             }
             if slot.startTime == nil || slot.endTime == nil {
-                issues.append(.init(step: .timetable, message: LT("第 \(index + 1) 个时间表条目必须填写开始和结束时间。", "Start and end time are required for timetable item #\(index + 1).", "\(index + 1)番目のタイムテーブル項目は開始時間と終了時間が必須です。")))
+                issues.append(.init(
+                    step: .timetable,
+                    message: LT(
+                        "Day \(slot.dayIndex) 的「\(context.stageName)」第 \(context.stageOrder) 个 DJ「\(context.displayName)」必须填写开始和结束时间。",
+                        "Start and end time are required for Day \(slot.dayIndex) \"\(context.stageName)\" DJ item #\(context.stageOrder) (\(context.displayName)).",
+                        "Day \(slot.dayIndex)「\(context.stageName)」のDJ項目 \(context.stageOrder) 番「\(context.displayName)」には開始時間と終了時間が必要です。"
+                    )
+                ))
             }
         }
         for (index, slot) in draft.lineupOnlySlots.enumerated() {

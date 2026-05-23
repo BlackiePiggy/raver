@@ -239,9 +239,10 @@ struct MyPublishesView: View {
         List {
             Picker(LT("发布类型", "Publish Type", "公開タイプ"), selection: $selectedTab) {
                 Text(LT("Sets", "Sets", "Sets")).tag(0)
-                Text(LT("活动", "Events", "イベント")).tag(1)
-                Text(LT("打分", "Ratings", "評価")).tag(2)
-                Text(LT("资讯", "News", "ニュース")).tag(3)
+                Text("DJ").tag(1)
+                Text(LT("活动", "Events", "イベント")).tag(2)
+                Text(LT("打分", "Ratings", "評価")).tag(3)
+                Text(LT("资讯", "News", "ニュース")).tag(4)
             }
             .pickerStyle(.segmented)
 
@@ -303,6 +304,8 @@ struct MyPublishesView: View {
                     }
                 }
             } else if selectedTab == 1 {
+                reviewSubmissionSection(entityType: "dj")
+            } else if selectedTab == 2 {
                 if selectedReviewFilter != .approved {
                     reviewSubmissionSection(entityType: "event")
                 } else if viewModel.publishes.events.isEmpty, !viewModel.isLoading {
@@ -355,7 +358,7 @@ struct MyPublishesView: View {
                         }
                     }
                 }
-            } else if selectedTab == 2 {
+            } else if selectedTab == 3 {
                 if selectedReviewFilter != .approved {
                     reviewSubmissionSection(entityType: "rating")
                 } else if viewModel.publishes.ratingEvents.isEmpty, viewModel.publishes.ratingUnits.isEmpty, !viewModel.isLoading {
@@ -478,7 +481,7 @@ struct MyPublishesView: View {
             Task { await viewModel.load() }
         }
         .onChange(of: selectedTab) { _, newTab in
-            if newTab == 2 {
+            if newTab == 3 {
                 Task { await viewModel.ensureRatingsLoaded() }
             }
         }
@@ -518,13 +521,17 @@ struct MyPublishesView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
-                            Text(item.title)
+                        Text(item.title)
                                 .font(.headline)
                             Spacer(minLength: 8)
                             Text(statusTitle(item.status))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(statusColor(item.status))
                         }
+
+                        Text(submissionKindTitle(item))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
 
                         if let reason = item.reviewReason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
                             Text(reason)
@@ -633,6 +640,49 @@ struct MyPublishesView: View {
         case "rejected": return .red
         case "failed": return .red.opacity(0.8)
         default: return RaverTheme.secondaryText
+        }
+    }
+
+    private func entityTitle(_ entityType: String) -> String {
+        switch entityType {
+        case "event": return LT("活动", "Event", "イベント")
+        case "dj": return "DJ"
+        case "news": return LT("资讯", "News", "ニュース")
+        case "set": return "Set"
+        case "brand": return LT("品牌", "Brand", "ブランド")
+        case "label": return LT("厂牌", "Label", "レーベル")
+        case "id": return "ID"
+        case "rating": return LT("打分", "Rating", "評価")
+        default: return entityType
+        }
+    }
+
+    private func submissionKindTitle(_ item: ContentSubmissionSummary) -> String {
+        switch item.entityType {
+        case "dj":
+            return item.isEditSubmission
+                ? LT("DJ 编辑任务", "DJ Edit Submission", "DJ編集申請")
+                : LT("DJ 创建任务", "DJ Creation Submission", "DJ作成申請")
+        case "event":
+            return item.isEditSubmission
+                ? LT("活动编辑任务", "Event Edit Submission", "イベント編集申請")
+                : LT("活动创建任务", "Event Creation Submission", "イベント作成申請")
+        case "set":
+            return LT("Set 投稿", "Set Submission", "Set投稿")
+        case "news":
+            return LT("资讯投稿", "News Submission", "ニュース投稿")
+        case "rating":
+            return LT("打分投稿", "Rating Submission", "評価投稿")
+        case "brand":
+            return item.isEditSubmission
+                ? LT("品牌编辑任务", "Brand Edit Submission", "ブランド編集申請")
+                : LT("品牌创建任务", "Brand Creation Submission", "ブランド作成申請")
+        case "label":
+            return item.isEditSubmission
+                ? LT("厂牌编辑任务", "Label Edit Submission", "レーベル編集申請")
+                : LT("厂牌创建任务", "Label Creation Submission", "レーベル作成申請")
+        default:
+            return entityTitle(item.entityType)
         }
     }
 }
@@ -775,7 +825,7 @@ struct ContentSubmissionDetailView: View {
             if let submission = viewModel.submission {
                 Section(LT("提交信息", "Submission Info", "送信情報")) {
                     labeledRow(LT("标题", "Title", "タイトル"), submission.title)
-                    labeledRow(LT("类型", "Type", "タイプ"), entityTitle(submission.entityType))
+                    labeledRow(LT("类型", "Type", "タイプ"), submissionKindTitle(submission))
                     labeledRow(LT("状态", "Status", "状態"), statusTitle(submission.status))
                     if let createdAt = submission.createdAt {
                         labeledRow(LT("提交时间", "Submitted At", "送信時間"), createdAt.appLocalizedYMDHMText())
@@ -1049,6 +1099,29 @@ struct ContentSubmissionDetailView: View {
         labeledRow(title, value)
     }
 
+    private func submissionKindTitle(_ submission: ContentSubmissionDetail) -> String {
+        switch submission.entityType {
+        case "dj":
+            return submission.isEditSubmission
+                ? LT("DJ 编辑任务", "DJ Edit Submission", "DJ編集申請")
+                : LT("DJ 创建任务", "DJ Creation Submission", "DJ作成申請")
+        case "event":
+            return submission.isEditSubmission
+                ? LT("活动编辑任务", "Event Edit Submission", "イベント編集申請")
+                : LT("活动创建任务", "Event Creation Submission", "イベント作成申請")
+        case "brand":
+            return submission.isEditSubmission
+                ? LT("品牌编辑任务", "Brand Edit Submission", "ブランド編集申請")
+                : LT("品牌创建任务", "Brand Creation Submission", "ブランド作成申請")
+        case "label":
+            return submission.isEditSubmission
+                ? LT("厂牌编辑任务", "Label Edit Submission", "レーベル編集申請")
+                : LT("厂牌创建任务", "Label Creation Submission", "レーベル作成申請")
+        default:
+            return entityTitle(submission.entityType)
+        }
+    }
+
     private func entityTitle(_ entityType: String) -> String {
         switch entityType {
         case "event": return LT("活动", "Event", "イベント")
@@ -1163,6 +1236,16 @@ private extension ContentSubmissionSummary {
     var changeSummaryText: String? {
         payload?.changeSummaryText
     }
+
+    var isEditSubmission: Bool {
+        payload?.isEditSubmission ?? false
+    }
+}
+
+private extension ContentSubmissionDetail {
+    var isEditSubmission: Bool {
+        payload.isEditSubmission
+    }
 }
 
 private extension Dictionary where Key == String, Value == ContentSubmissionJSONValue {
@@ -1177,5 +1260,22 @@ private extension Dictionary where Key == String, Value == ContentSubmissionJSON
             return trimmed.isEmpty ? nil : trimmed
         }
         return nil
+    }
+
+    var isEditSubmission: Bool {
+        let keys = [
+            "targetDJId",
+            "editTargetDJId",
+            "targetEventId",
+            "editTargetEventId",
+            "targetBrandId",
+            "editTargetBrandId",
+            "targetLabelId",
+            "editTargetLabelId",
+        ]
+        return keys.contains { key in
+            guard case .string(let value)? = self[key] else { return false }
+            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }

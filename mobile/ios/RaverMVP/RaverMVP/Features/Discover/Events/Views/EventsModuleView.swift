@@ -14,6 +14,17 @@ private struct EventsSkeletonBlock: View {
     }
 }
 
+private struct BubbleTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct DiscoverEventsRootView: View {
     @EnvironmentObject private var appContainer: AppContainer
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
@@ -44,6 +55,7 @@ struct EventsModuleView: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: EventsModuleViewModel
     @StateObject private var guidanceCenter = AppGuidanceCenter.shared
+    @AppStorage("events.uploadPromptBubble.dismissed") private var uploadPromptBubbleDismissed = false
     private let onHorizontalDragStateChanged: ((Bool) -> Void)?
 
     private static let predefinedEventTypeKeys = EventTypeOption.allCases.map(\.rawValue)
@@ -121,7 +133,7 @@ struct EventsModuleView: View {
         }
         .background(RaverTheme.background)
         .overlay(alignment: .bottomTrailing) {
-            uploadEventFloatingButton
+            uploadEventFloatingOverlay
                 .padding(.trailing, 20)
                 .raverTabBarBottomPadding(24)
         }
@@ -606,6 +618,69 @@ struct EventsModuleView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var uploadEventFloatingOverlay: some View {
+        VStack(alignment: .trailing, spacing: 10) {
+            if !uploadPromptBubbleDismissed {
+                uploadEventPromptBubble
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+            uploadEventFloatingButton
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: uploadPromptBubbleDismissed)
+    }
+
+    private var uploadEventPromptBubble: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button {
+                discoverPush(.eventCreate)
+            } label: {
+                Text(LT("没有找到理想的活动？我自己来添加", "Can't find the right event? Add it yourself", "理想のイベントがない？自分で追加"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                uploadPromptBubbleDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(width: 22, height: 22)
+                    .background(Color.white.opacity(0.38), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(LT("关闭提示", "Dismiss tip", "ヒントを閉じる"))
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 10)
+        .frame(width: 226, alignment: .leading)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(RaverTheme.card.opacity(0.62))
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+        )
+        .overlay(alignment: .bottomTrailing) {
+            BubbleTail()
+                .fill(RaverTheme.card.opacity(0.62))
+                .frame(width: 18, height: 14)
+                .offset(x: -20, y: 9)
+        }
+        .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 10)
+        .accessibilityLabel(LT("没有找到理想的活动？我自己来添加", "Can't find the right event? Add it yourself", "理想のイベントがない？自分で追加"))
     }
 
     private var uploadEventFloatingButton: some View {

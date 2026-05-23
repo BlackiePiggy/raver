@@ -5,6 +5,7 @@ import {
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
 } from './content-submission-event.service';
+import { createOrUpdateDJFromSubmission } from './content-submission-dj.service';
 
 const prisma = new PrismaClient();
 
@@ -340,7 +341,7 @@ export async function processContentSubmission(
 
   if (!submission) return { status: 'skipped', reason: 'Submission not found' };
   const shouldAutoApprove =
-    submission.entityType === 'event'
+    (submission.entityType === 'event' || submission.entityType === 'dj')
     && (submission.submitter?.role === 'admin' || submission.submitter?.role === 'operator');
 
   if (submission.status === 'approved') {
@@ -466,12 +467,18 @@ export async function processContentSubmission(
     if (shouldAutoApprove) {
       await checkpointPhase('apply_canonical');
       const applyStartedAt = Date.now();
-      const created = await createOrUpdateEventFromSubmission(
-        db,
-        payload as any,
-        submission.submitterId,
-        { submissionId: submission.id }
-      );
+      const created = submission.entityType === 'event'
+        ? await createOrUpdateEventFromSubmission(
+            db,
+            payload as any,
+            submission.submitterId,
+            { submissionId: submission.id }
+          )
+        : await createOrUpdateDJFromSubmission(
+            db,
+            payload as any,
+            submission.submitterId
+          );
       const applyMs = Date.now() - applyStartedAt;
       await checkpointPhase('canonical_applied', {
         applyMs,

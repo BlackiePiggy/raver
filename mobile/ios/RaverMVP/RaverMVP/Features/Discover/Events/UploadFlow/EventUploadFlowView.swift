@@ -2827,6 +2827,87 @@ private struct AIRecognitionPreviewPresentation: Identifiable {
     let initialIndex: Int
 }
 
+private struct AIRecognitionRunButton: View {
+    let idleTitle: String
+    let isRunning: Bool
+    let isDisabled: Bool
+    let action: () -> Void
+
+    @State private var shineOffset: CGFloat = -1.4
+
+    private let capsuleGradient = LinearGradient(
+        colors: [.pink, .orange, .blue, .cyan],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isRunning ? "sparkles.rectangle.stack" : "sparkles")
+                    .font(.caption.weight(.bold))
+                Text(isRunning ? LT("AI识别中", "AI Recognizing", "AI認識中") : idleTitle)
+                    .font(.caption.weight(.bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background {
+                Capsule()
+                    .fill(capsuleGradient)
+                    .overlay {
+                        if isRunning {
+                            GeometryReader { proxy in
+                                let width = max(proxy.size.width, 1)
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                .white.opacity(0.0),
+                                                .white.opacity(0.14),
+                                                .white.opacity(0.72),
+                                                .white.opacity(0.14),
+                                                .white.opacity(0.0),
+                                            ],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: width * 0.4)
+                                    .rotationEffect(.degrees(18))
+                                    .offset(x: shineOffset * width)
+                                    .clipShape(Capsule())
+                            }
+                            .clipShape(Capsule())
+                            .allowsHitTesting(false)
+                        }
+                    }
+            }
+            .opacity(isDisabled ? 0.55 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .onAppear {
+            guard isRunning else { return }
+            startShine()
+        }
+        .onChange(of: isRunning) { _, running in
+            if running {
+                startShine()
+            } else {
+                shineOffset = -1.4
+            }
+        }
+    }
+
+    private func startShine() {
+        shineOffset = -1.4
+        withAnimation(.linear(duration: 1.15).repeatForever(autoreverses: false)) {
+            shineOffset = 1.4
+        }
+    }
+}
+
 private func aiRecognitionPreviewPresentation(
     images: [EventUploadImageDraft],
     focusedImageID: UUID
@@ -2947,21 +3028,13 @@ private struct EventUploadPosterAIImportSheet: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
-                Button {
+                AIRecognitionRunButton(
+                    idleTitle: LT("确认并开始识别", "Run", "認識開始"),
+                    isRunning: isRunning,
+                    isDisabled: isRunning || selectedImage == nil
+                ) {
                     Task { await runRecognition() }
-                } label: {
-                    Label(LT("确认并开始识别", "Run", "認識開始"), systemImage: "sparkles")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            LinearGradient(colors: [.pink, .orange, .blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: Capsule()
-                        )
                 }
-                .buttonStyle(.plain)
-                .disabled(isRunning || selectedImage == nil)
             }
 
             if images.isEmpty {
@@ -3834,26 +3907,15 @@ private struct EventUploadLineupAIImportSheet: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
-                Button {
+                AIRecognitionRunButton(
+                    idleTitle: selectedImages.count > 1
+                        ? LT("识别 \(selectedImages.count) 张", "Run \(selectedImages.count)", "\(selectedImages.count)枚を認識")
+                        : LT("确认并开始识别", "Run", "認識開始"),
+                    isRunning: hasActiveRecognitionTasks,
+                    isDisabled: selectedImages.isEmpty
+                ) {
                     Task { await runRecognition() }
-                } label: {
-                    Label(
-                        selectedImages.count > 1
-                            ? LT("识别 \(selectedImages.count) 张", "Run \(selectedImages.count)", "\(selectedImages.count)枚を認識")
-                            : LT("确认并开始识别", "Run", "認識開始"),
-                        systemImage: "sparkles"
-                    )
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            LinearGradient(colors: [.pink, .orange, .blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: Capsule()
-                        )
                 }
-                .buttonStyle(.plain)
-                .disabled(selectedImages.isEmpty)
             }
 
             if images.isEmpty {
@@ -4861,6 +4923,10 @@ private struct EventUploadTimetableAIImportSheet: View {
     @State private var taskEntries: [RecognitionTaskEntry] = []
     @State private var taskHandles: [UUID: Task<Void, Never>] = [:]
     @State private var previewPresentation: AIRecognitionPreviewPresentation?
+    @State private var isResultSelectionMode = false
+    @State private var selectedResultSlotIDs: Set<UUID> = []
+    @State private var moveResultDayDialogPresented = false
+    @State private var moveResultStageDialogPresented = false
 
     private var images: [EventUploadImageDraft] {
         viewModel.timetableAIImageCandidates
@@ -4897,6 +4963,8 @@ private struct EventUploadTimetableAIImportSheet: View {
                 }
                 .padding(16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(TapGesture().onEnded { self.dismissKeyboard() })
             .background(RaverTheme.background.ignoresSafeArea())
             .navigationTitle(LT("AI 识别时间表", "AI Timetable Import", "AIタイムテーブル認識"))
             .navigationBarTitleDisplayMode(.inline)
@@ -4941,6 +5009,34 @@ private struct EventUploadTimetableAIImportSheet: View {
             .fullScreenCover(item: $previewPresentation) { presentation in
                 FullscreenMediaViewer(items: presentation.items, initialIndex: presentation.initialIndex)
             }
+            .confirmationDialog(
+                LT("更换到哪一天？", "Move to which day?", "どの日に移動しますか？"),
+                isPresented: $moveResultDayDialogPresented,
+                titleVisibility: .visible
+            ) {
+                ForEach(availableDays, id: \.dayIndex) { day in
+                    Button(dayLabel(for: day)) {
+                        moveSelectedResultSlots(to: day)
+                    }
+                }
+                Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+            } message: {
+                Text(LT("会把已选中的节目移动到目标日期。", "Selected sets will be moved to the target day.", "選択した出演を指定の日に移動します。"))
+            }
+            .confirmationDialog(
+                LT("更换到哪个舞台？", "Move to which stage?", "どのステージに移動しますか？"),
+                isPresented: $moveResultStageDialogPresented,
+                titleVisibility: .visible
+            ) {
+                ForEach(availableStageMoveOptions, id: \.self) { stage in
+                    Button(stage) {
+                        moveSelectedResultSlots(toStage: stage)
+                    }
+                }
+                Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+            } message: {
+                Text(LT("会把已选中的节目移动到目标舞台。", "Selected sets will be moved to the target stage.", "選択した出演を指定のステージに移動します。"))
+            }
         }
     }
 
@@ -4951,30 +5047,15 @@ private struct EventUploadTimetableAIImportSheet: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
-                Button {
+                AIRecognitionRunButton(
+                    idleTitle: selectedImages.count > 1
+                        ? LT("识别 \(selectedImages.count) 张", "Run \(selectedImages.count)", "\(selectedImages.count)枚を認識")
+                        : LT("确认并开始识别", "Run", "認識開始"),
+                    isRunning: hasActiveRecognitionTasks,
+                    isDisabled: selectedImages.isEmpty
+                ) {
                     Task { await runRecognition() }
-                } label: {
-                    Label(
-                        selectedImages.count > 1
-                            ? LT("识别 \(selectedImages.count) 张", "Run \(selectedImages.count)", "\(selectedImages.count)枚を認識")
-                            : LT("确认并开始识别", "Run", "認識開始"),
-                        systemImage: "sparkles"
-                    )
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            LinearGradient(
-                                colors: [.pink, .orange, .blue, .cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: Capsule()
-                        )
                 }
-                .buttonStyle(.plain)
-                .disabled(selectedImages.isEmpty)
             }
 
             if images.isEmpty {
@@ -5561,6 +5642,11 @@ private struct EventUploadTimetableAIImportSheet: View {
         return Array(Set(values.filter { !$0.isEmpty })).sorted()
     }
 
+    private var availableStageMoveOptions: [String] {
+        let values = filteredByWeek.map { $0.stageName.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return Array(Set(values.filter { !$0.isEmpty })).sorted()
+    }
+
     private var filteredByWeek: [EventUploadTimetableAIEditableSlot] {
         guard let selectedWeekIndex else { return resultSlots }
         return resultSlots.filter { $0.weekIndex == selectedWeekIndex }
@@ -5606,6 +5692,11 @@ private struct EventUploadTimetableAIImportSheet: View {
         }
         if let selectedStageName, !availableStages.contains(selectedStageName) {
             self.selectedStageName = availableStages.first
+        }
+        selectedResultSlotIDs = selectedResultSlotIDs.intersection(Set(resultSlots.map(\.id)))
+        if selectedResultSlotIDs.isEmpty {
+            moveResultDayDialogPresented = false
+            moveResultStageDialogPresented = false
         }
     }
 
@@ -5655,10 +5746,49 @@ private struct EventUploadTimetableAIImportSheet: View {
     private var resultSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(LT("识别结果", "Results", "認識結果"))
+                Text(LT("节目列表", "Set List", "セット一覧"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                 Spacer()
+	                if isResultSelectionMode {
+	                    Button {
+	                        moveResultDayDialogPresented = true
+                    } label: {
+                        Text(LT("更换日期", "Change Day", "日付変更"))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(selectedResultSlotIDs.isEmpty ? RaverTheme.secondaryText : .white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedResultSlotIDs.isEmpty ? RaverTheme.card : RaverTheme.accent, in: Capsule())
+	                    }
+	                    .buttonStyle(.plain)
+	                    .disabled(selectedResultSlotIDs.isEmpty)
+	                    if !availableStageMoveOptions.isEmpty {
+	                        Button {
+	                            moveResultStageDialogPresented = true
+	                        } label: {
+	                            Text(LT("更换舞台", "Change Stage", "ステージ変更"))
+	                                .font(.caption.weight(.bold))
+	                                .foregroundStyle(selectedResultSlotIDs.isEmpty ? RaverTheme.secondaryText : .white)
+	                                .padding(.horizontal, 10)
+	                                .padding(.vertical, 6)
+	                                .background(selectedResultSlotIDs.isEmpty ? RaverTheme.card : RaverTheme.accent, in: Capsule())
+	                        }
+	                        .buttonStyle(.plain)
+	                        .disabled(selectedResultSlotIDs.isEmpty)
+	                    }
+	                }
+                Button {
+                    toggleResultSelectionMode()
+                } label: {
+                    Text(isResultSelectionMode ? LT("完成", "Done", "完了") : LT("多选", "Select", "複数選択"))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(isResultSelectionMode ? .white : RaverTheme.primaryText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(isResultSelectionMode ? RaverTheme.accent : RaverTheme.card, in: Capsule())
+                }
+                .buttonStyle(.plain)
                 Text(LT("共 \(resultSlots.count) 条", "\(resultSlots.count) items", "\(resultSlots.count)件"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -5702,10 +5832,16 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private func timetableAIResultCard(_ slot: EventUploadTimetableAIEditableSlot, order: Int) -> some View {
-        let expanded = expandedSlotIDs.contains(slot.id)
+        let expanded = !isResultSelectionMode && expandedSlotIDs.contains(slot.id)
         let performerNames = timetableAIPerformerNames(for: slot)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
+                if isResultSelectionMode {
+                    Image(systemName: selectedResultSlotIDs.contains(slot.id) ? "checkmark.circle.fill" : "circle")
+                        .font(.headline)
+                        .foregroundStyle(selectedResultSlotIDs.contains(slot.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                }
+
                 Text("\(order)")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -5725,28 +5861,30 @@ private struct EventUploadTimetableAIImportSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button {
-                    expandedSlotIDs.formSymmetricDifference([slot.id])
-                } label: {
-                    Image(systemName: expanded ? "chevron.up" : "square.and.pencil")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(expanded ? RaverTheme.accent : RaverTheme.secondaryText)
-                        .frame(width: 30, height: 30)
-                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                if !isResultSelectionMode {
+                    Button {
+                        expandedSlotIDs.formSymmetricDifference([slot.id])
+                    } label: {
+                        Image(systemName: expanded ? "chevron.up" : "square.and.pencil")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(expanded ? RaverTheme.accent : RaverTheme.secondaryText)
+                            .frame(width: 30, height: 30)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
 
-                Button {
-                    resultSlots.removeAll { $0.id == slot.id }
-                    refreshResultFilters(preserveSelection: true)
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.red)
-                        .frame(width: 28, height: 28)
-                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Button {
+                        resultSlots.removeAll { $0.id == slot.id }
+                        refreshResultFilters(preserveSelection: true)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                            .frame(width: 28, height: 28)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             if expanded {
@@ -5849,8 +5987,59 @@ private struct EventUploadTimetableAIImportSheet: View {
         .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                .stroke(selectedResultSlotIDs.contains(slot.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedResultSlotIDs.contains(slot.id) ? 2 : 1)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            if isResultSelectionMode {
+                toggleResultSlotSelection(slot.id)
+            }
+        }
+    }
+
+    private func toggleResultSelectionMode() {
+        isResultSelectionMode.toggle()
+        if !isResultSelectionMode {
+            selectedResultSlotIDs.removeAll()
+        }
+    }
+
+    private func toggleResultSlotSelection(_ slotID: UUID) {
+        if selectedResultSlotIDs.contains(slotID) {
+            selectedResultSlotIDs.remove(slotID)
+        } else {
+            selectedResultSlotIDs.insert(slotID)
+        }
+    }
+
+    private func moveSelectedResultSlots(to day: EventUploadTimetableAIEditableSlot) {
+        guard !selectedResultSlotIDs.isEmpty else { return }
+        for index in resultSlots.indices where selectedResultSlotIDs.contains(resultSlots[index].id) {
+            resultSlots[index].dayIndex = day.dayIndex
+            resultSlots[index].dayLabel = day.dayLabel
+        }
+        selectedDayIndex = day.dayIndex
+        selectedResultSlotIDs.removeAll()
+        isResultSelectionMode = false
+        refreshResultFilters(preserveSelection: true)
+    }
+
+    private func moveSelectedResultSlots(toStage stage: String) {
+        let normalizedStage = stage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !selectedResultSlotIDs.isEmpty, !normalizedStage.isEmpty else { return }
+        for index in resultSlots.indices where selectedResultSlotIDs.contains(resultSlots[index].id) {
+            resultSlots[index].stageName = normalizedStage
+        }
+        selectedStageName = normalizedStage
+        selectedResultSlotIDs.removeAll()
+        isResultSelectionMode = false
+        refreshResultFilters(preserveSelection: true)
+    }
+
+    private func dismissKeyboard() {
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
     }
 
     private func performerAvatarStack(slot: EventUploadTimetableAIEditableSlot, performerNames: [String]) -> some View {
@@ -6457,6 +6646,10 @@ private struct EventUploadWeekTimetableEditorSheet: View {
     @State private var selectedStage: String = ""
     @State private var selectedDayIndex: Int = 1
     @State private var keyboardCandidateSpacing: CGFloat = 0
+    @State private var isSelectionMode = false
+    @State private var selectedSlotIDs: Set<UUID> = []
+    @State private var moveDayDialogPresented = false
+    @State private var moveStageDialogPresented = false
 
     var body: some View {
         NavigationStack {
@@ -6556,12 +6749,51 @@ private struct EventUploadWeekTimetableEditorSheet: View {
 	                    VStack(alignment: .leading, spacing: 8) {
 	                        HStack {
 	                            Text(LT("节目列表", "Set List", "セット一覧"))
-                                .font(.headline)
-                                .foregroundStyle(RaverTheme.primaryText)
-                            Spacer()
-                            Text("\(filteredSlots.count)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(RaverTheme.secondaryText)
+	                                .font(.headline)
+	                                .foregroundStyle(RaverTheme.primaryText)
+	                            Spacer()
+		                            if isSelectionMode {
+		                                Button {
+		                                    moveDayDialogPresented = true
+	                                } label: {
+	                                    Text(LT("更换日期", "Change Day", "日付変更"))
+	                                        .font(.caption.weight(.bold))
+	                                        .foregroundStyle(selectedSlotIDs.isEmpty ? RaverTheme.secondaryText : .white)
+	                                        .padding(.horizontal, 10)
+	                                        .padding(.vertical, 6)
+	                                        .background(selectedSlotIDs.isEmpty ? RaverTheme.card : RaverTheme.accent, in: Capsule())
+		                                }
+		                                .buttonStyle(.plain)
+		                                .disabled(selectedSlotIDs.isEmpty)
+		                                if !stageNames.isEmpty {
+		                                    Button {
+		                                        moveStageDialogPresented = true
+		                                    } label: {
+		                                        Text(LT("更换舞台", "Change Stage", "ステージ変更"))
+		                                            .font(.caption.weight(.bold))
+		                                            .foregroundStyle(selectedSlotIDs.isEmpty ? RaverTheme.secondaryText : .white)
+		                                            .padding(.horizontal, 10)
+		                                            .padding(.vertical, 6)
+		                                            .background(selectedSlotIDs.isEmpty ? RaverTheme.card : RaverTheme.accent, in: Capsule())
+		                                    }
+		                                    .buttonStyle(.plain)
+		                                    .disabled(selectedSlotIDs.isEmpty)
+		                                }
+		                            }
+	                            Button {
+	                                toggleSelectionMode()
+	                            } label: {
+	                                Text(isSelectionMode ? LT("完成", "Done", "完了") : LT("多选", "Select", "複数選択"))
+	                                    .font(.caption.weight(.bold))
+	                                    .foregroundStyle(isSelectionMode ? .white : RaverTheme.primaryText)
+	                                    .padding(.horizontal, 10)
+	                                    .padding(.vertical, 6)
+	                                    .background(isSelectionMode ? RaverTheme.accent : RaverTheme.card, in: Capsule())
+	                            }
+	                            .buttonStyle(.plain)
+	                            Text("\(filteredSlots.count)")
+	                                .font(.caption.weight(.semibold))
+	                                .foregroundStyle(RaverTheme.secondaryText)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(RaverTheme.card, in: Capsule())
@@ -6609,12 +6841,14 @@ private struct EventUploadWeekTimetableEditorSheet: View {
 	                    }
 	                    .buttonStyle(.plain)
 	                }
-                .padding(20)
-                .padding(.bottom, 84 + keyboardCandidateSpacing)
-            }
-            .safeAreaInset(edge: .bottom) {
-                Color.clear
-                    .frame(height: keyboardCandidateSpacing)
+	                .padding(20)
+	                .padding(.bottom, 84 + keyboardCandidateSpacing)
+	            }
+	            .scrollDismissesKeyboard(.interactively)
+	            .simultaneousGesture(TapGesture().onEnded { self.dismissKeyboard() })
+	            .safeAreaInset(edge: .bottom) {
+	                Color.clear
+	                    .frame(height: keyboardCandidateSpacing)
                     .allowsHitTesting(false)
             }
             .background(RaverTheme.background.ignoresSafeArea())
@@ -6645,8 +6879,36 @@ private struct EventUploadWeekTimetableEditorSheet: View {
                     keyboardCandidateSpacing = 0
                 }
             }
-        }
-    }
+	            .confirmationDialog(
+	                LT("更换到哪一天？", "Move to which day?", "どの日に移動しますか？"),
+	                isPresented: $moveDayDialogPresented,
+                titleVisibility: .visible
+            ) {
+                ForEach(dayOptions) { option in
+                    Button("\(option.title) · \(shortDate(option.date))") {
+                        moveSelectedSlots(to: option)
+                    }
+                }
+                Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+	            } message: {
+	                Text(LT("会把已选中的节目移动到目标日期。", "Selected sets will be moved to the target day.", "選択した出演を指定の日に移動します。"))
+	            }
+	            .confirmationDialog(
+	                LT("更换到哪个舞台？", "Move to which stage?", "どのステージに移動しますか？"),
+	                isPresented: $moveStageDialogPresented,
+	                titleVisibility: .visible
+	            ) {
+	                ForEach(stageNames, id: \.self) { stage in
+	                    Button(stage) {
+	                        moveSelectedSlots(toStage: stage)
+	                    }
+	                }
+	                Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+	            } message: {
+	                Text(LT("会把已选中的节目移动到目标舞台。", "Selected sets will be moved to the target stage.", "選択した出演を指定のステージに移動します。"))
+	            }
+	        }
+	    }
 
     private var filteredSlots: [EventUploadLineupSlotDraft] {
         slots.filter { slot in
@@ -6673,9 +6935,15 @@ private struct EventUploadWeekTimetableEditorSheet: View {
     }
 
     private func slotCard(_ slot: EventUploadLineupSlotDraft, order: Int) -> some View {
-        let expanded = isExpanded(slot.id) || !isCollapsedEligible(slot)
+        let expanded = !isSelectionMode && (isExpanded(slot.id) || !isCollapsedEligible(slot))
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
+                if isSelectionMode {
+                    Image(systemName: selectedSlotIDs.contains(slot.id) ? "checkmark.circle.fill" : "circle")
+                        .font(.headline)
+                        .foregroundStyle(selectedSlotIDs.contains(slot.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                }
+
                 Text("\(order)")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(RaverTheme.secondaryText)
@@ -6695,31 +6963,33 @@ private struct EventUploadWeekTimetableEditorSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button {
-                    if expanded, isCollapsedEligible(slot) {
-                        onToggleExpanded(slot.id)
-                    } else if !expanded {
-                        onToggleExpanded(slot.id)
+                if !isSelectionMode {
+                    Button {
+                        if expanded, isCollapsedEligible(slot) {
+                            onToggleExpanded(slot.id)
+                        } else if !expanded {
+                            onToggleExpanded(slot.id)
+                        }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.up" : "square.and.pencil")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(expanded ? RaverTheme.accent : RaverTheme.secondaryText)
+                            .frame(width: 30, height: 30)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                } label: {
-                    Image(systemName: expanded ? "chevron.up" : "square.and.pencil")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(expanded ? RaverTheme.accent : RaverTheme.secondaryText)
-                        .frame(width: 30, height: 30)
-                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                Button {
-                    onDelete(slot.id)
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.red)
-                        .frame(width: 28, height: 28)
-                        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Button {
+                        onDelete(slot.id)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                            .frame(width: 28, height: 28)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             if expanded {
@@ -6805,8 +7075,56 @@ private struct EventUploadWeekTimetableEditorSheet: View {
         .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                .stroke(selectedSlotIDs.contains(slot.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedSlotIDs.contains(slot.id) ? 2 : 1)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            if isSelectionMode {
+                toggleSlotSelection(slot.id)
+            }
+        }
+    }
+
+    private func toggleSelectionMode() {
+        isSelectionMode.toggle()
+        if !isSelectionMode {
+            selectedSlotIDs.removeAll()
+        }
+    }
+
+    private func toggleSlotSelection(_ slotID: UUID) {
+        if selectedSlotIDs.contains(slotID) {
+            selectedSlotIDs.remove(slotID)
+        } else {
+            selectedSlotIDs.insert(slotID)
+        }
+    }
+
+    private func moveSelectedSlots(to day: EventUploadDayOption) {
+        guard !selectedSlotIDs.isEmpty else { return }
+        for slotID in selectedSlotIDs {
+            dayBinding(slotID).wrappedValue = day.dayIndex
+        }
+        selectedDayIndex = day.dayIndex
+        selectedSlotIDs.removeAll()
+        isSelectionMode = false
+    }
+
+    private func moveSelectedSlots(toStage stage: String) {
+        let normalizedStage = stage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !selectedSlotIDs.isEmpty, !normalizedStage.isEmpty else { return }
+        for slotID in selectedSlotIDs {
+            stageBinding(slotID).wrappedValue = normalizedStage
+        }
+        selectedStage = normalizedStage
+        selectedSlotIDs.removeAll()
+        isSelectionMode = false
+    }
+
+    private func dismissKeyboard() {
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
     }
 
     private func timetableIsBound(_ slot: EventUploadLineupSlotDraft, index: Int) -> Bool {

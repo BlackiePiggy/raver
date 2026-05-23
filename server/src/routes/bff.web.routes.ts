@@ -63,6 +63,10 @@ import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { djEventBindingReviewService, type DJEventBindingTriggerSource } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
 import {
+  attachContentSubmissionChangeSummary,
+  changeSummaryTextFromPayload,
+} from '../services/content-submission-change-summary.service';
+import {
   autoAlignEventLineupToTimetablePayload,
   buildAlignedLineupArtistsFromTimetablePayload,
   formatEventLineupTimetableAlignmentError,
@@ -562,14 +566,18 @@ const createPendingContentSubmission = async (input: {
   title: string;
   payload: Record<string, unknown>;
 }) => {
+  const payloadWithSummary = attachContentSubmissionChangeSummary(
+    input.entityType,
+    input.payload as Prisma.InputJsonObject
+  );
   const submission = await prisma.$transaction(async (tx) => {
     const submission = await tx.contentSubmission.create({
       data: {
         submitterId: input.submitterId,
         entityType: input.entityType,
         title: input.title,
-        payload: input.payload as Prisma.InputJsonObject,
-        reviewNotes: buildI18nReviewNotes(input.entityType, input.payload),
+        payload: payloadWithSummary,
+        reviewNotes: buildI18nReviewNotes(input.entityType, payloadWithSummary),
         status: 'processing',
       },
     });
@@ -579,7 +587,7 @@ const createPendingContentSubmission = async (input: {
         submissionId: submission.id,
         version: 1,
         title: input.title,
-        payload: input.payload as Prisma.InputJsonObject,
+        payload: payloadWithSummary,
         submittedBy: input.submitterId,
         changeNote: 'Initial submission',
       },
@@ -599,6 +607,10 @@ const createPendingContentSubmission = async (input: {
     rating: '打分',
   };
   const typeLabel = typeLabelMap[input.entityType] || '内容';
+  const changeSummary = changeSummaryTextFromPayload(payloadWithSummary);
+  const processingBody = changeSummary
+    ? `你提交的「${input.title}」已进入处理队列。\n变更摘要：${changeSummary}`
+    : `你提交的「${input.title}」已进入处理队列。`;
   await scheduleContentSubmissionProcessingBestEffort(submission.id);
   await notificationCenterService.publish({
     category: 'content_review',
@@ -607,7 +619,7 @@ const createPendingContentSubmission = async (input: {
     dedupeKey: `content_submission:${submission.id}:processing`,
     payload: {
       title: `${typeLabel}提交处理中`,
-      body: `你提交的「${input.title}」已进入处理队列。`,
+      body: processingBody,
       deeplink: `/profile/submissions/${submission.id}`,
       metadata: {
         source: 'content_submission_review',
@@ -619,7 +631,7 @@ const createPendingContentSubmission = async (input: {
         createdEntityId: null,
         typeLabel,
         statusLabel: '处理中',
-        message: `你提交的「${input.title}」已进入处理队列。`,
+        message: processingBody,
       },
     },
   });
@@ -10858,27 +10870,17 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       return;
     }
 
-    await prisma.dJ.update({
-      where: { id: djId },
-      data: updateData,
+    const submission = await createPendingContentSubmission({
+      submitterId: userId,
+      entityType: 'dj',
+      title: nextName,
+      payload: {
+        ...payload,
+        name: nextName,
+        targetDJId: djId,
+      },
     });
-    if (typeof payload.avatarUrl === 'string' && payload.avatarUrl.trim() && existing.avatarUrl && existing.avatarUrl !== payload.avatarUrl.trim()) {
-      await mediaAssetService.markReplacedByUrl(existing.avatarUrl);
-      await deleteSingleDJMediaOssObjectIfOwned(existing.avatarUrl, djId);
-    }
-    if (typeof payload.bannerUrl === 'string' && payload.bannerUrl.trim() && existing.bannerUrl && existing.bannerUrl !== payload.bannerUrl.trim()) {
-      await mediaAssetService.markReplacedByUrl(existing.bannerUrl);
-      await deleteSingleDJMediaOssObjectIfOwned(existing.bannerUrl, djId);
-    }
-    await ensureDJContributor(djId, userId);
-
-    const updated = await fetchDJWithContributorsById(djId);
-    if (!updated) {
-      res.status(404).json({ error: 'DJ not found after update' });
-      return;
-    }
-
-    ok(res, mapDJ(updated, false, userId, viewerRole));
+    acceptedSubmission(res, submission, 'DJ 编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
     console.error('BFF web update dj error:', error);
     res.status(500).json({ error: 'Internal server error' });

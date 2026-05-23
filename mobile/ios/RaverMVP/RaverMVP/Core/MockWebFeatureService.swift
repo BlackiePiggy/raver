@@ -1630,7 +1630,7 @@ actor MockWebFeatureService: WebFeatureService {
         return .imported(ImportManualDJResponse(action: "created", dj: created))
     }
 
-    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> CreateContentResult<WebDJ> {
         guard let index = djs.firstIndex(where: { $0.id == id }) else {
             throw ServiceError.message("DJ 不存在")
         }
@@ -1719,7 +1719,7 @@ actor MockWebFeatureService: WebFeatureService {
 
         updated.updatedAt = Date()
         djs[index] = updated
-        return updated
+        return .created(updated)
     }
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {

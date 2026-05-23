@@ -24,7 +24,7 @@ protocol DJRelationRepository {
 }
 
 protocol DJCommandRepository {
-    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> CreateContentResult<WebDJ>
 }
 
 protocol DJRankingRepository {
@@ -136,7 +136,7 @@ struct DJCommandRepositoryAdapter: DJCommandRepository {
         self.service = service
     }
 
-    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> CreateContentResult<WebDJ> {
         try await service.updateDJ(id: id, input: input)
     }
 }

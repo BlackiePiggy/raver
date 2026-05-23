@@ -81,7 +81,7 @@ protocol WebFeatureService {
     func importSpotifyDJ(input: ImportSpotifyDJInput) async throws -> ImportDJResult<ImportSpotifyDJResponse>
     func importDiscogsDJ(input: ImportDiscogsDJInput) async throws -> ImportDJResult<ImportDiscogsDJResponse>
     func importManualDJ(input: ImportManualDJInput) async throws -> ImportDJResult<ImportManualDJResponse>
-    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> CreateContentResult<WebDJ>
     func uploadDJImage(
         imageData: Data,
         fileName: String,

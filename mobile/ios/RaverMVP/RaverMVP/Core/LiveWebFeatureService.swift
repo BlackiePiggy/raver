@@ -732,13 +732,18 @@ final class LiveWebFeatureService: WebFeatureService {
         }
     }
 
-    func updateDJ(id: String, input: UpdateDJInput) async throws -> WebDJ {
-        let response: BFFEnvelope<WebDJ> = try await request(
+    func updateDJ(id: String, input: UpdateDJInput) async throws -> CreateContentResult<WebDJ> {
+        let response: BFFEnvelope<CreateContentResult<WebDJ>> = try await request(
             path: "/v1/djs/\(id)",
             method: "PATCH",
             body: input
         )
-        return localizedDJ(response.data)
+        switch response.data {
+        case .created(let dj):
+            return .created(localizedDJ(dj))
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func uploadDJImage(

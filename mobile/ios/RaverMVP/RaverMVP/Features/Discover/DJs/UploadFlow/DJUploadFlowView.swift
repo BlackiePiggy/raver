@@ -1,14 +1,17 @@
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct DJUploadFlowView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: DJUploadFlowViewModel
     @State private var avatarItem: PhotosPickerItem?
     @State private var bannerItem: PhotosPickerItem?
     @State private var proofItem: PhotosPickerItem?
-    @State private var showDiscardAlert = false
+    @State private var showExitConfirmation = false
     @State private var expandedLocalizedFieldKeys: Set<String> = []
+    @State private var keyboardCandidateSpacing: CGFloat = 0
 
     init(
         mode: DJUploadMode,
@@ -31,6 +34,93 @@ struct DJUploadFlowView: View {
     }
 
     var body: some View {
+        rootContent
+        .background(RaverTheme.background.ignoresSafeArea())
+        .raverSystemNavigation(title: navigationTitle)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    if viewModel.draft.dirty && viewModel.submitSuccess == nil {
+                        showExitConfirmation = true
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                }
+            }
+        }
+        .onAppear {
+            viewModel.setDismissAction { dismiss() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || phase == .inactive {
+                viewModel.saveDraft()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.22)) {
+                keyboardCandidateSpacing = 132
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.18)) {
+                keyboardCandidateSpacing = 0
+            }
+        }
+        .onDisappear {
+            viewModel.handleDisappear()
+        }
+        .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredDraft) {
+            Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
+                Task { await viewModel.restartCreateDraft() }
+            }
+            Button(LT("继续草稿", "Continue", "続ける"), role: .cancel) {
+                viewModel.continueRestoredDraft()
+            }
+        } message: {
+            Text(restoredDraftMessage)
+        }
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+            get: { viewModel.statusMessage != nil },
+            set: { if !$0 { viewModel.statusMessage = nil } }
+        )) {
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.statusMessage ?? "")
+        }
+        .confirmationDialog(
+            LT("保留草稿？", "Keep Draft?", "下書きを残しますか？"),
+            isPresented: $showExitConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(LT("保存草稿并离开", "Save Draft & Leave", "下書きを保存して離れる")) {
+                viewModel.saveDraftAndClose()
+            }
+            Button(LT("放弃草稿", "Discard Draft", "下書きを破棄"), role: .destructive) {
+                Task { await viewModel.discardDraftAndClose() }
+            }
+            Button(LT("继续编辑", "Keep Editing", "編集を続ける"), role: .cancel) {}
+        } message: {
+            Text(LT("未提交的内容会保存在本地草稿中。", "Unsubmitted changes can be kept as a local draft.", "未送信の内容はローカル下書きとして保存できます。"))
+        }
+        .onChange(of: avatarItem) { _, item in Task { await loadPhoto(item, zone: .avatar) } }
+        .onChange(of: bannerItem) { _, item in Task { await loadPhoto(item, zone: .banner) } }
+        .onChange(of: proofItem) { _, item in Task { await loadPhoto(item, zone: .proof) } }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        VStack(spacing: 0) {
+            if let success = viewModel.submitSuccess {
+                successView(success)
+            } else {
+                editorContent
+            }
+        }
+    }
+
+    private var editorContent: some View {
         VStack(spacing: 0) {
             progressHeader
             ScrollView {
@@ -38,58 +128,19 @@ struct DJUploadFlowView: View {
                     stepContent
                 }
                 .padding(16)
-                .padding(.bottom, 96)
+                .padding(.bottom, 84 + keyboardCandidateSpacing)
+            }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear
+                    .frame(height: keyboardCandidateSpacing)
+                    .allowsHitTesting(false)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
             }
             bottomBar
-        }
-        .background(RaverTheme.background)
-        .raverSystemNavigation(title: navigationTitle)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(LT("关闭", "Close", "閉じる")) {
-                    if viewModel.draft.dirty {
-                        showDiscardAlert = true
-                    } else {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .alert(LT("继续 DJ 草稿？", "Continue DJ draft?", "DJ下書きを続けますか？"), isPresented: Binding(
-            get: { viewModel.pendingRestoreDraft != nil },
-            set: { if !$0 { viewModel.pendingRestoreDraft = nil } }
-        )) {
-            Button(LT("继续草稿", "Continue Draft", "下書きを続ける")) {
-                viewModel.restoreDraft()
-            }
-            Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
-                Task { await viewModel.discardRestoreDraft() }
-            }
-        } message: {
-            Text(LT("检测到上次未提交的 DJ 草稿。重新开始会删除草稿中已上传但未提交的 OSS 图片。", "An unsent DJ draft was found. Starting over will delete uploaded draft images from OSS.", "未送信のDJ下書きがあります。最初から始めると下書き画像はOSSから削除されます。"))
-        }
-        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(LT("确定", "OK", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
-        .alert(LT("保存草稿并退出？", "Save draft and exit?", "下書きを保存して閉じますか？"), isPresented: $showDiscardAlert) {
-            Button(LT("保存退出", "Save and Exit", "保存して閉じる")) {
-                viewModel.saveDraft()
-                dismiss()
-            }
-            Button(LT("继续编辑", "Keep Editing", "編集を続ける"), role: .cancel) {}
-        } message: {
-            Text(LT("未提交内容会保存在本地草稿中，下次进入会询问是否继续。", "Unsubmitted changes will be saved as a local draft.", "未送信の内容はローカル下書きとして保存されます。"))
-        }
-        .onChange(of: avatarItem) { _, item in Task { await loadPhoto(item, zone: .avatar) } }
-        .onChange(of: bannerItem) { _, item in Task { await loadPhoto(item, zone: .banner) } }
-        .onChange(of: proofItem) { _, item in Task { await loadPhoto(item, zone: .proof) } }
-        .onChange(of: viewModel.successMessage) { _, message in
-            if message != nil { dismiss() }
         }
     }
 
@@ -97,6 +148,13 @@ struct DJUploadFlowView: View {
         viewModel.draft.isCreate
             ? LT("上传 DJ", "Upload DJ", "DJをアップロード")
             : LT("编辑 DJ", "Edit DJ", "DJを編集")
+    }
+
+    private var restoredDraftMessage: String {
+        if case .edit = viewModel.draft.mode {
+            return LT("已恢复上次未提交的 DJ 编辑草稿。", "Your previous unsaved DJ edit draft was restored.", "前回の未保存DJ編集下書きを復元しました。")
+        }
+        return LT("已恢复上次未提交的新建 DJ 草稿。", "Your previous unsent DJ draft was restored.", "未送信のDJ下書きを復元しました。")
     }
 
     private var progressHeader: some View {
@@ -446,6 +504,73 @@ struct DJUploadFlowView: View {
         }
     }
 
+    private func successView(_ success: DJUploadSubmitSuccess) -> some View {
+        VStack(spacing: 22) {
+            Spacer(minLength: 40)
+
+            ZStack {
+                Circle()
+                    .fill(RaverTheme.accent.opacity(0.14))
+                    .frame(width: 92, height: 92)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 58, height: 58)
+                    .background(RaverTheme.accent, in: Circle())
+            }
+
+            VStack(spacing: 10) {
+                Text(success.title)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                Text(success.message)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 24)
+
+            VStack(spacing: 10) {
+                Button {
+                    viewModel.closeAfterSuccess()
+                } label: {
+                    HStack {
+                        Text(LT("返回 DJ 页", "Back to DJs", "DJページへ戻る"))
+                            .font(.headline.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Text(LT("之后也可以在我的发布里查看和管理。", "You can review and manage this later from My Posts.", "後からマイ投稿で確認・管理できます。"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 20)
+
+            Spacer(minLength: 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 24)
+    }
+
     private func stringListSection(
         title: String,
         subtitle: String,
@@ -714,8 +839,16 @@ struct DJUploadFlowView: View {
                 await viewModel.uploadImage(data, zone: zone)
             }
         } catch {
-            viewModel.errorMessage = error.userFacingMessage ?? LT("图片读取失败", "Failed to read image", "画像を読み込めませんでした")
+            viewModel.statusMessage = error.userFacingMessage ?? LT("图片读取失败", "Failed to read image", "画像を読み込めませんでした")
         }
+    }
+}
+
+private extension DJUploadFlowView {
+    func hideKeyboard() {
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+#endif
     }
 }
 
