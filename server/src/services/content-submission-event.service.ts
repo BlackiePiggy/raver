@@ -45,7 +45,7 @@ const eventImageAssetsFromPayload = (value: unknown): Prisma.InputJsonValue[] =>
       const row = item as Record<string, unknown>;
       const url = cleanText(row.url);
       const type = cleanText(row.type)?.toLowerCase();
-      if (!url || !type || !['cover', 'luall', 'tt', 'other'].includes(type)) return null;
+      if (!url || !type || !['cover', 'luall', 'tt', 'poster', 'other'].includes(type)) return null;
       const label = cleanText(row.label) || type.toUpperCase();
       const fileName = cleanText(row.fileName);
       const source = cleanText(row.source);
@@ -71,7 +71,7 @@ const hasRequiredEventPrimaryImageAsset = (assets: Prisma.InputJsonValue[]): boo
     if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return false;
     const row = asset as Record<string, unknown>;
     const type = cleanText(row.type)?.toLowerCase();
-    if (type === 'cover' || type === 'luall') return true;
+    if (type === 'cover' || type === 'luall' || type === 'poster') return true;
     const label = cleanText(row.label)?.toUpperCase() || '';
     const fileName = cleanText(row.fileName)?.toLowerCase() || '';
     return type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));

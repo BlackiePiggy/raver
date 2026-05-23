@@ -2846,7 +2846,7 @@ private func aiRecognitionPreviewPresentation(
 
 private func aiRecognitionPreviewOverlayButton(action: @escaping () -> Void) -> some View {
     Button(action: action) {
-        Image(systemName: "plus")
+        Image(systemName: "magnifyingglass")
             .font(.caption.weight(.bold))
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
@@ -2854,6 +2854,10 @@ private func aiRecognitionPreviewOverlayButton(action: @escaping () -> Void) -> 
     }
     .buttonStyle(.plain)
     .padding(8)
+}
+
+private func aiRecognitionCanPreview(_ image: EventUploadImageDraft) -> Bool {
+    image.localFileURL != nil || image.remoteURL != nil
 }
 
 private struct EventUploadPosterAIImportSheet: View {
@@ -2982,10 +2986,11 @@ private struct EventUploadPosterAIImportSheet: View {
                                 selectedImageID = image.id
                             }
 
-                            if image.localFileURL != nil || image.remoteURL != nil {
+                            if aiRecognitionCanPreview(image) {
                                 aiRecognitionPreviewOverlayButton {
                                     previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
                                 }
+                                .zIndex(1)
                             }
                         }
                     }
@@ -3857,11 +3862,9 @@ private struct EventUploadLineupAIImportSheet: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        ZStack {
+                        ZStack(alignment: .topTrailing) {
                             VStack(alignment: .leading, spacing: 8) {
-                                imagePreview(image) {
-                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
-                                }
+                                imagePreview(image)
                                 HStack(alignment: .top, spacing: 6) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(image.zone.title)
@@ -3888,6 +3891,13 @@ private struct EventUploadLineupAIImportSheet: View {
                             .contentShape(shape)
                             .onTapGesture {
                                 toggleImageSelection(image.id)
+                            }
+
+                            if aiRecognitionCanPreview(image) {
+                                aiRecognitionPreviewOverlayButton {
+                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
+                                }
+                                .zIndex(1)
                             }
                         }
                     }
@@ -3960,11 +3970,17 @@ private struct EventUploadLineupAIImportSheet: View {
     private func taskCard(_ entry: RecognitionTaskEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                imagePreview(entry.image) {
-                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                ZStack(alignment: .topTrailing) {
+                    imagePreview(entry.image)
+                    if aiRecognitionCanPreview(entry.image) {
+                        aiRecognitionPreviewOverlayButton {
+                            previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                        }
+                        .zIndex(1)
+                    }
                 }
-                    .frame(width: 88, height: 72)
-                    .clipped()
+                .frame(width: 88, height: 72)
+                .clipped()
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.image.fileName)
@@ -4195,9 +4211,8 @@ private struct EventUploadLineupAIImportSheet: View {
     }
 
     @ViewBuilder
-    private func imagePreview(_ image: EventUploadImageDraft, onPreviewTap: (() -> Void)? = nil) -> some View {
+    private func imagePreview(_ image: EventUploadImageDraft) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        let canPreview = image.localFileURL != nil || image.remoteURL != nil
         ZStack {
             shape
                 .fill(RaverTheme.background)
@@ -4227,16 +4242,6 @@ private struct EventUploadLineupAIImportSheet: View {
                 Image(systemName: "photo")
                     .foregroundStyle(RaverTheme.secondaryText)
                     .allowsHitTesting(false)
-            }
-
-            if let onPreviewTap, canPreview {
-                VStack {
-                    HStack {
-                        Spacer()
-                        aiRecognitionPreviewOverlayButton(action: onPreviewTap)
-                    }
-                    Spacer()
-                }
             }
         }
         .frame(height: 104)
@@ -4978,11 +4983,9 @@ private struct EventUploadTimetableAIImportSheet: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        ZStack {
+                        ZStack(alignment: .topTrailing) {
                             VStack(alignment: .leading, spacing: 8) {
-                                timetableAIImagePreview(image) {
-                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
-                                }
+                                timetableAIImagePreview(image)
                                 HStack(alignment: .top, spacing: 6) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(image.zone.title)
@@ -5009,6 +5012,13 @@ private struct EventUploadTimetableAIImportSheet: View {
                             .contentShape(shape)
                             .onTapGesture {
                                 toggleImageSelection(image.id)
+                            }
+
+                            if aiRecognitionCanPreview(image) {
+                                aiRecognitionPreviewOverlayButton {
+                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
+                                }
+                                .zIndex(1)
                             }
                         }
                     }
@@ -5081,11 +5091,17 @@ private struct EventUploadTimetableAIImportSheet: View {
     private func taskCard(_ entry: RecognitionTaskEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                timetableAIImagePreview(entry.image) {
-                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                ZStack(alignment: .topTrailing) {
+                    timetableAIImagePreview(entry.image)
+                    if aiRecognitionCanPreview(entry.image) {
+                        aiRecognitionPreviewOverlayButton {
+                            previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                        }
+                        .zIndex(1)
+                    }
                 }
-                    .frame(width: 88, height: 72)
-                    .clipped()
+                .frame(width: 88, height: 72)
+                .clipped()
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.image.fileName)
@@ -5471,9 +5487,8 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     @ViewBuilder
-    private func timetableAIImagePreview(_ image: EventUploadImageDraft, onPreviewTap: (() -> Void)? = nil) -> some View {
+    private func timetableAIImagePreview(_ image: EventUploadImageDraft) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        let canPreview = image.localFileURL != nil || image.remoteURL != nil
         ZStack {
             shape
                 .fill(RaverTheme.background)
@@ -5503,16 +5518,6 @@ private struct EventUploadTimetableAIImportSheet: View {
                 Image(systemName: "photo")
                     .foregroundStyle(RaverTheme.secondaryText)
                     .allowsHitTesting(false)
-            }
-
-            if let onPreviewTap, canPreview {
-                VStack {
-                    HStack {
-                        Spacer()
-                        aiRecognitionPreviewOverlayButton(action: onPreviewTap)
-                    }
-                    Spacer()
-                }
             }
         }
         .frame(height: 104)

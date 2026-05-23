@@ -244,21 +244,38 @@ private struct FullscreenZoomableRemoteImage: View {
     private let maximumScale: CGFloat = 4
     private let quickZoomScale: CGFloat = 2.2
     @State private var resetToken = UUID()
+    @State private var isLoading = true
 
     var body: some View {
-        FullscreenZoomableImageScrollView(
-            url: url,
-            minimumZoomScale: minimumScale,
-            maximumZoomScale: maximumScale,
-            quickZoomScale: quickZoomScale,
-            resetToken: resetToken
-        )
-        .background(
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.85))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        )
+        ZStack {
+            FullscreenZoomableImageScrollView(
+                url: url,
+                minimumZoomScale: minimumScale,
+                maximumZoomScale: maximumScale,
+                quickZoomScale: quickZoomScale,
+                resetToken: resetToken,
+                onLoadingChanged: { isLoading = $0 }
+            )
+            .background(
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            )
+
+            if isLoading {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                    Text(LT("图片加载中...", "Loading image...", "画像を読み込み中..."))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.82))
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .background(Color.black.opacity(0.54), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .onAppear {
@@ -284,6 +301,7 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
     let maximumZoomScale: CGFloat
     let quickZoomScale: CGFloat
     let resetToken: UUID
+    let onLoadingChanged: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -320,7 +338,6 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
         let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         scrollView.addGestureRecognizer(doubleTap)
-        scrollView.panGestureRecognizer.delegate = context.coordinator
 
         context.coordinator.scrollView = scrollView
         context.coordinator.imageView = imageView
@@ -330,6 +347,7 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.quickZoomScale = quickZoomScale
+        context.coordinator.onLoadingChanged = onLoadingChanged
         context.coordinator.loadImageIfNeeded(from: url)
 
         if context.coordinator.resetToken != resetToken {
@@ -344,11 +362,12 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
         coordinator.cancelImageLoad()
     }
 
-    final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+    final class Coordinator: NSObject, UIScrollViewDelegate {
         weak var scrollView: UIScrollView?
         weak var imageView: UIImageView?
         var quickZoomScale: CGFloat = 2.2
         var resetToken: UUID?
+        var onLoadingChanged: ((Bool) -> Void)?
         private var loadedURL: URL?
         private var loadTask: URLSessionDataTask?
 
@@ -358,17 +377,6 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
             centerImage()
-        }
-
-        func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
-        ) -> Bool {
-            guard gestureRecognizer === scrollView?.panGestureRecognizer,
-                  let scrollView else {
-                return false
-            }
-            return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
         }
 
         @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
@@ -397,21 +405,26 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
             loadedURL = url
             loadTask?.cancel()
             imageView?.image = nil
+            setLoading(true)
             scrollView?.setZoomScale(scrollView?.minimumZoomScale ?? 1, animated: false)
             scrollView?.contentOffset = .zero
 
             if url.isFileURL {
                 imageView?.image = UIImage(contentsOfFile: url.path)
                 centerImage()
+                setLoading(false)
                 return
             }
 
             loadTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-                guard let self, let data, let image = UIImage(data: data) else { return }
+                guard let self else { return }
                 DispatchQueue.main.async {
                     guard self.loadedURL == url else { return }
-                    self.imageView?.image = image
+                    if let data, let image = UIImage(data: data) {
+                        self.imageView?.image = image
+                    }
                     self.centerImage()
+                    self.setLoading(false)
                 }
             }
             loadTask?.resume()
@@ -420,6 +433,12 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
         func cancelImageLoad() {
             loadTask?.cancel()
             loadTask = nil
+        }
+
+        private func setLoading(_ isLoading: Bool) {
+            DispatchQueue.main.async { [weak self] in
+                self?.onLoadingChanged?(isLoading)
+            }
         }
 
         func centerImage() {

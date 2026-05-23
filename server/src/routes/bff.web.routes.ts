@@ -646,7 +646,7 @@ type EventSocialLinkPayload = {
 };
 
 type EventImageAssetPayload = {
-  type: 'cover' | 'luall' | 'tt' | 'other';
+  type: 'cover' | 'luall' | 'tt' | 'poster' | 'other';
   label: string;
   url: string;
   source?: string;
@@ -994,7 +994,7 @@ const parseEventSocialLinks = (value: unknown): EventSocialLinkPayload[] => {
 
 const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
   if (!Array.isArray(value)) return [];
-  const allowedTypes = new Set(['cover', 'luall', 'tt', 'other']);
+  const allowedTypes = new Set(['cover', 'luall', 'tt', 'poster', 'other']);
   return value
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
@@ -1027,7 +1027,7 @@ const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
 
 const hasRequiredEventPrimaryImageAsset = (assets: EventImageAssetPayload[]): boolean =>
   assets.some((asset) => {
-    if (asset.type === 'cover' || asset.type === 'luall') {
+    if (asset.type === 'cover' || asset.type === 'luall' || asset.type === 'poster') {
       return true;
     }
     const label = normalizeEventText(asset.label).toUpperCase();
