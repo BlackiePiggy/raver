@@ -382,10 +382,34 @@ const createEventFromSubmission = async (payload: Prisma.JsonObject, submitterId
   });
 };
 
-const createDJFromSubmission = async (payload: Prisma.JsonObject) => {
+const createDJFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
   const name = cleanText(payload.name);
   if (!name) {
     throw new Error('DJ 名称不能为空');
+  }
+  const avatarUrl = cleanText(payload.avatarUrl);
+  const proofImageUrl = cleanText(payload.proofImageUrl);
+  const hasProofLink = [
+    cleanText(payload.spotifyId),
+    cleanText(payload.spotifyUrl),
+    cleanText(payload.appleMusicId),
+    cleanText(payload.instagramUrl),
+    cleanText(payload.facebookUrl),
+    cleanText(payload.soundcloudUrl),
+    cleanText(payload.soundcloudId),
+    cleanText(payload.soundcloudid),
+    cleanText(payload.twitterUrl),
+    cleanText(payload.youtubeUrl),
+    cleanText(payload.neteaseUrl),
+    cleanText(payload.qqMusicUrl),
+    cleanText(payload.website),
+    cleanText(payload.otherPlatformUrl),
+  ].some(Boolean);
+  if (!avatarUrl) {
+    throw new Error('DJ 头像不能为空');
+  }
+  if (!hasProofLink && !proofImageUrl) {
+    throw new Error('至少需要一个平台链接或一张证明图片');
   }
   const existing = await prisma.dJ.findFirst({
     where: { name: { equals: name, mode: 'insensitive' } },
@@ -400,18 +424,41 @@ const createDJFromSubmission = async (payload: Prisma.JsonObject) => {
     data: {
       name,
       nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
+      aliases: stringArray(payload.aliases),
+      genres: stringArray(payload.genres),
       slug,
       bio: cleanText(payload.bio) || null,
       bioI18n: triTextToJson(normalizeTriTextPayload(payload.bioI18n, cleanText(payload.bio) || '')),
-      avatarUrl: cleanText(payload.avatarUrl) || null,
+      avatarUrl,
+      avatarSourceUrl: avatarUrl,
       bannerUrl: cleanText(payload.bannerUrl) || null,
       country: cleanText(payload.country) || null,
+      countryI18n: triTextToJson(normalizeTriTextPayload(payload.countryI18n, cleanText(payload.country) || '')),
+      spotifyUrl: cleanText(payload.spotifyUrl) || null,
       spotifyId: cleanText(payload.spotifyId) || null,
+      spotifyFollowers: integerOrNull(payload.spotifyFollowers),
       appleMusicId: cleanText(payload.appleMusicId) || null,
       soundcloudUrl: cleanText(payload.soundcloudUrl) || null,
+      soundcloudId: cleanText(payload.soundcloudId) || cleanText(payload.soundcloudid) || null,
       instagramUrl: cleanText(payload.instagramUrl) || null,
+      facebookUrl: cleanText(payload.facebookUrl) || null,
       twitterUrl: cleanText(payload.twitterUrl) || null,
+      youtubeUrl: cleanText(payload.youtubeUrl) || null,
+      neteaseUrl: cleanText(payload.neteaseUrl) || null,
+      qqMusicUrl: cleanText(payload.qqMusicUrl) || null,
+      website: cleanText(payload.website) || cleanText(payload.otherPlatformUrl) || null,
+      trackCount: integerOrNull(payload.trackCount),
+      playlistCount: integerOrNull(payload.playlistCount),
+      soundCloudFollowers:
+        integerOrNull(payload.soundCloudFollowers) ??
+        integerOrNull(payload.soundcloudFollowers) ??
+        integerOrNull(payload.followers_count),
+      soundCloudFavorites:
+        integerOrNull(payload.soundCloudFavorites) ??
+        integerOrNull(payload.soundcloudFavorites) ??
+        integerOrNull(payload.public_favorites_count),
       isVerified: true,
+      contributors: { create: { userId: submitterId } },
     } as any,
   });
 };
@@ -668,7 +715,7 @@ const createEntityFromSubmission = async (entityType: string, payload: Prisma.Js
     case 'event':
       return createEventFromSubmission(payload, submitterId);
     case 'dj':
-      return createDJFromSubmission(payload);
+      return createDJFromSubmission(payload, submitterId);
     case 'news':
       return createNewsFromSubmission(payload, submitterId);
     case 'set':

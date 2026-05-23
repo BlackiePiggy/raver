@@ -180,46 +180,7 @@ struct DJsModuleView: View {
 
     @State private var selectedSection: DJsModuleSection = .spotlight
     @State private var errorMessage: String?
-    @State private var djImportSuccessMessage: String?
-    @State private var showDJImportSheet = false
-    @State private var importMode: DJsImportMode = .spotify
-    @State private var spotifySearchKeyword = ""
-    @State private var spotifyCandidates: [SpotifyDJCandidate] = []
-    @State private var isSearchingSpotify = false
-    @State private var selectedSpotifyCandidate: SpotifyDJCandidate?
-    @State private var spotifyDraftName = ""
-    @State private var spotifyDraftAliases = ""
-    @State private var spotifyDraftBio = ""
-    @State private var spotifyDraftCountry = ""
-    @State private var discogsSearchKeyword = ""
-    @State private var discogsCandidates: [DiscogsDJCandidate] = []
-    @State private var isSearchingDiscogs = false
-    @State private var selectedDiscogsCandidate: DiscogsDJCandidate?
-    @State private var isLoadingDiscogsDetail = false
-    @State private var discogsDraftName = ""
-    @State private var discogsDraftAliases = ""
-    @State private var discogsDraftBio = ""
-    @State private var discogsDraftCountry = ""
-    @State private var discogsDraftInstagram = ""
-    @State private var discogsDraftSoundcloud = ""
-    @State private var discogsDraftTwitter = ""
-    @State private var discogsDraftSpotifyID = ""
-    @State private var discogsLinkedSpotifyKeyword = ""
-    @State private var discogsLinkedSpotifyCandidates: [SpotifyDJCandidate] = []
-    @State private var isSearchingDiscogsLinkedSpotify = false
-    @State private var selectedDiscogsLinkedSpotifyCandidate: SpotifyDJCandidate?
-    @State private var manualName = ""
-    @State private var manualAliases = ""
-    @State private var manualBio = ""
-    @State private var manualCountry = ""
-    @State private var manualInstagram = ""
-    @State private var manualSoundcloud = ""
-    @State private var manualTwitter = ""
-    @State private var manualAvatarItem: PhotosPickerItem?
-    @State private var manualBannerItem: PhotosPickerItem?
-    @State private var manualAvatarData: Data?
-    @State private var manualBannerData: Data?
-    @State private var isImportingDJ = false
+    @State private var showDJUploadFlow = false
     @State private var didOpenInitialImport = false
     @State private var showDJSpotlightGuide = false
     @State private var djSpotlightGuideHandOffset: CGFloat = 0
@@ -237,8 +198,6 @@ struct DJsModuleView: View {
         self.openImportOnAppear = openImportOnAppear
         self.dismissAfterSuccessfulImport = dismissAfterSuccessfulImport
         self.onHorizontalDragStateChanged = onHorizontalDragStateChanged
-        _importMode = State(initialValue: normalizedInitialName?.isEmpty == false ? .manual : .spotify)
-        _manualName = State(initialValue: normalizedInitialName?.isEmpty == false ? (normalizedInitialName ?? "") : "")
     }
 
     var body: some View {
@@ -317,20 +276,22 @@ struct DJsModuleView: View {
                 djImportFloatingButton
             }
         }
-        .navigationDestination(isPresented: $showDJImportSheet) {
-            djImportSheet
+        .navigationDestination(isPresented: $showDJUploadFlow) {
+            DJUploadFlowView(
+                mode: .create,
+                userID: appState.session?.user.id ?? "anonymous",
+                importRepository: djImportRepository,
+                commandRepository: appContainer.djCommandRepository,
+                mediaRepository: djMediaRepository
+            ) { _ in
+                Task { await viewModel.reload() }
+            }
         }
         .onDisappear {
             onHorizontalDragStateChanged?(false)
         }
         .onChange(of: spotlightCarouselDJs.count) { _, _ in
             presentDJSpotlightGuideIfNeeded()
-        }
-        .onChange(of: manualAvatarItem) { _, item in
-            Task { await loadManualPhoto(item, target: .avatar) }
-        }
-        .onChange(of: manualBannerItem) { _, item in
-            Task { await loadManualPhoto(item, target: .banner) }
         }
         .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { activeErrorMessage != nil },
@@ -351,11 +312,8 @@ struct DJsModuleView: View {
     private func openInitialImportIfNeeded() {
         guard openImportOnAppear, !didOpenInitialImport else { return }
         didOpenInitialImport = true
-        if let initialImportName {
-            importMode = .manual
-            manualName = initialImportName
-        }
-        showDJImportSheet = true
+        _ = initialImportName
+        showDJUploadFlow = true
     }
 
     private var activeErrorMessage: String? {
@@ -463,7 +421,7 @@ struct DJsModuleView: View {
 
     private var djImportFloatingButton: some View {
         Button {
-            showDJImportSheet = true
+            showDJUploadFlow = true
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 18, weight: .bold))
@@ -482,797 +440,6 @@ struct DJsModuleView: View {
         .buttonStyle(.plain)
         .padding(.trailing, 16)
         .raverTabBarBottomPadding(24)
-    }
-
-    private var djImportSheet: some View {
-        Form {
-                Section(LT("导入方式", "导入方式", "取り込み方法")) {
-                    Picker(LT("导入方式", "导入方式", "取り込み方法"), selection: $importMode) {
-                        ForEach(DJsImportMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                if importMode == .spotify {
-                    Section(LT("搜索 Spotify DJ", "搜索 Spotify DJ", "Spotify DJを検索")) {
-                        HStack(spacing: 8) {
-                            TextField(LT("输入 DJ 名称", "输入 DJ 名称", "DJ名を入力"), text: $spotifySearchKeyword)
-                                .textInputAutocapitalization(.words)
-                                .autocorrectionDisabled(true)
-                                .onSubmit {
-                                    Task { await searchSpotifyCandidates() }
-                                }
-
-                            Button(isSearchingSpotify ? LT("搜索中...", "Searching...", "検索中...") : LT("搜索", "Search", "検索")) {
-                                Task { await searchSpotifyCandidates() }
-                            }
-                            .disabled(isSearchingSpotify || spotifySearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-
-                        if isSearchingSpotify {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text(LT("正在拉取 Spotify 候选列表...", "正在拉取 Spotify 候选列表...", "Spotify候補を取得中..."))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-                    }
-
-                    Section(LT("候选结果", "候选结果", "候補結果")) {
-                        if spotifyCandidates.isEmpty {
-                            Text(LT("暂无候选，可切换到手动导入。", "暂无候选，可切换到手动导入。", "候補がありません。手動取り込みに切り替えられます。"))
-                                .font(.subheadline)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        } else {
-                            ForEach(spotifyCandidates) { candidate in
-                                Button {
-                                    applySpotifyCandidate(candidate)
-                                } label: {
-                                    spotifyCandidateRow(candidate, selectedSpotifyId: selectedSpotifyCandidate?.spotifyId)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    if let selected = selectedSpotifyCandidate {
-                        Section(LT("确认导入信息", "确认导入信息", "取り込み情報を確認")) {
-                            Text(LT("Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)", "Spotify ID: \(selected.spotifyId)"))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-
-                            TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $spotifyDraftName)
-                            TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $spotifyDraftAliases)
-                            TextField(LT("简介", "简介", "紹介"), text: $spotifyDraftBio, axis: .vertical)
-                            TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $spotifyDraftCountry)
-
-                            if let existingName = selected.existingDJName, !existingName.isEmpty {
-                                Text(LT("检测到同名/同Spotify DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name/Spotify DJ: \(existingName). Import will merge update instead of creating duplicate.", "同名/同一SpotifyのDJ「\(existingName)」を検出しました。取り込み時に統合更新され、重複作成されません。"))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-                    }
-                } else if importMode == .discogs {
-                    Section(LT("搜索 Discogs Artist", "搜索 Discogs Artist", "Discogs Artistを検索")) {
-                        HStack(spacing: 8) {
-                            TextField(LT("输入 DJ 名称", "输入 DJ 名称", "DJ名を入力"), text: $discogsSearchKeyword)
-                                .textInputAutocapitalization(.words)
-                                .autocorrectionDisabled(true)
-                                .onSubmit {
-                                    Task { await searchDiscogsCandidates() }
-                                }
-
-                            Button(isSearchingDiscogs ? LT("搜索中...", "Searching...", "検索中...") : LT("搜索", "Search", "検索")) {
-                                Task { await searchDiscogsCandidates() }
-                            }
-                            .disabled(isSearchingDiscogs || discogsSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-
-                        if isSearchingDiscogs {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text(LT("正在拉取 Discogs 候选列表...", "正在拉取 Discogs 候选列表...", "Discogs候補を取得中..."))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-                    }
-
-                    Section(LT("Discogs 候选结果", "Discogs 候选结果", "Discogs候補結果")) {
-                        if discogsCandidates.isEmpty {
-                            Text(LT("暂无候选，可继续搜索或切换到手动导入。", "暂无候选，可继续搜索或切换到手动导入。", "候補がありません。検索を続けるか手動取り込みに切り替えられます。"))
-                                .font(.subheadline)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        } else {
-                            ForEach(discogsCandidates) { candidate in
-                                Button {
-                                    applyDiscogsCandidate(candidate)
-                                } label: {
-                                    discogsCandidateRow(candidate)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    if selectedDiscogsCandidate != nil {
-                        Section(LT("确认导入信息（支持二次修改）", "确认导入信息（支持二次修改）", "取り込み情報を確認（二次編集可）")) {
-                            if isLoadingDiscogsDetail {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text(LT("正在读取 Discogs 详情并自动填充...", "正在读取 Discogs 详情并自动填充...", "Discogs詳細を読み込んで自動入力中..."))
-                                        .font(.caption)
-                                        .foregroundStyle(RaverTheme.secondaryText)
-                                }
-                            }
-
-                            TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $discogsDraftName)
-                            TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $discogsDraftAliases)
-                            TextField(LT("简介", "简介", "紹介"), text: $discogsDraftBio, axis: .vertical)
-                            TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $discogsDraftCountry)
-                            TextField(LT("Instagram（可选）", "Instagram（可选）", "Instagram（任意）"), text: $discogsDraftInstagram)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled(true)
-                            TextField(LT("SoundCloud（可选）", "SoundCloud（可选）", "SoundCloud（任意）"), text: $discogsDraftSoundcloud)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled(true)
-                            TextField(LT("X/Twitter（可选）", "X/Twitter（可选）", "X/Twitter（任意）"), text: $discogsDraftTwitter)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled(true)
-                            TextField(LT("Spotify ID（可选）", "Spotify ID（可选）", "Spotify ID（任意）"), text: $discogsDraftSpotifyID)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled(true)
-
-                            if let selectedDiscogsCandidate,
-                               let existingName = selectedDiscogsCandidate.existingDJName,
-                               !existingName.isEmpty {
-                                Text(LT("检测到同名 DJ：\(existingName)，导入时将合并更新，不会重复创建。", "Matched existing same-name DJ: \(existingName). Import will merge update instead of creating duplicate.", "同名DJ「\(existingName)」を検出しました。取り込み時に統合更新され、重複作成されません。"))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-
-                        Section(LT("关联 Spotify（可选）", "关联 Spotify（可选）", "Spotify連携（任意）")) {
-                            HStack(spacing: 8) {
-                                TextField(LT("搜索 Spotify 用于补全链接", "搜索 Spotify 用于补全链接", "リンク補完用にSpotifyを検索"), text: $discogsLinkedSpotifyKeyword)
-                                    .textInputAutocapitalization(.words)
-                                    .autocorrectionDisabled(true)
-                                    .onSubmit {
-                                        Task { await searchDiscogsLinkedSpotifyCandidates() }
-                                    }
-
-                                Button(isSearchingDiscogsLinkedSpotify ? LT("搜索中...", "Searching...", "検索中...") : "搜索") {
-                                    Task { await searchDiscogsLinkedSpotifyCandidates() }
-                                }
-                                .disabled(isSearchingDiscogsLinkedSpotify || discogsLinkedSpotifyKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-
-                            if isSearchingDiscogsLinkedSpotify {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text(LT("正在搜索 Spotify...", "正在搜索 Spotify...", "Spotifyを検索中..."))
-                                        .font(.caption)
-                                        .foregroundStyle(RaverTheme.secondaryText)
-                                }
-                            }
-
-                            if !discogsLinkedSpotifyCandidates.isEmpty {
-                                ForEach(discogsLinkedSpotifyCandidates) { candidate in
-                                    Button {
-                                        applyDiscogsLinkedSpotifyCandidate(candidate)
-                                    } label: {
-                                        spotifyCandidateRow(
-                                            candidate,
-                                            selectedSpotifyId: selectedDiscogsLinkedSpotifyCandidate?.spotifyId
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-
-                            if let selectedDiscogsLinkedSpotifyCandidate {
-                                Text(LT("已关联 Spotify：\(selectedDiscogsLinkedSpotifyCandidate.name)", "Linked Spotify: \(selectedDiscogsLinkedSpotifyCandidate.name)", "関連Spotify: \(selectedDiscogsLinkedSpotifyCandidate.name)"))
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                            }
-                        }
-                    }
-                } else {
-                    Section(LT("手动填写 DJ 信息", "手动填写 DJ 信息", "DJ情報を手動入力")) {
-                        TextField(LT("DJ 名称（必填）", "DJ 名称（必填）", "DJ名（必須）"), text: $manualName)
-                        TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $manualAliases)
-                        TextField(LT("国家（可选）", "国家（可选）", "国（任意）"), text: $manualCountry)
-                        TextField(LT("Instagram（可选）", "Instagram（可选）", "Instagram（任意）"), text: $manualInstagram)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                        TextField(LT("SoundCloud（可选）", "SoundCloud（可选）", "SoundCloud（任意）"), text: $manualSoundcloud)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                        TextField(LT("X/Twitter（可选）", "X/Twitter（可选）", "X/Twitter（任意）"), text: $manualTwitter)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                        TextField(LT("简介（可选）", "简介（可选）", "紹介（任意）"), text: $manualBio, axis: .vertical)
-                    }
-
-                    Section(LT("图片（上传到 OSS 的 DJ 文件夹）", "图片（上传到 OSS 的 DJ 文件夹）", "画像（OSSのDJフォルダにアップロード）")) {
-                        HStack(spacing: 12) {
-                            PhotosPicker(selection: $manualAvatarItem, matching: .images) {
-                                Label(LT("选择头像", "选择头像", "アバターを選択"), systemImage: "person.crop.circle")
-                            }
-                            .buttonStyle(.bordered)
-
-                            if let manualAvatarData, let image = UIImage(data: manualAvatarData) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 44, height: 44)
-                                    .clipShape(Circle())
-                            }
-                        }
-
-                        HStack(spacing: 12) {
-                            PhotosPicker(selection: $manualBannerItem, matching: .images) {
-                                Label(LT("选择横幅", "选择横幅", "バナーを選択"), systemImage: "photo.rectangle")
-                            }
-                            .buttonStyle(.bordered)
-
-                            if let manualBannerData, let image = UIImage(data: manualBannerData) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 88, height: 44)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            }
-                        }
-                    }
-                }
-
-                Section {
-                    Button(isImportingDJ ? LT("导入中...", "Importing...", "取り込み中...") : LT("确认导入到 DJ 数据库", "Confirm import to DJ database", "DJデータベースへの取り込みを確認")) {
-                        Task { await confirmDJImport() }
-                    }
-                    .disabled(isImportingDJ || isImportConfirmDisabled)
-                }
-            }
-            .raverSystemNavigation(title: LT("导入 DJ", "导入 DJ", "DJを取り込み"))
-            .scrollDismissesKeyboard(.interactively)
-            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-                get: { djImportSuccessMessage != nil },
-                set: { if !$0 { djImportSuccessMessage = nil } }
-            )) {
-                Button(LT("确定", "OK", "OK"), role: .cancel) {
-                    finishDJImportSuccessDismissal()
-                }
-            } message: {
-                Text(djImportSuccessMessage ?? "")
-            }
-    }
-
-    private var isImportConfirmDisabled: Bool {
-        switch importMode {
-        case .spotify:
-            return selectedSpotifyCandidate == nil
-                || spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .discogs:
-            return selectedDiscogsCandidate == nil
-                || discogsDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manual:
-            return manualName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-    }
-
-    @MainActor
-    private func searchSpotifyCandidates() async {
-        let keyword = spotifySearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else {
-            spotifyCandidates = []
-            selectedSpotifyCandidate = nil
-            return
-        }
-
-        isSearchingSpotify = true
-        defer { isSearchingSpotify = false }
-
-        do {
-            let items = try await djImportRepository.searchSpotifyDJs(query: keyword, limit: 10)
-            spotifyCandidates = items
-            if let first = items.first {
-                applySpotifyCandidate(first)
-            } else {
-                selectedSpotifyCandidate = nil
-            }
-        } catch {
-            errorMessage = LT("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")", "Spotify検索に失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    @MainActor
-    private func searchDiscogsCandidates() async {
-        let keyword = discogsSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else {
-            discogsCandidates = []
-            selectedDiscogsCandidate = nil
-            return
-        }
-
-        isSearchingDiscogs = true
-        defer { isSearchingDiscogs = false }
-
-        do {
-            let items = try await djImportRepository.searchDiscogsDJs(query: keyword, limit: 12)
-            discogsCandidates = items
-            if let first = items.first {
-                applyDiscogsCandidate(first)
-            } else {
-                selectedDiscogsCandidate = nil
-            }
-        } catch {
-            errorMessage = LT("Discogs 搜索失败：\(error.userFacingMessage ?? "")", "Discogs search failed: \(error.userFacingMessage ?? "")", "Discogs検索に失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    @MainActor
-    private func searchDiscogsLinkedSpotifyCandidates() async {
-        let keyword = discogsLinkedSpotifyKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else {
-            discogsLinkedSpotifyCandidates = []
-            return
-        }
-
-        isSearchingDiscogsLinkedSpotify = true
-        defer { isSearchingDiscogsLinkedSpotify = false }
-
-        do {
-            let items = try await djImportRepository.searchSpotifyDJs(query: keyword, limit: 8)
-            discogsLinkedSpotifyCandidates = items
-        } catch {
-            errorMessage = LT("Spotify 搜索失败：\(error.userFacingMessage ?? "")", "Spotify search failed: \(error.userFacingMessage ?? "")", "Spotify検索に失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    private func applySpotifyCandidate(_ candidate: SpotifyDJCandidate) {
-        selectedSpotifyCandidate = candidate
-        spotifyDraftName = candidate.name
-        spotifyDraftAliases = ""
-        spotifyDraftCountry = ""
-        if candidate.genres.isEmpty {
-            spotifyDraftBio = ""
-        } else {
-            spotifyDraftBio = "Spotify genres: \(candidate.genres.prefix(4).joined(separator: ", "))"
-        }
-    }
-
-    private func applyDiscogsCandidate(_ candidate: DiscogsDJCandidate) {
-        selectedDiscogsCandidate = candidate
-        discogsDraftName = candidate.name
-        discogsDraftAliases = ""
-        discogsDraftBio = ""
-        discogsDraftCountry = ""
-        discogsDraftInstagram = ""
-        discogsDraftSoundcloud = ""
-        discogsDraftTwitter = ""
-        discogsDraftSpotifyID = ""
-        selectedDiscogsLinkedSpotifyCandidate = nil
-        discogsLinkedSpotifyCandidates = []
-        discogsLinkedSpotifyKeyword = ""
-        Task { await loadDiscogsCandidateDetail(artistId: candidate.artistId) }
-    }
-
-    private func applyDiscogsLinkedSpotifyCandidate(_ candidate: SpotifyDJCandidate) {
-        selectedDiscogsLinkedSpotifyCandidate = candidate
-        discogsDraftSpotifyID = candidate.spotifyId
-    }
-
-    @MainActor
-    private func loadDiscogsCandidateDetail(artistId: Int) async {
-        isLoadingDiscogsDetail = true
-        defer { isLoadingDiscogsDetail = false }
-
-        do {
-            let detail = try await djImportRepository.fetchDiscogsDJArtist(id: artistId)
-            if !detail.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                discogsDraftName = detail.name
-            }
-            discogsDraftAliases = buildDiscogsAliasesText(from: detail)
-            discogsDraftBio = detail.profile ?? ""
-            discogsDraftInstagram = pickSocialURL(from: detail.urls, hosts: ["instagram.com"]) ?? ""
-            discogsDraftSoundcloud = pickSocialURL(from: detail.urls, hosts: ["soundcloud.com"]) ?? ""
-            discogsDraftTwitter = pickSocialURL(from: detail.urls, hosts: ["twitter.com", "x.com"]) ?? ""
-            if let linkedSpotify = selectedDiscogsLinkedSpotifyCandidate {
-                discogsDraftSpotifyID = linkedSpotify.spotifyId
-            }
-        } catch {
-            errorMessage = LT("读取 Discogs 详情失败：\(error.userFacingMessage ?? "")", "Failed to load Discogs detail: \(error.userFacingMessage ?? "")", "Discogs詳細の読み込みに失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    @ViewBuilder
-    private func spotifyCandidateRow(_ candidate: SpotifyDJCandidate, selectedSpotifyId: String?) -> some View {
-        HStack(spacing: 10) {
-            Group {
-                if let imageURL = AppConfig.resolvedURLString(candidate.imageUrl) {
-                    ImageLoaderView(urlString: imageURL)
-                        .background(Circle().fill(RaverTheme.card))
-                } else {
-                    Circle().fill(RaverTheme.card)
-                }
-            }
-            .frame(width: 36, height: 36)
-            .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(candidate.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .lineLimit(1)
-
-                HStack(spacing: 8) {
-                    Text(LT("粉丝 \(candidate.followers)", "Followers \(candidate.followers)", "フォロワー \(candidate.followers)"))
-                    Text(LT("热度 \(candidate.popularity)", "Popularity \(candidate.popularity)", "人気度 \(candidate.popularity)"))
-                }
-                .font(.caption2)
-                .foregroundStyle(RaverTheme.secondaryText)
-
-                if let existingName = candidate.existingDJName, !existingName.isEmpty {
-                    Text(LT("将合并到：\(existingName)", "Will merge into: \(existingName)", "\(existingName) に統合されます"))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.orange)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if selectedSpotifyId == candidate.spotifyId {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.green)
-            }
-        }
-        .contentShape(Rectangle())
-    }
-
-    @ViewBuilder
-    private func discogsCandidateRow(_ candidate: DiscogsDJCandidate) -> some View {
-        HStack(spacing: 10) {
-            Group {
-                if let thumb = AppConfig.resolvedURLString(candidate.thumbUrl) {
-                    ImageLoaderView(urlString: thumb)
-                        .background(Circle().fill(RaverTheme.card))
-                } else if let cover = AppConfig.resolvedURLString(candidate.coverImageUrl) {
-                    ImageLoaderView(urlString: cover)
-                        .background(Circle().fill(RaverTheme.card))
-                } else {
-                    Circle().fill(RaverTheme.card)
-                }
-            }
-            .frame(width: 36, height: 36)
-            .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(candidate.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(RaverTheme.primaryText)
-                    .lineLimit(1)
-
-                Text(LT("Discogs ID \(candidate.artistId)", "Discogs ID \(candidate.artistId)", "Discogs ID \(candidate.artistId)"))
-                    .font(.caption2)
-                    .foregroundStyle(RaverTheme.secondaryText)
-
-                if let existingName = candidate.existingDJName, !existingName.isEmpty {
-                    Text(LT("将合并到：\(existingName)", "Will merge into: \(existingName)", "\(existingName) に統合されます"))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.orange)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if selectedDiscogsCandidate?.artistId == candidate.artistId {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.green)
-            }
-        }
-        .contentShape(Rectangle())
-    }
-
-    @MainActor
-    private func confirmDJImport() async {
-        switch importMode {
-        case .spotify:
-            await confirmSpotifyImport()
-        case .discogs:
-            await confirmDiscogsImport()
-        case .manual:
-            await confirmManualImport()
-        }
-    }
-
-    @MainActor
-    private func confirmSpotifyImport() async {
-        guard let selected = selectedSpotifyCandidate else {
-            errorMessage = LT("请先选择一个 Spotify DJ", "Please select a Spotify DJ first.", "先にSpotify DJを選択してください。")
-            return
-        }
-        let finalName = spotifyDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !finalName.isEmpty else {
-            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
-            return
-        }
-
-        let aliases = spotifyDraftAliases
-            .split(whereSeparator: { $0 == "," || $0 == "，" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let bio = spotifyDraftBio.trimmingCharacters(in: .whitespacesAndNewlines)
-        let country = spotifyDraftCountry.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        isImportingDJ = true
-        defer { isImportingDJ = false }
-
-        do {
-            let result = try await djImportRepository.importSpotifyDJ(
-                input: ImportSpotifyDJInput(
-                    spotifyId: selected.spotifyId,
-                    name: finalName,
-                    aliases: aliases.isEmpty ? nil : aliases,
-                    bio: bio.isEmpty ? nil : bio,
-                    country: country.isEmpty ? nil : country,
-                    instagramUrl: nil,
-                    soundcloudUrl: nil,
-                    twitterUrl: nil,
-                    isVerified: true
-                )
-            )
-            switch result {
-            case .submittedForReview:
-                completeDJImportSuccess()
-            case .imported:
-                await viewModel.reload()
-                completeDJImportSuccess(message: LT("DJ 信息已保存", "DJ saved", "DJ情報を保存しました"))
-            }
-        } catch {
-            errorMessage = LT("导入失败：\(error.userFacingMessage ?? "")", "Import failed: \(error.userFacingMessage ?? "")", "取り込みに失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    @MainActor
-    private func confirmDiscogsImport() async {
-        guard let selected = selectedDiscogsCandidate else {
-            errorMessage = LT("请先选择一个 Discogs DJ", "Please select a Discogs DJ first.", "先にDiscogs DJを選択してください。")
-            return
-        }
-        let finalName = discogsDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !finalName.isEmpty else {
-            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
-            return
-        }
-
-        let aliases = discogsDraftAliases
-            .split(whereSeparator: { $0 == "," || $0 == "，" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let bio = normalizedOptionalString(discogsDraftBio)
-        let country = normalizedOptionalString(discogsDraftCountry)
-        let instagram = normalizedOptionalString(discogsDraftInstagram)
-        let soundcloud = normalizedOptionalString(discogsDraftSoundcloud)
-        let twitter = normalizedOptionalString(discogsDraftTwitter)
-        let spotifyID = normalizedOptionalString(discogsDraftSpotifyID) ?? selectedDiscogsLinkedSpotifyCandidate?.spotifyId
-
-        isImportingDJ = true
-        defer { isImportingDJ = false }
-
-        do {
-            let result = try await djImportRepository.importDiscogsDJ(
-                input: ImportDiscogsDJInput(
-                    discogsArtistId: selected.artistId,
-                    name: finalName,
-                    aliases: aliases,
-                    bio: bio,
-                    country: country,
-                    instagramUrl: instagram,
-                    soundcloudUrl: soundcloud,
-                    twitterUrl: twitter,
-                    spotifyId: spotifyID,
-                    isVerified: true
-                )
-            )
-            switch result {
-            case .submittedForReview:
-                completeDJImportSuccess()
-            case .imported:
-                await viewModel.reload()
-                completeDJImportSuccess(message: LT("DJ 信息已保存", "DJ saved", "DJ情報を保存しました"))
-            }
-        } catch {
-            errorMessage = LT("Discogs 导入失败：\(error.userFacingMessage ?? "")", "Discogs import failed: \(error.userFacingMessage ?? "")", "Discogs取り込みに失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    @MainActor
-    private func confirmManualImport() async {
-        let finalName = manualName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !finalName.isEmpty else {
-            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
-            return
-        }
-
-        let aliases = manualAliases
-            .split(whereSeparator: { $0 == "," || $0 == "，" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let country = normalizedOptionalString(manualCountry)
-        let bio = normalizedOptionalString(manualBio)
-        let instagram = normalizedOptionalString(manualInstagram)
-        let soundcloud = normalizedOptionalString(manualSoundcloud)
-        let twitter = normalizedOptionalString(manualTwitter)
-
-        isImportingDJ = true
-        defer { isImportingDJ = false }
-
-        do {
-            let result = try await djImportRepository.importManualDJ(
-                input: ImportManualDJInput(
-                    name: finalName,
-                    spotifyId: nil,
-                    aliases: aliases.isEmpty ? nil : aliases,
-                    bio: bio,
-                    country: country,
-                    instagramUrl: instagram,
-                    soundcloudUrl: soundcloud,
-                    twitterUrl: twitter,
-                    isVerified: true
-                )
-            )
-
-            guard case .imported(let imported) = result else {
-                completeDJImportSuccess()
-                return
-            }
-
-            if let manualAvatarData {
-                _ = try await djMediaRepository.uploadDJImage(
-                    imageData: jpegDataForDJImport(from: manualAvatarData),
-                    fileName: "dj-avatar-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg",
-                    djID: imported.dj.id,
-                    usage: "avatar"
-                )
-            }
-
-            if let manualBannerData {
-                _ = try await djMediaRepository.uploadDJImage(
-                    imageData: jpegDataForDJImport(from: manualBannerData),
-                    fileName: "dj-banner-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg",
-                    djID: imported.dj.id,
-                    usage: "banner"
-                )
-            }
-
-            await viewModel.reload()
-            completeDJImportSuccess(message: LT("DJ 信息已保存", "DJ saved", "DJ情報を保存しました"))
-        } catch {
-            errorMessage = LT("手动导入失败：\(error.userFacingMessage ?? "")", "Manual import failed: \(error.userFacingMessage ?? "")", "手動取り込みに失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    @MainActor
-    private func completeDJImportSuccess(message: String = LT("DJ 信息已提交审核", "DJ submitted for review", "DJ情報を審査に送信しました")) {
-        errorMessage = nil
-        viewModel.errorMessage = nil
-        djImportSuccessMessage = message
-    }
-
-    @MainActor
-    private func finishDJImportSuccessDismissal() {
-        djImportSuccessMessage = nil
-        showDJImportSheet = false
-        guard dismissAfterSuccessfulImport else { return }
-        dismiss()
-    }
-
-    private func buildDiscogsAliasesText(from detail: DiscogsDJArtistDetail) -> String {
-        var values: [String] = []
-        values.append(contentsOf: detail.nameVariations)
-        values.append(contentsOf: detail.aliases)
-        values.append(contentsOf: detail.groups)
-        if let realName = detail.realName, !realName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            values.append(realName)
-        }
-
-        var deduplicated: [String] = []
-        var seen = Set<String>()
-        let normalizedPrimary = detail.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        for item in values {
-            let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            let key = trimmed.lowercased()
-            guard key != normalizedPrimary else { continue }
-            guard !seen.contains(key) else { continue }
-            seen.insert(key)
-            deduplicated.append(trimmed)
-        }
-        return deduplicated.joined(separator: ", ")
-    }
-
-    private func pickSocialURL(from urls: [String], hosts: [String]) -> String? {
-        for raw in urls {
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            guard let parsed = URL(string: trimmed) else { continue }
-            let host = parsed.host?.lowercased() ?? ""
-            if hosts.contains(where: { host.contains($0.lowercased()) }) {
-                return trimmed
-            }
-        }
-        return nil
-    }
-
-    private enum ManualPhotoTarget {
-        case avatar
-        case banner
-    }
-
-    @MainActor
-    private func loadManualPhoto(_ item: PhotosPickerItem?, target: ManualPhotoTarget) async {
-        guard let item else {
-            switch target {
-            case .avatar:
-                manualAvatarData = nil
-            case .banner:
-                manualBannerData = nil
-            }
-            return
-        }
-        do {
-            let loaded = try await item.loadTransferable(type: Data.self)
-            switch target {
-            case .avatar:
-                manualAvatarData = loaded
-            case .banner:
-                manualBannerData = loaded
-            }
-        } catch {
-            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
-        }
-    }
-
-    private func normalizedOptionalString(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func jpegDataForDJImport(from data: Data) -> Data {
-        guard let image = UIImage(data: data),
-              let jpeg = image.jpegData(compressionQuality: 0.9) else {
-            return data
-        }
-        return jpeg
-    }
-}
-
-private enum DJsImportMode: String, CaseIterable, Identifiable {
-    case spotify
-    case discogs
-    case manual
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .spotify: return LT("Spotify 导入", "Import from Spotify", "Spotifyから取り込み")
-        case .discogs: return LT("Discogs 导入", "Import from Discogs", "Discogsから取り込み")
-        case .manual: return LT("手动导入", "Manual Import", "手動取り込み")
-        }
     }
 }
 
@@ -2572,21 +1739,6 @@ struct DJDetailView: View {
     @State private var spotifyDraftCountry = ""
     @State private var isImportingSpotifyDJ = false
     @State private var showDJEditSheet = false
-    @State private var isSavingDJProfile = false
-    @State private var editDJName = ""
-    @State private var editDJAliases = ""
-    @State private var editDJBio = ""
-    @State private var editDJCountry = ""
-    @State private var editDJSpotifyID = ""
-    @State private var editDJAppleMusicID = ""
-    @State private var editDJInstagram = ""
-    @State private var editDJSoundcloud = ""
-    @State private var editDJTwitter = ""
-    @State private var editDJVerified = true
-    @State private var editAvatarItem: PhotosPickerItem?
-    @State private var editBannerItem: PhotosPickerItem?
-    @State private var editAvatarData: Data?
-    @State private var editBannerData: Data?
     @State private var relatedArticles: [DiscoverNewsArticle] = []
     @State private var isLoadingRelatedArticles = false
     @State private var isLoadingMoreRelatedArticles = false
@@ -2758,16 +1910,21 @@ struct DJDetailView: View {
         .overlay { sharePanelOverlay }
         .animation(.sharePanelPresentSpring, value: isShareMorePanelVisible)
         .navigationDestination(isPresented: $showDJEditSheet) {
-            djEditSheet
+            if let dj {
+                DJUploadFlowView(
+                    mode: .edit(id: dj.id),
+                    initialDJ: dj,
+                    userID: appState.session?.user.id ?? "anonymous",
+                    importRepository: djImportRepository,
+                    commandRepository: djCommandRepository,
+                    mediaRepository: djMediaRepository
+                ) { _ in
+                    Task { await load() }
+                }
+            }
         }
         .navigationDestination(isPresented: $showSpotifyImportSheet) {
             spotifyImportSheet
-        }
-        .onChange(of: editAvatarItem) { _, item in
-            Task { await loadDJEditPhoto(item, target: .avatar) }
-        }
-        .onChange(of: editBannerItem) { _, item in
-            Task { await loadDJEditPhoto(item, target: .banner) }
         }
         .onChange(of: selectedTab) { _, tab in
             resetVisibleCounts(for: tab)
@@ -2955,7 +2112,6 @@ struct DJDetailView: View {
             let loadedWatchedCount = (try? await watchedCountTask) ?? loadedDJ.viewerWatchedCount ?? 0
 
             dj = loadedDJ
-            prepareDJEditDraft(from: loadedDJ)
             rankingHonors = []
             watchedSetCount = loadedWatchedCount
             isHonorListExpanded = false
@@ -3423,7 +2579,6 @@ struct DJDetailView: View {
     @MainActor
     private func applyDJManualCacheSnapshot(_ snapshot: DJManualCacheSnapshot) {
         dj = snapshot.dj
-        prepareDJEditDraft(from: snapshot.dj)
         sets = snapshot.sets
         let splitEvents = splitDJEventsBySection(snapshot.djEvents)
         upcomingDJEvents = splitEvents.upcoming
@@ -3709,129 +2864,6 @@ struct DJDetailView: View {
         } catch {
             errorMessage = LT("导入失败：\(error.userFacingMessage ?? "")", "Import failed: \(error.userFacingMessage ?? "")", "取り込みに失敗しました: \(error.userFacingMessage ?? "")")
         }
-    }
-
-    private func prepareDJEditDraft(from dj: WebDJ) {
-        editDJName = dj.name
-        editDJAliases = (dj.aliases ?? []).joined(separator: ", ")
-        editDJBio = dj.bio ?? ""
-        editDJCountry = dj.country ?? ""
-        editDJSpotifyID = dj.spotifyId ?? ""
-        editDJAppleMusicID = dj.appleMusicId ?? ""
-        editDJInstagram = dj.instagramUrl ?? ""
-        editDJSoundcloud = dj.soundcloudUrl ?? ""
-        editDJTwitter = dj.twitterUrl ?? ""
-        editDJVerified = dj.isVerified ?? true
-        editAvatarItem = nil
-        editBannerItem = nil
-        editAvatarData = nil
-        editBannerData = nil
-    }
-
-    @MainActor
-    private func saveDJProfileEdits() async {
-        guard let currentDJ = dj else { return }
-
-        let finalName = editDJName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !finalName.isEmpty else {
-            errorMessage = LT("DJ 名称不能为空", "DJ name cannot be empty.", "DJ名を入力してください。")
-            return
-        }
-
-        let aliases = editDJAliases
-            .split(whereSeparator: { $0 == "," || $0 == "，" })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        isSavingDJProfile = true
-        defer { isSavingDJProfile = false }
-
-        do {
-            _ = try await djCommandRepository.updateDJ(
-                id: currentDJ.id,
-                input: UpdateDJInput(
-                    name: finalName,
-                    aliases: aliases,
-                    bio: normalizedOptionalString(editDJBio),
-                    country: normalizedOptionalString(editDJCountry),
-                    spotifyId: normalizedOptionalString(editDJSpotifyID),
-                    appleMusicId: normalizedOptionalString(editDJAppleMusicID),
-                    instagramUrl: normalizedOptionalString(editDJInstagram),
-                    soundcloudUrl: normalizedOptionalString(editDJSoundcloud),
-                    twitterUrl: normalizedOptionalString(editDJTwitter),
-                    isVerified: editDJVerified
-                )
-            )
-
-            if let editAvatarData {
-                _ = try await djMediaRepository.uploadDJImage(
-                    imageData: jpegDataForDJImport(from: editAvatarData),
-                    fileName: "dj-avatar-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg",
-                    djID: currentDJ.id,
-                    usage: "avatar"
-                )
-            }
-
-            if let editBannerData {
-                _ = try await djMediaRepository.uploadDJImage(
-                    imageData: jpegDataForDJImport(from: editBannerData),
-                    fileName: "dj-banner-\(UUID().uuidString).jpg",
-                    mimeType: "image/jpeg",
-                    djID: currentDJ.id,
-                    usage: "banner"
-                )
-            }
-
-            showDJEditSheet = false
-            await load()
-            errorMessage = LT("DJ 信息已更新", "DJ profile updated.", "DJプロフィールを更新しました。")
-        } catch {
-            errorMessage = LT("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")", "保存に失敗しました: \(error.userFacingMessage ?? "")")
-        }
-    }
-
-    private enum DJEditPhotoTarget {
-        case avatar
-        case banner
-    }
-
-    @MainActor
-    private func loadDJEditPhoto(_ item: PhotosPickerItem?, target: DJEditPhotoTarget) async {
-        guard let item else {
-            switch target {
-            case .avatar:
-                editAvatarData = nil
-            case .banner:
-                editBannerData = nil
-            }
-            return
-        }
-
-        do {
-            let loaded = try await item.loadTransferable(type: Data.self)
-            switch target {
-            case .avatar:
-                editAvatarData = loaded
-            case .banner:
-                editBannerData = loaded
-            }
-        } catch {
-            errorMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
-        }
-    }
-
-    private func normalizedOptionalString(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func jpegDataForDJImport(from data: Data) -> Data {
-        guard let image = UIImage(data: data),
-              let jpeg = image.jpegData(compressionQuality: 0.9) else {
-            return data
-        }
-        return jpeg
     }
 
     private func heroSection(_ dj: WebDJ) -> some View {
@@ -4207,7 +3239,7 @@ struct DJDetailView: View {
                     accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
                 ) {
                     guard let currentDJ = dj else { return }
-                    prepareDJEditDraft(from: currentDJ)
+                    _ = currentDJ
                     showDJEditSheet = true
                 }
             )
@@ -4391,89 +3423,6 @@ struct DJDetailView: View {
             targetUserID: dj.contributors?.first?.id,
             targetUserDisplayName: dj.contributors?.first?.displayName
         )
-    }
-
-    private var djEditSheet: some View {
-        Form {
-                Section(LT("基础信息", "基础信息", "基本情報")) {
-                    TextField(LT("DJ 名称", "DJ 名称", "DJ名"), text: $editDJName)
-                    TextField(LT("别名（英文逗号分隔）", "别名（英文逗号分隔）", "別名（半角カンマ区切り）"), text: $editDJAliases)
-                    TextField(LT("简介", "简介", "紹介"), text: $editDJBio, axis: .vertical)
-                    TextField(LT("国家", "国家", "国"), text: $editDJCountry)
-                    Toggle(LT("认证 DJ", "认证 DJ", "認証DJ"), isOn: $editDJVerified)
-                }
-
-                Section(LT("平台信息", "平台信息", "プラットフォーム情報")) {
-                    TextField(LT("Spotify ID", "Spotify ID", "Spotify ID"), text: $editDJSpotifyID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                    TextField(LT("Apple Music ID", "Apple Music ID", "Apple Music ID"), text: $editDJAppleMusicID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                    TextField(LT("Instagram URL", "Instagram URL", "Instagram URL"), text: $editDJInstagram)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                    TextField(LT("SoundCloud URL", "SoundCloud URL", "SoundCloud URL"), text: $editDJSoundcloud)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                    TextField(LT("X/Twitter URL", "X/Twitter URL", "X/Twitter URL"), text: $editDJTwitter)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                }
-
-                Section(LT("图片", "图片", "画像")) {
-                    HStack(spacing: 12) {
-                        PhotosPicker(selection: $editAvatarItem, matching: .images) {
-                            Label(LT("更换头像", "更换头像", "アバターを変更"), systemImage: "person.crop.circle")
-                        }
-                        .buttonStyle(.bordered)
-
-                        if let editAvatarData, let image = UIImage(data: editAvatarData) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 44, height: 44)
-                                .clipShape(Circle())
-                        } else if let current = dj?.avatarUrl,
-                                  let resolved = AppConfig.resolvedURLString(current) {
-                            ImageLoaderView(urlString: resolved)
-                                .background(Circle().fill(RaverTheme.card))
-                            .frame(width: 44, height: 44)
-                            .clipShape(Circle())
-                        }
-                    }
-
-                    HStack(spacing: 12) {
-                        PhotosPicker(selection: $editBannerItem, matching: .images) {
-                            Label(LT("更换横幅", "更换横幅", "バナーを変更"), systemImage: "photo.rectangle")
-                        }
-                        .buttonStyle(.bordered)
-
-                        if let editBannerData, let image = UIImage(data: editBannerData) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 88, height: 44)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        } else if let current = dj?.bannerUrl,
-                                  let resolved = AppConfig.resolvedURLString(current) {
-                            ImageLoaderView(urlString: resolved)
-                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(RaverTheme.card))
-                            .frame(width: 88, height: 44)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                    }
-                }
-
-                Section {
-                    Button(isSavingDJProfile ? LT("保存中...", "Saving...", "保存中...") : "保存 DJ 信息") {
-                        Task { await saveDJProfileEdits() }
-                    }
-                    .disabled(isSavingDJProfile || editDJName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .raverSystemNavigation(title: LT("编辑 DJ", "编辑 DJ", "DJを編集"))
-            .scrollDismissesKeyboard(.interactively)
     }
 
     private var spotifyImportFloatingButton: some View {

@@ -1925,6 +1925,13 @@ const isDjAvatarOssObjectKey = (objectKey: string, djId: string): boolean => {
   return objectKey.startsWith(`${ossDjsPrefix}/${safeDJId}/`);
 };
 
+const isDJDraftOssObjectKey = (objectKey: string, userId: string, draftId: string): boolean => {
+  const safeUserId = sanitizeOssPathSegment(userId);
+  const safeDraftId = sanitizeOssPathSegment(draftId);
+  if (!safeUserId || !safeDraftId) return false;
+  return objectKey.startsWith(`${ossDjsPrefix}/drafts/${safeUserId}/${safeDraftId}/`);
+};
+
 const isWikiBrandOssObjectKey = (objectKey: string, brandId: string): boolean => {
   const safeBrandId = sanitizeOssPathSegment(brandId);
   if (!safeBrandId) return false;
@@ -2456,6 +2463,28 @@ const buildDJMediaObjectKey = (
   const safeDJId = sanitizeOssPathSegment(djId) || 'unknown-dj';
   const safeUsage = sanitizeOssPathSegment(usage) || 'image';
   return `${ossDjsPrefix}/${safeDJId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const buildDJDraftMediaObjectKey = (
+  userId: string,
+  draftId: string,
+  fileName: string,
+  mimeType: string,
+  usage: 'avatar' | 'banner' | 'proof'
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeUserId = sanitizeOssPathSegment(userId) || 'unknown-user';
+  const safeDraftId = sanitizeOssPathSegment(draftId) || 'unknown-draft';
+  const safeUsage = sanitizeOssPathSegment(usage) || 'image';
+  return `${ossDjsPrefix}/drafts/${safeUserId}/${safeDraftId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
 const buildDJSetMediaObjectKey = (
@@ -3301,6 +3330,70 @@ const uploadDJMediaToOss = async (
     originalUrl: variants?.originalUrl ?? null,
     mediumUrl: variants?.mediumUrl ?? null,
     smallUrl: variants?.smallUrl ?? null,
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+  };
+};
+
+const uploadDJDraftMediaToOss = async (
+  file: Express.Multer.File,
+  userId: string,
+  draftId: string,
+  usage: 'avatar' | 'banner' | 'proof'
+): Promise<{
+  assetId: string;
+  url: string;
+  originalUrl: string | null;
+  mediumUrl: string | null;
+  smallUrl: string | null;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildDJDraftMediaObjectKey(userId, draftId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'dj-draft',
+    ownerId: draftId,
+    purpose: usage,
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/djs/upload-image:draft',
+    },
+  });
+
+  return {
+    assetId: asset.id,
+    url,
+    originalUrl: null,
+    mediumUrl: null,
+    smallUrl: null,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
@@ -9966,6 +10059,47 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       return;
     }
 
+    const avatarUrl = typeof payload.avatarUrl === 'string' ? payload.avatarUrl.trim() : '';
+    const bannerUrl = typeof payload.bannerUrl === 'string' ? payload.bannerUrl.trim() : '';
+    const proofImageUrl = typeof payload.proofImageUrl === 'string' ? payload.proofImageUrl.trim() : '';
+    const spotifyIdForProof = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
+    const spotifyUrl = typeof payload.spotifyUrl === 'string' ? payload.spotifyUrl.trim() : '';
+    const appleMusicId = typeof payload.appleMusicId === 'string' ? payload.appleMusicId.trim() : '';
+    const instagramUrl = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
+    const facebookUrl = typeof payload.facebookUrl === 'string' ? payload.facebookUrl.trim() : '';
+    const soundcloudUrl = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
+    const twitterUrl = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
+    const youtubeUrl = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
+    const neteaseUrl = typeof payload.neteaseUrl === 'string' ? payload.neteaseUrl.trim() : '';
+    const qqMusicUrl = typeof payload.qqMusicUrl === 'string' ? payload.qqMusicUrl.trim() : '';
+    const soundcloudIdForProof = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
+    const website = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
+    const otherPlatformUrl = parseOptionalStringFromPayload(payload, ['otherPlatformUrl', 'otherUrl']);
+    const hasProofLink = [
+      spotifyIdForProof,
+      spotifyUrl,
+      appleMusicId,
+      instagramUrl,
+      facebookUrl,
+      soundcloudUrl,
+      soundcloudIdForProof,
+      twitterUrl,
+      youtubeUrl,
+      neteaseUrl,
+      qqMusicUrl,
+      website,
+      otherPlatformUrl,
+    ].some((value) => !!value);
+
+    if (!avatarUrl) {
+      res.status(400).json({ error: 'avatarUrl is required' });
+      return;
+    }
+    if (!hasProofLink && !proofImageUrl) {
+      res.status(400).json({ error: 'At least one platform link or proofImageUrl is required' });
+      return;
+    }
+
     if (!canBypassContentReview(viewerRole)) {
       const submission = await createPendingContentSubmission({
         submitterId: userId,
@@ -9974,9 +10108,28 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
         payload: {
           ...payload,
           name,
+          avatarUrl,
+          bannerUrl: bannerUrl || null,
+          proofImageUrl: proofImageUrl || null,
+          otherPlatformUrl: otherPlatformUrl || null,
           importSource: 'manual',
         },
       });
+      const submissionMediaUrls = [avatarUrl, bannerUrl, proofImageUrl].filter(Boolean);
+      if (submissionMediaUrls.length) {
+        await prisma.mediaAsset.updateMany({
+          where: {
+            ownerType: 'dj-draft',
+            uploadedById: userId,
+            url: { in: submissionMediaUrls },
+            status: 'active',
+          },
+          data: {
+            ownerType: 'content-submission',
+            ownerId: submission.id,
+          },
+        });
+      }
       acceptedSubmission(res, submission, 'DJ 信息已提交审核，管理员审核通过后才会入库');
       return;
     }
@@ -10003,16 +10156,7 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
         return;
       }
     }
-    const instagramUrl = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
-    const facebookUrl = typeof payload.facebookUrl === 'string' ? payload.facebookUrl.trim() : '';
-    const soundcloudUrl = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
-    const twitterUrl = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
-    const youtubeUrl = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
-    const spotifyUrl = typeof payload.spotifyUrl === 'string' ? payload.spotifyUrl.trim() : '';
-    const neteaseUrl = typeof payload.neteaseUrl === 'string' ? payload.neteaseUrl.trim() : '';
-    const qqMusicUrl = typeof payload.qqMusicUrl === 'string' ? payload.qqMusicUrl.trim() : '';
     const soundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
-    const website = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
     const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
     const hasPlaylistCountInput = payloadHasAnyKey(payload, ['playlistCount', 'playlist_count']);
     const hasSoundCloudFollowersInput = payloadHasAnyKey(payload, [
@@ -10095,11 +10239,15 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           genres: hasGenresInput ? genres : (target.genres ?? []),
           bio: bio || target.bio || null,
           bioI18n: (normalizeDJBiText(target.bioI18n ?? null, bio || target.bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          avatarUrl: avatarUrl || target.avatarUrl || null,
+          avatarSourceUrl: avatarUrl || target.avatarSourceUrl || null,
+          bannerUrl: bannerUrl || target.bannerUrl || null,
           country: country || target.country || null,
           countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyUrl: spotifyUrl || target.spotifyUrl || null,
           spotifyId: spotifyId || target.spotifyId || null,
           spotifyFollowers: hasSpotifyFollowersInput ? spotifyFollowers : (target.spotifyFollowers ?? null),
+          appleMusicId: appleMusicId || target.appleMusicId || null,
           instagramUrl: instagramUrl || target.instagramUrl || null,
           facebookUrl: facebookUrl || target.facebookUrl || null,
           soundcloudUrl: soundcloudUrl || target.soundcloudUrl || null,
@@ -10132,11 +10280,15 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           slug,
           bio: bio || null,
           bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+          avatarUrl,
+          avatarSourceUrl: avatarUrl,
+          bannerUrl: bannerUrl || null,
           country: country || null,
           countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
           spotifyUrl: spotifyUrl || null,
           spotifyId: spotifyId || null,
           spotifyFollowers,
+          appleMusicId: appleMusicId || null,
           instagramUrl: instagramUrl || null,
           facebookUrl: facebookUrl || null,
           soundcloudUrl: soundcloudUrl || null,
@@ -10185,13 +10337,31 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
 
     const formBody = req.body as Record<string, unknown>;
     const djId = typeof formBody.djId === 'string' ? formBody.djId.trim() : '';
+    const draftId = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
     const usageRaw = typeof formBody.usage === 'string' ? formBody.usage.trim().toLowerCase() : '';
     const usage: 'avatar' | 'banner' | null =
       usageRaw === 'avatar' || usageRaw === 'banner' ? usageRaw : null;
+    const draftUsage: 'avatar' | 'banner' | 'proof' | null =
+      usageRaw === 'avatar' || usageRaw === 'banner' || usageRaw === 'proof' ? usageRaw : null;
 
-    if (!djId) {
+    if (djId && draftId) {
       await fs.promises.unlink(file.path).catch(() => undefined);
-      res.status(400).json({ error: 'djId is required' });
+      res.status(400).json({ error: 'djId and draftId cannot be provided together' });
+      return;
+    }
+    if (!djId && !draftId) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'djId or draftId is required' });
+      return;
+    }
+    if (draftId) {
+      if (!draftUsage) {
+        await fs.promises.unlink(file.path).catch(() => undefined);
+        res.status(400).json({ error: 'usage must be avatar, banner, or proof' });
+        return;
+      }
+      const uploaded = await uploadDJDraftMediaToOss(file, userId, draftId, draftUsage);
+      ok(res, uploaded);
       return;
     }
     if (!usage) {
@@ -10249,6 +10419,59 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload dj image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/djs/delete-images', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const draftId = typeof body.draftId === 'string' ? body.draftId.trim() : '';
+    const urls = Array.isArray(body.urls)
+      ? body.urls
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+      : [];
+
+    if (!draftId) {
+      res.status(400).json({ error: 'draftId is required' });
+      return;
+    }
+    if (!urls.length) {
+      ok(res, { success: true });
+      return;
+    }
+
+    const assets = await prisma.mediaAsset.findMany({
+      where: {
+        ownerType: 'dj-draft',
+        ownerId: draftId,
+        uploadedById: userId,
+        url: { in: urls },
+        status: { in: ['active', 'replaced'] },
+      },
+      select: {
+        id: true,
+        url: true,
+        objectKey: true,
+      },
+    });
+
+    const keys = assets
+      .filter((asset) => typeof asset.objectKey === 'string' && isDJDraftOssObjectKey(asset.objectKey, userId, draftId))
+      .map((asset) => asset.objectKey as string);
+
+    for (const asset of assets) {
+      await mediaAssetService.markDeletedByUrl(asset.url);
+    }
+    await deleteOssObjects(keys);
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete dj images error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -10496,6 +10719,9 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       targetKey:
         | 'bio'
         | 'country'
+        | 'avatarUrl'
+        | 'avatarSourceUrl'
+        | 'bannerUrl'
         | 'spotifyUrl'
         | 'spotifyId'
         | 'appleMusicId'
@@ -10525,6 +10751,13 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
     try {
       assignOptionalString('bio', 'bio');
       assignOptionalString('country', 'country');
+      if (Object.prototype.hasOwnProperty.call(payload, 'avatarUrl')) {
+        assignOptionalString('avatarUrl', 'avatarUrl');
+        if (typeof payload.avatarUrl === 'string' && payload.avatarUrl.trim()) {
+          updateData.avatarSourceUrl = payload.avatarUrl.trim();
+        }
+      }
+      assignOptionalString('bannerUrl', 'bannerUrl');
       assignOptionalString('spotifyUrl', 'spotifyUrl');
       assignOptionalString('spotifyId', 'spotifyId');
       assignOptionalString('appleMusicId', 'appleMusicId');
@@ -10605,6 +10838,14 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       where: { id: djId },
       data: updateData,
     });
+    if (typeof payload.avatarUrl === 'string' && payload.avatarUrl.trim() && existing.avatarUrl && existing.avatarUrl !== payload.avatarUrl.trim()) {
+      await mediaAssetService.markReplacedByUrl(existing.avatarUrl);
+      await deleteSingleDJMediaOssObjectIfOwned(existing.avatarUrl, djId);
+    }
+    if (typeof payload.bannerUrl === 'string' && payload.bannerUrl.trim() && existing.bannerUrl && existing.bannerUrl !== payload.bannerUrl.trim()) {
+      await mediaAssetService.markReplacedByUrl(existing.bannerUrl);
+      await deleteSingleDJMediaOssObjectIfOwned(existing.bannerUrl, djId);
+    }
     await ensureDJContributor(djId, userId);
 
     const updated = await fetchDJWithContributorsById(djId);

@@ -82,9 +82,14 @@ protocol WebFeatureService {
         imageData: Data,
         fileName: String,
         mimeType: String,
-        djID: String,
+        djID: String?,
+        draftID: String?,
         usage: String
     ) async throws -> UploadMediaResponse
+    func deleteDJUploadedImages(
+        draftID: String?,
+        urls: [String]
+    ) async throws
     func fetchDJSets(djID: String) async throws -> [WebDJSet]
     func fetchDJSets(djID: String, page: Int, limit: Int) async throws -> DJSetListPage
     func fetchDJEvents(djID: String, page: Int, limit: Int, statuses: [String]?) async throws -> EventListPage

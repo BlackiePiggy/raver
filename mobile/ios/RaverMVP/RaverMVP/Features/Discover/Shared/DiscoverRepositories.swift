@@ -46,9 +46,11 @@ protocol DJMediaRepository {
         imageData: Data,
         fileName: String,
         mimeType: String,
-        djID: String,
+        djID: String?,
+        draftID: String?,
         usage: String
     ) async throws -> UploadMediaResponse
+    func deleteDJUploadedImages(draftID: String?, urls: [String]) async throws
 }
 
 struct DJListRepositoryAdapter: DJListRepository {
@@ -198,7 +200,8 @@ struct DJMediaRepositoryAdapter: DJMediaRepository {
         imageData: Data,
         fileName: String,
         mimeType: String,
-        djID: String,
+        djID: String?,
+        draftID: String?,
         usage: String
     ) async throws -> UploadMediaResponse {
         try await service.uploadDJImage(
@@ -206,8 +209,13 @@ struct DJMediaRepositoryAdapter: DJMediaRepository {
             fileName: fileName,
             mimeType: mimeType,
             djID: djID,
+            draftID: draftID,
             usage: usage
         )
+    }
+
+    func deleteDJUploadedImages(draftID: String?, urls: [String]) async throws {
+        try await service.deleteDJUploadedImages(draftID: draftID, urls: urls)
     }
 }
 

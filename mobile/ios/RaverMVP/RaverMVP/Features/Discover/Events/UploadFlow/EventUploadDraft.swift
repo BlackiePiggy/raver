@@ -26,7 +26,8 @@ enum EventUploadImageZone: String, CaseIterable, Identifiable, Codable {
         case .cover: return "cover"
         case .lineup: return "luall"
         case .timetable: return "tt"
-        case .poster, .map, .other: return "other"
+        case .poster: return "poster"
+        case .map, .other: return "other"
         }
     }
 

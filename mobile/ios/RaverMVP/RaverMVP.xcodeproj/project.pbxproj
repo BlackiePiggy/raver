@@ -157,6 +157,11 @@
 		830A86BDAE8AE230A646F536 /* login-background-placeholder.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = A7BE2DE303DA1C5FA1BC26C7 /* login-background-placeholder.mp4 */; };
 		8360A281187D3317D5EF87D3 /* SwappingContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00CB3404E61E2E6C8DAF084C /* SwappingContainerView.swift */; };
 		84150C8A5E151B452068305E /* DJsModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58DB7DEA399D18F3F93D63D7 /* DJsModuleView.swift */; };
+		84D11F594A4D98F7FBBE0101 /* DJUploadDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D11F584A4D98F7FBBE0101 /* DJUploadDraft.swift */; };
+		84D11F5B4A4D98F7FBBE0101 /* DJUploadDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D11F5A4A4D98F7FBBE0101 /* DJUploadDraftStore.swift */; };
+		84D11F5D4A4D98F7FBBE0101 /* DJUploadFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D11F5C4A4D98F7FBBE0101 /* DJUploadFlowView.swift */; };
+		84D11F5F4A4D98F7FBBE0101 /* DJUploadFlowViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D11F5E4A4D98F7FBBE0101 /* DJUploadFlowViewModel.swift */; };
+		84D11F614A4D98F7FBBE0101 /* DJUploadValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D11F604A4D98F7FBBE0101 /* DJUploadValidation.swift */; };
 		84A2EAB2692A64328FAF6D89 /* EventUploadProgressHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291612156DD6342708E8B924 /* EventUploadProgressHeader.swift */; };
 		84BB433D6FD0B88177DA05E4 /* VirtualAssetRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA34116CF788822404D7173 /* VirtualAssetRepository.swift */; };
 		84C97B4D0E8F4E86A2C81F0B /* AppAuthRefreshGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C97B4C0E8F4E86A2C81F0B /* AppAuthRefreshGate.swift */; };
@@ -455,6 +460,11 @@
 		587F3AE5F94F3B906F641F5C /* ImageLoaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageLoaderView.swift; sourceTree = "<group>"; };
 		58DA7470156F9993DC0CFC4A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		58DB7DEA399D18F3F93D63D7 /* DJsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJsModuleView.swift; sourceTree = "<group>"; };
+		84D11F584A4D98F7FBBE0101 /* DJUploadDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJUploadDraft.swift; sourceTree = "<group>"; };
+		84D11F5A4A4D98F7FBBE0101 /* DJUploadDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJUploadDraftStore.swift; sourceTree = "<group>"; };
+		84D11F5C4A4D98F7FBBE0101 /* DJUploadFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJUploadFlowView.swift; sourceTree = "<group>"; };
+		84D11F5E4A4D98F7FBBE0101 /* DJUploadFlowViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJUploadFlowViewModel.swift; sourceTree = "<group>"; };
+		84D11F604A4D98F7FBBE0101 /* DJUploadValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJUploadValidation.swift; sourceTree = "<group>"; };
 		593206FEE83459667A0A3851 /* ChatItemAlignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatItemAlignment.swift; sourceTree = "<group>"; };
 		5D77C38713B60ECD728CCDA1 /* EventUploadImageZoneCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventUploadImageZoneCard.swift; sourceTree = "<group>"; };
 		5DE86DE9B4F0EB126C1BD6FC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -1358,6 +1368,18 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		BAD11F574A4D98F7FBBE0101 /* UploadFlow */ = {
+			isa = PBXGroup;
+			children = (
+				84D11F584A4D98F7FBBE0101 /* DJUploadDraft.swift */,
+				84D11F5A4A4D98F7FBBE0101 /* DJUploadDraftStore.swift */,
+				84D11F5C4A4D98F7FBBE0101 /* DJUploadFlowView.swift */,
+				84D11F5E4A4D98F7FBBE0101 /* DJUploadFlowViewModel.swift */,
+				84D11F604A4D98F7FBBE0101 /* DJUploadValidation.swift */,
+			);
+			path = UploadFlow;
+			sourceTree = "<group>";
+		};
 		BC52FFFB3B7AC4DFF4F08D76 /* Widget */ = {
 			isa = PBXGroup;
 			children = (
@@ -1522,6 +1544,7 @@
 			children = (
 				C60BB8FED62AE3CBBF75FA82 /* ViewModels */,
 				BAC25BACC2DECDDA074AF30D /* Views */,
+				BAD11F574A4D98F7FBBE0101 /* UploadFlow */,
 			);
 			path = DJs;
 			sourceTree = "<group>";
@@ -1965,6 +1988,11 @@
 				2863EF343584D50767C838F5 /* ContainerCollectionViewCell.swift in Sources */,
 				9EF4A90A6D55911135CE0485 /* ContainerCollectionViewCellDelegate.swift in Sources */,
 				84150C8A5E151B452068305E /* DJsModuleView.swift in Sources */,
+				84D11F594A4D98F7FBBE0101 /* DJUploadDraft.swift in Sources */,
+				84D11F5B4A4D98F7FBBE0101 /* DJUploadDraftStore.swift in Sources */,
+				84D11F5D4A4D98F7FBBE0101 /* DJUploadFlowView.swift in Sources */,
+				84D11F5F4A4D98F7FBBE0101 /* DJUploadFlowViewModel.swift in Sources */,
+				84D11F614A4D98F7FBBE0101 /* DJUploadValidation.swift in Sources */,
 				45452C970F2DEDE67834FB2B /* DJsModuleViewModel.swift in Sources */,
 				2E2ADC697AD46EB8F911381F /* Date+Formatting.swift in Sources */,
 				643700CC4D94BC5699C456C9 /* DemoAlignedChatAssemblyDependencyResolver.swift in Sources */,

@@ -1189,11 +1189,20 @@ actor MockWebFeatureService: WebFeatureService {
         imageData: Data,
         fileName: String,
         mimeType: String,
-        djID: String,
+        djID: String?,
+        draftID: String?,
         usage: String
     ) async throws -> UploadMediaResponse {
         _ = imageData
-        guard let index = djs.firstIndex(where: { $0.id == djID }) else {
+        if let draftID, !draftID.isEmpty {
+            return UploadMediaResponse(
+                url: "/uploads/djs/drafts/\(draftID)/mock-\(usage)-\(fileName)",
+                fileName: fileName,
+                mimeType: mimeType,
+                size: 1
+            )
+        }
+        guard let djID, let index = djs.firstIndex(where: { $0.id == djID }) else {
             throw ServiceError.message("DJ 不存在")
         }
         let safeUsage = usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "image" : usage
@@ -1205,6 +1214,14 @@ actor MockWebFeatureService: WebFeatureService {
         }
         djs[index].updatedAt = Date()
         return UploadMediaResponse(url: url, fileName: fileName, mimeType: mimeType, size: 1)
+    }
+
+    func deleteDJUploadedImages(
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        _ = draftID
+        _ = urls
     }
 
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage {
@@ -1522,12 +1539,25 @@ actor MockWebFeatureService: WebFeatureService {
             var updated = djs[index]
             updated.name = updated.name.isEmpty ? finalName : updated.name
             updated.spotifyId = spotifyId ?? updated.spotifyId
+            updated.spotifyUrl = normalizedOptional(input.spotifyUrl) ?? updated.spotifyUrl
+            updated.spotifyFollowers = input.spotifyFollowers ?? updated.spotifyFollowers
             updated.aliases = Array(Set((updated.aliases ?? []) + aliases)).sorted()
             updated.bio = bio ?? updated.bio
             updated.country = normalizedOptional(input.country) ?? updated.country
+            updated.appleMusicId = normalizedOptional(input.appleMusicId) ?? updated.appleMusicId
             updated.instagramUrl = normalizedOptional(input.instagramUrl) ?? updated.instagramUrl
+            updated.facebookUrl = normalizedOptional(input.facebookUrl) ?? updated.facebookUrl
             updated.soundcloudUrl = normalizedOptional(input.soundcloudUrl) ?? updated.soundcloudUrl
+            updated.soundcloudId = normalizedOptional(input.soundcloudId) ?? updated.soundcloudId
             updated.twitterUrl = normalizedOptional(input.twitterUrl) ?? updated.twitterUrl
+            updated.youtubeUrl = normalizedOptional(input.youtubeUrl) ?? updated.youtubeUrl
+            updated.neteaseUrl = normalizedOptional(input.neteaseUrl) ?? updated.neteaseUrl
+            updated.qqMusicUrl = normalizedOptional(input.qqMusicUrl) ?? updated.qqMusicUrl
+            updated.website = normalizedOptional(input.website) ?? updated.website
+            updated.trackCount = input.trackCount ?? updated.trackCount
+            updated.playlistCount = input.playlistCount ?? updated.playlistCount
+            updated.soundCloudFollowers = input.soundCloudFollowers ?? updated.soundCloudFollowers
+            updated.soundCloudFavorites = input.soundCloudFavorites ?? updated.soundCloudFavorites
             updated.isVerified = input.isVerified ?? updated.isVerified ?? true
             updated.updatedAt = Date()
             djs[index] = updated
@@ -1544,12 +1574,24 @@ actor MockWebFeatureService: WebFeatureService {
             bannerUrl: nil,
             country: normalizedOptional(input.country),
             spotifyId: spotifyId,
+            spotifyUrl: normalizedOptional(input.spotifyUrl),
+            spotifyFollowers: input.spotifyFollowers,
             appleMusicId: nil,
             soundcloudUrl: normalizedOptional(input.soundcloudUrl),
+            soundcloudId: normalizedOptional(input.soundcloudId),
             instagramUrl: normalizedOptional(input.instagramUrl),
+            facebookUrl: normalizedOptional(input.facebookUrl),
             twitterUrl: normalizedOptional(input.twitterUrl),
+            youtubeUrl: normalizedOptional(input.youtubeUrl),
+            neteaseUrl: normalizedOptional(input.neteaseUrl),
+            qqMusicUrl: normalizedOptional(input.qqMusicUrl),
+            website: normalizedOptional(input.website),
             isVerified: input.isVerified ?? true,
             followerCount: 0,
+            trackCount: input.trackCount,
+            playlistCount: input.playlistCount,
+            soundCloudFollowers: input.soundCloudFollowers,
+            soundCloudFavorites: input.soundCloudFavorites,
             createdAt: Date(),
             updatedAt: Date(),
             isFollowing: false
@@ -1592,22 +1634,55 @@ actor MockWebFeatureService: WebFeatureService {
             let trimmed = spotifyId.trimmingCharacters(in: .whitespacesAndNewlines)
             updated.spotifyId = trimmed.isEmpty ? nil : trimmed
         }
+        updated.spotifyFollowers = input.spotifyFollowers ?? updated.spotifyFollowers
         if let appleMusicId = input.appleMusicId {
             let trimmed = appleMusicId.trimmingCharacters(in: .whitespacesAndNewlines)
             updated.appleMusicId = trimmed.isEmpty ? nil : trimmed
+        }
+        if let spotifyUrl = input.spotifyUrl {
+            let trimmed = spotifyUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.spotifyUrl = trimmed.isEmpty ? nil : trimmed
         }
         if let instagramUrl = input.instagramUrl {
             let trimmed = instagramUrl.trimmingCharacters(in: .whitespacesAndNewlines)
             updated.instagramUrl = trimmed.isEmpty ? nil : trimmed
         }
+        if let facebookUrl = input.facebookUrl {
+            let trimmed = facebookUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.facebookUrl = trimmed.isEmpty ? nil : trimmed
+        }
         if let soundcloudUrl = input.soundcloudUrl {
             let trimmed = soundcloudUrl.trimmingCharacters(in: .whitespacesAndNewlines)
             updated.soundcloudUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let soundcloudId = input.soundcloudId {
+            let trimmed = soundcloudId.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.soundcloudId = trimmed.isEmpty ? nil : trimmed
         }
         if let twitterUrl = input.twitterUrl {
             let trimmed = twitterUrl.trimmingCharacters(in: .whitespacesAndNewlines)
             updated.twitterUrl = trimmed.isEmpty ? nil : trimmed
         }
+        if let youtubeUrl = input.youtubeUrl {
+            let trimmed = youtubeUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.youtubeUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let neteaseUrl = input.neteaseUrl {
+            let trimmed = neteaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.neteaseUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let qqMusicUrl = input.qqMusicUrl {
+            let trimmed = qqMusicUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.qqMusicUrl = trimmed.isEmpty ? nil : trimmed
+        }
+        if let website = input.website {
+            let trimmed = website.trimmingCharacters(in: .whitespacesAndNewlines)
+            updated.website = trimmed.isEmpty ? nil : trimmed
+        }
+        updated.trackCount = input.trackCount ?? updated.trackCount
+        updated.playlistCount = input.playlistCount ?? updated.playlistCount
+        updated.soundCloudFollowers = input.soundCloudFollowers ?? updated.soundCloudFollowers
+        updated.soundCloudFavorites = input.soundCloudFavorites ?? updated.soundCloudFavorites
         if let isVerified = input.isVerified {
             updated.isVerified = isVerified
         }

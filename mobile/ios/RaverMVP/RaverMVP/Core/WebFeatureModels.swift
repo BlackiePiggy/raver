@@ -1139,13 +1139,24 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var country: String?
     var countryI18n: WebBiText? = nil
     var spotifyId: String?
+    var spotifyUrl: String? = nil
+    var spotifyFollowers: Int? = nil
     var appleMusicId: String?
     var soundcloudUrl: String?
+    var soundcloudId: String? = nil
     var instagramUrl: String?
+    var facebookUrl: String? = nil
     var twitterUrl: String?
+    var youtubeUrl: String? = nil
+    var neteaseUrl: String? = nil
+    var qqMusicUrl: String? = nil
+    var website: String? = nil
     var isVerified: Bool?
     var followerCount: Int?
+    var trackCount: Int? = nil
+    var playlistCount: Int? = nil
     var soundCloudFollowers: Int? = nil
+    var soundCloudFavorites: Int? = nil
     var eventCount: Int? = nil
     var eventsCount: Int? = nil
     var upcomingShows: Int? = nil
@@ -2132,13 +2143,34 @@ struct ImportDiscogsDJResponse: Codable, Hashable {
 
 struct ImportManualDJInput: Codable, Hashable {
     var name: String
+    var nameI18n: WebBiText? = nil
     var spotifyId: String?
     var aliases: [String]?
+    var genres: [String]? = nil
     var bio: String?
+    var bioI18n: WebBiText? = nil
     var country: String?
+    var countryI18n: WebBiText? = nil
+    var avatarUrl: String? = nil
+    var bannerUrl: String? = nil
+    var proofImageUrl: String? = nil
+    var spotifyUrl: String? = nil
+    var spotifyFollowers: Int? = nil
+    var appleMusicId: String? = nil
     var instagramUrl: String?
+    var facebookUrl: String? = nil
     var soundcloudUrl: String?
+    var soundcloudId: String? = nil
     var twitterUrl: String?
+    var youtubeUrl: String? = nil
+    var neteaseUrl: String? = nil
+    var qqMusicUrl: String? = nil
+    var website: String? = nil
+    var otherPlatformUrl: String? = nil
+    var trackCount: Int? = nil
+    var playlistCount: Int? = nil
+    var soundCloudFollowers: Int? = nil
+    var soundCloudFavorites: Int? = nil
     var isVerified: Bool?
 }
 
@@ -2151,15 +2183,30 @@ struct UpdateDJInput: Codable, Hashable {
     var name: String?
     var nameI18n: WebBiText? = nil
     var aliases: [String]?
+    var genres: [String]? = nil
     var bio: String?
     var bioI18n: WebBiText? = nil
+    var avatarUrl: String? = nil
+    var bannerUrl: String? = nil
     var country: String?
     var countryI18n: WebBiText? = nil
     var spotifyId: String?
     var appleMusicId: String?
+    var spotifyUrl: String? = nil
+    var spotifyFollowers: Int? = nil
     var instagramUrl: String?
+    var facebookUrl: String? = nil
     var soundcloudUrl: String?
+    var soundcloudId: String? = nil
     var twitterUrl: String?
+    var youtubeUrl: String? = nil
+    var neteaseUrl: String? = nil
+    var qqMusicUrl: String? = nil
+    var website: String? = nil
+    var trackCount: Int? = nil
+    var playlistCount: Int? = nil
+    var soundCloudFollowers: Int? = nil
+    var soundCloudFavorites: Int? = nil
     var isVerified: Bool?
 }
 

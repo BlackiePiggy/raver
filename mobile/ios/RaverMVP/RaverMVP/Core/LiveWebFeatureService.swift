@@ -9,6 +9,11 @@ final class LiveWebFeatureService: WebFeatureService {
         let urls: [String]
     }
 
+    private struct DeleteDJImagesRequest: Encodable {
+        let draftId: String?
+        let urls: [String]
+    }
+
     private let baseURL: URL
     private let session: URLSession
     private let refreshGate = AppAuthRefreshGate.shared
@@ -675,21 +680,45 @@ final class LiveWebFeatureService: WebFeatureService {
         imageData: Data,
         fileName: String,
         mimeType: String,
-        djID: String,
+        djID: String?,
+        draftID: String?,
         usage: String
     ) async throws -> UploadMediaResponse {
+        var fields: [String: String] = ["usage": usage]
+        if let djID, !djID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["djId"] = djID
+        }
+        if let draftID, !draftID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["draftId"] = draftID
+        }
         let response: BFFEnvelope<UploadMediaResponse> = try await uploadMultipart(
             path: "/v1/djs/upload-image",
             data: imageData,
             fileName: fileName,
             mimeType: mimeType,
             fieldName: "image",
-            fields: [
-                "djId": djID,
-                "usage": usage
-            ]
+            fields: fields
         )
         return response.data
+    }
+
+    func deleteDJUploadedImages(
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        let normalizedURLs = urls
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !normalizedURLs.isEmpty else { return }
+
+        let _: BFFEnvelope<GenericSuccess> = try await request(
+            path: "/v1/djs/delete-images",
+            method: "POST",
+            body: DeleteDJImagesRequest(
+                draftId: draftID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                urls: normalizedURLs
+            )
+        )
     }
 
     func fetchDJSets(djID: String) async throws -> [WebDJSet] {

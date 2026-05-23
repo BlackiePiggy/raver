@@ -570,7 +570,7 @@ struct EventUploadFlowView: View {
                             HStack(spacing: 10) {
                                 weekDateField(
                                     title: LT("开始", "Start", "開始"),
-                                    value: shortDateString(week.startDate),
+                                    value: shortDateString(week.startDate, in: eventTimeZone),
                                     action: {
                                         activeWeekDatePicker = WeekDatePickerTarget(weekID: week.id, field: .start)
                                     }
@@ -582,7 +582,7 @@ struct EventUploadFlowView: View {
 
                                 weekDateField(
                                     title: LT("结束", "End", "終了"),
-                                    value: shortDateString(week.endDate),
+                                    value: shortDateString(week.endDate, in: eventTimeZone),
                                     action: {
                                         activeWeekDatePicker = WeekDatePickerTarget(weekID: week.id, field: .end)
                                     }
@@ -1432,7 +1432,15 @@ struct EventUploadFlowView: View {
     }
 
     private func weekDateDurationSummary(_ week: EventUploadWeekRangeDraft) -> String {
-        let days = max((Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: week.startDate), to: Calendar.current.startOfDay(for: max(week.endDate, week.startDate))).day ?? 0) + 1, 1)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = eventTimeZone
+        let days = max((
+            calendar.dateComponents(
+                [.day],
+                from: calendar.startOfDay(for: week.startDate),
+                to: calendar.startOfDay(for: max(week.endDate, week.startDate))
+            ).day ?? 0
+        ) + 1, 1)
         return LT("\(days) 天", "\(days) days", "\(days)日")
     }
 
