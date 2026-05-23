@@ -251,6 +251,51 @@ const runManualReviewPatchRegression = async (eventId: string, userId: string): 
   await assertExistingRowsStable(eventId, beforeArtistIds, beforePerformanceIds);
 };
 
+const runTimetableSourceOfTruthRegression = async (eventId: string, userId: string): Promise<void> => {
+  logStep('timetable source of truth patch path');
+  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  const slotToRewrite = before.slots[1];
+  assert(Boolean(slotToRewrite?.id), 'timetable source of truth slot missing stable id');
+  const previousArtistName = slotToRewrite.djName;
+  const nextArtistName = 'Regression Timetable Source Of Truth DJ';
+
+  await createOrUpdateEventFromSubmission(prisma, {
+    targetEventId: eventId,
+    editMode: 'patch',
+    name: `Event Incremental Timetable Source ${Date.now()}`,
+    startDate: '2026-08-01',
+    endDate: '2026-08-02',
+    timeZone: 'Asia/Shanghai',
+    imageAssets: [
+      {
+        type: 'poster',
+        label: 'POSTER',
+        url: 'https://example.com/regression-poster.jpg',
+      },
+    ],
+    timetableChanges: [
+      {
+        op: 'update',
+        slotId: slotToRewrite.id,
+        patch: {
+          djName: nextArtistName,
+          memberNames: [nextArtistName],
+          memberDjIds: [],
+          djId: null,
+        },
+      },
+    ],
+    stageOrder: before.stageOrder,
+  }, userId);
+
+  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  assert(after.slots.length === before.slots.length, 'timetable source of truth changed slot count');
+  assert(after.artists.length === before.artists.length, 'timetable source of truth changed artist count');
+  assert(after.slots.some((slot) => slot.id === slotToRewrite.id && slot.djName === nextArtistName), 'timetable source of truth did not update slot artist');
+  assert(after.artists.some((artist) => artist.djName === nextArtistName), 'timetable source of truth did not auto-align lineup artist');
+  assert(!after.artists.some((artist) => artist.djName === previousArtistName), 'timetable source of truth left stale lineup artist behind');
+};
+
 const runNormalReviewApprovalRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('normal review approval path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
@@ -340,6 +385,7 @@ const main = async (): Promise<void> => {
     userId = seeded.userId;
     await runDirectCanonicalRegression(eventId);
     await runManualReviewPatchRegression(eventId, userId);
+    await runTimetableSourceOfTruthRegression(eventId, userId);
     await runNormalReviewApprovalRegression(eventId, userId);
     logStep('passed', { eventId });
   } finally {

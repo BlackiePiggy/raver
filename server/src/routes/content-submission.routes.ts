@@ -8,9 +8,8 @@ import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText,
 import { contentCompliance } from '../utils/content-compliance';
 import { syncNewsBindings, syncPostBindings } from '../services/content-bindings.service';
 import {
+  autoAlignEventLineupToTimetablePayload,
   createOrUpdateEventFromSubmission,
-  formatEventLineupTimetableAlignmentError,
-  validateEventLineupTimetableAlignment,
 } from '../services/content-submission-event.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
@@ -169,26 +168,25 @@ const ensureSubmissionPayload = (entityType: string, payload: Prisma.InputJsonOb
     if (!cleanText(payload.startDate) || !cleanText(payload.endDate)) {
       return '活动开始和结束日期不能为空';
     }
-    const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
-    const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
-    const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
-    if (startDate) {
-      const dayRolloverHourRaw = Number(payload.dayRolloverHour);
-      const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
-      const alignmentIssue = validateEventLineupTimetableAlignment(
-        payload as unknown as Prisma.JsonObject,
-        startDate,
-        dayRolloverHour,
-        timeZone
-      );
-      if (alignmentIssue) {
-        return formatEventLineupTimetableAlignmentError(alignmentIssue);
-      }
-    }
   }
   const complianceError = contentCompliance.validationError(entityType, payload);
   if (complianceError) return complianceError;
   return null;
+};
+
+const normalizeEventSubmissionPayload = (payload: Prisma.InputJsonObject): Prisma.InputJsonObject => {
+  const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
+  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
+  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
+  if (!startDate) return payload;
+  const dayRolloverHourRaw = Number(payload.dayRolloverHour);
+  const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
+  return autoAlignEventLineupToTimetablePayload(
+    payload as unknown as Prisma.JsonObject,
+    startDate,
+    dayRolloverHour,
+    timeZone
+  ) as unknown as Prisma.InputJsonObject;
 };
 
 const createSubmissionWithVersion = async (input: {
@@ -768,8 +766,9 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       res.status(400).json({ error: 'entityType 不支持' });
       return;
     }
-    const payload = toJsonObject(req.body.payload);
-    const payloadWithSummary = attachContentSubmissionChangeSummary(entityType, payload);
+    const rawPayload = toJsonObject(req.body.payload);
+    const normalizedPayload = entityType === 'event' ? normalizeEventSubmissionPayload(rawPayload) : rawPayload;
+    const payloadWithSummary = attachContentSubmissionChangeSummary(entityType, normalizedPayload);
     const validationError = ensureSubmissionPayload(entityType, payloadWithSummary);
     if (validationError) {
       res.status(400).json({ error: validationError });
@@ -896,7 +895,8 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       return;
     }
     const rawPayload = toJsonObject(req.body.payload);
-    const payload = attachContentSubmissionChangeSummary(current.entityType, rawPayload);
+    const normalizedPayload = current.entityType === 'event' ? normalizeEventSubmissionPayload(rawPayload) : rawPayload;
+    const payload = attachContentSubmissionChangeSummary(current.entityType, normalizedPayload);
 
     const validationError = ensureSubmissionPayload(current.entityType, payload);
     if (validationError) {

@@ -522,17 +522,9 @@ export const syncCanonicalEventLineupAndTimetable = async (
   const artistsToDelete = existingArtists
     .filter((artist) => !targetArtistIds.has(artist.id))
     .map((artist) => artist.id);
-  if (artistsToDelete.length > 0) {
-    await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistsToDelete } } });
-    await tx.eventArtist.deleteMany({ where: { id: { in: artistsToDelete } } });
-  }
-
   const stagesToDelete = existingStages
     .filter((stage) => !targetStageIds.has(stage.id))
     .map((stage) => stage.id);
-  if (stagesToDelete.length > 0) {
-    await tx.eventStage.deleteMany({ where: { id: { in: stagesToDelete } } });
-  }
 
   const existingArtistIds = new Set(existingArtists.map((artist) => artist.id));
   const artistRowsToCreate = target.artistRows.filter((artist) => !existingArtistIds.has(artist.id));
@@ -641,5 +633,14 @@ export const syncCanonicalEventLineupAndTimetable = async (
         },
       });
     }
+  }
+
+  if (artistsToDelete.length > 0) {
+    await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistsToDelete } } });
+    await tx.eventArtist.deleteMany({ where: { id: { in: artistsToDelete } } });
+  }
+
+  if (stagesToDelete.length > 0) {
+    await tx.eventStage.deleteMany({ where: { id: { in: stagesToDelete } } });
   }
 };

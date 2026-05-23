@@ -362,7 +362,7 @@ Expected behavior:
 - create member rows for that artist
 - create one performance
 - create stage only if needed
-- if timetable and lineup are no longer aligned, block final save until user chooses one-click alignment or manually fixes the mismatch
+- if timetable and lineup are no longer aligned, use timetable DJs as the source of truth and auto-rebuild lineup during submit
 
 ### Scenario J: Move one timetable slot to another stage
 
@@ -663,7 +663,7 @@ Patch validation rules:
 
 - deleting a lineup artist with linked timetable slots is rejected.
 - deleting a stage with linked performances requires `confirmDeleteLinkedPerformances: true`.
-- timetable and lineup DJ identities must still align after applying the patch.
+- timetable edits are the source of truth; patch apply should auto-rebuild lineup from timetable identities instead of rejecting mismatch.
 - unknown IDs are rejected instead of silently creating new rows.
 - duplicated operations for the same row in one payload are rejected unless the parser can safely coalesce them.
 - patch apply must be idempotent for retry-safe worker behavior.
@@ -672,18 +672,18 @@ Patch validation rules:
 
 ### Product rule
 
-Lineup and timetable DJs must be aligned before an event edit can be submitted or approved.
+Timetable DJs are the source of truth during event submit and approval.
 
 When a user adds or edits timetable data:
 
 - compare the normalized DJ set from timetable against the normalized DJ set from lineup
-- if timetable contains DJs not present in lineup, tell the user exactly which DJs are missing from lineup
-- if lineup contains DJs not present in timetable, tell the user exactly which DJs are extra in lineup
-- block final save until the mismatch is resolved
+- auto-rebuild lineup from timetable before queueing the submission
+- preserve existing lineup artist IDs when identities match
+- allow diagnostics tooling to still show which DJs were missing or extra if needed
 
 ### One-click alignment
 
-When mismatch is detected, offer:
+This remains available as a diagnostic or recovery action, but it is no longer required for submit:
 
 ```text
 一键将阵容与时间表对齐
@@ -694,7 +694,7 @@ Behavior:
 - derive lineup artists from timetable DJs
 - preserve existing lineup artist IDs when identities match
 - add missing lineup artists from timetable
-- remove lineup-only artists only after user confirms the alignment action
+- remove lineup-only artists when timetable source-of-truth submit runs
 - keep explicit lineup sort order as much as possible, then append new artists by first timetable appearance
 
 ### Matching rules
@@ -708,7 +708,7 @@ Use the same identity rules as canonical sync:
 
 ### UX requirements
 
-The mismatch message should be actionable:
+If a diagnostic screen still shows mismatch, the message should be actionable:
 
 ```text
 阵容和时间表未对齐：
@@ -717,16 +717,16 @@ The mismatch message should be actionable:
 请选择一键对齐，或手动修改后再提交。
 ```
 
-The backend must also validate this rule so old clients or admin tools cannot bypass it.
+The backend must also enforce the timetable source-of-truth rule so old clients or admin tools cannot bypass it.
 
 Implementation status:
 
-- [x] Backend submission route validates lineup/timetable alignment before queueing event submissions.
-- [x] Worker ingestion validates lineup/timetable alignment again before canonical writes.
+- [x] Backend submission route auto-aligns lineup from timetable before queueing event submissions.
+- [x] Worker ingestion auto-aligns lineup from timetable again before canonical writes.
 - [x] BFF exposes `POST /v1/events/lineup-timetable-alignment/preview` to return mismatch details and aligned `lineupArtists`.
-- [x] iOS upload flow calls the preview API before submit.
-- [x] iOS blocks submit on mismatch and offers "一键对齐并提交".
-- [x] iOS applies backend aligned `lineupArtists` to the draft before continuing submission.
+- [x] iOS upload flow no longer depends on the preview API before submit.
+- [x] iOS submit no longer blocks on mismatch and instead relies on timetable source-of-truth submit behavior.
+- [x] iOS can still apply backend aligned `lineupArtists` if a diagnostic alignment flow is opened manually later.
 - [x] Persist canonical lineup/timetable row IDs in iOS draft models for later patch-mode edits.
 
 ## Conflict And Concurrency Policy
@@ -821,11 +821,12 @@ Recommended for phase 2, not phase 1.
 
 Implementation note:
 
-- Backend patch mode is now handled when `editMode: "patch"` is submitted for an existing event. The worker loads the current canonical lineup/timetable snapshot, applies `lineupChanges`, `timetableChanges`, and guarded `stageChanges`, rejects unsafe missing-ID edits, rejects deleting lineup artists that are still linked by timetable slots, validates lineup/timetable alignment after patch application, then calls the same canonical incremental sync engine.
+- Backend patch mode is now handled when `editMode: "patch"` is submitted for an existing event. The worker loads the current canonical lineup/timetable snapshot, applies `lineupChanges`, `timetableChanges`, and guarded `stageChanges`, rejects unsafe missing-ID edits, rejects deleting lineup artists that are still linked by timetable slots, auto-rebuilds lineup from timetable whenever timetable content is present, then calls the same canonical incremental sync engine.
 - iOS edit mode now stores a canonical lineup/timetable baseline while hydrating an event. On submit it compares the baseline to the current draft and sends `editMode: "patch"` with `lineupChanges`, `timetableChanges`, and guarded `stageChanges`; create mode continues to submit the full event payload.
 - Patch submissions now receive a server-generated `changeSummary` such as "新增艺人 1 个，修改 time slot 1 个". The summary is persisted in the submission payload, appended to processing/review/approved/failed inbox notifications, and displayed in iOS My Posts list/detail.
 - Added backend regression script `pnpm events:incremental-sync:regression`, covering direct canonical `99 + 1` artist/slot add, single-slot update, single artist/slot delete, manual-review-style patch apply, and normal review approval into storage. The script verifies existing artist/performance row IDs remain stable across non-destructive edits.
 - Optimized canonical artist member rewrites from per-artist delete/create loops to batched member deletes and `createMany`, reducing transaction pressure on high-cardinality events and preventing transaction expiry during 99-row regression runs.
+- Timetable is now the source of truth during submit and approval. BFF intake and worker ingestion auto-align lineup from timetable, and iOS submit no longer waits on a blocking alignment preview request.
 
 ## Recommended Order Of Implementation
 
@@ -854,18 +855,18 @@ This sequence gives the fastest production win with the lowest migration risk.
 - [x] Submission UX: while one edit task for an event is processing/reviewing, new edit submissions for the same event are rejected.
 - [x] Long-term client direction: iOS edit flow should move to patch payloads after backend diff sync is stable.
 - [x] Audit depth: review/admin should show human-readable change summaries like "新增 1 个艺人，修改 1 个时间段".
-- [x] Alignment rule: timetable and lineup DJs must match before submit/approval; offer one-click lineup alignment from timetable.
+- [x] Alignment rule: timetable DJs are the source of truth during submit/approval, and lineup is auto-aligned from timetable.
 
 ## Progress Tracker
 
 - [x] Confirm current full-rewrite bottleneck and affected write paths
 - [x] Draft commercial incremental sync architecture covering create, edit, approval, and direct item APIs
 - [x] Confirm delete and concurrency policies with product/ops
-- [x] Add lineup/timetable DJ alignment requirement
+- [x] Add timetable-as-source-of-truth submit policy
 - [x] Implement incremental canonical sync engine
-- [x] Add backend lineup/timetable alignment validator
-- [x] Add one-click lineup alignment support
-- [x] Add iOS submit-time lineup/timetable alignment preview and one-click apply flow
+- [x] Add backend lineup auto-alignment on submit/worker paths
+- [x] Keep alignment preview available as a diagnostic helper
+- [x] Remove iOS submit-time blocking alignment preview
 - [x] Persist canonical lineup/timetable row IDs through iOS edit draft and submission payloads
 - [x] Add tests for high-cardinality edit scenarios
 - [x] Roll direct Web item APIs onto incremental engine

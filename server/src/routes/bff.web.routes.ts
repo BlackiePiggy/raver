@@ -63,6 +63,7 @@ import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { djEventBindingReviewService, type DJEventBindingTriggerSource } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
 import {
+  autoAlignEventLineupToTimetablePayload,
   buildAlignedLineupArtistsFromTimetablePayload,
   formatEventLineupTimetableAlignmentError,
   validateEventLineupTimetableAlignment,
@@ -510,24 +511,15 @@ const buildI18nReviewNotes = (entityType: string, payload: Record<string, unknow
   compliance: contentCompliance.reviewNotes(entityType, payload),
 });
 
-const validateSubmittedEventLineupTimetableAlignment = (payload: Record<string, unknown>): string | null => {
-  const timeZone = normalizeEventTimeZone(
-    payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE
-  );
-  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
-  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
-  if (!startDate) return null;
-
-  const dayRolloverHourRaw = Number(payload.dayRolloverHour);
-  const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
-  const alignmentIssue = validateEventLineupTimetableAlignment(
+const normalizeSubmittedEventLineupToTimetable = (payload: Record<string, unknown>): Record<string, unknown> => {
+  const { startDate, dayRolloverHour, timeZone } = resolveSubmittedEventTimelineContext(payload);
+  if (!startDate) return payload;
+  return autoAlignEventLineupToTimetablePayload(
     payload as unknown as Prisma.JsonObject,
     startDate,
     dayRolloverHour,
     timeZone
-  );
-  if (!alignmentIssue) return null;
-  return formatEventLineupTimetableAlignmentError(alignmentIssue);
+  ) as unknown as Record<string, unknown>;
 };
 
 const resolveSubmittedEventTimelineContext = (payload: Record<string, unknown>): {
@@ -7854,7 +7846,6 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
 
 void [
   validateSubmittedEventTimezoneSelection,
-  validateSubmittedEventLineupTimetableAlignment,
   parseEventReferenceLinks,
   parseEventSocialLinks,
   normalizeEventStartDate,
@@ -7931,17 +7922,13 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    const lineupAlignmentError = validateSubmittedEventLineupTimetableAlignment(body);
-    if (lineupAlignmentError) {
-      res.status(400).json({ error: lineupAlignmentError });
-      return;
-    }
+    const normalizedBody = normalizeSubmittedEventLineupToTimetable(body);
 
     const submission = await createPendingContentSubmission({
       submitterId: userId,
       entityType: 'event',
       title: name,
-      payload: body,
+      payload: normalizedBody,
     });
     acceptedSubmission(res, submission, '活动任务已提交，当前正在处理中，后续状态会通过通知更新');
     return;
@@ -8012,18 +7999,14 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
 
-    const lineupAlignmentError = validateSubmittedEventLineupTimetableAlignment(body);
-    if (lineupAlignmentError) {
-      res.status(400).json({ error: lineupAlignmentError });
-      return;
-    }
+    const normalizedBody = normalizeSubmittedEventLineupToTimetable(body);
 
     const submission = await createPendingContentSubmission({
       submitterId: userId,
       entityType: 'event',
       title: submittedName,
       payload: {
-        ...body,
+        ...normalizedBody,
         targetEventId: eventId,
       },
     });

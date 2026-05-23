@@ -360,6 +360,26 @@ const mergeAlignedLineupArtists = (
     .sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
+const relinkSlotsToAlignedArtists = (
+  slots: CanonicalLineupSlotInput[],
+  artists: CanonicalLineupArtistInput[]
+): CanonicalLineupSlotInput[] => {
+  const artistIdByKey = new Map<string, string>();
+  for (const artist of artists) {
+    if (!artist.id) continue;
+    artistIdByKey.set(lineupIdentityKey(artist), artist.id);
+  }
+
+  return slots.map((slot) => ({
+    ...slot,
+    lineupArtistId: artistIdByKey.get(lineupIdentityKey({
+      djId: slot.djId,
+      memberDjIds: slot.memberDjIds,
+      djName: slot.djName,
+    })) ?? null,
+  }));
+};
+
 export const buildAlignedLineupArtistsFromTimetablePayload = (
   payload: Prisma.JsonObject,
   eventStartDate: Date,
@@ -370,6 +390,27 @@ export const buildAlignedLineupArtistsFromTimetablePayload = (
   const currentArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
   const timetableArtists = normalizeCanonicalLineupArtists([], slots);
   return mergeAlignedLineupArtists(currentArtists, timetableArtists);
+};
+
+export const autoAlignEventLineupToTimetablePayload = (
+  payload: Prisma.JsonObject,
+  eventStartDate: Date,
+  dayRolloverHour: number,
+  timeZone: string
+): Prisma.JsonObject => {
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  if (slots.length === 0) return payload;
+  const alignedArtists = buildAlignedLineupArtistsFromTimetablePayload(
+    payload,
+    eventStartDate,
+    dayRolloverHour,
+    timeZone
+  );
+  return {
+    ...payload,
+    lineupArtists: alignedArtists as unknown as Prisma.JsonValue,
+    lineupSlots: relinkSlotsToAlignedArtists(slots, alignedArtists) as unknown as Prisma.JsonValue,
+  } as Prisma.JsonObject;
 };
 
 export const validateEventLineupTimetableAlignment = (
@@ -579,20 +620,14 @@ const applySubmissionLineupPatch = async (
     artists.slice().sort((a, b) => a.sortOrder - b.sortOrder),
     normalizedSlots
   );
-  const validationPayload = {
-    ...payload,
-    lineupArtists: normalizedArtists as unknown as Prisma.JsonValue,
-    lineupSlots: normalizedSlots as unknown as Prisma.JsonValue,
-    stageOrder: stageOrder as unknown as Prisma.JsonValue,
-  } as Prisma.JsonObject;
-  const alignmentIssue = validateEventLineupTimetableAlignment(validationPayload, eventStartDate, dayRolloverHour, timeZone);
-  if (alignmentIssue) {
-    throw new Error(formatEventLineupTimetableAlignmentError(alignmentIssue));
-  }
+  const finalArtists = normalizedSlots.length > 0
+    ? mergeAlignedLineupArtists(normalizedArtists, normalizeCanonicalLineupArtists([], normalizedSlots))
+    : normalizedArtists;
+  const finalSlots = relinkSlotsToAlignedArtists(normalizedSlots, finalArtists);
 
   return {
-    artists: normalizedArtists,
-    slots: normalizedSlots,
+    artists: finalArtists,
+    slots: finalSlots,
     stageOrder,
   };
 };
@@ -615,18 +650,18 @@ const syncSubmissionEventLineupAndTimetable = async (
   }
 
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
-  const artists = normalizeSubmissionLineupArtists(payload.lineupArtists, slots);
+  const submittedArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
+  const artists = slots.length > 0
+    ? mergeAlignedLineupArtists(submittedArtists, normalizeCanonicalLineupArtists([], slots))
+    : normalizeCanonicalLineupArtists(submittedArtists, slots);
+  const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
-  const alignmentIssue = validateEventLineupTimetableAlignment(payload, eventStartDate, dayRolloverHour, timeZone);
-  if (alignmentIssue) {
-    throw new Error(formatEventLineupTimetableAlignmentError(alignmentIssue));
-  }
 
   if (slots.length === 0 && artists.length === 0 && stageOrder.length === 0) {
     return;
   }
 
-  await syncCanonicalEventLineupAndTimetable(tx, eventId, slots, artists, stageOrder);
+  await syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
 };
 
 const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: string): Promise<string> => {

@@ -775,6 +775,10 @@ export default function DJSetUploader() {
   const textareaClassName =
     'w-full rounded-xl border border-bg-primary bg-bg-primary/60 px-4 py-3 text-text-primary outline-none transition-colors focus:border-primary-blue';
   const panelClassName = 'rounded-2xl border border-bg-primary bg-bg-primary/40 p-4';
+  const primaryActionClassName =
+    'px-5 py-2.5 rounded-lg bg-primary-blue hover:bg-primary-purple text-white transition-colors disabled:opacity-50 disabled:hover:bg-primary-blue';
+  const secondaryActionClassName =
+    'px-5 py-2.5 rounded-lg border border-bg-primary text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50';
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -1122,11 +1126,11 @@ export default function DJSetUploader() {
                     </div>
                   )}
 
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button type="button" onClick={() => setActiveStep(Math.max(1, activeStep - 1))} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary">
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => setActiveStep(Math.max(1, activeStep - 1))} className={secondaryActionClassName}>
                       上一步
                     </button>
-                    <button type="submit" disabled={loading || !readyToSubmit} className="flex-1 rounded-xl bg-primary-purple px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue disabled:bg-bg-tertiary">
+                    <button type="submit" disabled={loading || !readyToSubmit} className={primaryActionClassName}>
                       {loading ? '创建中...' : '创建 DJ Set'}
                     </button>
                   </div>
@@ -1135,11 +1139,11 @@ export default function DJSetUploader() {
             )}
 
             {activeStep < 4 && (
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-                <button type="button" onClick={() => setActiveStep((prev) => Math.max(1, prev - 1))} disabled={activeStep === 1} className="rounded-xl border border-bg-primary bg-bg-tertiary px-4 py-3 text-sm text-text-primary disabled:opacity-40">
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setActiveStep((prev) => Math.max(1, prev - 1))} disabled={activeStep === 1} className={secondaryActionClassName}>
                   上一步
                 </button>
-                <button type="button" onClick={() => setActiveStep((prev) => Math.min(4, prev + 1))} disabled={!canAdvanceStep} className="rounded-xl bg-primary-blue px-4 py-3 text-sm text-white transition-colors hover:bg-primary-purple disabled:opacity-40">
+                <button type="button" onClick={() => setActiveStep((prev) => Math.min(4, prev + 1))} disabled={!canAdvanceStep} className={primaryActionClassName}>
                   下一步
                 </button>
               </div>

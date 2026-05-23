@@ -249,17 +249,6 @@ final class EventUploadFlowViewModel: ObservableObject {
             try await webService.prepareAuthenticatedRequestForUserAction(source: "event-upload-submit")
             await waitForOutstandingImageUploads()
             try await uploadPendingImagesIfNeeded()
-            if !skipLineupAlignmentPreview {
-                let preview = try await webService.previewEventLineupTimetableAlignment(input: EventUploadMappers.createInput(from: draft))
-                if !preview.aligned {
-                    lineupTimetableAlignmentPrompt = LineupTimetableAlignmentPrompt(
-                        message: preview.message ?? LT("阵容和时间表未对齐，请一键对齐后再提交。", "Lineup and timetable are not aligned. Align them before submitting.", "ラインナップとタイムテーブルが一致していません。送信前に揃えてください。"),
-                        alignedLineupArtists: preview.lineupArtists
-                    )
-                    EventUploadAnalytics.track("event_upload_v2_lineup_timetable_alignment_blocked", properties: ["mode": draft.mode.storageKeyPart])
-                    return
-                }
-            }
             switch draft.mode {
             case .create:
                 let result = try await webService.createEvent(input: EventUploadMappers.createInput(from: draft))
