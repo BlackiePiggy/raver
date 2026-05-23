@@ -36,6 +36,9 @@ protocol EventRecommendationRepository {
 }
 
 protocol EventReadRepository {
+    func fetchEventSummary(id: String) async throws -> WebEvent
+    func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist]
+    func fetchEventTimetable(eventID: String) async throws -> [WebEventLineupSlot]
     func fetchEvent(id: String) async throws -> WebEvent
 }
 
@@ -72,7 +75,7 @@ protocol EventLiveDiscussionRepository {
 
 protocol EventCommandRepository {
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult
-    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent>
     func deleteEvent(id: String) async throws
 }
 
@@ -172,6 +175,18 @@ struct EventReadRepositoryAdapter: EventReadRepository {
         self.service = service
     }
 
+    func fetchEventSummary(id: String) async throws -> WebEvent {
+        try await service.fetchEventSummary(id: id)
+    }
+
+    func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist] {
+        try await service.fetchEventLineup(eventID: eventID)
+    }
+
+    func fetchEventTimetable(eventID: String) async throws -> [WebEventLineupSlot] {
+        try await service.fetchEventTimetable(eventID: eventID)
+    }
+
     func fetchEvent(id: String) async throws -> WebEvent {
         try await service.fetchEvent(id: id)
     }
@@ -237,7 +252,7 @@ struct EventCommandRepositoryAdapter: EventCommandRepository {
         return try await service.createEvent(input: input)
     }
 
-    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent> {
         try await service.updateEvent(id: id, input: input)
     }
 
@@ -603,6 +618,8 @@ final class EventsModuleViewModel: ObservableObject {
         errorMessage = nil
 
         do {
+            // The Discover -> Events surface is defined by the bootstrap response for
+            // both first entry and manual pull-to-refresh.
             let bootstrap = try await fetchEventsBootstrapUseCase.execute(
                 limit: pageSize,
                 search: query.searchParam,

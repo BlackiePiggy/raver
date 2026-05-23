@@ -166,6 +166,7 @@ struct EventsModuleView: View {
         .task(id: allQuery) {
             guard isActive else { return }
             viewModel.hydrateAllFromCacheIfPossible(query: allQuery)
+            // Entering Discover -> Events always reloads the bootstrap feed.
             await viewModel.reloadAll(query: allQuery)
             presentEventsListTabsGuideIfNeeded()
         }
@@ -651,6 +652,7 @@ struct EventsModuleView: View {
 
     @MainActor
     private func refreshCurrentScope() async {
+        // Pull to refresh intentionally reuses the same bootstrap request as first entry.
         await viewModel.reloadAll(query: allQuery, force: true)
     }
 

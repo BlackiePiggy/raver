@@ -272,9 +272,9 @@ struct DJsModuleView: View {
             presentDJSpotlightGuideIfNeeded()
         }
         .overlay(alignment: .bottomTrailing) {
-            if selectedSection == .hot {
-                djImportFloatingButton
-            }
+            djImportFloatingButton
+                .padding(.trailing, 20)
+                .raverTabBarBottomPadding(24)
         }
         .navigationDestination(isPresented: $showDJUploadFlow) {
             DJUploadFlowView(
@@ -424,22 +424,29 @@ struct DJsModuleView: View {
             showDJUploadFlow = true
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: 23, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 50, height: 50)
+                .frame(width: 58, height: 58)
                 .background(
-                    Circle()
-                        .fill(RaverTheme.accent)
+                    LinearGradient(
+                        colors: [
+                            RaverTheme.accent,
+                            Color(red: 0.31, green: 0.22, blue: 0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: Circle()
                 )
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+                        .stroke(Color.white.opacity(0.30), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.25), radius: 8, y: 4)
+                .shadow(color: RaverTheme.accent.opacity(0.32), radius: 16, x: 0, y: 8)
+                .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(.plain)
-        .padding(.trailing, 16)
-        .raverTabBarBottomPadding(24)
+        .accessibilityLabel(LT("上传 DJ", "Upload DJ", "DJをアップロード"))
     }
 }
 

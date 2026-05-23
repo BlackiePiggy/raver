@@ -8,12 +8,16 @@ const REVIEW_ENTITY_LABELS = {
   id: 'ID',
   rating: 'Rating',
   dj_enrichment: 'DJ Enrichment',
+  dj_binding_review: 'DJ Binding Review',
 };
 
 const REVIEW_STATUS_LABELS = {
   pending: '待审核',
   approved: '已通过',
   rejected: '未通过',
+  partially_applied: '部分已处理',
+  applied: '已完成',
+  dismissed: '已忽略',
 };
 
 const REVIEW_PROCESSING_STATUS_LABELS = {
@@ -142,19 +146,21 @@ function renderReviewSourceStats() {
     ? reviewPageState.pendingCountsByType
     : {};
   const djEnrichmentCount = Math.max(0, Number(countsByType.dj_enrichment || 0) || 0);
+  const djBindingReviewCount = Math.max(0, Number(countsByType.dj_binding_review || 0) || 0);
   let contentSubmissionCount = 0;
   for (const [key, value] of Object.entries(countsByType)) {
-    if (key === 'dj_enrichment') continue;
+    if (key === 'dj_enrichment' || key === 'dj_binding_review') continue;
     contentSubmissionCount += Math.max(0, Number(value || 0) || 0);
   }
   wrap.innerHTML = [
-    { label: 'Content Submission', count: contentSubmissionCount, active: reviewPageState.sourceFilter === 'content_submission' },
-    { label: 'DJ Enrichment', count: djEnrichmentCount, active: reviewPageState.sourceFilter === 'dj_enrichment' },
+    { label: 'Content Submission', source: 'content_submission', count: contentSubmissionCount, active: reviewPageState.sourceFilter === 'content_submission' },
+    { label: 'DJ Enrichment', source: 'dj_enrichment', count: djEnrichmentCount, active: reviewPageState.sourceFilter === 'dj_enrichment' },
+    { label: 'DJ Binding Review', source: 'dj_binding_review', count: djBindingReviewCount, active: reviewPageState.sourceFilter === 'dj_binding_review' },
   ].map((item) => `
-    <div class="review-type-item ${item.active ? 'active' : ''}">
+    <button class="review-type-item review-source-chip ${item.active ? 'active' : ''}" type="button" onclick="setReviewSourceFilter('${escapeHtml(item.source)}')">
       <span>${escapeHtml(item.label)}</span>
       <b>${escapeHtml(item.count > 99 ? '99+' : String(item.count || 0))}</b>
-    </div>
+    </button>
   `).join('');
 }
 
@@ -165,9 +171,10 @@ async function refreshReviewPendingCount() {
     return;
   }
   try {
-    const [submissionData, enrichmentData] = await Promise.all([
+    const [submissionData, enrichmentData, bindingReviewData] = await Promise.all([
       reviewApiGet('/api/admin/v1/content-submissions?status=pending&limit=200'),
       reviewApiGet('/api/admin/v1/dj-enrichment/results?applyStatus=pending_review&limit=1'),
+      reviewApiGet('/api/admin/v1/dj-event-binding-review/jobs?status=pending&page=1&limit=1'),
     ]);
     const items = Array.isArray(submissionData.items) ? submissionData.items : [];
     const countsByType = {};
@@ -177,8 +184,10 @@ async function refreshReviewPendingCount() {
       countsByType[type] = (countsByType[type] || 0) + 1;
     }
     countsByType.dj_enrichment = Math.max(0, Number(enrichmentData.total ?? 0) || 0);
+    countsByType.dj_binding_review = Math.max(0, Number(bindingReviewData?.pagination?.total ?? 0) || 0);
     const total = Math.max(0, Number(submissionData.total ?? items.length) || 0)
-      + Math.max(0, Number(enrichmentData.total ?? 0) || 0);
+      + Math.max(0, Number(enrichmentData.total ?? 0) || 0)
+      + Math.max(0, Number(bindingReviewData?.pagination?.total ?? 0) || 0);
     setReviewPendingCount(total, countsByType);
   } catch (_error) {
     syncReviewPendingBadge();
@@ -186,6 +195,11 @@ async function refreshReviewPendingCount() {
 }
 
 function reviewCountByType(type) {
+  if (reviewPageState.sourceFilter === 'dj_binding_review') {
+    const items = Array.isArray(reviewPageState.items) ? reviewPageState.items : [];
+    if (!type || type === 'dj_binding_review') return items.length;
+    return 0;
+  }
   if (reviewPageState.sourceFilter === 'dj_enrichment') {
     const items = Array.isArray(reviewPageState.items) ? reviewPageState.items : [];
     if (!type) return items.length;
@@ -227,6 +241,9 @@ function resetReviewSelection() {
   reviewPageState.selectedIds = new Set();
   reviewPageState.selectedAllMatching = false;
   reviewPageState.selectedAllMatchingMode = '';
+  if (typeof resetDjBindingCandidateSelection === 'function') {
+    resetDjBindingCandidateSelection();
+  }
 }
 
 function selectedReviewIds() {
@@ -247,11 +264,13 @@ function selectedReviewItems() {
 
 function isReviewItemSelectable(item) {
   if (!item) return false;
+  if (reviewPageState.sourceFilter === 'dj_binding_review') return false;
   if (reviewPageState.sourceFilter === 'dj_enrichment') return item.applyStatus === 'pending_review';
   return item.status === 'pending';
 }
 
 function canApproveReviewItem(item) {
+  if (reviewPageState.sourceFilter === 'dj_binding_review') return false;
   if (!isReviewItemSelectable(item)) return false;
   if (reviewPageState.sourceFilter === 'dj_enrichment') {
     return (item.processingStatus || item.status) === 'completed';
@@ -427,6 +446,9 @@ function renderReviewField(fieldKey, label, value) {
 }
 
 function renderReviewPreview(submission) {
+  if (reviewPageState.sourceFilter === 'dj_binding_review' && typeof renderDjBindingReviewPreview === 'function') {
+    return renderDjBindingReviewPreview(submission);
+  }
   if (reviewPageState.sourceFilter === 'dj_enrichment') {
     return renderDjEnrichmentPreview(submission);
   }
@@ -588,6 +610,13 @@ function renderReviewList() {
 function renderReviewBulkBar() {
   const wrap = document.getElementById('review-bulk-bar');
   if (!wrap) return;
+  if (reviewPageState.sourceFilter === 'dj_binding_review') {
+    const total = getReviewTotal();
+    wrap.innerHTML = `
+      <div class="review-bulk-meta">当前共有 ${escapeHtml(String(total))} 个 DJ 绑定审核任务，请在右侧处理选中的任务。</div>
+    `;
+    return;
+  }
   const selectable = selectableReviewItems();
   const selectedIds = selectedReviewIds();
   const selectedOnPage = selectable.filter((item) => isReviewItemSelected(item.id)).length;
@@ -636,6 +665,16 @@ function renderReviewPagination() {
 function renderReviewTypeNav() {
   const wrap = document.getElementById('review-type-nav');
   if (!wrap) return;
+  if (reviewPageState.sourceFilter === 'dj_binding_review') {
+    const total = reviewCountByType('dj_binding_review');
+    wrap.innerHTML = `
+      <button class="review-type-item active" type="button">
+        <span>全部任务</span>
+        <b>${escapeHtml(total > 99 ? '99+' : String(total || 0))}</b>
+      </button>
+    `;
+    return;
+  }
   const active = reviewPageState.entityFilter || '';
   const allCount = reviewCountByType('');
   const rows = [
@@ -659,7 +698,13 @@ function renderReviewDetail() {
   if (!wrap) return;
   const submission = reviewPageState.selectedDetail || reviewPageState.items.find((item) => item.id === reviewPageState.selectedId);
   if (!submission) {
-    wrap.innerHTML = '<div class="review-detail-empty">从左侧选择一条用户提交内容开始审核。</div>';
+    wrap.innerHTML = reviewPageState.sourceFilter === 'dj_binding_review'
+      ? '<div class="review-detail-empty">从左侧选择一个 DJ 绑定审核任务开始处理。</div>'
+      : '<div class="review-detail-empty">从左侧选择一条用户提交内容开始审核。</div>';
+    return;
+  }
+  if (reviewPageState.sourceFilter === 'dj_binding_review') {
+    wrap.innerHTML = renderReviewPreview(submission);
     return;
   }
   const isPending = reviewPageState.sourceFilter === 'dj_enrichment'
@@ -694,6 +739,36 @@ function renderReviewDetail() {
 
 function renderReviewPage() {
   const processingSelect = document.getElementById('review-processing-status-select');
+  const statusSelect = document.getElementById('review-status-select');
+  if (statusSelect) {
+    if (reviewPageState.sourceFilter === 'dj_binding_review') {
+      const rows = [
+        ['pending', '待处理'],
+        ['partially_applied', '部分已绑定'],
+        ['applied', '已完成'],
+        ['dismissed', '已忽略'],
+        ['', '全部状态'],
+      ];
+      statusSelect.innerHTML = rows.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
+      statusSelect.value = reviewPageState.statusFilter || 'pending';
+    } else {
+      const rows = reviewPageState.sourceFilter === 'dj_enrichment'
+        ? [
+          ['pending', '待审核'],
+          ['approved', '已通过'],
+          ['rejected', '未通过'],
+          ['', '全部状态'],
+        ]
+        : [
+          ['pending', '待审核'],
+          ['approved', '已通过'],
+          ['rejected', '未通过'],
+          ['', '全部状态'],
+        ];
+      statusSelect.innerHTML = rows.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
+      statusSelect.value = reviewPageState.statusFilter || 'pending';
+    }
+  }
   if (processingSelect) {
     processingSelect.style.display = reviewPageState.sourceFilter === 'dj_enrichment' ? '' : 'none';
     processingSelect.value = reviewPageState.processingStatusFilter || '';
@@ -710,7 +785,11 @@ function renderReviewPage() {
   if (meta) {
     const total = getReviewTotal();
     const page = Math.min(Math.max(1, Number(reviewPageState.page || 1) || 1), getReviewPageCount());
-    meta.textContent = reviewPageState.loading ? '加载中...' : `第 ${page} 页 · ${reviewPageState.items.length}/${total} 条`;
+    meta.textContent = reviewPageState.loading
+      ? '加载中...'
+      : reviewPageState.sourceFilter === 'dj_binding_review'
+        ? `第 ${page} 页 · ${reviewPageState.items.length}/${total} 个任务`
+        : `第 ${page} 页 · ${reviewPageState.items.length}/${total} 条`;
   }
 }
 
@@ -733,12 +812,34 @@ function onReviewProcessingStatusChanged() {
 function onReviewSourceChanged() {
   const sourceEl = document.getElementById('review-source-select');
   reviewPageState.sourceFilter = sourceEl ? sourceEl.value : 'content_submission';
+  reviewPageState.statusFilter = 'pending';
   reviewPageState.entityFilter = '';
   reviewPageState.processingStatusFilter = '';
   reviewPageState.page = 1;
   reviewPageState.selectedId = '';
   reviewPageState.selectedDetail = null;
   resetReviewSelection();
+  void refreshReviewPage(true);
+}
+
+function setReviewSourceFilter(source) {
+  const normalized = ['content_submission', 'dj_enrichment', 'dj_binding_review'].includes(String(source || ''))
+    ? String(source)
+    : 'content_submission';
+  const sourceEl = document.getElementById('review-source-select');
+  if (sourceEl) sourceEl.value = normalized;
+  reviewPageState.sourceFilter = normalized;
+  reviewPageState.statusFilter = 'pending';
+  reviewPageState.processingStatusFilter = '';
+  reviewPageState.entityFilter = '';
+  reviewPageState.page = 1;
+  reviewPageState.selectedId = '';
+  reviewPageState.selectedDetail = null;
+  resetReviewSelection();
+  if (currentAppPage !== 'review') {
+    switchAppPage('review');
+    return;
+  }
   void refreshReviewPage(true);
 }
 
@@ -776,7 +877,24 @@ async function refreshReviewPage(force = false) {
   reviewPageState.loadError = '';
   renderReviewPage();
   try {
-    if (reviewPageState.sourceFilter === 'dj_enrichment') {
+    if (reviewPageState.sourceFilter === 'dj_binding_review') {
+      const result = typeof fetchDjBindingReviewJobs === 'function'
+        ? await fetchDjBindingReviewJobs()
+        : { items: [], total: 0 };
+      reviewPageState.items = Array.isArray(result.items) ? result.items : [];
+      reviewPageState.total = Math.max(0, Number(result.total ?? reviewPageState.items.length) || 0);
+      if (reviewPageState.statusFilter === 'pending') {
+        const existingCounts = reviewPageState.pendingCountsByType && typeof reviewPageState.pendingCountsByType === 'object'
+          ? { ...reviewPageState.pendingCountsByType }
+          : {};
+        existingCounts.dj_binding_review = reviewPageState.total;
+        const mergedTotal = Object.values(existingCounts)
+          .reduce((sum, value) => sum + Math.max(0, Number(value || 0) || 0), 0);
+        setReviewPendingCount(mergedTotal, existingCounts);
+      } else {
+        void refreshReviewPendingCount();
+      }
+    } else if (reviewPageState.sourceFilter === 'dj_enrichment') {
       const qs = new URLSearchParams();
       if (reviewPageState.statusFilter === 'pending') qs.set('applyStatus', 'pending_review');
       else if (reviewPageState.statusFilter === 'approved') qs.set('applyStatus', 'approved');
@@ -863,13 +981,20 @@ async function selectReviewSubmission(id) {
   reviewPageState.reason = reviewPageState.selectedDetail?.reviewReason || '';
   renderReviewPage();
   try {
-    const data = reviewPageState.sourceFilter === 'dj_enrichment'
-      ? await reviewApiGet(`/api/admin/v1/dj-enrichment/results/${encodeURIComponent(submissionId)}`)
-      : await reviewApiGet(`/api/admin/v1/content-submissions/${encodeURIComponent(submissionId)}`);
-    reviewPageState.selectedDetail = data.submission || data.result || reviewPageState.selectedDetail;
-    reviewPageState.reviewNotes = reviewNormalizeNotes(reviewPageState.selectedDetail?.reviewNotes);
-    reviewPageState.expandedNoteFields = new Set(Object.keys(reviewPageState.reviewNotes));
-    reviewPageState.reason = reviewPageState.selectedDetail?.reviewReason || '';
+    if (reviewPageState.sourceFilter === 'dj_binding_review' && typeof fetchDjBindingReviewJobDetail === 'function') {
+      reviewPageState.selectedDetail = await fetchDjBindingReviewJobDetail(submissionId);
+      if (typeof resetDjBindingCandidateSelection === 'function') {
+        resetDjBindingCandidateSelection();
+      }
+    } else {
+      const data = reviewPageState.sourceFilter === 'dj_enrichment'
+        ? await reviewApiGet(`/api/admin/v1/dj-enrichment/results/${encodeURIComponent(submissionId)}`)
+        : await reviewApiGet(`/api/admin/v1/content-submissions/${encodeURIComponent(submissionId)}`);
+      reviewPageState.selectedDetail = data.submission || data.result || reviewPageState.selectedDetail;
+      reviewPageState.reviewNotes = reviewNormalizeNotes(reviewPageState.selectedDetail?.reviewNotes);
+      reviewPageState.expandedNoteFields = new Set(Object.keys(reviewPageState.reviewNotes));
+      reviewPageState.reason = reviewPageState.selectedDetail?.reviewReason || '';
+    }
     renderReviewPage();
   } catch (error) {
     setReviewStatus(error instanceof Error ? error.message : '加载详情失败', 'error');

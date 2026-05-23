@@ -250,17 +250,25 @@ final class EventUploadFlowViewModel: ObservableObject {
                     )
                 case .submittedForReview:
                     submitSuccess = EventUploadSubmitSuccess(
-                        title: LT("已提交审核", "Submitted for Review", "審査に送信しました"),
-                        message: LT("审核通过后会正式展示在活动页。你可以在我的发布里查看进度。", "It will appear on the events page after approval. You can track progress from My Posts.", "承認後にイベントページへ表示されます。進捗はマイ投稿で確認できます。")
+                        title: LT("任务已提交", "Task Submitted", "タスクを送信しました"),
+                        message: LT("当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。", "The task is now processing. Later updates will arrive through notifications and My Posts.", "現在処理中です。以降の更新は通知とマイ投稿で確認できます。")
                     )
                 }
             case .edit(let eventID):
-                _ = try await webService.updateEvent(id: eventID, input: EventUploadMappers.updateInput(from: draft))
+                let result = try await webService.updateEvent(id: eventID, input: EventUploadMappers.updateInput(from: draft))
                 draftStore.clear(mode: draft.mode, userID: userID)
-                submitSuccess = EventUploadSubmitSuccess(
-                    title: LT("活动已更新", "Event Updated", "イベントを更新しました"),
-                    message: LT("更新已保存。你可以返回活动页查看最新内容，也可以在我的发布里继续管理。", "Your changes are saved. Return to the events page to view the latest content, or manage it from My Posts.", "更新を保存しました。イベントページで最新内容を確認するか、マイ投稿から管理できます。")
-                )
+                switch result {
+                case .created:
+                    submitSuccess = EventUploadSubmitSuccess(
+                        title: LT("活动已更新", "Event Updated", "イベントを更新しました"),
+                        message: LT("更新已保存。你可以返回活动页查看最新内容，也可以在我的发布里继续管理。", "Your changes are saved. Return to the events page to view the latest content, or manage it from My Posts.", "更新を保存しました。イベントページで最新内容を確認するか、マイ投稿から管理できます。")
+                    )
+                case .submittedForReview:
+                    submitSuccess = EventUploadSubmitSuccess(
+                        title: LT("编辑任务已提交", "Edit Task Submitted", "編集タスクを送信しました"),
+                        message: LT("当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。", "The edit task is now processing. Later updates will arrive through notifications and My Posts.", "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。")
+                    )
+                }
             }
             EventUploadAnalytics.track("event_upload_v2_submit_succeeded", properties: ["mode": draft.mode.storageKeyPart])
             onSaved()
@@ -1519,10 +1527,9 @@ final class EventUploadFlowViewModel: ObservableObject {
         EventUploadAnalytics.track("event_upload_v2_image_removed", properties: ["zone": zone.rawValue])
         if let removedImage {
             Task {
-                if removedImage.ownership == .persistedEvent {
-                    await self.syncEditedEventImagesAfterRemovalIfNeeded()
+                if removedImage.ownership != .persistedEvent {
+                    await self.deleteUploadedImageIfNeeded(removedImage)
                 }
-                await self.deleteUploadedImageIfNeeded(removedImage)
             }
         }
     }
@@ -2052,18 +2059,6 @@ final class EventUploadFlowViewModel: ObservableObject {
         let images = EventUploadImageZone.allCases.flatMap { draft.imageZones[$0] ?? [] }
         for image in images {
             await deleteUploadedImageIfNeeded(image, eventID: currentEventID, draftID: currentDraftID)
-        }
-    }
-
-    private func syncEditedEventImagesAfterRemovalIfNeeded() async {
-        guard let eventID = eventIDForUpload else { return }
-        do {
-            _ = try await webService.updateEvent(
-                id: eventID,
-                input: EventUploadMappers.imageOnlyUpdateInput(from: draft)
-            )
-        } catch {
-            statusMessage = error.userFacingMessage ?? LT("删除活动图片失败，请稍后重试。", "Failed to delete event image. Please try again.", "イベント画像の削除に失敗しました。もう一度お試しください。")
         }
     }
 

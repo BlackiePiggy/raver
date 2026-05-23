@@ -2,6 +2,9 @@
 function buildRow(fest) {
   const row = document.createElement('div');
   row.className = 'festival-row';
+  if (String(fest?.backendEventId || '').trim()) {
+    row.dataset.backendEventId = String(fest.backendEventId).trim();
+  }
 
   const images = Array.isArray(fest.images) ? fest.images : [];
   const empty  = images.length === 0;

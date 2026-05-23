@@ -2295,6 +2295,16 @@
   }
   .review-status.error { color:#ff9ac2; }
   .review-status.ok { color:var(--accent); }
+  .review-source-stats {
+    display:flex;
+    gap:0.46rem;
+    flex-wrap:wrap;
+    margin:0 0 0.72rem;
+  }
+  .review-source-chip {
+    min-width:180px;
+    justify-content:space-between;
+  }
   .review-workspace {
     display:grid;
     grid-template-columns:minmax(260px, 340px) minmax(0, 1fr);
@@ -2611,6 +2621,111 @@
   .review-group-raw {
     border-color:rgba(255,255,255,0.12);
     background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.008));
+  }
+  .review-binding-action-row,
+  .review-binding-section-actions,
+  .review-binding-section-meta {
+    display:flex;
+    gap:0.45rem;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .review-binding-section-meta {
+    justify-content:flex-end;
+    font-family:'Space Mono',monospace;
+    font-size:0.54rem;
+    letter-spacing:0.08em;
+    color:var(--text-mid);
+  }
+  .review-binding-candidate-list {
+    display:grid;
+    gap:0.62rem;
+  }
+  .review-binding-candidate {
+    border:1px solid var(--border2);
+    background:rgba(255,255,255,0.02);
+    padding:0.72rem;
+    display:grid;
+    gap:0.44rem;
+  }
+  .review-binding-candidate.pending {
+    border-color:rgba(76,208,255,0.24);
+  }
+  .review-binding-candidate.applied {
+    border-color:rgba(0,245,200,0.24);
+    background:rgba(0,245,200,0.04);
+  }
+  .review-binding-candidate.dismissed,
+  .review-binding-candidate.skipped {
+    border-color:rgba(255,255,255,0.12);
+    opacity:0.82;
+  }
+  .review-binding-candidate.needs-split {
+    border-color:rgba(245,158,11,0.35);
+    background:rgba(245,158,11,0.05);
+  }
+  .review-binding-candidate-head {
+    display:flex;
+    justify-content:space-between;
+    gap:0.6rem;
+    align-items:flex-start;
+  }
+  .review-binding-candidate-check {
+    gap:0.44rem;
+  }
+  .review-binding-candidate-status {
+    font-family:'Space Mono',monospace;
+    font-size:0.52rem;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-mid);
+  }
+  .review-binding-candidate-status.applied {
+    color:var(--accent);
+  }
+  .review-binding-candidate-status.dismissed {
+    color:var(--accent2);
+  }
+  .review-binding-candidate-status.skipped {
+    color:#f59e0b;
+  }
+  .review-binding-candidate-name {
+    font-size:0.92rem;
+    line-height:1.35;
+    color:var(--text);
+    font-weight:700;
+  }
+  .review-binding-candidate-meta,
+  .review-binding-warning {
+    font-family:'Space Mono',monospace;
+    font-size:0.54rem;
+    letter-spacing:0.05em;
+    color:var(--text-mid);
+  }
+  .review-binding-warning {
+    color:#ffcb6b;
+  }
+  .review-binding-candidate-context {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:0.45rem 0.7rem;
+  }
+  .review-binding-candidate-context div {
+    display:grid;
+    gap:0.16rem;
+    min-width:0;
+  }
+  .review-binding-candidate-context span {
+    font-family:'Space Mono',monospace;
+    font-size:0.5rem;
+    letter-spacing:0.08em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+  }
+  .review-binding-candidate-context strong {
+    font-size:0.62rem;
+    color:var(--text);
+    word-break:break-word;
   }
   .review-field-grid {
     display:grid;

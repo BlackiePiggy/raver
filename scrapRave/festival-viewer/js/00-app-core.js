@@ -93,8 +93,13 @@ function setNewsHeaderCounter() {
 }
 
 function setReviewHeaderCounter() {
-  const total = reviewPageState.loaded ? reviewPageState.items.length : '—';
-  setHeaderCounter(total, 'CONTENT REVIEWS');
+  const total = reviewPageState.loaded ? (Number(reviewPageState.total || 0) || reviewPageState.items.length) : '—';
+  const label = reviewPageState.sourceFilter === 'dj_binding_review'
+    ? 'DJ BINDING JOBS'
+    : reviewPageState.sourceFilter === 'dj_enrichment'
+      ? 'DJ ENRICHMENT REVIEWS'
+      : 'CONTENT REVIEWS';
+  setHeaderCounter(total, label);
 }
 
 function syncAppPageTabs() {

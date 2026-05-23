@@ -2,6 +2,7 @@ import Foundation
 
 final class LiveWebFeatureService: WebFeatureService {
     private static let userActionRefreshLeadTime: TimeInterval = 300
+    private static let eventMutationTimeout: TimeInterval = 120
 
     private struct DeleteEventImagesRequest: Encodable {
         let eventId: String?
@@ -96,6 +97,7 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse {
+        // Discover -> Events initial load and pull-to-refresh both use this endpoint.
         var queryItems = [
             URLQueryItem(name: "limit", value: "\(max(1, min(20, limit)))")
         ]
@@ -173,12 +175,39 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data.items.map(localizedEvent)
     }
 
-    func fetchEvent(id: String) async throws -> WebEvent {
+    func fetchEventSummary(id: String) async throws -> WebEvent {
 #if DEBUG
         print("[EventDetailDebug] runtimeMode=\(AppConfig.runtimeMode.rawValue) bffBaseURL=\(AppConfig.bffBaseURL.absoluteString) requestPath=/v1/events/\(id)")
 #endif
         let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "GET")
         return localizedEvent(response.data)
+    }
+
+    func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist] {
+        let response: BFFEnvelope<BFFItems<WebEventLineupArtist>> = try await request(
+            path: "/v1/events/\(eventID)/lineup",
+            method: "GET"
+        )
+        return response.data.items
+    }
+
+    func fetchEventTimetable(eventID: String) async throws -> [WebEventLineupSlot] {
+        let response: BFFEnvelope<BFFItems<WebEventLineupSlot>> = try await request(
+            path: "/v1/events/\(eventID)/timetable",
+            method: "GET"
+        )
+        return response.data.items
+    }
+
+    func fetchEvent(id: String) async throws -> WebEvent {
+        async let eventTask = fetchEventSummary(id: id)
+        async let lineupTask = fetchEventLineup(eventID: id)
+        async let timetableTask = fetchEventTimetable(eventID: id)
+
+        var event = try await eventTask
+        event.lineupArtists = try await lineupTask
+        event.lineupSlots = try await timetableTask
+        return event
     }
 
     func searchEventTimezones(query: String, limit: Int) async throws -> [EventTimezoneLookupItem] {
@@ -258,7 +287,12 @@ final class LiveWebFeatureService: WebFeatureService {
     }
 
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
-        let response: BFFEnvelope<CreateEventResponsePayload> = try await request(path: "/v1/events", method: "POST", body: input)
+        let response: BFFEnvelope<CreateEventResponsePayload> = try await request(
+            path: "/v1/events",
+            method: "POST",
+            body: input,
+            timeoutInterval: Self.eventMutationTimeout
+        )
         switch response.data {
         case .event(let event):
             return .created(localizedEvent(event))
@@ -267,9 +301,19 @@ final class LiveWebFeatureService: WebFeatureService {
         }
     }
 
-    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
-        let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "PATCH", body: input)
-        return localizedEvent(response.data)
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent> {
+        let response: BFFEnvelope<CreateContentResult<WebEvent>> = try await request(
+            path: "/v1/events/\(id)",
+            method: "PATCH",
+            body: input,
+            timeoutInterval: Self.eventMutationTimeout
+        )
+        switch response.data {
+        case .created(let event):
+            return .created(localizedEvent(event))
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func deleteEvent(id: String) async throws {

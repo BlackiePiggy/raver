@@ -253,6 +253,8 @@ let reviewPageState = {
   reviewNotes: {},
   expandedNoteFields: new Set(),
   reason: '',
+  bindingCandidateIds: new Set(),
+  bindingActionBusy: false,
 };
 let rankingEntriesRowSeed = 1;
 let djBilingualJobState = {

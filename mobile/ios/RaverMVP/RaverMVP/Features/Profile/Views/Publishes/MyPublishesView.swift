@@ -198,17 +198,21 @@ struct MyPublishesView: View {
     private enum ReviewFilter: String, CaseIterable, Identifiable {
         case all
         case approved
-        case pending
+        case processing
+        case reviewing
         case rejected
+        case failed
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .all: return "ALL"
-            case .approved: return LT("审核通过", "Approved", "承認済み")
-            case .pending: return LT("审核中", "Pending", "審査中")
+            case .approved: return LT("已入库", "Approved", "入庫済み")
+            case .processing: return LT("处理中", "Processing", "処理中")
+            case .reviewing: return LT("审核中", "In Review", "審査中")
             case .rejected: return LT("未通过", "Rejected", "却下")
+            case .failed: return LT("处理失败", "Failed", "失敗")
             }
         }
     }
@@ -493,7 +497,7 @@ struct MyPublishesView: View {
 
     private func reviewSubmissionSection(entityType: String) -> some View {
         let items = viewModel.contentSubmissions.filter {
-            $0.entityType == entityType && (selectedReviewFilter == .all || $0.status == selectedReviewFilter.rawValue)
+            $0.entityType == entityType && matchesReviewFilter($0.status)
         }
         .sorted {
             ($0.updatedAt ?? $0.createdAt ?? .distantPast) > ($1.updatedAt ?? $1.createdAt ?? .distantPast)
@@ -503,7 +507,7 @@ struct MyPublishesView: View {
             if items.isEmpty, !viewModel.isLoading {
                 ContentUnavailableView(
                     LT("暂无\(selectedReviewFilter.title)内容", "No \(selectedReviewFilter.title) items", "\(selectedReviewFilter.title) の内容はまだありません"),
-                    systemImage: selectedReviewFilter == .pending ? "clock" : "xmark.seal"
+                    systemImage: emptyReviewFilterIcon
                 )
                 .listRowBackground(Color.clear)
             }
@@ -570,11 +574,46 @@ struct MyPublishesView: View {
         .buttonStyle(.plain)
     }
 
+    private func matchesReviewFilter(_ status: String) -> Bool {
+        guard selectedReviewFilter != .all else { return true }
+        switch selectedReviewFilter {
+        case .all:
+            return true
+        case .approved:
+            return status == "approved"
+        case .processing:
+            return status == "processing"
+        case .reviewing:
+            return status == "reviewing" || status == "pending"
+        case .rejected:
+            return status == "rejected"
+        case .failed:
+            return status == "failed"
+        }
+    }
+
+    private var emptyReviewFilterIcon: String {
+        switch selectedReviewFilter {
+        case .processing:
+            return "gearshape.2"
+        case .reviewing:
+            return "clock"
+        case .failed, .rejected:
+            return "xmark.seal"
+        case .approved:
+            return "checkmark.seal"
+        case .all:
+            return "tray"
+        }
+    }
+
     private func statusTitle(_ status: String) -> String {
         switch status {
-        case "approved": return LT("审核通过", "Approved", "承認済み")
-        case "pending": return LT("审核中", "Pending", "審査中")
+        case "approved": return LT("已入库", "Approved", "入庫済み")
+        case "processing": return LT("处理中", "Processing", "処理中")
+        case "reviewing", "pending": return LT("审核中", "In Review", "審査中")
         case "rejected": return LT("未通过", "Rejected", "却下")
+        case "failed": return LT("处理失败", "Failed", "失敗")
         default: return status
         }
     }
@@ -582,8 +621,10 @@ struct MyPublishesView: View {
     private func statusColor(_ status: String) -> Color {
         switch status {
         case "approved": return .green
-        case "pending": return .orange
+        case "processing": return .blue
+        case "reviewing", "pending": return .orange
         case "rejected": return .red
+        case "failed": return .red.opacity(0.8)
         default: return RaverTheme.secondaryText
         }
     }
@@ -1050,9 +1091,11 @@ struct ContentSubmissionDetailView: View {
 
     private func statusTitle(_ status: String) -> String {
         switch status {
-        case "approved": return LT("审核通过", "Approved", "承認済み")
-        case "pending": return LT("审核中", "Pending", "審査中")
+        case "approved": return LT("已入库", "Approved", "入庫済み")
+        case "processing": return LT("处理中", "Processing", "処理中")
+        case "reviewing", "pending": return LT("审核中", "In Review", "審査中")
         case "rejected": return LT("未通过", "Rejected", "却下")
+        case "failed": return LT("处理失败", "Failed", "失敗")
         default: return status
         }
     }

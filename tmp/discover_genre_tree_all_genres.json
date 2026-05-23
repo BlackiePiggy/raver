@@ -1,0 +1,138 @@
+[
+  {
+    "id": "house",
+    "name": "House",
+    "level": 0,
+    "path": [
+      "House"
+    ],
+    "description": "以四拍地板鼓点为核心，强调律动和舞池氛围。"
+  },
+  {
+    "id": "deep-house",
+    "name": "Deep House",
+    "level": 1,
+    "path": [
+      "House",
+      "Deep House"
+    ],
+    "description": "更柔和、更氛围化，低频和和声更细腻。"
+  },
+  {
+    "id": "tech-house",
+    "name": "Tech House",
+    "level": 1,
+    "path": [
+      "House",
+      "Tech House"
+    ],
+    "description": "融合 Techno 的极简与 House 的律动感。"
+  },
+  {
+    "id": "progressive-house",
+    "name": "Progressive House",
+    "level": 1,
+    "path": [
+      "House",
+      "Progressive House"
+    ],
+    "description": "注重层层推进和情绪堆叠，适合大舞台。"
+  },
+  {
+    "id": "techno",
+    "name": "Techno",
+    "level": 0,
+    "path": [
+      "Techno"
+    ],
+    "description": "强调工业感、重复性和催眠式推进。"
+  },
+  {
+    "id": "melodic-techno",
+    "name": "Melodic Techno",
+    "level": 1,
+    "path": [
+      "Techno",
+      "Melodic Techno"
+    ],
+    "description": "在 Techno 框架中加入旋律与情绪线。"
+  },
+  {
+    "id": "hard-techno",
+    "name": "Hard Techno",
+    "level": 1,
+    "path": [
+      "Techno",
+      "Hard Techno"
+    ],
+    "description": "速度更快、冲击更强、能量密度更高。"
+  },
+  {
+    "id": "bass-music",
+    "name": "Bass Music",
+    "level": 0,
+    "path": [
+      "Bass Music"
+    ],
+    "description": "强调低频冲击和节奏变化，现场表现力强。"
+  },
+  {
+    "id": "dubstep",
+    "name": "Dubstep",
+    "level": 1,
+    "path": [
+      "Bass Music",
+      "Dubstep"
+    ],
+    "description": "以重低音和 Drop 变化为标志。"
+  },
+  {
+    "id": "future-bass",
+    "name": "Future Bass",
+    "level": 1,
+    "path": [
+      "Bass Music",
+      "Future Bass"
+    ],
+    "description": "旋律化和弦与爆发式低频结合。"
+  },
+  {
+    "id": "drum-and-bass",
+    "name": "Drum & Bass",
+    "level": 1,
+    "path": [
+      "Bass Music",
+      "Drum & Bass"
+    ],
+    "description": "高速 breakbeat 与深厚低频的经典组合。"
+  },
+  {
+    "id": "trance",
+    "name": "Trance",
+    "level": 0,
+    "path": [
+      "Trance"
+    ],
+    "description": "强调旋律推进、铺垫和情绪释放。"
+  },
+  {
+    "id": "uplifting-trance",
+    "name": "Uplifting Trance",
+    "level": 1,
+    "path": [
+      "Trance",
+      "Uplifting Trance"
+    ],
+    "description": "旋律明亮、情感强烈，高潮感突出。"
+  },
+  {
+    "id": "psytrance",
+    "name": "Psytrance",
+    "level": 1,
+    "path": [
+      "Trance",
+      "Psytrance"
+    ],
+    "description": "高能重复节奏与迷幻音色。"
+  }
+]

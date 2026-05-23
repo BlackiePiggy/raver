@@ -6,6 +6,9 @@ protocol WebFeatureService {
     func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
+    func fetchEventSummary(id: String) async throws -> WebEvent
+    func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist]
+    func fetchEventTimetable(eventID: String) async throws -> [WebEventLineupSlot]
     func fetchEvent(id: String) async throws -> WebEvent
     func searchEventTimezones(query: String, limit: Int) async throws -> [EventTimezoneLookupItem]
     func fetchMyEvents() async throws -> [WebEvent]
@@ -15,7 +18,7 @@ protocol WebFeatureService {
     func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
     func unfavoriteEvent(eventID: String) async throws
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult
-    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent>
     func deleteEvent(id: String) async throws
     func uploadEventImage(
         imageData: Data,

@@ -547,6 +547,27 @@ actor MockWebFeatureService: WebFeatureService {
         return item
     }
 
+    func fetchEventSummary(id: String) async throws -> WebEvent {
+        var event = try await fetchEvent(id: id)
+        event.lineupArtists = nil
+        event.lineupSlots = []
+        return event
+    }
+
+    func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist] {
+        guard let item = events.first(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+        return item.lineupArtists ?? []
+    }
+
+    func fetchEventTimetable(eventID: String) async throws -> [WebEventLineupSlot] {
+        guard let item = events.first(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+        return item.lineupSlots
+    }
+
     func searchEventTimezones(query: String, limit: Int) async throws -> [EventTimezoneLookupItem] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
@@ -711,7 +732,7 @@ actor MockWebFeatureService: WebFeatureService {
         return .created(event)
     }
 
-    func updateEvent(id: String, input: UpdateEventInput) async throws -> WebEvent {
+    func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent> {
         guard let idx = events.firstIndex(where: { $0.id == id }) else {
             throw ServiceError.message("活动不存在")
         }
@@ -793,7 +814,7 @@ actor MockWebFeatureService: WebFeatureService {
             events[idx].lineupSlots = classifiedLineup.slots
         }
         events[idx].updatedAt = Date()
-        return events[idx]
+        return .created(events[idx])
     }
 
     func deleteEvent(id: String) async throws {

@@ -186,7 +186,7 @@ const mapContentReviewInboxItem = (
   const submissionId = readString(metadata.submissionId);
   const entityType = readString(metadata.entityType) ?? 'content';
   const status = readString(metadata.status);
-  if (!submissionId || (status !== 'approved' && status !== 'rejected')) {
+  if (!submissionId || !status || !['processing', 'reviewing', 'approved', 'rejected', 'failed'].includes(status)) {
     return null;
   }
 

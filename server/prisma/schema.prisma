@@ -753,6 +753,8 @@ model DJ {
   sets               DJSet[]
   canonicalArtists   EventArtist[]        @relation("EventArtistPrimaryDJ")
   eventArtistMembers EventArtistMember[]  @relation("EventArtistMemberDJ")
+  eventBindingReviewJobs       DJEventBindingReviewJob[]
+  eventBindingReviewCandidates DJEventBindingReviewCandidate[]
   contributors       DJContributor[]
   enrichmentResults  DJEnrichmentResult[]
   ratingUnits        RatingUnit[]         @relation("RatingUnitPrimaryDJ")
@@ -764,6 +766,62 @@ model DJ {
   foundedLabels     Label[]              @relation("LabelFounderDJ")
 
   @@map("djs")
+}
+
+model DJEventBindingReviewJob {
+  id             String    @id @default(uuid())
+  djId           String    @map("dj_id")
+  djNameSnapshot String    @map("dj_name_snapshot")
+  triggerSource  String    @map("trigger_source")
+  status         String    @default("pending")
+  exactCount     Int       @default(0) @map("exact_count")
+  fuzzyCount     Int       @default(0) @map("fuzzy_count")
+  appliedCount   Int       @default(0) @map("applied_count")
+  createdById    String?   @map("created_by_id")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  dj         DJ                              @relation(fields: [djId], references: [id], onDelete: Cascade)
+  candidates DJEventBindingReviewCandidate[]
+
+  @@index([djId, createdAt])
+  @@index([status, createdAt])
+  @@map("dj_event_binding_review_jobs")
+}
+
+model DJEventBindingReviewCandidate {
+  id                  String    @id @default(uuid())
+  jobId               String    @map("job_id")
+  djId                String    @map("dj_id")
+  eventId             String    @map("event_id")
+  eventArtistId       String?   @map("event_artist_id")
+  eventArtistMemberId String?   @map("event_artist_member_id")
+  eventPerformanceId  String?   @map("event_performance_id")
+  sourceType          String    @map("source_type")
+  matchTier           String    @map("match_tier")
+  matchScore          Int       @default(0) @map("match_score")
+  matchReason         String    @map("match_reason")
+  rawName             String    @map("raw_name")
+  normalizedKey       String    @map("normalized_key")
+  compactKey          String    @map("compact_key")
+  eventNameSnapshot   String    @map("event_name_snapshot")
+  stageNameSnapshot   String?   @map("stage_name_snapshot")
+  startAtSnapshot     DateTime? @map("start_at_snapshot")
+  needsSplit          Boolean   @default(false) @map("needs_split")
+  status              String    @default("pending")
+  appliedAt           DateTime? @map("applied_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  job DJEventBindingReviewJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  dj  DJ                      @relation(fields: [djId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, eventArtistId, eventArtistMemberId, eventPerformanceId, rawName])
+  @@index([jobId, matchTier, status])
+  @@index([djId, status, createdAt])
+  @@index([eventId])
+  @@map("dj_event_binding_review_candidates")
 }
 
 model DJContributor {

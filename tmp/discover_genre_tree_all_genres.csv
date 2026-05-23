@@ -1,0 +1,15 @@
+id,name,level,path,description
+house,House,0,House,以四拍地板鼓点为核心，强调律动和舞池氛围。
+deep-house,Deep House,1,House > Deep House,更柔和、更氛围化，低频和和声更细腻。
+tech-house,Tech House,1,House > Tech House,融合 Techno 的极简与 House 的律动感。
+progressive-house,Progressive House,1,House > Progressive House,注重层层推进和情绪堆叠，适合大舞台。
+techno,Techno,0,Techno,强调工业感、重复性和催眠式推进。
+melodic-techno,Melodic Techno,1,Techno > Melodic Techno,在 Techno 框架中加入旋律与情绪线。
+hard-techno,Hard Techno,1,Techno > Hard Techno,速度更快、冲击更强、能量密度更高。
+bass-music,Bass Music,0,Bass Music,强调低频冲击和节奏变化，现场表现力强。
+dubstep,Dubstep,1,Bass Music > Dubstep,以重低音和 Drop 变化为标志。
+future-bass,Future Bass,1,Bass Music > Future Bass,旋律化和弦与爆发式低频结合。
+drum-and-bass,Drum & Bass,1,Bass Music > Drum & Bass,高速 breakbeat 与深厚低频的经典组合。
+trance,Trance,0,Trance,强调旋律推进、铺垫和情绪释放。
+uplifting-trance,Uplifting Trance,1,Trance > Uplifting Trance,旋律明亮、情感强烈，高潮感突出。
+psytrance,Psytrance,1,Trance > Psytrance,高能重复节奏与迷幻音色。

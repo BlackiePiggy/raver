@@ -3744,6 +3744,13 @@ class Handler(BaseHTTPRequestHandler):
                 auth_header=self.headers.get("Authorization", ""),
             )
             return
+        if path == "/api/admin/v1/dj-event-binding-review/jobs":
+            self._proxy_raver_get(
+                "/v1/admin/dj-event-binding-review/jobs",
+                parsed.query,
+                auth_header=self.headers.get("Authorization", ""),
+            )
+            return
         content_submission_detail_m = re.match(r"^/api/admin/v1/content-submissions/([^/]+)$", path)
         if content_submission_detail_m:
             submission_id = quote(unquote_to_bytes(content_submission_detail_m.group(1)))
@@ -3758,6 +3765,15 @@ class Handler(BaseHTTPRequestHandler):
             result_id = quote(unquote_to_bytes(dj_enrichment_detail_m.group(1)))
             self._proxy_raver_get(
                 f"/api/admin/v1/dj-enrichment/results/{result_id}",
+                parsed.query,
+                auth_header=self.headers.get("Authorization", ""),
+            )
+            return
+        dj_binding_review_detail_m = re.match(r"^/api/admin/v1/dj-event-binding-review/jobs/([^/]+)$", path)
+        if dj_binding_review_detail_m:
+            job_id = quote(unquote_to_bytes(dj_binding_review_detail_m.group(1)))
+            self._proxy_raver_get(
+                f"/v1/admin/dj-event-binding-review/jobs/{job_id}",
                 parsed.query,
                 auth_header=self.headers.get("Authorization", ""),
             )
@@ -4187,6 +4203,33 @@ class Handler(BaseHTTPRequestHandler):
             result_id = quote(unquote_to_bytes(dj_enrichment_review_m.group(1)))
             self._proxy_raver_post(
                 f"/api/admin/v1/dj-enrichment/results/{result_id}/review",
+                body if isinstance(body, dict) else {},
+                auth_header=self.headers.get("Authorization", ""),
+            )
+            return
+        dj_binding_review_apply_exact_m = re.match(r"^/api/admin/v1/dj-event-binding-review/jobs/([^/]+)/apply-exact$", path)
+        if dj_binding_review_apply_exact_m:
+            job_id = quote(unquote_to_bytes(dj_binding_review_apply_exact_m.group(1)))
+            self._proxy_raver_post(
+                f"/v1/admin/dj-event-binding-review/jobs/{job_id}/apply-exact",
+                body if isinstance(body, dict) else {},
+                auth_header=self.headers.get("Authorization", ""),
+            )
+            return
+        dj_binding_review_apply_m = re.match(r"^/api/admin/v1/dj-event-binding-review/jobs/([^/]+)/apply$", path)
+        if dj_binding_review_apply_m:
+            job_id = quote(unquote_to_bytes(dj_binding_review_apply_m.group(1)))
+            self._proxy_raver_post(
+                f"/v1/admin/dj-event-binding-review/jobs/{job_id}/apply",
+                body if isinstance(body, dict) else {},
+                auth_header=self.headers.get("Authorization", ""),
+            )
+            return
+        dj_binding_review_dismiss_m = re.match(r"^/api/admin/v1/dj-event-binding-review/jobs/([^/]+)/dismiss$", path)
+        if dj_binding_review_dismiss_m:
+            job_id = quote(unquote_to_bytes(dj_binding_review_dismiss_m.group(1)))
+            self._proxy_raver_post(
+                f"/v1/admin/dj-event-binding-review/jobs/{job_id}/dismiss",
                 body if isinstance(body, dict) else {},
                 auth_header=self.headers.get("Authorization", ""),
             )

@@ -1565,6 +1565,8 @@ struct EventDetailView: View {
     @State private var relatedArticlesLoadFailed = false
     @State private var relatedRatingEventsLoadFailed = false
     @State private var relatedEventSetsLoadFailed = false
+    @State private var isLoadingEventLineupBundle = false
+    @State private var didLoadEventLineupBundle = false
     @State private var visibleEventDiscussionCount = 10
     @State private var relatedArticlesNextCursor: String?
     @State private var relatedRatingsPage = 0
@@ -5594,7 +5596,7 @@ struct EventDetailView: View {
 
         do {
             let hasSession = await MainActor.run { appState.session != nil }
-            async let eventTask = eventReadRepository.fetchEvent(id: eventID)
+            async let eventTask = eventReadRepository.fetchEventSummary(id: eventID)
             async let favoriteStatusTask: EventFavoriteStatus? = {
                 guard hasSession else { return nil }
                 return try? await eventCheckinRepository.fetchEventFavoriteStatus(eventID: eventID)
@@ -5611,7 +5613,13 @@ struct EventDetailView: View {
                 return page?.items ?? []
             }()
 
-            let loadedEvent = try await eventTask
+            var loadedEvent = try await eventTask
+            if let existing = event {
+                if didLoadEventLineupBundle {
+                    loadedEvent.lineupArtists = existing.lineupArtists
+                    loadedEvent.lineupSlots = existing.lineupSlots
+                }
+            }
             let loadedFavoriteStatus = await favoriteStatusTask
             let loadedCheckins = await checkinsTask
 
@@ -5683,8 +5691,37 @@ struct EventDetailView: View {
         case .sets:
             visibleRelatedSetCount = 10
             await loadRelatedSetsIfNeeded()
-        case .info, .lineup, .schedule:
+        case .lineup, .schedule:
+            await loadEventLineupBundleIfNeeded()
+        case .info:
             return
+        }
+    }
+
+    @MainActor
+    private func loadEventLineupBundleIfNeeded(force: Bool = false) async {
+        guard force || !didLoadEventLineupBundle else { return }
+        guard !isLoadingEventLineupBundle else { return }
+        isLoadingEventLineupBundle = true
+        defer { isLoadingEventLineupBundle = false }
+
+        do {
+            async let lineupTask = eventReadRepository.fetchEventLineup(eventID: eventID)
+            async let timetableTask = eventReadRepository.fetchEventTimetable(eventID: eventID)
+            let lineupArtists = try await lineupTask
+            let timetableSlots = try await timetableTask
+
+            guard var currentEvent = event else { return }
+            currentEvent.lineupArtists = lineupArtists
+            currentEvent.lineupSlots = timetableSlots
+            event = currentEvent
+            didLoadEventLineupBundle = true
+            invalidateLineupEntriesCache()
+            await persistCurrentManualCacheSnapshotIfPossible()
+        } catch is CancellationError {
+            return
+        } catch {
+            // Keep lightweight event visible; we'll retry the next time the tab is opened.
         }
     }
 

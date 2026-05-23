@@ -59,6 +59,9 @@ import {
 } from '../services/media-storage.service';
 import { mediaAssetService } from '../services/media-asset.service';
 import { notificationCenterService } from '../services/notification-center';
+import { adminAuditService } from '../modules/admin/admin-audit.service';
+import { djEventBindingReviewService, type DJEventBindingTriggerSource } from '../services/dj-event-binding-review.service';
+import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -213,6 +216,17 @@ const requireAuth = (req: BFFAuthRequest, res: Response): string | null => {
   return userId;
 };
 
+const requireAdminOrOperatorUserId = (req: BFFAuthRequest, res: Response): string | null => {
+  const userId = requireAuth(req, res);
+  if (!userId) return null;
+  const role = req.user?.role ?? null;
+  if (role !== 'admin' && role !== 'operator') {
+    res.status(403).json({ error: 'Forbidden' });
+    return null;
+  }
+  return userId;
+};
+
 const resolveRegionalComplianceUser = async (userId?: string | null): Promise<RegionalComplianceUser | null> => {
   if (!userId) return null;
   return prisma.user.findUnique({
@@ -223,6 +237,25 @@ const resolveRegionalComplianceUser = async (userId?: string | null): Promise<Re
 
 const canBypassContentReview = (role?: string | null): boolean =>
   role === 'admin' || role === 'operator';
+
+const createDJEventBindingReviewJobBestEffort = async (
+  djId: string,
+  input: {
+    triggerSource: DJEventBindingTriggerSource;
+    createdById?: string | null;
+  }
+): Promise<void> => {
+  try {
+    await djEventBindingReviewService.createJobForDJ(djId, input);
+  } catch (error) {
+    console.error('BFF web create DJ event binding review job failed:', {
+      djId,
+      triggerSource: input.triggerSource,
+      createdById: input.createdById ?? null,
+      error,
+    });
+  }
+};
 
 type CityTimezoneLookupRow = {
   city: string;
@@ -478,7 +511,7 @@ const createPendingContentSubmission = async (input: {
   title: string;
   payload: Record<string, unknown>;
 }) => {
-  return prisma.$transaction(async (tx) => {
+  const submission = await prisma.$transaction(async (tx) => {
     const submission = await tx.contentSubmission.create({
       data: {
         submitterId: input.submitterId,
@@ -486,7 +519,7 @@ const createPendingContentSubmission = async (input: {
         title: input.title,
         payload: input.payload as Prisma.InputJsonObject,
         reviewNotes: buildI18nReviewNotes(input.entityType, input.payload),
-        status: 'pending',
+        status: 'processing',
       },
     });
 
@@ -503,6 +536,44 @@ const createPendingContentSubmission = async (input: {
 
     return submission;
   });
+
+  const typeLabelMap: Record<string, string> = {
+    event: '活动',
+    dj: 'DJ',
+    news: '资讯',
+    set: 'Set',
+    brand: '品牌',
+    label: '厂牌',
+    id: 'ID',
+    rating: '打分',
+  };
+  const typeLabel = typeLabelMap[input.entityType] || '内容';
+  await notificationCenterService.publish({
+    category: 'content_review',
+    targets: [{ userId: input.submitterId }],
+    channels: ['in_app', 'apns'],
+    dedupeKey: `content_submission:${submission.id}:processing`,
+    payload: {
+      title: `${typeLabel}提交处理中`,
+      body: `你提交的「${input.title}」已进入处理队列。`,
+      deeplink: `/profile/submissions/${submission.id}`,
+      metadata: {
+        source: 'content_submission_review',
+        submissionId: submission.id,
+        entityType: input.entityType,
+        status: 'processing',
+        reason: null,
+        reasonCode: null,
+        createdEntityId: null,
+        typeLabel,
+        statusLabel: '处理中',
+        message: `你提交的「${input.title}」已进入处理队列。`,
+      },
+    },
+  });
+
+  scheduleContentSubmissionProcessingBestEffort(submission.id);
+  return submission;
 };
 
 const acceptedSubmission = (
@@ -1420,6 +1491,123 @@ const includeEventForWeb = {
     },
   },
 };
+
+const selectEventDetailForWeb = {
+  id: true,
+  name: true,
+  nameI18n: true,
+  wikiFestivalId: true,
+  slug: true,
+  archiveFestivalId: true,
+  abbreviation: true,
+  description: true,
+  descriptionI18n: true,
+  coverImageUrl: true,
+  lineupImageUrl: true,
+  imageAssets: true,
+  referenceLinks: true,
+  socialLinks: true,
+  sourceProvider: true,
+  sourceEventUrl: true,
+  eventType: true,
+  organizerName: true,
+  venueName: true,
+  venueAddress: true,
+  city: true,
+  cityI18n: true,
+  country: true,
+  countryI18n: true,
+  manualLocation: true,
+  locationPoint: true,
+  latitude: true,
+  longitude: true,
+  startDate: true,
+  endDate: true,
+  timeZone: true,
+  startTime: true,
+  endTime: true,
+  dayRolloverHour: true,
+  ticketUrl: true,
+  ticketPriceMin: true,
+  ticketPriceMax: true,
+  ticketCurrency: true,
+  ticketNotes: true,
+  officialWebsite: true,
+  status: true,
+  isVerified: true,
+  createdAt: true,
+  updatedAt: true,
+  ticketTiers: {
+    orderBy: { sortOrder: 'asc' as const },
+  },
+  stages: {
+    orderBy: { sortOrder: 'asc' as const },
+    select: { name: true },
+  },
+  organizer: {
+    select: { id: true, username: true, displayName: true, avatarUrl: true },
+  },
+  wikiFestival: {
+    select: {
+      id: true,
+      name: true,
+      nameI18n: true,
+      abbreviation: true,
+      aliases: true,
+      country: true,
+      countryI18n: true,
+      city: true,
+      cityI18n: true,
+      avatarUrl: true,
+      backgroundUrl: true,
+    },
+  },
+} satisfies Prisma.EventSelect;
+
+const selectEventLineupForWeb = {
+  canonicalArtists: {
+    orderBy: { billingOrder: 'asc' as const },
+    include: {
+      primaryDj: {
+        select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+      },
+      members: {
+        orderBy: { memberOrder: 'asc' as const },
+        include: {
+          dj: {
+            select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.EventSelect;
+
+const selectEventTimetableForWeb = {
+  performances: {
+    orderBy: [{ startAt: 'asc' as const }, { sortOrder: 'asc' as const }],
+    include: {
+      stage: {
+        select: { name: true },
+      },
+      eventArtist: {
+        include: {
+          primaryDj: {
+            select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+          },
+          members: {
+            orderBy: { memberOrder: 'asc' as const },
+            include: {
+              dj: {
+                select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.EventSelect;
 
 const selectEventRecommendationCardForWeb = {
   id: true,
@@ -5072,30 +5260,9 @@ const mapDJLiteForEvent = (dj: any) => dj
     }
   : null;
 
-const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
-  const latitude = toNumber(row.latitude);
-  const longitude = toNumber(row.longitude);
-  const locationFallback =
-    latitude !== null && longitude !== null
-      ? {
-          provider: 'amap',
-          sourceMode: 'legacy_coords',
-          location: { lng: longitude, lat: latitude },
-          nameI18n: row.city ?? row.name ?? '',
-          addressI18n: '',
-          formattedAddressI18n: '',
-          city: row.city ?? '',
-          countryCode: row.country ?? '',
-        }
-      : null;
-  const cityI18n = normalizeEventBiText(row.cityI18n ?? null, row.city ?? '');
-  const countryI18n = normalizeCountryBiText(row.countryI18n ?? null, row.country ?? '');
-  const manualLocationRaw = normalizeEventManualLocationPayload(row.manualLocation ?? null);
-  const manualLocation = mergeManualLocationFormattedWithBaseI18n(manualLocationRaw, cityI18n, countryI18n);
-  const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
-  const canonicalArtists = Array.isArray(row.canonicalArtists) ? row.canonicalArtists : [];
-  const canonicalPerformances = Array.isArray(row.performances) ? row.performances : [];
-  const mappedCanonicalArtists = canonicalArtists.map((artist: any) => {
+const mapEventLineupArtists = (canonicalArtistsRaw: any): any[] => {
+  const canonicalArtists = Array.isArray(canonicalArtistsRaw) ? canonicalArtistsRaw : [];
+  return canonicalArtists.map((artist: any) => {
     const uniqueMembers = Array.isArray(artist.members) ? dedupeCanonicalMembers(artist.members) : [];
     const memberDjs = uniqueMembers.map((member: any) => member.dj).filter(Boolean);
     const primaryDj = artist.primaryDj || memberDjs[0] || null;
@@ -5119,22 +5286,28 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       dj: mapDJLiteForEvent(primaryDj),
       djs: memberDjs.map(mapDJLiteForEvent).filter(Boolean),
       members: uniqueMembers.map((member: any) => ({
-            id: member.id,
-            eventArtistId: member.eventArtistId,
-            djId: member.djId,
-            memberNameSnapshot: member.memberNameSnapshot,
-            memberOrder: member.memberOrder,
-            role: member.role,
-            createdAt: member.createdAt,
-            dj: mapDJLiteForEvent(member.dj),
-          })),
+        id: member.id,
+        eventArtistId: member.eventArtistId,
+        djId: member.djId,
+        memberNameSnapshot: member.memberNameSnapshot,
+        memberOrder: member.memberOrder,
+        role: member.role,
+        createdAt: member.createdAt,
+        dj: mapDJLiteForEvent(member.dj),
+      })),
     };
   });
-  const mappedCanonicalSlots = canonicalPerformances.map((performance: any) => {
+};
+
+const mapEventTimetableSlots = (performancesRaw: any): any[] => {
+  const canonicalPerformances = Array.isArray(performancesRaw) ? performancesRaw : [];
+  return canonicalPerformances.map((performance: any) => {
     const artist = performance.eventArtist || {};
     const uniqueMembers = Array.isArray(artist.members) ? dedupeCanonicalMembers(artist.members) : [];
     const memberDjs = uniqueMembers.map((member: any) => member.dj).filter(Boolean);
     const primaryDj = artist.primaryDj || memberDjs[0] || null;
+    const dj = mapDJLiteForEvent(primaryDj);
+    const djs = memberDjs.map(mapDJLiteForEvent).filter(Boolean);
     return {
       id: performance.id,
       eventId: performance.eventId,
@@ -5156,10 +5329,35 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       sourceType: performance.sourceType,
       createdAt: performance.createdAt,
       updatedAt: performance.updatedAt,
-      dj: mapDJLiteForEvent(primaryDj),
-      djs: memberDjs.map(mapDJLiteForEvent).filter(Boolean),
+      dj,
+      djs,
     };
   });
+};
+
+const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
+  const latitude = toNumber(row.latitude);
+  const longitude = toNumber(row.longitude);
+  const locationFallback =
+    latitude !== null && longitude !== null
+      ? {
+          provider: 'amap',
+          sourceMode: 'legacy_coords',
+          location: { lng: longitude, lat: latitude },
+          nameI18n: row.city ?? row.name ?? '',
+          addressI18n: '',
+          formattedAddressI18n: '',
+          city: row.city ?? '',
+          countryCode: row.country ?? '',
+        }
+      : null;
+  const cityI18n = normalizeEventBiText(row.cityI18n ?? null, row.city ?? '');
+  const countryI18n = normalizeCountryBiText(row.countryI18n ?? null, row.country ?? '');
+  const manualLocationRaw = normalizeEventManualLocationPayload(row.manualLocation ?? null);
+  const manualLocation = mergeManualLocationFormattedWithBaseI18n(manualLocationRaw, cityI18n, countryI18n);
+  const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
+  const mappedCanonicalArtists = mapEventLineupArtists(row.canonicalArtists);
+  const mappedCanonicalSlots = mapEventTimetableSlots(row.performances);
 
   return {
     id: row.id,
@@ -7068,7 +7266,7 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     const eventId = req.params.id as string;
     const row = await prisma.event.findUnique({
       where: { id: eventId },
-      include: includeEventForWeb,
+      select: selectEventDetailForWeb,
     });
 
     if (!row) {
@@ -7092,13 +7290,13 @@ router.get('/events/:id/lineup', optionalAuth, async (req: Request, res: Respons
     const eventId = req.params.id as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      include: includeEventForWeb,
+      select: selectEventLineupForWeb,
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
       return;
     }
-    ok(res, { items: mapEvent(event).lineupArtists });
+    ok(res, { items: mapEventLineupArtists(event.canonicalArtists) });
   } catch (error) {
     console.error('BFF web event lineup error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -7269,13 +7467,30 @@ router.get('/events/:id/timetable', optionalAuth, async (req: Request, res: Resp
     const eventId = req.params.id as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      include: includeEventForWeb,
+      select: selectEventTimetableForWeb,
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
       return;
     }
-    ok(res, { items: mapEvent(event).timetableSlots });
+    ok(res, {
+      items: mapEventTimetableSlots(event.performances).map((slot: any) => ({
+        id: slot.id,
+        eventId: slot.eventId,
+        lineupArtistId: slot.lineupArtistId ?? null,
+        djId: slot.djId,
+        memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
+        djName: slot.djName,
+        djNameSnapshot: slot.djNameSnapshot ?? slot.djName,
+        festivalDayIndex: typeof slot.festivalDayIndex === 'number' ? slot.festivalDayIndex : null,
+        stageName: slot.stageName,
+        sortOrder: slot.sortOrder,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        dj: mapDJLiteForEvent(slot.dj),
+        djs: Array.isArray(slot.djs) ? slot.djs.map(mapDJLiteForEvent).filter(Boolean) : [],
+      })),
+    });
   } catch (error) {
     console.error('BFF web event timetable error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -7552,8 +7767,6 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     const authReq = req as BFFAuthRequest;
     const userId = requireAuth(authReq, res);
     if (!userId) return;
-    const viewerRole = authReq.user?.role ?? null;
-
     const body = req.body as Record<string, unknown>;
     const name = String(body.name || '').trim();
     const startDate = String(body.startDate || '').trim();
@@ -7576,207 +7789,14 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    if (!canBypassContentReview(viewerRole)) {
-      const submission = await createPendingContentSubmission({
-        submitterId: userId,
-        entityType: 'event',
-        title: name,
-        payload: body,
-      });
-      acceptedSubmission(res, submission, '活动信息已提交审核，管理员审核通过后才会入库');
-      return;
-    }
-
-    const timeZone = normalizeEventTimeZone(rawTimeZone);
-    const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(body, timeZone);
-    if (submittedTimeZoneSelectionError) {
-      res.status(400).json({ error: submittedTimeZoneSelectionError });
-      return;
-    }
-    const startTime = normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME);
-    const endTime = normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME);
-    const parsedStartDateInput = parseEventDateInput(startDate, timeZone, 'start', startTime);
-    const parsedEndDateInput = parseEventDateInput(endDate, timeZone, 'end', endTime);
-    if (!parsedStartDateInput || !parsedEndDateInput) {
-      res.status(400).json({ error: 'Invalid event date range' });
-      return;
-    }
-    const parsedStartDate = normalizeEventStartDate(parsedStartDateInput, timeZone);
-    const parsedEndDate = normalizeEventEndDate(parsedEndDateInput, timeZone);
-
-    const desiredSlug = String(body.slug || '').trim() || `${slugify(name)}-${Date.now().toString().slice(-6)}`;
-    const slugUsed = await prisma.event.findUnique({ where: { slug: desiredSlug }, select: { id: true } });
-    if (slugUsed) {
-      res.status(409).json({ error: 'slug already exists' });
-      return;
-    }
-
-    const dayRolloverHour = normalizeDayRolloverHour(body.dayRolloverHour, 6);
-    const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : [];
-    const lineupSlots = normalizeLineupSlots(rawSlots, parsedStartDate, dayRolloverHour, timeZone);
-    const lineupArtists = normalizeLineupArtistsInput(body.lineupArtists, lineupSlots);
-    const stageOrder = normalizeEventStageOrder(body.stageOrder);
-    const coverImageUrlInput =
-      typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim()
-        ? body.coverImageUrl.trim()
-        : null;
-    const lineupImageUrlInput =
-      typeof body.lineupImageUrl === 'string' && body.lineupImageUrl.trim()
-        ? body.lineupImageUrl.trim()
-        : null;
-    const archiveFestivalIdInput =
-      typeof body.archiveFestivalId === 'string' && body.archiveFestivalId.trim()
-        ? body.archiveFestivalId.trim()
-        : null;
-    const wikiFestivalIdInput = normalizeEventWikiFestivalId(body.wikiFestivalId ?? body.brandId);
-    const sourceProviderInput =
-      typeof body.sourceProvider === 'string' && body.sourceProvider.trim()
-        ? body.sourceProvider.trim()
-        : null;
-    const sourceEventUrlInput =
-      typeof body.sourceEventUrl === 'string' && body.sourceEventUrl.trim()
-        ? body.sourceEventUrl.trim()
-        : null;
-
-    const citySeed = typeof body.city === 'string' ? body.city : '';
-    const countrySeed = typeof body.country === 'string' ? body.country : '';
-    const descriptionSeed = typeof body.description === 'string' ? body.description : '';
-    const abbreviationInput =
-      typeof body.abbreviation === 'string' && body.abbreviation.trim()
-        ? body.abbreviation.trim()
-        : null;
-
-    const nameI18n = normalizeEventBiText(body.nameI18n, name);
-    const cityI18n = normalizeEventBiText(body.cityI18n ?? body.city_i18n, citySeed);
-    const countryI18n = normalizeCountryBiText(body.countryI18n ?? body.country_i18n, countrySeed);
-    const descriptionI18n = normalizeEventBiText(body.descriptionI18n, descriptionSeed);
-    const referenceLinks = parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks);
-    const socialLinks = parseEventSocialLinks(body.socialLinks);
-    const imageAssets = submittedImageAssets;
-    const rawManualLocation = Object.prototype.hasOwnProperty.call(body, 'manualLocation')
-      ? body.manualLocation
-      : body.manual_location;
-    const manualLocationFallback = {
-      detailAddressI18n: body.detailAddressI18n ?? body.addressI18n ?? null,
-      formattedAddressI18n: body.formattedAddressI18n ?? null,
-    };
-    const manualLocation = normalizeEventManualLocationPayload(rawManualLocation ?? null, manualLocationFallback);
-    if (rawManualLocation !== undefined && rawManualLocation !== null && !manualLocation) {
-      res.status(400).json({ error: 'Invalid manualLocation payload' });
-      return;
-    }
-    const rawLocationPoint = Object.prototype.hasOwnProperty.call(body, 'locationPoint')
-      ? body.locationPoint
-      : body.location_point;
-    const locationPoint = normalizeEventLocationPointPayload(rawLocationPoint ?? null);
-    if (rawLocationPoint !== undefined && rawLocationPoint !== null && !locationPoint) {
-      res.status(400).json({ error: 'Invalid locationPoint payload' });
-      return;
-    }
-    const hasLatitudeField = Object.prototype.hasOwnProperty.call(body, 'latitude');
-    const hasLongitudeField = Object.prototype.hasOwnProperty.call(body, 'longitude');
-    const latitudeInput = hasLatitudeField ? toNumber(body.latitude) : null;
-    const longitudeInput = hasLongitudeField ? toNumber(body.longitude) : null;
-    const locationPointLatitude = toNumber((locationPoint?.location as any)?.lat);
-    const locationPointLongitude = toNumber((locationPoint?.location as any)?.lng);
-    const resolvedCity =
-      normalizeEventText(typeof body.city === 'string' ? body.city : null)
-      || normalizeEventText(cityI18n?.zh)
-      || normalizeEventText(cityI18n?.en)
-      || null;
-    const resolvedCountry =
-      normalizeEventText(typeof body.country === 'string' ? body.country : null)
-      || normalizeEventText(countryI18n?.en)
-      || normalizeEventText(countryI18n?.zh)
-      || null;
-
-    if (wikiFestivalIdInput) {
-      const brand = await prisma.wikiFestival.findUnique({
-        where: { id: wikiFestivalIdInput },
-        select: { id: true, isActive: true },
-      });
-      if (!brand || !brand.isActive) {
-        res.status(400).json({ error: 'Invalid wikiFestivalId' });
-        return;
-      }
-    }
-
-    const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : [];
-    const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
-    const ticketTiers = rawTicketTiers
-      .filter((tier): tier is Record<string, unknown> => typeof tier === 'object' && tier !== null)
-      .map((tier, index) => ({
-        name: String(tier.name || '').trim(),
-        price: toNumber(tier.price),
-        currency: typeof tier.currency === 'string' && tier.currency.trim() ? tier.currency.trim() : ticketCurrency,
-        sortOrder: typeof tier.sortOrder === 'number' ? tier.sortOrder : index + 1,
-      }))
-      .filter((tier) => tier.name && tier.price !== null)
-      .map((tier) => ({
-        name: tier.name,
-        price: Number(tier.price),
-        currency: tier.currency || null,
-        sortOrder: tier.sortOrder,
-      }));
-
-    const createEventData: any = {
-        organizerId: userId,
-        name,
-        nameI18n: nameI18n ? (nameI18n as unknown as Prisma.InputJsonValue) : undefined,
-        slug: desiredSlug,
-        abbreviation: abbreviationInput,
-        wikiFestivalId: wikiFestivalIdInput,
-        archiveFestivalId: archiveFestivalIdInput,
-        description: typeof body.description === 'string' ? body.description : null,
-        descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : undefined,
-        cityI18n: cityI18n ? (cityI18n as unknown as Prisma.InputJsonValue) : undefined,
-        countryI18n: countryI18n ? (countryI18n as unknown as Prisma.InputJsonValue) : undefined,
-        coverImageUrl: coverImageUrlInput,
-        lineupImageUrl: lineupImageUrlInput,
-        imageAssets: imageAssets.length > 0 ? (imageAssets as unknown as Prisma.InputJsonValue) : undefined,
-        referenceLinks,
-        socialLinks: socialLinks.length > 0 ? (socialLinks as unknown as Prisma.InputJsonValue) : undefined,
-        sourceProvider: sourceProviderInput,
-        sourceEventUrl: sourceEventUrlInput,
-        eventType: typeof body.eventType === 'string' ? body.eventType : null,
-        organizerName: typeof body.organizerName === 'string' ? body.organizerName : null,
-        city: resolvedCity,
-        country: resolvedCountry,
-        manualLocation: manualLocation ? (manualLocation as unknown as Prisma.InputJsonValue) : undefined,
-        locationPoint: locationPoint ? (locationPoint as unknown as Prisma.InputJsonValue) : undefined,
-        latitude: latitudeInput ?? locationPointLatitude,
-        longitude: longitudeInput ?? locationPointLongitude,
-        startDate: parsedStartDate,
-        endDate: parsedEndDate,
-        timeZone,
-        startTime,
-        endTime,
-        dayRolloverHour,
-        status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof body.status === 'string' ? body.status : null),
-        ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : null,
-        ticketPriceMin: toNumber(body.ticketPriceMin),
-        ticketPriceMax: toNumber(body.ticketPriceMax),
-        ticketCurrency,
-        ticketNotes: typeof body.ticketNotes === 'string' ? body.ticketNotes : null,
-        officialWebsite: typeof body.officialWebsite === 'string' ? body.officialWebsite : null,
-        ticketTiers: ticketTiers.length ? { create: ticketTiers } : undefined,
-      };
-
-    const created = await prisma.$transaction(async (tx) => {
-      const event = await tx.event.create({ data: createEventData });
-      await syncEventLineupAndTimetable(tx, event.id, lineupSlots, lineupArtists, stageOrder);
-      return tx.event.findUnique({
-        where: { id: event.id },
-        include: includeEventForWeb,
-      });
+    const submission = await createPendingContentSubmission({
+      submitterId: userId,
+      entityType: 'event',
+      title: name,
+      payload: body,
     });
-
-    if (!created) {
-      res.status(500).json({ error: 'Event was created but could not be loaded' });
-      return;
-    }
-
-    ok(res, mapEvent(created));
+    acceptedSubmission(res, submission, '活动任务已提交，当前正在处理中，后续状态会通过通知更新');
+    return;
   } catch (error) {
     console.error('BFF web create event error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -7826,6 +7846,39 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     }
 
     const body = req.body as Record<string, unknown>;
+    const shouldCreateEditSubmission = !canBypassContentReview(authReq.user?.role ?? null);
+    if (shouldCreateEditSubmission) {
+      const submittedName = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!submittedName) {
+        res.status(400).json({ error: 'Event name is required' });
+        return;
+      }
+
+      const rawTimeZone = body.timeZone ?? body.timezone ?? body.eventTimeZone;
+      if (!isValidEventTimeZone(rawTimeZone)) {
+        res.status(400).json({ error: 'Valid event timeZone is required' });
+        return;
+      }
+
+      const submittedImageAssets = parseEventImageAssets(body.imageAssets);
+      if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
+        res.status(400).json({ error: 'At least one poster, lineup, or cover image is required' });
+        return;
+      }
+
+      const submission = await createPendingContentSubmission({
+        submitterId: userId,
+        entityType: 'event',
+        title: submittedName,
+        payload: {
+          ...body,
+          targetEventId: eventId,
+        },
+      });
+      acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
+      return;
+    }
+
     const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : null;
     const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : null;
     const hasCoverImageField = Object.prototype.hasOwnProperty.call(body, 'coverImageUrl');
@@ -9701,6 +9754,12 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
     }
 
     await ensureDJContributor(persisted.id, userId);
+    if (action === 'created') {
+      await createDJEventBindingReviewJobBestEffort(persisted.id, {
+        triggerSource: 'manual_import',
+        createdById: userId,
+      });
+    }
     const hydrated = await fetchDJWithContributorsById(persisted.id);
     const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
 
@@ -10018,6 +10077,12 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
     }
 
     await ensureDJContributor(persisted.id, userId);
+    if (action === 'created') {
+      await createDJEventBindingReviewJobBestEffort(persisted.id, {
+        triggerSource: 'admin_create',
+        createdById: userId,
+      });
+    }
     const hydrated = await fetchDJWithContributorsById(persisted.id);
     const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
 
@@ -10309,6 +10374,12 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     }
 
     await ensureDJContributor(persisted.id, userId);
+    if (action === 'created') {
+      await createDJEventBindingReviewJobBestEffort(persisted.id, {
+        triggerSource: 'admin_create',
+        createdById: userId,
+      });
+    }
     const hydrated = await fetchDJWithContributorsById(persisted.id);
     const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
 
@@ -10318,6 +10389,181 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     });
   } catch (error) {
     console.error('BFF web manual dj import error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/admin/dj-event-binding-review/jobs', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const actorId = requireAdminOrOperatorUserId(authReq, res);
+    if (!actorId) return;
+
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const result = await djEventBindingReviewService.listJobs({
+      status: status || undefined,
+      page,
+      limit,
+    });
+
+    ok(res, { items: result.items }, result.pagination);
+  } catch (error) {
+    console.error('BFF web list DJ event binding review jobs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/admin/dj-event-binding-review/jobs/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const actorId = requireAdminOrOperatorUserId(authReq, res);
+    if (!actorId) return;
+
+    const jobId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!jobId) {
+      res.status(400).json({ error: 'jobId is required' });
+      return;
+    }
+
+    const job = await djEventBindingReviewService.getJobDetail(jobId);
+    ok(res, job);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    console.error('BFF web get DJ event binding review job detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/admin/dj-event-binding-review/jobs/:id/apply', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const actorId = requireAdminOrOperatorUserId(authReq, res);
+    if (!actorId) return;
+
+    const jobId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const candidateIds = Array.isArray((req.body as Record<string, unknown>)?.candidateIds)
+      ? ((req.body as Record<string, unknown>).candidateIds as unknown[])
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+      : [];
+    if (!jobId) {
+      res.status(400).json({ error: 'jobId is required' });
+      return;
+    }
+    if (!candidateIds.length) {
+      res.status(400).json({ error: 'candidateIds is required' });
+      return;
+    }
+
+    const job = await djEventBindingReviewService.applyCandidates(jobId, candidateIds, actorId);
+    await adminAuditService.createAction({
+      actorId,
+      action: 'dj_event_binding_review.apply',
+      targetType: 'dj_event_binding_review_job',
+      targetId: jobId,
+      detail: {
+        candidateIds,
+      },
+    });
+    ok(res, job);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (error instanceof Error && /candidateIds is required|No review candidates found/.test(error.message)) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('BFF web apply DJ event binding review candidates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/admin/dj-event-binding-review/jobs/:id/apply-exact', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const actorId = requireAdminOrOperatorUserId(authReq, res);
+    if (!actorId) return;
+
+    const jobId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!jobId) {
+      res.status(400).json({ error: 'jobId is required' });
+      return;
+    }
+
+    const job = await djEventBindingReviewService.applyExactCandidates(jobId, actorId);
+    await adminAuditService.createAction({
+      actorId,
+      action: 'dj_event_binding_review.apply_exact',
+      targetType: 'dj_event_binding_review_job',
+      targetId: jobId,
+      detail: {},
+    });
+    ok(res, job);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    console.error('BFF web apply exact DJ event binding review candidates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/admin/dj-event-binding-review/jobs/:id/dismiss', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const actorId = requireAdminOrOperatorUserId(authReq, res);
+    if (!actorId) return;
+
+    const jobId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const dismissAll = body.dismissAll === true;
+    const candidateIds = Array.isArray(body.candidateIds)
+      ? (body.candidateIds as unknown[])
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+      : [];
+    if (!jobId) {
+      res.status(400).json({ error: 'jobId is required' });
+      return;
+    }
+    if (!dismissAll && !candidateIds.length) {
+      res.status(400).json({ error: 'candidateIds is required' });
+      return;
+    }
+
+    const job = await djEventBindingReviewService.dismissCandidates(jobId, {
+      candidateIds,
+      dismissAll,
+    });
+    await adminAuditService.createAction({
+      actorId,
+      action: dismissAll ? 'dj_event_binding_review.dismiss_all' : 'dj_event_binding_review.dismiss',
+      targetType: 'dj_event_binding_review_job',
+      targetId: jobId,
+      detail: {
+        dismissAll,
+        candidateIds,
+      },
+    });
+    ok(res, job);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (error instanceof Error && /candidateIds is required/.test(error.message)) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('BFF web dismiss DJ event binding review candidates error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
