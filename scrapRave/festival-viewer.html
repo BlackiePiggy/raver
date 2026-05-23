@@ -355,7 +355,9 @@
       <option value="dj_binding_review">DJ 绑定审核</option>
     </select>
     <select class="review-select" id="review-status-select" onchange="onReviewFilterChanged()">
-      <option value="pending">待审核</option>
+      <option value="pending">待审核/处理中</option>
+      <option value="reviewing">仅审核中</option>
+      <option value="processing">仅处理中</option>
       <option value="approved">已通过</option>
       <option value="rejected">未通过</option>
       <option value="">全部状态</option>

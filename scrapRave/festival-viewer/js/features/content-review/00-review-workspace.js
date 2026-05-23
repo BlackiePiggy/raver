@@ -13,12 +13,16 @@ const REVIEW_ENTITY_LABELS = {
 
 const REVIEW_STATUS_LABELS = {
   pending: '待审核',
+  processing: '处理中',
+  reviewing: '审核中',
   approved: '已通过',
   rejected: '未通过',
   partially_applied: '部分已处理',
   applied: '已完成',
   dismissed: '已忽略',
 };
+
+const CONTENT_SUBMISSION_REVIEWABLE_STATUSES = ['pending', 'processing', 'reviewing'];
 
 const REVIEW_PROCESSING_STATUS_LABELS = {
   queued: '排队中',
@@ -45,6 +49,26 @@ function reviewArray(value) {
   const text = reviewText(value);
   if (!text) return [];
   return text.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function isContentSubmissionReviewableStatus(status) {
+  return CONTENT_SUBMISSION_REVIEWABLE_STATUSES.includes(String(status || '').trim());
+}
+
+function mergeReviewItemsById(groups) {
+  const map = new Map();
+  for (const group of groups) {
+    for (const item of Array.isArray(group) ? group : []) {
+      const id = String(item?.id || '').trim();
+      if (!id || map.has(id)) continue;
+      map.set(id, item);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const bTime = new Date(b?.createdAt || b?.updatedAt || 0).getTime() || 0;
+    const aTime = new Date(a?.createdAt || a?.updatedAt || 0).getTime() || 0;
+    return bTime - aTime;
+  });
 }
 
 function reviewFormatDate(value) {
@@ -171,12 +195,18 @@ async function refreshReviewPendingCount() {
     return;
   }
   try {
-    const [submissionData, enrichmentData, bindingReviewData] = await Promise.all([
+    const [pendingSubmissionData, processingSubmissionData, reviewingSubmissionData, enrichmentData, bindingReviewData] = await Promise.all([
       reviewApiGet('/api/admin/v1/content-submissions?status=pending&limit=200'),
+      reviewApiGet('/api/admin/v1/content-submissions?status=processing&limit=200'),
+      reviewApiGet('/api/admin/v1/content-submissions?status=reviewing&limit=200'),
       reviewApiGet('/api/admin/v1/dj-enrichment/results?applyStatus=pending_review&limit=1'),
       reviewApiGet('/api/admin/v1/dj-event-binding-review/jobs?status=pending&page=1&limit=1'),
     ]);
-    const items = Array.isArray(submissionData.items) ? submissionData.items : [];
+    const items = mergeReviewItemsById([
+      pendingSubmissionData.items,
+      processingSubmissionData.items,
+      reviewingSubmissionData.items,
+    ]);
     const countsByType = {};
     for (const item of items) {
       const type = String(item?.entityType || '').trim();
@@ -185,7 +215,7 @@ async function refreshReviewPendingCount() {
     }
     countsByType.dj_enrichment = Math.max(0, Number(enrichmentData.total ?? 0) || 0);
     countsByType.dj_binding_review = Math.max(0, Number(bindingReviewData?.pagination?.total ?? 0) || 0);
-    const total = Math.max(0, Number(submissionData.total ?? items.length) || 0)
+    const total = items.length
       + Math.max(0, Number(enrichmentData.total ?? 0) || 0)
       + Math.max(0, Number(bindingReviewData?.pagination?.total ?? 0) || 0);
     setReviewPendingCount(total, countsByType);
@@ -266,7 +296,7 @@ function isReviewItemSelectable(item) {
   if (!item) return false;
   if (reviewPageState.sourceFilter === 'dj_binding_review') return false;
   if (reviewPageState.sourceFilter === 'dj_enrichment') return item.applyStatus === 'pending_review';
-  return item.status === 'pending';
+  return isContentSubmissionReviewableStatus(item.status);
 }
 
 function canApproveReviewItem(item) {
@@ -709,7 +739,7 @@ function renderReviewDetail() {
   }
   const isPending = reviewPageState.sourceFilter === 'dj_enrichment'
     ? submission.applyStatus === 'pending_review'
-    : submission.status === 'pending';
+    : isContentSubmissionReviewableStatus(submission.status);
   const canApprove = canApproveReviewItem(submission);
   wrap.innerHTML = `
     ${renderReviewPreview(submission)}
@@ -760,7 +790,9 @@ function renderReviewPage() {
           ['', '全部状态'],
         ]
         : [
-          ['pending', '待审核'],
+          ['pending', '待审核/处理中'],
+          ['reviewing', '仅审核中'],
+          ['processing', '仅处理中'],
           ['approved', '已通过'],
           ['rejected', '未通过'],
           ['', '全部状态'],
@@ -927,12 +959,24 @@ async function refreshReviewPage(force = false) {
       setReviewPendingCount(mergedTotal, existingCounts);
     } else {
       const qs = new URLSearchParams();
-      if (reviewPageState.statusFilter) qs.set('status', reviewPageState.statusFilter);
       if (reviewPageState.entityFilter) qs.set('entityType', reviewPageState.entityFilter);
       qs.set('limit', '200');
-      const data = await reviewApiGet(`/api/admin/v1/content-submissions?${qs.toString()}`);
-      reviewPageState.items = Array.isArray(data.items) ? data.items : [];
-      reviewPageState.total = Math.max(0, Number(data.total ?? reviewPageState.items.length) || 0);
+      let data = null;
+      if (reviewPageState.statusFilter === 'pending') {
+        const results = await Promise.all(CONTENT_SUBMISSION_REVIEWABLE_STATUSES.map((status) => {
+          const statusQs = new URLSearchParams(qs);
+          statusQs.set('status', status);
+          return reviewApiGet(`/api/admin/v1/content-submissions?${statusQs.toString()}`);
+        }));
+        reviewPageState.items = mergeReviewItemsById(results.map((result) => result.items));
+        reviewPageState.total = reviewPageState.items.length;
+        data = { items: reviewPageState.items, total: reviewPageState.total };
+      } else {
+        if (reviewPageState.statusFilter) qs.set('status', reviewPageState.statusFilter);
+        data = await reviewApiGet(`/api/admin/v1/content-submissions?${qs.toString()}`);
+        reviewPageState.items = Array.isArray(data.items) ? data.items : [];
+        reviewPageState.total = Math.max(0, Number(data.total ?? reviewPageState.items.length) || 0);
+      }
       if (reviewPageState.statusFilter === 'pending' && !reviewPageState.entityFilter) {
         const countsByType = {};
         for (const item of reviewPageState.items) {
