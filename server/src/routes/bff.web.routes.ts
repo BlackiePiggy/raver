@@ -1656,6 +1656,7 @@ const selectEventDetailForWeb = {
   officialWebsite: true,
   status: true,
   isVerified: true,
+  revision: true,
   createdAt: true,
   updatedAt: true,
   ticketTiers: {
@@ -8077,6 +8078,12 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
     if (error instanceof EventSubmissionConflictError) {
+      console.warn('[bff.web][event-update] revision conflict', {
+        eventId: req.params.id,
+        userId: (req as BFFAuthRequest).user?.userId ?? null,
+        baseEventRevision: (req.body as Record<string, unknown> | undefined)?.baseEventRevision ?? null,
+        details: error.details,
+      });
       res.status(409).json({
         error: error.message,
         code: error.code,
