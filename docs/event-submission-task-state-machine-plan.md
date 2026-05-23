@@ -13,6 +13,7 @@
 - [x] Move event lineup/timetable canonical ingestion into the submission approval pipeline
 - [x] Verify approved-only visibility rule for event list/search/detail exposure
 - [x] Add migration and rollout notes for old `pending` submissions
+- [x] Convert admin event create/edit flow to async auto-approve instead of synchronous bypass
 
 ## Progress Notes
 
@@ -30,6 +31,8 @@
 - 2026-05-23: Completed canonical lineup/timetable ingestion for approved event submissions, so task approval now writes event master data, ticket tiers, stages, artists, and performances in one pipeline.
 - 2026-05-23: Verified the approved-only visibility rule for new events: public event list/search/detail endpoints read from `event` records only, and submission tasks do not create those records until approval/ingestion completes.
 - 2026-05-23: Added migration and rollout notes for legacy `pending` submissions, including compatibility mapping, release order, and operator-facing fallback guidance.
+- 2026-05-23: Started removing the admin synchronous bypass for event create/edit so admin accounts also receive the same task notifications, with processing completion auto-approving instead of waiting for manual review.
+- 2026-05-23: Converted admin event create/edit to the same async submission flow, and added automatic approval after processing so admin inbox now receives `处理中 -> 处理完成 -> 已入库` notifications without manual review.
 
 ## Goal
 

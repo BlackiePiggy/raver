@@ -841,6 +841,14 @@ final class EventUploadFlowViewModel: ObservableObject {
         return try await webService.createEventLineupImageImportJob(input: request)
     }
 
+    func fetchLineupAIImportJob(id: String) async throws -> EventLineupAIImportJobResponse {
+        try await webService.fetchEventLineupImageImportJob(id: id)
+    }
+
+    func cancelLineupAIImportJob(id: String) async throws {
+        _ = try await webService.cancelEventLineupImageImportJob(id: id)
+    }
+
     func editableTimetableImportResult(from response: EventTimetableImageImportResponse) -> EventUploadTimetableAIImportResult {
         editableTimetableImportResult(from: response.rawJson)
     }

@@ -2808,6 +2808,54 @@ struct EventUploadFlowView: View {
     }
 }
 
+private struct AIRecognitionPreviewPresentation: Identifiable {
+    let id = UUID()
+    let items: [FullscreenMediaItem]
+    let initialIndex: Int
+}
+
+private func aiRecognitionPreviewPresentation(
+    images: [EventUploadImageDraft],
+    focusedImageID: UUID
+) -> AIRecognitionPreviewPresentation? {
+    var items: [FullscreenMediaItem] = []
+    var initialIndex: Int?
+
+    for image in images {
+        let rawURL: String?
+        if let localFileURL = image.localFileURL {
+            rawURL = localFileURL.absoluteString
+        } else if let remoteURL = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !remoteURL.isEmpty {
+            rawURL = remoteURL
+        } else {
+            rawURL = nil
+        }
+
+        guard let rawURL else { continue }
+        let itemIndex = items.count
+        items.append(FullscreenMediaItem(rawURL: rawURL, index: itemIndex))
+        if image.id == focusedImageID {
+            initialIndex = itemIndex
+        }
+    }
+
+    guard let initialIndex, !items.isEmpty else { return nil }
+    return AIRecognitionPreviewPresentation(items: items, initialIndex: initialIndex)
+}
+
+private func aiRecognitionPreviewOverlayButton(action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        Image(systemName: "plus")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(Color.black.opacity(0.58), in: Circle())
+    }
+    .buttonStyle(.plain)
+    .padding(8)
+}
+
 private struct EventUploadPosterAIImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: EventUploadFlowViewModel
@@ -2818,6 +2866,7 @@ private struct EventUploadPosterAIImportSheet: View {
     @State private var statusIsError = false
     @State private var result: EventUploadPosterAIEditableResult?
     @State private var expandedLocalizedFieldKeys: Set<String> = []
+    @State private var previewPresentation: AIRecognitionPreviewPresentation?
 
     private var images: [EventUploadImageDraft] {
         viewModel.timetableAIImageCandidates
@@ -2868,6 +2917,9 @@ private struct EventUploadPosterAIImportSheet: View {
                     selectedImageID = images.first(where: { $0.zone == .poster })?.id ?? images.first?.id
                 }
             }
+            .fullScreenCover(item: $previewPresentation) { presentation in
+                FullscreenMediaViewer(items: presentation.items, initialIndex: presentation.initialIndex)
+            }
         }
     }
 
@@ -2905,11 +2957,8 @@ private struct EventUploadPosterAIImportSheet: View {
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
-                        Button {
-                            guard !isRunning else { return }
-                            selectedImageID = image.id
-                        } label: {
-                            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        ZStack(alignment: .topTrailing) {
                             VStack(alignment: .leading, spacing: 8) {
                                 posterAIImagePreview(image)
                                 Text(image.zone.title)
@@ -2928,8 +2977,17 @@ private struct EventUploadPosterAIImportSheet: View {
                                     .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
                             )
                             .contentShape(shape)
+                            .onTapGesture {
+                                guard !isRunning else { return }
+                                selectedImageID = image.id
+                            }
+
+                            if image.localFileURL != nil || image.remoteURL != nil {
+                                aiRecognitionPreviewOverlayButton {
+                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
+                                }
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -3625,12 +3683,40 @@ private struct EventUploadPosterAIImportSheet: View {
 }
 
 private struct EventUploadLineupAIImportSheet: View {
+    private struct RecognitionTaskEntry: Identifiable {
+        enum Phase {
+            case preparing
+            case polling(String)
+            case autoMatching
+            case succeeded
+            case failed
+            case cancelled
+
+            var isTerminal: Bool {
+                switch self {
+                case .succeeded, .failed, .cancelled:
+                    return true
+                default:
+                    return false
+                }
+            }
+        }
+
+        let id: UUID
+        let image: EventUploadImageDraft
+        var jobId: String?
+        var phase: Phase
+        var startedAt: Date
+        var updatedAt: Date
+        var itemCount: Int
+        var warningCount: Int
+        var message: String
+    }
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: EventUploadFlowViewModel
-    @State private var selectedImageID: UUID?
-    @State private var isRunning = false
+    @State private var selectedImageIDs: Set<UUID> = []
     @State private var isAutoMatching = false
-    @State private var recognitionStartedAt: Date?
     @State private var autoMatchStartedAt: Date?
     @State private var statusMessage = LT("请选择一张已经上传到当前草稿里的阵容图。", "Choose one image from this draft for lineup recognition.", "この下書きに追加済みの画像からラインナップ認識に使う1枚を選んでください。")
     @State private var statusIsError = false
@@ -3638,14 +3724,27 @@ private struct EventUploadLineupAIImportSheet: View {
     @State private var warnings: [String] = []
     @State private var unparsedTexts: [String] = []
     @State private var expandedItemIDs: Set<UUID> = []
+    @State private var taskEntries: [RecognitionTaskEntry] = []
+    @State private var taskHandles: [UUID: Task<Void, Never>] = [:]
+    @State private var previewPresentation: AIRecognitionPreviewPresentation?
 
     private var images: [EventUploadImageDraft] {
         viewModel.timetableAIImageCandidates
     }
 
-    private var selectedImage: EventUploadImageDraft? {
-        guard let selectedImageID else { return nil }
-        return images.first { $0.id == selectedImageID }
+    private var selectedImages: [EventUploadImageDraft] {
+        images.filter { selectedImageIDs.contains($0.id) }
+    }
+
+    private var hasActiveRecognitionTasks: Bool {
+        taskEntries.contains { !$0.phase.isTerminal }
+    }
+
+    private var statusElapsedStart: Date? {
+        if isAutoMatching {
+            return autoMatchStartedAt
+        }
+        return taskEntries.first(where: { !$0.phase.isTerminal })?.startedAt
     }
 
     var body: some View {
@@ -3654,6 +3753,9 @@ private struct EventUploadLineupAIImportSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     imagePickerSection
                     statusSection
+                    if !taskEntries.isEmpty {
+                        taskStatusSection
+                    }
                     if !resultItems.isEmpty {
                         resultSection
                     }
@@ -3667,9 +3769,7 @@ private struct EventUploadLineupAIImportSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(LT("关闭", "Close", "閉じる")) {
                         Task {
-                            if isRunning {
-                                await viewModel.cancelAIRecognition(.lineup)
-                            }
+                            await cancelAllRecognitionTasks()
                             dismiss()
                         }
                     }
@@ -3681,20 +3781,30 @@ private struct EventUploadLineupAIImportSheet: View {
                         } label: {
                             Label(LT("一键匹配", "Auto Match", "一括紐付け"), systemImage: "wand.and.stars")
                         }
-                        .disabled(isRunning || isAutoMatching || resultItems.isEmpty)
+                        .disabled(hasActiveRecognitionTasks || isAutoMatching || resultItems.isEmpty)
 
                         Button(LT("确认添加", "Apply", "追加")) {
                             viewModel.applyLineupAIImportItems(resultItems)
                             dismiss()
                         }
-                        .disabled(isRunning || isAutoMatching || resultItems.isEmpty)
+                        .disabled(hasActiveRecognitionTasks || isAutoMatching || resultItems.isEmpty)
                     }
                 }
             }
             .onAppear {
-                if selectedImageID == nil {
-                    selectedImageID = images.first(where: { $0.zone == .lineup })?.id ?? images.first?.id
+                if selectedImageIDs.isEmpty, let firstID = images.first(where: { $0.zone == .lineup })?.id ?? images.first?.id {
+                    selectedImageIDs = [firstID]
                 }
+            }
+            .onDisappear {
+                let handles = taskHandles.values
+                taskHandles.removeAll()
+                for handle in handles {
+                    handle.cancel()
+                }
+            }
+            .fullScreenCover(item: $previewPresentation) { presentation in
+                FullscreenMediaViewer(items: presentation.items, initialIndex: presentation.initialIndex)
             }
         }
     }
@@ -3709,7 +3819,12 @@ private struct EventUploadLineupAIImportSheet: View {
                 Button {
                     Task { await runRecognition() }
                 } label: {
-                    Label(LT("确认并开始识别", "Run", "認識開始"), systemImage: "sparkles")
+                    Label(
+                        selectedImages.count > 1
+                            ? LT("识别 \(selectedImages.count) 张", "Run \(selectedImages.count)", "\(selectedImages.count)枚を認識")
+                            : LT("确认并开始识别", "Run", "認識開始"),
+                        systemImage: "sparkles"
+                    )
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
@@ -3720,7 +3835,7 @@ private struct EventUploadLineupAIImportSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .disabled(isRunning || selectedImage == nil)
+                .disabled(selectedImages.isEmpty)
             }
 
             if images.isEmpty {
@@ -3731,33 +3846,50 @@ private struct EventUploadLineupAIImportSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
+                Text(
+                    selectedImageIDs.isEmpty
+                        ? LT("可一次勾选多张图，系统会并发创建多个识别任务，并把结果增量加入下方结果区。", "Select multiple images to launch concurrent recognition jobs and append each result below.", "複数画像を選ぶと、認識ジョブを並行実行し、結果を下に順次追加します。")
+                        : LT("已选择 \(selectedImageIDs.count) 张。可以继续勾选更多图片，或随时再次开始新任务。", "\(selectedImageIDs.count) selected. You can keep adding images and start more jobs anytime.", "\(selectedImageIDs.count)枚選択中。さらに選択していつでも新しいジョブを開始できます。")
+                )
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
-                        Button {
-                            guard !isRunning else { return }
-                            selectedImageID = image.id
-                        } label: {
-                            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        ZStack {
                             VStack(alignment: .leading, spacing: 8) {
-                                imagePreview(image)
-                                Text(image.zone.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                    .lineLimit(1)
-                                Text(image.fileName)
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                    .lineLimit(1)
+                                imagePreview(image) {
+                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
+                                }
+                                HStack(alignment: .top, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(image.zone.title)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                            .lineLimit(1)
+                                        Text(image.fileName)
+                                            .font(.caption2)
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: selectedImageIDs.contains(image.id) ? "checkmark.circle.fill" : "circle")
+                                        .font(.headline)
+                                        .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                                }
                             }
                             .padding(8)
                             .background(RaverTheme.card, in: shape)
                             .overlay(
                                 shape
-                                    .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
+                                    .stroke(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageIDs.contains(image.id) ? 2 : 1)
                             )
                             .contentShape(shape)
+                            .onTapGesture {
+                                toggleImageSelection(image.id)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -3766,33 +3898,14 @@ private struct EventUploadLineupAIImportSheet: View {
 
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if isRunning || isAutoMatching {
+            if hasActiveRecognitionTasks || isAutoMatching {
                 TimelineView(.periodic(from: Date(), by: 1)) { timeline in
                     HStack(spacing: 10) {
                         AIThinkingIndicator()
                         Spacer()
-                        Text(elapsedText(since: isRunning ? recognitionStartedAt : autoMatchStartedAt, now: timeline.date))
+                        Text(elapsedText(since: statusElapsedStart, now: timeline.date))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-                if isRunning {
-                    HStack {
-                        Spacer()
-                        Button {
-                            Task {
-                                await viewModel.cancelAIRecognition(.lineup)
-                                isRunning = false
-                                recognitionStartedAt = nil
-                                statusIsError = false
-                                statusMessage = LT("已取消当前识别任务。", "Current recognition task cancelled.", "現在の認識タスクをキャンセルしました。")
-                            }
-                        } label: {
-                            Label(LT("取消识别", "Cancel", "キャンセル"), systemImage: "xmark.circle")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -3817,6 +3930,115 @@ private struct EventUploadLineupAIImportSheet: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(statusIsError ? Color.red.opacity(0.45) : RaverTheme.cardBorder, lineWidth: 1)
         )
+    }
+
+    private var taskStatusSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(LT("任务状态", "Task Status", "タスク状態"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                if hasActiveRecognitionTasks {
+                    Button {
+                        Task { await cancelAllRecognitionTasks() }
+                    } label: {
+                        Label(LT("取消全部", "Cancel All", "すべてキャンセル"), systemImage: "xmark.circle")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            ForEach(taskEntries) { entry in
+                taskCard(entry)
+            }
+        }
+    }
+
+    private func taskCard(_ entry: RecognitionTaskEntry) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                imagePreview(entry.image) {
+                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                }
+                    .frame(width: 88, height: 72)
+                    .clipped()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.image.fileName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                    Text(taskPhaseText(entry.phase))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(taskPhaseTint(entry.phase))
+                    Text(entry.message)
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+                        Text(elapsedText(since: entry.startedAt, now: timeline.date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    if !entry.phase.isTerminal {
+                        Button {
+                            Task { await cancelRecognitionTask(entry.id) }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.headline)
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                if let jobId = entry.jobId, !jobId.isEmpty {
+                    infoChip(title: "Job", value: String(jobId.prefix(8)))
+                }
+                if entry.itemCount > 0 {
+                    infoChip(title: LT("结果", "Result", "結果"), value: "\(entry.itemCount)")
+                }
+                if entry.warningCount > 0 {
+                    infoChip(title: LT("警告", "Warnings", "警告"), value: "\(entry.warningCount)")
+                }
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(taskPhaseTint(entry.phase).opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private func infoChip(title: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            Text(value)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(RaverTheme.secondaryText)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RaverTheme.background, in: Capsule())
+    }
+
+    private func toggleImageSelection(_ imageID: UUID) {
+        if selectedImageIDs.contains(imageID) {
+            selectedImageIDs.remove(imageID)
+        } else {
+            selectedImageIDs.insert(imageID)
+        }
     }
 
     private var resultSection: some View {
@@ -3845,7 +4067,7 @@ private struct EventUploadLineupAIImportSheet: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(isRunning || isAutoMatching || resultItems.isEmpty)
+            .disabled(hasActiveRecognitionTasks || isAutoMatching || resultItems.isEmpty)
 
             VStack(spacing: 12) {
                 ForEach(Array(resultItems.enumerated()), id: \.element.id) { index, item in
@@ -3973,8 +4195,9 @@ private struct EventUploadLineupAIImportSheet: View {
     }
 
     @ViewBuilder
-    private func imagePreview(_ image: EventUploadImageDraft) -> some View {
+    private func imagePreview(_ image: EventUploadImageDraft, onPreviewTap: (() -> Void)? = nil) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let canPreview = image.localFileURL != nil || image.remoteURL != nil
         ZStack {
             shape
                 .fill(RaverTheme.background)
@@ -4005,6 +4228,16 @@ private struct EventUploadLineupAIImportSheet: View {
                     .foregroundStyle(RaverTheme.secondaryText)
                     .allowsHitTesting(false)
             }
+
+            if let onPreviewTap, canPreview {
+                VStack {
+                    HStack {
+                        Spacer()
+                        aiRecognitionPreviewOverlayButton(action: onPreviewTap)
+                    }
+                    Spacer()
+                }
+            }
         }
         .frame(height: 104)
         .clipShape(shape)
@@ -4012,31 +4245,257 @@ private struct EventUploadLineupAIImportSheet: View {
     }
 
     private func runRecognition() async {
-        guard let selectedImage else { return }
-        isRunning = true
-        recognitionStartedAt = Date()
-        statusIsError = false
-        statusMessage = LT("已提交识别任务，AI 正在分析阵容图。", "Recognition task submitted. AI is analyzing the lineup image.", "認識タスクを送信しました。AIがラインナップ画像を解析しています。")
-        do {
-            let result = try await viewModel.recognizeLineupFromImage(selectedImage)
-            resultItems = result.items
-            warnings = result.warnings
-            unparsedTexts = result.unparsedTexts
-            expandedItemIDs = []
-            statusIsError = result.items.isEmpty
-            if result.items.isEmpty {
-                statusMessage = LT("没有识别到可用阵容。可以换一张更清晰的阵容图再试。", "No usable lineup items were recognized. Try a clearer lineup image.", "有効なラインナップを認識できませんでした。より鮮明な画像で再試行してください。")
-            } else {
-                statusMessage = LT("识别完成，正在自动匹配 DJ 词条。", "Recognition finished. Auto-matching DJs now.", "認識が完了しました。DJを自動紐付けしています。")
-                await autoMatchCurrentItems()
-                statusMessage = LT("识别完成。请检查并修正结果，确认后会增量添加到仅阵容信息。", "Recognition finished. Review and edit the results, then apply them to lineup only.", "認識が完了しました。結果を確認・修正してからラインナップのみに追加してください。")
-            }
-        } catch {
+        let activeImageIDs = Set(taskEntries.filter { !$0.phase.isTerminal }.map(\.image.id))
+        let launchImages = selectedImages.filter { !activeImageIDs.contains($0.id) }
+        guard !launchImages.isEmpty else {
             statusIsError = true
-            statusMessage = error.userFacingMessage ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。")
+            statusMessage = LT("请选择至少一张未在识别中的图片。", "Select at least one image that is not already running.", "まだ認識中ではない画像を1枚以上選択してください。")
+            return
         }
-        isRunning = false
-        recognitionStartedAt = nil
+
+        statusIsError = false
+        statusMessage = launchImages.count > 1
+            ? LT("已开始 \(launchImages.count) 个阵容识别任务，结果会逐个追加到下方。", "Started \(launchImages.count) lineup jobs. Results will be appended one by one.", "\(launchImages.count)件のラインナップ認識を開始しました。結果は順次追加されます。")
+            : LT("已提交识别任务，AI 正在分析阵容图。结果返回后会自动匹配 DJ 并追加到下方。", "Recognition task submitted. The result will auto-match DJs and append below.", "認識タスクを送信しました。結果はDJ自動紐付け後に下へ追加されます。")
+
+        for image in launchImages {
+            startRecognitionTask(for: image)
+        }
+    }
+
+    private func startRecognitionTask(for image: EventUploadImageDraft) {
+        let entryID = UUID()
+        taskEntries.insert(
+            RecognitionTaskEntry(
+                id: entryID,
+                image: image,
+                jobId: nil,
+                phase: .preparing,
+                startedAt: Date(),
+                updatedAt: Date(),
+                itemCount: 0,
+                warningCount: 0,
+                message: LT("准备上传并创建识别任务。", "Preparing image upload and job creation.", "画像アップロードとジョブ作成を準備しています。")
+            ),
+            at: 0
+        )
+
+        let handle = Task {
+            do {
+                let createdJob = try await viewModel.createLineupAIImportJob(for: image)
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .polling(createdJob.status),
+                        jobId: createdJob.jobId,
+                        message: LT("识别任务已创建，正在轮询 Coze 状态。", "Job created. Polling Coze status now.", "認識ジョブを作成しました。Coze状態をポーリングしています。")
+                    )
+                }
+
+                let response = try await waitForLineupTask(entryID: entryID, jobId: createdJob.jobId)
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .autoMatching,
+                        message: LT("识别完成，正在自动匹配 DJ 库。", "Recognition finished. Auto-matching DJs now.", "認識完了。DJライブラリを自動紐付けしています。")
+                    )
+                }
+
+                let parsed = viewModel.editableLineupImportResult(from: response)
+                let matched = await viewModel.autoMatchLineupAIImportItems(parsed.items)
+
+                await MainActor.run {
+                    appendRecognitionResult(items: matched, warnings: parsed.warnings, unparsedTexts: parsed.unparsedTexts)
+                    updateTask(
+                        entryID,
+                        phase: .succeeded,
+                        itemCount: matched.count,
+                        warningCount: parsed.warnings.count,
+                        message: matched.isEmpty
+                            ? LT("任务完成，但没有可用阵容结果。", "Task completed but returned no usable lineup items.", "タスクは完了しましたが、有効なラインナップ結果はありませんでした。")
+                            : LT("任务完成，\(matched.count) 条结果已追加到下方。", "Task completed. \(matched.count) results appended below.", "タスク完了。\(matched.count)件の結果を下に追加しました。")
+                    )
+                    statusIsError = false
+                    statusMessage = LT("新结果已追加到当前阵容识别列表。你可以继续选择更多图片再跑新任务。", "New results were appended. You can keep selecting more images and launch more jobs.", "新しい結果を追加しました。さらに画像を選んで新しいジョブを続けて開始できます。")
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .cancelled,
+                        message: LT("已取消该识别任务。", "This recognition task was cancelled.", "この認識タスクをキャンセルしました。")
+                    )
+                    statusIsError = false
+                    statusMessage = LT("已取消一个识别任务。", "Cancelled one recognition task.", "認識タスクを1件キャンセルしました。")
+                }
+            } catch {
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .failed,
+                        message: error.userFacingMessage ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。")
+                    )
+                    statusIsError = true
+                    statusMessage = error.userFacingMessage ?? LT("有一个阵容识别任务失败了，请检查任务状态后重试。", "One lineup task failed. Check the task status and retry.", "ラインナップ認識タスクが1件失敗しました。状態を確認して再試行してください。")
+                }
+            }
+
+            await MainActor.run {
+                taskHandles[entryID] = nil
+            }
+        }
+
+        taskHandles[entryID] = handle
+    }
+
+    private func waitForLineupTask(entryID: UUID, jobId: String) async throws -> EventLineupAIImportResponse {
+        let deadline = Date().addingTimeInterval(10 * 60)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            let job = try await viewModel.fetchLineupAIImportJob(id: jobId)
+            await MainActor.run {
+                updateTask(
+                    entryID,
+                    phase: .polling(job.status),
+                    message: taskPollingMessage(for: job.status)
+                )
+            }
+
+            switch job.status {
+            case "succeeded":
+                if let result = job.result {
+                    return result
+                }
+                throw ServiceError.message(LT("阵容识别结果为空，请稍后重试。", "Lineup recognition returned an empty result. Please try again.", "ラインナップ認識結果が空です。もう一度お試しください。"))
+            case "failed":
+                throw ServiceError.message(job.error ?? LT("阵容识别失败，请稍后重试。", "Lineup recognition failed. Please try again later.", "ラインナップ認識に失敗しました。しばらくしてから再試行してください。"))
+            case "cancelled":
+                throw CancellationError()
+            default:
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+
+        throw ServiceError.message(LT("阵容识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for lineup recognition. Please try again on a stable network.", "ラインナップ認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
+    }
+
+    private func cancelRecognitionTask(_ entryID: UUID) async {
+        let handle = taskHandles[entryID]
+        let jobId = taskEntries.first(where: { $0.id == entryID })?.jobId
+        handle?.cancel()
+        if let jobId, !jobId.isEmpty {
+            try? await viewModel.cancelLineupAIImportJob(id: jobId)
+        }
+        await MainActor.run {
+            updateTask(
+                entryID,
+                phase: .cancelled,
+                message: LT("已取消该识别任务。", "This recognition task was cancelled.", "この認識タスクをキャンセルしました。")
+            )
+            taskHandles[entryID] = nil
+        }
+    }
+
+    private func cancelAllRecognitionTasks() async {
+        let activeIDs = taskEntries.filter { !$0.phase.isTerminal }.map(\.id)
+        for id in activeIDs {
+            await cancelRecognitionTask(id)
+        }
+    }
+
+    private func updateTask(
+        _ entryID: UUID,
+        phase: RecognitionTaskEntry.Phase,
+        jobId: String? = nil,
+        itemCount: Int? = nil,
+        warningCount: Int? = nil,
+        message: String
+    ) {
+        guard let index = taskEntries.firstIndex(where: { $0.id == entryID }) else { return }
+        taskEntries[index].phase = phase
+        taskEntries[index].updatedAt = Date()
+        if let jobId {
+            taskEntries[index].jobId = jobId
+        }
+        if let itemCount {
+            taskEntries[index].itemCount = itemCount
+        }
+        if let warningCount {
+            taskEntries[index].warningCount = warningCount
+        }
+        taskEntries[index].message = message
+    }
+
+    private func taskPollingMessage(for status: String) -> String {
+        switch status.lowercased() {
+        case "queued", "pending":
+            return LT("任务已排队，等待 Coze 开始处理。", "Queued and waiting for Coze to start processing.", "ジョブはキュー待ちで、Cozeの処理開始を待っています。")
+        case "running", "processing":
+            return LT("AI 正在识别这张阵容图。", "AI is actively recognizing this lineup image.", "AIがこのラインナップ画像を認識中です。")
+        case "succeeded":
+            return LT("识别完成，正在整理结果。", "Recognition finished. Preparing the result.", "認識が完了し、結果を整理しています。")
+        case "failed":
+            return LT("识别失败。", "Recognition failed.", "認識に失敗しました。")
+        case "cancelled":
+            return LT("识别已取消。", "Recognition was cancelled.", "認識はキャンセルされました。")
+        default:
+            return LT("正在轮询识别状态。", "Polling recognition status.", "認識状態をポーリングしています。")
+        }
+    }
+
+    private func taskPhaseText(_ phase: RecognitionTaskEntry.Phase) -> String {
+        switch phase {
+        case .preparing:
+            return LT("准备中", "Preparing", "準備中")
+        case .polling(let status):
+            switch status.lowercased() {
+            case "queued", "pending":
+                return LT("排队中", "Queued", "待機中")
+            case "running", "processing":
+                return LT("识别中", "Recognizing", "認識中")
+            case "succeeded":
+                return LT("整理结果", "Finalizing", "結果整理中")
+            default:
+                return LT("轮询中", "Polling", "ポーリング中")
+            }
+        case .autoMatching:
+            return LT("自动匹配 DJ", "Auto Matching DJs", "DJ自動紐付け")
+        case .succeeded:
+            return LT("已完成", "Completed", "完了")
+        case .failed:
+            return LT("失败", "Failed", "失敗")
+        case .cancelled:
+            return LT("已取消", "Cancelled", "キャンセル済み")
+        }
+    }
+
+    private func taskPhaseTint(_ phase: RecognitionTaskEntry.Phase) -> Color {
+        switch phase {
+        case .succeeded:
+            return .green
+        case .failed, .cancelled:
+            return .red
+        case .autoMatching:
+            return .orange
+        default:
+            return RaverTheme.accent
+        }
+    }
+
+    private func appendRecognitionResult(
+        items: [EventUploadLineupAIEditableItem],
+        warnings nextWarnings: [String],
+        unparsedTexts nextUnparsedTexts: [String]
+    ) {
+        guard !items.isEmpty || !nextWarnings.isEmpty || !nextUnparsedTexts.isEmpty else { return }
+        resultItems.append(contentsOf: items)
+        for warning in nextWarnings where !warnings.contains(warning) {
+            warnings.append(warning)
+        }
+        for text in nextUnparsedTexts where !unparsedTexts.contains(text) {
+            unparsedTexts.append(text)
+        }
+        expandedItemIDs = expandedItemIDs.intersection(Set(resultItems.map(\.id)))
     }
 
     private func autoMatchCurrentItems() async {
@@ -4336,10 +4795,40 @@ private struct EventUploadLineupAIImportSheet: View {
 }
 
 private struct EventUploadTimetableAIImportSheet: View {
+    private struct RecognitionTaskEntry: Identifiable {
+        enum Phase {
+            case preparing
+            case submitted
+            case polling(String)
+            case autoMatching
+            case succeeded
+            case failed
+            case cancelled
+
+            var isTerminal: Bool {
+                switch self {
+                case .succeeded, .failed, .cancelled:
+                    return true
+                default:
+                    return false
+                }
+            }
+        }
+
+        let id: UUID
+        let image: EventUploadImageDraft
+        var jobId: String?
+        var phase: Phase
+        var startedAt: Date
+        var updatedAt: Date
+        var slotCount: Int
+        var warningCount: Int
+        var message: String
+    }
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: EventUploadFlowViewModel
-    @State private var selectedImageID: UUID?
-    @State private var isRunning = false
+    @State private var selectedImageIDs: Set<UUID> = []
     @State private var statusMessage = LT("请选择一张已经上传到当前草稿里的时间表图片。", "Choose one image from this draft for timetable recognition.", "この下書きに追加済みの画像からタイムテーブル認識に使う1枚を選んでください。")
     @State private var statusIsError = false
     @State private var resultSlots: [EventUploadTimetableAIEditableSlot] = []
@@ -4350,16 +4839,28 @@ private struct EventUploadTimetableAIImportSheet: View {
     @State private var selectedStageName: String?
     @State private var expandedSlotIDs: Set<UUID> = []
     @State private var isAutoMatching = false
-    @State private var recognitionStartedAt: Date?
     @State private var autoMatchStartedAt: Date?
+    @State private var taskEntries: [RecognitionTaskEntry] = []
+    @State private var taskHandles: [UUID: Task<Void, Never>] = [:]
+    @State private var previewPresentation: AIRecognitionPreviewPresentation?
 
     private var images: [EventUploadImageDraft] {
         viewModel.timetableAIImageCandidates
     }
 
-    private var selectedImage: EventUploadImageDraft? {
-        guard let selectedImageID else { return nil }
-        return images.first { $0.id == selectedImageID }
+    private var selectedImages: [EventUploadImageDraft] {
+        images.filter { selectedImageIDs.contains($0.id) }
+    }
+
+    private var hasActiveRecognitionTasks: Bool {
+        taskEntries.contains { !$0.phase.isTerminal }
+    }
+
+    private var statusElapsedStart: Date? {
+        if isAutoMatching {
+            return autoMatchStartedAt
+        }
+        return taskEntries.first(where: { !$0.phase.isTerminal })?.startedAt
     }
 
     var body: some View {
@@ -4368,6 +4869,9 @@ private struct EventUploadTimetableAIImportSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     imagePickerSection
                     statusSection
+                    if !taskEntries.isEmpty {
+                        taskStatusSection
+                    }
                     if !resultSlots.isEmpty {
                         filterSection
                         resultSection
@@ -4382,9 +4886,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(LT("关闭", "Close", "閉じる")) {
                         Task {
-                            if isRunning {
-                                await viewModel.cancelAIRecognition(.timetable)
-                            }
+                            await cancelAllRecognitionTasks()
                             dismiss()
                         }
                     }
@@ -4396,20 +4898,30 @@ private struct EventUploadTimetableAIImportSheet: View {
                         } label: {
                             Label(LT("一键匹配", "Auto Match", "一括紐付け"), systemImage: "wand.and.stars")
                         }
-                        .disabled(isRunning || isAutoMatching || resultSlots.isEmpty)
+                        .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty)
 
                         Button(LT("确认添加", "Apply", "追加")) {
                             viewModel.applyTimetableAIImportSlots(resultSlots)
                             dismiss()
                         }
-                        .disabled(isRunning || isAutoMatching || resultSlots.isEmpty)
+                        .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty)
                     }
                 }
             }
             .onAppear {
-                if selectedImageID == nil {
-                    selectedImageID = images.first(where: { $0.zone == .timetable })?.id ?? images.first?.id
+                if selectedImageIDs.isEmpty, let firstID = images.first(where: { $0.zone == .timetable })?.id ?? images.first?.id {
+                    selectedImageIDs = [firstID]
                 }
+            }
+            .onDisappear {
+                let handles = taskHandles.values
+                taskHandles.removeAll()
+                for handle in handles {
+                    handle.cancel()
+                }
+            }
+            .fullScreenCover(item: $previewPresentation) { presentation in
+                FullscreenMediaViewer(items: presentation.items, initialIndex: presentation.initialIndex)
             }
         }
     }
@@ -4424,7 +4936,12 @@ private struct EventUploadTimetableAIImportSheet: View {
                 Button {
                     Task { await runRecognition() }
                 } label: {
-                    Label(LT("确认并开始识别", "Run", "認識開始"), systemImage: "sparkles")
+                    Label(
+                        selectedImages.count > 1
+                            ? LT("识别 \(selectedImages.count) 张", "Run \(selectedImages.count)", "\(selectedImages.count)枚を認識")
+                            : LT("确认并开始识别", "Run", "認識開始"),
+                        systemImage: "sparkles"
+                    )
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
@@ -4439,7 +4956,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .disabled(isRunning || selectedImage == nil)
+                .disabled(selectedImages.isEmpty)
             }
 
             if images.isEmpty {
@@ -4450,33 +4967,50 @@ private struct EventUploadTimetableAIImportSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
+                Text(
+                    selectedImageIDs.isEmpty
+                        ? LT("可一次勾选多张图，系统会并发创建多个识别任务，并把结果增量加入下方结果区。", "Select multiple images to launch concurrent recognition jobs and append each result below.", "複数画像を選ぶと、認識ジョブを並行実行し、結果を下に順次追加します。")
+                        : LT("已选择 \(selectedImageIDs.count) 张。可以继续勾选更多图片，或随时再次开始新任务。", "\(selectedImageIDs.count) selected. You can keep adding images and start more jobs anytime.", "\(selectedImageIDs.count)枚選択中。さらに選択していつでも新しいジョブを開始できます。")
+                )
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
-                        Button {
-                            guard !isRunning else { return }
-                            selectedImageID = image.id
-                        } label: {
-                            let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        ZStack {
                             VStack(alignment: .leading, spacing: 8) {
-                                timetableAIImagePreview(image)
-                                Text(image.zone.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                    .lineLimit(1)
-                                Text(image.fileName)
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                    .lineLimit(1)
+                                timetableAIImagePreview(image) {
+                                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
+                                }
+                                HStack(alignment: .top, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(image.zone.title)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(RaverTheme.primaryText)
+                                            .lineLimit(1)
+                                        Text(image.fileName)
+                                            .font(.caption2)
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: selectedImageIDs.contains(image.id) ? "checkmark.circle.fill" : "circle")
+                                        .font(.headline)
+                                        .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                                }
                             }
                             .padding(8)
                             .background(RaverTheme.card, in: shape)
                             .overlay(
                                 shape
-                                    .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
+                                    .stroke(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageIDs.contains(image.id) ? 2 : 1)
                             )
                             .contentShape(shape)
+                            .onTapGesture {
+                                toggleImageSelection(image.id)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -4485,33 +5019,14 @@ private struct EventUploadTimetableAIImportSheet: View {
 
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if isRunning || isAutoMatching {
+            if hasActiveRecognitionTasks || isAutoMatching {
                 TimelineView(.periodic(from: Date(), by: 1)) { timeline in
                     HStack(spacing: 10) {
                         AIThinkingIndicator()
                         Spacer()
-                        Text(elapsedText(since: isRunning ? recognitionStartedAt : autoMatchStartedAt, now: timeline.date))
+                        Text(elapsedText(since: statusElapsedStart, now: timeline.date))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-                if isRunning {
-                    HStack {
-                        Spacer()
-                        Button {
-                            Task {
-                                await viewModel.cancelAIRecognition(.timetable)
-                                isRunning = false
-                                recognitionStartedAt = nil
-                                statusIsError = false
-                                statusMessage = LT("已取消当前识别任务。", "Current recognition task cancelled.", "現在の認識タスクをキャンセルしました。")
-                            }
-                        } label: {
-                            Label(LT("取消识别", "Cancel", "キャンセル"), systemImage: "xmark.circle")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.red)
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -4538,28 +5053,369 @@ private struct EventUploadTimetableAIImportSheet: View {
         )
     }
 
-    private func runRecognition() async {
-        guard let selectedImage else { return }
-        isRunning = true
-        recognitionStartedAt = Date()
-        statusIsError = false
-        statusMessage = LT("已提交识别任务，AI 正在分析时间表。这个过程可以稍等一会儿。", "Recognition task submitted. AI is analyzing the timetable.", "認識タスクを送信しました。AIがタイムテーブルを解析しています。")
-        do {
-                let result = try await viewModel.recognizeTimetableFromImage(selectedImage)
-            resultSlots = result.slots
-            warnings = result.warnings
-            unparsedTexts = result.unparsedTexts
-            configureResultFilters()
-            statusIsError = result.slots.isEmpty
-            statusMessage = result.slots.isEmpty
-                ? LT("没有识别到可用节目。可以换一张更清晰的时间表图再试。", "No usable timetable sets were recognized. Try a clearer timetable image.", "有効なタイムテーブル項目を認識できませんでした。より鮮明な画像で再試行してください。")
-                : LT("识别完成。请检查并修正结果，确认后会增量添加到当前时间表。", "Recognition finished. Review and edit the results, then apply them to the current timetable.", "認識が完了しました。結果を確認・修正してから現在のタイムテーブルに追加してください。")
-        } catch {
-            statusIsError = true
-            statusMessage = error.userFacingMessage ?? LT("时间表识别失败，请稍后重试。", "Timetable recognition failed. Please try again later.", "タイムテーブル認識に失敗しました。しばらくしてから再試行してください。")
+    private var taskStatusSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(LT("任务状态", "Task Status", "タスク状態"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                if hasActiveRecognitionTasks {
+                    Button {
+                        Task { await cancelAllRecognitionTasks() }
+                    } label: {
+                        Label(LT("取消全部", "Cancel All", "すべてキャンセル"), systemImage: "xmark.circle")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            ForEach(taskEntries) { entry in
+                taskCard(entry)
+            }
         }
-        isRunning = false
-        recognitionStartedAt = nil
+    }
+
+    private func taskCard(_ entry: RecognitionTaskEntry) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                timetableAIImagePreview(entry.image) {
+                    previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                }
+                    .frame(width: 88, height: 72)
+                    .clipped()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.image.fileName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                    Text(taskPhaseText(entry.phase))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(taskPhaseTint(entry.phase))
+                    Text(entry.message)
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    TimelineView(.periodic(from: Date(), by: 1)) { timeline in
+                        Text(elapsedText(since: entry.startedAt, now: timeline.date))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    if !entry.phase.isTerminal {
+                        Button {
+                            Task { await cancelRecognitionTask(entry.id) }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.headline)
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                if let jobId = entry.jobId, !jobId.isEmpty {
+                    infoChip(title: "Job", value: String(jobId.prefix(8)))
+                }
+                if entry.slotCount > 0 {
+                    infoChip(title: LT("结果", "Result", "結果"), value: "\(entry.slotCount)")
+                }
+                if entry.warningCount > 0 {
+                    infoChip(title: LT("警告", "Warnings", "警告"), value: "\(entry.warningCount)")
+                }
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(taskPhaseTint(entry.phase).opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private func infoChip(title: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+            Text(value)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(RaverTheme.secondaryText)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RaverTheme.background, in: Capsule())
+    }
+
+    private func toggleImageSelection(_ imageID: UUID) {
+        if selectedImageIDs.contains(imageID) {
+            selectedImageIDs.remove(imageID)
+        } else {
+            selectedImageIDs.insert(imageID)
+        }
+    }
+
+    private func runRecognition() async {
+        let activeImageIDs = Set(taskEntries.filter { !$0.phase.isTerminal }.map(\.image.id))
+        let launchImages = selectedImages.filter { !activeImageIDs.contains($0.id) }
+        guard !launchImages.isEmpty else {
+            statusIsError = true
+            statusMessage = LT("请选择至少一张未在识别中的图片。", "Select at least one image that is not already running.", "まだ認識中ではない画像を1枚以上選択してください。")
+            return
+        }
+
+        statusIsError = false
+        statusMessage = launchImages.count > 1
+            ? LT("已开始 \(launchImages.count) 个时间表识别任务，结果会逐个追加到下方。", "Started \(launchImages.count) timetable jobs. Results will be appended one by one.", "\(launchImages.count)件のタイムテーブル認識を開始しました。結果は順次追加されます。")
+            : LT("已提交识别任务，AI 正在分析时间表。结果返回后会自动匹配 DJ 并追加到下方。", "Recognition task submitted. The result will auto-match DJs and append below.", "認識タスクを送信しました。結果はDJ自動紐付け後に下へ追加されます。")
+
+        for image in launchImages {
+            startRecognitionTask(for: image)
+        }
+    }
+
+    private func startRecognitionTask(for image: EventUploadImageDraft) {
+        let entryID = UUID()
+        taskEntries.insert(
+            RecognitionTaskEntry(
+                id: entryID,
+                image: image,
+                jobId: nil,
+                phase: .preparing,
+                startedAt: Date(),
+                updatedAt: Date(),
+                slotCount: 0,
+                warningCount: 0,
+                message: LT("准备上传并创建识别任务。", "Preparing image upload and job creation.", "画像アップロードとジョブ作成を準備しています。")
+            ),
+            at: 0
+        )
+
+        let handle = Task {
+            do {
+                let createdJob = try await viewModel.createTimetableAIImportJob(for: image)
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .polling(createdJob.status),
+                        jobId: createdJob.jobId,
+                        message: LT("识别任务已创建，正在轮询 Coze 状态。", "Job created. Polling Coze status now.", "認識ジョブを作成しました。Coze状態をポーリングしています。")
+                    )
+                }
+
+                let response = try await waitForTimetableTask(entryID: entryID, jobId: createdJob.jobId)
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .autoMatching,
+                        message: LT("识别完成，正在自动匹配 DJ 库。", "Recognition finished. Auto-matching DJs now.", "認識完了。DJライブラリを自動紐付けしています。")
+                    )
+                }
+
+                let parsed = viewModel.editableTimetableImportResult(from: response)
+                let matched = await viewModel.autoMatchTimetableAIImportSlots(parsed.slots)
+
+                await MainActor.run {
+                    appendRecognitionResult(slots: matched, warnings: parsed.warnings, unparsedTexts: parsed.unparsedTexts)
+                    updateTask(
+                        entryID,
+                        phase: .succeeded,
+                        slotCount: matched.count,
+                        warningCount: parsed.warnings.count,
+                        message: matched.isEmpty
+                            ? LT("任务完成，但没有可用节目结果。", "Task completed but returned no usable slots.", "タスクは完了しましたが、有効な出演結果はありませんでした。")
+                            : LT("任务完成，\(matched.count) 条结果已追加到下方。", "Task completed. \(matched.count) results appended below.", "タスク完了。\(matched.count)件の結果を下に追加しました。")
+                    )
+                    statusIsError = false
+                    statusMessage = LT("新结果已追加到当前时间表识别列表。你可以继续选择更多图片再跑新任务。", "New results were appended. You can keep selecting more images and launch more jobs.", "新しい結果を追加しました。さらに画像を選んで新しいジョブを続けて開始できます。")
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .cancelled,
+                        message: LT("已取消该识别任务。", "This recognition task was cancelled.", "この認識タスクをキャンセルしました。")
+                    )
+                    statusIsError = false
+                    statusMessage = LT("已取消一个识别任务。", "Cancelled one recognition task.", "認識タスクを1件キャンセルしました。")
+                }
+            } catch {
+                await MainActor.run {
+                    updateTask(
+                        entryID,
+                        phase: .failed,
+                        message: error.userFacingMessage ?? LT("时间表识别失败，请稍后重试。", "Timetable recognition failed. Please try again later.", "タイムテーブル認識に失敗しました。しばらくしてから再試行してください。")
+                    )
+                    statusIsError = true
+                    statusMessage = error.userFacingMessage ?? LT("有一个时间表识别任务失败了，请检查任务状态后重试。", "One timetable task failed. Check the task status and retry.", "タイムテーブル認識タスクが1件失敗しました。状態を確認して再試行してください。")
+                }
+            }
+
+            await MainActor.run {
+                taskHandles[entryID] = nil
+            }
+        }
+
+        taskHandles[entryID] = handle
+    }
+
+    private func waitForTimetableTask(entryID: UUID, jobId: String) async throws -> EventTimetableImageImportResponse {
+        let deadline = Date().addingTimeInterval(10 * 60)
+        while Date() < deadline {
+            try Task.checkCancellation()
+            let job = try await viewModel.fetchTimetableAIImportJob(id: jobId)
+            await MainActor.run {
+                updateTask(
+                    entryID,
+                    phase: .polling(job.status),
+                    message: taskPollingMessage(for: job.status)
+                )
+            }
+
+            switch job.status {
+            case "succeeded":
+                if let result = job.result {
+                    return result
+                }
+                throw ServiceError.message(LT("时间表识别结果为空，请稍后重试。", "Timetable recognition returned an empty result. Please try again.", "タイムテーブル認識結果が空です。もう一度お試しください。"))
+            case "failed":
+                throw ServiceError.message(job.error ?? LT("时间表识别失败，请稍后重试。", "Timetable recognition failed. Please try again later.", "タイムテーブル認識に失敗しました。しばらくしてから再試行してください。"))
+            case "cancelled":
+                throw CancellationError()
+            default:
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+
+        throw ServiceError.message(LT("时间表识别等待超时，请稍后在网络稳定时重试。", "Timed out waiting for timetable recognition. Please try again on a stable network.", "タイムテーブル認識の待機がタイムアウトしました。安定したネットワークで再試行してください。"))
+    }
+
+    private func cancelRecognitionTask(_ entryID: UUID) async {
+        let handle = taskHandles[entryID]
+        let jobId = taskEntries.first(where: { $0.id == entryID })?.jobId
+        handle?.cancel()
+        if let jobId, !jobId.isEmpty {
+            try? await viewModel.cancelTimetableAIImportJob(id: jobId)
+        }
+        await MainActor.run {
+            updateTask(
+                entryID,
+                phase: .cancelled,
+                message: LT("已取消该识别任务。", "This recognition task was cancelled.", "この認識タスクをキャンセルしました。")
+            )
+            taskHandles[entryID] = nil
+        }
+    }
+
+    private func cancelAllRecognitionTasks() async {
+        let activeIDs = taskEntries.filter { !$0.phase.isTerminal }.map(\.id)
+        for id in activeIDs {
+            await cancelRecognitionTask(id)
+        }
+    }
+
+    private func updateTask(
+        _ entryID: UUID,
+        phase: RecognitionTaskEntry.Phase,
+        jobId: String? = nil,
+        slotCount: Int? = nil,
+        warningCount: Int? = nil,
+        message: String
+    ) {
+        guard let index = taskEntries.firstIndex(where: { $0.id == entryID }) else { return }
+        taskEntries[index].phase = phase
+        taskEntries[index].updatedAt = Date()
+        if let jobId {
+            taskEntries[index].jobId = jobId
+        }
+        if let slotCount {
+            taskEntries[index].slotCount = slotCount
+        }
+        if let warningCount {
+            taskEntries[index].warningCount = warningCount
+        }
+        taskEntries[index].message = message
+    }
+
+    private func taskPollingMessage(for status: String) -> String {
+        switch status.lowercased() {
+        case "queued", "pending":
+            return LT("任务已排队，等待 Coze 开始处理。", "Queued and waiting for Coze to start processing.", "ジョブはキュー待ちで、Cozeの処理開始を待っています。")
+        case "running", "processing":
+            return LT("AI 正在识别这张时间表。", "AI is actively recognizing this timetable image.", "AIがこのタイムテーブル画像を認識中です。")
+        case "succeeded":
+            return LT("识别完成，正在整理结果。", "Recognition finished. Preparing the result.", "認識が完了し、結果を整理しています。")
+        case "failed":
+            return LT("识别失败。", "Recognition failed.", "認識に失敗しました。")
+        case "cancelled":
+            return LT("识别已取消。", "Recognition was cancelled.", "認識はキャンセルされました。")
+        default:
+            return LT("正在轮询识别状态。", "Polling recognition status.", "認識状態をポーリングしています。")
+        }
+    }
+
+    private func taskPhaseText(_ phase: RecognitionTaskEntry.Phase) -> String {
+        switch phase {
+        case .preparing:
+            return LT("准备中", "Preparing", "準備中")
+        case .submitted:
+            return LT("已提交", "Submitted", "送信済み")
+        case .polling(let status):
+            switch status.lowercased() {
+            case "queued", "pending":
+                return LT("排队中", "Queued", "待機中")
+            case "running", "processing":
+                return LT("识别中", "Recognizing", "認識中")
+            case "succeeded":
+                return LT("整理结果", "Finalizing", "結果整理中")
+            default:
+                return LT("轮询中", "Polling", "ポーリング中")
+            }
+        case .autoMatching:
+            return LT("自动匹配 DJ", "Auto Matching DJs", "DJ自動紐付け")
+        case .succeeded:
+            return LT("已完成", "Completed", "完了")
+        case .failed:
+            return LT("失败", "Failed", "失敗")
+        case .cancelled:
+            return LT("已取消", "Cancelled", "キャンセル済み")
+        }
+    }
+
+    private func taskPhaseTint(_ phase: RecognitionTaskEntry.Phase) -> Color {
+        switch phase {
+        case .succeeded:
+            return .green
+        case .failed, .cancelled:
+            return .red
+        case .autoMatching:
+            return .orange
+        default:
+            return RaverTheme.accent
+        }
+    }
+
+    private func appendRecognitionResult(
+        slots: [EventUploadTimetableAIEditableSlot],
+        warnings nextWarnings: [String],
+        unparsedTexts nextUnparsedTexts: [String]
+    ) {
+        guard !slots.isEmpty || !nextWarnings.isEmpty || !nextUnparsedTexts.isEmpty else { return }
+        resultSlots.append(contentsOf: slots)
+        for warning in nextWarnings where !warnings.contains(warning) {
+            warnings.append(warning)
+        }
+        for text in nextUnparsedTexts where !unparsedTexts.contains(text) {
+            unparsedTexts.append(text)
+        }
+        refreshResultFilters(preserveSelection: true)
     }
 
     private var filterSection: some View {
@@ -4615,8 +5471,9 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     @ViewBuilder
-    private func timetableAIImagePreview(_ image: EventUploadImageDraft) -> some View {
+    private func timetableAIImagePreview(_ image: EventUploadImageDraft, onPreviewTap: (() -> Void)? = nil) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let canPreview = image.localFileURL != nil || image.remoteURL != nil
         ZStack {
             shape
                 .fill(RaverTheme.background)
@@ -4646,6 +5503,16 @@ private struct EventUploadTimetableAIImportSheet: View {
                 Image(systemName: "photo")
                     .foregroundStyle(RaverTheme.secondaryText)
                     .allowsHitTesting(false)
+            }
+
+            if let onPreviewTap, canPreview {
+                VStack {
+                    HStack {
+                        Spacer()
+                        aiRecognitionPreviewOverlayButton(action: onPreviewTap)
+                    }
+                    Spacer()
+                }
             }
         }
         .frame(height: 104)
@@ -4693,10 +5560,23 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private func configureResultFilters() {
-        selectedWeekIndex = availableWeeks.first
-        selectedDayIndex = availableDays.first?.dayIndex
-        selectedStageName = availableStages.first
-        expandedSlotIDs = []
+        refreshResultFilters(preserveSelection: false)
+    }
+
+    private func refreshResultFilters(preserveSelection: Bool) {
+        if !preserveSelection || selectedWeekIndex == nil {
+            selectedWeekIndex = availableWeeks.first
+        }
+        syncAIResultScope()
+        if !preserveSelection || selectedDayIndex == nil {
+            selectedDayIndex = availableDays.first?.dayIndex
+        }
+        syncAIResultScope()
+        if !preserveSelection || selectedStageName == nil {
+            selectedStageName = availableStages.first
+        }
+        syncAIResultScope()
+        expandedSlotIDs = expandedSlotIDs.intersection(Set(resultSlots.map(\.id)))
     }
 
     private func syncAIResultScope() {
@@ -4784,7 +5664,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(isRunning || isAutoMatching || resultSlots.isEmpty)
+            .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty)
 
             if visibleSlots.isEmpty {
                 Text(LT("当前筛选下没有结果。", "No results in the current filter.", "現在の絞り込み条件では結果がありません。"))
@@ -4840,6 +5720,7 @@ private struct EventUploadTimetableAIImportSheet: View {
 
                 Button {
                     resultSlots.removeAll { $0.id == slot.id }
+                    refreshResultFilters(preserveSelection: true)
                 } label: {
                     Image(systemName: "trash")
                         .font(.caption.weight(.bold))
@@ -5304,7 +6185,7 @@ private struct EventUploadTimetableAIImportSheet: View {
         statusMessage = LT("正在匹配当前列表中的 DJ 词条。", "Matching DJs in the current list.", "現在のリストのDJを紐付けています。")
         let matched = await viewModel.autoMatchTimetableAIImportSlots(resultSlots)
         resultSlots = matched
-        configureResultFilters()
+        refreshResultFilters(preserveSelection: true)
         statusMessage = LT("已完成自动匹配，可继续确认导入。", "Auto match finished. You can continue and apply.", "自動紐付けが完了しました。続けて適用できます。")
         isAutoMatching = false
         autoMatchStartedAt = nil

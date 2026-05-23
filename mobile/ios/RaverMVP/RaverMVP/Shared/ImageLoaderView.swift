@@ -243,155 +243,196 @@ private struct FullscreenZoomableRemoteImage: View {
     private let minimumScale: CGFloat = 1
     private let maximumScale: CGFloat = 4
     private let quickZoomScale: CGFloat = 2.2
-    private let pageTurnThreshold: CGFloat = 24
-    private let panEdgeEpsilon: CGFloat = 1.0
-
-    @State private var baseScale: CGFloat = 1
-    @State private var gestureScale: CGFloat = 1
-    @State private var currentOffset: CGSize = .zero
-    @State private var accumulatedOffset: CGSize = .zero
-    @State private var didTriggerPageTurnInCurrentDrag = false
+    @State private var resetToken = UUID()
 
     var body: some View {
-        GeometryReader { proxy in
-            let isZoomed = displayScale > minimumScale + 0.01
-            ImageLoaderView(urlString: url.absoluteString, resizingMode: .fit)
-                .background(
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.85))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                )
-                .scaleEffect(displayScale)
-                .offset(currentOffset)
-                .contentShape(Rectangle())
-                .simultaneousGesture(
-                    magnificationGesture(in: proxy.size)
-                )
-                .highPriorityGesture(
-                    dragGesture(in: proxy.size),
-                    including: isZoomed ? .all : .subviews
-                )
-                .simultaneousGesture(
-                    TapGesture(count: 2).onEnded {
-                        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
-                            if displayScale > minimumScale + 0.01 {
-                                resetZoom()
-                            } else {
-                                baseScale = quickZoomScale
-                                gestureScale = 1
-                                currentOffset = .zero
-                                accumulatedOffset = .zero
-                            }
-                        }
-                    }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-                .onAppear {
-                    if isActive {
-                        resetZoom()
-                    }
-                }
-                .onChange(of: isActive) { _, newValue in
-                    if newValue {
-                        resetZoom()
-                    }
-                }
-        }
-    }
-
-    private var displayScale: CGFloat {
-        clampedScale(baseScale * gestureScale)
-    }
-
-    private func magnificationGesture(in containerSize: CGSize) -> some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                gestureScale = value
-            }
-            .onEnded { value in
-                baseScale = clampedScale(baseScale * value)
-                gestureScale = 1
-                if baseScale <= minimumScale + 0.01 {
-                    resetZoom()
-                } else {
-                    currentOffset = clampedOffset(currentOffset, scale: baseScale, in: containerSize)
-                    accumulatedOffset = currentOffset
-                }
-            }
-    }
-
-    private func dragGesture(in containerSize: CGSize) -> some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard displayScale > minimumScale + 0.01 else { return }
-
-                if tryHandlePageTurnIfNeeded(value: value, containerSize: containerSize) {
-                    return
-                }
-
-                let proposed = CGSize(
-                    width: accumulatedOffset.width + value.translation.width,
-                    height: accumulatedOffset.height + value.translation.height
-                )
-                currentOffset = clampedOffset(proposed, scale: displayScale, in: containerSize)
-            }
-            .onEnded { _ in
-                accumulatedOffset = currentOffset
-                didTriggerPageTurnInCurrentDrag = false
-            }
-    }
-
-    private func tryHandlePageTurnIfNeeded(value: DragGesture.Value, containerSize: CGSize) -> Bool {
-        guard !didTriggerPageTurnInCurrentDrag else { return true }
-
-        let horizontalLimit = horizontalPanLimit(scale: displayScale, in: containerSize)
-        guard horizontalLimit > 0 else { return false }
-
-        let atLeftEdge = currentOffset.width <= (-horizontalLimit + panEdgeEpsilon)
-        let atRightEdge = currentOffset.width >= (horizontalLimit - panEdgeEpsilon)
-        let translationX = value.translation.width
-
-        if atLeftEdge && translationX <= -pageTurnThreshold && canGoNext {
-            didTriggerPageTurnInCurrentDrag = true
-            resetZoom()
-            onRequestNext()
-            return true
-        }
-
-        if atRightEdge && translationX >= pageTurnThreshold && canGoPrevious {
-            didTriggerPageTurnInCurrentDrag = true
-            resetZoom()
-            onRequestPrevious()
-            return true
-        }
-
-        return false
-    }
-
-    private func clampedScale(_ value: CGFloat) -> CGFloat {
-        min(max(value, minimumScale), maximumScale)
-    }
-
-    private func horizontalPanLimit(scale: CGFloat, in size: CGSize) -> CGFloat {
-        max(0, (size.width * (scale - 1)) / 2)
-    }
-
-    private func clampedOffset(_ value: CGSize, scale: CGFloat, in size: CGSize) -> CGSize {
-        let horizontalLimit = horizontalPanLimit(scale: scale, in: size)
-        let verticalLimit = max(0, (size.height * (scale - 1)) / 2)
-        return CGSize(
-            width: min(max(value.width, -horizontalLimit), horizontalLimit),
-            height: min(max(value.height, -verticalLimit), verticalLimit)
+        FullscreenZoomableImageScrollView(
+            url: url,
+            minimumZoomScale: minimumScale,
+            maximumZoomScale: maximumScale,
+            quickZoomScale: quickZoomScale,
+            resetToken: resetToken
         )
+        .background(
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .onAppear {
+            if isActive {
+                resetZoom()
+            }
+        }
+        .onChange(of: isActive) { _, newValue in
+            if newValue {
+                resetZoom()
+            }
+        }
     }
 
     private func resetZoom() {
-        baseScale = minimumScale
-        gestureScale = 1
-        currentOffset = .zero
-        accumulatedOffset = .zero
+        resetToken = UUID()
+    }
+}
+
+private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
+    let url: URL
+    let minimumZoomScale: CGFloat
+    let maximumZoomScale: CGFloat
+    let quickZoomScale: CGFloat
+    let resetToken: UUID
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.backgroundColor = .black
+        scrollView.minimumZoomScale = minimumZoomScale
+        scrollView.maximumZoomScale = maximumZoomScale
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.bouncesZoom = true
+        scrollView.decelerationRate = .fast
+        scrollView.contentInsetAdjustmentBehavior = .never
+
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        imageView.backgroundColor = .black
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(imageView)
+
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            imageView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            imageView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
+        ])
+
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTap)
+        scrollView.panGestureRecognizer.delegate = context.coordinator
+
+        context.coordinator.scrollView = scrollView
+        context.coordinator.imageView = imageView
+        context.coordinator.quickZoomScale = quickZoomScale
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: UIScrollView, context: Context) {
+        context.coordinator.quickZoomScale = quickZoomScale
+        context.coordinator.loadImageIfNeeded(from: url)
+
+        if context.coordinator.resetToken != resetToken {
+            context.coordinator.resetToken = resetToken
+            scrollView.setZoomScale(minimumZoomScale, animated: false)
+            scrollView.contentOffset = .zero
+            context.coordinator.centerImage()
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIScrollView, coordinator: Coordinator) {
+        coordinator.cancelImageLoad()
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+        weak var scrollView: UIScrollView?
+        weak var imageView: UIImageView?
+        var quickZoomScale: CGFloat = 2.2
+        var resetToken: UUID?
+        private var loadedURL: URL?
+        private var loadTask: URLSessionDataTask?
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            imageView
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            centerImage()
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            guard gestureRecognizer === scrollView?.panGestureRecognizer,
+                  let scrollView else {
+                return false
+            }
+            return scrollView.zoomScale <= scrollView.minimumZoomScale + 0.01
+        }
+
+        @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard let scrollView, let imageView else { return }
+
+            if scrollView.zoomScale > scrollView.minimumZoomScale + 0.01 {
+                scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+                return
+            }
+
+            let tapPoint = recognizer.location(in: imageView)
+            let targetScale = min(max(quickZoomScale, scrollView.minimumZoomScale), scrollView.maximumZoomScale)
+            let width = scrollView.bounds.width / targetScale
+            let height = scrollView.bounds.height / targetScale
+            let zoomRect = CGRect(
+                x: tapPoint.x - (width / 2),
+                y: tapPoint.y - (height / 2),
+                width: width,
+                height: height
+            )
+            scrollView.zoom(to: zoomRect, animated: true)
+        }
+
+        func loadImageIfNeeded(from url: URL) {
+            guard loadedURL != url else { return }
+            loadedURL = url
+            loadTask?.cancel()
+            imageView?.image = nil
+            scrollView?.setZoomScale(scrollView?.minimumZoomScale ?? 1, animated: false)
+            scrollView?.contentOffset = .zero
+
+            if url.isFileURL {
+                imageView?.image = UIImage(contentsOfFile: url.path)
+                centerImage()
+                return
+            }
+
+            loadTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                guard let self, let data, let image = UIImage(data: data) else { return }
+                DispatchQueue.main.async {
+                    guard self.loadedURL == url else { return }
+                    self.imageView?.image = image
+                    self.centerImage()
+                }
+            }
+            loadTask?.resume()
+        }
+
+        func cancelImageLoad() {
+            loadTask?.cancel()
+            loadTask = nil
+        }
+
+        func centerImage() {
+            guard let scrollView, let imageView else { return }
+            let horizontalInset = max(0, (scrollView.bounds.width - imageView.frame.width) / 2)
+            let verticalInset = max(0, (scrollView.bounds.height - imageView.frame.height) / 2)
+            scrollView.contentInset = UIEdgeInsets(
+                top: verticalInset,
+                left: horizontalInset,
+                bottom: verticalInset,
+                right: horizontalInset
+            )
+        }
     }
 }
 

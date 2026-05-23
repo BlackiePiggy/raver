@@ -7762,6 +7762,19 @@ router.get('/events/:id/rating-events', optionalAuth, async (req: Request, res: 
   }
 });
 
+void [
+  validateSubmittedEventTimezoneSelection,
+  parseEventReferenceLinks,
+  parseEventSocialLinks,
+  normalizeEventStartDate,
+  normalizeEventEndDate,
+  normalizeEventStageOrder,
+  rebaseExistingLineupSlotsToEventStart,
+  syncEventLineupAndTimetable,
+  deleteSingleEventOssObjectIfOwned,
+  normalizeEventWikiFestivalId,
+];
+
 router.post('/events', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -7846,397 +7859,34 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     }
 
     const body = req.body as Record<string, unknown>;
-    const shouldCreateEditSubmission = !canBypassContentReview(authReq.user?.role ?? null);
-    if (shouldCreateEditSubmission) {
-      const submittedName = typeof body.name === 'string' ? body.name.trim() : '';
-      if (!submittedName) {
-        res.status(400).json({ error: 'Event name is required' });
-        return;
-      }
-
-      const rawTimeZone = body.timeZone ?? body.timezone ?? body.eventTimeZone;
-      if (!isValidEventTimeZone(rawTimeZone)) {
-        res.status(400).json({ error: 'Valid event timeZone is required' });
-        return;
-      }
-
-      const submittedImageAssets = parseEventImageAssets(body.imageAssets);
-      if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
-        res.status(400).json({ error: 'At least one poster, lineup, or cover image is required' });
-        return;
-      }
-
-      const submission = await createPendingContentSubmission({
-        submitterId: userId,
-        entityType: 'event',
-        title: submittedName,
-        payload: {
-          ...body,
-          targetEventId: eventId,
-        },
-      });
-      acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
+    const submittedName = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!submittedName) {
+      res.status(400).json({ error: 'Event name is required' });
       return;
     }
 
-    const rawSlots = Array.isArray(body.lineupSlots) ? body.lineupSlots : null;
-    const rawTicketTiers = Array.isArray(body.ticketTiers) ? body.ticketTiers : null;
-    const hasCoverImageField = Object.prototype.hasOwnProperty.call(body, 'coverImageUrl');
-    const hasLineupImageField = Object.prototype.hasOwnProperty.call(body, 'lineupImageUrl');
-    const hasArchiveFestivalIdField = Object.prototype.hasOwnProperty.call(body, 'archiveFestivalId');
-    const hasWikiFestivalIdField = Object.prototype.hasOwnProperty.call(body, 'wikiFestivalId')
-      || Object.prototype.hasOwnProperty.call(body, 'brandId');
-    const hasNameI18nField = Object.prototype.hasOwnProperty.call(body, 'nameI18n');
-    const hasDescriptionI18nField = Object.prototype.hasOwnProperty.call(body, 'descriptionI18n');
-    const hasCityI18nField = Object.prototype.hasOwnProperty.call(body, 'cityI18n')
-      || Object.prototype.hasOwnProperty.call(body, 'city_i18n');
-    const hasCountryI18nField = Object.prototype.hasOwnProperty.call(body, 'countryI18n')
-      || Object.prototype.hasOwnProperty.call(body, 'country_i18n');
-    const hasReferenceLinksField = Object.prototype.hasOwnProperty.call(body, 'referenceLinks')
-      || Object.prototype.hasOwnProperty.call(body, 'relatedLinks');
-    const hasSocialLinksField = Object.prototype.hasOwnProperty.call(body, 'socialLinks');
-    const hasImageAssetsField = Object.prototype.hasOwnProperty.call(body, 'imageAssets');
-    const hasSourceProviderField = Object.prototype.hasOwnProperty.call(body, 'sourceProvider');
-    const hasSourceEventUrlField = Object.prototype.hasOwnProperty.call(body, 'sourceEventUrl');
-    const hasManualLocationField = Object.prototype.hasOwnProperty.call(body, 'manualLocation')
-      || Object.prototype.hasOwnProperty.call(body, 'manual_location');
-    const hasLocationPointField = Object.prototype.hasOwnProperty.call(body, 'locationPoint')
-      || Object.prototype.hasOwnProperty.call(body, 'location_point');
-    const hasStageOrderField = Object.prototype.hasOwnProperty.call(body, 'stageOrder');
-    const hasStartTimeField = Object.prototype.hasOwnProperty.call(body, 'startTime');
-    const hasEndTimeField = Object.prototype.hasOwnProperty.call(body, 'endTime');
-    const hasTimeZoneField = Object.prototype.hasOwnProperty.call(body, 'timeZone')
-      || Object.prototype.hasOwnProperty.call(body, 'timezone')
-      || Object.prototype.hasOwnProperty.call(body, 'eventTimeZone');
-    const hasLatitudeField = Object.prototype.hasOwnProperty.call(body, 'latitude');
-    const hasLongitudeField = Object.prototype.hasOwnProperty.call(body, 'longitude');
-
-    const nextCoverImageUrl =
-      hasCoverImageField
-        ? (typeof body.coverImageUrl === 'string' && body.coverImageUrl.trim() ? body.coverImageUrl.trim() : null)
-        : undefined;
-    const nextLineupImageUrl =
-      hasLineupImageField
-        ? (typeof body.lineupImageUrl === 'string' && body.lineupImageUrl.trim() ? body.lineupImageUrl.trim() : null)
-        : undefined;
-    const nextArchiveFestivalId =
-      hasArchiveFestivalIdField
-        ? (typeof body.archiveFestivalId === 'string' && body.archiveFestivalId.trim() ? body.archiveFestivalId.trim() : null)
-        : undefined;
-    const nextWikiFestivalId =
-      hasWikiFestivalIdField
-        ? normalizeEventWikiFestivalId(body.wikiFestivalId ?? body.brandId)
-        : undefined;
-
-    if (hasWikiFestivalIdField && nextWikiFestivalId) {
-      const brand = await prisma.wikiFestival.findUnique({
-        where: { id: nextWikiFestivalId },
-        select: { id: true, isActive: true },
-      });
-      if (!brand || !brand.isActive) {
-        res.status(400).json({ error: 'Invalid wikiFestivalId' });
-        return;
-      }
-    }
-
-    const updateName = typeof body.name === 'string' ? body.name : '';
-    const updateDescription = typeof body.description === 'string' ? body.description : '';
-    const updateCitySeed = typeof body.city === 'string' ? body.city : '';
-    const updateCountrySeed = typeof body.country === 'string' ? body.country : '';
-    const hasAbbreviationField = Object.prototype.hasOwnProperty.call(body, 'abbreviation');
-    const nextAbbreviation = hasAbbreviationField
-      ? (typeof body.abbreviation === 'string' && body.abbreviation.trim() ? body.abbreviation.trim() : null)
-      : undefined;
-
-    const nextNameI18n = hasNameI18nField ? normalizeEventBiText(body.nameI18n, updateName) : null;
-    const nextDescriptionI18n = hasDescriptionI18nField ? normalizeEventBiText(body.descriptionI18n, updateDescription) : null;
-    const nextCityI18n = hasCityI18nField ? normalizeEventBiText(body.cityI18n ?? body.city_i18n, updateCitySeed) : null;
-    const nextCountryI18n = hasCountryI18nField ? normalizeCountryBiText(body.countryI18n ?? body.country_i18n, updateCountrySeed) : null;
-    const nextReferenceLinks = hasReferenceLinksField ? parseEventReferenceLinks(body.referenceLinks ?? body.relatedLinks) : null;
-    const nextSocialLinks = hasSocialLinksField ? parseEventSocialLinks(body.socialLinks) : null;
-    const nextImageAssets = hasImageAssetsField ? parseEventImageAssets(body.imageAssets) : null;
-    const nextSourceProvider =
-      hasSourceProviderField
-        ? (typeof body.sourceProvider === 'string' && body.sourceProvider.trim() ? body.sourceProvider.trim() : null)
-        : undefined;
-    const nextSourceEventUrl =
-      hasSourceEventUrlField
-        ? (typeof body.sourceEventUrl === 'string' && body.sourceEventUrl.trim() ? body.sourceEventUrl.trim() : null)
-        : undefined;
-    const rawManualLocation = hasManualLocationField
-      ? (Object.prototype.hasOwnProperty.call(body, 'manualLocation') ? body.manualLocation : body.manual_location)
-      : undefined;
-    const manualLocationFallback = {
-      detailAddressI18n: body.detailAddressI18n ?? body.addressI18n ?? null,
-      formattedAddressI18n: body.formattedAddressI18n ?? null,
-    };
-    const nextManualLocation = hasManualLocationField
-      ? normalizeEventManualLocationPayload(rawManualLocation ?? null, manualLocationFallback)
-      : null;
-    if (hasManualLocationField && rawManualLocation !== null && rawManualLocation !== undefined && !nextManualLocation) {
-      res.status(400).json({ error: 'Invalid manualLocation payload' });
-      return;
-    }
-    const rawLocationPoint = hasLocationPointField
-      ? (Object.prototype.hasOwnProperty.call(body, 'locationPoint') ? body.locationPoint : body.location_point)
-      : undefined;
-    const nextLocationPoint = hasLocationPointField
-      ? normalizeEventLocationPointPayload(rawLocationPoint ?? null)
-      : null;
-    if (hasLocationPointField && rawLocationPoint !== null && rawLocationPoint !== undefined && !nextLocationPoint) {
-      res.status(400).json({ error: 'Invalid locationPoint payload' });
-      return;
-    }
-    const nextLatitude = hasLatitudeField
-      ? toNumber(body.latitude)
-      : (hasLocationPointField ? toNumber((nextLocationPoint?.location as any)?.lat) : undefined);
-    const nextLongitude = hasLongitudeField
-      ? toNumber(body.longitude)
-      : (hasLocationPointField ? toNumber((nextLocationPoint?.location as any)?.lng) : undefined);
-    const nextStageOrder = hasStageOrderField
-      ? normalizeEventStageOrder(body.stageOrder)
-      : null;
-    const cityFromBody = Object.prototype.hasOwnProperty.call(body, 'city')
-      ? normalizeEventText(typeof body.city === 'string' ? body.city : null)
-      : null;
-    const countryFromBody = Object.prototype.hasOwnProperty.call(body, 'country')
-      ? normalizeEventText(typeof body.country === 'string' ? body.country : null)
-      : null;
-    const cityFromI18n = hasCityI18nField
-      ? (normalizeEventText(nextCityI18n?.zh) || normalizeEventText(nextCityI18n?.en))
-      : null;
-    const countryFromI18n = hasCountryI18nField
-      ? (normalizeEventText(nextCountryI18n?.en) || normalizeEventText(nextCountryI18n?.zh))
-      : null;
-
-    if (hasTimeZoneField && !isValidEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone)) {
+    const rawTimeZone = body.timeZone ?? body.timezone ?? body.eventTimeZone;
+    if (!isValidEventTimeZone(rawTimeZone)) {
       res.status(400).json({ error: 'Valid event timeZone is required' });
       return;
     }
-    const nextTimeZone = hasTimeZoneField
-      ? normalizeEventTimeZone(body.timeZone ?? body.timezone ?? body.eventTimeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
-      : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
-    if (hasTimeZoneField) {
-      const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(body, nextTimeZone);
-      if (submittedTimeZoneSelectionError) {
-        res.status(400).json({ error: submittedTimeZoneSelectionError });
-        return;
-      }
-    }
-    const nextStartTime = hasStartTimeField
-      ? normalizeEventClockTime(body.startTime, EVENT_DEFAULT_START_TIME)
-      : normalizeEventClockTime(existing.startTime, EVENT_DEFAULT_START_TIME);
-    const nextEndTime = hasEndTimeField
-      ? normalizeEventClockTime(body.endTime, EVENT_DEFAULT_END_TIME)
-      : normalizeEventClockTime(existing.endTime, EVENT_DEFAULT_END_TIME);
-    const parsedStartDateRaw = body.startDate !== undefined ? parseEventDateInput(body.startDate, nextTimeZone, 'start', nextStartTime) : null;
-    const parsedEndDateRaw = body.endDate !== undefined ? parseEventDateInput(body.endDate, nextTimeZone, 'end', nextEndTime) : null;
-    const parsedStartDate = parsedStartDateRaw ? normalizeEventStartDate(parsedStartDateRaw, nextTimeZone) : null;
-    const parsedEndDate = parsedEndDateRaw ? normalizeEventEndDate(parsedEndDateRaw, nextTimeZone) : null;
-    if (body.startDate !== undefined && parsedStartDate === null) {
-      res.status(400).json({ error: 'Invalid startDate' });
-      return;
-    }
-    if (body.endDate !== undefined && parsedEndDate === null) {
-      res.status(400).json({ error: 'Invalid endDate' });
+
+    const submittedImageAssets = parseEventImageAssets(body.imageAssets);
+    if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
+      res.status(400).json({ error: 'At least one poster, lineup, or cover image is required' });
       return;
     }
 
-    const nextDayRolloverHour = body.dayRolloverHour !== undefined
-      ? normalizeDayRolloverHour(body.dayRolloverHour, existing.dayRolloverHour ?? 6)
-      : (existing.dayRolloverHour ?? 6);
-    const lineupBaseDate = parsedStartDate ?? existing.startDate;
-    const effectiveStartDate = parsedStartDate ?? existing.startDate;
-    const effectiveEndDate = parsedEndDate ?? existing.endDate;
-    const lineupSlots = normalizeLineupSlots(rawSlots || [], lineupBaseDate, nextDayRolloverHour, nextTimeZone);
-    const rawArtists = Array.isArray(body.lineupArtists) ? body.lineupArtists : null;
-    const lineupArtists = normalizeLineupArtistsInput(rawArtists, lineupSlots);
-    const shouldSyncLineupTimetable = rawSlots !== null || rawArtists !== null;
-    const shouldRebaseExistingLineupSlots =
-      rawSlots === null
-      && (body.startDate !== undefined || body.dayRolloverHour !== undefined || hasTimeZoneField)
-      && (await loadCanonicalEventLineupSnapshot(prisma, eventId)).slots.length > 0;
-
-    const ticketCurrency = typeof body.ticketCurrency === 'string' ? body.ticketCurrency : null;
-    const ticketTiers = (rawTicketTiers || [])
-      .filter((tier): tier is Record<string, unknown> => typeof tier === 'object' && tier !== null)
-      .map((tier, index) => ({
-        name: String(tier.name || '').trim(),
-        price: toNumber(tier.price),
-        currency: typeof tier.currency === 'string' && tier.currency.trim() ? tier.currency.trim() : ticketCurrency,
-        sortOrder: typeof tier.sortOrder === 'number' ? tier.sortOrder : index + 1,
-      }))
-      .filter((tier) => tier.name && tier.price !== null)
-      .map((tier) => ({
-        name: tier.name,
-        price: Number(tier.price),
-        currency: tier.currency || null,
-        sortOrder: tier.sortOrder,
-      }));
-
-    const updateEventData: any = {
-        name: typeof body.name === 'string' ? body.name : undefined,
-        abbreviation: hasAbbreviationField ? nextAbbreviation : undefined,
-        nameI18n: hasNameI18nField
-          ? (nextNameI18n ? (nextNameI18n as unknown as Prisma.InputJsonValue) : undefined)
-          : undefined,
-        slug: typeof body.slug === 'string' ? body.slug : undefined,
-        wikiFestivalId: hasWikiFestivalIdField ? nextWikiFestivalId : undefined,
-        archiveFestivalId: nextArchiveFestivalId,
-        description: typeof body.description === 'string' ? body.description : undefined,
-        descriptionI18n: hasDescriptionI18nField
-          ? (nextDescriptionI18n ? (nextDescriptionI18n as unknown as Prisma.InputJsonValue) : undefined)
-          : undefined,
-        cityI18n: hasCityI18nField
-          ? (nextCityI18n ? (nextCityI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
-          : undefined,
-        countryI18n: hasCountryI18nField
-          ? (nextCountryI18n ? (nextCountryI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
-          : undefined,
-        coverImageUrl: nextCoverImageUrl,
-        lineupImageUrl: nextLineupImageUrl,
-        imageAssets: hasImageAssetsField
-          ? (nextImageAssets && nextImageAssets.length > 0
-              ? (nextImageAssets as unknown as Prisma.InputJsonValue)
-              : Prisma.DbNull)
-          : undefined,
-        referenceLinks: hasReferenceLinksField ? (nextReferenceLinks ?? []) : undefined,
-        socialLinks: hasSocialLinksField
-          ? (nextSocialLinks && nextSocialLinks.length > 0 ? (nextSocialLinks as unknown as Prisma.InputJsonValue) : undefined)
-          : undefined,
-        sourceProvider: nextSourceProvider,
-        sourceEventUrl: nextSourceEventUrl,
-        eventType: typeof body.eventType === 'string' ? body.eventType : undefined,
-        organizerName: typeof body.organizerName === 'string' ? body.organizerName : undefined,
-        city: cityFromBody !== null
-          ? cityFromBody
-          : (hasCityI18nField ? (cityFromI18n || null) : undefined),
-        country: countryFromBody !== null
-          ? countryFromBody
-          : (hasCountryI18nField ? (countryFromI18n || null) : undefined),
-        manualLocation: hasManualLocationField
-          ? (nextManualLocation ? (nextManualLocation as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
-          : undefined,
-        locationPoint: hasLocationPointField
-          ? (nextLocationPoint ? (nextLocationPoint as unknown as Prisma.InputJsonValue) : Prisma.DbNull)
-          : undefined,
-        latitude: hasLatitudeField
-          ? nextLatitude
-          : (hasLocationPointField ? (nextLatitude ?? null) : undefined),
-        longitude: hasLongitudeField
-          ? nextLongitude
-          : (hasLocationPointField ? (nextLongitude ?? null) : undefined),
-        startDate: body.startDate !== undefined ? parsedStartDate ?? undefined : undefined,
-        endDate: body.endDate !== undefined ? parsedEndDate ?? undefined : undefined,
-        timeZone: hasTimeZoneField ? nextTimeZone : undefined,
-        startTime: hasStartTimeField ? nextStartTime : undefined,
-        endTime: hasEndTimeField ? nextEndTime : undefined,
-        dayRolloverHour: body.dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
-        ticketUrl: typeof body.ticketUrl === 'string' ? body.ticketUrl : undefined,
-        ticketPriceMin: body.ticketPriceMin !== undefined ? toNumber(body.ticketPriceMin) : undefined,
-        ticketPriceMax: body.ticketPriceMax !== undefined ? toNumber(body.ticketPriceMax) : undefined,
-        ticketCurrency: body.ticketCurrency !== undefined ? ticketCurrency : undefined,
-        ticketNotes: typeof body.ticketNotes === 'string' ? body.ticketNotes : undefined,
-        officialWebsite: typeof body.officialWebsite === 'string' ? body.officialWebsite : undefined,
-        status: resolveEventStatus(effectiveStartDate, effectiveEndDate, typeof body.status === 'string' ? body.status : existing.status),
-        ticketTiers:
-          rawTicketTiers !== null
-            ? {
-                deleteMany: {},
-                create: ticketTiers,
-              }
-          : undefined,
-      };
-
-    const updated = await prisma.$transaction(async (tx) => {
-      await tx.event.update({
-        where: { id: eventId },
-        data: updateEventData,
-      });
-      if (shouldSyncLineupTimetable) {
-        await syncEventLineupAndTimetable(tx, eventId, lineupSlots, lineupArtists, nextStageOrder ?? []);
-      }
-      return tx.event.findUnique({
-        where: { id: eventId },
-        include: includeEventForWeb,
-      });
+    const submission = await createPendingContentSubmission({
+      submitterId: userId,
+      entityType: 'event',
+      title: submittedName,
+      payload: {
+        ...body,
+        targetEventId: eventId,
+      },
     });
-
-    if (shouldRebaseExistingLineupSlots) {
-      await prisma.$transaction(async (tx) => {
-        const snapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
-        const rebasedSlots = rebaseExistingLineupSlotsToEventStart(
-          snapshot.slots.map((slot) => ({
-            id: slot.id || '',
-            festivalDayIndex: slot.festivalDayIndex,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-          })),
-          existing.startDate,
-          effectiveStartDate,
-          nextDayRolloverHour,
-          nextTimeZone
-        );
-        await syncCanonicalEventLineupAndTimetable(
-          tx,
-          eventId,
-          snapshot.slots.map((slot) => {
-            const rebased = rebasedSlots.find((item) => item.id === slot.id);
-            return rebased
-              ? { ...slot, festivalDayIndex: rebased.festivalDayIndex, startTime: rebased.startTime, endTime: rebased.endTime }
-              : slot;
-          }),
-          snapshot.artists,
-          hasStageOrderField ? (nextStageOrder ?? []) : snapshot.stageOrder
-        );
-      });
-    }
-
-    if (!updated) {
-      res.status(404).json({ error: 'Event not found after update' });
-      return;
-    }
-
-    if (hasCoverImageField && existing.coverImageUrl && existing.coverImageUrl !== updated.coverImageUrl) {
-      await mediaAssetService.markDeletedByUrl(existing.coverImageUrl);
-      await deleteSingleEventOssObjectIfOwned(existing.coverImageUrl, eventId);
-    }
-    if (hasLineupImageField && existing.lineupImageUrl && existing.lineupImageUrl !== updated.lineupImageUrl) {
-      await mediaAssetService.markDeletedByUrl(existing.lineupImageUrl);
-      await deleteSingleEventOssObjectIfOwned(existing.lineupImageUrl, eventId);
-    }
-    if (hasImageAssetsField) {
-      const previousAssets = parseEventImageAssets(existing.imageAssets ?? []);
-      const nextAssets = parseEventImageAssets(updated.imageAssets ?? []);
-      const nextUrlSet = new Set(
-        nextAssets
-          .map((asset) => String(asset.url || '').trim().toLowerCase())
-          .filter(Boolean)
-      );
-      const removedAssets = previousAssets.filter((asset) => {
-        const key = String(asset.url || '').trim().toLowerCase();
-        if (!key) return false;
-        return !nextUrlSet.has(key);
-      });
-      for (const asset of removedAssets) {
-        await mediaAssetService.markDeletedByUrl(asset.url);
-        await deleteSingleEventOssObjectIfOwned(asset.url, eventId);
-      }
-    }
-
-    const finalEvent = shouldRebaseExistingLineupSlots
-      ? await prisma.event.findUnique({
-          where: { id: eventId },
-          include: includeEventForWeb,
-        })
-      : updated;
-
-    if (!finalEvent) {
-      res.status(404).json({ error: 'Event not found after update' });
-      return;
-    }
-
-    ok(res, mapEvent(finalEvent));
+    acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
     console.error('BFF web update event error:', error);
     res.status(500).json({ error: 'Internal server error' });

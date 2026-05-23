@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { notificationCenterService } from '../modules/notifications';
+import { createOrUpdateEventFromSubmission } from './content-submission-event.service';
 
 const prisma = new PrismaClient();
 
@@ -37,6 +38,9 @@ export async function publishContentSubmissionTaskNotification(input: {
   submissionId: string;
   reason?: string | null;
   createdEntityId?: string | null;
+  titleOverride?: string;
+  bodyOverride?: string;
+  statusLabelOverride?: string;
 }) {
   const typeLabel = typeLabelMap[input.entityType] || '内容';
   const statusLabels = statusLabelMap[input.status];
@@ -78,14 +82,14 @@ export async function publishContentSubmissionTaskNotification(input: {
               : `投稿「${input.title}」は承認されませんでした：${input.reason || 'より正確な情報を追加して再送信してください。'}`,
   };
 
-  const localizedBody = bodyI18n.zh;
+  const localizedBody = input.bodyOverride || bodyI18n.zh;
   await notificationCenterService.publish({
     category: 'content_review',
     targets: [{ userId: input.userId }],
     channels: ['in_app', 'apns'],
     dedupeKey: `content_submission:${input.submissionId}:${input.status}`,
     payload: {
-      title: titleI18n.zh,
+      title: input.titleOverride || titleI18n.zh,
       body: localizedBody,
       deeplink: input.status === 'approved' && input.createdEntityId
         ? `/${input.entityType}s/${input.createdEntityId}`
@@ -102,7 +106,7 @@ export async function publishContentSubmissionTaskNotification(input: {
         reasonCode: input.reason || null,
         createdEntityId: input.createdEntityId || null,
         typeLabel,
-        statusLabel: statusLabels.zh,
+        statusLabel: input.statusLabelOverride || statusLabels.zh,
       },
     },
   });
@@ -118,6 +122,11 @@ async function processContentSubmission(submissionId: string): Promise<void> {
       title: true,
       submitterId: true,
       payload: true,
+      submitter: {
+        select: {
+          role: true,
+        },
+      },
     },
   });
 
@@ -144,13 +153,60 @@ async function processContentSubmission(submissionId: string): Promise<void> {
       },
     });
 
+    const shouldAutoApprove =
+      submission.entityType === 'event'
+      && (submission.submitter?.role === 'admin' || submission.submitter?.role === 'operator');
+
     await publishContentSubmissionTaskNotification({
       userId: updated.submitterId,
       entityType: updated.entityType,
       status: 'reviewing',
       title: updated.title,
       submissionId: updated.id,
+      ...(shouldAutoApprove
+        ? {
+            titleOverride: `${typeLabelMap[updated.entityType] || '内容'}处理完成`,
+            bodyOverride: `你提交的「${updated.title}」已完成处理，系统正在自动入库。`,
+            statusLabelOverride: '处理完成',
+          }
+        : {}),
     });
+
+    if (shouldAutoApprove) {
+      const payload = submission.payload;
+      const created = await createOrUpdateEventFromSubmission(
+        prisma,
+        payload as any,
+        submission.submitterId
+      );
+
+      const approved = await prisma.contentSubmission.update({
+        where: { id: submission.id },
+        data: {
+          status: 'approved',
+          reviewReason: null,
+          reviewedAt: new Date(),
+          reviewedBy: submission.submitterId,
+          createdEntityId: created.id,
+        },
+        select: {
+          id: true,
+          entityType: true,
+          title: true,
+          submitterId: true,
+          createdEntityId: true,
+        },
+      });
+
+      await publishContentSubmissionTaskNotification({
+        userId: approved.submitterId,
+        entityType: approved.entityType,
+        status: 'approved',
+        title: approved.title,
+        submissionId: approved.id,
+        createdEntityId: approved.createdEntityId,
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Submission processing failed';
     const failed = await prisma.contentSubmission.update({
