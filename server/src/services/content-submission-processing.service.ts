@@ -1,7 +1,10 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { notificationCenterService } from '../modules/notifications';
 import { changeSummaryTextFromPayload } from './content-submission-change-summary.service';
-import { createOrUpdateEventFromSubmission } from './content-submission-event.service';
+import {
+  createOrUpdateEventFromSubmission,
+  EventSubmissionConflictError,
+} from './content-submission-event.service';
 
 const prisma = new PrismaClient();
 
@@ -769,7 +772,8 @@ export async function runContentSubmissionProcessingWorkerOnce(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Submission processing failed';
-      const shouldRetry = job.attempts < job.maxAttempts;
+      const retryable = !(error instanceof EventSubmissionConflictError);
+      const shouldRetry = retryable && job.attempts < job.maxAttempts;
       const durationMs = Date.now() - startedAt;
       const retryAt = shouldRetry ? new Date(Date.now() + retryDelayMs(job.attempts)) : undefined;
       const metadata = withDefinedJsonFields({
@@ -781,6 +785,14 @@ export async function runContentSubmissionProcessingWorkerOnce(
         lastSubmissionStatus: shouldRetry ? 'processing' : 'failed',
         lastDurationMs: durationMs,
         lastError: message,
+        retryable,
+        conflictDetails: error instanceof EventSubmissionConflictError && error.details
+          ? withDefinedJsonFields({
+              targetEventId: error.details.targetEventId ?? null,
+              baseEventUpdatedAt: error.details.baseEventUpdatedAt ?? null,
+              currentEventUpdatedAt: error.details.currentEventUpdatedAt ?? null,
+            })
+          : null,
         retryScheduledAt: retryAt?.toISOString() ?? null,
       });
       if (shouldRetry) {
@@ -805,10 +817,14 @@ export async function runContentSubmissionProcessingWorkerOnce(
         submissionId: job.submissionId,
         attempts: job.attempts,
         maxAttempts: job.maxAttempts,
+        retryable,
         retrying: shouldRetry,
         durationMs,
         error: message,
         retryAt: retryAt?.toISOString() ?? null,
+        ...(error instanceof EventSubmissionConflictError && error.details
+          ? { conflictDetails: error.details }
+          : {}),
       });
     }
   }

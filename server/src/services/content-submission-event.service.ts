@@ -32,10 +32,20 @@ const cleanText = (value: unknown): string | undefined => {
 
 export class EventSubmissionConflictError extends Error {
   readonly code = 'EVENT_SUBMISSION_STALE_EDIT';
+  readonly details?: {
+    targetEventId?: string;
+    baseEventUpdatedAt?: string | null;
+    currentEventUpdatedAt?: string | null;
+  };
 
-  constructor(message: string) {
+  constructor(message: string, details?: {
+    targetEventId?: string;
+    baseEventUpdatedAt?: string | null;
+    currentEventUpdatedAt?: string | null;
+  }) {
     super(message);
     this.name = 'EventSubmissionConflictError';
+    this.details = details;
   }
 }
 
@@ -59,10 +69,18 @@ const validateBaseEventRevision = (
   if (!targetEventId) return;
   const baseEventUpdatedAt = dateFromUnknown(payload.baseEventUpdatedAt);
   if (!baseEventUpdatedAt) {
-    throw new EventSubmissionConflictError('编辑基线已失效，请重新打开活动后再提交');
+    throw new EventSubmissionConflictError('编辑基线已失效，请重新打开活动后再提交', {
+      targetEventId,
+      baseEventUpdatedAt: cleanText(payload.baseEventUpdatedAt) || null,
+      currentEventUpdatedAt: currentUpdatedAt.toISOString(),
+    });
   }
   if (baseEventUpdatedAt.getTime() !== currentUpdatedAt.getTime()) {
-    throw new EventSubmissionConflictError('活动在你编辑期间已被更新，请刷新最新内容后重新编辑提交');
+    throw new EventSubmissionConflictError('活动在你编辑期间已被更新，请刷新最新内容后重新编辑提交', {
+      targetEventId,
+      baseEventUpdatedAt: baseEventUpdatedAt.toISOString(),
+      currentEventUpdatedAt: currentUpdatedAt.toISOString(),
+    });
   }
 };
 
