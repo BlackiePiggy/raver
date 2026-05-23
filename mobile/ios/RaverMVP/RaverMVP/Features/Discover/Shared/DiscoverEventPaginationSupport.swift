@@ -240,6 +240,11 @@ private struct DiscoverStandardEventCoverImage: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(RaverTheme.card)
                 )
+#if DEBUG
+                .onAppear {
+                    debugLogCardSelection(surface: "discover-standard-row")
+                }
+#endif
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(
@@ -256,4 +261,16 @@ private struct DiscoverStandardEventCoverImage: View {
                 )
         }
     }
+
+#if DEBUG
+    private func debugLogCardSelection(surface: String) {
+        guard event.id == "e87c26d3-a3eb-4ae5-a221-49e074ce905d" else { return }
+        print(
+            "[EventCardDebug] surface=\(surface) eventId=\(event.id) " +
+            "card=\(event.cardImageURL ?? "nil") cover=\(event.coverImageUrl ?? "nil") " +
+            "lineup=\(event.lineupImageUrl ?? "nil") posterAssets=\(event.posterAssetURLs.count) " +
+            "lineupAssets=\(event.lineupAssetURLs.count)"
+        )
+    }
+#endif
 }

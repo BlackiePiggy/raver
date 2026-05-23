@@ -112,6 +112,17 @@ final class LiveWebFeatureService: WebFeatureService {
             method: "GET",
             queryItems: queryItems
         )
+#if DEBUG
+        let debugEvents = response.data.ongoing.items + response.data.upcoming.items
+        if let target = debugEvents.first(where: { $0.id == "e87c26d3-a3eb-4ae5-a221-49e074ce905d" }) {
+            print(
+                "[EventCardDebug] surface=discover-bootstrap runtimeMode=\(AppConfig.runtimeMode.rawValue) " +
+                "bffBaseURL=\(AppConfig.bffBaseURL.absoluteString) eventId=\(target.id) " +
+                "cover=\(target.coverImageUrl ?? "nil") lineup=\(target.lineupImageUrl ?? "nil") " +
+                "imageAssetsNil=\(target.imageAssets == nil)"
+            )
+        }
+#endif
         return EventsBootstrapResponse(
             ongoing: EventListPage(
                 items: response.data.ongoing.items.map(localizedEvent),

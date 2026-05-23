@@ -760,7 +760,7 @@ router.get('/content-reviews/summary', authenticate, async (req: AuthRequest, re
     const rows = await prisma.notificationInboxItem.findMany({
       where: {
         userId,
-        type: 'community_interaction',
+        type: 'content_review',
       },
       select: {
         id: true,
@@ -806,7 +806,7 @@ router.get('/content-reviews/items', authenticate, async (req: AuthRequest, res:
     const rows = await prisma.notificationInboxItem.findMany({
       where: {
         userId,
-        type: 'community_interaction',
+        type: 'content_review',
       },
       select: {
         id: true,

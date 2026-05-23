@@ -35,6 +35,7 @@
 - 2026-05-23: Converted admin event create/edit to the same async submission flow, and added automatic approval after processing so admin inbox now receives `处理中 -> 处理完成 -> 已入库` notifications without manual review.
 - 2026-05-23: Identified and fixed the first large-payload ingestion bottleneck: event auto-ingest transactions now need an explicit longer timeout because canonical lineup/timetable rewrites can exceed Prisma's default 5-second interactive transaction window.
 - 2026-05-23: Increased event submission ingest transaction limits to `maxWait=10s` and `timeout=30s` so large event lineup/timetable rewrites stay atomic without hitting Prisma's default 5-second interactive transaction expiry.
+- 2026-05-23: Verified that content-review notifications were being persisted for admin submissions, then fixed the review inbox query path so `content_review` items are no longer filtered out by an outdated `community_interaction` type constraint.
 
 ## Goal
 

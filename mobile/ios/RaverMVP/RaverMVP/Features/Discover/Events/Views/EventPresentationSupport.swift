@@ -310,7 +310,24 @@ struct EventRow: View {
                             .foregroundStyle(RaverTheme.secondaryText)
                     )
             )
+#if DEBUG
+            .onAppear {
+                debugLogCardSelection(surface: "discover-event-row")
+            }
+#endif
     }
+
+#if DEBUG
+    private func debugLogCardSelection(surface: String) {
+        guard event.id == "e87c26d3-a3eb-4ae5-a221-49e074ce905d" else { return }
+        print(
+            "[EventCardDebug] surface=\(surface) eventId=\(event.id) " +
+            "card=\(event.cardImageURL ?? "nil") cover=\(event.coverImageUrl ?? "nil") " +
+            "lineup=\(event.lineupImageUrl ?? "nil") posterAssets=\(event.posterAssetURLs.count) " +
+            "lineupAssets=\(event.lineupAssetURLs.count)"
+        )
+    }
+#endif
 
     private var eventDateBadge: some View {
         VStack(spacing: 0) {
