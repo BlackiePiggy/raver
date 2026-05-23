@@ -160,6 +160,7 @@ export async function publishContentSubmissionTaskNotification(input: {
   bodyOverride?: string;
   statusLabelOverride?: string;
   payload?: Prisma.InputJsonObject | Prisma.JsonObject;
+  locale?: string;
 }) {
   const typeLabel = typeLabelMap[input.entityType] || '内容';
   const statusLabels = statusLabelMap[input.status];
@@ -216,11 +217,13 @@ export async function publishContentSubmissionTaskNotification(input: {
     payload: {
       title: input.titleOverride || titleI18n.zh,
       body: localizedBody,
+      locale: input.locale || 'zh-CN',
       deeplink: input.status === 'approved' && input.createdEntityId
         ? `/${input.entityType}s/${input.createdEntityId}`
         : `/profile/submissions/${input.submissionId}`,
       metadata: {
         source: 'content_submission_review',
+        locale: input.locale || 'zh-CN',
         titleI18n,
         bodyI18n,
         message: localizedBody,

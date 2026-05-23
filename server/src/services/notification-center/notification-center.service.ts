@@ -880,7 +880,7 @@ const normalizeNotificationLocale = (value: unknown): string => {
   if (lower === 'ja' || lower === 'ja-jp' || lower.startsWith('ja-')) return 'ja-JP';
   if (lower === 'zh' || lower === 'zh-cn' || lower === 'zh-hans' || lower.startsWith('zh-')) return 'zh-CN';
   if (lower === 'en' || lower === 'en-us' || lower === 'en-gb' || lower.startsWith('en-')) return 'en';
-  return 'ja-JP';
+  return 'zh-CN';
 };
 
 const notificationLocaleFallbacks = (locale: string): string[] => {

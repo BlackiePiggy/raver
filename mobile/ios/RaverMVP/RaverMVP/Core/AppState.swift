@@ -1640,7 +1640,7 @@ final class AppState: ObservableObject {
         guard let latestPushToken, !latestPushToken.isEmpty else { return }
         let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? "ios-device-unknown"
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        let locale = Locale.preferredLanguages.first
+        let locale = AppLanguagePreference.current.effectiveLanguage.localeIdentifier
         do {
             try await service.registerDevicePushToken(
                 deviceID: deviceID,
