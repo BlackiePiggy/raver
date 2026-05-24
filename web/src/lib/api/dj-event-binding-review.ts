@@ -74,7 +74,7 @@ export const djEventBindingReviewApi = {
     const response = await authenticatedJsonFetch<{
       data: { items: DJEventBindingReviewJob[] };
       pagination?: DJEventBindingReviewPagination;
-    }>(getApiUrl(`/admin/dj-event-binding-review/jobs${buildQuery(params)}`));
+    }>(getApiUrl(`/v1/admin/dj-event-binding-review/jobs${buildQuery(params)}`));
     return {
       items: response.data.items,
       pagination: response.pagination,
@@ -83,14 +83,14 @@ export const djEventBindingReviewApi = {
 
   async detail(_token: string, jobId: string): Promise<DJEventBindingReviewJob> {
     const response = await authenticatedJsonFetch<{ data: DJEventBindingReviewJob }>(
-      getApiUrl(`/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}`)
+      getApiUrl(`/v1/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}`)
     );
     return response.data;
   },
 
   async applyExact(_token: string, jobId: string): Promise<DJEventBindingReviewJob> {
     const response = await authenticatedJsonFetch<{ data: DJEventBindingReviewJob }>(
-      getApiUrl(`/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}/apply-exact`),
+      getApiUrl(`/v1/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}/apply-exact`),
       {
         method: 'POST',
       }
@@ -100,7 +100,7 @@ export const djEventBindingReviewApi = {
 
   async applyCandidates(_token: string, jobId: string, candidateIds: string[]): Promise<DJEventBindingReviewJob> {
     const response = await authenticatedJsonFetch<{ data: DJEventBindingReviewJob }>(
-      getApiUrl(`/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}/apply`),
+      getApiUrl(`/v1/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}/apply`),
       {
         method: 'POST',
         body: JSON.stringify({ candidateIds }),
@@ -115,7 +115,7 @@ export const djEventBindingReviewApi = {
     input: { candidateIds?: string[]; dismissAll?: boolean }
   ): Promise<DJEventBindingReviewJob> {
     const response = await authenticatedJsonFetch<{ data: DJEventBindingReviewJob }>(
-      getApiUrl(`/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}/dismiss`),
+      getApiUrl(`/v1/admin/dj-event-binding-review/jobs/${encodeURIComponent(jobId)}/dismiss`),
       {
         method: 'POST',
         body: JSON.stringify(input),
