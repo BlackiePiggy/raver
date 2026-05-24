@@ -166,6 +166,13 @@ export default function AdminOverviewPage() {
             <div className="mt-2 text-sm leading-6 text-text-secondary">活动、DJ、Set、资讯、百科、榜单统一入口</div>
           </Link>
           {rolePolicy.canAccessOperations && (
+            <Link href="/admin/dj-binding-reviews" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">DJ Binding Review</div>
+              <div className="mt-2 text-lg font-semibold">DJ 阵容绑定审核</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">查看 DJ 自动命中的 Event 阵容候选，并一键 apply exact 结果</div>
+            </Link>
+          )}
+          {rolePolicy.canAccessOperations && (
             <Link href="/admin/festival-viewer.html#review" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
               <div className="text-sm text-text-secondary">Contribution Review</div>
               <div className="mt-2 text-lg font-semibold">内容贡献审核</div>

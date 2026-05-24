@@ -128,10 +128,10 @@ private struct JustifiedUILabelText: UIViewRepresentable {
     let font: UIFont
     let color: UIColor
     let lineSpacing: CGFloat
+    var lineLimit: Int? = nil
 
     func makeUIView(context: Context) -> UILabel {
         let label = UILabel()
-        label.numberOfLines = 0
         label.backgroundColor = .clear
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.required, for: .vertical)
@@ -152,6 +152,7 @@ private struct JustifiedUILabelText: UIViewRepresentable {
         paragraph.baseWritingDirection = .natural
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineSpacing = lineSpacing
+        uiView.numberOfLines = lineLimit ?? 0
 
         uiView.attributedText = NSAttributedString(
             string: text,
@@ -161,6 +162,94 @@ private struct JustifiedUILabelText: UIViewRepresentable {
                 .paragraphStyle: paragraph
             ]
         )
+    }
+}
+
+private struct ExpandableJustifiedText: View {
+    let text: String
+    let font: UIFont
+    let color: UIColor
+    let lineSpacing: CGFloat
+    let collapsedLineLimit: Int
+
+    @State private var isExpanded = false
+    @State private var availableWidth: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            JustifiedUILabelText(
+                text: text,
+                font: font,
+                color: color,
+                lineSpacing: lineSpacing,
+                lineLimit: isExpanded ? nil : collapsedLineLimit
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            updateAvailableWidth(proxy.size.width)
+                        }
+                        .onChange(of: proxy.size.width) { _, newWidth in
+                            updateAvailableWidth(newWidth)
+                        }
+                }
+            )
+
+            if shouldShowToggle {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button(isExpanded ? LT("收起", "Collapse", "閉じる") : LT("展开全文", "Expand", "全文を表示")) {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isExpanded.toggle()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+                }
+            }
+        }
+    }
+
+    private var shouldShowToggle: Bool {
+        guard availableWidth > 0 else { return false }
+        return measuredLineCount(for: availableWidth) > collapsedLineLimit
+    }
+
+    private func measuredLineCount(for width: CGFloat) -> Int {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .justified
+        paragraph.baseWritingDirection = .natural
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineSpacing = lineSpacing
+
+        let attributedText = NSAttributedString(
+            string: text,
+            attributes: [
+                .font: font,
+                .paragraphStyle: paragraph
+            ]
+        )
+
+        let boundingRect = attributedText.boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        )
+        let totalHeight = ceil(boundingRect.height)
+        let singleLineHeight = ceil(font.lineHeight)
+        let effectiveLineHeight = max(singleLineHeight, singleLineHeight + lineSpacing)
+        return max(1, Int(ceil((totalHeight + lineSpacing) / effectiveLineHeight)))
+    }
+
+    private func updateAvailableWidth(_ width: CGFloat) {
+        guard width > 0 else { return }
+        if abs(availableWidth - width) > 0.5 {
+            availableWidth = width
+        }
     }
 }
 
@@ -4136,14 +4225,14 @@ struct DJDetailView: View {
         }
 
         if let bio = dj.bio, !bio.isEmpty {
-            JustifiedUILabelText(
+            ExpandableJustifiedText(
                 text: bio,
                 font: UIFont.preferredFont(forTextStyle: .subheadline),
                 color: UIColor(RaverTheme.secondaryText),
-                lineSpacing: 2
+                lineSpacing: 2,
+                collapsedLineLimit: 7
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
         }
 
         socialLinks(dj)

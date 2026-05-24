@@ -73,7 +73,7 @@ struct GlobalSearchOverlayView: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                 }
 
-                Text(LT("搜索 Raver 里的内容", "Search across Raver", "Raver内を検索"))
+                Text(LT("搜索 RaveHub 里的内容", "Search across RaveHub", "RaveHub内を検索"))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(1)
@@ -207,7 +207,7 @@ struct GlobalSearchOverlayView: View {
 
     private var scopeHints: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(LT("在 Raver 探索", "Explore on Raver", "Raverで探索"))
+            Text(LT("在 RaveHub 探索", "Explore on RaveHub", "RaveHubで探索"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(RaverTheme.primaryText)
 

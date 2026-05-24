@@ -3651,6 +3651,7 @@ struct EventDetailView: View {
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 scheduleToolbar(searchResults: scheduleSearchIndexKey == searchIndexKey ? scheduleSearchIndex : [])
+                    .zIndex(1000)
 
                 if let selectedScheduleSearchResult {
                     selectedScheduleSearchResultCard(selectedScheduleSearchResult)
@@ -3698,6 +3699,7 @@ struct EventDetailView: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .zIndex(1000)
     }
 
     private var scheduleViewModePicker: some View {
@@ -8091,9 +8093,10 @@ private struct EventScheduleSearchPanel: View {
                 if !candidates.isEmpty {
                     candidateList
                         .padding(.top, 46)
-                        .zIndex(20)
+                        .zIndex(2000)
                 }
             }
+            .zIndex(candidates.isEmpty ? 0 : 2000)
         .onChange(of: text) { _, value in
             scheduleSearch(for: value)
         }
@@ -8216,7 +8219,7 @@ private struct EventScheduleSearchPanel: View {
     }
 
     private var searchFieldBackground: Color {
-        colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.74)
+        colorScheme == .dark ? Color(red: 0.10, green: 0.11, blue: 0.14) : Color.white
     }
 
     private var searchStroke: Color {
@@ -8224,7 +8227,7 @@ private struct EventScheduleSearchPanel: View {
     }
 
     private var candidateBackground: Color {
-        colorScheme == .dark ? Color(red: 0.09, green: 0.10, blue: 0.13) : Color(red: 0.965, green: 0.97, blue: 0.985)
+        colorScheme == .dark ? Color(red: 0.11, green: 0.12, blue: 0.15) : Color.white
     }
 
     private var candidateStroke: Color {
@@ -8232,7 +8235,7 @@ private struct EventScheduleSearchPanel: View {
     }
 
     private var candidatePanelBackground: Color {
-        colorScheme == .dark ? Color(red: 0.035, green: 0.04, blue: 0.055) : Color(red: 0.995, green: 0.997, blue: 1.0)
+        colorScheme == .dark ? Color(red: 0.05, green: 0.06, blue: 0.08) : Color.white
     }
 
     private var candidatePanelStroke: Color {

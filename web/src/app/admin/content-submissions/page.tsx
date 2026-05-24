@@ -27,6 +27,9 @@ export default function ContentSubmissionsAdminPage() {
           <p className="mt-3 text-sm leading-6 text-text-secondary">
             用户共建内容现在会按 Event / DJ / Set / Brand / Label / News / ID / Rating 的实际结构渲染，审核人可以逐字段写修改意见，再统一通过或拒绝。
           </p>
+          <p className="mt-3 text-sm leading-6 text-text-secondary">
+            如果要处理 DJ 上传后与活动阵容的自动命中结果，请前往单独的 DJ 绑定审核台进行 apply / dismiss。
+          </p>
           <div className="mt-5 flex gap-3">
             {isAuthorized ? (
               <Link href="/admin/festival-viewer.html#review" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
@@ -35,6 +38,11 @@ export default function ContentSubmissionsAdminPage() {
             ) : (
               <Link href="/login" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
                 去登录
+              </Link>
+            )}
+            {isAuthorized && (
+              <Link href="/admin/dj-binding-reviews" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+                打开 DJ 绑定审核台
               </Link>
             )}
             <Link href="/admin" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
