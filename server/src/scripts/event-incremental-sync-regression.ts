@@ -376,6 +376,58 @@ const runSingleStageLegacyRenameRegression = async (userId: string): Promise<voi
   }
 };
 
+const runPatchClearAllTimetableRegression = async (eventId: string, userId: string): Promise<void> => {
+  logStep('patch clear all timetable path');
+  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  const eventBefore = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { revision: true },
+  });
+
+  assert(before.stageOrder.length > 0, 'patch clear all regression requires seeded stages');
+  assert(before.slots.length > 0, 'patch clear all regression requires seeded slots');
+
+  await createOrUpdateEventFromSubmission(prisma, {
+    targetEventId: eventId,
+    baseEventRevision: eventBefore.revision,
+    editMode: 'patch',
+    name: `Event Incremental Clear All ${Date.now()}`,
+    startDate: '2026-08-01',
+    endDate: '2026-08-02',
+    timeZone: 'Asia/Shanghai',
+    imageAssets: [
+      {
+        type: 'poster',
+        label: 'POSTER',
+        url: 'https://example.com/regression-poster.jpg',
+      },
+    ],
+    lineupChanges: before.artists
+      .filter((artist) => Boolean(artist.id))
+      .map((artist) => ({
+        op: 'delete',
+        artistId: artist.id as string,
+      })),
+    timetableChanges: before.slots
+      .filter((slot) => Boolean(slot.id))
+      .map((slot) => ({
+        op: 'delete',
+        slotId: slot.id as string,
+      })),
+    stageChanges: before.stageOrder.map((stageName) => ({
+      op: 'delete',
+      name: stageName,
+      confirmDeleteLinkedPerformances: true,
+    })),
+    stageOrder: before.stageOrder,
+  }, userId);
+
+  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+  assert(after.artists.length === 0, 'patch clear all regression did not remove artists');
+  assert(after.slots.length === 0, 'patch clear all regression did not remove slots');
+  assert(after.stageOrder.length === 0, 'patch clear all regression did not remove stage order');
+};
+
 const runTimetableSourceOfTruthRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('timetable source of truth patch path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
@@ -777,6 +829,7 @@ const main = async (): Promise<void> => {
     await runTimetableSourceOfTruthRegression(eventId, userId);
     await runNormalReviewApprovalRegression(eventId, userId);
     await runFullPayloadTargetedSyncRegression(eventId, userId);
+    await runPatchClearAllTimetableRegression(eventId, userId);
     await runStaleEditConflictRegression(eventId, userId);
     await runSingleStageLegacyRenameRegression(userId);
     await runCreateSubmissionIdempotencyRegression(userId);

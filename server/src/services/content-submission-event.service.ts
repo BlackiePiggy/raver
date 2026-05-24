@@ -955,9 +955,6 @@ const syncSubmissionEventLineupAndTimetable = async (
 ): Promise<void> => {
   if (cleanText(payload.editMode) === 'patch') {
     const patched = await applySubmissionLineupPatch(tx, eventId, payload, eventStartDate, dayRolloverHour, timeZone);
-    if (patched.slots.length === 0 && patched.artists.length === 0 && patched.stageOrder.length === 0) {
-      return;
-    }
     await syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
     return;
   }
@@ -974,11 +971,6 @@ const syncSubmissionEventLineupAndTimetable = async (
     : normalizeCanonicalLineupArtists(submittedArtists, slots);
   const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
-
-  if (slots.length === 0 && artists.length === 0 && stageOrder.length === 0) {
-    return;
-  }
-
   await syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
 };
 
