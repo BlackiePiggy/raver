@@ -1314,6 +1314,11 @@ final class EventUploadFlowViewModel: ObservableObject {
         return trimmed.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : trimmed
     }
 
+    private func normalizedStageName(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? LT("主舞台", "Main Stage", "メインステージ") : trimmed
+    }
+
     func removeStage(at index: Int) {
         guard draft.stageEntries.indices.contains(index) else { return }
         let removedStage = normalizedStageName(at: index)
@@ -1322,10 +1327,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             draft.timetableSlots.removeAll()
         } else {
             draft.timetableSlots.removeAll { slot in
-                let stage = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? LT("主舞台", "Main Stage", "メインステージ")
-                    : slot.stageName
-                return stage == removedStage
+                normalizedStageName(slot.stageName).localizedCaseInsensitiveCompare(removedStage) == .orderedSame
             }
         }
         draft.dirty = true
@@ -1357,6 +1359,14 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     var canOpenTimetableWeekEditor: Bool {
         stageNameValidationMessage == nil
+    }
+
+    func clearAllTimetableData() {
+        draft.stageEntries.removeAll()
+        draft.timetableSlots.removeAll()
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track("event_upload_v2_timetable_cleared_all")
     }
 
     func tapLineupImportPlaceholder() {

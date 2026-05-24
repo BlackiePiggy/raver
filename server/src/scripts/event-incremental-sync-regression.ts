@@ -283,6 +283,99 @@ const runManualReviewPatchRegression = async (eventId: string, userId: string): 
   await assertExistingRowsStable(eventId, beforeArtistIds, beforePerformanceIds);
 };
 
+const runSingleStageLegacyRenameRegression = async (userId: string): Promise<void> => {
+  logStep('single stage legacy rename compatibility path');
+  const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
+  let eventId = '';
+
+  try {
+    const event = await prisma.event.create({
+      data: {
+        organizerId: userId,
+        slug: `event-incremental-single-stage-${suffix}`,
+        name: `Event Incremental Single Stage ${suffix}`,
+        city: 'Shanghai',
+        country: 'China',
+        startDate: new Date('2026-11-01T00:00:00.000Z'),
+        endDate: new Date('2026-11-01T23:59:59.000Z'),
+        timeZone: 'Asia/Shanghai',
+        coverImageUrl: 'https://example.com/regression-cover.jpg',
+        lineupImageUrl: 'https://example.com/regression-lineup.jpg',
+        imageAssets: [
+          {
+            type: 'poster',
+            label: 'POSTER',
+            url: 'https://example.com/regression-poster.jpg',
+          },
+        ],
+        status: 'upcoming',
+        isVerified: true,
+      },
+      select: { id: true, revision: true },
+    });
+    eventId = event.id;
+
+    const artist = {
+      id: crypto.randomUUID(),
+      djId: null,
+      memberDjIds: [],
+      memberNames: ['Regression Legacy Rename DJ'],
+      djName: 'Regression Legacy Rename DJ',
+      sortOrder: 1,
+    } satisfies CanonicalLineupArtistInput;
+    const slot = {
+      id: crypto.randomUUID(),
+      lineupArtistId: artist.id,
+      djId: null,
+      memberDjIds: [],
+      djName: artist.djName,
+      stageName: 'Main Stage',
+      festivalDayIndex: 1,
+      startTime: new Date('2026-11-01T12:00:00.000Z'),
+      endTime: new Date('2026-11-01T13:00:00.000Z'),
+      sortOrder: 1,
+    } satisfies CanonicalLineupSlotInput;
+
+    await prisma.$transaction(async (tx) => {
+      await syncCanonicalEventLineupAndTimetable(tx, eventId, [slot], [artist], ['Main Stage']);
+    });
+
+    await createOrUpdateEventFromSubmission(prisma, {
+      targetEventId: eventId,
+      baseEventRevision: event.revision,
+      editMode: 'patch',
+      name: `Event Incremental Single Stage Rename ${suffix}`,
+      startDate: '2026-11-01',
+      endDate: '2026-11-01',
+      timeZone: 'Asia/Shanghai',
+      imageAssets: [
+        {
+          type: 'poster',
+          label: 'POSTER',
+          url: 'https://example.com/regression-poster.jpg',
+        },
+      ],
+      stageChanges: [
+        {
+          op: 'rename',
+          name: '百威风暴电音节主舞台',
+          nextName: 'Single Stage From Legacy Rename',
+        },
+      ],
+      stageOrder: ['Main Stage'],
+    }, userId);
+
+    const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
+    assert(after.stageOrder.length === 1, 'single stage legacy rename changed stage count');
+    assert(after.stageOrder[0] === 'Single Stage From Legacy Rename', 'single stage legacy rename did not update stage order');
+    assert(after.slots.every((candidate) => candidate.stageName === 'Single Stage From Legacy Rename'), 'single stage legacy rename did not relabel slot stages');
+  } finally {
+    if (eventId) {
+      await prisma.event.deleteMany({ where: { id: eventId } });
+    }
+  }
+};
+
 const runTimetableSourceOfTruthRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('timetable source of truth patch path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
@@ -685,6 +778,7 @@ const main = async (): Promise<void> => {
     await runNormalReviewApprovalRegression(eventId, userId);
     await runFullPayloadTargetedSyncRegression(eventId, userId);
     await runStaleEditConflictRegression(eventId, userId);
+    await runSingleStageLegacyRenameRegression(userId);
     await runCreateSubmissionIdempotencyRegression(userId);
     await runAutoApprovalResumeRegression();
     logStep('passed', { eventId });

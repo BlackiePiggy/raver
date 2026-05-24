@@ -752,6 +752,9 @@ const requirePatchId = (row: Record<string, unknown>, field: string, label: stri
   return id;
 };
 
+const normalizedStageText = (value: string | null | undefined): string =>
+  cleanText(value)?.toLocaleLowerCase() || '';
+
 const applySubmissionLineupPatch = async (
   tx: Prisma.TransactionClient,
   eventId: string,
@@ -885,25 +888,37 @@ const applySubmissionLineupPatch = async (
     const op = cleanText(rawChange.op);
     const stageName = cleanText(rawChange.name);
     if (!stageName) throw new Error('舞台变更缺少 stage name');
-    const normalizedStageName = stageName.toLocaleLowerCase();
+    const normalizedStageName = normalizedStageText(stageName);
 
     if (op === 'delete') {
       if (rawChange.confirmDeleteLinkedPerformances !== true) {
         throw new Error(`删除舞台「${stageName}」会删除该舞台下的全部演出，请确认后再提交`);
       }
-      stageOrder = stageOrder.filter((name) => name.toLocaleLowerCase() !== normalizedStageName);
-      slots = slots.filter((slot) => (slot.stageName || '').toLocaleLowerCase() !== normalizedStageName);
+      stageOrder = stageOrder.filter((name) => normalizedStageText(name) !== normalizedStageName);
+      slots = slots.filter((slot) => normalizedStageText(slot.stageName) !== normalizedStageName);
       continue;
     }
 
     if (op === 'rename') {
       const nextName = cleanText(rawChange.nextName);
       if (!nextName) throw new Error('舞台重命名缺少新名称');
-      if (!stageOrder.some((name) => name.toLocaleLowerCase() === normalizedStageName)) {
+      const hasExactStageMatch = stageOrder.some((name) => normalizedStageText(name) === normalizedStageName);
+      const canFallbackSingleStageRename = !hasExactStageMatch && stageOrder.length === 1;
+      if (!hasExactStageMatch && !canFallbackSingleStageRename) {
         throw new Error(`舞台不存在或已变化，无法重命名：${stageName}`);
       }
-      stageOrder = stageOrder.map((name) => name.toLocaleLowerCase() === normalizedStageName ? nextName : name);
-      slots = slots.map((slot) => (slot.stageName || '').toLocaleLowerCase() === normalizedStageName ? { ...slot, stageName: nextName } : slot);
+      if (canFallbackSingleStageRename) {
+        const currentOnlyStageName = stageOrder[0] || '';
+        const normalizedCurrentOnlyStage = normalizedStageText(currentOnlyStageName);
+        stageOrder = [nextName];
+        slots = slots.map((slot) => normalizedStageText(slot.stageName) === normalizedCurrentOnlyStage
+          ? { ...slot, stageName: nextName }
+          : slot
+        );
+        continue;
+      }
+      stageOrder = stageOrder.map((name) => normalizedStageText(name) === normalizedStageName ? nextName : name);
+      slots = slots.map((slot) => normalizedStageText(slot.stageName) === normalizedStageName ? { ...slot, stageName: nextName } : slot);
       continue;
     }
 

@@ -111,6 +111,8 @@ struct EventUploadFlowView: View {
     @State private var showAdvancedRollover = false
     @State private var activeWeekDatePicker: WeekDatePickerTarget?
     @State private var keyboardCandidateSpacing: CGFloat = 0
+    @State private var stageIndexPendingDeletion: Int?
+    @State private var showClearAllTimetableConfirmation = false
 
     init(
         mode: EventUploadMode = .create,
@@ -241,6 +243,38 @@ struct EventUploadFlowView: View {
             Button(LT("继续编辑", "Keep Editing", "編集を続ける"), role: .cancel) {}
         } message: {
             Text(LT("未提交的内容会保存在本地草稿中。", "Unsubmitted changes can be kept as a local draft.", "未送信の内容はローカル下書きとして保存できます。"))
+        }
+        .confirmationDialog(
+            LT("删除这个舞台？", "Delete this stage?", "このステージを削除しますか？"),
+            isPresented: Binding(
+                get: { stageIndexPendingDeletion != nil },
+                set: { if !$0 { stageIndexPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(LT("删除舞台和对应时间表", "Delete stage and its timetable", "ステージと関連タイムテーブルを削除"), role: .destructive) {
+                if let index = stageIndexPendingDeletion {
+                    viewModel.removeStage(at: index)
+                }
+                stageIndexPendingDeletion = nil
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
+                stageIndexPendingDeletion = nil
+            }
+        } message: {
+            Text(LT("这个舞台下的所有时间表节目都会一起删除，不会保留。", "All timetable sets under this stage will be deleted too.", "このステージ配下のタイムテーブル出演はすべて一緒に削除されます。"))
+        }
+        .confirmationDialog(
+            LT("清空全部时间表？", "Clear all timetable data?", "タイムテーブルをすべて削除しますか？"),
+            isPresented: $showClearAllTimetableConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(LT("删除全部舞台和时间表", "Delete all stages and timetable", "全ステージとタイムテーブルを削除"), role: .destructive) {
+                viewModel.clearAllTimetableData()
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+        } message: {
+            Text(LT("会一次性清空当前草稿里的全部舞台信息和全部时间表信息，不留任何条目。", "This removes every stage and every timetable item from the current draft.", "現在の下書きにある全ステージ情報と全タイムテーブル情報をまとめて削除します。"))
         }
     }
 
@@ -748,6 +782,20 @@ struct EventUploadFlowView: View {
             }
             .buttonStyle(.plain)
 
+            if !viewModel.draft.stageEntries.isEmpty || !viewModel.draft.timetableSlots.isEmpty {
+                Button {
+                    showClearAllTimetableConfirmation = true
+                } label: {
+                    Label(LT("一键删除全部时间表", "Clear All Timetable", "タイムテーブルを全削除"), systemImage: "trash.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.red, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
             if viewModel.draft.stageEntries.isEmpty {
                 Text(LT("如果这一场没有时间表，可以直接跳过这一页。需要填写时间表时，再添加舞台即可；名称留空会默认显示为主舞台。", "You can skip this step if there is no timetable yet. Add a stage only when you want to fill schedule details; empty names default to Main Stage.", "タイムテーブルが未定ならこのページはそのままスキップできます。入力したいときだけステージを追加してください。空欄名はメインステージとして扱われます。"))
                     .font(.subheadline)
@@ -799,7 +847,7 @@ struct EventUploadFlowView: View {
                             .disabled(index == viewModel.draft.stageEntries.count - 1)
 
                             Button {
-                                viewModel.removeStage(at: index)
+                                stageIndexPendingDeletion = index
                             } label: {
                                 Image(systemName: "trash")
                                     .font(.subheadline.weight(.bold))
