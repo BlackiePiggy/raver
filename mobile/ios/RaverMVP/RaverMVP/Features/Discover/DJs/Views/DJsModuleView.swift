@@ -1268,13 +1268,13 @@ private struct DJWebCard: View {
 
                     HStack(spacing: 6) {
                         if dj.spotifyId != nil {
-                            DJPlatformIcon(platform: .spotify, size: 24, logoPadding: 5)
+                            DJPlatformIcon(platform: .spotify, size: 20)
                         }
                         if dj.soundcloudUrl != nil {
-                            DJPlatformIcon(platform: .soundcloud, size: 24, logoPadding: 5)
+                            DJPlatformIcon(platform: .soundcloud, size: 20)
                         }
                         if dj.instagramUrl != nil {
-                            DJPlatformIcon(platform: .instagram, size: 24, logoPadding: 5)
+                            DJPlatformIcon(platform: .instagram, size: 20)
                         }
                     }
                     .lineLimit(1)
@@ -1389,31 +1389,12 @@ private enum DJPlatformLogo {
 private struct DJPlatformIcon: View {
     let platform: DJPlatformLogo
     var size: CGFloat = 36
-    var logoPadding: CGFloat = 7
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            platform.color.opacity(0.96),
-                            platform.color.opacity(0.58)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            Circle()
-                .stroke(Color.white.opacity(0.24), lineWidth: 1)
-
-            ImageLoaderView(urlString: platform.logoURL, resizingMode: .fit, showsIndicator: false)
-                .padding(logoPadding)
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .shadow(color: platform.color.opacity(0.20), radius: size * 0.22, x: 0, y: size * 0.10)
-        .accessibilityHidden(true)
+        ImageLoaderView(urlString: platform.logoURL, resizingMode: .fill, showsIndicator: false)
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .accessibilityHidden(true)
     }
 }
 
@@ -3887,7 +3868,7 @@ struct DJDetailView: View {
                 Button {
                     openURL(link.url)
                 } label: {
-                    DJPlatformIcon(platform: link.platform, size: 36, logoPadding: 7)
+                    DJPlatformIcon(platform: link.platform, size: 30)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(link.platform.accessibilityTitle)

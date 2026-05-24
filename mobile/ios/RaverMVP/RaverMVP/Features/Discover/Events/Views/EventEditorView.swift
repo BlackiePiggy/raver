@@ -1507,7 +1507,7 @@ struct EventEditorView: View {
                             .disabled(index >= stageEntries.count - 1)
 
                             Button(role: .destructive) {
-                                stageEntries.remove(at: index)
+                                removeStageEntry(at: index)
                             } label: {
                                 Image(systemName: "trash")
                             }
@@ -3360,7 +3360,9 @@ struct EventEditorView: View {
                         status: resolvedStatus,
                         clearCityI18n: shouldClearCityI18n,
                         clearCountryI18n: shouldClearCountryI18n,
-                        clearManualLocation: shouldClearManualLocation
+                        clearManualLocation: shouldClearManualLocation,
+                        clearStageOrder: normalizedStageEntries.isEmpty,
+                        clearLineupSlots: lineupSlotsInput.isEmpty
                     )
                 )
             }
@@ -4388,6 +4390,24 @@ struct EventEditorView: View {
         lineupEntries.removeAll { $0.id == id }
         lineupTimeDraftBySlotID[id] = nil
         clearSearchState(for: performerIDs)
+    }
+
+    private func removeStageEntry(at index: Int) {
+        guard stageEntries.indices.contains(index) else { return }
+        let removedStage = stageEntries.remove(at: index).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !removedStage.isEmpty else { return }
+
+        let removedIDs = lineupEntries
+            .filter { $0.stageName.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(removedStage) == .orderedSame }
+            .flatMap { $0.performers.map(\.id) }
+
+        lineupEntries.removeAll {
+            $0.stageName.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(removedStage) == .orderedSame
+        }
+        lineupTimeDraftBySlotID = lineupTimeDraftBySlotID.filter { id, _ in
+            lineupEntries.contains(where: { $0.id == id })
+        }
+        clearSearchState(for: removedIDs)
     }
 
     private func sortLineupEntriesForDisplay() {

@@ -115,11 +115,42 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private static func canRestoreEditDraft(_ draft: EventUploadDraft, for event: WebEvent) -> Bool {
-        guard let draftRevision = draft.incrementalBaseline?.eventRevision,
+        guard let baseline = draft.incrementalBaseline,
+              let draftRevision = baseline.eventRevision,
               let eventRevision = event.revision else {
             return false
         }
-        return draftRevision == eventRevision
+        guard draftRevision == eventRevision else { return false }
+
+        let baselineStages = normalizedRestoreStages(baseline.stageOrder, hasSlots: !baseline.lineupSlots.isEmpty)
+        let eventStages = normalizedRestoreStages(event.stageOrder ?? [], hasSlots: !event.lineupSlots.isEmpty)
+        guard baselineStages == eventStages else { return false }
+
+        let baselineSlotIDs = baseline.lineupSlots.compactMap {
+            $0.id?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        }
+        let eventSlotIDs = event.lineupSlots.compactMap {
+            $0.id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        }
+        guard baselineSlotIDs == eventSlotIDs else { return false }
+
+        let baselineArtistIDs = baseline.lineupArtists.compactMap {
+            $0.id?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        }
+        let eventArtistIDs = (event.lineupArtists ?? []).compactMap {
+            $0.id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        }
+        return baselineArtistIDs == eventArtistIDs
+    }
+
+    private static func normalizedRestoreStages(_ stages: [String], hasSlots: Bool) -> [String] {
+        let normalized = stages.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        if normalized.isEmpty, hasSlots {
+            return [""]
+        }
+        return normalized
     }
 
     func advance() {

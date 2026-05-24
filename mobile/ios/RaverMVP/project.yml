@@ -27,7 +27,7 @@ targets:
     info:
       path: RaverMVP/Info.plist
       properties:
-        CFBundleDisplayName: Raver MVP
+        CFBundleDisplayName: RaveHub
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

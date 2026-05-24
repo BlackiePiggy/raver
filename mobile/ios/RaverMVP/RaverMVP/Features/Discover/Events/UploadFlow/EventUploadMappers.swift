@@ -125,7 +125,9 @@ enum EventUploadMappers {
             clearWikiFestivalId: create.wikiFestivalId == nil,
             clearLocationPoint: create.locationPoint == nil,
             clearLatitude: create.latitude == nil,
-            clearLongitude: create.longitude == nil
+            clearLongitude: create.longitude == nil,
+            clearStageOrder: create.stageOrder == nil,
+            clearLineupSlots: create.lineupSlots == nil
         )
         if let patch = patchChanges(from: draft) {
             input.editMode = "patch"
@@ -134,6 +136,9 @@ enum EventUploadMappers {
             input.lineupChanges = patch.lineupChanges.isEmpty ? nil : patch.lineupChanges
             input.timetableChanges = patch.timetableChanges.isEmpty ? nil : patch.timetableChanges
             input.stageChanges = patch.stageChanges.isEmpty ? nil : patch.stageChanges
+            input.clearLineupSlots = false
+            input.clearTimetableChanges = patch.timetableChanges.isEmpty
+            input.clearStageChanges = patch.stageChanges.isEmpty
         }
         return input
     }

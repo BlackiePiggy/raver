@@ -193,6 +193,7 @@ struct DJUploadDraft: Identifiable, Hashable, Codable {
         draft.neteaseUrl = dj.neteaseUrl ?? ""
         draft.qqMusicUrl = dj.qqMusicUrl ?? ""
         draft.website = dj.website ?? ""
+        draft.otherPlatformUrl = dj.otherPlatformUrl ?? ""
         draft.trackCount = dj.trackCount.map(String.init) ?? ""
         draft.playlistCount = dj.playlistCount.map(String.init) ?? ""
         draft.soundCloudFollowers = dj.soundCloudFollowers.map(String.init) ?? ""

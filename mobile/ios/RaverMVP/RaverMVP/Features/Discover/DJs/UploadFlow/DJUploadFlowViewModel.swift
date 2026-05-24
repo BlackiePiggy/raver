@@ -288,32 +288,34 @@ final class DJUploadFlowViewModel: ObservableObject {
     private func makeUpdateInput() -> UpdateDJInput {
         UpdateDJInput(
             name: draft.primaryName,
-            nameI18n: webBiText(from: draft.name),
-            aliases: normalizedList(draft.aliases),
-            genres: normalizedList(draft.genres),
-            bio: draft.bio.primaryValue(preferredLanguage: draft.preferredLanguage).nilIfBlank,
-            bioI18n: webBiText(from: draft.bio),
-            avatarUrl: draft.avatar?.remoteURL,
-            bannerUrl: draft.banner?.remoteURL,
-            country: draft.country.primaryValue(preferredLanguage: draft.preferredLanguage).nilIfBlank,
-            countryI18n: webBiText(from: draft.country),
-            spotifyId: draft.spotifyId.nilIfBlank,
-            appleMusicId: draft.appleMusicId.nilIfBlank,
-            spotifyUrl: draft.spotifyUrl.nilIfBlank,
-            spotifyFollowers: intValue(draft.spotifyFollowers),
-            instagramUrl: draft.instagramUrl.nilIfBlank,
-            facebookUrl: draft.facebookUrl.nilIfBlank,
-            soundcloudUrl: draft.soundcloudUrl.nilIfBlank,
-            soundcloudId: draft.soundcloudId.nilIfBlank,
-            twitterUrl: draft.twitterUrl.nilIfBlank,
-            youtubeUrl: draft.youtubeUrl.nilIfBlank,
-            neteaseUrl: draft.neteaseUrl.nilIfBlank,
-            qqMusicUrl: draft.qqMusicUrl.nilIfBlank,
-            website: draft.website.nilIfBlank,
-            trackCount: intValue(draft.trackCount),
-            playlistCount: intValue(draft.playlistCount),
-            soundCloudFollowers: intValue(draft.soundCloudFollowers),
-            soundCloudFavorites: intValue(draft.soundCloudFavorites),
+            nameI18n: webBiText(from: draft.name, includeEmptyForEdit: true),
+            // For edits, send [] or null explicitly so cleared fields are removed on the backend.
+            aliases: normalizedList(draft.aliases) ?? [],
+            genres: normalizedList(draft.genres) ?? [],
+            bio: blankableString(draft.bio.primaryValue(preferredLanguage: draft.preferredLanguage)),
+            bioI18n: webBiText(from: draft.bio, includeEmptyForEdit: true),
+            avatarUrl: blankableImageURL(draft.avatar),
+            bannerUrl: blankableImageURL(draft.banner),
+            country: blankableString(draft.country.primaryValue(preferredLanguage: draft.preferredLanguage)),
+            countryI18n: webBiText(from: draft.country, includeEmptyForEdit: true),
+            spotifyId: blankableString(draft.spotifyId),
+            appleMusicId: blankableString(draft.appleMusicId),
+            spotifyUrl: blankableString(draft.spotifyUrl),
+            spotifyFollowers: blankableInt(draft.spotifyFollowers),
+            instagramUrl: blankableString(draft.instagramUrl),
+            facebookUrl: blankableString(draft.facebookUrl),
+            soundcloudUrl: blankableString(draft.soundcloudUrl),
+            soundcloudId: blankableString(draft.soundcloudId),
+            twitterUrl: blankableString(draft.twitterUrl),
+            youtubeUrl: blankableString(draft.youtubeUrl),
+            neteaseUrl: blankableString(draft.neteaseUrl),
+            qqMusicUrl: blankableString(draft.qqMusicUrl),
+            website: blankableString(draft.website),
+            otherPlatformUrl: blankableString(draft.otherPlatformUrl),
+            trackCount: blankableInt(draft.trackCount),
+            playlistCount: blankableInt(draft.playlistCount),
+            soundCloudFollowers: blankableInt(draft.soundCloudFollowers),
+            soundCloudFavorites: blankableInt(draft.soundCloudFavorites),
             isVerified: true
         )
     }
@@ -331,8 +333,20 @@ final class DJUploadFlowViewModel: ObservableObject {
         return Int(trimmed)
     }
 
-    private func webBiText(from fields: EventUploadLocalizedFields) -> WebBiText? {
-        guard fields.hasAnyValue else { return nil }
+    private func blankableString(_ value: String) -> String? {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+    }
+
+    private func blankableInt(_ value: String) -> Int? {
+        intValue(value)
+    }
+
+    private func blankableImageURL(_ image: DJUploadImageDraft?) -> String? {
+        image?.remoteURL
+    }
+
+    private func webBiText(from fields: EventUploadLocalizedFields, includeEmptyForEdit: Bool = false) -> WebBiText? {
+        guard includeEmptyForEdit || fields.hasAnyValue else { return nil }
         let primary = fields.primaryValue(preferredLanguage: draft.preferredLanguage)
         return WebBiText(
             en: fields.en.nilIfBlank ?? fields.enFull.nilIfBlank ?? primary,

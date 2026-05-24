@@ -120,7 +120,7 @@ struct DJUploadFlowView: View {
         }
     }
 
-    private var editorContent: some View {
+    private var editorContent:                                                                                                                                                                                                                                                                                                                                                                  some View {
         VStack(spacing: 0) {
             progressHeader
             ScrollView {
@@ -669,55 +669,11 @@ struct DJUploadFlowView: View {
     }
 
     private func linkField(_ title: String, _ keyPath: WritableKeyPath<DJUploadDraft, String>) -> some View {
-        let text = textBinding(keyPath)
-        let platform = DJUploadLinkPlatform(title: title)
-
-        return VStack(alignment: .leading, spacing: 8) {
-            fieldTitle(title, isRequired: false)
-
-            HStack(spacing: 10) {
-                platformLogo(platform)
-
-                HStack(spacing: 8) {
-                    TextField(title, text: text)
-                        .keyboardType(.URL)
-                        .font(.body)
-                        .foregroundStyle(RaverTheme.primaryText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .lineLimit(1)
-
-                    linkFieldActionButton(
-                        systemImage: "doc.on.clipboard",
-                        accessibilityLabel: LT("粘贴", "Paste", "貼り付け")
-                    ) {
-                        if let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
-                           !pasted.isEmpty {
-                            text.wrappedValue = pasted
-                        }
-                    }
-
-                    linkFieldActionButton(
-                        systemImage: "xmark.circle.fill",
-                        accessibilityLabel: LT("清空", "Clear", "クリア")
-                    ) {
-                        text.wrappedValue = ""
-                    }
-                    .opacity(text.wrappedValue.isEmpty ? 0.38 : 1)
-                    .disabled(text.wrappedValue.isEmpty)
-                }
-                .padding(.leading, 12)
-                .padding(.trailing, 8)
-                .padding(.vertical, 8)
-                .frame(minHeight: 48)
-                .background(fieldBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(RaverTheme.cardBorder.opacity(0.76), lineWidth: 1)
-                )
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        DJUploadLinkField(
+            title: title,
+            text: textBinding(keyPath),
+            platform: DJUploadLinkPlatform(title: title)
+        )
     }
 
     private func statField(_ title: String, _ keyPath: WritableKeyPath<DJUploadDraft, String>) -> some View {
@@ -787,57 +743,6 @@ struct DJUploadFlowView: View {
 
     private var fieldBackground: some ShapeStyle {
         RaverTheme.card
-    }
-
-    private func platformLogo(_ platform: DJUploadLinkPlatform) -> some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            platform.color.opacity(0.98),
-                            platform.color.opacity(0.62)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            Circle()
-                .stroke(Color.white.opacity(0.28), lineWidth: 1)
-
-            if let logoURL = platform.logoURL {
-                ImageLoaderView(urlString: logoURL, resizingMode: .fit, showsIndicator: false)
-                    .padding(8)
-            } else if let symbol = platform.systemImage {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .black))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white)
-            } else {
-                Text(platform.shortTitle)
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: 42, height: 42)
-        .shadow(color: platform.color.opacity(0.24), radius: 10, x: 0, y: 5)
-        .accessibilityHidden(true)
-    }
-
-    private func linkFieldActionButton(
-        systemImage: String,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(RaverTheme.secondaryText)
-                .frame(width: 28, height: 28)
-                .background(RaverTheme.background.opacity(0.86), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
     }
 
     private func inlineInfoCard(_ message: String) -> some View {
@@ -1014,6 +919,110 @@ private struct DJUploadLinkPlatform {
             systemImage = "link"
             logoURL = nil
         }
+    }
+}
+
+private struct DJUploadLinkField: View {
+    let title: String
+    @Binding var text: String
+    let platform: DJUploadLinkPlatform
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldTitle
+
+            HStack(spacing: 10) {
+                platformLogo
+                inputContainer
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var fieldTitle: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(RaverTheme.secondaryText)
+    }
+
+    private var inputContainer: some View {
+        HStack(spacing: 8) {
+            TextField(title, text: $text)
+                .keyboardType(.URL)
+                .font(.body)
+                .foregroundStyle(RaverTheme.primaryText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .lineLimit(1)
+
+            actionButton(
+                systemImage: "doc.on.clipboard",
+                accessibilityLabel: LT("粘贴", "Paste", "貼り付け")
+            ) {
+                if let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !pasted.isEmpty {
+                    text = pasted
+                }
+            }
+
+            actionButton(
+                systemImage: "xmark.circle.fill",
+                accessibilityLabel: LT("清空", "Clear", "クリア")
+            ) {
+                text = ""
+            }
+            .opacity(text.isEmpty ? 0.38 : 1)
+            .disabled(text.isEmpty)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .frame(minHeight: 48)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.76), lineWidth: 1)
+        )
+    }
+
+    private var platformLogo: some View {
+        Group {
+            if let logoURL = platform.logoURL {
+                ImageLoaderView(urlString: logoURL, resizingMode: .fill, showsIndicator: false)
+            } else if let symbol = platform.systemImage {
+                Image(systemName: symbol)
+                    .font(.system(size: 18, weight: .black))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.card)
+            } else {
+                Text(platform.shortTitle)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.card)
+            }
+        }
+        .frame(width: 36, height: 36)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    private func actionButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(RaverTheme.secondaryText)
+                .frame(width: 28, height: 28)
+                .background(RaverTheme.background.opacity(0.86), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

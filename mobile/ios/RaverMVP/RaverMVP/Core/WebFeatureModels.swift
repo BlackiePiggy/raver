@@ -1048,6 +1048,10 @@ struct UpdateEventInput: Encodable {
     var clearLocationPoint: Bool = false
     var clearLatitude: Bool = false
     var clearLongitude: Bool = false
+    var clearStageOrder: Bool = false
+    var clearLineupSlots: Bool = false
+    var clearTimetableChanges: Bool = false
+    var clearStageChanges: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -1165,18 +1169,34 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(startTime, forKey: .startTime)
         try container.encodeIfPresent(endTime, forKey: .endTime)
         try container.encodeIfPresent(dayRolloverHour, forKey: .dayRolloverHour)
-        try container.encodeIfPresent(stageOrder, forKey: .stageOrder)
+        if clearStageOrder {
+            try container.encodeNil(forKey: .stageOrder)
+        } else {
+            try container.encodeIfPresent(stageOrder, forKey: .stageOrder)
+        }
         try container.encodeIfPresent(coverImageUrl, forKey: .coverImageUrl)
         try container.encodeIfPresent(lineupImageUrl, forKey: .lineupImageUrl)
         try container.encodeIfPresent(imageAssets, forKey: .imageAssets)
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
         try container.encodeIfPresent(lineupArtists, forKey: .lineupArtists)
-        try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
+        if clearLineupSlots {
+            try container.encodeNil(forKey: .lineupSlots)
+        } else {
+            try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
+        }
         try container.encodeIfPresent(baseEventRevision, forKey: .baseEventRevision)
         try container.encodeIfPresent(editMode, forKey: .editMode)
         try container.encodeIfPresent(lineupChanges, forKey: .lineupChanges)
-        try container.encodeIfPresent(timetableChanges, forKey: .timetableChanges)
-        try container.encodeIfPresent(stageChanges, forKey: .stageChanges)
+        if clearTimetableChanges {
+            try container.encodeNil(forKey: .timetableChanges)
+        } else {
+            try container.encodeIfPresent(timetableChanges, forKey: .timetableChanges)
+        }
+        if clearStageChanges {
+            try container.encodeNil(forKey: .stageChanges)
+        } else {
+            try container.encodeIfPresent(stageChanges, forKey: .stageChanges)
+        }
         try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
         try container.encodeIfPresent(status, forKey: .status)
     }
@@ -1212,6 +1232,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var neteaseUrl: String? = nil
     var qqMusicUrl: String? = nil
     var website: String? = nil
+    var otherPlatformUrl: String? = nil
     var isVerified: Bool?
     var followerCount: Int?
     var trackCount: Int? = nil
@@ -2240,7 +2261,7 @@ struct ImportManualDJResponse: Codable, Hashable {
     var dj: WebDJ
 }
 
-struct UpdateDJInput: Codable, Hashable {
+struct UpdateDJInput: Encodable, Hashable {
     var name: String?
     var nameI18n: WebBiText? = nil
     var aliases: [String]?
@@ -2264,11 +2285,77 @@ struct UpdateDJInput: Codable, Hashable {
     var neteaseUrl: String? = nil
     var qqMusicUrl: String? = nil
     var website: String? = nil
+    var otherPlatformUrl: String? = nil
     var trackCount: Int? = nil
     var playlistCount: Int? = nil
     var soundCloudFollowers: Int? = nil
     var soundCloudFavorites: Int? = nil
     var isVerified: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case nameI18n
+        case aliases
+        case genres
+        case bio
+        case bioI18n
+        case avatarUrl
+        case bannerUrl
+        case country
+        case countryI18n
+        case spotifyId
+        case appleMusicId
+        case spotifyUrl
+        case spotifyFollowers
+        case instagramUrl
+        case facebookUrl
+        case soundcloudUrl
+        case soundcloudId
+        case twitterUrl
+        case youtubeUrl
+        case neteaseUrl
+        case qqMusicUrl
+        case website
+        case otherPlatformUrl
+        case trackCount
+        case playlistCount
+        case soundCloudFollowers
+        case soundCloudFavorites
+        case isVerified
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(nameI18n, forKey: .nameI18n)
+        try container.encode(aliases, forKey: .aliases)
+        try container.encode(genres, forKey: .genres)
+        try container.encode(bio, forKey: .bio)
+        try container.encode(bioI18n, forKey: .bioI18n)
+        try container.encode(avatarUrl, forKey: .avatarUrl)
+        try container.encode(bannerUrl, forKey: .bannerUrl)
+        try container.encode(country, forKey: .country)
+        try container.encode(countryI18n, forKey: .countryI18n)
+        try container.encode(spotifyId, forKey: .spotifyId)
+        try container.encode(appleMusicId, forKey: .appleMusicId)
+        try container.encode(spotifyUrl, forKey: .spotifyUrl)
+        try container.encode(spotifyFollowers, forKey: .spotifyFollowers)
+        try container.encode(instagramUrl, forKey: .instagramUrl)
+        try container.encode(facebookUrl, forKey: .facebookUrl)
+        try container.encode(soundcloudUrl, forKey: .soundcloudUrl)
+        try container.encode(soundcloudId, forKey: .soundcloudId)
+        try container.encode(twitterUrl, forKey: .twitterUrl)
+        try container.encode(youtubeUrl, forKey: .youtubeUrl)
+        try container.encode(neteaseUrl, forKey: .neteaseUrl)
+        try container.encode(qqMusicUrl, forKey: .qqMusicUrl)
+        try container.encode(website, forKey: .website)
+        try container.encode(otherPlatformUrl, forKey: .otherPlatformUrl)
+        try container.encode(trackCount, forKey: .trackCount)
+        try container.encode(playlistCount, forKey: .playlistCount)
+        try container.encode(soundCloudFollowers, forKey: .soundCloudFollowers)
+        try container.encode(soundCloudFavorites, forKey: .soundCloudFavorites)
+        try container.encode(isVerified, forKey: .isVerified)
+    }
 }
 
 struct CachedDiscoverNewsArticle: Codable, Hashable {

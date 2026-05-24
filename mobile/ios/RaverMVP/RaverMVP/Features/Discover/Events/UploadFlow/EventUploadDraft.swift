@@ -567,6 +567,8 @@ struct EventUploadDraft: Hashable, Codable {
         let mergedStages = stageOrderFromEvent + stagesFromSlots.filter { !stageOrderFromEvent.contains($0) }
         if !mergedStages.isEmpty {
             stageEntries = Array(NSOrderedSet(array: mergedStages)) as? [String] ?? mergedStages
+        } else if !parsedSlots.isEmpty {
+            stageEntries = [""]
         }
     }
 
