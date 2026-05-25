@@ -1508,11 +1508,17 @@ private struct GenreSunburstSelectionCard: View {
     }
 
     private var displayDescription: String {
-        detail?.description ?? node.description
+        localizedGenreText(
+            detail?.descriptionI18n ?? node.descriptionI18n,
+            fallback: detail?.description ?? node.description
+        )
     }
 
     private var displayExample: String {
-        detail?.example ?? node.example
+        localizedGenreText(
+            detail?.exampleI18n ?? node.exampleI18n,
+            fallback: detail?.example ?? node.example
+        )
     }
 
     private func normalizedArtistBindings() -> [LearnGenreKeyArtistBinding] {
@@ -1522,6 +1528,15 @@ private struct GenreSunburstSelectionCard: View {
         }
 
         return (detail?.keyArtists ?? node.keyArtists).map { LearnGenreKeyArtistBinding(name: $0, djId: nil, dj: nil) }
+    }
+
+    private func localizedGenreText(_ value: WebBiText?, fallback: String?) -> String {
+        let localized = value?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !localized.isEmpty {
+            return localized
+        }
+        return fallback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }
 
@@ -1957,7 +1972,9 @@ private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
     let name: String
     let path: String
     let description: String
+    let descriptionI18n: WebBiText?
     let example: String
+    let exampleI18n: WebBiText?
     let spotifyTrackURL: String
     let wikipediaURL: String
     let keyArtists: [String]
@@ -1969,7 +1986,9 @@ private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
         name: String,
         path: String,
         description: String,
+        descriptionI18n: WebBiText? = nil,
         example: String,
+        exampleI18n: WebBiText? = nil,
         spotifyTrackURL: String,
         wikipediaURL: String,
         keyArtists: [String],
@@ -1980,7 +1999,9 @@ private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
         self.name = name
         self.path = path
         self.description = description
+        self.descriptionI18n = descriptionI18n
         self.example = example
+        self.exampleI18n = exampleI18n
         self.spotifyTrackURL = spotifyTrackURL
         self.wikipediaURL = wikipediaURL
         self.keyArtists = keyArtists
@@ -1993,7 +2014,9 @@ private struct GenreSunburstNode: Identifiable, Hashable, Sendable {
         self.name = summaryNode.name
         self.path = summaryNode.path ?? "\(parentPath)/\(summaryNode.id)"
         self.description = ""
+        self.descriptionI18n = nil
         self.example = ""
+        self.exampleI18n = nil
         self.spotifyTrackURL = ""
         self.wikipediaURL = ""
         self.keyArtists = []

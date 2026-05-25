@@ -13238,7 +13238,9 @@ type LearnGenreDetailNode = {
   name: string;
   path: string;
   description: string;
+  descriptionI18n: TriTextPayload | null;
   example: string;
+  exampleI18n: TriTextPayload | null;
   spotifyTrackURL: string;
   wikipediaURL: string;
   keyArtists: string[];
@@ -13583,7 +13585,9 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
         name: true,
         path: true,
         description: true,
+        descriptionI18n: true,
         example: true,
+        exampleI18n: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
         keyArtists: true,
@@ -13614,7 +13618,9 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
       name: row.name,
       path: row.path,
       description: row.description ?? '',
+      descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
       example: row.example ?? '',
+      exampleI18n: resolveTriTextWithFallback(row.exampleI18n ?? null, row.example ?? ''),
       spotifyTrackURL: row.spotifyTrackUrl ?? '',
       wikipediaURL: row.wikipediaUrl ?? '',
       keyArtists: row.keyArtists,

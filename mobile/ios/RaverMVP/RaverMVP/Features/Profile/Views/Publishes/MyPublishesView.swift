@@ -505,12 +505,16 @@ struct MyPublishesView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(RaverTheme.secondaryText)
 
-                RaverSegmentedControl(
-                    items: publishTabItems,
-                    selection: $selectedTab,
-                    title: publishTabTitle,
-                    iconName: publishTabIconName
-                )
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(publishTabItems, id: \.self) { tab in
+                            publishTabChip(tab)
+                        }
+                    }
+                    .padding(.horizontal, 1)
+                    .padding(.vertical, 1)
+                }
+                .scrollClipDisabled()
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -530,26 +534,13 @@ struct MyPublishesView: View {
                 .scrollClipDisabled()
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 6)
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            RaverTheme.card.opacity(0.98),
-                            RaverTheme.cardBorder.opacity(0.28)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.clear)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(RaverTheme.cardBorder.opacity(0.72), lineWidth: 1)
-        )
-        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 10, leading: 8, bottom: 8, trailing: 8))
         .listRowBackground(Color.clear)
     }
 
@@ -568,15 +559,51 @@ struct MyPublishesView: View {
         }
     }
 
-    private func publishTabIconName(_ tab: Int) -> String? {
-        switch tab {
-        case 0: return "waveform"
-        case 1: return "headphones"
-        case 2: return "calendar"
-        case 3: return "star.leadinghalf.filled"
-        case 4: return "newspaper"
-        default: return nil
+    private func publishTabChip(_ tab: Int) -> some View {
+        let isSelected = selectedTab == tab
+
+        return Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                selectedTab = tab
+            }
+        } label: {
+            Text(publishTabTitle(tab))
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .background {
+                    if isSelected {
+                        Capsule(style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        RaverTheme.tabBarSelectionStart,
+                                        RaverTheme.accent,
+                                        RaverTheme.tabBarSelectionEnd
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(RaverTheme.tabBarSelectionStroke, lineWidth: 1)
+                            )
+                            .shadow(color: RaverTheme.tabBarShadowAccent, radius: 10, x: 0, y: 5)
+                    } else {
+                        Capsule(style: .continuous)
+                            .fill(RaverTheme.card.opacity(0.72))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(RaverTheme.cardBorder.opacity(0.62), lineWidth: 1)
+                            )
+                    }
+                }
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func reviewFilterChip(_ filter: ReviewFilter) -> some View {
@@ -587,17 +614,11 @@ struct MyPublishesView: View {
                 selectedReviewFilter = filter
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: filter.iconName)
-                    .font(.system(size: 11, weight: .bold))
-                    .symbolRenderingMode(.hierarchical)
-
-                Text(filter.title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-            }
+            Text(filter.title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
             .foregroundStyle(isSelected ? Color.white : RaverTheme.secondaryText)
-            .padding(.horizontal, 11)
+            .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background {
                 if isSelected {

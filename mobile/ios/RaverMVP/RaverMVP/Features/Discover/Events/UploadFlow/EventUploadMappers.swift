@@ -34,6 +34,7 @@ enum EventUploadMappers {
         let city = draft.city.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let country = draft.country.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let address = draft.detailAddress.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
+        let addressI18n = localizedText(from: draft.detailAddress, language: language)
         let timeZone = draft.timeZoneIdentifier.trimmed.eventUploadMapperNilIfBlank ?? "Asia/Shanghai"
         let ticketTiers = ticketTierInputs(from: draft.ticket)
 
@@ -50,7 +51,7 @@ enum EventUploadMappers {
             cityI18n: localizedText(from: draft.city, language: language),
             country: country,
             countryI18n: localizedText(from: draft.country, language: language),
-            manualLocation: manualLocation(address: address, language: language),
+            manualLocation: manualLocation(address: address, addressI18n: addressI18n, language: language),
             locationPoint: locationPoint(from: draft, address: address, city: city),
             latitude: draft.latitude,
             longitude: draft.longitude,
@@ -177,16 +178,36 @@ enum EventUploadMappers {
         return text
     }
 
-    private static func manualLocation(address: String?, language: EventUploadPreferredLanguage) -> WebEventManualLocation? {
-        guard let address else { return nil }
-        let trimmed = address.trimmed
-        guard !trimmed.isEmpty else { return nil }
-        let text = localizedSingleText(trimmed, language: language)
+    private static func manualLocation(
+        address: String?,
+        addressI18n: WebBiText?,
+        language: EventUploadPreferredLanguage
+    ) -> WebEventManualLocation? {
+        let localized = addressI18n.flatMap(normalizedLocalizedAddress)
+        let fallback = address
+            .map { $0.trimmed }
+            .flatMap { $0.eventUploadMapperNilIfBlank }
+            .map { localizedSingleText($0, language: language) }
+        guard let text = localized ?? fallback else { return nil }
         return WebEventManualLocation(
             detailAddressI18n: text,
             formattedAddressI18n: text,
             selectedAt: Date()
         )
+    }
+
+    private static func normalizedLocalizedAddress(_ text: WebBiText) -> WebBiText? {
+        let normalized = WebBiText(
+            en: text.en.trimmed,
+            zh: text.zh.trimmed,
+            ja: text.ja?.trimmed.eventUploadMapperNilIfBlank,
+            enFull: text.enFull?.trimmed.eventUploadMapperNilIfBlank
+        )
+        let hasValue = !normalized.en.isEmpty
+            || !normalized.zh.isEmpty
+            || normalized.ja != nil
+            || normalized.enFull != nil
+        return hasValue ? normalized : nil
     }
 
     private static func locationPoint(from draft: EventUploadDraft, address: String?, city: String?) -> WebEventLocationPoint? {

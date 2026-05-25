@@ -1236,6 +1236,8 @@ struct EventEditorView: View {
     @State private var isSearchingDJPerformerIDs: Set<UUID> = []
     @State private var djSearchTaskByPerformerID: [UUID: Task<Void, Never>] = [:]
     @State private var prefillHydrationTask: Task<Void, Never>?
+    @State private var prefillSnapshotSignature: String?
+    @State private var didRefreshPrefillFromServer = false
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var saveSuccessMessage: String?
@@ -1618,6 +1620,7 @@ struct EventEditorView: View {
                 Self.assertEventEditorTimezoneGuardrails()
                 #endif
                 prefillIfNeeded()
+                await refreshPrefillEventIfNeeded()
             }
             .onChange(of: timeZoneSearchQuery) { _, newValue in
                 guard let selectedTimeZoneLookup else { return }
@@ -2925,7 +2928,10 @@ struct EventEditorView: View {
     private func prefillIfNeeded() {
         guard case .edit(let event) = mode else { return }
         if !name.isEmpty { return }
+        applyPrefill(from: event)
+    }
 
+    private func applyPrefill(from event: WebEvent) {
         name = event.name
         description = EventWeekScheduleMode.stripMarker(from: event.description)
         isWeekScheduleEnabled = EventWeekScheduleMode.isEnabled(in: event.description)
@@ -3082,6 +3088,78 @@ struct EventEditorView: View {
         prefillHydrationTask = Task {
             await hydratePrefilledLineupDJIdentity()
         }
+        prefillSnapshotSignature = currentPrefillSnapshotSignature()
+    }
+
+    @MainActor
+    private func refreshPrefillEventIfNeeded() async {
+        guard case .edit(let event) = mode else { return }
+        guard !didRefreshPrefillFromServer else { return }
+
+        didRefreshPrefillFromServer = true
+        let currentSnapshotSignature = prefillSnapshotSignature
+
+        do {
+            let latest = try await webService.fetchEvent(id: event.id)
+            guard prefillSnapshotSignature == currentSnapshotSignature else { return }
+            applyPrefill(from: latest)
+        } catch {
+            return
+        }
+    }
+
+    private func currentPrefillSnapshotSignature() -> String {
+        let lineupSummary = lineupEntries.map { entry in
+            let performers = entry.performers.map { performer in
+                performer.djId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? performer.djName.trimmingCharacters(in: .whitespacesAndNewlines)
+            }.joined(separator: ",")
+            return [
+                entry.actType.rawValue,
+                performers,
+                entry.stageName.trimmingCharacters(in: .whitespacesAndNewlines),
+                entry.dayID ?? "",
+                entry.startTime?.description ?? "",
+                entry.endTime?.description ?? "",
+            ].joined(separator: "|")
+        }.joined(separator: "||")
+        let ticketSummary = ticketTierDrafts.map { draft in
+            [
+                draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                draft.price.trimmingCharacters(in: .whitespacesAndNewlines),
+                draft.currency.trimmingCharacters(in: .whitespacesAndNewlines),
+            ].joined(separator: "|")
+        }.joined(separator: "||")
+        let snapshotParts: [String] = [
+            name,
+            description,
+            eventType,
+            cityEn,
+            cityZh,
+            countryEn,
+            countryEnFull,
+            countryZh,
+            detailAddressZh,
+            detailAddressEn,
+            ticketUrl,
+            officialWebsite,
+            ticketCurrency,
+            ticketNotes,
+            pickedLatitude.map { String($0) } ?? "",
+            pickedLongitude.map { String($0) } ?? "",
+            pickedMapAddress,
+            pickedPlaceName,
+            eventTimeZoneIdentifier,
+            timeZoneSearchQuery,
+            String(startDate.timeIntervalSince1970),
+            String(endDate.timeIntervalSince1970),
+            coverImageUrl,
+            lineupImageUrl,
+            stageEntries.joined(separator: "||"),
+            ticketSummary,
+            lineupSummary,
+        ]
+        return snapshotParts.joined(separator: "<|>")
     }
 
     private func isSyntheticUnscheduledLineupTime(

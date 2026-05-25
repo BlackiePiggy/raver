@@ -1693,7 +1693,9 @@ struct LearnGenreNode: Codable, Identifiable, Hashable {
     var name: String
     var path: String?
     var description: String
+    var descriptionI18n: WebBiText? = nil
     var example: String?
+    var exampleI18n: WebBiText? = nil
     var spotifyTrackURL: String?
     var wikipediaURL: String?
     var keyArtists: [String]?
@@ -1713,7 +1715,9 @@ struct LearnGenreDetail: Codable, Identifiable, Hashable {
     var name: String
     var path: String?
     var description: String
+    var descriptionI18n: WebBiText? = nil
     var example: String?
+    var exampleI18n: WebBiText? = nil
     var spotifyTrackURL: String?
     var wikipediaURL: String?
     var keyArtists: [String]?
