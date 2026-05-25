@@ -12150,6 +12150,31 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
     }
 
     if (type === 'event' && eventId) {
+      const targetEvent = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: {
+          id: true,
+          startDate: true,
+          endDate: true,
+          status: true,
+        },
+      });
+
+      if (!targetEvent) {
+        res.status(404).json({ error: 'Event not found' });
+        return;
+      }
+
+      const resolvedStatus = resolveEventStatus(
+        targetEvent.startDate,
+        targetEvent.endDate,
+        targetEvent.status ?? undefined
+      );
+      if (resolvedStatus !== 'ongoing' && resolvedStatus !== 'ended') {
+        res.status(400).json({ error: '活动尚未开始或已取消，暂时不能打卡' });
+        return;
+      }
+
       const existingAttendance = await prisma.checkin.findFirst({
         where: {
           userId,

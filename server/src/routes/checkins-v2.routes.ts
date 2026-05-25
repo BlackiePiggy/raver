@@ -695,6 +695,26 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
       return;
     }
 
+    if (type === 'event' && event) {
+      const now = new Date();
+      const normalizedStatus = String(event.status ?? '')
+        .trim()
+        .toLowerCase();
+      const resolvedStatus =
+        normalizedStatus === 'cancelled' || normalizedStatus === 'canceled'
+          ? 'cancelled'
+          : now < event.startDate
+            ? 'upcoming'
+            : now > event.endDate
+              ? 'ended'
+              : 'ongoing';
+
+      if (resolvedStatus !== 'ongoing' && resolvedStatus !== 'ended') {
+        res.status(400).json({ error: '活动尚未开始或已取消，暂时不能打卡' });
+        return;
+      }
+    }
+
     if (type === 'event' && eventId) {
       const existingAttendance = await prisma.checkin.findFirst({
         where: {

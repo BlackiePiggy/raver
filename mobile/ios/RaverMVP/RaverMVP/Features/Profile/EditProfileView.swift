@@ -401,8 +401,10 @@ struct EditProfileView: View {
 
         do {
             let nodes = try await appContainer.webService.fetchLearnGenres()
-            availableGenreTags = Self.flattenGenreTags(nodes)
-            selectedTags = selectedTags.filter { availableGenreTags.contains($0) }
+            availableGenreTags = Self.mergedGenreTags(
+                fetched: Self.flattenGenreTags(nodes),
+                selected: selectedTags
+            )
         } catch {
             viewModel.error = error.userFacingMessage ?? LT("流派标签加载失败，请稍后重试。", "Failed to load genre tags. Please try again.", "ジャンルタグの読み込みに失敗しました。後でもう一度お試しください。")
         }
@@ -421,6 +423,20 @@ struct EditProfileView: View {
         }
 
         nodes.forEach(visit)
+        return result
+    }
+
+    private static func mergedGenreTags(fetched: [String], selected: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for tag in selected + fetched {
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(trimmed.lowercased()).inserted else { continue }
+            result.append(trimmed)
+        }
+
         return result
     }
 

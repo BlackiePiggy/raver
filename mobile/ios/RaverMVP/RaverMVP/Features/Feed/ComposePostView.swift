@@ -324,10 +324,12 @@ struct ComposePostView: View {
             )
         }
         .fullScreenCover(isPresented: $showLocationPicker) {
-            PostLocationPickerSheet(
-                initialQuery: normalizedLocationTag ?? "",
-                onSelect: { selected in
-                    locationTag = selected
+            EventLocationPickerSheet(
+                initialLatitude: nil,
+                initialLongitude: nil,
+                initialAddress: normalizedLocationTag ?? "",
+                onConfirm: { result in
+                    locationTag = result.displayAddress
                 }
             )
         }

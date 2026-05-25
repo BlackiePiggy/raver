@@ -1343,6 +1343,7 @@ final class AppState: ObservableObject {
             bio: "",
             location: nil,
             avatarURL: avatarURL ?? user.avatarURL,
+            createdAt: nil,
             birthYear: user.birthYear,
             tags: [],
             isFollowersListPublic: true,

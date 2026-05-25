@@ -4586,7 +4586,7 @@ struct EventDetailView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(isPreparingEventCheckinSheet)
+                        .disabled(isPreparingEventCheckinSheet || !canCheckInToEvent(event))
 
                     }
                     .padding(.bottom, 6)
@@ -6503,6 +6503,11 @@ struct EventDetailView: View {
 
     @MainActor
     private func beginEventCheckinFlow(for event: WebEvent) async {
+        guard canCheckInToEvent(event) else {
+            errorMessage = LT("活动尚未开始，暂时不能打卡。只有进行中或已结束的活动才能打卡。", "This event hasn't started yet. Check-in is available only for ongoing or ended events.", "イベントはまだ開始していません。チェックインできるのは開催中または終了したイベントのみです。")
+            return
+        }
+
         let dayOptions = eventCheckinDayOptions(for: event)
         guard !dayOptions.isEmpty else { return }
 
@@ -6540,6 +6545,11 @@ struct EventDetailView: View {
         }
 
         showEventCheckinSheet = true
+    }
+
+    private func canCheckInToEvent(_ event: WebEvent) -> Bool {
+        let status = EventVisualStatus.resolve(event: event)
+        return status == .ongoing || status == .ended
     }
 
     private func eventCheckinDayOptions(for event: WebEvent) -> [EventCheckinDayOption] {

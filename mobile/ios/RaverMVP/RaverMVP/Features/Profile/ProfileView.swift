@@ -161,13 +161,6 @@ struct ProfileView: View {
     private var profileTopActions: some View {
         if viewModel.profile != nil {
             HStack {
-                profileTopIconButton(
-                    systemName: "square.and.pencil",
-                    accessibilityLabel: LT("编辑", "Edit", "編集")
-                ) {
-                    profilePush(.editProfile)
-                }
-
                 Spacer()
 
                 profileTopIconButton(
@@ -754,57 +747,55 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            avatarView
+            HStack(alignment: .top, spacing: 14) {
+                avatarView
 
-            VStack(spacing: 7) {
-                HStack(spacing: 7) {
-                    Text(profile.displayName)
-                        .font(.title3.bold())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 7) {
+                        Text(profile.displayName)
+                            .font(.title3.bold())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
 
-                    if let titleMedal = appearance?.titleMedal {
-                        VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-
-                if let badges = appearance?.profileBadges, !badges.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(badges.prefix(5)) { badge in
-                                VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
-                            }
+                        if let titleMedal = appearance?.titleMedal {
+                            VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
                         }
-                        .padding(.horizontal, 2)
                     }
-                    .frame(maxWidth: .infinity)
+
+                    if let badges = appearance?.profileBadges, !badges.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(badges.prefix(5)) { badge in
+                                    VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    HStack(spacing: 8) {
+                        if let locationText = profileLocationText {
+                            metaPill(icon: "location.fill", text: locationText)
+                        }
+                        if let joinedDaysText = profileJoinedDaysText {
+                            metaPill(icon: "clock.fill", text: joinedDaysText)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let realNameStatus {
+                        realNameBadge(status: realNameStatus)
+                    }
+
+                    if !profile.bio.isEmpty {
+                        Text(profile.bio)
+                            .font(.subheadline)
+                            .multilineTextAlignment(.leading)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
                 }
-            }
-
-            if let realNameStatus {
-                realNameBadge(status: realNameStatus)
-            }
-
-            if !profile.bio.isEmpty {
-                Text(profile.bio)
-                    .font(.subheadline)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(RaverTheme.secondaryText)
-            }
-
-            if let locationText = profileLocationText {
-                HStack(spacing: 5) {
-                    Image(systemName: "location.fill")
-                        .font(.caption2.weight(.bold))
-                    Text(locationText)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(RaverTheme.secondaryText)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(RaverTheme.card, in: Capsule())
+                Spacer(minLength: 0)
             }
 
             if !profile.tags.isEmpty {
@@ -917,6 +908,29 @@ struct ProfileHeaderCard<Actions: View>: View {
         let raw = profile.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !raw.isEmpty else { return nil }
         return RegistrationRegionCatalog.load().displayText(for: raw)
+    }
+
+    private var profileJoinedDaysText: String? {
+        guard let createdAt = profile.createdAt else { return nil }
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: createdAt)
+        let today = calendar.startOfDay(for: Date())
+        let joinedDays = max((calendar.dateComponents([.day], from: startDay, to: today).day ?? 0) + 1, 1)
+        return LT("加入\(joinedDays)天", "Joined \(joinedDays) days", "\(joinedDays)日参加")
+    }
+
+    private func metaPill(icon: String, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption2.weight(.bold))
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(RaverTheme.secondaryText)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(RaverTheme.card, in: Capsule())
     }
 
     @ViewBuilder

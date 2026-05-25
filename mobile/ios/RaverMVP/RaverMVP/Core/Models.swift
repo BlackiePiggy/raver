@@ -650,6 +650,7 @@ struct UserProfile: Codable, Identifiable {
     var location: String?
     var avatarURL: String?
     var qrCodeURL: String? = nil
+    var createdAt: Date? = nil
     var birthYear: Int? = nil
     var tags: [String]
     var isFollowersListPublic: Bool
