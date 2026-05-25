@@ -8,6 +8,8 @@ struct ProfileView: View {
     @ObservedObject private var viewModel: ProfileViewModel
     @Namespace private var profilePostTabNamespace
     @State private var isShowingRealNameSheet = false
+    @State private var selectedAvatarMedia: FullscreenMediaSelection?
+    @State private var selectedBackgroundMedia: FullscreenMediaSelection?
 
     private var resolvedAppearance: UserAssetAppearance? {
         AppConfig.virtualAssetsEnabled ? viewModel.appearance : nil
@@ -90,7 +92,10 @@ struct ProfileView: View {
                                 appearance: resolvedAppearance,
                                 realNameStatus: profileRealNameStatus,
                                 onAvatarTap: {
-                                    profilePush(.avatarFullscreen)
+                                    selectedAvatarMedia = FullscreenMediaSelection(id: 0)
+                                },
+                                onBackgroundTap: {
+                                    selectedBackgroundMedia = FullscreenMediaSelection(id: 0)
                                 },
                                 onRealNameTap: profileRealNameTapAction,
                                 onFollowersTap: {
@@ -154,6 +159,26 @@ struct ProfileView: View {
             Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
+        }
+        .fullScreenCover(item: $selectedAvatarMedia) { selection in
+            if let profile = viewModel.profile,
+               let avatarURL = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !avatarURL.isEmpty {
+                FullscreenMediaViewer(
+                    items: [FullscreenMediaItem(rawURL: avatarURL, index: 0)],
+                    initialIndex: selection.id
+                )
+            }
+        }
+        .fullScreenCover(item: $selectedBackgroundMedia) { selection in
+            if let profile = viewModel.profile,
+               let backgroundURL = profile.backgroundURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !backgroundURL.isEmpty {
+                FullscreenMediaViewer(
+                    items: [FullscreenMediaItem(rawURL: backgroundURL, index: 0)],
+                    initialIndex: selection.id
+                )
+            }
         }
     }
 
@@ -717,10 +742,12 @@ struct ProfileHeaderCard<Actions: View>: View {
     let appearance: UserAssetAppearance?
     let realNameStatus: RealNameVerificationStatus?
     let onAvatarTap: (() -> Void)?
+    let onBackgroundTap: (() -> Void)?
     let onRealNameTap: (() -> Void)?
     let onFollowersTap: (() -> Void)?
     let onFollowingTap: (() -> Void)?
     let onFriendsTap: (() -> Void)?
+    @State private var isBioExpanded = false
     @ViewBuilder let actions: () -> Actions
 
     init(
@@ -728,6 +755,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         appearance: UserAssetAppearance? = nil,
         realNameStatus: RealNameVerificationStatus? = nil,
         onAvatarTap: (() -> Void)? = nil,
+        onBackgroundTap: (() -> Void)? = nil,
         onRealNameTap: (() -> Void)? = nil,
         onFollowersTap: (() -> Void)? = nil,
         onFollowingTap: (() -> Void)? = nil,
@@ -738,6 +766,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         self.appearance = appearance
         self.realNameStatus = realNameStatus
         self.onAvatarTap = onAvatarTap
+        self.onBackgroundTap = onBackgroundTap
         self.onRealNameTap = onRealNameTap
         self.onFollowersTap = onFollowersTap
         self.onFollowingTap = onFollowingTap
@@ -747,60 +776,7 @@ struct ProfileHeaderCard<Actions: View>: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 14) {
-                avatarView
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 7) {
-                        Text(profile.displayName)
-                            .font(.title3.bold())
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-
-                        if let titleMedal = appearance?.titleMedal {
-                            VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
-                        }
-                    }
-
-                    if let badges = appearance?.profileBadges, !badges.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(badges.prefix(5)) { badge in
-                                    VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
-                                }
-                            }
-                            .padding(.horizontal, 2)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    HStack(spacing: 8) {
-                        if let locationText = profileLocationText {
-                            metaPill(icon: "location.fill", text: locationText)
-                        }
-                        if let joinedDaysText = profileJoinedDaysText {
-                            metaPill(icon: "clock.fill", text: joinedDaysText)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let realNameStatus {
-                        realNameBadge(status: realNameStatus)
-                    }
-
-                    if !profile.bio.isEmpty {
-                        Text(profile.bio)
-                            .font(.subheadline)
-                            .multilineTextAlignment(.leading)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-
-            if !profile.tags.isEmpty {
-                tagsFlow(profile.tags)
-            }
+            heroBackground
 
             HStack(spacing: 24) {
                 stat(LT("动态", "Posts", "投稿"), value: profile.postsCount)
@@ -808,10 +784,152 @@ struct ProfileHeaderCard<Actions: View>: View {
                 stat(LT("关注", "Following", "フォロー中"), value: profile.followingCount, onTap: onFollowingTap)
                 stat(LT("好友", "Friends", "友達"), value: profile.friendsCount, onTap: onFriendsTap)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+
+            if !profile.tags.isEmpty {
+                tagsFlow(profile.tags)
+                    .padding(.horizontal, 16)
+            }
 
             actions()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
         }
-        .padding(16)
+        .padding(.top, 0)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(RaverTheme.card.opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(RaverTheme.cardBorder.opacity(0.34), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var heroBackground: some View {
+        ZStack(alignment: .bottomLeading) {
+            heroImageView
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.02),
+                    Color.black.opacity(0.22),
+                    Color.black.opacity(0.74)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            LinearGradient(
+                colors: [
+                    RaverTheme.background.opacity(0),
+                    RaverTheme.background.opacity(0.1),
+                    RaverTheme.card.opacity(0.94)
+                ],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 14) {
+                    avatarView
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 7) {
+                            Text(profile.displayName)
+                                .font(.title3.bold())
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+
+                            if let titleMedal = appearance?.titleMedal {
+                                VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
+                            }
+                        }
+
+                        if let badges = appearance?.profileBadges, !badges.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(badges.prefix(5)) { badge in
+                                        VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
+                                    }
+                                }
+                                .padding(.horizontal, 2)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        HStack(spacing: 8) {
+                            if let locationText = profileLocationText {
+                                metaPill(text: locationText)
+                            }
+                            if let joinedDaysText = profileJoinedDaysText {
+                                metaPill(text: joinedDaysText)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if let realNameStatus {
+                            realNameBadge(status: realNameStatus)
+                        }
+
+                        if !profile.bio.isEmpty {
+                            bioView
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 18)
+        }
+        .frame(height: 286)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var heroImageView: some View {
+        if let onBackgroundTap {
+            Button(action: onBackgroundTap) {
+                heroImageContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            heroImageContent
+        }
+    }
+
+    @ViewBuilder
+    private var heroImageContent: some View {
+        if let resolved = AppConfig.resolvedURLString(profile.backgroundURL),
+           let url = URL(string: resolved),
+           resolved.hasPrefix("http://") || resolved.hasPrefix("https://") || url.isFileURL {
+            ImageLoaderView(urlString: resolved)
+                .scaledToFill()
+        } else {
+            LinearGradient(
+                colors: [
+                    RaverTheme.accent.opacity(0.55),
+                    Color(red: 0.11, green: 0.14, blue: 0.22),
+                    RaverTheme.card
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(
+                RadialGradient(
+                    colors: [
+                        Color.white.opacity(0.18),
+                        Color.clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 20,
+                    endRadius: 240
+                )
+            )
+        }
     }
 
     @ViewBuilder
@@ -919,18 +1037,14 @@ struct ProfileHeaderCard<Actions: View>: View {
         return LT("加入\(joinedDays)天", "Joined \(joinedDays) days", "\(joinedDays)日参加")
     }
 
-    private func metaPill(icon: String, text: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.caption2.weight(.bold))
-            Text(text)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(RaverTheme.secondaryText)
+    private func metaPill(text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+        .foregroundStyle(Color.white.opacity(0.92))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(RaverTheme.card, in: Capsule())
+        .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     @ViewBuilder
@@ -938,14 +1052,14 @@ struct ProfileHeaderCard<Actions: View>: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Array(tags.prefix(12).enumerated()), id: \.offset) { _, tag in
-                    Text(formattedTagText(tag))
-                        .font(.caption)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(RaverTheme.card)
-                        .clipShape(Capsule())
+                Text(formattedTagText(tag))
+                    .font(.caption)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
 
                 if tags.count > 12 {
@@ -955,11 +1069,49 @@ struct ProfileHeaderCard<Actions: View>: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(RaverTheme.card)
-                        .clipShape(Capsule())
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var bioView: some View {
+        if isBioExpanded {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isBioExpanded = false
+                }
+            } label: {
+                Text(profile.bio)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isBioExpanded = true
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(profile.bio)
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText.opacity(0.8))
+                }
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func formattedTagText(_ tag: String) -> String {

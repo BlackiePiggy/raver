@@ -36,6 +36,8 @@
     "canonical:repair:event-lineup-members:dry-run": "CANONICAL_REPAIR_DRY_RUN=1 ts-node src/scripts/repair-canonical-event-lineup-members.ts",
     "events:repair:default-stages": "ts-node src/scripts/repair-legacy-event-default-stages.ts",
     "events:repair:default-stages:dry-run": "EVENT_DEFAULT_STAGE_REPAIR_DRY_RUN=1 ts-node src/scripts/repair-legacy-event-default-stages.ts",
+    "events:repair:formatted-addresses": "ts-node src/scripts/repair-event-formatted-addresses.ts --apply",
+    "events:repair:formatted-addresses:dry-run": "ts-node src/scripts/repair-event-formatted-addresses.ts",
     "seed:benchmark:dj-events": "ts-node src/scripts/seed-dj-event-benchmark.ts",
     "wiki:festivals:seed-uploadtester": "ts-node prisma/seed-wiki-festivals.ts",
     "wiki:festivals:media:backfill-oss": "ts-node prisma/backfill-wiki-festival-media-from-oss.ts",

@@ -1461,6 +1461,16 @@ final class LiveSocialService: SocialService {
         )
     }
 
+    func uploadMyBackground(imageData: Data, fileName: String, mimeType: String) async throws -> ProfileBackgroundUploadResponse {
+        try await uploadMultipart(
+            path: "/v1/profile/me/background",
+            data: imageData,
+            fileName: fileName,
+            mimeType: mimeType,
+            fieldName: "background"
+        )
+    }
+
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage {
         var path = "/v1/profile/me/likes"
         if let cursor {

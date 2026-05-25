@@ -27,6 +27,8 @@ private struct UserProfileScreen: View {
     @State private var isUpdatingBlockStatus = false
     @State private var blockStatus: UserBlockStatus?
     @State private var reportTarget: ReportSheetTarget?
+    @State private var selectedAvatarMedia: FullscreenMediaSelection?
+    @State private var selectedBackgroundMedia: FullscreenMediaSelection?
 
     private var resolvedAppearance: UserAssetAppearance? {
         AppConfig.virtualAssetsEnabled ? viewModel.appearance : nil
@@ -77,6 +79,12 @@ private struct UserProfileScreen: View {
                             ProfileHeaderCard(
                                 profile: profile,
                                 appearance: resolvedAppearance,
+                                onAvatarTap: {
+                                    selectedAvatarMedia = FullscreenMediaSelection(id: 0)
+                                },
+                                onBackgroundTap: {
+                                    selectedBackgroundMedia = FullscreenMediaSelection(id: 0)
+                                },
                                 onFollowersTap: {
                                     if profile.canViewFollowersList {
                                         profilePush(.followList(userID: profile.id, kind: .followers))
@@ -300,6 +308,26 @@ private struct UserProfileScreen: View {
             Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(viewModel.error ?? "")
+        }
+        .fullScreenCover(item: $selectedAvatarMedia) { selection in
+            if let profile = viewModel.profile,
+               let avatarURL = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !avatarURL.isEmpty {
+                FullscreenMediaViewer(
+                    items: [FullscreenMediaItem(rawURL: avatarURL, index: 0)],
+                    initialIndex: selection.id
+                )
+            }
+        }
+        .fullScreenCover(item: $selectedBackgroundMedia) { selection in
+            if let profile = viewModel.profile,
+               let backgroundURL = profile.backgroundURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !backgroundURL.isEmpty {
+                FullscreenMediaViewer(
+                    items: [FullscreenMediaItem(rawURL: backgroundURL, index: 0)],
+                    initialIndex: selection.id
+                )
+            }
         }
     }
 

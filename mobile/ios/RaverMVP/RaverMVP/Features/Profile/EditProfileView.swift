@@ -12,6 +12,7 @@ struct SaveProfileUseCase {
     func execute(
         displayName: String,
         bio: String,
+        backgroundURL: String?,
         birthYear: Int?,
         tags: [String],
         isFollowersListPublic: Bool,
@@ -20,6 +21,7 @@ struct SaveProfileUseCase {
         return try await repository.updateMyProfile(input: UpdateMyProfileInput(
             displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
+            backgroundURL: backgroundURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             birthYear: birthYear,
             tags: tags,
             isFollowersListPublic: isFollowersListPublic,
@@ -42,6 +44,7 @@ final class EditProfileViewModel: ObservableObject {
     func saveProfile(
         displayName: String,
         bio: String,
+        backgroundURL: String?,
         birthYear: Int?,
         tags: [String],
         isFollowersListPublic: Bool,
@@ -54,6 +57,7 @@ final class EditProfileViewModel: ObservableObject {
             let updated = try await saveProfileUseCase.execute(
                 displayName: displayName,
                 bio: bio,
+                backgroundURL: backgroundURL,
                 birthYear: birthYear,
                 tags: tags,
                 isFollowersListPublic: isFollowersListPublic,
@@ -70,6 +74,17 @@ final class EditProfileViewModel: ObservableObject {
 
 private extension UIImage {
     func resizedForProfileAvatar(maxPixel: CGFloat) -> UIImage? {
+        let longest = max(size.width, size.height)
+        guard longest > maxPixel else { return self }
+        let scale = maxPixel / longest
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        return renderer.image {
+            _ in draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+    }
+
+    func resizedForProfileBackground(maxPixel: CGFloat) -> UIImage? {
         let longest = max(size.width, size.height)
         guard longest > maxPixel else { return self }
         let scale = maxPixel / longest
@@ -98,13 +113,16 @@ struct EditProfileView: View {
     @State private var isFollowersListPublic: Bool
     @State private var isFollowingListPublic: Bool
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedBackgroundPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarData: Data?
+    @State private var pendingBackgroundData: Data?
     @State private var availableGenreTags: [String] = []
     @State private var tagSearchText = ""
     @State private var isLoadingGenreTags = false
     @State private var isShowingTagPicker = false
 
     private let currentAvatarURL: String?
+    private let currentBackgroundURL: String?
     private let initialBirthYear: Int?
 
     init(
@@ -116,6 +134,7 @@ struct EditProfileView: View {
         self.repository = repository
         self.onSaved = onSaved
         self.currentAvatarURL = profile.avatarURL
+        self.currentBackgroundURL = profile.backgroundURL
         self.initialBirthYear = profile.birthYear
         _displayName = State(initialValue: profile.displayName)
         _bio = State(initialValue: profile.bio)
@@ -146,6 +165,14 @@ struct EditProfileView: View {
                 }
 
                 VStack(spacing: 12) {
+                    backgroundPreview
+
+                    PhotosPicker(selection: $selectedBackgroundPhotoItem, matching: .images) {
+                        Label(LT("更换背景图", "Change Background", "背景画像を変更"), systemImage: "photo.on.rectangle")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.accountEnforcementStatus.blocks(.mediaUpload))
+
                     avatarPreview
 
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -274,6 +301,15 @@ struct EditProfileView: View {
                 }
             }
         }
+        .onChange(of: selectedBackgroundPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            guard !appState.accountEnforcementStatus.blocks(.mediaUpload) else { return }
+            Task {
+                if let data = try? await newItem.loadTransferable(type: Data.self) {
+                    await applyPickedBackgroundData(data)
+                }
+            }
+        }
         .task {
             await loadGenreTagsIfNeeded()
         }
@@ -292,6 +328,17 @@ struct EditProfileView: View {
             let image = UIImage(data: data),
             let resized = image.resizedForProfileAvatar(maxPixel: 512),
             let jpegData = resized.jpegData(compressionQuality: 0.78)
+        else {
+            return data
+        }
+        return jpegData
+    }
+
+    private static func preparedBackgroundData(from data: Data) -> Data {
+        guard
+            let image = UIImage(data: data),
+            let resized = image.resizedForProfileBackground(maxPixel: 1600),
+            let jpegData = resized.jpegData(compressionQuality: 0.8)
         else {
             return data
         }
@@ -326,6 +373,53 @@ struct EditProfileView: View {
         } else {
             AvatarPlaceholderView(size: 88, backgroundColor: RaverTheme.card)
         }
+    }
+
+    @ViewBuilder
+    private var backgroundPreview: some View {
+        ZStack(alignment: .bottomLeading) {
+            if let pendingBackgroundData,
+               let image = UIImage(data: pendingBackgroundData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let resolved = AppConfig.resolvedURLString(currentBackgroundURL),
+                      URL(string: resolved) != nil,
+                      resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+                ImageLoaderView(urlString: resolved)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(RaverTheme.card)
+                    )
+            } else {
+                LinearGradient(
+                    colors: [
+                        RaverTheme.accent.opacity(0.42),
+                        Color.black.opacity(0.18),
+                        RaverTheme.card
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.04),
+                    Color.black.opacity(0.18),
+                    Color.black.opacity(0.55)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Text(LT("个人主页背景图", "Profile Background", "プロフィール背景"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(14)
+        }
+        .frame(height: 164)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     @MainActor
@@ -369,6 +463,43 @@ struct EditProfileView: View {
     }
 
     @MainActor
+    private func applyPickedBackgroundData(_ data: Data) async {
+        let prepared = Self.preparedBackgroundData(from: data)
+        pendingBackgroundData = prepared
+        guard let userId = appState.session?.user.id else { return }
+        do {
+            let localURL = try LocalProfileAvatarCache.saveBackground(imageData: prepared, userId: userId)
+            if let snapshot = appState.currentUserProfileSnapshot(backgroundURL: localURL.absoluteString) {
+                NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
+            }
+            Task {
+                await uploadBackgroundInBackground(prepared)
+            }
+        } catch {
+            viewModel.error = error.userFacingMessage
+        }
+    }
+
+    private func uploadBackgroundInBackground(_ backgroundData: Data) async {
+        do {
+            let uploaded = try await repository.uploadMyBackground(
+                imageData: backgroundData,
+                fileName: "background.jpg",
+                mimeType: "image/jpeg"
+            )
+            await MainActor.run {
+                if let snapshot = appState.currentUserProfileSnapshot(backgroundURL: uploaded.backgroundURL) {
+                    NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
+                }
+            }
+        } catch {
+            await MainActor.run {
+                viewModel.error = LT("背景图正在本地显示，上传失败后可稍后重试。", "Your background is shown locally. Upload failed; please retry later.", "背景画像はローカル表示中です。アップロードに失敗したため後でもう一度お試しください。")
+            }
+        }
+    }
+
+    @MainActor
     private func save() async {
         guard !appState.accountEnforcementStatus.blocks(.profileUpdate) else {
             viewModel.error = appState.accountEnforcementStatus.restrictionSummary
@@ -377,6 +508,7 @@ struct EditProfileView: View {
         if var updated = await viewModel.saveProfile(
             displayName: displayName,
             bio: bio,
+            backgroundURL: persistedBackgroundURL,
             birthYear: normalizedBirthYear,
             tags: selectedTags,
             isFollowersListPublic: isFollowersListPublic,
@@ -386,6 +518,7 @@ struct EditProfileView: View {
                URL(string: currentAvatarURL)?.isFileURL == true {
                 updated.avatarURL = currentAvatarURL
             }
+            updated.backgroundURL = persistedBackgroundURL
             updated.birthYear = normalizedBirthYear
             appState.applyCurrentUserProfile(updated)
             onSaved(updated)
@@ -443,6 +576,15 @@ struct EditProfileView: View {
     private var normalizedBirthYear: Int? {
         guard isBirthDateKnown else { return nil }
         return Calendar.current.component(.year, from: selectedBirthDate)
+    }
+
+    private var persistedBackgroundURL: String? {
+        if let pendingBackgroundData,
+           let userId = appState.session?.user.id,
+           let localURL = try? LocalProfileAvatarCache.saveBackground(imageData: pendingBackgroundData, userId: userId) {
+            return localURL.absoluteString
+        }
+        return currentBackgroundURL
     }
 
     private var selectedTagsSummary: String {

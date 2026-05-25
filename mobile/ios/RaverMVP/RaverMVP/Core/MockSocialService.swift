@@ -2178,6 +2178,7 @@ actor MockSocialService: SocialService {
         profilesByID[currentUser.id]?.displayName = displayName
         profilesByID[currentUser.id]?.bio = input.bio.trimmingCharacters(in: .whitespacesAndNewlines)
         profilesByID[currentUser.id]?.location = input.location?.trimmingCharacters(in: .whitespacesAndNewlines)
+        profilesByID[currentUser.id]?.backgroundURL = input.backgroundURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         profilesByID[currentUser.id]?.tags = input.tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         profilesByID[currentUser.id]?.isFollowersListPublic = input.isFollowersListPublic
         profilesByID[currentUser.id]?.isFollowingListPublic = input.isFollowingListPublic
@@ -2246,6 +2247,14 @@ actor MockSocialService: SocialService {
         }
 
         return AvatarUploadResponse(avatarURL: url)
+    }
+
+    func uploadMyBackground(imageData: Data, fileName: String, mimeType: String) async throws -> ProfileBackgroundUploadResponse {
+        _ = imageData
+        _ = mimeType
+        let url = "mock://backgrounds/\(fileName)"
+        profilesByID[currentUser.id]?.backgroundURL = url
+        return ProfileBackgroundUploadResponse(backgroundURL: url)
     }
 
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage {

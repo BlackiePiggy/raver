@@ -649,6 +649,7 @@ struct UserProfile: Codable, Identifiable {
     var bio: String
     var location: String?
     var avatarURL: String?
+    var backgroundURL: String? = nil
     var qrCodeURL: String? = nil
     var createdAt: Date? = nil
     var birthYear: Int? = nil
@@ -1343,6 +1344,7 @@ struct UpdateMyProfileInput: Codable {
     var displayName: String
     var bio: String
     var location: String?
+    var backgroundURL: String?
     var birthYear: Int?
     var tags: [String]
     var isFollowersListPublic: Bool
@@ -1352,6 +1354,7 @@ struct UpdateMyProfileInput: Codable {
         displayName: String,
         bio: String,
         location: String? = nil,
+        backgroundURL: String? = nil,
         birthYear: Int? = nil,
         tags: [String],
         isFollowersListPublic: Bool,
@@ -1360,6 +1363,7 @@ struct UpdateMyProfileInput: Codable {
         self.displayName = displayName
         self.bio = bio
         self.location = location
+        self.backgroundURL = backgroundURL
         self.birthYear = birthYear
         self.tags = tags
         self.isFollowersListPublic = isFollowersListPublic
@@ -1369,6 +1373,10 @@ struct UpdateMyProfileInput: Codable {
 
 struct AvatarUploadResponse: Codable {
     let avatarURL: String
+}
+
+struct ProfileBackgroundUploadResponse: Codable {
+    let backgroundURL: String
 }
 
 struct ActivityPostItem: Codable, Identifiable, Hashable {

@@ -10,6 +10,7 @@ protocol ProfileUserRepository {
     func fetchFriends(userID: String, cursor: String?) async throws -> FollowListPage
     func toggleFollow(userID: String, shouldFollow: Bool) async throws -> UserSummary
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
+    func uploadMyBackground(imageData: Data, fileName: String, mimeType: String) async throws -> ProfileBackgroundUploadResponse
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
 }
 
@@ -98,6 +99,10 @@ struct ProfileUserRepositoryAdapter: ProfileUserRepository {
 
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse {
         try await socialService.uploadMyAvatar(imageData: imageData, fileName: fileName, mimeType: mimeType)
+    }
+
+    func uploadMyBackground(imageData: Data, fileName: String, mimeType: String) async throws -> ProfileBackgroundUploadResponse {
+        try await socialService.uploadMyBackground(imageData: imageData, fileName: fileName, mimeType: mimeType)
     }
 
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile {
@@ -523,6 +528,7 @@ final class ProfileViewModel: ObservableObject {
             existing.displayName = profile.displayName
             existing.bio = profile.bio.isEmpty ? existing.bio : profile.bio
             existing.avatarURL = profile.avatarURL
+            existing.backgroundURL = profile.backgroundURL ?? existing.backgroundURL
             existing.qrCodeURL = profile.qrCodeURL ?? existing.qrCodeURL
             existing.tags = profile.tags.isEmpty ? existing.tags : profile.tags
             existing.isFollowersListPublic = profile.isFollowersListPublic

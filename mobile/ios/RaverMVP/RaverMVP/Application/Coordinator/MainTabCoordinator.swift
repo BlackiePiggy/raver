@@ -658,10 +658,7 @@ struct MainTabCoordinatorView: View {
                     ownerDisplayName: ownerDisplayName
                 )
             case .avatarFullscreen:
-                CurrentUserProfileLoaderView(repository: appContainer.profileUserRepository) { profile in
-                    AvatarFullscreenView(profile: profile)
-                        .toolbar(.hidden, for: .navigationBar)
-                }
+                EmptyView()
             case .publishEvent:
                 EventUploadFlowView(mode: .create, webService: appContainer.webService) { outcome in
                     postEventUploadOutcome(outcome)

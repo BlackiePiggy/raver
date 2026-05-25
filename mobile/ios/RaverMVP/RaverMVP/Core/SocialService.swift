@@ -356,6 +356,7 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func fetchMyProfileBootstrap() async throws -> ProfileBootstrapResponse
     func updateMyProfile(input: UpdateMyProfileInput) async throws -> UserProfile
     func uploadMyAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> AvatarUploadResponse
+    func uploadMyBackground(imageData: Data, fileName: String, mimeType: String) async throws -> ProfileBackgroundUploadResponse
     func fetchMyLikeHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage

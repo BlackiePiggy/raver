@@ -1334,7 +1334,7 @@ final class AppState: ObservableObject {
         )
     }
 
-    func currentUserProfileSnapshot(avatarURL: String? = nil) -> UserProfile? {
+    func currentUserProfileSnapshot(avatarURL: String? = nil, backgroundURL: String? = nil) -> UserProfile? {
         guard let user = session?.user else { return nil }
         return UserProfile(
             id: user.id,
@@ -1343,6 +1343,7 @@ final class AppState: ObservableObject {
             bio: "",
             location: nil,
             avatarURL: avatarURL ?? user.avatarURL,
+            backgroundURL: backgroundURL,
             createdAt: nil,
             birthYear: user.birthYear,
             tags: [],

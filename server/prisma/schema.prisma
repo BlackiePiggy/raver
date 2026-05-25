@@ -22,6 +22,7 @@ model User {
   displayNameStatus     String    @default("pending") @map("display_name_status")
   displayNameReviewNote String?   @map("display_name_review_note")
   avatarUrl             String?   @map("avatar_url")
+  backgroundUrl         String?   @map("background_url")
   avatarStatus          String    @default("none") @map("avatar_status")
   avatarReviewNote      String?   @map("avatar_review_note")
   bio                   String?

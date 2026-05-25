@@ -33,6 +33,8 @@ enum EventUploadMappers {
         let name = draft.name.primaryValue(preferredLanguage: language).trimmed
         let city = draft.city.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let country = draft.country.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
+        let cityI18n = localizedText(from: draft.city, language: language)
+        let countryI18n = localizedText(from: draft.country, language: language)
         let address = draft.detailAddress.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let addressI18n = localizedText(from: draft.detailAddress, language: language)
         let timeZone = draft.timeZoneIdentifier.trimmed.eventUploadMapperNilIfBlank ?? "Asia/Shanghai"
@@ -48,11 +50,25 @@ enum EventUploadMappers {
             organizerName: draft.organizerName.trimmed.eventUploadMapperNilIfBlank,
             sourceEventUrl: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
             city: city,
-            cityI18n: localizedText(from: draft.city, language: language),
+            cityI18n: cityI18n,
             country: country,
-            countryI18n: localizedText(from: draft.country, language: language),
-            manualLocation: manualLocation(address: address, addressI18n: addressI18n, language: language),
-            locationPoint: locationPoint(from: draft, address: address, city: city),
+            countryI18n: countryI18n,
+            manualLocation: manualLocation(
+                address: address,
+                addressI18n: addressI18n,
+                cityI18n: cityI18n,
+                countryI18n: countryI18n,
+                language: language
+            ),
+            locationPoint: locationPoint(
+                from: draft,
+                address: address,
+                addressI18n: addressI18n,
+                city: city,
+                cityI18n: cityI18n,
+                country: country,
+                countryI18n: countryI18n
+            ),
             latitude: draft.latitude,
             longitude: draft.longitude,
             ticketUrl: draft.ticket.ticketURL.trimmed.eventUploadMapperNilIfBlank,
@@ -181,6 +197,8 @@ enum EventUploadMappers {
     private static func manualLocation(
         address: String?,
         addressI18n: WebBiText?,
+        cityI18n: WebBiText?,
+        countryI18n: WebBiText?,
         language: EventUploadPreferredLanguage
     ) -> WebEventManualLocation? {
         let localized = addressI18n.flatMap(normalizedLocalizedAddress)
@@ -189,9 +207,14 @@ enum EventUploadMappers {
             .flatMap { $0.eventUploadMapperNilIfBlank }
             .map { localizedSingleText($0, language: language) }
         guard let text = localized ?? fallback else { return nil }
+        let formatted = formattedAddress(
+            detailAddressI18n: text,
+            cityI18n: cityI18n,
+            countryI18n: countryI18n
+        )
         return WebEventManualLocation(
             detailAddressI18n: text,
-            formattedAddressI18n: text,
+            formattedAddressI18n: formatted,
             selectedAt: Date()
         )
     }
@@ -210,21 +233,93 @@ enum EventUploadMappers {
         return hasValue ? normalized : nil
     }
 
-    private static func locationPoint(from draft: EventUploadDraft, address: String?, city: String?) -> WebEventLocationPoint? {
+    private static func locationPoint(
+        from draft: EventUploadDraft,
+        address: String?,
+        addressI18n: WebBiText?,
+        city: String?,
+        cityI18n: WebBiText?,
+        country: String?,
+        countryI18n: WebBiText?
+    ) -> WebEventLocationPoint? {
         guard let latitude = draft.latitude, let longitude = draft.longitude else { return nil }
-        let addressText = (draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank ?? address)
+        let mapAddress = draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank
+        let addressText = mapAddress
             .map { localizedSingleText($0, language: draft.preferredLanguage) }
+            ?? addressI18n.flatMap(normalizedLocalizedAddress)
+            ?? address
+                .map { $0.trimmed }
+                .flatMap { $0.eventUploadMapperNilIfBlank }
+                .map { localizedSingleText($0, language: draft.preferredLanguage) }
         let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank
             .map { localizedSingleText($0, language: draft.preferredLanguage) }
+        let formatted = addressText.map {
+            formattedAddress(
+                detailAddressI18n: $0,
+                cityI18n: cityI18n ?? city.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                },
+                countryI18n: countryI18n ?? country.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                }
+            )
+        }
         return WebEventLocationPoint(
             provider: "apple-mapkit",
             sourceMode: "ios-event-upload-v2",
             location: WebEventLocationCoordinate(lng: longitude, lat: latitude),
             nameI18n: placeName,
             addressI18n: addressText,
-            formattedAddressI18n: addressText,
+            formattedAddressI18n: formatted,
             city: city
         )
+    }
+
+    private static func formattedAddress(
+        detailAddressI18n: WebBiText,
+        cityI18n: WebBiText?,
+        countryI18n: WebBiText?
+    ) -> WebBiText {
+        let detail = normalizedLocalizedAddress(detailAddressI18n) ?? detailAddressI18n
+        let city = cityI18n.flatMap(normalizedLocalizedAddress)
+        let country = countryI18n.flatMap(normalizedLocalizedAddress)
+
+        let formattedZh = joinAddressComponents([
+            country?.zh.eventUploadMapperNilIfBlank ?? country?.en.eventUploadMapperNilIfBlank,
+            city?.zh.eventUploadMapperNilIfBlank ?? city?.en.eventUploadMapperNilIfBlank,
+            detail.zh.eventUploadMapperNilIfBlank ?? detail.en.eventUploadMapperNilIfBlank,
+        ])
+        let formattedEn = joinAddressComponents([
+            country?.enFull.eventUploadMapperNilIfBlank
+                ?? country?.en.eventUploadMapperNilIfBlank
+                ?? country?.zh.eventUploadMapperNilIfBlank,
+            city?.en.eventUploadMapperNilIfBlank ?? city?.zh.eventUploadMapperNilIfBlank,
+            detail.en.eventUploadMapperNilIfBlank ?? detail.zh.eventUploadMapperNilIfBlank,
+        ])
+        let formattedJa = joinAddressComponents([
+            country?.ja.eventUploadMapperNilIfBlank
+                ?? country?.enFull.eventUploadMapperNilIfBlank
+                ?? country?.en.eventUploadMapperNilIfBlank
+                ?? country?.zh.eventUploadMapperNilIfBlank,
+            city?.ja.eventUploadMapperNilIfBlank
+                ?? city?.en.eventUploadMapperNilIfBlank
+                ?? city?.zh.eventUploadMapperNilIfBlank,
+            detail.ja.eventUploadMapperNilIfBlank
+                ?? detail.en.eventUploadMapperNilIfBlank
+                ?? detail.zh.eventUploadMapperNilIfBlank,
+        ])
+
+        return WebBiText(
+            en: formattedEn ?? detail.en,
+            zh: formattedZh ?? detail.zh,
+            ja: formattedJa ?? detail.ja,
+            enFull: detail.enFull
+        )
+    }
+
+    private static func joinAddressComponents(_ parts: [String?]) -> String? {
+        let values = parts.compactMap { $0?.trimmed.eventUploadMapperNilIfBlank }
+        return values.isEmpty ? nil : values.joined(separator: " · ")
     }
 
     private static func localizedSingleText(_ value: String, language: EventUploadPreferredLanguage) -> WebBiText {

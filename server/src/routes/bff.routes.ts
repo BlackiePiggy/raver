@@ -152,6 +152,7 @@ const ossBucket = cleanEnv(process.env.OSS_BUCKET);
 const ossEndpoint = cleanEnv(process.env.OSS_ENDPOINT);
 const ossPostsPrefix = (cleanEnv(process.env.OSS_POSTS_PREFIX) || 'posts').replace(/^\/+|\/+$/g, '');
 const ossUserAvatarsPrefix = (cleanEnv(process.env.OSS_USER_AVATARS_PREFIX) || 'users/avatars').replace(/^\/+|\/+$/g, '');
+const ossUserBackgroundsPrefix = (cleanEnv(process.env.OSS_USER_BACKGROUNDS_PREFIX) || 'users/backgrounds').replace(/^\/+|\/+$/g, '');
 const ossSquadAvatarsPrefix = (cleanEnv(process.env.OSS_SQUAD_AVATARS_PREFIX) || 'squads/avatars').replace(/^\/+|\/+$/g, '');
 
 const ossClient =
@@ -260,6 +261,46 @@ const uploadUserAvatarToOss = async (
     step: 'media_asset_register',
     durationMs: Date.now() - registerStartedAt,
     userId,
+  });
+  return {
+    assetId: asset.id,
+    url,
+    objectKey,
+  };
+};
+
+const uploadUserBackgroundToOss = async (
+  userId: string,
+  file: Express.Multer.File
+): Promise<{ assetId: string; url: string; objectKey: string }> => {
+  if (!ossClient) {
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const ext = extensionForMimeType(file.mimetype);
+  const objectKey = `${ossUserBackgroundsPrefix}/${userId}/background-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+  const result = await ossClient.put(objectKey, file.buffer, {
+    headers: {
+      'Content-Type': file.mimetype,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Disposition': 'inline',
+    },
+  });
+  const url = securePublicAssetUrl(result.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'user',
+    ownerId: userId,
+    purpose: 'background',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    uploadedById: userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/profile/me/background',
+    },
   });
   return {
     assetId: asset.id,
@@ -7497,6 +7538,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
         displayName: true,
         bio: true,
         avatarUrl: true,
+        backgroundUrl: true,
         isFollowersListPublic: true,
         isFollowingListPublic: true,
         isActive: true,
@@ -7558,6 +7600,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       displayName: user.displayName || user.username,
       bio: user.bio || '',
       avatarURL: user.avatarUrl,
+      backgroundURL: user.backgroundUrl,
       tags: genreTags,
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
@@ -11539,6 +11582,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
           bio: true,
           location: true,
           avatarUrl: true,
+          backgroundUrl: true,
           birthYear: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
@@ -11587,6 +11631,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       bio: user.bio || '',
       location: user.location || null,
       avatarURL: user.avatarUrl,
+      backgroundURL: user.backgroundUrl,
       createdAt: user.createdAt,
       birthYear: user.birthYear ?? null,
       tags: await resolveUserGenrePreferences(prisma, user.id),
@@ -11623,6 +11668,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
           bio: true,
           location: true,
           avatarUrl: true,
+          backgroundUrl: true,
           birthYear: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
@@ -11713,6 +11759,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
         bio: user.bio || '',
         location: user.location || null,
         avatarURL: user.avatarUrl,
+        backgroundURL: user.backgroundUrl,
         createdAt: user.createdAt,
         birthYear: user.birthYear ?? null,
         tags,
@@ -11770,6 +11817,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       displayName?: string;
       bio?: string;
       location?: string | null;
+      backgroundURL?: string | null;
       birthYear?: number | string | null;
       tags?: unknown;
       isFollowersListPublic?: boolean;
@@ -11783,6 +11831,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       displayNameReviewNote?: string | null;
       bio?: string;
       location?: string | null;
+      backgroundUrl?: string | null;
       birthYear?: number | null;
       ageBand?: string;
       ageDeclaredAt?: Date | null;
@@ -11827,6 +11876,13 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       data.location = normalizedLocation || null;
     } else if (body.location === null) {
       data.location = null;
+    }
+
+    if (typeof body.backgroundURL === 'string') {
+      const normalizedBackgroundUrl = body.backgroundURL.trim();
+      data.backgroundUrl = normalizedBackgroundUrl || null;
+    } else if (body.backgroundURL === null) {
+      data.backgroundUrl = null;
     }
 
     if (body.birthYear === null) {
@@ -11903,6 +11959,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
           bio: true,
           location: true,
           avatarUrl: true,
+          backgroundUrl: true,
           birthYear: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
@@ -11940,6 +11997,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       bio: user.bio || '',
       location: user.location || null,
       avatarURL: user.avatarUrl,
+      backgroundURL: user.backgroundUrl,
       createdAt: user.createdAt,
       birthYear: user.birthYear ?? null,
       tags: await resolveUserGenrePreferences(prisma, user.id),
@@ -12052,6 +12110,47 @@ router.post(
       res.status(201).json({ avatarURL: avatarUrl, assetId: upload.assetId });
     } catch (error) {
       console.error('BFF upload avatar error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.post(
+  '/profile/me/background',
+  optionalAuth,
+  avatarUpload.single('background'),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = requireAuth(req as BFFAuthRequest, res);
+      if (!userId) return;
+      if (await denyForEnforcement(userId, 'media_upload', res)) return;
+
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file) {
+        res.status(400).json({ error: 'No file uploaded' });
+        return;
+      }
+
+      const previousUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { backgroundUrl: true },
+      });
+
+      const upload = await uploadUserBackgroundToOss(userId, file);
+      const backgroundUrl = upload.url;
+      await prisma.user.update({
+        where: { id: userId },
+        data: { backgroundUrl },
+        select: { id: true },
+      });
+
+      if (previousUser?.backgroundUrl && previousUser.backgroundUrl !== backgroundUrl) {
+        await mediaAssetService.markReplacedByUrl(previousUser.backgroundUrl);
+      }
+
+      res.status(201).json({ backgroundURL: backgroundUrl, assetId: upload.assetId });
+    } catch (error) {
+      console.error('BFF upload background error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
