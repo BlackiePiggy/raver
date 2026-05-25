@@ -12,6 +12,7 @@ struct SaveProfileUseCase {
     func execute(
         displayName: String,
         bio: String,
+        birthYear: Int?,
         tags: [String],
         isFollowersListPublic: Bool,
         isFollowingListPublic: Bool
@@ -19,6 +20,7 @@ struct SaveProfileUseCase {
         return try await repository.updateMyProfile(input: UpdateMyProfileInput(
             displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
             bio: bio.trimmingCharacters(in: .whitespacesAndNewlines),
+            birthYear: birthYear,
             tags: tags,
             isFollowersListPublic: isFollowersListPublic,
             isFollowingListPublic: isFollowingListPublic
@@ -40,6 +42,7 @@ final class EditProfileViewModel: ObservableObject {
     func saveProfile(
         displayName: String,
         bio: String,
+        birthYear: Int?,
         tags: [String],
         isFollowersListPublic: Bool,
         isFollowingListPublic: Bool,
@@ -51,6 +54,7 @@ final class EditProfileViewModel: ObservableObject {
             let updated = try await saveProfileUseCase.execute(
                 displayName: displayName,
                 bio: bio,
+                birthYear: birthYear,
                 tags: tags,
                 isFollowersListPublic: isFollowersListPublic,
                 isFollowingListPublic: isFollowingListPublic
@@ -89,6 +93,8 @@ struct EditProfileView: View {
     @State private var displayName: String
     @State private var bio: String
     @State private var selectedTags: [String]
+    @State private var isBirthDateKnown: Bool
+    @State private var selectedBirthDate: Date
     @State private var isFollowersListPublic: Bool
     @State private var isFollowingListPublic: Bool
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -99,6 +105,7 @@ struct EditProfileView: View {
     @State private var isShowingTagPicker = false
 
     private let currentAvatarURL: String?
+    private let initialBirthYear: Int?
 
     init(
         profile: UserProfile,
@@ -109,9 +116,12 @@ struct EditProfileView: View {
         self.repository = repository
         self.onSaved = onSaved
         self.currentAvatarURL = profile.avatarURL
+        self.initialBirthYear = profile.birthYear
         _displayName = State(initialValue: profile.displayName)
         _bio = State(initialValue: profile.bio)
         _selectedTags = State(initialValue: profile.tags)
+        _isBirthDateKnown = State(initialValue: profile.birthYear != nil)
+        _selectedBirthDate = State(initialValue: Self.date(forBirthYear: profile.birthYear))
         _isFollowersListPublic = State(initialValue: profile.isFollowersListPublic)
         _isFollowingListPublic = State(initialValue: profile.isFollowingListPublic)
     }
@@ -173,6 +183,38 @@ struct EditProfileView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Text(LT("出生日期", "Date of Birth", "生年月日"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Toggle(
+                        LT("已填写出生日期", "Birth date provided", "生年月日を入力済み"),
+                        isOn: $isBirthDateKnown
+                    )
+                    .tint(RaverTheme.accent)
+
+                    if isBirthDateKnown {
+                        DatePicker(
+                            "",
+                            selection: $selectedBirthDate,
+                            in: birthDateRange,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .labelsHidden()
+                        .padding(12)
+                        .background(RaverTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    } else {
+                        Text(LT("历史未填写出生信息的用户可以暂时留空。填写后会用于年龄分级与功能限制判断。", "Users with no birth date on record can leave this blank for now. Once provided, it will be used for age gating and safety limits.", "これまで生年月日未設定のユーザーは空欄のままでも構いません。入力後は年齢区分と機能制限に使用されます。"))
+                            .font(.footnote)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .padding(12)
+                            .background(RaverTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
                     Text(LT("Tag", "Tags", "タグ"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
@@ -182,7 +224,7 @@ struct EditProfileView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "tag")
                                 .font(.system(size: 14, weight: .semibold))
-                            Text(selectedTags.isEmpty ? LT("从流派树选择", "Choose from genre tree", "ジャンルツリーから選択") : selectedTags.joined(separator: ", "))
+                            Text(selectedTagsSummary)
                                 .lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right")
@@ -335,6 +377,7 @@ struct EditProfileView: View {
         if var updated = await viewModel.saveProfile(
             displayName: displayName,
             bio: bio,
+            birthYear: normalizedBirthYear,
             tags: selectedTags,
             isFollowersListPublic: isFollowersListPublic,
             isFollowingListPublic: isFollowingListPublic
@@ -343,6 +386,8 @@ struct EditProfileView: View {
                URL(string: currentAvatarURL)?.isFileURL == true {
                 updated.avatarURL = currentAvatarURL
             }
+            updated.birthYear = normalizedBirthYear
+            appState.applyCurrentUserProfile(updated)
             onSaved(updated)
             dismiss()
         }
@@ -378,6 +423,35 @@ struct EditProfileView: View {
         nodes.forEach(visit)
         return result
     }
+
+    private var normalizedBirthYear: Int? {
+        guard isBirthDateKnown else { return nil }
+        return Calendar.current.component(.year, from: selectedBirthDate)
+    }
+
+    private var selectedTagsSummary: String {
+        if selectedTags.isEmpty {
+            return LT("管理并添加流派 Tag", "Manage and add genre tags", "ジャンルタグを管理・追加")
+        }
+        return selectedTags.joined(separator: " / ")
+    }
+
+    private var birthDateRange: ClosedRange<Date> {
+        let calendar = Calendar.current
+        let now = Date()
+        let maxDate = calendar.date(byAdding: .year, value: -13, to: now) ?? now
+        let minDate = calendar.date(byAdding: .year, value: -100, to: now) ?? now
+        return minDate...maxDate
+    }
+
+    private static func date(forBirthYear birthYear: Int?) -> Date {
+        let calendar = Calendar.current
+        if let birthYear,
+           let date = calendar.date(from: DateComponents(year: birthYear, month: 7, day: 1)) {
+            return date
+        }
+        return calendar.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    }
 }
 
 private struct GenreTagPickerSheet: View {
@@ -397,39 +471,60 @@ private struct GenreTagPickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                } else if filteredTags.isEmpty {
-                    Text(LT("没有匹配的流派标签", "No matching genre tags", "一致するジャンルタグがありません"))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                } else {
-                    ForEach(filteredTags, id: \.self) { tag in
-                        Button {
-                            toggle(tag)
-                        } label: {
-                            HStack {
+                Section(LT("当前已选择", "Selected Tags", "現在選択中")) {
+                    if selectedTags.isEmpty {
+                        Text(LT("还没有添加任何流派 Tag", "No genre tags added yet", "ジャンルタグはまだ追加されていません"))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        ForEach(selectedTags, id: \.self) { tag in
+                            HStack(spacing: 12) {
                                 Text(tag)
                                     .foregroundStyle(RaverTheme.primaryText)
                                 Spacer()
-                                if selectedTags.contains(tag) {
-                                    Image(systemName: "checkmark")
-                                        .font(.subheadline.weight(.semibold))
+                                Button(role: .destructive) {
+                                    remove(tag)
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundStyle(Color.red)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Section(LT("添加 Tag", "Add Tags", "タグを追加")) {
+                    if isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                    } else if filteredTags.isEmpty {
+                        Text(LT("没有匹配的流派标签", "No matching genre tags", "一致するジャンルタグがありません"))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        ForEach(filteredTags.filter { !selectedTags.contains($0) }, id: \.self) { tag in
+                            Button {
+                                add(tag)
+                            } label: {
+                                HStack {
+                                    Text(tag)
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    Spacer()
+                                    Image(systemName: "plus.circle.fill")
                                         .foregroundStyle(RaverTheme.accent)
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
             .searchable(text: $searchText, prompt: LT("搜索流派 Tag", "Search genre tags", "ジャンルタグを検索"))
             .scrollContentBackground(.hidden)
             .background(RaverTheme.background)
-            .navigationTitle(LT("选择 Tag", "Choose Tags", "タグを選択"))
+            .navigationTitle(LT("管理 Tag", "Manage Tags", "タグを管理"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(LT("完成", "Done", "完了")) {
@@ -440,11 +535,12 @@ private struct GenreTagPickerSheet: View {
         }
     }
 
-    private func toggle(_ tag: String) {
-        if selectedTags.contains(tag) {
-            selectedTags.removeAll { $0 == tag }
-        } else {
-            selectedTags.append(tag)
-        }
+    private func add(_ tag: String) {
+        guard !selectedTags.contains(tag) else { return }
+        selectedTags.append(tag)
+    }
+
+    private func remove(_ tag: String) {
+        selectedTags.removeAll { $0 == tag }
     }
 }

@@ -11538,6 +11538,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
           bio: true,
           location: true,
           avatarUrl: true,
+          birthYear: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
         },
@@ -11585,6 +11586,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       bio: user.bio || '',
       location: user.location || null,
       avatarURL: user.avatarUrl,
+      birthYear: user.birthYear ?? null,
       tags: await resolveUserGenrePreferences(prisma, user.id),
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
@@ -11618,6 +11620,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
           bio: true,
           location: true,
           avatarUrl: true,
+          birthYear: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
         },
@@ -11707,6 +11710,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
         bio: user.bio || '',
         location: user.location || null,
         avatarURL: user.avatarUrl,
+        birthYear: user.birthYear ?? null,
         tags,
         isFollowersListPublic: user.isFollowersListPublic,
         isFollowingListPublic: user.isFollowingListPublic,
@@ -11762,6 +11766,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       displayName?: string;
       bio?: string;
       location?: string | null;
+      birthYear?: number | string | null;
       tags?: unknown;
       isFollowersListPublic?: boolean;
       isFollowingListPublic?: boolean;
@@ -11774,6 +11779,9 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       displayNameReviewNote?: string | null;
       bio?: string;
       location?: string | null;
+      birthYear?: number | null;
+      ageBand?: string;
+      ageDeclaredAt?: Date | null;
       isFollowersListPublic?: boolean;
       isFollowingListPublic?: boolean;
     } = {};
@@ -11815,6 +11823,34 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       data.location = normalizedLocation || null;
     } else if (body.location === null) {
       data.location = null;
+    }
+
+    if (body.birthYear === null) {
+      data.birthYear = null;
+      data.ageBand = 'unknown';
+      data.ageDeclaredAt = null;
+    } else if (body.birthYear !== undefined) {
+      const normalizedBirthYear =
+        typeof body.birthYear === 'number'
+          ? body.birthYear
+          : Number.parseInt(String(body.birthYear || ''), 10);
+      if (!Number.isInteger(normalizedBirthYear)) {
+        res.status(400).json({ error: '出生年份无效' });
+        return;
+      }
+      const currentYear = new Date().getUTCFullYear();
+      if (normalizedBirthYear < 1900 || normalizedBirthYear > currentYear) {
+        res.status(400).json({ error: '出生年份无效' });
+        return;
+      }
+      const ageBand = regionalCompliance.ageBandForBirthYear(normalizedBirthYear);
+      if (ageBand === 'under_13') {
+        res.status(403).json({ error: '未达到最低年龄要求' });
+        return;
+      }
+      data.birthYear = normalizedBirthYear;
+      data.ageBand = ageBand;
+      data.ageDeclaredAt = new Date();
     }
 
     if (typeof body.isFollowersListPublic === 'boolean') {
@@ -11862,6 +11898,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
           bio: true,
           location: true,
           avatarUrl: true,
+          birthYear: true,
           isFollowersListPublic: true,
           isFollowingListPublic: true,
         },
@@ -11898,6 +11935,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       bio: user.bio || '',
       location: user.location || null,
       avatarURL: user.avatarUrl,
+      birthYear: user.birthYear ?? null,
       tags: await resolveUserGenrePreferences(prisma, user.id),
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,

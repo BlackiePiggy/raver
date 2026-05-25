@@ -1283,6 +1283,8 @@ final class AppState: ObservableObject {
     func applyCurrentUserProfile(_ profile: UserProfile) {
         guard let current = session, current.user.id == profile.id else { return }
         let existing = current.user
+        let nextBirthYear = profile.birthYear
+        let nextAgeBand = nextBirthYear.map { RegionalCompliance.ageBand(for: $0) } ?? .unknown
         let updatedUser = UserSummary(
             id: profile.id,
             username: profile.username,
@@ -1293,8 +1295,8 @@ final class AppState: ObservableObject {
             conversationID: existing.conversationID,
             friendMessage: existing.friendMessage,
             regionCode: existing.regionCode,
-            birthYear: existing.birthYear,
-            ageBand: existing.ageBand,
+            birthYear: nextBirthYear,
+            ageBand: nextAgeBand,
             guardianContactEmail: existing.guardianContactEmail
         )
         session = Session(
@@ -1341,6 +1343,7 @@ final class AppState: ObservableObject {
             bio: "",
             location: nil,
             avatarURL: avatarURL ?? user.avatarURL,
+            birthYear: user.birthYear,
             tags: [],
             isFollowersListPublic: true,
             isFollowingListPublic: true,

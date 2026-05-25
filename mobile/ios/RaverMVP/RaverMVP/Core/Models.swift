@@ -650,6 +650,7 @@ struct UserProfile: Codable, Identifiable {
     var location: String?
     var avatarURL: String?
     var qrCodeURL: String? = nil
+    var birthYear: Int? = nil
     var tags: [String]
     var isFollowersListPublic: Bool
     var isFollowingListPublic: Bool
@@ -1341,6 +1342,7 @@ struct UpdateMyProfileInput: Codable {
     var displayName: String
     var bio: String
     var location: String?
+    var birthYear: Int?
     var tags: [String]
     var isFollowersListPublic: Bool
     var isFollowingListPublic: Bool
@@ -1349,6 +1351,7 @@ struct UpdateMyProfileInput: Codable {
         displayName: String,
         bio: String,
         location: String? = nil,
+        birthYear: Int? = nil,
         tags: [String],
         isFollowersListPublic: Bool,
         isFollowingListPublic: Bool
@@ -1356,6 +1359,7 @@ struct UpdateMyProfileInput: Codable {
         self.displayName = displayName
         self.bio = bio
         self.location = location
+        self.birthYear = birthYear
         self.tags = tags
         self.isFollowersListPublic = isFollowersListPublic
         self.isFollowingListPublic = isFollowingListPublic

@@ -206,7 +206,7 @@ enum AppConfig {
     }
 
     static var shouldExposeRealNameControls: Bool {
-        isRealNameEnforcementEnabled
+        canOverrideRealNameEnforcement
     }
 
     static var isRealNameEnforcementEnabled: Bool {
@@ -220,7 +220,7 @@ enum AppConfig {
             return UserDefaults.standard.bool(forKey: persistedRealNameEnforcementEnabledKey)
         }
 
-        return true
+        return false
 #else
         false
 #endif
