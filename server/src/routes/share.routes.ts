@@ -124,6 +124,13 @@ const posterText = (value: string | null | undefined, fallback: string): string 
   return normalized || fallback;
 };
 
+const formatPosterVenueText = (value: string): string =>
+  String(value || '')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s*·\s*/g, ' · ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const wrapText = (value: string, maxChars: number, maxLines: number): string[] => {
   const words = value.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -917,7 +924,7 @@ const loadEventPosterSnapshot = async (
   if (!event) return null;
 
   const venue = posterText(
-    [event.venueAddress, event.venueName, event.city, event.country].filter(Boolean).join(' · '),
+    formatPosterVenueText([event.venueAddress, event.venueName, event.city, event.country].filter(Boolean).join(' · ')),
     'Venue TBA'
   );
 
@@ -975,10 +982,10 @@ const renderEventPosterSvg = async (
   const lineupNumber = lineupMatch?.[1] || safeLineup;
   const lineupUnit = lineupMatch?.[2] || '';
   const organizerRaw = event.organizer || 'Raver';
-  const venueLines = wrapPosterMixedText(safeVenueRaw, 338, 17, 3);
+  const venueLines = wrapPosterMixedText(formatPosterVenueText(safeVenueRaw), 302, 16, 3);
   const organizerLines = wrapPosterMixedText(organizerRaw, 338, 18, 3);
   const venueValueY = 492;
-  const venueLineHeight = 23;
+  const venueLineHeight = 22;
   const venueBottomY = venueValueY + (venueLines.length - 1) * venueLineHeight;
   const organizerLabelY = venueBottomY + 34;
   const organizerValueY = organizerLabelY + 20;
@@ -1060,7 +1067,7 @@ const renderEventPosterSvg = async (
     }
 
     <text x="25" y="472" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.venue)}</text>
-    ${renderPosterTextBlock(venueLines, 25, venueValueY, copy.bodyFont, 17, venueLineHeight, '#e4e4e7', locale === 'zh' ? 0 : 0.4)}
+    ${renderPosterTextBlock(venueLines, 25, venueValueY, copy.bodyFont, 16, venueLineHeight, '#e4e4e7', 0)}
 
     <text x="25" y="${organizerLabelY}" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
     ${renderPosterTextBlock(organizerLines, 25, organizerValueY, copy.bodyFont, 18, organizerLineHeight, '#e4e4e7', 0)}
