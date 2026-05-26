@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { Request, Response, Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import jpeg from 'jpeg-js';
+import { chromium, Browser } from 'playwright-core';
 import QRCode from 'qrcode';
 import { PNG } from 'pngjs';
 import {
@@ -21,6 +23,14 @@ const APP_ICON_PATH = path.resolve(
   __dirname,
   '../../../mobile/ios/RaverMVP/RaverMVP/Assets.xcassets/AppIcon.appiconset/icon-60@3x.png'
 );
+const DEFAULT_CHROME_PATHS = [
+  process.env.SHARE_POSTER_CHROME_PATH,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+].filter((value): value is string => Boolean(value && value.trim()));
 
 type RGB = [number, number, number];
 
@@ -119,6 +129,55 @@ const appendShareCode = (value: string, code: string): string => {
   } catch {
     const separator = value.includes('?') ? '&' : '?';
     return `${value}${separator}shareCode=${encodeURIComponent(code)}`;
+  }
+};
+
+let cachedPosterBrowser: Browser | null = null;
+let cachedChromeExecutablePath: string | null | undefined;
+
+const resolveChromeExecutablePath = (): string | null => {
+  if (cachedChromeExecutablePath !== undefined) return cachedChromeExecutablePath;
+
+  for (const candidate of DEFAULT_CHROME_PATHS) {
+    if (candidate && fs.existsSync(candidate)) {
+      cachedChromeExecutablePath = candidate;
+      return candidate;
+    }
+  }
+
+  const commandCandidates = ['google-chrome', 'chromium', 'chromium-browser'];
+  for (const command of commandCandidates) {
+    try {
+      const resolved = execFileSync('which', [command], { encoding: 'utf8' }).trim();
+      if (resolved) {
+        cachedChromeExecutablePath = resolved;
+        return resolved;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  cachedChromeExecutablePath = null;
+  return null;
+};
+
+const getPosterBrowser = async (): Promise<Browser | null> => {
+  if (cachedPosterBrowser?.isConnected()) return cachedPosterBrowser;
+  const executablePath = resolveChromeExecutablePath();
+  if (!executablePath) return null;
+
+  try {
+    cachedPosterBrowser = await chromium.launch({
+      executablePath,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    return cachedPosterBrowser;
+  } catch (error) {
+    console.error('Failed to launch poster browser:', error);
+    cachedPosterBrowser = null;
+    return null;
   }
 };
 
@@ -479,11 +538,12 @@ const decodeImageToPng = (buffer: Buffer, contentType?: string | null): PNG | nu
   if (normalizedType.includes('jpeg') || normalizedType.includes('jpg')) {
     try {
       const decoded = jpeg.decode(buffer, { useTArray: true });
-      return new PNG({
+      const png = new PNG({
         width: decoded.width,
         height: decoded.height,
-        data: Buffer.from(decoded.data),
       });
+      png.data = Buffer.from(decoded.data);
+      return png;
     } catch {
       return null;
     }
@@ -494,11 +554,12 @@ const decodeImageToPng = (buffer: Buffer, contentType?: string | null): PNG | nu
   } catch {
     try {
       const decoded = jpeg.decode(buffer, { useTArray: true });
-      return new PNG({
+      const png = new PNG({
         width: decoded.width,
         height: decoded.height,
-        data: Buffer.from(decoded.data),
       });
+      png.data = Buffer.from(decoded.data);
+      return png;
     } catch {
       return null;
     }
@@ -568,6 +629,7 @@ type SharePosterEventSnapshot = {
   timeZone: string;
   artistCount: number;
   imageUrl: string | null;
+  shareCode: string;
 };
 
 const formatPosterDate = (date: Date | null, timeZone: string): string => {
@@ -650,7 +712,278 @@ const loadEventPosterSnapshot = async (
     timeZone: event.timeZone || 'UTC',
     artistCount: Math.max(0, Number(event._count?.canonicalArtists ?? 0)),
     imageUrl: shareLink.imageUrl || null,
+    shareCode: shareLink.code,
   };
+};
+
+const renderEventPosterHtml = async (
+  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>,
+  event: SharePosterEventSnapshot
+): Promise<Buffer | null> => {
+  const browser = await getPosterBrowser();
+  if (!browser) return null;
+
+  const qrDataUrl = await QRCode.toDataURL(buildShareShortUrl(shareLink.code), {
+    errorCorrectionLevel: 'H',
+    margin: 0,
+    width: 240,
+    color: {
+      dark: '#050505',
+      light: '#FFFFFFFF',
+    },
+  });
+
+  const safeTitle = htmlEscape(event.title || shareLink.title);
+  const safeVenue = htmlEscape(event.venue || 'Venue TBA');
+  const safeOrganizer = htmlEscape(event.organizer || 'Raver');
+  const safeStart = htmlEscape(formatPosterDate(event.startDate, event.timeZone));
+  const safeEnd = htmlEscape(formatPosterDate(event.endDate, event.timeZone));
+  const safeDuration = htmlEscape(formatPosterDuration(event.startDate, event.endDate, event.timeZone));
+  const safeLineup = htmlEscape(`${Math.max(0, event.artistCount)} Artists`);
+  const safeImage = cssImageUrl(event.imageUrl);
+  const heroImage = safeImage
+    ? `<img src="${safeImage}" class="hero-image" />`
+    : '<div class="hero-fallback">R</div>';
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; text-transform: uppercase; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #000;
+      color: #fff;
+      font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+    .frame {
+      width: 390px;
+      background: #09090b;
+      border-radius: 30px;
+      overflow: hidden;
+      border: 1px solid rgba(63, 63, 70, .9);
+      box-shadow: 0 20px 80px rgba(0, 0, 0, .72);
+    }
+    .topbar {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      background: rgba(255,255,255,.03);
+      backdrop-filter: blur(20px);
+    }
+    .topbar-title {
+      font-size: 14px;
+      letter-spacing: .35em;
+      color: #d4d4d8;
+      font-weight: 700;
+    }
+    .hero {
+      position: relative;
+      height: 260px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #171717 0%, #09090b 100%);
+    }
+    .hero-image, .hero-fallback {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .hero-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 112px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #1f1f23 0%, #0a0a0d 100%);
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to bottom, rgba(0,0,0,.15) 0%, rgba(0,0,0,.5) 55%, rgba(0,0,0,.92) 100%),
+        linear-gradient(to top right, rgba(239,68,68,.12) 0%, rgba(239,68,68,0) 50%);
+    }
+    .glitch span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      background: rgba(239,68,68,.2);
+    }
+    .event-title {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      max-width: 88%;
+      z-index: 1;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: .18em;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+    .teeth {
+      height: 20px;
+      background: #000;
+      display: flex;
+      overflow: hidden;
+      padding-left: 1px;
+    }
+    .tooth {
+      width: 0;
+      height: 0;
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-top: 10px solid #09090b;
+    }
+    .content {
+      padding: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px 20px;
+    }
+    .full { grid-column: 1 / -1; }
+    .label {
+      font-size: 11px;
+      letter-spacing: .25em;
+      color: #71717a;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .value {
+      color: #f4f4f5;
+      font-size: 17px;
+      line-height: 1.6;
+      letter-spacing: .06em;
+      font-weight: 700;
+      word-break: break-word;
+    }
+    .value.venue {
+      font-size: 16px;
+      line-height: 1.9;
+    }
+    .divider {
+      height: 1px;
+      background: rgba(255,255,255,.1);
+      margin: 20px 0;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .footer-left {
+      font-size: 11px;
+      letter-spacing: .3em;
+      color: #a1a1aa;
+      font-weight: 600;
+    }
+    .footer-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .scan-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .1em;
+    }
+    .scan-subtitle {
+      font-size: 11px;
+      color: #a1a1aa;
+      margin-top: 4px;
+      letter-spacing: .15em;
+      font-weight: 600;
+    }
+    .qr {
+      width: 56px;
+      height: 56px;
+      display: block;
+      background: #fff;
+      padding: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame" id="poster-root">
+    <div class="topbar">
+      <div class="topbar-title">RaveHub Access</div>
+    </div>
+    <div class="hero">
+      ${heroImage}
+      <div class="glitch">
+        <span style="top:12%;height:2px;"></span>
+        <span style="top:27%;height:1px;"></span>
+        <span style="top:35%;height:3px;"></span>
+        <span style="top:48%;height:2px;"></span>
+        <span style="top:62%;height:1px;"></span>
+        <span style="top:75%;height:2px;"></span>
+        <span style="top:88%;height:2px;"></span>
+        <span style="top:94%;height:3px;"></span>
+      </div>
+      <div class="event-title">${safeTitle}</div>
+    </div>
+    <div class="teeth">${Array.from({ length: 26 }, () => '<div class="tooth"></div>').join('')}</div>
+    <div class="content">
+      <div class="grid">
+        <div><div class="label">Start</div><div class="value">${safeStart}</div></div>
+        <div><div class="label">End</div><div class="value">${safeEnd}</div></div>
+        <div><div class="label">Duration</div><div class="value">${safeDuration}</div></div>
+        <div><div class="label">Lineup</div><div class="value">${safeLineup}</div></div>
+        <div class="full"><div class="label">Venue</div><div class="value venue">${safeVenue}</div></div>
+        <div class="full"><div class="label">Presented By</div><div class="value">${safeOrganizer}</div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="footer">
+        <div class="footer-left">RaveHub Access</div>
+        <div class="footer-right">
+          <div>
+            <div class="scan-title">Scan</div>
+            <div class="scan-subtitle">RaveHub App</div>
+          </div>
+          <img src="${qrDataUrl}" class="qr" />
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const context = await browser.newContext({
+    viewport: {
+      width: 520,
+      height: 980,
+    },
+    deviceScaleFactor: 2,
+  });
+  const page = await context.newPage();
+
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle' });
+    const poster = await page.locator('#poster-root').screenshot({ type: 'png' });
+    return Buffer.from(poster);
+  } catch (error) {
+    console.error('Failed to render event poster HTML:', error);
+    return null;
+  } finally {
+    await page.close();
+    await context.close();
+  }
 };
 
 const drawDefaultPoster = async (shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>): Promise<Buffer> => {
@@ -814,6 +1147,10 @@ const drawEventAccessPassPoster = async (
 const drawPoster = async (shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>): Promise<Buffer> => {
   const eventSnapshot = await loadEventPosterSnapshot(shareLink);
   if (eventSnapshot) {
+    const renderedPoster = await renderEventPosterHtml(shareLink, eventSnapshot);
+    if (renderedPoster) {
+      return renderedPoster;
+    }
     return drawEventAccessPassPoster(shareLink, eventSnapshot);
   }
   return drawDefaultPoster(shareLink);
