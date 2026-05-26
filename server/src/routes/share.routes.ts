@@ -34,6 +34,11 @@ const DEFAULT_CHROME_PATHS = [
 
 type RGB = [number, number, number];
 
+type PosterRenderMode =
+  | 'event_html'
+  | 'event_fallback_png'
+  | 'default_png';
+
 const htmlEscape = (value: string | null | undefined): string =>
   String(value || '')
     .replace(/&/g, '&amp;')
@@ -787,7 +792,10 @@ const renderEventPosterHtml = async (
   event: SharePosterEventSnapshot
 ): Promise<Buffer | null> => {
   const browser = await getPosterBrowser();
-  if (!browser) return null;
+  if (!browser) {
+    console.warn(`[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} html-render skipped reason=no_browser`);
+    return null;
+  }
 
   const qrDataUrl = await QRCode.toDataURL(buildShareShortUrl(shareLink.code), {
     errorCorrectionLevel: 'H',
@@ -926,9 +934,15 @@ const renderEventPosterHtml = async (
   try {
     await page.setContent(html, { waitUntil: 'networkidle' });
     const poster = await page.locator('#poster-root').screenshot({ type: 'png' });
+    console.info(
+      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} html-render success bytes=${poster.length} imageUrl=${event.imageUrl || 'none'}`
+    );
     return Buffer.from(poster);
   } catch (error) {
-    console.error('Failed to render event poster HTML:', error);
+    console.error(
+      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} html-render failed imageUrl=${event.imageUrl || 'none'}`,
+      error
+    );
     return null;
   } finally {
     await page.close();
@@ -1094,16 +1108,30 @@ const drawEventAccessPassPoster = async (
   return PNG.sync.write(png);
 };
 
-const drawPoster = async (shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>): Promise<Buffer> => {
+const drawPoster = async (
+  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>
+): Promise<{ png: Buffer; mode: PosterRenderMode }> => {
   const eventSnapshot = await loadEventPosterSnapshot(shareLink);
   if (eventSnapshot) {
+    console.info(
+      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} eventSnapshot loaded title="${eventSnapshot.title}" imageUrl=${eventSnapshot.imageUrl || 'none'}`
+    );
     const renderedPoster = await renderEventPosterHtml(shareLink, eventSnapshot);
     if (renderedPoster) {
-      return renderedPoster;
+      return { png: renderedPoster, mode: 'event_html' };
     }
-    return drawEventAccessPassPoster(shareLink, eventSnapshot);
+    console.warn(
+      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} fallback=event_fallback_png`
+    );
+    return {
+      png: await drawEventAccessPassPoster(shareLink, eventSnapshot),
+      mode: 'event_fallback_png',
+    };
   }
-  return drawDefaultPoster(shareLink);
+  console.warn(
+    `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} fallback=default_png reason=no_event_snapshot`
+  );
+  return { png: await drawDefaultPoster(shareLink), mode: 'default_png' };
 };
 
 router.get('/s/:code', async (req: Request, res: Response): Promise<void> => {
@@ -1280,13 +1308,22 @@ router.get('/poster/:code.png', async (req: Request, res: Response): Promise<voi
     const code = req.params.code as string;
     const shareLink = await getRawShareLinkByCode(prisma, code);
     const state = describeShareState(shareLink);
+    console.info(
+      `[share-poster] code=${code} route-hit targetType=${shareLink.targetType} status=${shareLink.status} host=${req.get('host') || 'unknown'} ua=${req.get('user-agent') || 'unknown'}`
+    );
 
     if (!state.ok) {
+      console.warn(
+        `[share-poster] code=${code} route-blocked reason=${state.reason} statusCode=${state.statusCode}`
+      );
       res.status(state.statusCode).type('html').send(renderLandingPage(req, shareLink, state));
       return;
     }
 
-    const png = await drawPoster(shareLink);
+    const { png, mode } = await drawPoster(shareLink);
+    console.info(
+      `[share-poster] code=${code} route-success mode=${mode} bytes=${png.length}`
+    );
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.send(png);
