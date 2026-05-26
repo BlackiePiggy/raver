@@ -56,7 +56,7 @@ struct RecommendEventsModuleView: View {
         ZStack(alignment: .top) {
             Group {
                 if viewModel.phase == .idle || viewModel.phase == .initialLoading {
-                    FeedSkeletonView(count: 4)
+                    RecommendEventsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 } else if case .failure(let message) = viewModel.phase {
                     ScreenErrorCard(
@@ -445,7 +445,7 @@ struct RecommendEventsModuleView: View {
     }
 
     private func recommendationDateText(for event: WebEvent) -> String {
-        event.startDate.appLocalizedDateRangeText(to: event.endDate)
+        event.startDate.appLocalizedDateRangeText(to: event.endDate, timeZone: event.eventTimeZone)
     }
 
     private func notifyHorizontalDragging(_ isDragging: Bool) {

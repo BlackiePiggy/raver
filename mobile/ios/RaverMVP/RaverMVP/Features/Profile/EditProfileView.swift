@@ -116,6 +116,8 @@ struct EditProfileView: View {
     @State private var selectedBackgroundPhotoItem: PhotosPickerItem?
     @State private var pendingAvatarData: Data?
     @State private var pendingBackgroundData: Data?
+    @State private var uploadedBackgroundURL: String?
+    @State private var isUploadingBackgroundOnSave = false
     @State private var availableGenreTags: [String] = []
     @State private var tagSearchText = ""
     @State private var isLoadingGenreTags = false
@@ -171,7 +173,7 @@ struct EditProfileView: View {
                         Label(LT("更换背景图", "Change Background", "背景画像を変更"), systemImage: "photo.on.rectangle")
                     }
                     .buttonStyle(.bordered)
-                    .disabled(appState.accountEnforcementStatus.blocks(.mediaUpload))
+                    .disabled(isProfileSaveBusy || appState.accountEnforcementStatus.blocks(.mediaUpload))
 
                     avatarPreview
 
@@ -179,7 +181,7 @@ struct EditProfileView: View {
                         Label(LT("更换头像", "Change Avatar", "アバターを変更"), systemImage: "photo")
                     }
                     .buttonStyle(.bordered)
-                    .disabled(appState.accountEnforcementStatus.blocks(.mediaUpload))
+                    .disabled(isProfileSaveBusy || appState.accountEnforcementStatus.blocks(.mediaUpload))
                 }
                 .frame(maxWidth: .infinity)
 
@@ -270,14 +272,14 @@ struct EditProfileView: View {
                 Button {
                     Task { await save() }
                 } label: {
-                    if viewModel.isSaving {
+                    if isProfileSaveBusy {
                         ProgressView().tint(.white)
                     } else {
                         Text(LT("保存", "Save", "保存"))
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSaving || appState.accountEnforcementStatus.blocks(.profileUpdate))
+                .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProfileSaveBusy || appState.accountEnforcementStatus.blocks(.profileUpdate))
             }
             .padding(16)
         }
@@ -466,36 +468,43 @@ struct EditProfileView: View {
     private func applyPickedBackgroundData(_ data: Data) async {
         let prepared = Self.preparedBackgroundData(from: data)
         pendingBackgroundData = prepared
-        guard let userId = appState.session?.user.id else { return }
-        do {
-            let localURL = try LocalProfileAvatarCache.saveBackground(imageData: prepared, userId: userId)
-            if let snapshot = appState.currentUserProfileSnapshot(backgroundURL: localURL.absoluteString) {
-                NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
-            }
-            Task {
-                await uploadBackgroundInBackground(prepared)
-            }
-        } catch {
-            viewModel.error = error.userFacingMessage
-        }
+        uploadedBackgroundURL = nil
     }
 
-    private func uploadBackgroundInBackground(_ backgroundData: Data) async {
+    private func uploadPendingBackgroundIfNeeded() async throws -> String? {
+        guard let pendingBackgroundData else {
+            return uploadedBackgroundURL ?? currentBackgroundURL
+        }
+
+        if let uploadedBackgroundURL {
+            return uploadedBackgroundURL
+        }
+
+        await MainActor.run {
+            isUploadingBackgroundOnSave = true
+            viewModel.error = nil
+        }
+        defer {
+            Task { @MainActor in
+                isUploadingBackgroundOnSave = false
+            }
+        }
+
         do {
             let uploaded = try await repository.uploadMyBackground(
-                imageData: backgroundData,
+                imageData: pendingBackgroundData,
                 fileName: "background.jpg",
                 mimeType: "image/jpeg"
             )
             await MainActor.run {
-                if let snapshot = appState.currentUserProfileSnapshot(backgroundURL: uploaded.backgroundURL) {
-                    NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
-                }
+                uploadedBackgroundURL = uploaded.backgroundURL
             }
+            return uploaded.backgroundURL
         } catch {
             await MainActor.run {
-                viewModel.error = LT("背景图正在本地显示，上传失败后可稍后重试。", "Your background is shown locally. Upload failed; please retry later.", "背景画像はローカル表示中です。アップロードに失敗したため後でもう一度お試しください。")
+                viewModel.error = LT("背景图上传失败，请稍后重试。", "Background upload failed. Please try again later.", "背景画像のアップロードに失敗しました。後でもう一度お試しください。")
             }
+            throw error
         }
     }
 
@@ -505,10 +514,16 @@ struct EditProfileView: View {
             viewModel.error = appState.accountEnforcementStatus.restrictionSummary
             return
         }
+        let backgroundURLForSave: String?
+        do {
+            backgroundURLForSave = try await uploadPendingBackgroundIfNeeded()
+        } catch {
+            return
+        }
         if var updated = await viewModel.saveProfile(
             displayName: displayName,
             bio: bio,
-            backgroundURL: persistedBackgroundURL,
+            backgroundURL: backgroundURLForSave,
             birthYear: normalizedBirthYear,
             tags: selectedTags,
             isFollowersListPublic: isFollowersListPublic,
@@ -518,7 +533,7 @@ struct EditProfileView: View {
                URL(string: currentAvatarURL)?.isFileURL == true {
                 updated.avatarURL = currentAvatarURL
             }
-            updated.backgroundURL = persistedBackgroundURL
+            updated.backgroundURL = backgroundURLForSave
             updated.birthYear = normalizedBirthYear
             appState.applyCurrentUserProfile(updated)
             onSaved(updated)
@@ -578,13 +593,8 @@ struct EditProfileView: View {
         return Calendar.current.component(.year, from: selectedBirthDate)
     }
 
-    private var persistedBackgroundURL: String? {
-        if let pendingBackgroundData,
-           let userId = appState.session?.user.id,
-           let localURL = try? LocalProfileAvatarCache.saveBackground(imageData: pendingBackgroundData, userId: userId) {
-            return localURL.absoluteString
-        }
-        return currentBackgroundURL
+    private var isProfileSaveBusy: Bool {
+        viewModel.isSaving || isUploadingBackgroundOnSave
     }
 
     private var selectedTagsSummary: String {

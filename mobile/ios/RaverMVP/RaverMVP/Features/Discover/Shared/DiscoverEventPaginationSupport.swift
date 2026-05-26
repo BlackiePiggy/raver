@@ -210,7 +210,7 @@ private struct DiscoverStandardEventRow: View {
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(2)
 
-                Text(event.startDate.appLocalizedDateRangeText(to: event.endDate))
+                Text(event.startDate.appLocalizedDateRangeText(to: event.endDate, timeZone: event.eventTimeZone))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
                     .lineLimit(1)

@@ -148,6 +148,7 @@ struct MyCheckinsOverviewTimelineEvent: Codable, Hashable, Identifiable {
     var country: String?
     var startDate: Date?
     var endDate: Date?
+    var timeZone: String? = nil
 }
 
 struct MyCheckinsOverviewTimelineSummary: Codable, Hashable {
@@ -1547,6 +1548,16 @@ struct CheckinEventLite: Codable, Identifiable, Hashable {
     var country: String?
     var startDate: Date?
     var endDate: Date?
+    var timeZone: String? = nil
+
+    var eventTimeZone: TimeZone {
+        guard let raw = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let timeZone = TimeZone(identifier: raw) else {
+            return TimeZone(identifier: "Asia/Shanghai") ?? .current
+        }
+        return timeZone
+    }
 
     var unifiedAddress: String {
         resolveEventUnifiedAddress(
@@ -1836,8 +1847,18 @@ struct MyPublishEvent: Codable, Identifiable, Hashable {
     var city: String?
     var country: String?
     var startDate: Date
+    var timeZone: String? = nil
     var createdAt: Date
     var lineupSlotCount: Int
+
+    var eventTimeZone: TimeZone {
+        guard let raw = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let timeZone = TimeZone(identifier: raw) else {
+            return TimeZone(identifier: "Asia/Shanghai") ?? .current
+        }
+        return timeZone
+    }
 
     var unifiedAddress: String {
         resolveEventUnifiedAddress(
@@ -2680,8 +2701,18 @@ struct SavedEventRoute: Codable, Identifiable, Hashable {
     var coverImageUrl: String?
     var startDate: Date
     var endDate: Date
+    var timeZone: String? = nil
     var selectedSlotIDs: [String]
     var savedAt: Date
+
+    var eventTimeZone: TimeZone {
+        guard let raw = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let timeZone = TimeZone(identifier: raw) else {
+            return TimeZone(identifier: "Asia/Shanghai") ?? .current
+        }
+        return timeZone
+    }
 
     var selectedSlotIDSet: Set<String> {
         Set(selectedSlotIDs)
@@ -2712,6 +2743,7 @@ final class EventRouteStore: ObservableObject {
             coverImageUrl: event.coverImageUrl,
             startDate: event.startDate,
             endDate: event.endDate,
+            timeZone: event.timeZone,
             selectedSlotIDs: selectedSlotIDs.sorted(),
             savedAt: Date()
         )

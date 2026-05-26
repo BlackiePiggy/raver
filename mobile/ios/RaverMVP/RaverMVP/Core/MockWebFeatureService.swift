@@ -2337,7 +2337,8 @@ actor MockWebFeatureService: WebFeatureService {
                     city: item.event?.city,
                     country: item.event?.country,
                     startDate: item.event?.startDate,
-                    endDate: item.event?.endDate
+                    endDate: item.event?.endDate,
+                    timeZone: item.event?.timeZone
                 ),
                 summary: MyCheckinsOverviewTimelineSummary(
                     dayCount: selections.count,
@@ -2461,7 +2462,8 @@ actor MockWebFeatureService: WebFeatureService {
                     city: item.event?.city,
                     country: item.event?.country,
                     startDate: item.event?.startDate,
-                    endDate: item.event?.endDate
+                    endDate: item.event?.endDate,
+                    timeZone: item.event?.timeZone
                 ),
                 summary: MyCheckinsOverviewTimelineSummary(
                     dayCount: selections.count,
@@ -2617,7 +2619,8 @@ actor MockWebFeatureService: WebFeatureService {
                     city: $0.city,
                     country: $0.country,
                     startDate: $0.startDate,
-                    endDate: $0.endDate
+                    endDate: $0.endDate,
+                    timeZone: $0.timeZone
                 )
             },
             dj: dj.map { CheckinDJLite(id: $0.id, name: $0.name, avatarUrl: $0.avatarUrl, country: $0.country) }
@@ -2648,7 +2651,8 @@ actor MockWebFeatureService: WebFeatureService {
                     city: event.city,
                     country: event.country,
                     startDate: event.startDate,
-                    endDate: event.endDate
+                    endDate: event.endDate,
+                    timeZone: event.timeZone
                 )
             }
         }
@@ -3679,6 +3683,7 @@ actor MockWebFeatureService: WebFeatureService {
                     city: $0.city,
                     country: $0.country,
                     startDate: $0.startDate,
+                    timeZone: $0.timeZone,
                     createdAt: $0.createdAt,
                     lineupSlotCount: $0.lineupSlots.count
                 )

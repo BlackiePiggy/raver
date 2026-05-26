@@ -84,9 +84,8 @@ struct ProfileView: View {
             case .success:
                 if let profile = viewModel.profile {
                     ScrollView {
-                        VStack(spacing: 14) {
-                            profileTopActions
-
+                        ZStack(alignment: .topTrailing) {
+                            VStack(spacing: 14) {
                             ProfileHeaderCard(
                                 profile: profile,
                                 appearance: resolvedAppearance,
@@ -109,9 +108,10 @@ struct ProfileView: View {
                                 }
                             )
 
+                                VStack(spacing: 14) {
                             ProfileRecentCheckinsCard(
                                 title: LT("我的近期打卡", "My Recent Check-ins", "最近のチェックイン"),
-                                checkins: viewModel.recentCheckins,
+                                checkins: viewModel.recentCheckinPreviews,
                                 emptyText: LT("去发现页完成活动或 DJ 打卡，记录会显示在这里。", "Complete event or DJ check-ins from Discover. Records will appear here.", "発見ページでイベントまたはDJチェックインを完了すると、記録がここに表示されます。")
                             ) {
                                 profilePush(.myCheckins(
@@ -124,12 +124,16 @@ struct ProfileView: View {
                             profileQuickActions
 
                             sectionContent
+                                }
+                                .padding(.horizontal, 16)
                         }
-                        .padding(16)
+
+                            profileTopActions
+                                .padding(.top, 50)
+                                .padding(.trailing, 16)
+                        }
                     }
-                    .refreshable {
-                        await viewModel.refreshSection()
-                    }
+                    .ignoresSafeArea(edges: .top)
                 } else {
                     ProfileSkeletonView()
                 }
@@ -666,7 +670,7 @@ struct MySavesView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(event.name)
                         .font(.headline)
-                    Text(event.startDate.appLocalizedYMDText())
+                    Text(event.startDate.appLocalizedYMDText(in: event.eventTimeZone))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
                     let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -747,6 +751,7 @@ struct ProfileHeaderCard<Actions: View>: View {
     let onFollowersTap: (() -> Void)?
     let onFollowingTap: (() -> Void)?
     let onFriendsTap: (() -> Void)?
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isBioExpanded = false
     @ViewBuilder let actions: () -> Actions
 
@@ -778,115 +783,104 @@ struct ProfileHeaderCard<Actions: View>: View {
         VStack(spacing: 12) {
             heroBackground
 
-            HStack(spacing: 24) {
-                stat(LT("动态", "Posts", "投稿"), value: profile.postsCount)
-                stat(LT("粉丝", "Followers", "フォロワー"), value: profile.followersCount, onTap: onFollowersTap)
-                stat(LT("关注", "Following", "フォロー中"), value: profile.followingCount, onTap: onFollowingTap)
-                stat(LT("好友", "Friends", "友達"), value: profile.friendsCount, onTap: onFriendsTap)
+            VStack(alignment: .leading, spacing: 12) {
+                if !profile.bio.isEmpty {
+                    bioView
+                }
+
+                if !profile.tags.isEmpty {
+                    tagsFlow(profile.tags)
+                }
+
+                actions()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-
-            if !profile.tags.isEmpty {
-                tagsFlow(profile.tags)
-                    .padding(.horizontal, 16)
-            }
-
-            actions()
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+            .padding(.bottom, 16)
         }
-        .padding(.top, 0)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(RaverTheme.card.opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(RaverTheme.cardBorder.opacity(0.34), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     private var heroBackground: some View {
-        ZStack(alignment: .bottomLeading) {
-            heroImageView
+        ZStack(alignment: .top) {
+            GeometryReader { geo in
+                ZStack {
+                    RaverTheme.card
+                    heroImageView
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
+            }
 
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.02),
-                    Color.black.opacity(0.22),
-                    Color.black.opacity(0.74)
+                    .clear,
+                    Color.black.opacity(0.38),
+                    Color.black.opacity(0.76),
+                    RaverTheme.background.opacity(0.98)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
 
-            LinearGradient(
-                colors: [
-                    RaverTheme.background.opacity(0),
-                    RaverTheme.background.opacity(0.1),
-                    RaverTheme.card.opacity(0.94)
-                ],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 14) {
+                        avatarView
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 14) {
-                    avatarView
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 7) {
+                                Text(profile.displayName)
+                                    .font(.title3.bold())
+                                    .foregroundStyle(heroPrimaryTextColor)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.82)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 7) {
-                            Text(profile.displayName)
-                                .font(.title3.bold())
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.82)
-
-                            if let titleMedal = appearance?.titleMedal {
-                                VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
-                            }
-                        }
-
-                        if let badges = appearance?.profileBadges, !badges.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(badges.prefix(5)) { badge in
-                                        VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
-                                    }
+                                if let titleMedal = appearance?.titleMedal {
+                                    VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
                                 }
-                                .padding(.horizontal, 2)
+                            }
+
+                            if let badges = appearance?.profileBadges, !badges.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 6) {
+                                        ForEach(badges.prefix(5)) { badge in
+                                            VirtualAssetBadgeView(asset: badge, compact: true, showTitle: true)
+                                        }
+                                    }
+                                    .padding(.horizontal, 2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            HStack(spacing: 6) {
+                                if let locationText = profileLocationText {
+                                    metaPill(text: locationText)
+                                }
+                                if let joinedDaysText = profileJoinedDaysText {
+                                    metaPill(text: joinedDaysText)
+                                }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        }
 
-                        HStack(spacing: 8) {
-                            if let locationText = profileLocationText {
-                                metaPill(text: locationText)
+                            if let realNameStatus {
+                                realNameBadge(status: realNameStatus)
                             }
-                            if let joinedDaysText = profileJoinedDaysText {
-                                metaPill(text: joinedDaysText)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        if let realNameStatus {
-                            realNameBadge(status: realNameStatus)
+                            statsRow(
+                                valueColor: heroPrimaryTextColor,
+                                titleColor: heroSecondaryTextColor,
+                                spacing: 18
+                            )
                         }
-
-                        if !profile.bio.isEmpty {
-                            bioView
-                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 18)
         }
-        .frame(height: 286)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .frame(height: 250)
     }
 
     @ViewBuilder
@@ -906,8 +900,12 @@ struct ProfileHeaderCard<Actions: View>: View {
         if let resolved = AppConfig.resolvedURLString(profile.backgroundURL),
            let url = URL(string: resolved),
            resolved.hasPrefix("http://") || resolved.hasPrefix("https://") || url.isFileURL {
-            ImageLoaderView(urlString: resolved)
-                .scaledToFill()
+            if url.isFileURL {
+                localHeroImage(url: url)
+            } else {
+                ImageLoaderView(urlString: resolved)
+                    .background(RaverTheme.card)
+            }
         } else {
             LinearGradient(
                 colors: [
@@ -928,6 +926,25 @@ struct ProfileHeaderCard<Actions: View>: View {
                     startRadius: 20,
                     endRadius: 240
                 )
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func localHeroImage(url: URL) -> some View {
+        if let image = UIImage(contentsOfFile: url.path) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            LinearGradient(
+                colors: [
+                    RaverTheme.accent.opacity(0.55),
+                    Color(red: 0.11, green: 0.14, blue: 0.22),
+                    RaverTheme.card
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
         }
     }
@@ -1037,14 +1054,42 @@ struct ProfileHeaderCard<Actions: View>: View {
         return LT("加入\(joinedDays)天", "Joined \(joinedDays) days", "\(joinedDays)日参加")
     }
 
+    private var hasCustomHeroBackground: Bool {
+        guard let resolved = AppConfig.resolvedURLString(profile.backgroundURL),
+              let url = URL(string: resolved) else {
+            return false
+        }
+        return resolved.hasPrefix("http://") || resolved.hasPrefix("https://") || url.isFileURL
+    }
+
+    private var shouldUseLightHeroText: Bool {
+        hasCustomHeroBackground || colorScheme == .dark
+    }
+
+    private var heroPrimaryTextColor: Color {
+        shouldUseLightHeroText ? Color.white : RaverTheme.primaryText
+    }
+
+    private var heroSecondaryTextColor: Color {
+        shouldUseLightHeroText ? Color.white.opacity(0.72) : RaverTheme.secondaryText
+    }
+
+    private var heroPillTextColor: Color {
+        shouldUseLightHeroText ? Color.white.opacity(0.9) : RaverTheme.primaryText.opacity(0.86)
+    }
+
+    private var heroPillBackgroundColor: Color {
+        shouldUseLightHeroText ? Color.white.opacity(0.13) : RaverTheme.card.opacity(0.72)
+    }
+
     private func metaPill(text: String) -> some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(.caption2.weight(.semibold))
             .lineLimit(1)
-        .foregroundStyle(Color.white.opacity(0.92))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .foregroundStyle(heroPillTextColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(heroPillBackgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     @ViewBuilder
@@ -1052,14 +1097,14 @@ struct ProfileHeaderCard<Actions: View>: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Array(tags.prefix(12).enumerated()), id: \.offset) { _, tag in
-                Text(formattedTagText(tag))
-                    .font(.caption)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(RaverTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Text(formattedTagText(tag))
+                        .font(.caption)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RaverTheme.card)
+                        .clipShape(Rectangle())
                 }
 
                 if tags.count > 12 {
@@ -1069,7 +1114,7 @@ struct ProfileHeaderCard<Actions: View>: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(RaverTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .clipShape(Rectangle())
                 }
             }
         }
@@ -1086,9 +1131,8 @@ struct ProfileHeaderCard<Actions: View>: View {
             } label: {
                 Text(profile.bio)
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .multilineTextAlignment(.leading)
                     .foregroundStyle(RaverTheme.secondaryText)
+                    .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
@@ -1125,39 +1169,71 @@ struct ProfileHeaderCard<Actions: View>: View {
         Group {
             if let onTap {
                 Button(action: onTap) {
-                    statBody(title: title, value: value)
+                    statBody(title: title, value: value, valueColor: RaverTheme.primaryText, titleColor: RaverTheme.secondaryText)
                 }
                 .buttonStyle(.plain)
             } else {
-                statBody(title: title, value: value)
+                statBody(title: title, value: value, valueColor: RaverTheme.primaryText, titleColor: RaverTheme.secondaryText)
             }
         }
     }
 
-    private func statBody(title: String, value: Int) -> some View {
+    private func statsRow(valueColor: Color, titleColor: Color, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            statForHero(LT("动态", "Posts", "投稿"), value: profile.postsCount, valueColor: valueColor, titleColor: titleColor)
+            statForHero(LT("粉丝", "Followers", "フォロワー"), value: profile.followersCount, valueColor: valueColor, titleColor: titleColor, onTap: onFollowersTap)
+            statForHero(LT("关注", "Following", "フォロー中"), value: profile.followingCount, valueColor: valueColor, titleColor: titleColor, onTap: onFollowingTap)
+            statForHero(LT("好友", "Friends", "友達"), value: profile.friendsCount, valueColor: valueColor, titleColor: titleColor, onTap: onFriendsTap)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statForHero(_ title: String, value: Int, valueColor: Color, titleColor: Color, onTap: (() -> Void)? = nil) -> some View {
+        Group {
+            if let onTap {
+                Button(action: onTap) {
+                    statBody(title: title, value: value, valueColor: valueColor, titleColor: titleColor)
+                }
+                .buttonStyle(.plain)
+            } else {
+                statBody(title: title, value: value, valueColor: valueColor, titleColor: titleColor)
+            }
+        }
+    }
+
+    private func statBody(title: String, value: Int, valueColor: Color, titleColor: Color) -> some View {
         VStack(spacing: 4) {
             Text("\(value)")
                 .font(.headline)
+                .foregroundStyle(valueColor)
             Text(title)
                 .font(.caption)
-                .foregroundStyle(RaverTheme.secondaryText)
+                .foregroundStyle(titleColor)
         }
     }
 }
 
 struct ProfileRecentCheckinsCard: View {
     let title: String
-    let checkins: [WebCheckin]
+    let checkins: [ProfileRecentCheckinPreview]
     let emptyText: String
     let onShowAll: () -> Void
 
     var body: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(RaverTheme.primaryText)
+                    HStack(spacing: 6) {
+                        Image("Check")
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(RaverTheme.accent)
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                    }
                     Spacer()
                     Button(LT("查看全部", "View all", "すべて表示")) {
                         onShowAll()
@@ -1173,19 +1249,30 @@ struct ProfileRecentCheckinsCard: View {
                         .foregroundStyle(RaverTheme.secondaryText)
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(Array(checkins.prefix(3))) { item in
-                        checkinPreviewRow(item)
+                    ForEach(Array(checkins.enumerated()), id: \.element.id) { index, item in
+                        checkinPreviewRow(item, showsConnector: index < checkins.count - 1)
                     }
                 }
             }
         }
     }
 
-    private func checkinPreviewRow(_ item: WebCheckin) -> some View {
+    private func checkinPreviewRow(_ item: ProfileRecentCheckinPreview, showsConnector: Bool) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "postage.stamp.fill")
-                .font(.title3)
-                .foregroundStyle(RaverTheme.accent)
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(RaverTheme.accent)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 4)
+
+                if showsConnector {
+                    Rectangle()
+                        .fill(RaverTheme.accent.opacity(0.28))
+                        .frame(width: 2, height: 28)
+                        .padding(.top, 5)
+                }
+            }
+            .frame(width: 12)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(checkinTitle(item))
@@ -1202,34 +1289,18 @@ struct ProfileRecentCheckinsCard: View {
         }
     }
 
-    private func checkinTitle(_ item: WebCheckin) -> String {
-        if item.type == "event" {
-            if let event = item.event {
-                if let nameI18n = event.nameI18n {
-                    let localized = nameI18n.text(for: AppLanguagePreference.current.effectiveLanguage)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !localized.isEmpty { return localized }
-                }
-                let fallback = event.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !fallback.isEmpty { return fallback }
-            }
-            return LT("活动打卡", "Event Check-in", "イベントチェックイン")
-        }
-        return item.dj?.name ?? LT("DJ 打卡", "DJ Check-in", "DJチェックイン")
+    private func checkinTitle(_ item: ProfileRecentCheckinPreview) -> String {
+        item.title
     }
 
-    private func checkinSubtitle(_ item: WebCheckin) -> String {
-        let location: String = {
-            if let event = item.event {
-                let unified = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-                return unified.isEmpty ? LT("现场记录", "Live Record", "ライブ記録") : unified
-            }
-            if let country = item.dj?.country, !country.isEmpty {
-                return country
-            }
-            return LT("现场记录", "Live Record", "ライブ記録")
-        }()
-        return "\(item.attendedAt.appLocalizedYMDText()) · \(location)"
+    private func checkinSubtitle(_ item: ProfileRecentCheckinPreview) -> String {
+        let location = item.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackLocation = location.isEmpty ? LT("现场记录", "Live Record", "ライブ記録") : location
+
+        if let startDate = item.startDate {
+            return "\(startDate.appLocalizedYMDText(in: item.eventTimeZone)) · \(fallbackLocation)"
+        }
+        return fallbackLocation
     }
 }
 
@@ -1538,14 +1609,14 @@ struct MyRoutesView: View {
     }
 
     private func eventDateText(_ route: SavedEventRoute) -> String {
-        let start = route.startDate.appLocalizedYMDText()
-        let end = route.endDate.appLocalizedYMDText()
+        let start = route.startDate.appLocalizedYMDText(in: route.eventTimeZone)
+        let end = route.endDate.appLocalizedYMDText(in: route.eventTimeZone)
         return start == end ? start : "\(start) - \(end)"
     }
 
     private func eventDateText(_ event: WebEvent) -> String {
-        let start = event.startDate.appLocalizedYMDText()
-        let end = event.endDate.appLocalizedYMDText()
+        let start = event.startDate.appLocalizedYMDText(in: event.eventTimeZone)
+        let end = event.endDate.appLocalizedYMDText(in: event.eventTimeZone)
         return start == end ? start : "\(start) - \(end)"
     }
 

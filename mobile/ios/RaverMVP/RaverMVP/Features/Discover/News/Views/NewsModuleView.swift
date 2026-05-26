@@ -130,7 +130,7 @@ struct NewsModuleView: View {
                 }
 
                 if phase == .idle || phase == .initialLoading {
-                    FeedSkeletonView(count: 4)
+                    NewsListSkeletonView(count: 6)
                         .padding(.top, 16)
                 } else if case .failure(let message) = phase {
                     ScreenErrorCard(

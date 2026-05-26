@@ -167,7 +167,7 @@ private struct UserProfileScreen: View {
 
                             ProfileRecentCheckinsCard(
                                 title: LT("Ta 的近期打卡", "Recent Check-ins", "相手の最近のチェックイン"),
-                                checkins: viewModel.recentCheckins,
+                                checkins: viewModel.recentCheckinPreviews,
                                 emptyText: LT("Ta 还没有公开的打卡记录。", "No public check-ins yet.", "公開チェックインはまだありません。")
                             ) {
                                 profilePush(.myCheckins(
@@ -228,11 +228,8 @@ private struct UserProfileScreen: View {
                                 .padding(.top, 80)
                         }
                     }
-                    .padding(16)
                 }
-                .refreshable {
-                    await viewModel.refresh()
-                }
+                .ignoresSafeArea(edges: .top)
             }
         }
         .background(RaverTheme.background)

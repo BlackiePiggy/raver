@@ -172,6 +172,7 @@ struct EventCheckinSelectionSheet: View {
     let eventName: String
     let options: [EventCheckinDayOption]
     let djOptionsByDayID: [String: [EventCheckinDJOption]]
+    let isLoadingOptions: Bool
     let initialSelectedDayIDs: Set<String>
     let initialSelectedDJIDsByDayID: [String: Set<String>]
     let confirmButtonTitle: String
@@ -214,6 +215,7 @@ struct EventCheckinSelectionSheet: View {
         eventName: String,
         options: [EventCheckinDayOption],
         djOptionsByDayID: [String: [EventCheckinDJOption]],
+        isLoadingOptions: Bool = false,
         initialSelectedDayIDs: Set<String> = [],
         initialSelectedDJIDsByDayID: [String: Set<String>] = [:],
         confirmButtonTitle: String = "",
@@ -224,6 +226,7 @@ struct EventCheckinSelectionSheet: View {
         self.eventName = eventName
         self.options = options
         self.djOptionsByDayID = djOptionsByDayID
+        self.isLoadingOptions = isLoadingOptions
         self.initialSelectedDayIDs = initialSelectedDayIDs
         self.initialSelectedDJIDsByDayID = initialSelectedDJIDsByDayID
         self.confirmButtonTitle = confirmButtonTitle.isEmpty ? LT("确认打卡", "Confirm Check-in", "チェックインを確認") : confirmButtonTitle
@@ -247,6 +250,20 @@ struct EventCheckinSelectionSheet: View {
                     Text(LT("勾选参加的\(dayUnitLabel)，展开后直接选择当天看过的 DJ", "Select attended \(dayUnitLabel), then expand to choose DJs you watched that day.", "参加した\(dayUnitLabel)を選び、展開して当日見たDJを選択してください。"))
                         .font(.subheadline)
                         .foregroundStyle(RaverTheme.secondaryText)
+
+                    if isLoadingOptions {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(LT("正在加载可选演出...", "Loading available acts...", "選択可能な出演を読み込み中..."))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
 
                     if !selectedDayIDs.isEmpty {
                         Text(LT("已选 \(selectedDayIDs.count) 天 · \(selectedDJCount) 个演出", "Selected \(selectedDayIDs.count) days · \(selectedDJCount) acts", "選択済み \(selectedDayIDs.count)日 · \(selectedDJCount)件の出演"))
@@ -296,7 +313,7 @@ struct EventCheckinSelectionSheet: View {
                             isLoading: activeOperation == .save
                         )
                     }
-                    .disabled(selectedDayIDs.isEmpty || activeOperation != nil)
+                    .disabled(selectedDayIDs.isEmpty || activeOperation != nil || isLoadingOptions)
                 }
             }
             .onAppear {
@@ -400,7 +417,16 @@ struct EventCheckinSelectionSheet: View {
             }
 
             if isExpanded {
-                if djOptions.isEmpty {
+                if isLoadingOptions {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(LT("正在加载这次活动的可选演出，稍后即可选择 DJ。", "Loading available acts for this event. DJ selection will be ready shortly.", "このイベントの選択可能な出演を読み込み中です。まもなくDJを選択できます。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .padding(.leading, 2)
+                } else if djOptions.isEmpty {
                     Text(LT("这一天暂未配置可选 DJ，确认后会只记录该\(dayUnitLabel)的活动打卡。", "No DJ options are configured for this day. Confirming will record only this \(dayUnitLabel) event check-in.", "この日は選択可能なDJが設定されていません。確認するとこの\(dayUnitLabel)のイベントチェックインのみ記録されます。"))
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)

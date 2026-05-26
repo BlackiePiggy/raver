@@ -269,6 +269,51 @@ struct ProfileDashboardSnapshot {
     let recentCheckins: [WebCheckin]
 }
 
+struct ProfileRecentCheckinPreview: Codable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let startDate: Date?
+    let timeZoneIdentifier: String?
+    let address: String?
+    let city: String?
+    let country: String?
+
+    var eventTimeZone: TimeZone {
+        guard let timeZoneIdentifier,
+              let timeZone = TimeZone(identifier: timeZoneIdentifier) else {
+            return .current
+        }
+        return timeZone
+    }
+
+    var unifiedAddress: String {
+        let addressText = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !addressText.isEmpty {
+            return addressText
+        }
+
+        let cityText = city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let countryText = country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let components = [cityText, countryText].filter { !$0.isEmpty }
+        return components.joined(separator: ", ")
+    }
+
+    init(item: MyCheckinsOverviewTimelineItem) {
+        let nameI18n = item.event.nameI18n?
+            .text(for: AppLanguagePreference.current.effectiveLanguage)
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let fallbackName = item.event.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        id = item.id
+        title = !nameI18n.isEmpty ? nameI18n : (!fallbackName.isEmpty ? fallbackName : LT("活动打卡", "Event Check-in", "イベントチェックイン"))
+        startDate = item.event.startDate
+        timeZoneIdentifier = item.event.timeZone
+        address = item.event.address
+        city = item.event.city
+        country = item.event.country
+    }
+}
+
 private struct ProfileOfflineSnapshot: Codable {
     var profile: UserProfile
     var recentPosts: [Post]
@@ -276,6 +321,7 @@ private struct ProfileOfflineSnapshot: Codable {
     var repostedItems: [ActivityPostItem]
     var savedItems: [ActivityPostItem]
     var recentCheckins: [WebCheckin]
+    var recentCheckinPreviews: [ProfileRecentCheckinPreview]
     var cachedAt: Date
 }
 
@@ -333,6 +379,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var repostedItems: [ActivityPostItem] = []
     @Published var savedItems: [ActivityPostItem] = []
     @Published var recentCheckins: [WebCheckin] = []
+    @Published var recentCheckinPreviews: [ProfileRecentCheckinPreview] = []
     @Published var appearance: UserAssetAppearance?
     @Published var hasMorePublishedPosts = false
     @Published var isLoadingMorePublishedPosts = false
@@ -391,6 +438,7 @@ final class ProfileViewModel: ObservableObject {
             profile = dashboard.profile
             appearance = dashboard.appearance
             recentCheckins = dashboard.recentCheckins
+            recentCheckinPreviews = try await loadRecentCheckinPreviews()
             persistOfflineSnapshot()
             phase = .success
             bannerMessage = nil
@@ -435,6 +483,9 @@ final class ProfileViewModel: ObservableObject {
             loadedSections.insert(selectedSection)
             if let checkinPage = try? await checkinRepository.fetchUserCheckins(userID: profile.id, page: 1, limit: 6, type: nil) {
                 recentCheckins = checkinPage.items
+            }
+            if let overview = try? await checkinRepository.fetchMyCheckinsOverview() {
+                recentCheckinPreviews = makeRecentCheckinPreviews(from: overview)
             }
             await loadAppearance(for: profile.id)
             persistOfflineSnapshot()
@@ -633,6 +684,7 @@ final class ProfileViewModel: ObservableObject {
             repostedItems: repostedItems,
             savedItems: savedItems,
             recentCheckins: recentCheckins,
+            recentCheckinPreviews: recentCheckinPreviews,
             cachedAt: Date()
         )
 
@@ -656,6 +708,7 @@ final class ProfileViewModel: ObservableObject {
         repostedItems = snapshot.repostedItems
         savedItems = snapshot.savedItems
         recentCheckins = snapshot.recentCheckins
+        recentCheckinPreviews = snapshot.recentCheckinPreviews
         if !AppConfig.virtualAssetsEnabled {
             appearance = nil
             return true
@@ -705,5 +758,14 @@ final class ProfileViewModel: ObservableObject {
                 assetType: asset.type
             )
         }
+    }
+
+    private func loadRecentCheckinPreviews() async throws -> [ProfileRecentCheckinPreview] {
+        let overview = try await checkinRepository.fetchMyCheckinsOverview()
+        return makeRecentCheckinPreviews(from: overview)
+    }
+
+    private func makeRecentCheckinPreviews(from overview: MyCheckinsOverviewResponse) -> [ProfileRecentCheckinPreview] {
+        Array(overview.timeline.items.prefix(3)).map(ProfileRecentCheckinPreview.init(item:))
     }
 }

@@ -239,6 +239,12 @@ struct LoginView: View {
                 }
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                focusedField = nil
+                dismissKeyboard()
+            }
+        )
     }
 
     @ViewBuilder
@@ -899,6 +905,9 @@ private struct RegisterProfileView: View {
     @State private var selectedAvatarItem: PhotosPickerItem?
     @State private var selectedAvatarData: Data?
     @State private var selectedAvatarImage: UIImage?
+    @State private var avatarUploadTask: Task<Void, Never>?
+    @State private var isUploadingAvatar = false
+    @State private var hasPendingAvatarUpload = false
     @State private var isSubmitting = false
     @State private var isLoadingOnboardingOptions = false
     @State private var isSavingOnboarding = false
@@ -907,9 +916,28 @@ private struct RegisterProfileView: View {
     @State private var onboardingGenres: [OnboardingGenreOption] = []
     @State private var onboardingBrands: [WebLearnFestival] = []
     @State private var onboardingDJs: [WebDJ] = []
+    @State private var onboardingBaseGenres: [OnboardingGenreOption] = []
+    @State private var onboardingBaseBrands: [WebLearnFestival] = []
+    @State private var onboardingBaseDJs: [WebDJ] = []
+    @State private var onboardingCurrentGenres: [OnboardingGenreOption] = []
+    @State private var onboardingCurrentBrands: [WebLearnFestival] = []
+    @State private var onboardingCurrentDJs: [WebDJ] = []
+    @State private var isRefreshingOnboardingGenres = false
+    @State private var isRefreshingOnboardingBrands = false
+    @State private var isRefreshingOnboardingDJs = false
+    @State private var onboardingGenreSearchCandidates: [OnboardingGenreSearchCandidate] = []
     @State private var selectedGenreIDs: Set<String> = []
     @State private var selectedBrandIDs: Set<String> = []
     @State private var selectedDJIDs: Set<String> = []
+    @State private var onboardingGenreSearchText = ""
+    @State private var onboardingBrandSearchText = ""
+    @State private var onboardingDJSearchText = ""
+    @State private var onboardingGenreSearchTask: Task<Void, Never>?
+    @State private var onboardingBrandSearchTask: Task<Void, Never>?
+    @State private var onboardingDJSearchTask: Task<Void, Never>?
+    @State private var isSearchingOnboardingGenres = false
+    @State private var isSearchingOnboardingBrands = false
+    @State private var isSearchingOnboardingDJs = false
     @State private var showWelcomeCard = false
 
     @FocusState private var focusedField: RegisterField?
@@ -988,9 +1016,22 @@ private struct RegisterProfileView: View {
         .onChange(of: displayName) { _, newValue in
             scheduleDisplayNameAvailabilityCheck(newValue)
         }
+        .onChange(of: onboardingGenreSearchText) { _, newValue in
+            scheduleOnboardingGenreSearch(for: newValue)
+        }
+        .onChange(of: onboardingBrandSearchText) { _, newValue in
+            scheduleOnboardingBrandSearch(for: newValue)
+        }
+        .onChange(of: onboardingDJSearchText) { _, newValue in
+            scheduleOnboardingDJSearch(for: newValue)
+        }
         .onDisappear {
             smsCooldownTask?.cancel()
             displayNameAvailabilityTask?.cancel()
+            onboardingGenreSearchTask?.cancel()
+            onboardingBrandSearchTask?.cancel()
+            onboardingDJSearchTask?.cancel()
+            avatarUploadTask?.cancel()
         }
         .interactiveDismissDisabled(true)
         .toolbar {
@@ -1002,6 +1043,12 @@ private struct RegisterProfileView: View {
                 }
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                focusedField = nil
+                dismissKeyboard()
+            }
+        )
     }
 
     private var emailVerificationPage: some View {
@@ -1187,7 +1234,7 @@ private struct RegisterProfileView: View {
                     Text(selectedAvatarImage == nil ? LT("上传头像", "Upload Avatar", "アイコンをアップロード") : LT("更换头像", "Change Avatar", "アイコンを変更"))
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.97))
-                    Text(LT("上传头像", "Upload Avatar", "アイコンをアップロード"))
+                    Text(avatarUploadStatusText)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.62))
                 }
@@ -1222,11 +1269,31 @@ private struct RegisterProfileView: View {
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.82))
             }
+
+            if isUploadingAvatar {
+                Circle()
+                    .fill(Color.black.opacity(0.42))
+                    .frame(width: 72, height: 72)
+
+                ProgressView()
+                    .scaleEffect(0.9)
+                    .tint(.white)
+            }
         }
         .overlay(
             Circle()
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
+    }
+
+    private var avatarUploadStatusText: String {
+        if isUploadingAvatar {
+            return LT("正在上传头像…", "Uploading avatar...", "アバターをアップロード中...")
+        }
+        if hasPendingAvatarUpload {
+            return LT("注册成功后会自动完成上传", "Upload will finish automatically after sign-up.", "登録完了後に自動でアップロードします。")
+        }
+        return LT("上传头像", "Upload Avatar", "アイコンをアップロード")
     }
 
     private var emailVerificationFields: some View {
@@ -1503,15 +1570,56 @@ private struct RegisterProfileView: View {
     private var onboardingGenreSection: some View {
         onboardingSelectionSection(
             title: LT("喜欢的风格", "Favorite Genres", "好きなジャンル"),
-            subtitle: LT("来自流派树的不同层级", "Mixed from the genre tree", "ジャンルツリーから選出")
+            subtitle: LT("来自流派树的不同层级", "Mixed from the genre tree", "ジャンルツリーから選出"),
+            searchText: $onboardingGenreSearchText,
+            searchPlaceholder: LT("搜索风格", "Search genres", "ジャンルを検索"),
+            isSearching: isSearchingOnboardingGenres,
+            isRefreshing: isRefreshingOnboardingGenres,
+            onRefresh: refreshOnboardingGenreBatch
         ) {
-            FlexibleWrapLayout(spacing: 8, lineSpacing: 8) {
-                ForEach(onboardingGenres) { genre in
-                    onboardingChip(
-                        title: genre.name,
-                        isSelected: selectedGenreIDs.contains(genre.id)
-                    ) {
-                        toggleGenreSelection(genre.id)
+            if isRefreshingOnboardingGenres {
+                onboardingGenreBatchSkeleton
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    FlexibleWrapLayout(spacing: 8, lineSpacing: 8) {
+                        ForEach(defaultOnboardingGenres) { genre in
+                            onboardingChip(
+                                title: genre.name,
+                                isSelected: selectedGenreIDs.contains(genre.id)
+                            ) {
+                                toggleGenreSelection(genre.id)
+                            }
+                        }
+                    }
+
+                    if defaultOnboardingGenres.isEmpty {
+                        onboardingEmptySearchHint
+                    }
+                }
+            }
+
+            if !selectedOnboardingGenres.isEmpty {
+                onboardingSelectedWrapSection(
+                    title: LT("已选风格", "Selected Genres", "選択済みジャンル"),
+                    items: selectedOnboardingGenres.map { (id: $0.id, title: $0.name) },
+                    onRemove: toggleGenreSelection
+                )
+            }
+        } searchResults: {
+            if shouldShowGenreSearchResults {
+                VStack(alignment: .leading, spacing: 8) {
+                    if searchCandidateGenres.isEmpty {
+                        onboardingSearchEmptyResult
+                    } else {
+                        ForEach(searchCandidateGenres) { genre in
+                            onboardingSearchCandidateRow(
+                                title: genre.name,
+                                subtitle: genre.pathText,
+                                isSelected: selectedGenreIDs.contains(genre.id)
+                            ) {
+                                selectGenreSearchCandidate(genre)
+                            }
+                        }
                     }
                 }
             }
@@ -1521,11 +1629,44 @@ private struct RegisterProfileView: View {
     private var onboardingBrandSection: some View {
         onboardingSelectionSection(
             title: LT("关注的电音节", "Festival Brands", "フォローするフェス"),
-            subtitle: LT("关注后可收到相关动态", "Follow for future updates", "今後の更新を受け取れます")
+            subtitle: LT("关注后可收到相关动态", "Follow for future updates", "今後の更新を受け取れます"),
+            searchText: $onboardingBrandSearchText,
+            searchPlaceholder: LT("搜索电音节", "Search festivals", "フェスを検索"),
+            isSearching: isSearchingOnboardingBrands,
+            isRefreshing: isRefreshingOnboardingBrands,
+            onRefresh: refreshOnboardingBrandBatch
         ) {
-            VStack(spacing: 10) {
-                ForEach(onboardingBrands.prefix(10)) { brand in
-                    onboardingBrandRow(brand)
+            if isRefreshingOnboardingBrands {
+                onboardingBrandBatchSkeleton
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(defaultOnboardingBrands) { brand in
+                        onboardingBrandRow(brand)
+                    }
+
+                    if defaultOnboardingBrands.isEmpty {
+                        onboardingEmptySearchHint
+                    }
+                }
+            }
+
+            if !selectedOnboardingBrands.isEmpty {
+                onboardingSelectedWrapSection(
+                    title: LT("已选电音节", "Selected Festivals", "選択済みフェス"),
+                    items: selectedOnboardingBrands.map { (id: $0.id, title: $0.name) },
+                    onRemove: toggleBrandSelection
+                )
+            }
+        } searchResults: {
+            if shouldShowBrandSearchResults {
+                VStack(spacing: 8) {
+                    if searchCandidateBrands.isEmpty && !isSearchingOnboardingBrands {
+                        onboardingSearchEmptyResult
+                    } else {
+                        ForEach(searchCandidateBrands) { brand in
+                            onboardingBrandRow(brand)
+                        }
+                    }
                 }
             }
         }
@@ -1534,20 +1675,59 @@ private struct RegisterProfileView: View {
     private var onboardingDJSection: some View {
         onboardingSelectionSection(
             title: LT("喜欢的 DJ", "Favorite DJs", "好きなDJ"),
-            subtitle: LT("从 SoundCloud 粉丝量 Top 100 中随机抽取", "Randomly picked from SoundCloud top 100", "SoundCloud上位100組からランダム選出")
+            subtitle: LT("从 SoundCloud 粉丝量 Top 100 中随机抽取", "Randomly picked from SoundCloud top 100", "SoundCloud上位100組からランダム選出"),
+            searchText: $onboardingDJSearchText,
+            searchPlaceholder: LT("搜索 DJ", "Search DJs", "DJを検索"),
+            isSearching: isSearchingOnboardingDJs,
+            isRefreshing: isRefreshingOnboardingDJs,
+            onRefresh: refreshOnboardingDJBatch
         ) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 10)], spacing: 10) {
-                ForEach(onboardingDJs.prefix(18)) { dj in
-                    onboardingDJCard(dj)
+            if isRefreshingOnboardingDJs {
+                onboardingDJBatchSkeleton
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 10)], spacing: 10) {
+                    ForEach(defaultOnboardingDJs) { dj in
+                        onboardingDJCard(dj)
+                    }
+                }
+
+                if defaultOnboardingDJs.isEmpty {
+                    onboardingEmptySearchHint
+                }
+            }
+
+            if !selectedOnboardingDJs.isEmpty {
+                onboardingSelectedWrapSection(
+                    title: LT("已选 DJ", "Selected DJs", "選択済みDJ"),
+                    items: selectedOnboardingDJs.map { (id: $0.id, title: $0.name) },
+                    onRemove: toggleDJSelection
+                )
+            }
+        } searchResults: {
+            if shouldShowDJSearchResults {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 10)], spacing: 10) {
+                    if searchCandidateDJs.isEmpty && !isSearchingOnboardingDJs {
+                        onboardingSearchEmptyResult
+                    } else {
+                        ForEach(searchCandidateDJs) { dj in
+                            onboardingDJCard(dj)
+                        }
+                    }
                 }
             }
         }
     }
 
-    private func onboardingSelectionSection<Content: View>(
+    private func onboardingSelectionSection<Content: View, SearchResults: View>(
         title: String,
         subtitle: String,
-        @ViewBuilder content: () -> Content
+        searchText: Binding<String>,
+        searchPlaceholder: String,
+        isSearching: Bool = false,
+        isRefreshing: Bool = false,
+        onRefresh: @escaping () -> Void,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder searchResults: @escaping () -> SearchResults
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 10) {
@@ -1563,11 +1743,119 @@ private struct RegisterProfileView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.56))
                 }
+
+                Spacer(minLength: 12)
+
+                Button(action: onRefresh) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(LT("换一批", "Refresh", "入れ替え"))
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(.white.opacity(0.78))
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isRefreshing)
+            }
+
+            OnboardingFloatingSearchPanel(
+                text: searchText,
+                placeholder: searchPlaceholder,
+                isSearching: isSearching
+            ) {
+                searchResults()
             }
 
             content()
         }
         .padding(.vertical, 6)
+    }
+
+    private var onboardingEmptySearchHint: some View {
+        Text(LT("没有找到匹配项，换个关键词试试。", "No matches yet. Try another keyword.", "一致する候補がありません。別のキーワードを試してください。"))
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.56))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+    }
+
+    private var onboardingSearchEmptyResult: some View {
+        Text(LT("没有找到匹配项，换个关键词试试。", "No matches yet. Try another keyword.", "一致する候補がありません。別のキーワードを試してください。"))
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.62))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+    }
+
+    private var onboardingGenreBatchSkeleton: some View {
+        FlexibleWrapLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(0..<10, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: index.isMultiple(of: 3) ? 92 : 118, height: 34)
+                    .redacted(reason: .placeholder)
+            }
+        }
+    }
+
+    private var onboardingBrandBatchSkeleton: some View {
+        VStack(spacing: 10) {
+            ForEach(0..<4, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
+                    .frame(height: 68)
+                    .redacted(reason: .placeholder)
+            }
+        }
+    }
+
+    private var onboardingDJBatchSkeleton: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 10)], spacing: 10) {
+            ForEach(0..<6, id: \.self) { _ in
+                VStack(spacing: 9) {
+                    Circle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 64, height: 64)
+                        .redacted(reason: .placeholder)
+
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 72, height: 12)
+                        .redacted(reason: .placeholder)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+            }
+        }
+    }
+
+    private func onboardingSelectedWrapSection(
+        title: String,
+        items: [(id: String, title: String)],
+        onRemove: @escaping (String) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.62))
+
+            FlexibleWrapLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(items, id: \.id) { item in
+                    onboardingSelectedChip(title: item.title) {
+                        onRemove(item.id)
+                    }
+                }
+            }
+        }
     }
 
     private func onboardingChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -1586,6 +1874,61 @@ private struct RegisterProfileView: View {
             .overlay(
                 Capsule().stroke(Color.white.opacity(isSelected ? 0.0 : 0.24), lineWidth: 1)
             )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func onboardingSelectedChip(title: String, onRemove: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.black.opacity(0.88))
+                .lineLimit(1)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(Color.black.opacity(0.7))
+                    .frame(width: 16, height: 16)
+                    .background(Circle().fill(Color.black.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .background(Capsule().fill(Color.white.opacity(0.94)))
+    }
+
+    private func onboardingSearchCandidateRow(
+        title: String,
+        subtitle: String? = nil,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.94))
+                        .lineLimit(1)
+
+                    if let subtitle, !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.96) : Color.white.opacity(0.7))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 48)
         }
         .buttonStyle(.plain)
     }
@@ -1868,6 +2211,90 @@ private struct RegisterProfileView: View {
         return nil
     }
 
+    private var selectedOnboardingGenres: [OnboardingGenreOption] {
+        onboardingGenres.filter { selectedGenreIDs.contains($0.id) }
+    }
+
+    private var selectedOnboardingBrands: [WebLearnFestival] {
+        onboardingBrands.filter { selectedBrandIDs.contains($0.id) }
+    }
+
+    private var selectedOnboardingDJs: [WebDJ] {
+        onboardingDJs.filter { selectedDJIDs.contains($0.id) }
+    }
+
+    private var defaultOnboardingGenres: [OnboardingGenreOption] {
+        onboardingCurrentGenres
+    }
+
+    private var defaultOnboardingBrands: [WebLearnFestival] {
+        onboardingCurrentBrands
+    }
+
+    private var defaultOnboardingDJs: [WebDJ] {
+        onboardingCurrentDJs
+    }
+
+    private var searchCandidateGenres: [OnboardingGenreSearchCandidate] {
+        onboardingGenreSearchCandidates
+    }
+
+    private var searchCandidateBrands: [WebLearnFestival] {
+        let query = normalizedOnboardingSearchQuery(onboardingBrandSearchText)
+        guard !query.isEmpty else { return [] }
+        let source = onboardingBrands.filter { brand in
+            onboardingSearchText(for: [
+                brand.name,
+                brand.nameI18n?.en,
+                brand.nameI18n?.zh,
+                brand.nameI18n?.ja,
+                brand.abbreviation,
+                brand.aliases.joined(separator: " "),
+                brand.city,
+                brand.cityI18n?.en,
+                brand.cityI18n?.zh,
+                brand.cityI18n?.ja,
+                brand.country,
+                brand.countryI18n?.en,
+                brand.countryI18n?.zh,
+                brand.countryI18n?.ja,
+            ]).contains(query)
+        }
+        return source
+    }
+
+    private var searchCandidateDJs: [WebDJ] {
+        let query = normalizedOnboardingSearchQuery(onboardingDJSearchText)
+        guard !query.isEmpty else { return [] }
+        let source = onboardingDJs.filter { dj in
+            onboardingSearchText(for: [
+                dj.name,
+                dj.nameI18n?.en,
+                dj.nameI18n?.zh,
+                dj.nameI18n?.ja,
+                dj.aliases?.joined(separator: " "),
+                dj.genres?.joined(separator: " "),
+                dj.country,
+                dj.countryI18n?.en,
+                dj.countryI18n?.zh,
+                dj.countryI18n?.ja,
+            ]).contains(query)
+        }
+        return source
+    }
+
+    private var shouldShowGenreSearchResults: Bool {
+        !normalizedOnboardingSearchQuery(onboardingGenreSearchText).isEmpty
+    }
+
+    private var shouldShowBrandSearchResults: Bool {
+        !normalizedOnboardingSearchQuery(onboardingBrandSearchText).isEmpty
+    }
+
+    private var shouldShowDJSearchResults: Bool {
+        !normalizedOnboardingSearchQuery(onboardingDJSearchText).isEmpty
+    }
+
     private var birthDateRange: ClosedRange<Date> {
         let calendar = Calendar(identifier: .gregorian)
         let now = Date()
@@ -2079,20 +2506,7 @@ private struct RegisterProfileView: View {
             currentPage = .preferences
         }
 
-        if let selectedAvatarData {
-            let avatarData = selectedAvatarData
-            if let userId = appState.session?.user.id,
-               let localURL = try? LocalProfileAvatarCache.save(imageData: avatarData, userId: userId) {
-                let localAvatarURL = localURL.absoluteString
-                appState.updateCurrentUserAvatarURL(localAvatarURL)
-                if let snapshot = appState.currentUserProfileSnapshot(avatarURL: localAvatarURL) {
-                    NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
-                }
-            }
-            Task {
-                await uploadRegistrationAvatarInBackground(avatarData)
-            }
-        }
+        await uploadPendingAvatarIfNeeded()
     }
 
     private func loadOnboardingOptionsIfNeeded() async {
@@ -2107,6 +2521,12 @@ private struct RegisterProfileView: View {
             onboardingGenres = options.genres
             onboardingBrands = options.brands
             onboardingDJs = options.djs
+            onboardingBaseGenres = options.genres
+            onboardingBaseBrands = options.brands
+            onboardingBaseDJs = options.djs
+            onboardingCurrentGenres = Self.makeRandomBatch(from: options.genres, size: 12)
+            onboardingCurrentBrands = Self.makeRandomBatch(from: options.brands, size: 10)
+            onboardingCurrentDJs = Self.makeRandomBatch(from: options.djs, size: 18)
             onboardingErrorMessage = nil
         } catch {
             onboardingErrorMessage = error.userFacingMessage ?? LT("推荐选项加载失败，请稍后重试。", "Could not load picks. Please try again later.", "おすすめを読み込めませんでした。時間をおいて再試行してください。")
@@ -2114,6 +2534,10 @@ private struct RegisterProfileView: View {
     }
 
     private func uploadRegistrationAvatarInBackground(_ avatarData: Data) async {
+        await MainActor.run {
+            isUploadingAvatar = true
+            hasPendingAvatarUpload = false
+        }
         do {
             let uploaded = try await appContainer.profileUserRepository.uploadMyAvatar(
                 imageData: avatarData,
@@ -2125,8 +2549,15 @@ private struct RegisterProfileView: View {
                 name: .profileDidUpdate,
                 object: appState.currentUserProfileSnapshot(avatarURL: uploaded.avatarURL)
             )
+            await MainActor.run {
+                isUploadingAvatar = false
+            }
         } catch {
-            onboardingErrorMessage = LT("头像上传失败，请稍后在个人主页重试", "Avatar upload failed. Please retry from your profile later.", "アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
+            await MainActor.run {
+                isUploadingAvatar = false
+                hasPendingAvatarUpload = true
+                onboardingErrorMessage = LT("头像上传失败，请稍后在个人主页重试", "Avatar upload failed. Please retry from your profile later.", "アイコンのアップロードに失敗しました。後ほどプロフィールから再試行してください。")
+            }
         }
     }
 
@@ -2226,6 +2657,19 @@ private struct RegisterProfileView: View {
         }
     }
 
+    private func selectGenreSearchCandidate(_ candidate: OnboardingGenreSearchCandidate) {
+        if !onboardingGenres.contains(where: { $0.id == candidate.id }) {
+            onboardingGenres.append(
+                OnboardingGenreOption(
+                    id: candidate.id,
+                    name: candidate.name,
+                    level: 0
+                )
+            )
+        }
+        toggleGenreSelection(candidate.id)
+    }
+
     private func toggleBrandSelection(_ id: String) {
         if selectedBrandIDs.contains(id) {
             selectedBrandIDs.remove(id)
@@ -2256,6 +2700,137 @@ private struct RegisterProfileView: View {
         }
     }
 
+    private func scheduleOnboardingGenreSearch(for rawValue: String) {
+        onboardingGenreSearchTask?.cancel()
+        let query = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            isSearchingOnboardingGenres = false
+            onboardingGenreSearchCandidates = []
+            return
+        }
+
+        isSearchingOnboardingGenres = true
+        onboardingGenreSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+
+            do {
+                let tree = try await appContainer.webService.fetchLearnGenreTreeSummary()
+                let flat = Self.flattenGenreTreeSummary(tree)
+                let normalized = normalizedOnboardingSearchQuery(query)
+                let results = flat
+                    .map { item in (item, Self.scoreGenreSearchCandidate(item, query: normalized)) }
+                    .filter { $0.1 > 0 }
+                    .sorted { lhs, rhs in
+                        if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+                        return lhs.0.name.localizedCaseInsensitiveCompare(rhs.0.name) == .orderedAscending
+                    }
+                    .prefix(10)
+                    .map(\.0)
+
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    onboardingGenreSearchCandidates = results
+                    isSearchingOnboardingGenres = false
+                }
+            } catch {
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    onboardingGenreSearchCandidates = []
+                    isSearchingOnboardingGenres = false
+                }
+            }
+        }
+    }
+
+    private func scheduleOnboardingBrandSearch(for rawValue: String) {
+        onboardingBrandSearchTask?.cancel()
+        let query = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            isSearchingOnboardingBrands = false
+            return
+        }
+
+        isSearchingOnboardingBrands = true
+        onboardingBrandSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            guard !Task.isCancelled else { return }
+
+            do {
+                let remoteBrands = try await appContainer.webService.fetchLearnFestivals(search: query)
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    onboardingBrands = Self.mergedByID(existing: onboardingBrands, incoming: remoteBrands)
+                    isSearchingOnboardingBrands = false
+                }
+            } catch {
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    isSearchingOnboardingBrands = false
+                }
+            }
+        }
+    }
+
+    private func scheduleOnboardingDJSearch(for rawValue: String) {
+        onboardingDJSearchTask?.cancel()
+        let query = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            isSearchingOnboardingDJs = false
+            return
+        }
+
+        isSearchingOnboardingDJs = true
+        onboardingDJSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 280_000_000)
+            guard !Task.isCancelled else { return }
+
+            do {
+                let page = try await appContainer.webService.fetchDJs(
+                    page: 1,
+                    limit: 24,
+                    search: query,
+                    sortBy: "relevance"
+                )
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    onboardingDJs = Self.mergedByID(existing: onboardingDJs, incoming: page.items)
+                    isSearchingOnboardingDJs = false
+                }
+            } catch {
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    isSearchingOnboardingDJs = false
+                }
+            }
+        }
+    }
+
+    private func normalizedOnboardingSearchQuery(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    private func onboardingSearchText(for values: [String?]) -> String {
+        values
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    private func selectedFirst<Item: Identifiable>(_ items: [Item], selectedIDs: Set<String>) -> [Item] where Item.ID == String {
+        items.sorted { lhs, rhs in
+            let lhsSelected = selectedIDs.contains(lhs.id)
+            let rhsSelected = selectedIDs.contains(rhs.id)
+            if lhsSelected != rhsSelected { return lhsSelected }
+            return false
+        }
+    }
+
     private static func uniqueStrings(_ values: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
@@ -2266,6 +2841,123 @@ private struct RegisterProfileView: View {
             guard !seen.contains(key) else { continue }
             seen.insert(key)
             result.append(trimmed)
+        }
+        return result
+    }
+
+    private static func mergedByID<Item: Identifiable>(existing: [Item], incoming: [Item]) -> [Item] where Item.ID == String {
+        var seen = Set<String>()
+        var result: [Item] = []
+        for item in incoming + existing {
+            guard !seen.contains(item.id) else { continue }
+            seen.insert(item.id)
+            result.append(item)
+        }
+        return result
+    }
+
+    private func refreshOnboardingGenreBatch() {
+        guard !isRefreshingOnboardingGenres else { return }
+        isRefreshingOnboardingGenres = true
+        let nextBatch = Self.makeRandomBatch(from: onboardingBaseGenres, size: 12, avoiding: onboardingCurrentGenres)
+        Task {
+            try? await Task.sleep(nanoseconds: 420_000_000)
+            await MainActor.run {
+                onboardingCurrentGenres = nextBatch
+                isRefreshingOnboardingGenres = false
+            }
+        }
+    }
+
+    private func refreshOnboardingBrandBatch() {
+        guard !isRefreshingOnboardingBrands else { return }
+        isRefreshingOnboardingBrands = true
+        let nextBatch = Self.makeRandomBatch(from: onboardingBaseBrands, size: 10, avoiding: onboardingCurrentBrands)
+        Task {
+            try? await Task.sleep(nanoseconds: 420_000_000)
+            await MainActor.run {
+                onboardingCurrentBrands = nextBatch
+                isRefreshingOnboardingBrands = false
+            }
+        }
+    }
+
+    private func refreshOnboardingDJBatch() {
+        guard !isRefreshingOnboardingDJs else { return }
+        isRefreshingOnboardingDJs = true
+        let nextBatch = Self.makeRandomBatch(from: onboardingBaseDJs, size: 18, avoiding: onboardingCurrentDJs)
+        Task {
+            try? await Task.sleep(nanoseconds: 420_000_000)
+            await MainActor.run {
+                onboardingCurrentDJs = nextBatch
+                isRefreshingOnboardingDJs = false
+            }
+        }
+    }
+
+    private static func flattenGenreTreeSummary(_ nodes: [LearnGenreTreeSummaryNode]) -> [OnboardingGenreSearchCandidate] {
+        var output: [OnboardingGenreSearchCandidate] = []
+
+        func visit(_ node: LearnGenreTreeSummaryNode, parents: [String]) {
+            let pathNames = parents + [node.name]
+            output.append(
+                OnboardingGenreSearchCandidate(
+                    id: node.id,
+                    name: node.name,
+                    pathText: pathNames.joined(separator: " / ")
+                )
+            )
+            for child in node.children ?? [] {
+                visit(child, parents: pathNames)
+            }
+        }
+
+        for node in nodes {
+            visit(node, parents: [])
+        }
+
+        return output
+    }
+
+    private static func scoreGenreSearchCandidate(_ item: OnboardingGenreSearchCandidate, query: String) -> Int {
+        let name = item.name
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        let path = item.pathText
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+
+        var score = 0
+        if name == query { score += 1200 }
+        if name.hasPrefix(query) { score += 700 }
+        if name.contains(query) { score += 320 }
+        if path.contains(query) { score += 120 }
+        return score
+    }
+
+    private static func makeRandomBatch<Item: Identifiable>(
+        from source: [Item],
+        size: Int,
+        avoiding current: [Item] = []
+    ) -> [Item] where Item.ID == String {
+        guard !source.isEmpty else { return [] }
+        let targetSize = min(size, source.count)
+        guard targetSize > 0 else { return [] }
+
+        let currentIDs = Set(current.map(\.id))
+        var preferredPool = source.filter { !currentIDs.contains($0.id) }
+        preferredPool.shuffle()
+
+        if preferredPool.count >= targetSize {
+            return Array(preferredPool.prefix(targetSize))
+        }
+
+        var fallbackPool = source
+        fallbackPool.shuffle()
+        var result = preferredPool
+        for item in fallbackPool where !result.contains(where: { $0.id == item.id }) {
+            result.append(item)
+            if result.count == targetSize { break }
         }
         return result
     }
@@ -2303,6 +2995,9 @@ private struct RegisterProfileView: View {
 
     private func loadSelectedAvatar(_ item: PhotosPickerItem?) async {
         guard let item else {
+            avatarUploadTask?.cancel()
+            isUploadingAvatar = false
+            hasPendingAvatarUpload = false
             selectedAvatarData = nil
             selectedAvatarImage = nil
             return
@@ -2314,12 +3009,47 @@ private struct RegisterProfileView: View {
             await MainActor.run {
                 selectedAvatarData = preparedData
                 selectedAvatarImage = UIImage(data: preparedData)
+                hasPendingAvatarUpload = true
             }
+            await cacheRegistrationAvatarLocally(preparedData)
+            scheduleAvatarUploadIfPossible(with: preparedData)
         } catch {
             await MainActor.run {
                 registrationErrorMessage = LT("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.", "アイコンの読み込みに失敗しました。もう一度選択してください。")
             }
         }
+    }
+
+    private func cacheRegistrationAvatarLocally(_ avatarData: Data) async {
+        guard let userId = appState.session?.user.id,
+              let localURL = try? LocalProfileAvatarCache.save(imageData: avatarData, userId: userId) else { return }
+        let localAvatarURL = localURL.absoluteString
+        await MainActor.run {
+            appState.updateCurrentUserAvatarURL(localAvatarURL)
+            if let snapshot = appState.currentUserProfileSnapshot(avatarURL: localAvatarURL) {
+                NotificationCenter.default.post(name: .profileDidUpdate, object: snapshot)
+            }
+        }
+    }
+
+    private func scheduleAvatarUploadIfPossible(with avatarData: Data) {
+        avatarUploadTask?.cancel()
+        guard appState.session != nil else {
+            isUploadingAvatar = false
+            hasPendingAvatarUpload = true
+            return
+        }
+
+        avatarUploadTask = Task {
+            await uploadRegistrationAvatarInBackground(avatarData)
+        }
+    }
+
+    private func uploadPendingAvatarIfNeeded() async {
+        guard let avatarData = selectedAvatarData, hasPendingAvatarUpload else { return }
+        await cacheRegistrationAvatarLocally(avatarData)
+        avatarUploadTask?.cancel()
+        await uploadRegistrationAvatarInBackground(avatarData)
     }
 
     private static func preparedAvatarData(from data: Data) -> Data {
@@ -2391,6 +3121,12 @@ private enum DisplayNameAvailabilityState: Equatable {
             return false
         }
     }
+}
+
+private struct OnboardingGenreSearchCandidate: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let pathText: String
 }
 
 private struct PhoneCountryOption: Identifiable, Hashable {
@@ -2597,6 +3333,100 @@ private struct LoginBackgroundVideoView: UIViewRepresentable {
     final class PlayerContainerView: UIView {
         override static var layerClass: AnyClass { AVPlayerLayer.self }
         var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+}
+
+private struct OnboardingFloatingSearchPanel<SearchResults: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var text: String
+    let placeholder: String
+    var isSearching: Bool
+    @ViewBuilder var searchResults: () -> SearchResults
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(secondaryText)
+
+            TextField(placeholder, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(primaryText)
+                .submitLabel(.done)
+                .focused($isFocused)
+
+            if isSearching {
+                ProgressView()
+                    .scaleEffect(0.68)
+                    .tint(secondaryText)
+            } else if !text.isEmpty {
+                Button {
+                    text = ""
+                    isFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(secondaryText)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: 560)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(searchFieldBackground)
+        )
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .opacity(colorScheme == .dark ? 0.38 : 0.62)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(searchStroke, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.24), radius: 18, x: 0, y: 8)
+        .overlay(alignment: .top) {
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                searchResults()
+                    .frame(maxWidth: 560)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color(red: 0.08, green: 0.08, blue: 0.1).opacity(0.96))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.26), radius: 20, x: 0, y: 10)
+                    .offset(y: 48)
+                    .zIndex(2)
+            }
+        }
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .zIndex(4)
+    }
+
+    private var primaryText: Color {
+        colorScheme == .dark ? .white : Color.black.opacity(0.86)
+    }
+
+    private var secondaryText: Color {
+        colorScheme == .dark ? .white.opacity(0.62) : Color.black.opacity(0.50)
+    }
+
+    private var searchFieldBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.04) : Color.white.opacity(0.28)
+    }
+
+    private var searchStroke: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.white.opacity(0.54)
     }
 }
 

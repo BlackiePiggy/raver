@@ -318,7 +318,7 @@ struct MyPublishesView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(event.name)
                                 .font(.headline)
-                            Text(event.startDate.appLocalizedYMDText())
+                            Text(event.startDate.appLocalizedYMDText(in: event.eventTimeZone))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
                             let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -869,6 +869,7 @@ private extension MyPublishEvent {
             city: event.city,
             country: event.country,
             startDate: event.startDate,
+            timeZone: event.timeZone,
             createdAt: event.createdAt,
             lineupSlotCount: event.lineupSlots.count
         )

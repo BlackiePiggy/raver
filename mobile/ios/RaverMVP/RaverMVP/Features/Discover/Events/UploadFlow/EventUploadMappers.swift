@@ -285,28 +285,33 @@ enum EventUploadMappers {
         let country = countryI18n.flatMap(normalizedLocalizedAddress)
 
         let formattedZh = joinAddressComponents([
-            country?.zh.eventUploadMapperNilIfBlank ?? country?.en.eventUploadMapperNilIfBlank,
-            city?.zh.eventUploadMapperNilIfBlank ?? city?.en.eventUploadMapperNilIfBlank,
-            detail.zh.eventUploadMapperNilIfBlank ?? detail.en.eventUploadMapperNilIfBlank,
+            country?.zh.trimmed.eventUploadMapperNilIfBlank
+                ?? country?.en.trimmed.eventUploadMapperNilIfBlank,
+            city?.zh.trimmed.eventUploadMapperNilIfBlank
+                ?? city?.en.trimmed.eventUploadMapperNilIfBlank,
+            detail.zh.trimmed.eventUploadMapperNilIfBlank
+                ?? detail.en.trimmed.eventUploadMapperNilIfBlank,
         ])
         let formattedEn = joinAddressComponents([
-            country?.enFull.eventUploadMapperNilIfBlank
-                ?? country?.en.eventUploadMapperNilIfBlank
-                ?? country?.zh.eventUploadMapperNilIfBlank,
-            city?.en.eventUploadMapperNilIfBlank ?? city?.zh.eventUploadMapperNilIfBlank,
-            detail.en.eventUploadMapperNilIfBlank ?? detail.zh.eventUploadMapperNilIfBlank,
+            country?.enFull?.trimmed.eventUploadMapperNilIfBlank
+                ?? country?.en.trimmed.eventUploadMapperNilIfBlank
+                ?? country?.zh.trimmed.eventUploadMapperNilIfBlank,
+            city?.en.trimmed.eventUploadMapperNilIfBlank
+                ?? city?.zh.trimmed.eventUploadMapperNilIfBlank,
+            detail.en.trimmed.eventUploadMapperNilIfBlank
+                ?? detail.zh.trimmed.eventUploadMapperNilIfBlank,
         ])
         let formattedJa = joinAddressComponents([
-            country?.ja.eventUploadMapperNilIfBlank
-                ?? country?.enFull.eventUploadMapperNilIfBlank
-                ?? country?.en.eventUploadMapperNilIfBlank
-                ?? country?.zh.eventUploadMapperNilIfBlank,
-            city?.ja.eventUploadMapperNilIfBlank
-                ?? city?.en.eventUploadMapperNilIfBlank
-                ?? city?.zh.eventUploadMapperNilIfBlank,
-            detail.ja.eventUploadMapperNilIfBlank
-                ?? detail.en.eventUploadMapperNilIfBlank
-                ?? detail.zh.eventUploadMapperNilIfBlank,
+            country?.ja?.trimmed.eventUploadMapperNilIfBlank
+                ?? country?.enFull?.trimmed.eventUploadMapperNilIfBlank
+                ?? country?.en.trimmed.eventUploadMapperNilIfBlank
+                ?? country?.zh.trimmed.eventUploadMapperNilIfBlank,
+            city?.ja?.trimmed.eventUploadMapperNilIfBlank
+                ?? city?.en.trimmed.eventUploadMapperNilIfBlank
+                ?? city?.zh.trimmed.eventUploadMapperNilIfBlank,
+            detail.ja?.trimmed.eventUploadMapperNilIfBlank
+                ?? detail.en.trimmed.eventUploadMapperNilIfBlank
+                ?? detail.zh.trimmed.eventUploadMapperNilIfBlank,
         ])
 
         return WebBiText(

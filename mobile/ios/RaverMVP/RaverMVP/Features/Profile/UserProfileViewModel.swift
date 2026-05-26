@@ -5,7 +5,7 @@ import Combine
 final class UserProfileViewModel: ObservableObject {
     @Published var profile: UserProfile?
     @Published var posts: [Post] = []
-    @Published var recentCheckins: [WebCheckin] = []
+    @Published var recentCheckinPreviews: [ProfileRecentCheckinPreview] = []
     @Published var appearance: UserAssetAppearance?
     @Published private(set) var phase: LoadPhase = .idle
     @Published var isLoading = false
@@ -56,10 +56,10 @@ final class UserProfileViewModel: ObservableObject {
             profile = profileValue
             posts = page.posts.filter { !$0.isRaverNews }
             await loadAppearance(for: profileValue.id)
-            if let checkinPage = try? await checkinRepository.fetchUserCheckins(userID: userID, page: 1, limit: 6, type: nil) {
-                recentCheckins = checkinPage.items
+            if let overview = try? await checkinRepository.fetchUserCheckinsOverview(userID: userID) {
+                recentCheckinPreviews = Array(overview.timeline.items.prefix(3)).map(ProfileRecentCheckinPreview.init(item:))
             } else {
-                recentCheckins = []
+                recentCheckinPreviews = []
             }
             nextCursor = page.nextCursor
             hasMore = page.nextCursor != nil

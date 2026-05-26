@@ -1551,6 +1551,7 @@ struct EventDetailView: View {
     @State private var tabFrames: [EventDetailTab: CGRect] = [:]
     @State private var pagerWidth: CGFloat = 1
     @State private var isPreparingEventCheckinSheet = false
+    @State private var isLoadingEventCheckinOptions = false
     @State private var relatedRatingEvents: [WebRatingEvent] = []
     @State private var relatedEventSets: [WebDJSet] = []
     @State private var relatedArticles: [DiscoverNewsArticle] = []
@@ -1620,10 +1621,10 @@ struct EventDetailView: View {
 
     fileprivate enum EventDetailTab: String, CaseIterable, Identifiable {
         case info
-        case posts
-        case news
         case lineup
         case schedule
+        case news
+        case posts
         case ratings
         case sets
 
@@ -2286,6 +2287,7 @@ struct EventDetailView: View {
                                     (day.id, eventCheckinDJOptions(for: event, selectedDayIDs: [day.id]))
                                 }
                             ),
+                            isLoadingOptions: isLoadingEventCheckinOptions,
                             initialSelectedDayIDs: selectedEventCheckinDayIDs,
                             initialSelectedDJIDsByDayID: selectedEventCheckinDJIDsByDayID,
                             confirmButtonTitle: activeAttendanceCheckin == nil ? LT("确认打卡", "Confirm Check-in", "チェックインを確認") : LT("保存修改", "Save Changes", "変更を保存"),
@@ -4579,14 +4581,14 @@ struct EventDetailView: View {
                         Button {
                             Task { await beginEventCheckinFlow(for: event) }
                         } label: {
-                            eventHeroActionButton(
+                            eventHeroActionImageButton(
                                 title: activeAttendanceCheckin == nil ? LT("打卡", "Check-in", "チェックイン") : LT("编辑打卡", "Edit Check-in", "チェックインを編集"),
-                                icon: "postage.stamp.fill",
+                                imageName: "Check",
                                 fill: RaverTheme.accent
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(isPreparingEventCheckinSheet || !canCheckInToEvent(event))
+                        .disabled(isPreparingEventCheckinSheet)
 
                     }
                     .padding(.bottom, 6)
@@ -4624,6 +4626,27 @@ struct EventDetailView: View {
                 Capsule()
                     .fill(fill)
             )
+    }
+
+    private func eventHeroActionImageButton(title: String, imageName: String, fill: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(imageName)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 17, height: 17)
+
+            Text(title)
+                .lineLimit(1)
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            Capsule()
+                .fill(fill)
+        )
     }
 
     private func eventBoundLocationPoint(_ event: WebEvent) -> WebEventLocationPoint? {
@@ -5859,15 +5882,15 @@ struct EventDetailView: View {
             return [eventInfoDateText(date)]
         }
 
-        let deviceText = eventInfoDateText(date, timeZone: deviceTimeZone)
+        let eventText = eventInfoDateText(date, timeZone: eventTimeZone)
 
         guard deviceTimeZone.secondsFromGMT(for: date) != eventTimeZone.secondsFromGMT(for: date) else {
-            return [deviceText]
+            return [eventText]
         }
 
         return [
-            deviceText,
-            eventInfoDateText(date, timeZone: eventTimeZone)
+            eventText,
+            eventInfoDateText(date, timeZone: deviceTimeZone)
         ]
     }
 
@@ -5940,14 +5963,12 @@ struct EventDetailView: View {
             }()
             async let checkinsTask: [WebCheckin] = {
                 guard hasSession else { return [] }
-                let page = try? await eventCheckinRepository.fetchMyCheckins(
-                    page: 1,
-                    limit: 200,
-                    type: nil,
+                let checkins = try? await eventCheckinRepository.fetchMyEventTimelineCheckins(
                     eventID: eventID,
-                    djID: nil
+                    page: 1,
+                    limit: 200
                 )
-                return page?.items ?? []
+                return checkins ?? []
             }()
 
             var loadedEvent = try await eventTask
@@ -6504,26 +6525,23 @@ struct EventDetailView: View {
     @MainActor
     private func beginEventCheckinFlow(for event: WebEvent) async {
         guard canCheckInToEvent(event) else {
-            errorMessage = LT("活动尚未开始，暂时不能打卡。只有进行中或已结束的活动才能打卡。", "This event hasn't started yet. Check-in is available only for ongoing or ended events.", "イベントはまだ開始していません。チェックインできるのは開催中または終了したイベントのみです。")
+            errorMessage = LT("等活动开始了再来打卡吧～", "Come back to check in when the event starts.", "イベントが始まったら、またチェックインしに来てください。")
             return
         }
-
-        let dayOptions = eventCheckinDayOptions(for: event)
-        guard !dayOptions.isEmpty else { return }
 
         guard !isPreparingEventCheckinSheet else { return }
         isPreparingEventCheckinSheet = true
         defer { isPreparingEventCheckinSheet = false }
 
+        let dayOptions = eventCheckinDayOptions(for: event)
+        guard !dayOptions.isEmpty else { return }
+
         do {
-            let page = try await eventCheckinRepository.fetchMyCheckins(
-                page: 1,
-                limit: 200,
-                type: nil,
+            relatedEventCheckins = try await eventCheckinRepository.fetchMyEventTimelineCheckins(
                 eventID: eventID,
-                djID: nil
+                page: 1,
+                limit: 200
             )
-            relatedEventCheckins = page.items
         } catch {
             if relatedEventCheckins.isEmpty {
                 errorMessage = LT("打卡记录加载失败，请稍后重试", "Failed to load check-in records. Please try again later.", "チェックイン記録を読み込めませんでした。時間をおいて再試行してください。")
@@ -6544,7 +6562,20 @@ struct EventDetailView: View {
             selectedEventCheckinDJIDsByDayID = [:]
         }
 
+        isLoadingEventCheckinOptions = !didLoadEventSchedule || event.lineupSlots.isEmpty
         showEventCheckinSheet = true
+
+        guard isLoadingEventCheckinOptions else { return }
+        Task {
+            await loadEventCheckinOptionsIfNeeded()
+        }
+    }
+
+    @MainActor
+    private func loadEventCheckinOptionsIfNeeded() async {
+        guard isLoadingEventCheckinOptions else { return }
+        defer { isLoadingEventCheckinOptions = false }
+        await loadEventScheduleIfNeeded()
     }
 
     private func canCheckInToEvent(_ event: WebEvent) -> Bool {
@@ -6780,14 +6811,11 @@ struct EventDetailView: View {
     }
 
     private func refreshRelatedEventCheckins() async throws {
-        let page = try await eventCheckinRepository.fetchMyCheckins(
-            page: 1,
-            limit: 200,
-            type: nil,
+        relatedEventCheckins = try await eventCheckinRepository.fetchMyEventTimelineCheckins(
             eventID: eventID,
-            djID: nil
+            page: 1,
+            limit: 200
         )
-        relatedEventCheckins = page.items
     }
 
     @MainActor

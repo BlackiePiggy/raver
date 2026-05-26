@@ -317,7 +317,7 @@ struct DJsModuleView: View {
         ZStack(alignment: .top) {
             switch viewModel.phase {
             case .idle, .initialLoading:
-                DiscoverGridSkeletonView()
+                DJSpotlightSkeletonView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             case .failure(let message), .offline(let message):
                 ScrollView {
@@ -1977,10 +1977,10 @@ struct DJDetailView: View {
 
     fileprivate enum DJDetailTab: String, CaseIterable, Identifiable {
         case intro
-        case posts
-        case sets
         case events
         case ratings
+        case posts
+        case sets
 
         var id: String { rawValue }
 
@@ -2051,19 +2051,21 @@ struct DJDetailView: View {
         var sortYear: Int { year ?? Int.min }
     }
 
-    private static let heroLiveTimeFormatter: DateFormatter = {
+    private static func heroLiveTimeFormatter(timeZone: TimeZone) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
+        formatter.timeZone = timeZone
         return formatter
-    }()
+    }
 
-    private static let heroLiveDateFormatter: DateFormatter = {
+    private static func heroLiveDateFormatter(timeZone: TimeZone) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "MM/dd"
+        formatter.timeZone = timeZone
         return formatter
-    }()
+    }
 
     private static let djEventPageSize = 8
     private static let djSetPageSize = 10
@@ -3300,11 +3302,15 @@ struct DJDetailView: View {
     }
 
     private func heroLiveEventTimeText(for event: WebEvent) -> String {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.timeZone = event.eventTimeZone
+        let timeZoneLabel = Date.appLocalizedTimeZoneLabel(event.eventTimeZone)
+        let timeFormatter = Self.heroLiveTimeFormatter(timeZone: event.eventTimeZone)
+        let dateFormatter = Self.heroLiveDateFormatter(timeZone: event.eventTimeZone)
         if calendar.isDate(event.startDate, inSameDayAs: event.endDate) {
-            return "\(Self.heroLiveTimeFormatter.string(from: event.startDate)) - \(Self.heroLiveTimeFormatter.string(from: event.endDate)) · \(Date.appLocalizedTimeZoneLabel())"
+            return "\(timeFormatter.string(from: event.startDate)) - \(timeFormatter.string(from: event.endDate)) · \(timeZoneLabel)"
         }
-        return "\(Self.heroLiveDateFormatter.string(from: event.startDate))-\(Self.heroLiveDateFormatter.string(from: event.endDate)) · \(Date.appLocalizedTimeZoneLabel())"
+        return "\(dateFormatter.string(from: event.startDate))-\(dateFormatter.string(from: event.endDate)) · \(timeZoneLabel)"
     }
 
     private func slotIncludesDJ(_ slot: WebEventLineupSlot, dj: WebDJ) -> Bool {
@@ -4836,7 +4842,7 @@ struct DJDetailView: View {
     }
 
     private func djHistoryEventDateText(_ event: WebEvent) -> String {
-        event.startDate.appLocalizedDateRangeText(to: event.endDate)
+        event.startDate.appLocalizedDateRangeText(to: event.endDate, timeZone: event.eventTimeZone)
     }
 
     @ViewBuilder

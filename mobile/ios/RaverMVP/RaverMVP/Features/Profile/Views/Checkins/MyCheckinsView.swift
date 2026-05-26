@@ -490,7 +490,7 @@ final class MyCheckinsViewModel: ObservableObject {
             longitude: nil,
             startDate: event.startDate ?? timelineItem.attendedAt,
             endDate: event.endDate ?? timelineItem.attendedAt,
-            timeZone: TimeZone.current.identifier,
+            timeZone: event.timeZone,
             ticketUrl: nil,
             ticketPriceMin: nil,
             ticketPriceMax: nil,
@@ -763,6 +763,16 @@ struct MyCheckinsView: View {
         var country: String?
         var startDate: Date?
         var endDate: Date?
+        var timeZone: String?
+
+        var eventTimeZone: TimeZone {
+            guard let raw = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty,
+                  let timeZone = TimeZone(identifier: raw) else {
+                return TimeZone(identifier: "Asia/Shanghai") ?? .current
+            }
+            return timeZone
+        }
 
         var unifiedAddress: String {
             let explicitAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1009,7 +1019,7 @@ struct MyCheckinsView: View {
                     activeAutoLoadMoreSentinel
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.top, 12)
         }
         .background(RaverTheme.background)
@@ -1022,6 +1032,7 @@ struct MyCheckinsView: View {
         }
         .task(id: targetUserID ?? "me") {
             await viewModel.reload()
+            await hydrateTimelineEventDetails()
             if targetUserID == nil, !CheckinProjectionMutationStore.hasUnconsumedMutation {
                 CheckinProjectionMutationStore.markConsumed(CheckinProjectionMutationStore.token)
             }
@@ -1034,6 +1045,9 @@ struct MyCheckinsView: View {
         .task(id: displayMode) {
             await ensureActiveGalleryLoaded()
         }
+        .task(id: timelineEventHydrationKey) {
+            await hydrateTimelineEventDetails()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .raverCheckinsDidMutate)) { notification in
             guard targetUserID == nil else { return }
             let checkinId = notification.object as? String ?? "unknown"
@@ -1041,6 +1055,7 @@ struct MyCheckinsView: View {
             viewModel.invalidateLoadedState()
             Task {
                 await viewModel.reload(force: true)
+                await hydrateTimelineEventDetails()
                 await ensureActiveGalleryLoaded()
                 CheckinProjectionMutationStore.markConsumed(CheckinProjectionMutationStore.token)
                 print("[CheckinProjection] MyCheckins refresh finished after mutation checkinId=\(checkinId) phase=\(viewModel.phase) timelineItems=\(viewModel.timelineItems.count) galleryEvents=\(viewModel.galleryEvents.count) galleryArtists=\(viewModel.galleryArtists.count)")
@@ -1048,6 +1063,7 @@ struct MyCheckinsView: View {
         }
         .refreshable {
             await viewModel.reload(force: true)
+            await hydrateTimelineEventDetails()
             await ensureActiveGalleryLoaded()
         }
         .sheet(item: $fullChatSharePresentation) { presentation in
@@ -1197,6 +1213,14 @@ struct MyCheckinsView: View {
 
     private var galleryEventNodes: [TimelineNodeV2] {
         timelineNodes
+    }
+
+    private var timelineEventHydrationKey: String {
+        viewModel.timelineItems
+            .map(\.event.id)
+            .filter { !$0.isEmpty }
+            .sorted()
+            .joined(separator: ",")
     }
 
     private var galleryDJEntries: [TimelineDJEntry] {
@@ -1545,7 +1569,6 @@ struct MyCheckinsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
 
@@ -1570,7 +1593,6 @@ struct MyCheckinsView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
 
@@ -1714,9 +1736,18 @@ struct MyCheckinsView: View {
     }
 
     private func timelineTimestamp(for node: TimelineNodeV2) -> some View {
-        Text(node.day.appLocalizedYMDWeekdayText())
+        Text(timelineDayText(for: node))
             .font(.headline.weight(.bold))
             .foregroundStyle(RaverTheme.primaryText)
+    }
+
+    private func timelineDayText(for node: TimelineNodeV2) -> String {
+        let displayDate = node.event.startDate ?? node.day
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = node.event.eventTimeZone
+        formatter.dateFormat = LT("yyyy年M月d日 EEE", "EEE, MMM d, yyyy", "yyyy年M月d日 EEE")
+        return formatter.string(from: displayDate)
     }
 
     private func timelineExperienceCard(_ node: TimelineNodeV2) -> some View {
@@ -2130,6 +2161,39 @@ struct MyCheckinsView: View {
         timelineLocalizedEventByID[node.event.id]
     }
 
+    @MainActor
+    private func hydrateTimelineEventDetails() async {
+        let eventIDs = Array(
+            Set(
+                viewModel.timelineItems
+                    .map(\.event.id)
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            )
+        )
+        guard !eventIDs.isEmpty else { return }
+
+        let repository = appContainer.eventReadRepository
+        await withTaskGroup(of: (String, WebEvent?).self) { group in
+            for eventID in eventIDs {
+                group.addTask {
+                    let event = try? await repository.fetchEventSummary(id: eventID)
+                    return (eventID, event)
+                }
+            }
+
+            var hydratedByID: [String: WebEvent] = [:]
+            for await (eventID, event) in group {
+                guard let event else { continue }
+                hydratedByID[eventID] = event
+            }
+
+            guard !hydratedByID.isEmpty else { return }
+            for (eventID, event) in hydratedByID {
+                viewModel.timelineLocalizedEventByID[eventID] = event
+            }
+        }
+    }
+
     private func localizedBiText(_ value: WebBiText?) -> String? {
         guard let value else { return nil }
         let text = value.text(for: AppLanguagePreference.current.effectiveLanguage)
@@ -2174,12 +2238,16 @@ struct MyCheckinsView: View {
                 city: item.event.city,
                 country: item.event.country,
                 startDate: item.event.startDate,
-                endDate: item.event.endDate
+                endDate: item.event.endDate,
+                timeZone: item.event.timeZone
             )
+            let eventTimeZone = event.eventTimeZone
+            var calendar = Calendar.current
+            calendar.timeZone = eventTimeZone
             return TimelineNodeV2(
                 id: item.id,
                 anchorDate: item.attendedAt,
-                day: Calendar.current.startOfDay(for: item.attendedAt),
+                day: calendar.startOfDay(for: item.attendedAt),
                 event: event,
                 structuredSelections: timelineSelectionPayloads(from: item.selections),
                 summary: item.summary
@@ -2348,10 +2416,12 @@ struct MyCheckinsView: View {
             let dayIndex = timelineLineupDayIndex(
                 for: slot,
                 eventStartDate: event.startDate,
+                timeZone: event.eventTimeZone,
                 dayRolloverHour: event.dayRolloverHour
             )
-            let slotDayDate = timelineLineupDayDate(for: dayIndex, anchorDate: event.startDate)
-            let slotDayID = timelineCheckinDayKey(for: slotDayDate)
+            let eventTimeZone = event.eventTimeZone
+            let slotDayDate = timelineLineupDayDate(for: dayIndex, anchorDate: event.startDate, timeZone: eventTimeZone)
+            let slotDayID = timelineCheckinDayKey(for: slotDayDate, timeZone: eventTimeZone)
             if let dayID, slotDayID != dayID {
                 continue
             }
@@ -2524,8 +2594,9 @@ struct MyCheckinsView: View {
         return raw
     }
 
-    private func timelineLineupDayDate(for dayIndex: Int, anchorDate: Date) -> Date {
-        let calendar = Calendar.current
+    private func timelineLineupDayDate(for dayIndex: Int, anchorDate: Date, timeZone: TimeZone) -> Date {
+        var calendar = Calendar.current
+        calendar.timeZone = timeZone
         let anchorDay = calendar.startOfDay(for: anchorDate)
         guard dayIndex > 1 else { return anchorDay }
         return calendar.date(byAdding: .day, value: dayIndex - 1, to: anchorDay) ?? anchorDay
@@ -2534,6 +2605,7 @@ struct MyCheckinsView: View {
     private func timelineLineupDayIndex(
         for slot: WebEventLineupSlot,
         eventStartDate: Date,
+        timeZone: TimeZone,
         dayRolloverHour: Int?
     ) -> Int {
         if let explicit = slot.festivalDayIndex, explicit > 0 {
@@ -2542,6 +2614,7 @@ struct MyCheckinsView: View {
         return timelineLineupDayIndex(
             for: slot.startTime,
             eventStartDate: eventStartDate,
+            timeZone: timeZone,
             dayRolloverHour: dayRolloverHour
         )
     }
@@ -2549,9 +2622,11 @@ struct MyCheckinsView: View {
     private func timelineLineupDayIndex(
         for date: Date,
         eventStartDate: Date,
+        timeZone: TimeZone,
         dayRolloverHour: Int?
     ) -> Int {
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.timeZone = timeZone
         let rolloverHour = timelineNormalizeDayRolloverHour(dayRolloverHour)
         let anchorDay = calendar.startOfDay(for: eventStartDate)
         let targetDay = calendar.startOfDay(for: date)
@@ -2562,17 +2637,18 @@ struct MyCheckinsView: View {
         return max(1, dayOffset + 1)
     }
 
-    private func timelineCheckinDayKey(for date: Date) -> String {
-        Self.timelineCheckinDayFormatter.string(from: date)
+    private func timelineCheckinDayKey(for date: Date, timeZone: TimeZone) -> String {
+        let formatter = Self.timelineCheckinDayFormatter(timeZone: timeZone)
+        return formatter.string(from: date)
     }
 
-    private static let timelineCheckinDayFormatter: DateFormatter = {
+    private static func timelineCheckinDayFormatter(timeZone: TimeZone) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
-    }()
+    }
 
     private func timelineResolvedDJEntry(
         name: String,
@@ -3013,7 +3089,8 @@ struct MyCheckinsView: View {
     private func fallbackDayLabel(for node: TimelineNodeV2) -> String? {
         let event = node.event
         guard let startDate = event.startDate else { return nil }
-        let calendar = Calendar.current
+        var calendar = Calendar.current
+        calendar.timeZone = event.eventTimeZone
         let startDay = calendar.startOfDay(for: startDate)
         let currentDay = calendar.startOfDay(for: node.day)
         let dayOffset = calendar.dateComponents([.day], from: startDay, to: currentDay).day ?? 0

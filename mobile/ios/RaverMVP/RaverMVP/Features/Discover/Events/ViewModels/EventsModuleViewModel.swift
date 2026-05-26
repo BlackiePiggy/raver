@@ -104,6 +104,7 @@ protocol EventDiscussionMediaRepository {
 protocol EventCheckinRepository {
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
     func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
+    func fetchMyEventTimelineCheckins(eventID: String, page: Int, limit: Int) async throws -> [WebCheckin]
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin
     func deleteCheckin(id: String) async throws
@@ -340,6 +341,77 @@ struct EventCheckinRepositoryAdapter: EventCheckinRepository {
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
         try await service.fetchMyCheckins(page: page, limit: limit, type: type, eventID: eventID, djID: djID)
+    }
+
+    func fetchMyEventTimelineCheckins(eventID: String, page: Int, limit: Int) async throws -> [WebCheckin] {
+        let timelinePage = try await service.fetchMyCheckinsTimeline(page: page, limit: limit)
+        return timelinePage.items
+            .filter { $0.event.id == eventID }
+            .map { item in
+                WebCheckin(
+                    id: item.id,
+                    userId: "",
+                    eventId: item.event.id,
+                    djId: nil,
+                    type: item.type,
+                    note: WebCheckin.makeEventAttendanceNote(
+                        selections: item.selections.map { day in
+                            EventAttendanceDaySelectionPayload(
+                                dayID: day.dayId,
+                                dayIndex: day.dayIndex,
+                                djSelections: day.acts.flatMap { act in
+                                    act.performers.map { performer in
+                                        EventAttendanceDJSelection(
+                                            id: act.actGroupId,
+                                            djId: performer.djId,
+                                            name: performer.name,
+                                            avatarUrl: performer.avatarUrl,
+                                            country: performer.country,
+                                            actGroupId: act.actGroupId,
+                                            actType: act.actType,
+                                            performerIndex: performer.performerIndex,
+                                            performers: act.performers
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    ),
+                    photoUrl: nil,
+                    rating: nil,
+                    attendedAt: item.attendedAt,
+                    createdAt: item.createdAt,
+                    event: CheckinEventLite(
+                        id: item.event.id,
+                        name: item.event.name ?? "",
+                        nameI18n: item.event.nameI18n,
+                        coverImageUrl: item.event.coverImageUrl,
+                        city: item.event.city,
+                        country: item.event.country,
+                        startDate: item.event.startDate,
+                        endDate: item.event.endDate,
+                        timeZone: item.event.timeZone
+                    ),
+                    dj: nil,
+                    selections: item.selections.map { day in
+                        CheckinSelectionInput(
+                            dayId: day.dayId,
+                            dayIndex: day.dayIndex,
+                            djs: day.acts.flatMap { act in
+                                act.performers.map { performer in
+                                    CheckinSelectionDJInput(
+                                        djId: performer.djId,
+                                        displayName: performer.name,
+                                        actGroupId: act.actGroupId,
+                                        actType: act.actType,
+                                        performerIndex: performer.performerIndex
+                                    )
+                                }
+                            }
+                        )
+                    }
+                )
+            }
     }
 
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin {
