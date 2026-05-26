@@ -966,7 +966,7 @@ const renderEventPosterSvg = async (
   const safeVenueRaw = event.venue || (locale === 'zh' ? '待定' : 'Venue TBA');
   const titleSource = locale === 'zh' ? (event.title || shareLink.title || '') : (event.title || shareLink.title || '').toUpperCase();
   const titleFontSize = 28;
-  const titleMaxWidth = 340;
+  const titleMaxWidth = 306;
   const titleLines = wrapPosterMixedText(titleSource, titleMaxWidth, titleFontSize, 3);
   const titleBlock = titleLines
     .map((line, index) => {

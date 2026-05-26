@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import SDWebImageSwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
@@ -3024,6 +3025,7 @@ struct ShareAssetDetailView: View {
 
     @State private var feedbackMessage: String?
     @State private var assetImageSize: CGSize?
+    @State private var assetDidFailToLoad = false
 
     var body: some View {
         ScrollView {
@@ -3134,44 +3136,94 @@ struct ShareAssetDetailView: View {
         let resolved = AppConfig.resolvedURLString(assetURL)
         if let resolved,
            !resolved.isEmpty,
-           URL(string: resolved) != nil {
+           let remoteURL = URL(string: resolved) {
             GeometryReader { proxy in
                 let horizontalInset: CGFloat = 24
                 let availableWidth = max(proxy.size.width - horizontalInset, 1)
                 let resolvedHeight = assetPreviewHeight(for: availableWidth)
 
-                ImageLoaderView(
-                    urlString: resolved,
-                    resizingMode: .fit,
-                    showsIndicator: true,
-                    showsFallback: true,
-                    onImageLoaded: { size in
-                        assetImageSize = size
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(RaverTheme.card)
+
+                    WebImage(url: remoteURL)
+                        .onSuccess { image, _, _ in
+                            assetDidFailToLoad = false
+                            assetImageSize = image.size
+                        }
+                        .onFailure { _ in
+                            assetDidFailToLoad = true
+                        }
+                        .resizable()
+                        .indicator(.activity)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: availableWidth, height: resolvedHeight)
+                        .opacity(assetDidFailToLoad ? 0 : 1)
+
+                    if !assetDidFailToLoad {
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                colors: [
+                                    RaverTheme.background.opacity(0.78),
+                                    RaverTheme.background.opacity(0.26),
+                                    .clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: min(84, resolvedHeight * 0.22))
+
+                            Spacer(minLength: 0)
+
+                            LinearGradient(
+                                colors: [
+                                    .clear,
+                                    RaverTheme.background.opacity(0.26),
+                                    RaverTheme.background.opacity(0.78)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: min(84, resolvedHeight * 0.22))
+                        }
+                        .allowsHitTesting(false)
                     }
-                )
+
+                    if assetDidFailToLoad {
+                        shareAssetEmptyState
+                    }
+                }
                 .frame(width: availableWidth, height: resolvedHeight)
                 .frame(maxWidth: .infinity)
             }
             .frame(height: assetPreviewHeight(for: UIScreen.main.bounds.width - 56))
         } else {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(RaverTheme.card)
-                .frame(maxWidth: .infinity)
-                .frame(height: 320)
-                .overlay {
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 56, weight: .medium))
-                        Text(emptyTitle)
-                            .font(.headline)
-                        Text(emptyMessage)
-                            .font(.footnote)
-                            .multilineTextAlignment(.center)
-                    }
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .padding(.horizontal, 28)
-            }
+            shareAssetEmptyContainer
         }
+    }
+
+    private var shareAssetEmptyContainer: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(RaverTheme.card)
+            .frame(maxWidth: .infinity)
+            .frame(height: 320)
+            .overlay {
+                shareAssetEmptyState
+            }
+    }
+
+    private var shareAssetEmptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 56, weight: .medium))
+            Text(emptyTitle)
+                .font(.headline)
+            Text(emptyMessage)
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(RaverTheme.secondaryText)
+        .padding(.horizontal, 28)
     }
 
     private func assetPreviewHeight(for width: CGFloat) -> CGFloat {
