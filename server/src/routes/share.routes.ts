@@ -1,11 +1,10 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'child_process';
 import { Request, Response, Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { Resvg } from '@resvg/resvg-js';
 import jpeg from 'jpeg-js';
-import { chromium, Browser } from 'playwright-core';
 import QRCode from 'qrcode';
 import { PNG } from 'pngjs';
 import {
@@ -23,21 +22,15 @@ const APP_ICON_PATH = path.resolve(
   __dirname,
   '../../../mobile/ios/RaverMVP/RaverMVP/Assets.xcassets/AppIcon.appiconset/icon-60@3x.png'
 );
-const DEFAULT_CHROME_PATHS = [
-  process.env.SHARE_POSTER_CHROME_PATH,
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-].filter((value): value is string => Boolean(value && value.trim()));
 
 type RGB = [number, number, number];
 
 type PosterRenderMode =
-  | 'event_html'
+  | 'event_svg'
   | 'event_fallback_png'
   | 'default_png';
+
+type SharePosterLocale = 'zh' | 'en';
 
 const htmlEscape = (value: string | null | undefined): string =>
   String(value || '')
@@ -187,6 +180,11 @@ const requestContext = (req: Request) => {
   };
 };
 
+const normalizePosterLocale = (acceptLanguage: string | string[] | undefined): SharePosterLocale => {
+  const raw = Array.isArray(acceptLanguage) ? acceptLanguage.join(',') : String(acceptLanguage || '');
+  return raw.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
+};
+
 const appendShareCode = (value: string, code: string): string => {
   try {
     const url = new URL(value);
@@ -197,55 +195,6 @@ const appendShareCode = (value: string, code: string): string => {
   } catch {
     const separator = value.includes('?') ? '&' : '?';
     return `${value}${separator}shareCode=${encodeURIComponent(code)}`;
-  }
-};
-
-let cachedPosterBrowser: Browser | null = null;
-let cachedChromeExecutablePath: string | null | undefined;
-
-const resolveChromeExecutablePath = (): string | null => {
-  if (cachedChromeExecutablePath !== undefined) return cachedChromeExecutablePath;
-
-  for (const candidate of DEFAULT_CHROME_PATHS) {
-    if (candidate && fs.existsSync(candidate)) {
-      cachedChromeExecutablePath = candidate;
-      return candidate;
-    }
-  }
-
-  const commandCandidates = ['google-chrome', 'chromium', 'chromium-browser'];
-  for (const command of commandCandidates) {
-    try {
-      const resolved = execFileSync('which', [command], { encoding: 'utf8' }).trim();
-      if (resolved) {
-        cachedChromeExecutablePath = resolved;
-        return resolved;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  cachedChromeExecutablePath = null;
-  return null;
-};
-
-const getPosterBrowser = async (): Promise<Browser | null> => {
-  if (cachedPosterBrowser?.isConnected()) return cachedPosterBrowser;
-  const executablePath = resolveChromeExecutablePath();
-  if (!executablePath) return null;
-
-  try {
-    cachedPosterBrowser = await chromium.launch({
-      executablePath,
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-    return cachedPosterBrowser;
-  } catch (error) {
-    console.error('Failed to launch poster browser:', error);
-    cachedPosterBrowser = null;
-    return null;
   }
 };
 
@@ -700,9 +649,17 @@ type SharePosterEventSnapshot = {
   shareCode: string;
 };
 
-const formatPosterDate = (date: Date | null, timeZone: string): string => {
-  if (!date) return 'TBA';
+const formatPosterDate = (date: Date | null, timeZone: string, locale: SharePosterLocale = 'en'): string => {
+  if (!date) return locale == 'zh' ? '待定' : 'TBA';
   try {
+    if (locale === 'zh') {
+      return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone,
+      }).format(date);
+    }
     const formatted = new Intl.DateTimeFormat('en-US', {
       month: 'short',
       day: 'numeric',
@@ -711,8 +668,132 @@ const formatPosterDate = (date: Date | null, timeZone: string): string => {
     }).format(date);
     return asciiText(formatted.toUpperCase(), 'TBA');
   } catch {
-    return asciiText(date.toISOString().slice(0, 10), 'TBA');
+    return locale === 'zh' ? '待定' : asciiText(date.toISOString().slice(0, 10), 'TBA');
   }
+};
+
+const svgEscape = (value: string | null | undefined): string => htmlEscape(value);
+
+const toImageDataUri = async (urlString: string | null | undefined): Promise<string | null> => {
+  const normalized = String(urlString || '').trim();
+  if (!/^https?:\/\//i.test(normalized)) return null;
+
+  try {
+    const response = await fetch(normalized);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+  } catch (error) {
+    console.error('Failed to load share poster remote image as data URL:', error);
+    return null;
+  }
+};
+
+const formatPosterDurationLabel = (
+  startDate: Date | null,
+  endDate: Date | null,
+  timeZone: string,
+  locale: SharePosterLocale
+): string => {
+  const duration = formatPosterDuration(startDate, endDate, timeZone);
+  if (duration === 'TBA') {
+    return locale === 'zh' ? '待定' : 'TBA';
+  }
+  if (locale === 'zh') {
+    const days = duration.match(/\d+/)?.[0] || duration;
+    return `${days} 天`;
+  }
+  return duration.replace(/\bDAY\b/g, 'Day').replace(/\bDAYS\b/g, 'Days');
+};
+
+const posterCopy = (locale: SharePosterLocale) =>
+  locale === 'zh'
+    ? {
+        access: 'RAVEHUB 通行证',
+        start: '开始',
+        end: '结束',
+        duration: '时长',
+        lineup: '阵容',
+        venue: '地点',
+        presentedBy: '主办方',
+        moreInfo: '更多活动、艺人信息请扫码查看 RaveHub App',
+        titleFont: "'Bebas Neue', Impact, sans-serif",
+        bodyFont: "'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+      }
+    : {
+        access: 'RAVEHUB ACCESS',
+        start: 'START',
+        end: 'END',
+        duration: 'DURATION',
+        lineup: 'LINEUP',
+        venue: 'VENUE',
+        presentedBy: 'PRESENTED BY',
+        moreInfo: 'SCAN RAVEHUB APP FOR MORE EVENTS & LINEUP INFO',
+        titleFont: "'Bebas Neue', Impact, sans-serif",
+        bodyFont: "'Bebas Neue', Impact, sans-serif",
+      };
+
+const hasCJKText = (value: string): boolean => /[\u3400-\u9FFF]/.test(value);
+const hasLatinOrDigitText = (value: string): boolean => /[A-Za-z0-9]/.test(value);
+
+const splitMixedRuns = (value: string): Array<{ text: string; kind: 'cjk' | 'latin' }> => {
+  const runs: Array<{ text: string; kind: 'cjk' | 'latin' }> = [];
+  let current = '';
+  let currentKind: 'cjk' | 'latin' | null = null;
+
+  for (const char of value) {
+    const kind: 'cjk' | 'latin' = /[A-Za-z0-9]/.test(char) ? 'latin' : 'cjk';
+    if (currentKind === kind || currentKind === null) {
+      current += char;
+      currentKind = kind;
+      continue;
+    }
+    runs.push({ text: current, kind: currentKind });
+    current = char;
+    currentKind = kind;
+  }
+
+  if (current && currentKind) {
+    runs.push({ text: current, kind: currentKind });
+  }
+  return runs;
+};
+
+const measurePosterTextWidth = (value: string, fontSize: number, kind: 'cjk' | 'latin'): number => {
+  let width = 0;
+  for (const char of value) {
+    if (char === ' ') {
+      width += fontSize * 0.34;
+    } else if (kind === 'latin') {
+      width += fontSize * 0.66;
+    } else {
+      width += fontSize * 1.02;
+    }
+  }
+  return width;
+};
+
+const buildMixedFontText = (
+  value: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  color: string,
+  zhFont: string,
+  enFont: string,
+  zhWeight: string,
+  letterSpacing: number
+): string => {
+  const runs = splitMixedRuns(value);
+  let cursorX = x;
+  return runs.map((run) => {
+    const family = run.kind === 'latin' ? enFont : zhFont;
+    const weight = run.kind === 'latin' ? '400' : zhWeight;
+    const text = `<text x="${cursorX}" y="${y}" font-family="${family}" font-weight="${weight}" font-size="${fontSize}" fill="${color}" letter-spacing="${letterSpacing}">${svgEscape(run.text)}</text>`;
+    cursorX += measurePosterTextWidth(run.text, fontSize, run.kind);
+    return text;
+  }).join('');
 };
 
 const formatPosterDuration = (startDate: Date | null, endDate: Date | null, timeZone: string): string => {
@@ -787,16 +868,12 @@ const loadEventPosterSnapshot = async (
   };
 };
 
-const renderEventPosterHtml = async (
+const renderEventPosterSvg = async (
   shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>,
-  event: SharePosterEventSnapshot
+  event: SharePosterEventSnapshot,
+  locale: SharePosterLocale
 ): Promise<Buffer | null> => {
-  const browser = await getPosterBrowser();
-  if (!browser) {
-    console.warn(`[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} html-render skipped reason=no_browser`);
-    return null;
-  }
-
+  const copy = posterCopy(locale);
   const qrDataUrl = await QRCode.toDataURL(buildShareShortUrl(shareLink.code), {
     errorCorrectionLevel: 'H',
     margin: 0,
@@ -806,147 +883,158 @@ const renderEventPosterHtml = async (
       light: '#FFFFFFFF',
     },
   });
+  const qrImageDataUrl = qrDataUrl;
+  const heroImageDataUrl = await toImageDataUri(event.imageUrl);
 
-  const safeTitle = htmlEscape(event.title || shareLink.title);
-  const safeVenue = htmlEscape(event.venue || 'Venue TBA');
-  const safeOrganizer = htmlEscape(event.organizer || 'Raver');
-  const safeStart = htmlEscape(formatPosterDate(event.startDate, event.timeZone));
-  const safeEnd = htmlEscape(formatPosterDate(event.endDate, event.timeZone));
-  const safeDuration = htmlEscape(formatPosterDuration(event.startDate, event.endDate, event.timeZone));
-  const safeLineup = htmlEscape(`${Math.max(0, event.artistCount)} Artists`);
-  const safeImage = cssImageUrl(event.imageUrl);
-  const heroImage = safeImage
-    ? safeImage
-    : '';
+  const safeStart = svgEscape(formatPosterDate(event.startDate, event.timeZone, locale));
+  const safeEnd = svgEscape(formatPosterDate(event.endDate, event.timeZone, locale));
+  const safeDuration = svgEscape(formatPosterDurationLabel(event.startDate, event.endDate, event.timeZone, locale));
+  const safeLineup = svgEscape(locale === 'zh' ? `${Math.max(0, event.artistCount)} 组艺人` : `${Math.max(0, event.artistCount)} Artists`);
+  const safeVenueRaw = event.venue || (locale === 'zh' ? '待定' : 'Venue TBA');
+  const safeVenue = svgEscape(safeVenueRaw);
+  const titleSource = locale === 'zh' ? (event.title || shareLink.title || '') : (event.title || shareLink.title || '').toUpperCase();
+  const titleLines = wrapText(titleSource, locale === 'zh' ? 12 : 16, 3);
+  const titleBlock = titleLines
+    .map((line, index) => {
+      const y = 280 + index * 30;
+      if (locale === 'zh' && hasLatinOrDigitText(line) && hasCJKText(line)) {
+        return buildMixedFontText(line, 25, y, 28, '#fff', copy.bodyFont, copy.titleFont, '900', 2.6);
+      }
+      const fontFamily = hasCJKText(line) ? copy.bodyFont : copy.titleFont;
+      const fontWeight = hasCJKText(line) ? '900' : '400';
+      const letterSpacing = hasCJKText(line) ? '2.6' : '5.04';
+      return `<text x="25" y="${y}" font-family="${fontFamily}" font-weight="${fontWeight}" font-size="28" letter-spacing="${letterSpacing}" fill="#fff">${svgEscape(line)}</text>`;
+    })
+    .join('');
+  const durationMatch = safeDuration.match(/^(\d+)\s*(.*)$/);
+  const durationNumber = durationMatch?.[1] || safeDuration;
+  const durationUnit = durationMatch?.[2] || '';
+  const lineupMatch = safeLineup.match(/^(\d+)\s*(.*)$/);
+  const lineupNumber = lineupMatch?.[1] || safeLineup;
+  const lineupUnit = lineupMatch?.[2] || '';
+  const organizerRaw = event.organizer || 'Raver';
+  const organizerParts = locale === 'zh'
+    ? organizerRaw.split(/×/).map((item) => item.trim()).filter(Boolean)
+    : [organizerRaw];
+  const organizerSecondary = organizerParts[1] ? svgEscape(organizerParts[1]) : '';
+  const moreInfoLine1 = locale === 'zh' ? '更多活动、艺人信息请扫码查看' : 'SCAN FOR MORE EVENTS &';
+  const moreInfoLine2 = locale === 'zh' ? 'RaveHub App' : 'LINEUP INFO ON RAVEHUB APP';
 
-  const html = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RAVE ACCESS PASS</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: 'Rajdhani', sans-serif;
-      -webkit-font-smoothing: antialiased;
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="700" viewBox="0 0 390 700">
+  <defs>
+    <linearGradient id="maskGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.15"/>
+      <stop offset="55%" stop-color="#000" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.92"/>
+    </linearGradient>
+    <linearGradient id="topGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </linearGradient>
+    <clipPath id="heroClip">
+      <rect x="0" y="60" width="390" height="260" />
+    </clipPath>
+  </defs>
+  <rect width="390" height="700" rx="30" fill="#0f0f11" stroke="#27272a" stroke-width="1"/>
+
+  <rect x="0" y="0" width="390" height="60" fill="rgba(255,255,255,0.03)"/>
+  <line x1="0" y1="60" x2="390" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+  <text x="25" y="38" font-family="${copy.titleFont}" font-size="16" fill="#d4d4d8" letter-spacing="5.6">RAVEHUB ACCESS</text>
+
+  <rect x="0" y="60" width="390" height="260" fill="#18181b"/>
+  ${
+    heroImageDataUrl
+      ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="260" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />`
+      : ''
+  }
+  <rect x="0" y="60" width="390" height="260" fill="url(#maskGrad)"/>
+  <rect x="0" y="60" width="390" height="260" fill="url(#topGlow)"/>
+
+  <line x1="0" y1="91" x2="390" y2="91" stroke="rgba(239,68,68,0.2)" stroke-width="2"/>
+  <line x1="0" y1="130" x2="390" y2="130" stroke="rgba(239,68,68,0.2)" stroke-width="1"/>
+  <line x1="0" y1="158" x2="390" y2="158" stroke="rgba(239,68,68,0.2)" stroke-width="3"/>
+  <line x1="0" y1="193" x2="390" y2="193" stroke="rgba(239,68,68,0.2)" stroke-width="2"/>
+  <line x1="0" y1="226" x2="390" y2="226" stroke="rgba(239,68,68,0.2)" stroke-width="1"/>
+  <line x1="0" y1="255" x2="390" y2="255" stroke="rgba(239,68,68,0.2)" stroke-width="2"/>
+
+  <g>${titleBlock}</g>
+
+  <rect x="0" y="320" width="390" height="20" fill="#000"/>
+  <path d="M0,0 L7,-10 L14,0 L21,-10 L28,0 L35,-10 L42,0 L49,-10 L56,0 L63,-10 L70,0 L77,-10 L84,0 L91,-10 L98,0 L105,-10 L112,0 L119,-10 L126,0 L133,-10 L140,0 L147,-10 L154,0 L161,-10 L168,0 L175,-10 L182,0 L189,-10 L196,0 L203,-10 L210,0 L217,-10 L224,0 L231,-10 L238,0 L245,-10 L252,0 L259,-10 L266,0 L273,-10 L280,0 L287,-10 L294,0 L301,-10 L308,0 L315,-10 L322,0 L329,-10 L336,0 L343,-10 L350,0 L357,-10 L364,0 L371,-10 L378,0 L385,-10 L392,0" transform="translate(0,320)" fill="#0f0f11"/>
+
+  <g font-family="${copy.bodyFont}">
+    <text x="25" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.start)}</text>
+    ${locale === 'zh'
+      ? buildMixedFontText(safeStart, 25, 392, 18, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 1.08)
+      : `<text x="25" y="392" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeStart}</text>`}
+
+    <text x="200" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.end)}</text>
+    ${locale === 'zh'
+      ? buildMixedFontText(safeEnd, 200, 392, 18, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 1.08)
+      : `<text x="200" y="392" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeEnd}</text>`}
+
+    <text x="25" y="422" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.duration)}</text>
+    ${
+      locale === 'zh'
+        ? `<text x="25" y="442" font-family="${copy.titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(durationNumber)}</text>
+    <text x="44" y="442" font-family="${copy.bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(durationUnit)}</text>`
+        : `<text x="25" y="442" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeDuration}</text>`
     }
-    * {
-      text-transform: uppercase;
-    }
-  </style>
-</head>
-<body class="min-h-screen bg-black flex items-center justify-center p-6 text-white">
-  <div class="w-[390px] max-w-[92vw]" id="poster-root">
-    <div class="relative bg-zinc-950 rounded-[30px] overflow-hidden border border-zinc-800 shadow-[0_20px_80px_rgba(0,0,0,.7)]">
-      <div class="px-5 pt-5 pb-4 border-b border-white/5 bg-white/[0.03] backdrop-blur-xl">
-        <div class="text-[14px] tracking-[0.35em] text-zinc-300 font-bold">
-          RaveHub Access
-        </div>
-      </div>
-      <div class="relative h-[260px] overflow-hidden">
-        ${
-          heroImage
-            ? `<img src="${heroImage}" class="absolute inset-0 w-full h-full object-cover" />`
-            : `<div class="absolute inset-0 bg-zinc-900"></div>`
-        }
-        <div class="absolute inset-0" style="background: linear-gradient(to bottom, rgba(0,0,0,.15) 0%, rgba(0,0,0,.5) 55%, rgba(0,0,0,.92) 100%)"></div>
-        <div class="absolute inset-0 bg-gradient-to-tr from-red-500/10 via-transparent to-transparent"></div>
-        <div class="absolute left-5 bottom-5 max-w-[88%]">
-          <h2 class="text-[26px] font-bold tracking-[0.18em] text-white leading-snug break-words">
-            ${safeTitle}
-          </h2>
-        </div>
-        <div class="absolute inset-0 opacity-30 pointer-events-none">
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 12%; height: 2px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 27%; height: 1px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 35%; height: 3px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 48%; height: 2px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 62%; height: 1px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 75%; height: 2px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 88%; height: 2px;"></div>
-          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 94%; height: 3px;"></div>
-        </div>
-      </div>
-      <div class="h-5 bg-black flex overflow-hidden">
-        ${Array.from({ length: 26 }, () => '<div class="w-0 h-0 border-l-[7px] border-r-[7px] border-t-[10px] border-l-transparent border-r-transparent border-t-zinc-950"></div>').join('')}
-      </div>
-      <div class="p-5">
-        <div class="grid grid-cols-2 gap-x-5 gap-y-5">
-          <div>
-            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">START</div>
-            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeStart}</div>
-          </div>
-          <div>
-            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">END</div>
-            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeEnd}</div>
-          </div>
-          <div>
-            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">DURATION</div>
-            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeDuration}</div>
-          </div>
-          <div>
-            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">LINEUP</div>
-            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeLineup}</div>
-          </div>
-          <div class="col-span-2">
-            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">VENUE</div>
-            <div class="text-zinc-100 break-words text-[16px] leading-[1.9] tracking-[0.06em] font-bold">${safeVenue}</div>
-          </div>
-          <div class="col-span-2">
-            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">PRESENTED BY</div>
-            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeOrganizer}</div>
-          </div>
-        </div>
-        <div class="h-px bg-white/10 my-5"></div>
-        <div class="flex justify-between items-center">
-          <div class="text-[11px] text-zinc-400 tracking-[0.3em] font-semibold">
-            RaveHub Access
-          </div>
-          <div class="flex items-center gap-3">
-            <div>
-              <div class="text-[14px] font-bold tracking-[0.1em]">Scan</div>
-              <div class="text-[11px] text-zinc-400 mt-1 tracking-[0.15em] font-semibold">RaveHub App</div>
-            </div>
-            <img src="${qrDataUrl}" class="w-14 h-14" />
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`;
 
-  const context = await browser.newContext({
-    viewport: {
-      width: 520,
-      height: 980,
-    },
-    deviceScaleFactor: 2,
-  });
-  const page = await context.newPage();
+    <text x="200" y="422" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.lineup)}</text>
+    ${
+      locale === 'zh'
+        ? `<text x="200" y="442" font-family="${copy.titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(lineupNumber)}</text>
+    <text x="223" y="442" font-family="${copy.bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(lineupUnit)}</text>`
+        : `<text x="200" y="442" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeLineup}</text>`
+    }
+
+    <text x="25" y="472" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.venue)}</text>
+    ${locale === 'zh' && hasLatinOrDigitText(safeVenueRaw)
+      ? buildMixedFontText(safeVenueRaw, 25, 492, 17, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 0.3)
+      : `<text x="25" y="492" font-size="17" fill="#e4e4e7" letter-spacing="${locale === 'zh' ? '0.3' : '1.02'}">${safeVenue}</text>`}
+
+    <text x="25" y="522" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
+    ${
+      locale === 'zh' && organizerSecondary
+        ? `${buildMixedFontText(`${organizerParts[0] || ''} × `, 25, 542, 18, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 0.8)}
+    <text x="102" y="542" font-family="${copy.titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${organizerSecondary}</text>`
+        : locale === 'zh' && hasLatinOrDigitText(organizerRaw)
+          ? buildMixedFontText(organizerRaw, 25, 542, 18, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 0.8)
+          : `<text x="25" y="542" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(organizerRaw)}</text>`
+    }
+  </g>
+
+  <line x1="25" y1="560" x2="365" y2="560" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+
+  <g font-family="${copy.bodyFont}">
+    <text x="25" y="585" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.8' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
+    <text x="25" y="608" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="1.12">${svgEscape(moreInfoLine2)}</text>
+  </g>
+
+  <rect x="290" y="575" width="60" height="60" fill="#ffffff"/>
+  <image href="${qrImageDataUrl}" x="290" y="575" width="60" height="60" preserveAspectRatio="none" />
+</svg>`;
 
   try {
-    await page.setContent(html, { waitUntil: 'networkidle' });
-    const poster = await page.locator('#poster-root').screenshot({ type: 'png' });
+    const resvg = new Resvg(svg, {
+      fitTo: {
+        mode: 'width',
+        value: 780,
+      },
+    });
+    const poster = resvg.render().asPng();
     console.info(
-      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} html-render success bytes=${poster.length} imageUrl=${event.imageUrl || 'none'}`
+      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} svg-render success bytes=${poster.length} imageUrl=${event.imageUrl || 'none'}`
     );
     return Buffer.from(poster);
   } catch (error) {
     console.error(
-      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} html-render failed imageUrl=${event.imageUrl || 'none'}`,
+      `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} svg-render failed imageUrl=${event.imageUrl || 'none'}`,
       error
     );
     return null;
-  } finally {
-    await page.close();
-    await context.close();
   }
 };
 
@@ -1109,16 +1197,17 @@ const drawEventAccessPassPoster = async (
 };
 
 const drawPoster = async (
-  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>
+  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>,
+  locale: SharePosterLocale
 ): Promise<{ png: Buffer; mode: PosterRenderMode }> => {
   const eventSnapshot = await loadEventPosterSnapshot(shareLink);
   if (eventSnapshot) {
     console.info(
       `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} eventSnapshot loaded title="${eventSnapshot.title}" imageUrl=${eventSnapshot.imageUrl || 'none'}`
     );
-    const renderedPoster = await renderEventPosterHtml(shareLink, eventSnapshot);
+    const renderedPoster = await renderEventPosterSvg(shareLink, eventSnapshot, locale);
     if (renderedPoster) {
-      return { png: renderedPoster, mode: 'event_html' };
+      return { png: renderedPoster, mode: 'event_svg' };
     }
     console.warn(
       `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} fallback=event_fallback_png`
@@ -1308,8 +1397,9 @@ router.get('/poster/:code.png', async (req: Request, res: Response): Promise<voi
     const code = req.params.code as string;
     const shareLink = await getRawShareLinkByCode(prisma, code);
     const state = describeShareState(shareLink);
+    const locale = normalizePosterLocale(req.headers['accept-language']);
     console.info(
-      `[share-poster] code=${code} route-hit targetType=${shareLink.targetType} status=${shareLink.status} host=${req.get('host') || 'unknown'} ua=${req.get('user-agent') || 'unknown'}`
+      `[share-poster] code=${code} route-hit targetType=${shareLink.targetType} status=${shareLink.status} locale=${locale} host=${req.get('host') || 'unknown'} ua=${req.get('user-agent') || 'unknown'}`
     );
 
     if (!state.ok) {
@@ -1320,7 +1410,7 @@ router.get('/poster/:code.png', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const { png, mode } = await drawPoster(shareLink);
+    const { png, mode } = await drawPoster(shareLink, locale);
     console.info(
       `[share-poster] code=${code} route-success mode=${mode} bytes=${png.length}`
     );

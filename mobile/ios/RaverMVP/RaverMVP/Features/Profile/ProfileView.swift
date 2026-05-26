@@ -3082,6 +3082,8 @@ struct ShareAssetDetailView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(RaverTheme.accent)
+                    .foregroundStyle(.white)
                 }
             }
             .frame(maxWidth: .infinity)
