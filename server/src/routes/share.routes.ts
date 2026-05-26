@@ -130,16 +130,29 @@ const formatPosterVenueText = (value: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const readLocalizedAddressText = (value: unknown, field: 'formattedAddressI18n' | 'detailAddressI18n'): string | null => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const source = (value as Record<string, unknown>)[field];
-  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
-  const record = source as Record<string, unknown>;
-  for (const key of ['zh', 'en', 'ja', 'enFull']) {
+const localizedValueFromRecord = (record: Record<string, unknown>, locale: SharePosterLocale): string | null => {
+  const keysByLocale: Record<SharePosterLocale, string[]> = {
+    zh: ['zh', 'zh-CN', 'zh-Hans', 'zh_CN', 'zh_Hans'],
+    en: ['enFull', 'en', 'en-US', 'en_US'],
+  };
+  const fallbackKeys = ['zh', 'enFull', 'en', 'ja'];
+  for (const key of [...keysByLocale[locale], ...fallbackKeys]) {
     const text = normalizeEventText(record[key]);
     if (text) return text;
   }
   return null;
+};
+
+const readLocalizedAddressText = (
+  value: unknown,
+  field: 'formattedAddressI18n' | 'detailAddressI18n',
+  locale: SharePosterLocale
+): string | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = (value as Record<string, unknown>)[field];
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const record = source as Record<string, unknown>;
+  return localizedValueFromRecord(record, locale);
 };
 
 const resolvePosterVenueText = (event: {
@@ -147,14 +160,24 @@ const resolvePosterVenueText = (event: {
   venueAddress?: string | null;
   city?: string | null;
   country?: string | null;
+  cityI18n?: unknown;
+  countryI18n?: unknown;
   manualLocation?: unknown;
   locationPoint?: unknown;
-}): string | null => {
-  const unified = readLocalizedAddressText(event.manualLocation, 'formattedAddressI18n')
-    ?? readLocalizedAddressText(event.locationPoint, 'formattedAddressI18n')
-    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n')
-    ?? normalizeEventText(event.city)
-    ?? normalizeEventText(event.country);
+}, locale: SharePosterLocale): string | null => {
+  const cityText =
+    event.cityI18n && typeof event.cityI18n === 'object' && !Array.isArray(event.cityI18n)
+      ? localizedValueFromRecord(event.cityI18n as Record<string, unknown>, locale) ?? normalizeEventText(event.city)
+      : normalizeEventText(event.city);
+  const countryText =
+    event.countryI18n && typeof event.countryI18n === 'object' && !Array.isArray(event.countryI18n)
+      ? localizedValueFromRecord(event.countryI18n as Record<string, unknown>, locale) ?? normalizeEventText(event.country)
+      : normalizeEventText(event.country);
+  const unified = readLocalizedAddressText(event.manualLocation, 'formattedAddressI18n', locale)
+    ?? readLocalizedAddressText(event.locationPoint, 'formattedAddressI18n', locale)
+    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n', locale)
+    ?? cityText
+    ?? countryText;
   return unified ? formatPosterVenueText(unified) : null;
 };
 
@@ -221,7 +244,13 @@ const requestContext = (req: Request) => {
   };
 };
 
-const normalizePosterLocale = (acceptLanguage: string | string[] | undefined): SharePosterLocale => {
+const normalizePosterLocale = (
+  localeInput: unknown,
+  acceptLanguage: string | string[] | undefined
+): SharePosterLocale => {
+  const localeRaw = String(localeInput || '').trim().toLowerCase();
+  if (localeRaw.startsWith('zh')) return 'zh';
+  if (localeRaw.startsWith('en')) return 'en';
   const raw = Array.isArray(acceptLanguage) ? acceptLanguage.join(',') : String(acceptLanguage || '');
   return raw.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
 };
@@ -921,7 +950,8 @@ const formatPosterDuration = (startDate: Date | null, endDate: Date | null, time
 };
 
 const loadEventPosterSnapshot = async (
-  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>
+  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>,
+  locale: SharePosterLocale
 ): Promise<SharePosterEventSnapshot | null> => {
   if (shareLink.targetType !== 'event') return null;
 
@@ -929,10 +959,13 @@ const loadEventPosterSnapshot = async (
     where: { id: shareLink.targetId },
     select: {
       name: true,
+      nameI18n: true,
       venueName: true,
       venueAddress: true,
       city: true,
+      cityI18n: true,
       country: true,
+      countryI18n: true,
       manualLocation: true,
       locationPoint: true,
       startDate: true,
@@ -944,6 +977,7 @@ const loadEventPosterSnapshot = async (
       wikiFestival: {
         select: {
           name: true,
+          nameI18n: true,
         },
       },
       _count: {
@@ -956,12 +990,22 @@ const loadEventPosterSnapshot = async (
 
   if (!event) return null;
 
-  const venue = posterText(resolvePosterVenueText(event), 'Venue TBA');
+  const localizedTitle =
+    event.nameI18n && typeof event.nameI18n === 'object' && !Array.isArray(event.nameI18n)
+      ? localizedValueFromRecord(event.nameI18n as Record<string, unknown>, locale) ?? normalizeEventText(event.name)
+      : normalizeEventText(event.name);
+  const localizedOrganizer =
+    event.wikiFestival?.nameI18n &&
+    typeof event.wikiFestival.nameI18n === 'object' &&
+    !Array.isArray(event.wikiFestival.nameI18n)
+      ? localizedValueFromRecord(event.wikiFestival.nameI18n as Record<string, unknown>, locale) ?? normalizeEventText(event.wikiFestival.name)
+      : normalizeEventText(event.wikiFestival?.name);
+  const venue = posterText(resolvePosterVenueText(event, locale), locale === 'zh' ? '待定' : 'Venue TBA');
 
   return {
-    title: posterText(event.name || shareLink.title, posterText(shareLink.title, `Event ${shareLink.code}`)),
+    title: posterText(localizedTitle || shareLink.title, posterText(shareLink.title, `Event ${shareLink.code}`)),
     venue,
-    organizer: normalizeEventText(event.wikiFestival?.name),
+    organizer: localizedOrganizer,
     startDate: event.startDate ?? null,
     endDate: event.endDate ?? null,
     timeZone: event.timeZone || 'UTC',
@@ -998,9 +1042,12 @@ const renderEventPosterSvg = async (
   const titleFontSize = 28;
   const titleMaxWidth = 306;
   const titleLines = wrapPosterMixedText(titleSource, titleMaxWidth, titleFontSize, 3);
+  const titleLineHeight = 30;
+  const titleBottomY = 310;
+  const titleStartY = titleBottomY - (Math.max(titleLines.length, 1) - 1) * titleLineHeight;
   const titleBlock = titleLines
     .map((line, index) => {
-      const y = 280 + index * 30;
+      const y = titleStartY + index * titleLineHeight;
       const letterSpacing = locale === 'zh' ? '1.2' : '0.8';
       return `<text x="25" y="${y}" font-family="${copy.titleFont}" font-weight="900" font-size="${titleFontSize}" letter-spacing="${letterSpacing}" fill="#fff">${svgEscape(line)}</text>`;
     })
@@ -1287,7 +1334,7 @@ const drawPoster = async (
   shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>,
   locale: SharePosterLocale
 ): Promise<{ png: Buffer; mode: PosterRenderMode }> => {
-  const eventSnapshot = await loadEventPosterSnapshot(shareLink);
+  const eventSnapshot = await loadEventPosterSnapshot(shareLink, locale);
   if (eventSnapshot) {
     console.info(
       `[share-poster] code=${shareLink.code} targetType=${shareLink.targetType} eventSnapshot loaded title="${eventSnapshot.title}" imageUrl=${eventSnapshot.imageUrl || 'none'}`
@@ -1484,7 +1531,7 @@ router.get('/poster/:code.png', async (req: Request, res: Response): Promise<voi
     const code = req.params.code as string;
     const shareLink = await getRawShareLinkByCode(prisma, code);
     const state = describeShareState(shareLink);
-    const locale = normalizePosterLocale(req.headers['accept-language']);
+    const locale = normalizePosterLocale(req.query.locale, req.headers['accept-language']);
     console.info(
       `[share-poster] code=${code} route-hit targetType=${shareLink.targetType} status=${shareLink.status} locale=${locale} host=${req.get('host') || 'unknown'} ua=${req.get('user-agent') || 'unknown'}`
     );

@@ -3051,7 +3051,7 @@ struct ShareAssetDetailView: View {
         self.emptyMessage = emptyMessage
         self.hintText = hintText
         self.saveButtonTitle = saveButtonTitle
-        _currentAssetURL = State(initialValue: assetURL)
+        _currentAssetURL = State(initialValue: Self.localizedPosterURL(assetURL))
     }
 
     var body: some View {
@@ -3167,6 +3167,19 @@ struct ShareAssetDetailView: View {
         let resolved = AppConfig.resolvedURLString(currentAssetURL)
         guard let resolved, !resolved.isEmpty else { return false }
         return URL(string: resolved) != nil
+    }
+
+    private static func localizedPosterURL(_ value: String?) -> String? {
+        guard let resolved = AppConfig.resolvedURLString(value),
+              var components = URLComponents(string: resolved) else {
+            return value
+        }
+        let locale = AppLanguagePreference.current.effectiveLanguage == .zh ? "zh" : "en"
+        var items = components.queryItems ?? []
+        items.removeAll(where: { $0.name == "locale" })
+        items.append(URLQueryItem(name: "locale", value: locale))
+        components.queryItems = items
+        return components.string
     }
 
     private var regenerateButtonTitle: String? {
@@ -3377,7 +3390,7 @@ struct ShareAssetDetailView: View {
         do {
             print("[share-poster-ios] regenerate-start code=\(code)")
             let payload = try await AppEnvironment.makeShareLinkService().regeneratePoster(code: code)
-            currentAssetURL = payload.posterURL
+            currentAssetURL = Self.localizedPosterURL(payload.posterURL)
             loadedAssetImage = nil
             assetImageSize = nil
             assetDidFailToLoad = false
