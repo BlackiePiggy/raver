@@ -829,10 +829,19 @@ const wrapPosterMixedText = (value: string, maxWidth: number, fontSize: number, 
     lines.push(current);
   }
 
-  if (lines.length > maxLines) {
-    return lines.slice(0, maxLines);
+  const fitted = lines.slice(0, maxLines);
+  const consumed = fitted.join('').replace(/\s+/g, '');
+  const original = tokens.join('').replace(/\s+/g, '');
+  const truncated = original.length > consumed.length || lines.length > maxLines;
+
+  if (truncated && fitted.length > 0) {
+    let lastLine = fitted[fitted.length - 1];
+    while (lastLine && estimatePosterLineWidth(`${lastLine}…`, fontSize) > maxWidth) {
+      lastLine = lastLine.slice(0, -1).trimEnd();
+    }
+    fitted[fitted.length - 1] = lastLine ? `${lastLine}…` : '…';
   }
-  return lines;
+  return fitted;
 };
 
 const renderPosterTextBlock = (
@@ -949,12 +958,14 @@ const renderEventPosterSvg = async (
   const safeLineup = svgEscape(locale === 'zh' ? `${Math.max(0, event.artistCount)} 组艺人` : `${Math.max(0, event.artistCount)} Artists`);
   const safeVenueRaw = event.venue || (locale === 'zh' ? '待定' : 'Venue TBA');
   const titleSource = locale === 'zh' ? (event.title || shareLink.title || '') : (event.title || shareLink.title || '').toUpperCase();
-  const titleLines = wrapText(titleSource, locale === 'zh' ? 12 : 16, 3);
+  const titleFontSize = 28;
+  const titleMaxWidth = 340;
+  const titleLines = wrapPosterMixedText(titleSource, titleMaxWidth, titleFontSize, 3);
   const titleBlock = titleLines
     .map((line, index) => {
       const y = 280 + index * 30;
-      const letterSpacing = locale === 'zh' ? '1.2' : '2.4';
-      return `<text x="25" y="${y}" font-family="${copy.titleFont}" font-weight="900" font-size="28" letter-spacing="${letterSpacing}" fill="#fff">${svgEscape(line)}</text>`;
+      const letterSpacing = locale === 'zh' ? '1.2' : '0.8';
+      return `<text x="25" y="${y}" font-family="${copy.titleFont}" font-weight="900" font-size="${titleFontSize}" letter-spacing="${letterSpacing}" fill="#fff">${svgEscape(line)}</text>`;
     })
     .join('');
   const durationMatch = safeDuration.match(/^(\d+)\s*(.*)$/);
@@ -964,8 +975,8 @@ const renderEventPosterSvg = async (
   const lineupNumber = lineupMatch?.[1] || safeLineup;
   const lineupUnit = lineupMatch?.[2] || '';
   const organizerRaw = event.organizer || 'Raver';
-  const venueLines = wrapPosterMixedText(safeVenueRaw, 330, 17, 3);
-  const organizerLines = wrapPosterMixedText(organizerRaw, 330, 18, 3);
+  const venueLines = wrapPosterMixedText(safeVenueRaw, 338, 17, 3);
+  const organizerLines = wrapPosterMixedText(organizerRaw, 338, 18, 3);
   const venueValueY = 492;
   const venueLineHeight = 23;
   const venueBottomY = venueValueY + (venueLines.length - 1) * venueLineHeight;
