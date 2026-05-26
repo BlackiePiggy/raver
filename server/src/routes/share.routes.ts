@@ -747,8 +747,8 @@ const posterCopy = (locale: SharePosterLocale) =>
         venue: '地点',
         presentedBy: '主办方',
         moreInfo: '更多活动、艺人信息请扫码查看 RaveHub App',
-        titleFont: "'站酷酷黑体', 'ZCOOL KuHei', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
-        bodyFont: "'站酷酷黑体', 'ZCOOL KuHei', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+        titleFont: "'ZCOOL_KuHei', '站酷酷黑', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+        bodyFont: "'ZCOOL_KuHei', '站酷酷黑', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
       }
     : {
         access: 'RAVEHUB ACCESS',
@@ -759,8 +759,8 @@ const posterCopy = (locale: SharePosterLocale) =>
         venue: 'VENUE',
         presentedBy: 'PRESENTED BY',
         moreInfo: 'SCAN RAVEHUB APP FOR MORE EVENTS & LINEUP INFO',
-        titleFont: "'站酷酷黑体', 'ZCOOL KuHei', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
-        bodyFont: "'站酷酷黑体', 'ZCOOL KuHei', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+        titleFont: "'ZCOOL_KuHei', '站酷酷黑', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+        bodyFont: "'ZCOOL_KuHei', '站酷酷黑', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
       };
 
 const hasCJKText = (value: string): boolean => /[\u3400-\u9FFF]/.test(value);
