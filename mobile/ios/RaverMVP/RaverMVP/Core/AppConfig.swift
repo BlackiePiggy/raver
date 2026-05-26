@@ -132,6 +132,7 @@ enum AppConfig {
     ]
     private static let persistedRuntimeModeKey = "raver.persisted.runtimeMode"
     private static let persistedBFFBaseURLKey = "raver.persisted.bffBaseURL"
+    private static let persistedShareAssetBaseURLKey = "raver.persisted.shareAssetBaseURL"
     private static let persistedRealNameEnforcementEnabledKey = "raver.persisted.realNameEnforcementEnabled"
     private static let persistedVirtualAssetsEnabledKey = "raver.persisted.virtualAssetsEnabled"
     private static let persistedGuidanceEnabledKey = "raver.persisted.guidanceEnabled"
@@ -173,6 +174,27 @@ enum AppConfig {
         return URL(string: "http://localhost:8787")!
 #else
         return URL(string: "https://api.ravehub.top")!
+#endif
+    }
+
+    static var shareAssetBaseURL: URL? {
+        if let custom = normalizedBaseURLString(ProcessInfo.processInfo.environment["RAVER_SHARE_ASSET_BASE_URL"]),
+           let url = validatedShareAssetBaseURL(from: custom) {
+#if DEBUG
+            UserDefaults.standard.set(url.absoluteString, forKey: persistedShareAssetBaseURLKey)
+#endif
+            return url
+        }
+
+#if DEBUG
+        if let persisted = normalizedBaseURLString(UserDefaults.standard.string(forKey: persistedShareAssetBaseURLKey)),
+           let url = validatedShareAssetBaseURL(from: persisted) {
+            return url
+        }
+
+        return defaultLocalShareAssetBaseURL
+#else
+        return nil
 #endif
     }
 
@@ -405,6 +427,17 @@ enum AppConfig {
     }
 
     private static func localShareOriginURL() -> URL? {
+        if let shareAssetBaseURL,
+           let components = URLComponents(url: shareAssetBaseURL, resolvingAgainstBaseURL: false),
+           let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !host.isEmpty {
+            var origin = URLComponents()
+            origin.scheme = components.scheme
+            origin.host = host
+            origin.port = components.port
+            return origin.url
+        }
+
         guard let components = URLComponents(url: bffBaseURL, resolvingAgainstBaseURL: false),
               let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
               !host.isEmpty else {
@@ -416,6 +449,31 @@ enum AppConfig {
         origin.host = host
         origin.port = components.port
         return origin.url
+    }
+
+    private static var defaultLocalShareAssetBaseURL: URL? {
+#if targetEnvironment(simulator)
+        return URL(string: "http://localhost:3901")
+#else
+        return nil
+#endif
+    }
+
+    private static func validatedShareAssetBaseURL(from raw: String) -> URL? {
+        guard let url = URL(string: raw),
+              let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty else {
+            return nil
+        }
+
+#if !targetEnvironment(simulator)
+        let loweredHost = host.lowercased()
+        if loweredHost == "localhost" || loweredHost == "127.0.0.1" || loweredHost == "::1" {
+            return nil
+        }
+#endif
+
+        return url
     }
 
     static func resolvedDJAvatarURLString(_ value: String?, size: DJAvatarSize = .original) -> String? {
