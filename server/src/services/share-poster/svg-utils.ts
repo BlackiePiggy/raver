@@ -1,0 +1,340 @@
+import { Resvg } from '@resvg/resvg-js';
+import QRCode from 'qrcode';
+import { buildShareShortUrl } from '../share-link.service';
+import { excerpt, singleLine } from './localization';
+import { SharePosterLocale, SharePosterSectionRow, SharePosterStructuredCardInput } from './types';
+
+export const htmlEscape = (value: string | null | undefined): string =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+export const svgEscape = (value: string | null | undefined): string => htmlEscape(value);
+
+export const toImageDataUri = async (urlString: string | null | undefined): Promise<string | null> => {
+  const normalized = String(urlString || '').trim();
+  if (!/^https?:\/\//i.test(normalized)) return null;
+  try {
+    const response = await fetch(normalized);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+  } catch {
+    return null;
+  }
+};
+
+export const formatPosterDate = (date: Date | null, timeZone: string, locale: SharePosterLocale = 'en'): string => {
+  if (!date) return locale === 'zh' ? '待定' : 'TBA';
+  try {
+    if (locale === 'zh') {
+      return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone,
+      }).format(date);
+    }
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone,
+    }).format(date);
+  } catch {
+    return locale === 'zh' ? '待定' : date.toISOString().slice(0, 10);
+  }
+};
+
+export const formatPosterDateParts = (
+  date: Date | null,
+  timeZone: string
+): { year: string; month: string; day: string } | null => {
+  if (!date) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('zh-CN-u-nu-latn', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      timeZone,
+    }).formatToParts(date);
+    const year = parts.find((part) => part.type === 'year')?.value || '';
+    const month = parts.find((part) => part.type === 'month')?.value || '';
+    const day = parts.find((part) => part.type === 'day')?.value || '';
+    if (!year || !month || !day) return null;
+    return { year, month, day };
+  } catch {
+    return null;
+  }
+};
+
+export const formatPosterDuration = (startDate: Date | null, endDate: Date | null, timeZone: string): string => {
+  if (!startDate || !endDate) return 'TBA';
+  try {
+    const startText = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone,
+    }).format(startDate);
+    const endText = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone,
+    }).format(endDate);
+    const start = new Date(`${startText}T00:00:00Z`);
+    const end = new Date(`${endText}T00:00:00Z`);
+    const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+    return `${diffDays} ${diffDays > 1 ? 'DAYS' : 'DAY'}`;
+  } catch {
+    return 'TBA';
+  }
+};
+
+export const formatPosterDurationLabel = (
+  startDate: Date | null,
+  endDate: Date | null,
+  timeZone: string,
+  locale: SharePosterLocale
+): string => {
+  const duration = formatPosterDuration(startDate, endDate, timeZone);
+  if (duration === 'TBA') {
+    return locale === 'zh' ? '待定' : 'TBA';
+  }
+  if (locale === 'zh') {
+    const days = duration.match(/\d+/)?.[0] || duration;
+    return `${days} 天`;
+  }
+  return duration.replace(/\bDAY\b/g, 'Day').replace(/\bDAYS\b/g, 'Days');
+};
+
+export const formatPosterTime = (date: Date | null, timeZone: string, locale: SharePosterLocale): string => {
+  if (!date) return locale === 'zh' ? '待定' : 'TBA';
+  try {
+    return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: locale !== 'zh',
+      timeZone,
+    }).format(date);
+  } catch {
+    return locale === 'zh' ? '待定' : 'TBA';
+  }
+};
+
+export const estimatePosterLineWidth = (value: string, fontSize: number): number => {
+  let width = 0;
+  for (const char of value) {
+    if (char === ' ') {
+      width += fontSize * 0.26;
+    } else if (/[A-Z0-9]/.test(char)) {
+      width += fontSize * 0.58;
+    } else if (/[a-z]/.test(char)) {
+      width += fontSize * 0.52;
+    } else if (/[.,:;!?'’"()\-·/&]/.test(char)) {
+      width += fontSize * 0.24;
+    } else {
+      width += fontSize * 0.9;
+    }
+  }
+  return width;
+};
+
+export const wrapPosterMixedText = (value: string, maxWidth: number, fontSize: number, maxLines: number): string[] => {
+  const normalized = singleLine(value);
+  if (!normalized) return [''];
+  const tokens = normalized.match(/([A-Za-z0-9]+|[\u3400-\u9FFF]|[^\s])/g) || [normalized];
+  const lines: string[] = [];
+  let current = '';
+  for (const token of tokens) {
+    const glue = current && /^[A-Za-z0-9]+$/.test(token) && /[A-Za-z0-9]$/.test(current) ? ' ' : '';
+    const candidate = `${current}${glue}${token}`;
+    if (!current || estimatePosterLineWidth(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    if (lines.length >= maxLines) break;
+    current = token;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const fitted = lines.slice(0, maxLines);
+  const consumed = fitted.join('').replace(/\s+/g, '');
+  const original = tokens.join('').replace(/\s+/g, '');
+  const truncated = original.length > consumed.length || lines.length > maxLines;
+  if (truncated && fitted.length > 0) {
+    let lastLine = fitted[fitted.length - 1];
+    while (lastLine && estimatePosterLineWidth(`${lastLine}…`, fontSize) > maxWidth) {
+      lastLine = lastLine.slice(0, -1).trimEnd();
+    }
+    fitted[fitted.length - 1] = lastLine ? `${lastLine}…` : '…';
+  }
+  return fitted;
+};
+
+export const renderPosterTextBlock = (
+  lines: string[],
+  x: number,
+  y: number,
+  fontFamily: string,
+  fontSize: number,
+  lineHeight: number,
+  fill: string,
+  letterSpacing: number,
+  fontWeight = '900'
+): string =>
+  lines
+    .map(
+      (line, index) =>
+        `<text x="${x}" y="${y + index * lineHeight}" font-family="${fontFamily}" font-weight="${fontWeight}" font-size="${fontSize}" fill="${fill}" letter-spacing="${letterSpacing}">${svgEscape(line)}</text>`
+    )
+    .join('');
+
+export const renderZhDateText = (
+  date: Date | null,
+  timeZone: string,
+  x: number,
+  y: number,
+  bodyFont: string
+): string => {
+  const parts = formatPosterDateParts(date, timeZone);
+  if (!parts) {
+    return `<text x="${x}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7">待定</text>`;
+  }
+  return `<text x="${x}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="0">${svgEscape(`${parts.year}年 ${parts.month}月${parts.day}日`)}</text>`;
+};
+
+export const renderZhNumberUnitText = (
+  numberText: string,
+  unitText: string,
+  x: number,
+  y: number,
+  bodyFont: string
+): string => {
+  return `<text x="${x}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="0">${svgEscape(`${numberText}${unitText ? ` ${unitText}` : ''}`.trim())}</text>`;
+};
+
+const posterFonts = {
+  title: "'站酷高端黑', 'ZCOOL_GDH', 'zcool-gdh', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+  body: "'站酷高端黑', 'ZCOOL_GDH', 'zcool-gdh', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+};
+
+const renderRowPair = (row: Extract<SharePosterSectionRow, { kind: 'pair' }>, y: number, locale: SharePosterLocale): string => {
+  const letterSpacing = locale === 'zh' ? '1.2' : '3';
+  const leftValue = wrapPosterMixedText(row.left.value, 132, 18, 2);
+  const rightValue = wrapPosterMixedText(row.right.value, 132, 18, 2);
+  return `
+    <text x="25" y="${y}" font-family="${posterFonts.body}" font-size="12" fill="#71717a" letter-spacing="${letterSpacing}">${svgEscape(row.left.label)}</text>
+    ${renderPosterTextBlock(leftValue, 25, y + 20, posterFonts.body, 18, 22, '#e4e4e7', 0)}
+    <text x="200" y="${y}" font-family="${posterFonts.body}" font-size="12" fill="#71717a" letter-spacing="${letterSpacing}">${svgEscape(row.right.label)}</text>
+    ${renderPosterTextBlock(rightValue, 200, y + 20, posterFonts.body, 18, 22, '#e4e4e7', 0)}
+  `;
+};
+
+const renderRowFull = (row: Extract<SharePosterSectionRow, { kind: 'full' }>, y: number, locale: SharePosterLocale): { svg: string; bottomY: number } => {
+  const letterSpacing = locale === 'zh' ? '1.2' : '3';
+  const valueLines = wrapPosterMixedText(row.cell.value, 316, 17, 3);
+  return {
+    svg: `
+      <text x="25" y="${y}" font-family="${posterFonts.body}" font-size="12" fill="#71717a" letter-spacing="${letterSpacing}">${svgEscape(row.cell.label)}</text>
+      ${renderPosterTextBlock(valueLines, 25, y + 20, posterFonts.body, 17, 22, '#e4e4e7', 0)}
+    `,
+    bottomY: y + 20 + (valueLines.length - 1) * 22,
+  };
+};
+
+export const renderStructuredPosterSvg = async (input: SharePosterStructuredCardInput): Promise<Buffer> => {
+  const qrDataUrl = await QRCode.toDataURL(input.qrText, {
+    errorCorrectionLevel: 'H',
+    margin: 0,
+    width: 240,
+    color: {
+      dark: '#050505',
+      light: '#FFFFFFFF',
+    },
+  });
+  const heroImageDataUrl = await toImageDataUri(input.imageUrl);
+  const titleFontSize = 28;
+  const titleLines = wrapPosterMixedText(
+    input.locale === 'zh' ? input.title : input.title.toUpperCase(),
+    278,
+    titleFontSize,
+    3
+  );
+  const titleLineHeight = 30;
+  const titleBottomY = 350;
+  const titleStartY = titleBottomY - (Math.max(titleLines.length, 1) - 1) * titleLineHeight;
+  const titleBlock = titleLines
+    .map((line, index) => {
+      const y = titleStartY + index * titleLineHeight;
+      return `<text x="25" y="${y}" font-family="${posterFonts.title}" font-weight="900" font-size="${titleFontSize}" letter-spacing="${input.locale === 'zh' ? '1.2' : '0.8'}" fill="#fff">${svgEscape(line)}</text>`;
+    })
+    .join('');
+
+  let rowsSvg = '';
+  let cursorY = 372;
+  for (const row of input.rows) {
+    if (row.kind === 'pair') {
+      rowsSvg += renderRowPair(row, cursorY, input.locale);
+      cursorY += 50;
+      continue;
+    }
+    const rendered = renderRowFull(row, cursorY, input.locale);
+    rowsSvg += rendered.svg;
+    cursorY = rendered.bottomY + 30;
+  }
+  const dividerY = cursorY + 8;
+  const footerLine1Y = dividerY + 27;
+  const footerLine2Y = footerLine1Y + 19;
+  const qrY = dividerY + 13;
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="700" viewBox="0 0 390 700">
+  <defs>
+    <clipPath id="heroClip">
+      <rect x="0" y="60" width="390" height="300" />
+    </clipPath>
+    <linearGradient id="titleMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="52%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.82"/>
+    </linearGradient>
+  </defs>
+  <rect width="390" height="700" rx="30" fill="#0f0f11" stroke="#27272a" stroke-width="1"/>
+  <rect x="0" y="0" width="390" height="60" fill="rgba(255,255,255,0.03)"/>
+  <line x1="0" y1="60" x2="390" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+  <text x="25" y="38" font-family="${posterFonts.title}" font-size="16" fill="#d4d4d8" letter-spacing="4.3">RAVEHUB ACCESS</text>
+
+  <rect x="0" y="60" width="390" height="300" fill="#18181b"/>
+  ${heroImageDataUrl ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="300" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />` : ''}
+  <rect x="0" y="60" width="390" height="300" fill="url(#titleMask)"/>
+  <g>${titleBlock}</g>
+
+  <g font-family="${posterFonts.body}">
+    ${rowsSvg}
+  </g>
+
+  <line x1="25" y1="${dividerY}" x2="365" y2="${dividerY}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <g font-family="${posterFonts.body}">
+    <text x="25" y="${footerLine1Y}" font-weight="${input.locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${input.locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(excerpt(input.footerLine1, 42))}</text>
+    <text x="25" y="${footerLine2Y}" font-family="${posterFonts.title}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(input.footerLine2)}</text>
+  </g>
+  <rect x="292" y="${qrY}" width="60" height="60" fill="#ffffff"/>
+  <image href="${qrDataUrl}" x="292" y="${qrY}" width="60" height="60" preserveAspectRatio="none" />
+</svg>`;
+
+  const resvg = new Resvg(svg, {
+    fitTo: {
+      mode: 'width',
+      value: 780,
+    },
+  });
+  return Buffer.from(resvg.render().asPng());
+};
+
+export const buildPosterQrText = (code: string): string => buildShareShortUrl(code);

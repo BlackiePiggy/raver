@@ -580,6 +580,68 @@ const buildTargetSeed = async (
     };
   }
 
+  if (targetType === djType) {
+    const dj = await prisma.dJ.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        country: true,
+        avatarUrl: true,
+        bannerUrl: true,
+        bio: true,
+      },
+    });
+    if (!dj) {
+      throw new ShareLinkError('target_not_found', 404, 'DJ not found');
+    }
+    const subtitle = singleLine([dj.country, excerpt(dj.bio || '', 72)].filter(Boolean).join(' · '));
+    return {
+      targetType,
+      targetId: dj.id,
+      canonicalUrl: joinUrl(`/dj/${encodeURIComponent(singleLine(dj.slug) || dj.id)}`),
+      deepLink: `raver://dj/${encodeURIComponent(dj.id)}`,
+      fallbackUrl: joinUrl(`/dj/${encodeURIComponent(singleLine(dj.slug) || dj.id)}`),
+      title: singleLine(dj.name || 'Raver DJ'),
+      subtitle: subtitle || null,
+      imageUrl: dj.bannerUrl || dj.avatarUrl || null,
+      previewType: 'content_card',
+      visibility: 'public',
+    };
+  }
+
+  if (targetType === festivalType) {
+    const festival = await prisma.wikiFestival.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        name: true,
+        city: true,
+        country: true,
+        avatarUrl: true,
+        backgroundUrl: true,
+        tagline: true,
+      },
+    });
+    if (!festival) {
+      throw new ShareLinkError('target_not_found', 404, 'Festival not found');
+    }
+    const subtitle = singleLine([festival.city, festival.country, festival.tagline].filter(Boolean).join(' · '));
+    return {
+      targetType,
+      targetId: festival.id,
+      canonicalUrl: joinUrl(`/festival/${encodeURIComponent(festival.id)}`),
+      deepLink: `raver://festival/${encodeURIComponent(festival.id)}`,
+      fallbackUrl: joinUrl(`/festival/${encodeURIComponent(festival.id)}`),
+      title: singleLine(festival.name || 'Raver Festival'),
+      subtitle: subtitle || null,
+      imageUrl: festival.backgroundUrl || festival.avatarUrl || null,
+      previewType: 'content_card',
+      visibility: 'public',
+    };
+  }
+
   if (targetType === newsType) {
     const post = await prisma.post.findUnique({
       where: { id: targetId },
