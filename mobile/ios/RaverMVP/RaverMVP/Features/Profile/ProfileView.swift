@@ -3156,38 +3156,53 @@ struct ShareAssetDetailView: View {
                         }
                         .resizable()
                         .indicator(.activity)
-                        .aspectRatio(contentMode: .fit)
+                        .aspectRatio(contentMode: .fill)
                         .frame(width: availableWidth, height: resolvedHeight)
+                        .clipped()
                         .opacity(assetDidFailToLoad ? 0 : 1)
 
                     if !assetDidFailToLoad {
                         VStack(spacing: 0) {
                             LinearGradient(
                                 colors: [
-                                    RaverTheme.background.opacity(0.78),
-                                    RaverTheme.background.opacity(0.26),
+                                    RaverTheme.background.opacity(0.88),
+                                    RaverTheme.background.opacity(0.38),
                                     .clear
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
-                            .frame(height: min(84, resolvedHeight * 0.22))
+                            .frame(height: min(104, resolvedHeight * 0.24))
 
                             Spacer(minLength: 0)
 
                             LinearGradient(
                                 colors: [
                                     .clear,
-                                    RaverTheme.background.opacity(0.26),
-                                    RaverTheme.background.opacity(0.78)
+                                    RaverTheme.background.opacity(0.38),
+                                    RaverTheme.background.opacity(0.88)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
-                            .frame(height: min(84, resolvedHeight * 0.22))
+                            .frame(height: min(104, resolvedHeight * 0.24))
                         }
                         .allowsHitTesting(false)
                     }
+
+                    WebImage(url: remoteURL)
+                        .onSuccess { image, _, _ in
+                            assetDidFailToLoad = false
+                            assetImageSize = image.size
+                        }
+                        .onFailure { _ in
+                            assetDidFailToLoad = true
+                        }
+                        .resizable()
+                        .indicator(.activity)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: availableWidth, height: resolvedHeight)
+                        .opacity(assetDidFailToLoad ? 0 : 1)
 
                     if assetDidFailToLoad {
                         shareAssetEmptyState

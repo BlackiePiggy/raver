@@ -131,6 +131,53 @@ const formatPosterVenueText = (value: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const readLocalizedAddressText = (value: unknown, field: 'formattedAddressI18n' | 'detailAddressI18n'): string | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = (value as Record<string, unknown>)[field];
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const record = source as Record<string, unknown>;
+  for (const key of ['zh', 'en', 'ja', 'enFull']) {
+    const text = normalizeEventText(record[key]);
+    if (text) return text;
+  }
+  return null;
+};
+
+const compactPosterAddressParts = (parts: Array<string | null | undefined>): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of parts) {
+    const normalized = normalizeEventText(part);
+    if (!normalized) continue;
+    const dedupeKey = normalized.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    result.push(normalized);
+  }
+  return result;
+};
+
+const resolvePosterVenueText = (event: {
+  venueName?: string | null;
+  venueAddress?: string | null;
+  city?: string | null;
+  country?: string | null;
+  manualLocation?: unknown;
+  locationPoint?: unknown;
+}): string | null => {
+  const formatted = readLocalizedAddressText(event.manualLocation, 'formattedAddressI18n')
+    ?? readLocalizedAddressText(event.locationPoint, 'formattedAddressI18n')
+    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n');
+  const parts = compactPosterAddressParts([
+    formatted,
+    event.venueAddress,
+    event.venueName,
+    event.city,
+    event.country,
+  ]);
+  return parts.length > 0 ? formatPosterVenueText(parts.join(' · ')) : null;
+};
+
 const wrapText = (value: string, maxChars: number, maxLines: number): string[] => {
   const words = value.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -907,6 +954,8 @@ const loadEventPosterSnapshot = async (
       venueAddress: true,
       city: true,
       country: true,
+      manualLocation: true,
+      locationPoint: true,
       startDate: true,
       endDate: true,
       timeZone: true,
@@ -923,10 +972,7 @@ const loadEventPosterSnapshot = async (
 
   if (!event) return null;
 
-  const venue = posterText(
-    formatPosterVenueText([event.venueAddress, event.venueName, event.city, event.country].filter(Boolean).join(' · ')),
-    'Venue TBA'
-  );
+  const venue = posterText(resolvePosterVenueText(event), 'Venue TBA');
 
   return {
     title: posterText(event.name || shareLink.title, posterText(shareLink.title, `Event ${shareLink.code}`)),
