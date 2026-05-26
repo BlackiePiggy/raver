@@ -787,6 +787,72 @@ const renderZhNumberUnitText = (
   return `<text x="${x}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="0">${svgEscape(`${numberText}${unitText ? ` ${unitText}` : ''}`.trim())}</text>`;
 };
 
+const estimatePosterLineWidth = (value: string, fontSize: number): number => {
+  let width = 0;
+  for (const char of value) {
+    if (char === ' ') {
+      width += fontSize * 0.34;
+    } else if (/[A-Z0-9]/.test(char)) {
+      width += fontSize * 0.66;
+    } else if (/[a-z]/.test(char)) {
+      width += fontSize * 0.56;
+    } else if (/[.,:;!?'’"()\-·/&]/.test(char)) {
+      width += fontSize * 0.3;
+    } else {
+      width += fontSize * 0.94;
+    }
+  }
+  return width;
+};
+
+const wrapPosterMixedText = (value: string, maxWidth: number, fontSize: number, maxLines: number): string[] => {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return [''];
+
+  const tokens = normalized.match(/([A-Za-z0-9]+|[\u3400-\u9FFF]|[^\s])/g) || [normalized];
+  const lines: string[] = [];
+  let current = '';
+
+  for (const token of tokens) {
+    const glue = current && /^[A-Za-z0-9]+$/.test(token) && /[A-Za-z0-9]$/.test(current) ? ' ' : '';
+    const candidate = `${current}${glue}${token}`;
+    if (!current || estimatePosterLineWidth(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    if (lines.length >= maxLines) break;
+    current = token;
+  }
+
+  if (current && lines.length < maxLines) {
+    lines.push(current);
+  }
+
+  if (lines.length > maxLines) {
+    return lines.slice(0, maxLines);
+  }
+  return lines;
+};
+
+const renderPosterTextBlock = (
+  lines: string[],
+  x: number,
+  y: number,
+  fontFamily: string,
+  fontSize: number,
+  lineHeight: number,
+  fill: string,
+  letterSpacing: number,
+  fontWeight = '900'
+): string =>
+  lines
+    .map(
+      (line, index) =>
+        `<text x="${x}" y="${y + index * lineHeight}" font-family="${fontFamily}" font-weight="${fontWeight}" font-size="${fontSize}" fill="${fill}" letter-spacing="${letterSpacing}">${svgEscape(line)}</text>`
+    )
+    .join('');
+
 const formatPosterDuration = (startDate: Date | null, endDate: Date | null, timeZone: string): string => {
   if (!startDate || !endDate) return 'TBA';
   try {
@@ -882,7 +948,6 @@ const renderEventPosterSvg = async (
   const safeDuration = svgEscape(formatPosterDurationLabel(event.startDate, event.endDate, event.timeZone, locale));
   const safeLineup = svgEscape(locale === 'zh' ? `${Math.max(0, event.artistCount)} 组艺人` : `${Math.max(0, event.artistCount)} Artists`);
   const safeVenueRaw = event.venue || (locale === 'zh' ? '待定' : 'Venue TBA');
-  const safeVenue = svgEscape(safeVenueRaw);
   const titleSource = locale === 'zh' ? (event.title || shareLink.title || '') : (event.title || shareLink.title || '').toUpperCase();
   const titleLines = wrapText(titleSource, locale === 'zh' ? 12 : 16, 3);
   const titleBlock = titleLines
@@ -899,6 +964,19 @@ const renderEventPosterSvg = async (
   const lineupNumber = lineupMatch?.[1] || safeLineup;
   const lineupUnit = lineupMatch?.[2] || '';
   const organizerRaw = event.organizer || 'Raver';
+  const venueLines = wrapPosterMixedText(safeVenueRaw, 330, 17, 3);
+  const organizerLines = wrapPosterMixedText(organizerRaw, 330, 18, 3);
+  const venueValueY = 492;
+  const venueLineHeight = 23;
+  const venueBottomY = venueValueY + (venueLines.length - 1) * venueLineHeight;
+  const organizerLabelY = venueBottomY + 34;
+  const organizerValueY = organizerLabelY + 20;
+  const organizerLineHeight = 24;
+  const organizerBottomY = organizerValueY + (organizerLines.length - 1) * organizerLineHeight;
+  const dividerY = organizerBottomY + 28;
+  const footerLine1Y = dividerY + 27;
+  const footerLine2Y = footerLine1Y + 19;
+  const qrY = dividerY + 13;
   const moreInfoLine1 = locale === 'zh' ? '更多活动与艺人信息请扫码查看' : 'SCAN FOR MORE EVENTS &';
   const moreInfoLine2 = locale === 'zh' ? 'RaveHub App' : 'LINEUP INFO ON RAVEHUB APP';
 
@@ -971,21 +1049,21 @@ const renderEventPosterSvg = async (
     }
 
     <text x="25" y="472" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.venue)}</text>
-    <text x="25" y="492" font-size="17" fill="#e4e4e7" letter-spacing="${locale === 'zh' ? '0' : '1.02'}">${safeVenue}</text>
+    ${renderPosterTextBlock(venueLines, 25, venueValueY, copy.bodyFont, 17, venueLineHeight, '#e4e4e7', locale === 'zh' ? 0 : 0.4)}
 
-    <text x="25" y="522" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
-    <text x="25" y="542" font-size="18" fill="#e4e4e7" letter-spacing="0">${svgEscape(organizerRaw)}</text>
+    <text x="25" y="${organizerLabelY}" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
+    ${renderPosterTextBlock(organizerLines, 25, organizerValueY, copy.bodyFont, 18, organizerLineHeight, '#e4e4e7', 0)}
   </g>
 
-  <line x1="25" y1="560" x2="365" y2="560" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <line x1="25" y1="${dividerY}" x2="365" y2="${dividerY}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
 
   <g font-family="${copy.bodyFont}">
-    <text x="25" y="587" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
-    <text x="25" y="606" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(moreInfoLine2)}</text>
+    <text x="25" y="${footerLine1Y}" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
+    <text x="25" y="${footerLine2Y}" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(moreInfoLine2)}</text>
   </g>
 
-  <rect x="292" y="573" width="60" height="60" fill="#ffffff"/>
-  <image href="${qrImageDataUrl}" x="292" y="573" width="60" height="60" preserveAspectRatio="none" />
+  <rect x="292" y="${qrY}" width="60" height="60" fill="#ffffff"/>
+  <image href="${qrImageDataUrl}" x="292" y="${qrY}" width="60" height="60" preserveAspectRatio="none" />
 </svg>`;
 
   try {
