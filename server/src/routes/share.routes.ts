@@ -127,7 +127,6 @@ const posterText = (value: string | null | undefined, fallback: string): string 
 const formatPosterVenueText = (value: string): string =>
   String(value || '')
     .replace(/\s*,\s*/g, ', ')
-    .replace(/\s*·\s*/g, ' · ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -143,20 +142,6 @@ const readLocalizedAddressText = (value: unknown, field: 'formattedAddressI18n' 
   return null;
 };
 
-const compactPosterAddressParts = (parts: Array<string | null | undefined>): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const part of parts) {
-    const normalized = normalizeEventText(part);
-    if (!normalized) continue;
-    const dedupeKey = normalized.toLowerCase();
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-    result.push(normalized);
-  }
-  return result;
-};
-
 const resolvePosterVenueText = (event: {
   venueName?: string | null;
   venueAddress?: string | null;
@@ -165,17 +150,12 @@ const resolvePosterVenueText = (event: {
   manualLocation?: unknown;
   locationPoint?: unknown;
 }): string | null => {
-  const formatted = readLocalizedAddressText(event.manualLocation, 'formattedAddressI18n')
+  const unified = readLocalizedAddressText(event.manualLocation, 'formattedAddressI18n')
     ?? readLocalizedAddressText(event.locationPoint, 'formattedAddressI18n')
-    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n');
-  const parts = compactPosterAddressParts([
-    formatted,
-    event.venueAddress,
-    event.venueName,
-    event.city,
-    event.country,
-  ]);
-  return parts.length > 0 ? formatPosterVenueText(parts.join(' · ')) : null;
+    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n')
+    ?? normalizeEventText(event.city)
+    ?? normalizeEventText(event.country);
+  return unified ? formatPosterVenueText(unified) : null;
 };
 
 const wrapText = (value: string, maxChars: number, maxLines: number): string[] => {
@@ -701,7 +681,7 @@ const overlayPngCover = (
 type SharePosterEventSnapshot = {
   title: string;
   venue: string;
-  organizer: string;
+  organizer: string | null;
   startDate: Date | null;
   endDate: Date | null;
   timeZone: string;
@@ -949,7 +929,6 @@ const loadEventPosterSnapshot = async (
     where: { id: shareLink.targetId },
     select: {
       name: true,
-      organizerName: true,
       venueName: true,
       venueAddress: true,
       city: true,
@@ -962,6 +941,11 @@ const loadEventPosterSnapshot = async (
       coverImageUrl: true,
       lineupImageUrl: true,
       imageAssets: true,
+      wikiFestival: {
+        select: {
+          name: true,
+        },
+      },
       _count: {
         select: {
           canonicalArtists: true,
@@ -977,7 +961,7 @@ const loadEventPosterSnapshot = async (
   return {
     title: posterText(event.name || shareLink.title, posterText(shareLink.title, `Event ${shareLink.code}`)),
     venue,
-    organizer: posterText(event.organizerName || shareLink.subtitle || 'RAVER', 'RAVER'),
+    organizer: normalizeEventText(event.wikiFestival?.name),
     startDate: event.startDate ?? null,
     endDate: event.endDate ?? null,
     timeZone: event.timeZone || 'UTC',
@@ -1027,17 +1011,19 @@ const renderEventPosterSvg = async (
   const lineupMatch = safeLineup.match(/^(\d+)\s*(.*)$/);
   const lineupNumber = lineupMatch?.[1] || safeLineup;
   const lineupUnit = lineupMatch?.[2] || '';
-  const organizerRaw = event.organizer || 'Raver';
   const venueLines = wrapPosterMixedText(formatPosterVenueText(safeVenueRaw), 302, 16, 3);
-  const organizerLines = wrapPosterMixedText(organizerRaw, 338, 18, 3);
   const venueValueY = 492;
   const venueLineHeight = 22;
   const venueBottomY = venueValueY + (venueLines.length - 1) * venueLineHeight;
+  const organizerRaw = normalizeEventText(event.organizer);
+  const organizerLines = organizerRaw ? wrapPosterMixedText(organizerRaw, 338, 18, 3) : [];
   const organizerLabelY = venueBottomY + 34;
   const organizerValueY = organizerLabelY + 20;
   const organizerLineHeight = 24;
-  const organizerBottomY = organizerValueY + (organizerLines.length - 1) * organizerLineHeight;
-  const dividerY = organizerBottomY + 28;
+  const organizerBottomY = organizerLines.length > 0
+    ? organizerValueY + (organizerLines.length - 1) * organizerLineHeight
+    : venueBottomY;
+  const dividerY = (organizerLines.length > 0 ? organizerBottomY : venueBottomY) + 28;
   const footerLine1Y = dividerY + 27;
   const footerLine2Y = footerLine1Y + 19;
   const qrY = dividerY + 13;
@@ -1050,6 +1036,11 @@ const renderEventPosterSvg = async (
     <clipPath id="heroClip">
       <rect x="0" y="60" width="390" height="260" />
     </clipPath>
+    <linearGradient id="titleMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="62%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.82"/>
+    </linearGradient>
   </defs>
   <rect width="390" height="700" rx="30" fill="#0f0f11" stroke="#27272a" stroke-width="1"/>
 
@@ -1063,10 +1054,9 @@ const renderEventPosterSvg = async (
       ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="260" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />`
       : ''
   }
+  <rect x="0" y="60" width="390" height="260" fill="url(#titleMask)"/>
 
   <g>${titleBlock}</g>
-
-  <rect x="0" y="320" width="390" height="20" fill="#000"/>
 
   <g font-family="${copy.bodyFont}">
     <text x="25" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.start)}</text>
@@ -1096,8 +1086,11 @@ const renderEventPosterSvg = async (
     <text x="25" y="472" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.venue)}</text>
     ${renderPosterTextBlock(venueLines, 25, venueValueY, copy.bodyFont, 16, venueLineHeight, '#e4e4e7', 0)}
 
+    ${organizerLines.length > 0
+      ? `
     <text x="25" y="${organizerLabelY}" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
-    ${renderPosterTextBlock(organizerLines, 25, organizerValueY, copy.bodyFont, 18, organizerLineHeight, '#e4e4e7', 0)}
+    ${renderPosterTextBlock(organizerLines, 25, organizerValueY, copy.bodyFont, 18, organizerLineHeight, '#e4e4e7', 0)}`
+      : ''}
   </g>
 
   <line x1="25" y1="${dividerY}" x2="365" y2="${dividerY}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
