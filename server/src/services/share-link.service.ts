@@ -1297,6 +1297,34 @@ export const getShareLinkByCode = async (
   return mapShareLink(shareLink);
 };
 
+export const regenerateSharePosterByCode = async (
+  prisma: PrismaClient,
+  code: string,
+  options: { refreshToken?: string | null } = {}
+): Promise<ShareLinkPayloadDTO> => {
+  const normalizedCode = String(code || '').trim();
+  if (!normalizedCode) {
+    throw new ShareLinkError('invalid_code', 400, 'Share code is required');
+  }
+
+  const shareLink = await prisma.shareLink.findUnique({
+    where: { code: normalizedCode },
+  });
+  if (!shareLink) {
+    throw new ShareLinkError('not_found', 404, 'Share link not found');
+  }
+
+  const payload = mapShareLink(shareLink);
+  const refreshToken = String(options.refreshToken || '').trim() || String(Date.now());
+  const posterUrl = new URL(payload.posterUrl || buildSharePosterUrl(shareLink.code));
+  posterUrl.searchParams.set('refresh', refreshToken);
+
+  return {
+    ...payload,
+    posterUrl: posterUrl.toString(),
+  };
+};
+
 export const getRawShareLinkByCode = async (prisma: PrismaClient, code: string): Promise<ShareLink> => {
   const normalizedCode = String(code || '').trim();
   if (!normalizedCode) {

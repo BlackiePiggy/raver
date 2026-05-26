@@ -70,6 +70,7 @@ import {
 } from '../modules/feed';
 import {
   getShareLinkByCode,
+  regenerateSharePosterByCode,
   recordShareLinkEvent,
   redeemShareLinkInvite,
   resolveOrCreateShareLink,
@@ -3552,6 +3553,29 @@ router.post('/share-links/:code/reset', optionalAuth, async (req: Request, res: 
       return;
     }
     console.error('BFF reset share invite error:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
+router.post('/share-links/:code/poster/regenerate', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const refreshToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = await regenerateSharePosterByCode(prisma, req.params.code as string, {
+      refreshToken,
+    });
+    console.info(
+      `[share-poster] code=${payload.code} regenerate userId=${userId} posterURL=${payload.posterUrl ?? 'nil'}`
+    );
+    res.json(payload);
+  } catch (error) {
+    if (error instanceof ShareLinkError) {
+      res.status(error.status).json({ error: error.code, message: error.message });
+      return;
+    }
+    console.error('BFF regenerate share poster error:', error);
     res.status(500).json({ error: 'internal_server_error' });
   }
 });

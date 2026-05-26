@@ -1047,15 +1047,6 @@ const renderEventPosterSvg = async (
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="700" viewBox="0 0 390 700">
   <defs>
-    <linearGradient id="maskGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#000" stop-opacity="0.15"/>
-      <stop offset="55%" stop-color="#000" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.92"/>
-    </linearGradient>
-    <linearGradient id="topGlow" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.1"/>
-      <stop offset="100%" stop-color="transparent"/>
-    </linearGradient>
     <clipPath id="heroClip">
       <rect x="0" y="60" width="390" height="260" />
     </clipPath>
@@ -1072,20 +1063,10 @@ const renderEventPosterSvg = async (
       ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="260" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />`
       : ''
   }
-  <rect x="0" y="60" width="390" height="260" fill="url(#maskGrad)"/>
-  <rect x="0" y="60" width="390" height="260" fill="url(#topGlow)"/>
-
-  <line x1="0" y1="91" x2="390" y2="91" stroke="rgba(239,68,68,0.2)" stroke-width="2"/>
-  <line x1="0" y1="130" x2="390" y2="130" stroke="rgba(239,68,68,0.2)" stroke-width="1"/>
-  <line x1="0" y1="158" x2="390" y2="158" stroke="rgba(239,68,68,0.2)" stroke-width="3"/>
-  <line x1="0" y1="193" x2="390" y2="193" stroke="rgba(239,68,68,0.2)" stroke-width="2"/>
-  <line x1="0" y1="226" x2="390" y2="226" stroke="rgba(239,68,68,0.2)" stroke-width="1"/>
-  <line x1="0" y1="255" x2="390" y2="255" stroke="rgba(239,68,68,0.2)" stroke-width="2"/>
 
   <g>${titleBlock}</g>
 
   <rect x="0" y="320" width="390" height="20" fill="#000"/>
-  <path d="M0,0 L7,-10 L14,0 L21,-10 L28,0 L35,-10 L42,0 L49,-10 L56,0 L63,-10 L70,0 L77,-10 L84,0 L91,-10 L98,0 L105,-10 L112,0 L119,-10 L126,0 L133,-10 L140,0 L147,-10 L154,0 L161,-10 L168,0 L175,-10 L182,0 L189,-10 L196,0 L203,-10 L210,0 L217,-10 L224,0 L231,-10 L238,0 L245,-10 L252,0 L259,-10 L266,0 L273,-10 L280,0 L287,-10 L294,0 L301,-10 L308,0 L315,-10 L322,0 L329,-10 L336,0 L343,-10 L350,0 L357,-10 L364,0 L371,-10 L378,0 L385,-10 L392,0" transform="translate(0,320)" fill="#0f0f11"/>
 
   <g font-family="${copy.bodyFont}">
     <text x="25" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.start)}</text>

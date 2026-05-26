@@ -116,6 +116,8 @@ protocol ShareLinkService {
 
     func getLink(code: String) async throws -> ShareLinkPayload
 
+    func regeneratePoster(code: String) async throws -> ShareLinkPayload
+
     func recordEvent(
         code: String,
         eventType: String,
@@ -316,6 +318,14 @@ final class LiveShareLinkService: ShareLinkService {
         )
     }
 
+    func regeneratePoster(code: String) async throws -> ShareLinkPayload {
+        try await request(
+            path: "/v1/share-links/\(code)/poster/regenerate",
+            method: "POST",
+            body: EmptyRequestBody()
+        )
+    }
+
     func recordEvent(
         code: String,
         eventType: String,
@@ -440,6 +450,8 @@ final class LiveShareLinkService: ShareLinkService {
     }
 }
 
+private struct EmptyRequestBody: Encodable {}
+
 final class MockShareLinkService: ShareLinkService {
     func resolve(
         target: ShareTarget,
@@ -493,6 +505,31 @@ final class MockShareLinkService: ShareLinkService {
             previewType: "content_card",
             status: "active"
         )
+    }
+
+    func regeneratePoster(code: String) async throws -> ShareLinkPayload {
+        var payload = try await getLink(code: code)
+        if let posterURL = payload.posterURL,
+           var components = URLComponents(string: posterURL) {
+            components.queryItems = (components.queryItems ?? []) + [
+                URLQueryItem(name: "refresh", value: String(Int(Date().timeIntervalSince1970 * 1000)))
+            ]
+            payload = ShareLinkPayload(
+                code: payload.code,
+                shortURL: payload.shortURL,
+                canonicalURL: payload.canonicalURL,
+                deepLink: payload.deepLink,
+                fallbackURL: payload.fallbackURL,
+                qrCodeURL: payload.qrCodeURL,
+                posterURL: components.string,
+                title: payload.title,
+                subtitle: payload.subtitle,
+                imageURL: payload.imageURL,
+                previewType: payload.previewType,
+                status: payload.status
+            )
+        }
+        return payload
     }
 
     func recordEvent(

@@ -1,6 +1,5 @@
 import SwiftUI
 import Photos
-import SDWebImageSwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
@@ -3023,9 +3022,37 @@ struct ShareAssetDetailView: View {
     let hintText: String
     let saveButtonTitle: String?
 
+    @State private var currentAssetURL: String?
+
     @State private var feedbackMessage: String?
     @State private var assetImageSize: CGSize?
     @State private var assetDidFailToLoad = false
+    @State private var loadedAssetImage: UIImage?
+    @State private var isAssetLoading = false
+    @State private var isRegenerating = false
+
+    init(
+        navigationTitle: String,
+        title: String,
+        subtitle: String?,
+        imageURL: String?,
+        assetURL: String?,
+        emptyTitle: String,
+        emptyMessage: String,
+        hintText: String,
+        saveButtonTitle: String?
+    ) {
+        self.navigationTitle = navigationTitle
+        self.title = title
+        self.subtitle = subtitle
+        self.imageURL = imageURL
+        self.assetURL = assetURL
+        self.emptyTitle = emptyTitle
+        self.emptyMessage = emptyMessage
+        self.hintText = hintText
+        self.saveButtonTitle = saveButtonTitle
+        _currentAssetURL = State(initialValue: assetURL)
+    }
 
     var body: some View {
         ScrollView {
@@ -3045,6 +3072,12 @@ struct ShareAssetDetailView: View {
             Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(feedbackMessage ?? "")
+        }
+        .onAppear {
+            print("[share-poster-ios] detail-appear title=\(title) assetURL=\(currentAssetURL ?? "nil")")
+        }
+        .task(id: AppConfig.resolvedURLString(currentAssetURL) ?? "") {
+            await loadAssetPreview()
         }
     }
 
@@ -3077,11 +3110,35 @@ struct ShareAssetDetailView: View {
                 assetPreview
 
                 if let saveButtonTitle, hasValidAssetURL {
-                    Button {
-                        Task { await saveAssetToPhotos() }
-                    } label: {
-                        Label(saveButtonTitle, systemImage: "photo.badge.arrow.down")
-                            .frame(maxWidth: .infinity)
+                    HStack(spacing: 12) {
+                        if let regenerateButtonTitle {
+                            Button {
+                                Task { await regeneratePoster() }
+                            } label: {
+                                if isRegenerating {
+                                    HStack(spacing: 8) {
+                                        ProgressView()
+                                            .progressViewStyle(.circular)
+                                            .tint(.white)
+                                        Text(regenerateButtonTitle)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                } else {
+                                    Label(regenerateButtonTitle, systemImage: "arrow.clockwise")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(RaverTheme.accent)
+                            .disabled(isRegenerating || isAssetLoading)
+                        }
+
+                        Button {
+                            Task { await saveAssetToPhotos() }
+                        } label: {
+                            Label(saveButtonTitle, systemImage: "photo.badge.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(RaverTheme.accent)
@@ -3107,9 +3164,29 @@ struct ShareAssetDetailView: View {
     }
 
     private var hasValidAssetURL: Bool {
-        let resolved = AppConfig.resolvedURLString(assetURL)
+        let resolved = AppConfig.resolvedURLString(currentAssetURL)
         guard let resolved, !resolved.isEmpty else { return false }
         return URL(string: resolved) != nil
+    }
+
+    private var regenerateButtonTitle: String? {
+        guard sharePosterCode != nil else { return nil }
+        return LT("重新生成海报", "Regenerate", "海報を再生成")
+    }
+
+    private var sharePosterCode: String? {
+        guard let resolved = AppConfig.resolvedURLString(currentAssetURL),
+              let url = URL(string: resolved) else {
+            return nil
+        }
+        let parts = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+        guard parts.count >= 2,
+              parts[0] == "poster",
+              parts[1].hasSuffix(".png") else {
+            return nil
+        }
+        let code = String(parts[1].dropLast(4))
+        return code.isEmpty ? nil : code
     }
 
     @ViewBuilder
@@ -3133,10 +3210,10 @@ struct ShareAssetDetailView: View {
 
     @ViewBuilder
     private var assetPreview: some View {
-        let resolved = AppConfig.resolvedURLString(assetURL)
+        let resolved = AppConfig.resolvedURLString(currentAssetURL)
         if let resolved,
            !resolved.isEmpty,
-           let remoteURL = URL(string: resolved) {
+           URL(string: resolved) != nil {
             GeometryReader { proxy in
                 let horizontalInset: CGFloat = 24
                 let availableWidth = max(proxy.size.width - horizontalInset, 1)
@@ -3146,22 +3223,13 @@ struct ShareAssetDetailView: View {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(RaverTheme.card)
 
-                    WebImage(url: remoteURL)
-                        .onSuccess { image, _, _ in
-                            assetDidFailToLoad = false
-                            assetImageSize = image.size
-                        }
-                        .onFailure { _ in
-                            assetDidFailToLoad = true
-                        }
-                        .resizable()
-                        .indicator(.activity)
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: availableWidth, height: resolvedHeight)
-                        .clipped()
-                        .opacity(assetDidFailToLoad ? 0 : 1)
+                    if let loadedAssetImage {
+                        Image(uiImage: loadedAssetImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: availableWidth, height: resolvedHeight)
+                            .clipped()
 
-                    if !assetDidFailToLoad {
                         VStack(spacing: 0) {
                             LinearGradient(
                                 colors: [
@@ -3188,24 +3256,16 @@ struct ShareAssetDetailView: View {
                             .frame(height: min(104, resolvedHeight * 0.24))
                         }
                         .allowsHitTesting(false)
-                    }
 
-                    WebImage(url: remoteURL)
-                        .onSuccess { image, _, _ in
-                            assetDidFailToLoad = false
-                            assetImageSize = image.size
-                        }
-                        .onFailure { _ in
-                            assetDidFailToLoad = true
-                        }
-                        .resizable()
-                        .indicator(.activity)
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: availableWidth, height: resolvedHeight)
-                        .opacity(assetDidFailToLoad ? 0 : 1)
-
-                    if assetDidFailToLoad {
+                        Image(uiImage: loadedAssetImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: availableWidth, height: resolvedHeight)
+                    } else if assetDidFailToLoad {
                         shareAssetEmptyState
+                    } else {
+                        ProgressView()
+                            .tint(RaverTheme.primaryText)
                     }
                 }
                 .frame(width: availableWidth, height: resolvedHeight)
@@ -3252,12 +3312,80 @@ struct ShareAssetDetailView: View {
     }
 
     @MainActor
+    private func loadAssetPreview() async {
+        let resolved = AppConfig.resolvedURLString(currentAssetURL)
+        guard let resolved,
+              !resolved.isEmpty,
+              let url = URL(string: resolved) else {
+            loadedAssetImage = nil
+            assetDidFailToLoad = false
+            assetImageSize = nil
+            return
+        }
+        if isAssetLoading { return }
+        if loadedAssetImage != nil && !assetDidFailToLoad { return }
+
+        isAssetLoading = true
+        assetDidFailToLoad = false
+        loadedAssetImage = nil
+        assetImageSize = nil
+        let start = Date()
+        print("[share-poster-ios] poster-fetch-start assetURL=\(resolved)")
+
+        defer { isAssetLoading = false }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            print("[share-poster-ios] poster-fetch-response assetURL=\(resolved) status=\(statusCode) bytes=\(data.count) elapsedMs=\(elapsedMs)")
+
+            guard let image = UIImage(data: data) else {
+                assetDidFailToLoad = true
+                print("[share-poster-ios] poster-decode-failed assetURL=\(resolved)")
+                return
+            }
+
+            loadedAssetImage = image
+            assetImageSize = image.size
+            assetDidFailToLoad = false
+            let decodeElapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+            print("[share-poster-ios] poster-image-ready assetURL=\(resolved) size=\(image.size.width)x\(image.size.height) elapsedMs=\(decodeElapsedMs)")
+        } catch {
+            assetDidFailToLoad = true
+            let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
+            print("[share-poster-ios] poster-fetch-failed assetURL=\(resolved) elapsedMs=\(elapsedMs) error=\(String(describing: error))")
+        }
+    }
+
+    @MainActor
     private func saveAssetToPhotos() async {
         do {
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: assetURL)
+            try await ShareAssetPhotoSaver.saveRemoteImage(from: currentAssetURL)
             feedbackMessage = LT("已保存到相册", "Saved to Photos.", "写真に保存しました。")
         } catch {
             feedbackMessage = error.userFacingMessage ?? emptyMessage
+        }
+    }
+
+    @MainActor
+    private func regeneratePoster() async {
+        guard let code = sharePosterCode, !isRegenerating else { return }
+        isRegenerating = true
+        defer { isRegenerating = false }
+
+        do {
+            print("[share-poster-ios] regenerate-start code=\(code)")
+            let payload = try await AppEnvironment.makeShareLinkService().regeneratePoster(code: code)
+            currentAssetURL = payload.posterURL
+            loadedAssetImage = nil
+            assetImageSize = nil
+            assetDidFailToLoad = false
+            print("[share-poster-ios] regenerate-success code=\(code) posterURL=\(payload.posterURL ?? "nil")")
+            feedbackMessage = LT("海报已重新生成", "Poster regenerated.", "海報を再生成しました。")
+        } catch {
+            print("[share-poster-ios] regenerate-failed code=\(code) error=\(String(describing: error))")
+            feedbackMessage = error.userFacingMessage ?? LT("重新生成海报失败，请稍后再试。", "Failed to regenerate poster. Please try again later.", "海報の再生成に失敗しました。時間をおいて再試行してください。")
         }
     }
 }

@@ -5121,10 +5121,12 @@ struct EventDetailView: View {
     @MainActor
     private func openEventPoster(_ event: WebEvent) async {
         do {
+            print("[share-poster-ios] action=openEventPoster eventID=\(event.id) title=\(event.name)")
             let subtitle = [event.city, event.organizerName].compactMap { value in
                 value?.trimmingCharacters(in: .whitespacesAndNewlines)
             }.filter { !$0.isEmpty }.joined(separator: " · ")
 
+            print("[share-poster-ios] resolve-start eventID=\(event.id) channel=view_poster")
             let resolved = try await shareLinkCoordinator.resolveLink(
                 target: ShareTarget(
                     type: .event,
@@ -5135,6 +5137,7 @@ struct EventDetailView: View {
                 ),
                 channel: "view_poster"
             )
+            print("[share-poster-ios] resolve-success eventID=\(event.id) posterURL=\(resolved.payload.posterURL ?? "nil") imageURL=\(resolved.payload.imageURL ?? "nil")")
             appPush(
                 .profile(
                     .shareAsset(
@@ -5150,7 +5153,9 @@ struct EventDetailView: View {
                     )
                 )
             )
+            print("[share-poster-ios] push-shareAsset eventID=\(event.id)")
         } catch {
+            print("[share-poster-ios] resolve-failed eventID=\(event.id) error=\(String(describing: error))")
             errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
         }
     }
