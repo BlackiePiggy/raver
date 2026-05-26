@@ -117,6 +117,13 @@ const asciiText = (value: string | null | undefined, fallback: string): string =
   return normalized || fallback;
 };
 
+const posterText = (value: string | null | undefined, fallback: string): string => {
+  const normalized = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalized || fallback;
+};
+
 const wrapText = (value: string, maxChars: number, maxLines: number): string[] => {
   const words = value.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -672,6 +679,28 @@ const formatPosterDate = (date: Date | null, timeZone: string, locale: SharePost
   }
 };
 
+const formatPosterDateParts = (
+  date: Date | null,
+  timeZone: string
+): { year: string; month: string; day: string } | null => {
+  if (!date) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('zh-CN-u-nu-latn', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      timeZone,
+    }).formatToParts(date);
+    const year = parts.find((part) => part.type === 'year')?.value || '';
+    const month = parts.find((part) => part.type === 'month')?.value || '';
+    const day = parts.find((part) => part.type === 'day')?.value || '';
+    if (!year || !month || !day) return null;
+    return { year, month, day };
+  } catch {
+    return null;
+  }
+};
+
 const svgEscape = (value: string | null | undefined): string => htmlEscape(value);
 
 const toImageDataUri = async (urlString: string | null | undefined): Promise<string | null> => {
@@ -719,7 +748,7 @@ const posterCopy = (locale: SharePosterLocale) =>
         presentedBy: '主办方',
         moreInfo: '更多活动、艺人信息请扫码查看 RaveHub App',
         titleFont: "'Bebas Neue', Impact, sans-serif",
-        bodyFont: "'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
+        bodyFont: "'站酷酷黑体', 'ZCOOL KuHei', 'Alibaba PuHuiTi', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
       }
     : {
         access: 'RAVEHUB ACCESS',
@@ -736,6 +765,7 @@ const posterCopy = (locale: SharePosterLocale) =>
 
 const hasCJKText = (value: string): boolean => /[\u3400-\u9FFF]/.test(value);
 const hasLatinOrDigitText = (value: string): boolean => /[A-Za-z0-9]/.test(value);
+const isLatinStyledChar = (char: string): boolean => /[A-Za-z0-9\s.,:&()\-/'"+]/.test(char);
 
 const splitMixedRuns = (value: string): Array<{ text: string; kind: 'cjk' | 'latin' }> => {
   const runs: Array<{ text: string; kind: 'cjk' | 'latin' }> = [];
@@ -743,7 +773,7 @@ const splitMixedRuns = (value: string): Array<{ text: string; kind: 'cjk' | 'lat
   let currentKind: 'cjk' | 'latin' | null = null;
 
   for (const char of value) {
-    const kind: 'cjk' | 'latin' = /[A-Za-z0-9]/.test(char) ? 'latin' : 'cjk';
+    const kind: 'cjk' | 'latin' = isLatinStyledChar(char) ? 'latin' : 'cjk';
     if (currentKind === kind || currentKind === null) {
       current += char;
       currentKind = kind;
@@ -764,11 +794,13 @@ const measurePosterTextWidth = (value: string, fontSize: number, kind: 'cjk' | '
   let width = 0;
   for (const char of value) {
     if (char === ' ') {
-      width += fontSize * 0.34;
+      width += fontSize * 0.16;
+    } else if (/[.,:]/.test(char)) {
+      width += fontSize * 0.14;
     } else if (kind === 'latin') {
-      width += fontSize * 0.66;
+      width += fontSize * 0.46;
     } else {
-      width += fontSize * 1.02;
+      width += fontSize * 0.98;
     }
   }
   return width;
@@ -783,17 +815,68 @@ const buildMixedFontText = (
   zhFont: string,
   enFont: string,
   zhWeight: string,
-  letterSpacing: number
+  letterSpacing: number | { zh: number; latin: number }
 ): string => {
   const runs = splitMixedRuns(value);
   let cursorX = x;
   return runs.map((run) => {
     const family = run.kind === 'latin' ? enFont : zhFont;
     const weight = run.kind === 'latin' ? '400' : zhWeight;
-    const text = `<text x="${cursorX}" y="${y}" font-family="${family}" font-weight="${weight}" font-size="${fontSize}" fill="${color}" letter-spacing="${letterSpacing}">${svgEscape(run.text)}</text>`;
-    cursorX += measurePosterTextWidth(run.text, fontSize, run.kind);
+    const runLetterSpacing = typeof letterSpacing === 'number'
+      ? letterSpacing
+      : run.kind === 'latin'
+        ? letterSpacing.latin
+        : letterSpacing.zh;
+    const text = `<text x="${cursorX}" y="${y}" font-family="${family}" font-weight="${weight}" font-size="${fontSize}" fill="${color}" letter-spacing="${runLetterSpacing}">${svgEscape(run.text)}</text>`;
+    cursorX += measurePosterTextWidth(run.text, fontSize, run.kind) + Math.max(0, run.text.length - 1) * runLetterSpacing;
     return text;
   }).join('');
+};
+
+const renderZhDateText = (
+  date: Date | null,
+  timeZone: string,
+  x: number,
+  y: number,
+  bodyFont: string,
+  titleFont: string
+): string => {
+  const parts = formatPosterDateParts(date, timeZone);
+  if (!parts) {
+    return `<text x="${x}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7">待定</text>`;
+  }
+  const yearWidth = measurePosterTextWidth(parts.year, 18, 'latin');
+  const monthWidth = measurePosterTextWidth(parts.month, 18, 'latin');
+  const dayWidth = measurePosterTextWidth(parts.day, 18, 'latin');
+  const yearLabelX = x + yearWidth + 4;
+  const monthX = yearLabelX + 12;
+  const monthLabelX = monthX + monthWidth + 3;
+  const dayX = monthLabelX + 12;
+  const dayLabelX = dayX + dayWidth + 3;
+  return `
+    <text x="${x}" y="${y}" font-family="${titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="0.5">${svgEscape(parts.year)}</text>
+    <text x="${yearLabelX}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="17" fill="#e4e4e7">年</text>
+    <text x="${monthX}" y="${y}" font-family="${titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="0.38">${svgEscape(parts.month)}</text>
+    <text x="${monthLabelX}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="17" fill="#e4e4e7">月</text>
+    <text x="${dayX}" y="${y}" font-family="${titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="0.38">${svgEscape(parts.day)}</text>
+    <text x="${dayLabelX}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="17" fill="#e4e4e7">日</text>
+  `;
+};
+
+const renderZhNumberUnitText = (
+  numberText: string,
+  unitText: string,
+  x: number,
+  y: number,
+  bodyFont: string,
+  titleFont: string
+): string => {
+  const numberWidth = measurePosterTextWidth(numberText, 18, 'latin');
+  const unitX = x + numberWidth + 6;
+  return `
+    <text x="${x}" y="${y}" font-family="${titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="0.5">${svgEscape(numberText)}</text>
+    <text x="${unitX}" y="${y}" font-family="${bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="0.18">${svgEscape(unitText)}</text>
+  `;
 };
 
 const formatPosterDuration = (startDate: Date | null, endDate: Date | null, timeZone: string): string => {
@@ -850,15 +933,15 @@ const loadEventPosterSnapshot = async (
 
   if (!event) return null;
 
-  const venue = asciiText(
+  const venue = posterText(
     [event.venueAddress, event.venueName, event.city, event.country].filter(Boolean).join(' · '),
-    'VENUE TBA'
+    'Venue TBA'
   );
 
   return {
-    title: asciiText(event.name || shareLink.title, asciiText(shareLink.title, `EVENT ${shareLink.code}`)),
+    title: posterText(event.name || shareLink.title, posterText(shareLink.title, `Event ${shareLink.code}`)),
     venue,
-    organizer: asciiText(event.organizerName || shareLink.subtitle || 'RAVER', 'RAVER'),
+    organizer: posterText(event.organizerName || shareLink.subtitle || 'RAVER', 'RAVER'),
     startDate: event.startDate ?? null,
     endDate: event.endDate ?? null,
     timeZone: event.timeZone || 'UTC',
@@ -917,7 +1000,7 @@ const renderEventPosterSvg = async (
     ? organizerRaw.split(/×/).map((item) => item.trim()).filter(Boolean)
     : [organizerRaw];
   const organizerSecondary = organizerParts[1] ? svgEscape(organizerParts[1]) : '';
-  const moreInfoLine1 = locale === 'zh' ? '更多活动、艺人信息请扫码查看' : 'SCAN FOR MORE EVENTS &';
+  const moreInfoLine1 = locale === 'zh' ? '更多活动与艺人信息请扫码查看' : 'SCAN FOR MORE EVENTS &';
   const moreInfoLine2 = locale === 'zh' ? 'RaveHub App' : 'LINEUP INFO ON RAVEHUB APP';
 
   const svg = `
@@ -940,7 +1023,7 @@ const renderEventPosterSvg = async (
 
   <rect x="0" y="0" width="390" height="60" fill="rgba(255,255,255,0.03)"/>
   <line x1="0" y1="60" x2="390" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-  <text x="25" y="38" font-family="${copy.titleFont}" font-size="16" fill="#d4d4d8" letter-spacing="5.6">RAVEHUB ACCESS</text>
+  <text x="25" y="38" font-family="${copy.titleFont}" font-size="16" fill="#d4d4d8" letter-spacing="4.3">RAVEHUB ACCESS</text>
 
   <rect x="0" y="60" width="390" height="260" fill="#18181b"/>
   ${
@@ -966,33 +1049,31 @@ const renderEventPosterSvg = async (
   <g font-family="${copy.bodyFont}">
     <text x="25" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.start)}</text>
     ${locale === 'zh'
-      ? buildMixedFontText(safeStart, 25, 392, 18, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 1.08)
+      ? renderZhDateText(event.startDate, event.timeZone, 25, 392, copy.bodyFont, copy.titleFont)
       : `<text x="25" y="392" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeStart}</text>`}
 
     <text x="200" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.end)}</text>
     ${locale === 'zh'
-      ? buildMixedFontText(safeEnd, 200, 392, 18, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 1.08)
+      ? renderZhDateText(event.endDate, event.timeZone, 200, 392, copy.bodyFont, copy.titleFont)
       : `<text x="200" y="392" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeEnd}</text>`}
 
     <text x="25" y="422" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.duration)}</text>
     ${
       locale === 'zh'
-        ? `<text x="25" y="442" font-family="${copy.titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(durationNumber)}</text>
-    <text x="44" y="442" font-family="${copy.bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(durationUnit)}</text>`
+        ? renderZhNumberUnitText(durationNumber, durationUnit, 25, 442, copy.bodyFont, copy.titleFont)
         : `<text x="25" y="442" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeDuration}</text>`
     }
 
     <text x="200" y="422" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.lineup)}</text>
     ${
       locale === 'zh'
-        ? `<text x="200" y="442" font-family="${copy.titleFont}" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(lineupNumber)}</text>
-    <text x="223" y="442" font-family="${copy.bodyFont}" font-weight="900" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${svgEscape(lineupUnit)}</text>`
+        ? renderZhNumberUnitText(lineupNumber, lineupUnit, 200, 442, copy.bodyFont, copy.titleFont)
         : `<text x="200" y="442" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeLineup}</text>`
     }
 
     <text x="25" y="472" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.venue)}</text>
     ${locale === 'zh' && hasLatinOrDigitText(safeVenueRaw)
-      ? buildMixedFontText(safeVenueRaw, 25, 492, 17, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', 0.3)
+      ? buildMixedFontText(safeVenueRaw, 25, 492, 17, '#e4e4e7', copy.bodyFont, copy.titleFont, '900', { zh: 0.18, latin: 0 })
       : `<text x="25" y="492" font-size="17" fill="#e4e4e7" letter-spacing="${locale === 'zh' ? '0.3' : '1.02'}">${safeVenue}</text>`}
 
     <text x="25" y="522" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
@@ -1009,12 +1090,12 @@ const renderEventPosterSvg = async (
   <line x1="25" y1="560" x2="365" y2="560" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
 
   <g font-family="${copy.bodyFont}">
-    <text x="25" y="585" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.8' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
-    <text x="25" y="608" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="1.12">${svgEscape(moreInfoLine2)}</text>
+    <text x="25" y="587" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
+    <text x="25" y="606" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(moreInfoLine2)}</text>
   </g>
 
-  <rect x="290" y="575" width="60" height="60" fill="#ffffff"/>
-  <image href="${qrImageDataUrl}" x="290" y="575" width="60" height="60" preserveAspectRatio="none" />
+  <rect x="292" y="573" width="60" height="60" fill="#ffffff"/>
+  <image href="${qrImageDataUrl}" x="292" y="573" width="60" height="60" preserveAspectRatio="none" />
 </svg>`;
 
   try {

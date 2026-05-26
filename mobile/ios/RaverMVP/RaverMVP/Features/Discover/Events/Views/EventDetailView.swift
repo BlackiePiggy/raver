@@ -5015,17 +5015,6 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                guard let event else { return }
-                Task { await saveEventPoster(event) }
-            }
-        )
-
-        actions.append(
-            SharePanelQuickAction(
                 title: isCachingManualSnapshot ? LT("缓存中", "Caching", "キャッシュ中") : LT("缓存", "Cache", "キャッシュ"),
                 systemImage: "arrow.down.circle",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
