@@ -1040,10 +1040,10 @@ const renderEventPosterSvg = async (
   const safeVenueRaw = event.venue || (locale === 'zh' ? '待定' : 'Venue TBA');
   const titleSource = locale === 'zh' ? (event.title || shareLink.title || '') : (event.title || shareLink.title || '').toUpperCase();
   const titleFontSize = 28;
-  const titleMaxWidth = 306;
+  const titleMaxWidth = 278;
   const titleLines = wrapPosterMixedText(titleSource, titleMaxWidth, titleFontSize, 3);
   const titleLineHeight = 30;
-  const titleBottomY = 310;
+  const titleBottomY = 350;
   const titleStartY = titleBottomY - (Math.max(titleLines.length, 1) - 1) * titleLineHeight;
   const titleBlock = titleLines
     .map((line, index) => {
@@ -1081,11 +1081,11 @@ const renderEventPosterSvg = async (
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="700" viewBox="0 0 390 700">
   <defs>
     <clipPath id="heroClip">
-      <rect x="0" y="60" width="390" height="260" />
+      <rect x="0" y="60" width="390" height="300" />
     </clipPath>
     <linearGradient id="titleMask" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="62%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="52%" stop-color="#000" stop-opacity="0"/>
       <stop offset="100%" stop-color="#000" stop-opacity="0.82"/>
     </linearGradient>
   </defs>
@@ -1095,13 +1095,13 @@ const renderEventPosterSvg = async (
   <line x1="0" y1="60" x2="390" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
   <text x="25" y="38" font-family="${copy.titleFont}" font-size="16" fill="#d4d4d8" letter-spacing="4.3">RAVEHUB ACCESS</text>
 
-  <rect x="0" y="60" width="390" height="260" fill="#18181b"/>
+  <rect x="0" y="60" width="390" height="300" fill="#18181b"/>
   ${
     heroImageDataUrl
-      ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="260" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />`
+      ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="300" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />`
       : ''
   }
-  <rect x="0" y="60" width="390" height="260" fill="url(#titleMask)"/>
+  <rect x="0" y="60" width="390" height="300" fill="url(#titleMask)"/>
 
   <g>${titleBlock}</g>
 
