@@ -3023,6 +3023,7 @@ struct ShareAssetDetailView: View {
     let saveButtonTitle: String?
 
     @State private var feedbackMessage: String?
+    @State private var assetImageSize: CGSize?
 
     var body: some View {
         ScrollView {
@@ -3132,15 +3133,24 @@ struct ShareAssetDetailView: View {
         if let resolved,
            !resolved.isEmpty,
            URL(string: resolved) != nil {
-            ImageLoaderView(urlString: resolved, resizingMode: .fit)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 280)
-                .background(RaverTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+            GeometryReader { proxy in
+                let horizontalInset: CGFloat = 24
+                let availableWidth = max(proxy.size.width - horizontalInset, 1)
+                let resolvedHeight = assetPreviewHeight(for: availableWidth)
+
+                ImageLoaderView(
+                    urlString: resolved,
+                    resizingMode: .fit,
+                    showsIndicator: true,
+                    showsFallback: true,
+                    onImageLoaded: { size in
+                        assetImageSize = size
+                    }
                 )
+                .frame(width: availableWidth, height: resolvedHeight)
+                .frame(maxWidth: .infinity)
+            }
+            .frame(height: assetPreviewHeight(for: UIScreen.main.bounds.width - 56))
         } else {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(RaverTheme.card)
@@ -3158,8 +3168,18 @@ struct ShareAssetDetailView: View {
                     }
                     .foregroundStyle(RaverTheme.secondaryText)
                     .padding(.horizontal, 28)
-                }
+            }
         }
+    }
+
+    private func assetPreviewHeight(for width: CGFloat) -> CGFloat {
+        guard let assetImageSize,
+              assetImageSize.width > 0,
+              assetImageSize.height > 0 else {
+            return 420
+        }
+        let ratio = assetImageSize.height / assetImageSize.width
+        return max(280, width * ratio)
     }
 
     @MainActor

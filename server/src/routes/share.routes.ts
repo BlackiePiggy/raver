@@ -48,6 +48,69 @@ const cssImageUrl = (value: string | null | undefined): string => {
   return normalized.replace(/["\\\n\r]/g, '');
 };
 
+type EventImageAssetPayload = {
+  bucket?: string | null;
+  zone?: string | null;
+  type?: string | null;
+  purpose?: string | null;
+  kind?: string | null;
+  url?: string | null;
+  sort?: number | null;
+  order?: number | null;
+};
+
+const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is EventImageAssetPayload => Boolean(item && typeof item === 'object'));
+};
+
+const normalizeEventText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+};
+
+const resolveEventImageAssetBucket = (asset: EventImageAssetPayload): 'poster' | 'cover' | 'lineup' | 'other' => {
+  const raw = [
+    asset.bucket,
+    asset.zone,
+    asset.type,
+    asset.purpose,
+    asset.kind,
+  ]
+    .map((item) => String(item || '').trim().toLowerCase())
+    .find(Boolean) || '';
+  if (raw.includes('poster')) return 'poster';
+  if (raw.includes('cover')) return 'cover';
+  if (raw.includes('lineup')) return 'lineup';
+  return 'other';
+};
+
+const sortEventImageAssetsForDisplay = (assets: EventImageAssetPayload[]): EventImageAssetPayload[] =>
+  [...assets].sort((a, b) => {
+    const aOrder = typeof a.sort === 'number' ? a.sort : typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+    const bOrder = typeof b.sort === 'number' ? b.sort : typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+    return aOrder - bOrder;
+  });
+
+const resolveEventPosterImageUrl = (row: {
+  imageAssets?: unknown;
+  coverImageUrl?: unknown;
+  lineupImageUrl?: unknown;
+}): string | null => {
+  const assets = sortEventImageAssetsForDisplay(parseEventImageAssets(row.imageAssets ?? []));
+  const firstAssetUrl = (bucket: ReturnType<typeof resolveEventImageAssetBucket>) =>
+    normalizeEventText(assets.find((asset) => resolveEventImageAssetBucket(asset) === bucket)?.url);
+  return (
+    normalizeEventText(row.coverImageUrl) ||
+    firstAssetUrl('poster') ||
+    normalizeEventText(row.lineupImageUrl) ||
+    firstAssetUrl('lineup') ||
+    firstAssetUrl('cover') ||
+    null
+  );
+};
+
 const asciiText = (value: string | null | undefined, fallback: string): string => {
   const normalized = String(value || '')
     .replace(/[^\x20-\x7E]/g, '')
@@ -688,6 +751,9 @@ const loadEventPosterSnapshot = async (
       startDate: true,
       endDate: true,
       timeZone: true,
+      coverImageUrl: true,
+      lineupImageUrl: true,
+      imageAssets: true,
       _count: {
         select: {
           canonicalArtists: true,
@@ -711,7 +777,7 @@ const loadEventPosterSnapshot = async (
     endDate: event.endDate ?? null,
     timeZone: event.timeZone || 'UTC',
     artistCount: Math.max(0, Number(event._count?.canonicalArtists ?? 0)),
-    imageUrl: shareLink.imageUrl || null,
+    imageUrl: resolveEventPosterImageUrl(event) || shareLink.imageUrl || null,
     shareCode: shareLink.code,
   };
 };
@@ -742,221 +808,105 @@ const renderEventPosterHtml = async (
   const safeLineup = htmlEscape(`${Math.max(0, event.artistCount)} Artists`);
   const safeImage = cssImageUrl(event.imageUrl);
   const heroImage = safeImage
-    ? `<img src="${safeImage}" class="hero-image" />`
-    : '<div class="hero-fallback">R</div>';
+    ? safeImage
+    : '';
 
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RAVE ACCESS PASS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    * { box-sizing: border-box; text-transform: uppercase; }
     body {
       margin: 0;
-      min-height: 100vh;
-      background: #000;
-      color: #fff;
-      font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 0;
+      font-family: 'Rajdhani', sans-serif;
       -webkit-font-smoothing: antialiased;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 32px;
     }
-    .frame {
-      width: 390px;
-      background: #09090b;
-      border-radius: 30px;
-      overflow: hidden;
-      border: 1px solid rgba(63, 63, 70, .9);
-      box-shadow: 0 20px 80px rgba(0, 0, 0, .72);
-    }
-    .topbar {
-      padding: 20px 20px 16px;
-      border-bottom: 1px solid rgba(255,255,255,.05);
-      background: rgba(255,255,255,.03);
-      backdrop-filter: blur(20px);
-    }
-    .topbar-title {
-      font-size: 14px;
-      letter-spacing: .35em;
-      color: #d4d4d8;
-      font-weight: 700;
-    }
-    .hero {
-      position: relative;
-      height: 260px;
-      overflow: hidden;
-      background: linear-gradient(180deg, #171717 0%, #09090b 100%);
-    }
-    .hero-image, .hero-fallback {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .hero-fallback {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 112px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #1f1f23 0%, #0a0a0d 100%);
-    }
-    .hero::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background:
-        linear-gradient(to bottom, rgba(0,0,0,.15) 0%, rgba(0,0,0,.5) 55%, rgba(0,0,0,.92) 100%),
-        linear-gradient(to top right, rgba(239,68,68,.12) 0%, rgba(239,68,68,0) 50%);
-    }
-    .glitch span {
-      position: absolute;
-      left: 0;
-      right: 0;
-      background: rgba(239,68,68,.2);
-    }
-    .event-title {
-      position: absolute;
-      left: 20px;
-      bottom: 20px;
-      max-width: 88%;
-      z-index: 1;
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: .18em;
-      line-height: 1.25;
-      word-break: break-word;
-    }
-    .teeth {
-      height: 20px;
-      background: #000;
-      display: flex;
-      overflow: hidden;
-      padding-left: 1px;
-    }
-    .tooth {
-      width: 0;
-      height: 0;
-      border-left: 7px solid transparent;
-      border-right: 7px solid transparent;
-      border-top: 10px solid #09090b;
-    }
-    .content {
-      padding: 20px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px 20px;
-    }
-    .full { grid-column: 1 / -1; }
-    .label {
-      font-size: 11px;
-      letter-spacing: .25em;
-      color: #71717a;
-      margin-bottom: 4px;
-      font-weight: 600;
-    }
-    .value {
-      color: #f4f4f5;
-      font-size: 17px;
-      line-height: 1.6;
-      letter-spacing: .06em;
-      font-weight: 700;
-      word-break: break-word;
-    }
-    .value.venue {
-      font-size: 16px;
-      line-height: 1.9;
-    }
-    .divider {
-      height: 1px;
-      background: rgba(255,255,255,.1);
-      margin: 20px 0;
-    }
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-    }
-    .footer-left {
-      font-size: 11px;
-      letter-spacing: .3em;
-      color: #a1a1aa;
-      font-weight: 600;
-    }
-    .footer-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .scan-title {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: .1em;
-    }
-    .scan-subtitle {
-      font-size: 11px;
-      color: #a1a1aa;
-      margin-top: 4px;
-      letter-spacing: .15em;
-      font-weight: 600;
-    }
-    .qr {
-      width: 56px;
-      height: 56px;
-      display: block;
-      background: #fff;
-      padding: 4px;
+    * {
+      text-transform: uppercase;
     }
   </style>
 </head>
-<body>
-  <div class="frame" id="poster-root">
-    <div class="topbar">
-      <div class="topbar-title">RaveHub Access</div>
-    </div>
-    <div class="hero">
-      ${heroImage}
-      <div class="glitch">
-        <span style="top:12%;height:2px;"></span>
-        <span style="top:27%;height:1px;"></span>
-        <span style="top:35%;height:3px;"></span>
-        <span style="top:48%;height:2px;"></span>
-        <span style="top:62%;height:1px;"></span>
-        <span style="top:75%;height:2px;"></span>
-        <span style="top:88%;height:2px;"></span>
-        <span style="top:94%;height:3px;"></span>
+<body class="min-h-screen bg-black flex items-center justify-center p-6 text-white">
+  <div class="w-[390px] max-w-[92vw]" id="poster-root">
+    <div class="relative bg-zinc-950 rounded-[30px] overflow-hidden border border-zinc-800 shadow-[0_20px_80px_rgba(0,0,0,.7)]">
+      <div class="px-5 pt-5 pb-4 border-b border-white/5 bg-white/[0.03] backdrop-blur-xl">
+        <div class="text-[14px] tracking-[0.35em] text-zinc-300 font-bold">
+          RaveHub Access
+        </div>
       </div>
-      <div class="event-title">${safeTitle}</div>
-    </div>
-    <div class="teeth">${Array.from({ length: 26 }, () => '<div class="tooth"></div>').join('')}</div>
-    <div class="content">
-      <div class="grid">
-        <div><div class="label">Start</div><div class="value">${safeStart}</div></div>
-        <div><div class="label">End</div><div class="value">${safeEnd}</div></div>
-        <div><div class="label">Duration</div><div class="value">${safeDuration}</div></div>
-        <div><div class="label">Lineup</div><div class="value">${safeLineup}</div></div>
-        <div class="full"><div class="label">Venue</div><div class="value venue">${safeVenue}</div></div>
-        <div class="full"><div class="label">Presented By</div><div class="value">${safeOrganizer}</div></div>
+      <div class="relative h-[260px] overflow-hidden">
+        ${
+          heroImage
+            ? `<img src="${heroImage}" class="absolute inset-0 w-full h-full object-cover" />`
+            : `<div class="absolute inset-0 bg-zinc-900"></div>`
+        }
+        <div class="absolute inset-0" style="background: linear-gradient(to bottom, rgba(0,0,0,.15) 0%, rgba(0,0,0,.5) 55%, rgba(0,0,0,.92) 100%)"></div>
+        <div class="absolute inset-0 bg-gradient-to-tr from-red-500/10 via-transparent to-transparent"></div>
+        <div class="absolute left-5 bottom-5 max-w-[88%]">
+          <h2 class="text-[26px] font-bold tracking-[0.18em] text-white leading-snug break-words">
+            ${safeTitle}
+          </h2>
+        </div>
+        <div class="absolute inset-0 opacity-30 pointer-events-none">
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 12%; height: 2px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 27%; height: 1px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 35%; height: 3px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 48%; height: 2px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 62%; height: 1px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 75%; height: 2px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 88%; height: 2px;"></div>
+          <div class="absolute left-0 right-0 bg-red-500/20" style="top: 94%; height: 3px;"></div>
+        </div>
       </div>
-      <div class="divider"></div>
-      <div class="footer">
-        <div class="footer-left">RaveHub Access</div>
-        <div class="footer-right">
+      <div class="h-5 bg-black flex overflow-hidden">
+        ${Array.from({ length: 26 }, () => '<div class="w-0 h-0 border-l-[7px] border-r-[7px] border-t-[10px] border-l-transparent border-r-transparent border-t-zinc-950"></div>').join('')}
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-2 gap-x-5 gap-y-5">
           <div>
-            <div class="scan-title">Scan</div>
-            <div class="scan-subtitle">RaveHub App</div>
+            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">START</div>
+            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeStart}</div>
           </div>
-          <img src="${qrDataUrl}" class="qr" />
+          <div>
+            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">END</div>
+            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeEnd}</div>
+          </div>
+          <div>
+            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">DURATION</div>
+            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeDuration}</div>
+          </div>
+          <div>
+            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">LINEUP</div>
+            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeLineup}</div>
+          </div>
+          <div class="col-span-2">
+            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">VENUE</div>
+            <div class="text-zinc-100 break-words text-[16px] leading-[1.9] tracking-[0.06em] font-bold">${safeVenue}</div>
+          </div>
+          <div class="col-span-2">
+            <div class="text-[11px] tracking-[0.25em] text-zinc-500 mb-1 font-semibold">PRESENTED BY</div>
+            <div class="text-zinc-100 break-words text-[17px] leading-[1.6] tracking-[0.06em] font-bold">${safeOrganizer}</div>
+          </div>
+        </div>
+        <div class="h-px bg-white/10 my-5"></div>
+        <div class="flex justify-between items-center">
+          <div class="text-[11px] text-zinc-400 tracking-[0.3em] font-semibold">
+            RaveHub Access
+          </div>
+          <div class="flex items-center gap-3">
+            <div>
+              <div class="text-[14px] font-bold tracking-[0.1em]">Scan</div>
+              <div class="text-[11px] text-zinc-400 mt-1 tracking-[0.15em] font-semibold">RaveHub App</div>
+            </div>
+            <img src="${qrDataUrl}" class="w-14 h-14" />
+          </div>
         </div>
       </div>
     </div>
