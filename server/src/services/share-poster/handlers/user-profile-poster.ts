@@ -52,7 +52,7 @@ export const userProfilePosterHandler: SharePosterHandler = {
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
       title,
-      imageUrl: user.avatarUrl || user.backgroundUrl || context.shareLink.imageUrl,
+      imageUrl: user.avatarUrl || null,
       rows: [
         {
           kind: 'pair',

@@ -34,7 +34,7 @@ export const festivalPosterHandler: SharePosterHandler = {
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
       title,
-      imageUrl: festival.backgroundUrl || festival.avatarUrl || context.shareLink.imageUrl,
+      imageUrl: festival.backgroundUrl || null,
       rows: [
         {
           kind: 'pair',

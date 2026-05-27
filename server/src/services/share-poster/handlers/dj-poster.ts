@@ -58,7 +58,7 @@ export const djPosterHandler: SharePosterHandler = {
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
       title,
-      imageUrl: dj.bannerUrl || dj.avatarUrl || context.shareLink.imageUrl,
+      imageUrl: dj.avatarUrl || null,
       rows: [
         {
           kind: 'pair',
