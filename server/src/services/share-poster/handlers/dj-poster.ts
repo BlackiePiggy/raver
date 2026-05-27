@@ -1,5 +1,5 @@
-import { buildPosterQrText, formatPosterDate, renderStructuredPosterSvg } from '../svg-utils';
-import { excerpt, pickLocalizedText, posterText } from '../localization';
+import { buildPosterQrText, renderStructuredPosterSvg } from '../svg-utils';
+import { pickLocalizedText, posterText } from '../localization';
 import { SharePosterHandler } from '../types';
 
 export const djPosterHandler: SharePosterHandler = {
@@ -13,22 +13,48 @@ export const djPosterHandler: SharePosterHandler = {
       select: {
         name: true,
         nameI18n: true,
-        bio: true,
-        bioI18n: true,
         avatarUrl: true,
         bannerUrl: true,
         country: true,
         countryI18n: true,
         genres: true,
-        updatedAt: true,
+        genreBindings: {
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            genre: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          take: 6,
+        },
       },
     });
     if (!dj) return null;
+    const boundEventRows = await context.prisma.eventArtist.findMany({
+      where: {
+        OR: [
+          { primaryDjId: context.shareLink.targetId },
+          { members: { some: { djId: context.shareLink.targetId } } },
+        ],
+      },
+      select: {
+        eventId: true,
+      },
+      distinct: ['eventId'],
+    });
     const title = posterText(pickLocalizedText(dj.nameI18n, context.locale, dj.name), context.shareLink.title);
     const country = posterText(pickLocalizedText(dj.countryI18n, context.locale, dj.country), context.locale === 'zh' ? '未知' : 'Unknown');
-    const bio = posterText(pickLocalizedText(dj.bioI18n, context.locale, dj.bio), context.locale === 'zh' ? '等待补充简介' : 'Bio coming soon');
-    const genres = dj.genres.slice(0, 3).join(' · ') || (context.locale === 'zh' ? '风格待补充' : 'Genres TBA');
-    const updated = formatPosterDate(dj.updatedAt, 'UTC', context.locale);
+    const genreNames = dj.genreBindings
+      .map((binding) => binding.genre.name.trim())
+      .filter(Boolean);
+    const genres = [...genreNames, ...dj.genres]
+      .filter(Boolean)
+      .filter((value, index, array) => array.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index)
+      .slice(0, 6)
+      .join(' · ') || (context.locale === 'zh' ? '风格待补充' : 'Genres TBA');
+    const eventCountText = String(boundEventRows.length || 0);
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
       title,
@@ -37,15 +63,11 @@ export const djPosterHandler: SharePosterHandler = {
         {
           kind: 'pair',
           left: { label: context.locale === 'zh' ? '国家/地区' : 'COUNTRY', value: country },
-          right: { label: context.locale === 'zh' ? '最近更新' : 'UPDATED', value: updated },
+          right: { label: context.locale === 'zh' ? '活动数量' : 'EVENTS', value: eventCountText },
         },
         {
           kind: 'full',
           cell: { label: context.locale === 'zh' ? '风格' : 'GENRES', value: genres },
-        },
-        {
-          kind: 'full',
-          cell: { label: context.locale === 'zh' ? '简介' : 'BIO', value: excerpt(bio, 180) },
         },
       ],
       footerLine1: context.locale === 'zh' ? '扫码打开 RaveHub 查看 DJ 详情与相关活动' : 'SCAN TO OPEN RAVEHUB FOR DJ PROFILE & EVENTS',

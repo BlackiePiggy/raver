@@ -25,6 +25,7 @@ import {
   formatPosterDate,
   formatPosterDuration,
   formatPosterDurationLabel,
+  getSharePosterAppIconDataUri,
   renderPosterTextBlock,
   renderZhDateText,
   renderZhNumberUnitText,
@@ -187,6 +188,7 @@ const renderEventPosterSvg = async (
     },
   });
   const heroImageDataUrl = await toImageDataUri(event.imageUrl);
+  const appIconDataUrl = getSharePosterAppIconDataUri();
   const safeStart = svgEscape(formatPosterDate(event.startDate, event.timeZone, locale));
   const safeEnd = svgEscape(formatPosterDate(event.endDate, event.timeZone, locale));
   const safeDuration = svgEscape(formatPosterDurationLabel(event.startDate, event.endDate, event.timeZone, locale));
@@ -281,6 +283,13 @@ const renderEventPosterSvg = async (
   </g>
   <rect x="292" y="${qrY}" width="60" height="60" fill="#ffffff"/>
   <image href="${qrDataUrl}" x="292" y="${qrY}" width="60" height="60" preserveAspectRatio="none" />
+  ${
+    appIconDataUrl
+      ? `
+  <rect x="313.5" y="${qrY + 21.5}" width="17" height="17" rx="4" fill="#ffffff"/>
+  <image href="${appIconDataUrl}" x="315" y="${qrY + 23}" width="14" height="14" preserveAspectRatio="xMidYMid meet" />`
+      : ''
+  }
 </svg>`;
   try {
     const resvg = new Resvg(svg, {

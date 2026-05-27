@@ -1,8 +1,15 @@
+import fs from 'fs';
+import path from 'path';
 import { Resvg } from '@resvg/resvg-js';
 import QRCode from 'qrcode';
 import { buildShareShortUrl } from '../share-link.service';
 import { excerpt, singleLine } from './localization';
 import { SharePosterLocale, SharePosterSectionRow, SharePosterStructuredCardInput } from './types';
+
+const APP_ICON_PATH = path.resolve(
+  __dirname,
+  '../../../../mobile/ios/RaverMVP/RaverMVP/Assets.xcassets/AppIcon.appiconset/icon-60@3x.png'
+);
 
 export const htmlEscape = (value: string | null | undefined): string =>
   String(value || '')
@@ -27,6 +34,26 @@ export const toImageDataUri = async (urlString: string | null | undefined): Prom
     return null;
   }
 };
+
+const loadLocalImageDataUri = (() => {
+  const cache = new Map<string, string | null>();
+  return (filePath: string): string | null => {
+    if (cache.has(filePath)) return cache.get(filePath) ?? null;
+    try {
+      const bytes = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+      const dataUri = `data:${mimeType};base64,${bytes.toString('base64')}`;
+      cache.set(filePath, dataUri);
+      return dataUri;
+    } catch {
+      cache.set(filePath, null);
+      return null;
+    }
+  };
+})();
+
+export const getSharePosterAppIconDataUri = (): string | null => loadLocalImageDataUri(APP_ICON_PATH);
 
 export const formatPosterDate = (date: Date | null, timeZone: string, locale: SharePosterLocale = 'en'): string => {
   if (!date) return locale === 'zh' ? '待定' : 'TBA';
@@ -259,6 +286,7 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
     },
   });
   const heroImageDataUrl = await toImageDataUri(input.imageUrl);
+  const appIconDataUrl = getSharePosterAppIconDataUri();
   const titleFontSize = 28;
   const titleLines = wrapPosterMixedText(
     input.locale === 'zh' ? input.title : input.title.toUpperCase(),
@@ -326,6 +354,13 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
   </g>
   <rect x="292" y="${qrY}" width="60" height="60" fill="#ffffff"/>
   <image href="${qrDataUrl}" x="292" y="${qrY}" width="60" height="60" preserveAspectRatio="none" />
+  ${
+    appIconDataUrl
+      ? `
+  <rect x="313.5" y="${qrY + 21.5}" width="17" height="17" rx="4" fill="#ffffff"/>
+  <image href="${appIconDataUrl}" x="315" y="${qrY + 23}" width="14" height="14" preserveAspectRatio="xMidYMid meet" />`
+      : ''
+  }
 </svg>`;
 
   const resvg = new Resvg(svg, {

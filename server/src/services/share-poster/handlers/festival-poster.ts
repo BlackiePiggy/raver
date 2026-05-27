@@ -1,5 +1,5 @@
 import { buildPosterQrText, renderStructuredPosterSvg } from '../svg-utils';
-import { excerpt, pickLocalizedText, posterText } from '../localization';
+import { pickLocalizedText, posterText } from '../localization';
 import { SharePosterHandler } from '../types';
 
 export const festivalPosterHandler: SharePosterHandler = {
@@ -17,19 +17,19 @@ export const festivalPosterHandler: SharePosterHandler = {
         countryI18n: true,
         city: true,
         cityI18n: true,
-        foundedYear: true,
-        tagline: true,
-        introduction: true,
-        descriptionI18n: true,
         avatarUrl: true,
         backgroundUrl: true,
+        _count: {
+          select: {
+            events: true,
+          },
+        },
       },
     });
     if (!festival) return null;
     const title = posterText(pickLocalizedText(festival.nameI18n, context.locale, festival.name), context.shareLink.title);
     const city = pickLocalizedText(festival.cityI18n, context.locale, festival.city) || festival.city;
     const country = pickLocalizedText(festival.countryI18n, context.locale, festival.country) || festival.country;
-    const intro = pickLocalizedText(festival.descriptionI18n, context.locale, festival.introduction) || festival.introduction;
     const location = [city, country].filter(Boolean).join(' · ');
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
@@ -38,16 +38,8 @@ export const festivalPosterHandler: SharePosterHandler = {
       rows: [
         {
           kind: 'pair',
-          left: { label: context.locale === 'zh' ? '城市' : 'CITY', value: posterText(location, context.locale === 'zh' ? '待补充' : 'TBA') },
-          right: { label: context.locale === 'zh' ? '创立年份' : 'FOUNDED', value: posterText(festival.foundedYear, context.locale === 'zh' ? '待补充' : 'TBA') },
-        },
-        {
-          kind: 'full',
-          cell: { label: context.locale === 'zh' ? '标语' : 'TAGLINE', value: posterText(festival.tagline, context.locale === 'zh' ? '等待补充' : 'Coming soon') },
-        },
-        {
-          kind: 'full',
-          cell: { label: context.locale === 'zh' ? '介绍' : 'INTRO', value: excerpt(intro, 180) || (context.locale === 'zh' ? '暂无介绍' : 'No introduction yet') },
+          left: { label: context.locale === 'zh' ? '地点' : 'LOCATION', value: posterText(location, context.locale === 'zh' ? '待补充' : 'TBA') },
+          right: { label: context.locale === 'zh' ? '活动次数' : 'EVENTS', value: String(festival._count?.events || 0) },
         },
       ],
       footerLine1: context.locale === 'zh' ? '扫码打开 RaveHub 查看品牌介绍与相关活动' : 'SCAN TO OPEN RAVEHUB FOR FESTIVAL INFO & EVENTS',
