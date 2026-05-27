@@ -268,6 +268,16 @@
 		E3C47626F62DD73F157D2C71 /* EventUploadAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB050AB2AD3D4168D1337638 /* EventUploadAnalytics.swift */; };
 		E3ECDB1B33A9F03828AF419F /* DemoAlignedMessageFailureFeedbackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62E09E40EEE663DB8422B87 /* DemoAlignedMessageFailureFeedbackCoordinator.swift */; };
 		E3FE5377589AF10103D4A7E1 /* ComposePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6D812798B002B0C31A4CF63 /* ComposePostView.swift */; };
+		F10000000000000000000001 /* OrganizerUploadAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* OrganizerUploadAnalytics.swift */; };
+		F10000000000000000000002 /* OrganizerUploadBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* OrganizerUploadBottomBar.swift */; };
+		F10000000000000000000003 /* OrganizerUploadDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* OrganizerUploadDraft.swift */; };
+		F10000000000000000000004 /* OrganizerUploadDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* OrganizerUploadDraftStore.swift */; };
+		F10000000000000000000005 /* OrganizerUploadFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000005 /* OrganizerUploadFlowView.swift */; };
+		F10000000000000000000006 /* OrganizerUploadFlowViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000006 /* OrganizerUploadFlowViewModel.swift */; };
+		F10000000000000000000007 /* OrganizerUploadMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000007 /* OrganizerUploadMappers.swift */; };
+		F10000000000000000000008 /* OrganizerUploadProgressHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000008 /* OrganizerUploadProgressHeader.swift */; };
+		F10000000000000000000009 /* OrganizerUploadStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000009 /* OrganizerUploadStep.swift */; };
+		F1000000000000000000000A /* OrganizerUploadValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000000000000000000000A /* OrganizerUploadValidation.swift */; };
 		E52829E0A7978B0AE4160548 /* EdgeAligningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FAB537F2ADAF4219E60383E /* EdgeAligningView.swift */; };
 		E55E00EA27BCA93CAB31B079 /* ContainerCollectionReusableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E0AA74625EBC4D4BEED29D0 /* ContainerCollectionReusableView.swift */; };
 		E7954AF650641F0B6407C3CA /* DemoAlignedChatScreenAssemblyActionHandlerDependenciesFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 996D0C385A7DF3B8D363EE3C /* DemoAlignedChatScreenAssemblyActionHandlerDependenciesFactory.swift */; };
@@ -620,6 +630,16 @@
 		EEB34499375B06DC9CA5D5E9 /* NSLayoutDimension+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSLayoutDimension+Extension.swift"; sourceTree = "<group>"; };
 		EEC3A3A4975BE3939171763A /* RaverChatComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverChatComposerView.swift; sourceTree = "<group>"; };
 		EFE8DB718344DB86861AFB06 /* DemoAlignedPaginationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedPaginationCoordinator.swift; sourceTree = "<group>"; };
+		F20000000000000000000001 /* OrganizerUploadAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadAnalytics.swift; sourceTree = "<group>"; };
+		F20000000000000000000002 /* OrganizerUploadBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadBottomBar.swift; sourceTree = "<group>"; };
+		F20000000000000000000003 /* OrganizerUploadDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadDraft.swift; sourceTree = "<group>"; };
+		F20000000000000000000004 /* OrganizerUploadDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadDraftStore.swift; sourceTree = "<group>"; };
+		F20000000000000000000005 /* OrganizerUploadFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadFlowView.swift; sourceTree = "<group>"; };
+		F20000000000000000000006 /* OrganizerUploadFlowViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadFlowViewModel.swift; sourceTree = "<group>"; };
+		F20000000000000000000007 /* OrganizerUploadMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadMappers.swift; sourceTree = "<group>"; };
+		F20000000000000000000008 /* OrganizerUploadProgressHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadProgressHeader.swift; sourceTree = "<group>"; };
+		F20000000000000000000009 /* OrganizerUploadStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadStep.swift; sourceTree = "<group>"; };
+		F2000000000000000000000A /* OrganizerUploadValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerUploadValidation.swift; sourceTree = "<group>"; };
 		F27D566B130C8A0806611492 /* DemoAlignedFailureFeedbackActionsFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedFailureFeedbackActionsFactory.swift; sourceTree = "<group>"; };
 		F344082B0E151F9897120966 /* EventDetailTabBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailTabBarView.swift; sourceTree = "<group>"; };
 		F434E041601C9F1BB795B02F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -1022,6 +1042,15 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
+		664DF1BAB59BD61E92135904 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000002 /* OrganizerUploadBottomBar.swift */,
+				F20000000000000000000008 /* OrganizerUploadProgressHeader.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
 		69B5931138F51F747677108D /* Sets */ = {
 			isa = PBXGroup;
 			children = (
@@ -1159,6 +1188,14 @@
 			path = Events;
 			sourceTree = "<group>";
 		};
+		8242A9FB47B65317BB75B280 /* Brands */ = {
+			isa = PBXGroup;
+			children = (
+				8242A9FB47B65317BB75B281 /* UploadFlow */,
+			);
+			path = Brands;
+			sourceTree = "<group>";
+		};
 		84A47F95D2642EED1B260559 /* Coordinator */ = {
 			isa = PBXGroup;
 			children = (
@@ -1176,6 +1213,7 @@
 				29E085D9710BB20E966CA1DE /* EventDetailRepresentable.swift */,
 				4B8FF198478D461F949BE540 /* EventDetailScrollViewController.swift */,
 				F344082B0E151F9897120966 /* EventDetailTabBarView.swift */,
+				8242A9FB47B65317BB75B280 /* Brands */,
 				C600D367612573CD74584ECC /* Coordinator */,
 				D357F31DF2ED9D475AE5105F /* DJs */,
 				8242A9FB47B65317BB75B27F /* Events */,
@@ -1413,6 +1451,22 @@
 				D2674AB3A7B5C398603C0255 /* EventUploadStep.swift */,
 				0455E7D49C4AE2156B071CA3 /* EventUploadValidation.swift */,
 				664DF1BAB59BD61E92135903 /* Components */,
+			);
+			path = UploadFlow;
+			sourceTree = "<group>";
+		};
+		8242A9FB47B65317BB75B281 /* UploadFlow */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000001 /* OrganizerUploadAnalytics.swift */,
+				F20000000000000000000003 /* OrganizerUploadDraft.swift */,
+				F20000000000000000000004 /* OrganizerUploadDraftStore.swift */,
+				F20000000000000000000005 /* OrganizerUploadFlowView.swift */,
+				F20000000000000000000006 /* OrganizerUploadFlowViewModel.swift */,
+				F20000000000000000000007 /* OrganizerUploadMappers.swift */,
+				F20000000000000000000009 /* OrganizerUploadStep.swift */,
+				F2000000000000000000000A /* OrganizerUploadValidation.swift */,
+				664DF1BAB59BD61E92135904 /* Components */,
 			);
 			path = UploadFlow;
 			sourceTree = "<group>";
@@ -2041,6 +2095,16 @@
 				84A2EAB2692A64328FAF6D89 /* EventUploadProgressHeader.swift in Sources */,
 				61DFBF7C7C2ED9996817A7A0 /* EventUploadStep.swift in Sources */,
 				C40A71018E2CD5723F576994 /* EventUploadValidation.swift in Sources */,
+				F10000000000000000000001 /* OrganizerUploadAnalytics.swift in Sources */,
+				F10000000000000000000002 /* OrganizerUploadBottomBar.swift in Sources */,
+				F10000000000000000000003 /* OrganizerUploadDraft.swift in Sources */,
+				F10000000000000000000004 /* OrganizerUploadDraftStore.swift in Sources */,
+				F10000000000000000000005 /* OrganizerUploadFlowView.swift in Sources */,
+				F10000000000000000000006 /* OrganizerUploadFlowViewModel.swift in Sources */,
+				F10000000000000000000007 /* OrganizerUploadMappers.swift in Sources */,
+				F10000000000000000000008 /* OrganizerUploadProgressHeader.swift in Sources */,
+				F10000000000000000000009 /* OrganizerUploadStep.swift in Sources */,
+				F1000000000000000000000A /* OrganizerUploadValidation.swift in Sources */,
 				673306312CBE98DDE78B49BE /* EventsModuleView.swift in Sources */,
 				26C4483038B4E3BB9DB40516 /* EventsModuleViewModel.swift in Sources */,
 				097FFF23469EEA1D2FA723A6 /* FeedView.swift in Sources */,

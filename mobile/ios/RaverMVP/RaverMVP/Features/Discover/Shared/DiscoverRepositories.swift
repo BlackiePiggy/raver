@@ -417,8 +417,14 @@ protocol DiscoverWikiRepository {
         fileName: String,
         mimeType: String,
         brandID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
+    func deleteWikiBrandUploadedImages(
+        brandID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws
     func fetchFollowedBrandUpdatePreference() async throws -> FollowedBrandUpdatePreference
     func updateFollowedBrandUpdatePreference(
         _ input: FollowedBrandUpdatePreferenceInput
@@ -499,6 +505,7 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
         fileName: String,
         mimeType: String,
         brandID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse {
         try await service.uploadWikiBrandImage(
@@ -506,7 +513,20 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
             fileName: fileName,
             mimeType: mimeType,
             brandID: brandID,
+            draftID: draftID,
             usage: usage
+        )
+    }
+
+    func deleteWikiBrandUploadedImages(
+        brandID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        try await service.deleteWikiBrandUploadedImages(
+            brandID: brandID,
+            draftID: draftID,
+            urls: urls
         )
     }
 

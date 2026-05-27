@@ -169,10 +169,80 @@ const resolveRequiredText = (
   return cleanText(payload[key]) || '';
 };
 
+const collectImageAssetUrls = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      return cleanText((item as Record<string, unknown>).url) || null;
+    })
+    .filter((item): item is string => Boolean(item));
+};
+
+export const collectBrandSubmissionMediaUrls = (payload: Prisma.JsonObject): string[] => {
+  const urls = [
+    cleanText(payload.avatarUrl) || null,
+    cleanText(payload.backgroundUrl) || null,
+    cleanText(payload.proofImageUrl) || null,
+    ...collectImageAssetUrls(payload.imageAssets),
+  ].filter((item): item is string => Boolean(item));
+
+  return Array.from(new Set(urls.map((item) => item.trim()).filter(Boolean)));
+};
+
+export const bindBrandDraftMediaToSubmission = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  submissionId: string
+): Promise<void> => {
+  const urls = collectBrandSubmissionMediaUrls(payload);
+  if (!urls.length) return;
+
+  await db.mediaAsset.updateMany({
+    where: {
+      ownerType: 'wiki_brand_draft',
+      uploadedById: submitterId,
+      url: { in: urls },
+      status: 'active',
+    },
+    data: {
+      ownerType: 'content-submission',
+      ownerId: submissionId,
+    },
+  });
+};
+
+export const rebindBrandSubmissionMediaToBrand = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  payload: Prisma.JsonObject,
+  submissionId: string,
+  brandId: string
+): Promise<void> => {
+  const urls = collectBrandSubmissionMediaUrls(payload);
+  if (!urls.length) return;
+
+  await db.mediaAsset.updateMany({
+    where: {
+      ownerType: 'content-submission',
+      ownerId: submissionId,
+      url: { in: urls },
+      status: 'active',
+    },
+    data: {
+      ownerType: 'wiki_brand',
+      ownerId: brandId,
+    },
+  });
+};
+
 export const createOrUpdateBrandFromSubmission = async (
   db: Prisma.TransactionClient | PrismaClient,
   payload: Prisma.JsonObject,
-  submitterId: string
+  submitterId: string,
+  options: {
+    submissionId?: string;
+  } = {}
 ) => {
   const targetBrandId = cleanText(payload.targetBrandId) || cleanText(payload.editTargetBrandId) || null;
 
@@ -346,6 +416,9 @@ export const createOrUpdateBrandFromSubmission = async (
     });
 
     await ensureBrandContributor(db, updated.id, submitterId);
+    if (options.submissionId) {
+      await rebindBrandSubmissionMediaToBrand(db, payload, options.submissionId, updated.id);
+    }
     return updated;
   }
 
@@ -355,7 +428,7 @@ export const createOrUpdateBrandFromSubmission = async (
   }
 
   const id = await uniqueWikiFestivalId(db, name);
-  return db.wikiFestival.create({
+  const created = await db.wikiFestival.create({
     data: {
       id,
       sourceRowId: integerOrNull(payload.sourceRowId),
@@ -419,4 +492,8 @@ export const createOrUpdateBrandFromSubmission = async (
       contributors: { create: { userId: submitterId } },
     } as any,
   });
+  if (options.submissionId) {
+    await rebindBrandSubmissionMediaToBrand(db, payload, options.submissionId, created.id);
+  }
+  return created;
 };

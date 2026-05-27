@@ -1143,6 +1143,7 @@ struct LearnModuleView: View {
                     fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
                     brandID: created.id,
+                    draftID: nil,
                     usage: "avatar"
                 )
                 uploadedAvatarURL = uploadedAvatar.url
@@ -1155,13 +1156,14 @@ struct LearnModuleView: View {
                     fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
                     brandID: created.id,
+                    draftID: nil,
                     usage: "background"
                 )
                 uploadedBackgroundURL = uploadedBackground.url
             }
 
             if uploadedAvatarURL != nil || uploadedBackgroundURL != nil {
-                created = try await wikiRepository.updateLearnFestival(
+                let updateResult = try await wikiRepository.updateLearnFestival(
                     id: created.id,
                     input: UpdateLearnFestivalInput(
                         name: nil,
@@ -1177,6 +1179,16 @@ struct LearnModuleView: View {
                         links: nil
                     )
                 )
+                switch updateResult {
+                case .created(let persisted):
+                    created = persisted
+                case .submittedForReview:
+                    let hydrated = LearnFestival(web: created)
+                    updateFestival(hydrated)
+                    showFestivalCreateSheet = false
+                    errorMessage = LT("品牌图片更新已提交审核", "Brand image update submitted for review.", "ブランド画像更新を審査に送信しました。")
+                    return
+                }
             }
 
             let hydrated = LearnFestival(web: created)
@@ -5925,6 +5937,7 @@ struct LearnFestivalDetailView: View {
                     fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
                     brandID: updated.id,
+                    draftID: nil,
                     usage: "avatar"
                 )
                 updated.avatarUrl = uploadedAvatar.url
@@ -5936,6 +5949,7 @@ struct LearnFestivalDetailView: View {
                     fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
                     mimeType: "image/jpeg",
                     brandID: updated.id,
+                    draftID: nil,
                     usage: "background"
                 )
                 updated.backgroundUrl = uploadedBackground.url
@@ -6584,6 +6598,7 @@ struct LearnFestivalEditorView: View {
                         fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
                         brandID: editing.id,
+                        draftID: nil,
                         usage: "avatar"
                     )
                     editing.avatarUrl = uploadedAvatar.url
@@ -6595,6 +6610,7 @@ struct LearnFestivalEditorView: View {
                         fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
                         brandID: editing.id,
+                        draftID: nil,
                         usage: "background"
                     )
                     editing.backgroundUrl = uploadedBackground.url
@@ -6671,6 +6687,7 @@ struct LearnFestivalEditorView: View {
                         fileName: "wiki-brand-avatar-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
                         brandID: created.id,
+                        draftID: nil,
                         usage: "avatar"
                     )
                     uploadedAvatarURL = uploadedAvatar.url
@@ -6683,6 +6700,7 @@ struct LearnFestivalEditorView: View {
                         fileName: "wiki-brand-background-\(UUID().uuidString).jpg",
                         mimeType: "image/jpeg",
                         brandID: created.id,
+                        draftID: nil,
                         usage: "background"
                     )
                     uploadedBackgroundURL = uploadedBackground.url

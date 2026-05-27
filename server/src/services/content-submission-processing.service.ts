@@ -487,7 +487,8 @@ export async function processContentSubmission(
           : await createOrUpdateBrandFromSubmission(
               db,
               payload as any,
-              submission.submitterId
+              submission.submitterId,
+              { submissionId: submission.id }
             );
       const applyMs = Date.now() - applyStartedAt;
       await checkpointPhase('canonical_applied', {

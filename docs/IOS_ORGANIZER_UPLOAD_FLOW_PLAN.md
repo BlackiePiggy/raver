@@ -21,9 +21,9 @@
 - [x] `2026-05-27` 已完成现状调研，确认“主办方上传”技术实体统一落到 `Brand / WikiFestival`
 - [x] `2026-05-27` 已完成 event / DJ / brand 现有上传链路对比
 - [x] `2026-05-27` 已完成首版产品与技术方案文档
-- [ ] 服务端 brand 创建/编辑 submission task 化
+- [x] 服务端 brand 创建/编辑 submission task 化
 - [ ] 服务端 brand 图片草稿归属模型补齐
-- [ ] iOS `OrganizerUploadFlow` 基础框架落地
+- [x] iOS `OrganizerUploadFlow` 基础框架落地
 - [ ] iOS 草稿、图片、提交、成功态全链路打通
 - [ ] event 上传页接入“创建主办方”快捷流
 - [ ] 联调、回归、真机验收完成
@@ -41,11 +41,22 @@
 - [x] 为 brand patch submission 增加 `changeSummary` 生成能力
 - [x] 新增 `content-submission-brand.service`，支持 brand create / edit canonical apply
 - [x] worker 已支持 `brand` 自动处理与管理员 auto-approve 入库
+- [x] `POST /v1/learn/festivals` 已统一改为 submission task，不再同步直写线上 brand
 - [x] `PATCH /v1/learn/festivals/:id` 已对普通用户改为 submission task
+- [x] 管理员 brand create / edit 已统一进入 async submission + worker auto-approve`
 - [x] iOS `updateLearnFestival(...)` 已改为 `CreateContentResult<WebLearnFestival>`
 - [x] iOS Learn Festival 编辑页已兼容 `.submittedForReview`
-- [x] 服务端 `pnpm --dir server build` 构建通过
-- [x] iOS `xcodebuild` 验证受环境问题阻塞，首个错误为缺少 `SDWebImage` 模块
+- [x] iOS `LearnModuleView` 已补齐遗漏的 `CreateContentResult` 兼容点
+- [x] brand 图片上传已支持 `brandId / draftId` 双模式
+- [x] brand 图片删除已支持 `brandId + urls` 与 `draftId + urls`
+- [x] brand submission 已支持草稿图绑定到 `content-submission`
+- [x] brand 审核通过已支持 submission 图片归属回绑到最终 `wiki_brand`
+- [x] 服务端 `pnpm --dir server build` 已再次通过，确认本轮 brand 图片草稿改造无新增 TS 构建问题
+- [x] iOS brand 图片 service / repository / mock 已对齐 `draftId` 上传与删除接口
+- [x] iOS `xcodebuild -workspace ...` 已再次通过，确认本轮 brand 图片接口对齐无新增编译错误
+- [x] iOS 构建方式已校正为使用 `.xcworkspace`，`SDWebImage` 缺失并非真实代码阻塞
+- [x] iOS 已新建 `Features/Discover/Brands/UploadFlow/` 骨架目录与基础 Swift 文件组
+- [x] iOS `OrganizerUploadFlow` 已具备本地 draft restore/save、step 切换、create/edit 标题与成功态占位
 
 ## 分阶段落地计划
 
@@ -267,9 +278,9 @@
 #### 1.2 brand 编辑改成 submission task
 
 - [x] 将 `PATCH /v1/learn/festivals/:id` 从同步直写改为提交 `contentSubmission`
-- [ ] 普通用户编辑返回 `submittedForReview`
-- [ ] 管理员编辑改成 async auto-approve，而不是同步 bypass
-- [ ] brand 创建与编辑统一进入 worker
+- [x] 普通用户编辑返回 `submittedForReview`
+- [x] 管理员编辑改成 async auto-approve，而不是同步 bypass
+- [x] brand 创建与编辑统一进入 worker
 - [x] brand 提交进入 `My Publishes`
 - [x] brand 提交进入通知中心审核盒子
 
@@ -293,8 +304,8 @@
 
 验收标准：
 
-- [ ] brand 创建提交后不再同步创建线上实体
-- [ ] brand 编辑提交后不再直接修改线上实体
+- [x] brand 创建提交后不再同步创建线上实体
+- [x] brand 编辑提交后不再直接修改线上实体
 - [ ] `My Publishes` 能看到 brand 的 `处理中 / 审核中 / 已入库 / 未通过 / 处理失败`
 - [ ] worker 失败时用户可见，不会 silently fail
 
@@ -304,25 +315,25 @@
 
 #### 2.1 上传接口改造
 
-- [ ] 盘点 `/v1/wiki/brands/upload-image` 当前请求字段和返回字段
-- [ ] 给上传接口增加 `draftId`
-- [ ] 给上传接口增加 `usage`
+- [x] 盘点 `/v1/wiki/brands/upload-image` 当前请求字段和返回字段
+- [x] 给上传接口增加 `draftId`
+- [x] 给上传接口增加 `usage`
 - [ ] 给上传接口增加 `sort`
-- [ ] 给返回值补齐 `ownerType` / `ownerId`
+- [x] 给返回值补齐 `ownerType` / `ownerId`
 - [ ] 给返回值补齐 `width` / `height` / `originalUrl`
 
 #### 2.2 删除与清理接口
 
-- [ ] 新增或改造 brand 上传图删除接口
-- [ ] 支持按 `draftId + urls` 删除
-- [ ] 支持按 `brandId + urls` 删除
+- [x] 新增或改造 brand 上传图删除接口
+- [x] 支持按 `draftId + urls` 删除
+- [x] 支持按 `brandId + urls` 删除
 - [ ] 支持提交成功后清理无主草稿图
 - [ ] 支持放弃草稿时批量清理
 
 #### 2.3 提交后绑定策略
 
-- [ ] brand submission payload 中纳入图片资产数组
-- [ ] 审核通过时把 draft 归属图片绑定到最终 brand
+- [x] brand submission payload 中纳入图片资产数组
+- [x] 审核通过时把 draft 归属图片绑定到最终 brand
 - [ ] proof 类图片标记为“仅审核可见”
 - [ ] avatar/background/poster 标记为“可公开展示”
 - [ ] 校验 rejected / cancelled submission 是否要保留或清理图片
@@ -336,10 +347,10 @@
 
 验收标准：
 
-- [ ] 创建 brand 前即可上传图片到 draft
-- [ ] 编辑 brand 时草稿图片不会污染线上实体
+- [x] 创建 brand 前即可上传图片到 draft
+- [x] 编辑 brand 时草稿图片不会污染线上实体
 - [ ] 放弃草稿后远端草稿图可清理
-- [ ] 审核通过后图片归属正确
+- [x] 审核通过后图片归属正确
 
 ### Phase 3 - iOS 上传流骨架
 
@@ -347,24 +358,24 @@
 
 #### 3.1 目录与模型
 
-- [ ] 新建 `Features/Discover/Brands/UploadFlow/`
-- [ ] 新建 `OrganizerUploadFlowView.swift`
-- [ ] 新建 `OrganizerUploadFlowViewModel.swift`
-- [ ] 新建 `OrganizerUploadDraft.swift`
-- [ ] 新建 `OrganizerUploadStep.swift`
-- [ ] 新建 `OrganizerUploadValidation.swift`
-- [ ] 新建 `OrganizerUploadMappers.swift`
-- [ ] 新建 `OrganizerUploadDraftStore.swift`
-- [ ] 新建 `OrganizerUploadAnalytics.swift`
+- [x] 新建 `Features/Discover/Brands/UploadFlow/`
+- [x] 新建 `OrganizerUploadFlowView.swift`
+- [x] 新建 `OrganizerUploadFlowViewModel.swift`
+- [x] 新建 `OrganizerUploadDraft.swift`
+- [x] 新建 `OrganizerUploadStep.swift`
+- [x] 新建 `OrganizerUploadValidation.swift`
+- [x] 新建 `OrganizerUploadMappers.swift`
+- [x] 新建 `OrganizerUploadDraftStore.swift`
+- [x] 新建 `OrganizerUploadAnalytics.swift`
 
 #### 3.2 基础 UI 容器
 
-- [ ] 搭建顶部步骤进度条
-- [ ] 搭建底部固定操作栏
-- [ ] 搭建 step 容器切换逻辑
-- [ ] 支持 create / edit 两种 mode
+- [x] 搭建顶部步骤进度条
+- [x] 搭建底部固定操作栏
+- [x] 搭建 step 容器切换逻辑
+- [x] 支持 create / edit 两种 mode
 - [ ] 支持从 `WebLearnFestival` hydrate 到 draft
-- [ ] 支持提交成功页替换编辑器内容
+- [x] 支持提交成功页替换编辑器内容
 
 #### 3.3 路由与入口
 
@@ -479,11 +490,13 @@
 目标：把图片上传体验做成 event 同级。
 
 - [ ] 提交图片前调用 `prepareAuthenticatedRequestForUserAction(source: ...)`
+- [x] iOS 接口层已支持 brand 图片按 `draftId` 上传
 - [ ] 创建态图片按 `draftId` 上传
 - [ ] 编辑态未提交变更图片按 `draftId` 上传
 - [ ] 已持久化图片标记 `persistedBrand`
 - [ ] 单图上传失败支持重试
 - [ ] 替换图片时清理旧草稿图
+- [x] iOS 接口层已支持 brand 图片删除
 - [ ] 删除图片时同步更新 draft
 - [ ] 提交时把图片资产映射到 payload
 
@@ -617,7 +630,13 @@
 - [x] 已约定后续每次执行完成后都回写本文件
 - [x] 已把 brand create / edit 当前真实链路盘点结果回写到 checklist
 - [x] 已把 brand submission service / worker / iOS 返回类型改造同步回 checklist
-- [x] 已记录 backend build 通过与 iOS `SDWebImage` 环境阻塞现状
+- [x] 已修正 iOS 构建结论为必须使用 `RaverMVP.xcworkspace`
+- [x] 已记录 `LearnModuleView` 遗漏的 `CreateContentResult` 兼容修复
+- [x] 已修正 backend build 结论为“当前阻塞来自既有脚本类型错误，非本次 brand 改造”
+- [x] 已补齐 brand 草稿图上传 / 删除 / submission 绑定 / 审核通过回绑的后端闭环
+- [x] 已用 `pnpm --dir server build` 重新验证本轮 brand 图片草稿改造可通过构建
+- [x] 已补齐 iOS brand 图片上传 `draftId` / 删除接口的 service-repository-mock 底座
+- [x] 已用 `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace ... build` 验证本轮 iOS 接口对齐可通过构建
 
 ## 背景与定位
 

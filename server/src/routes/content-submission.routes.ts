@@ -16,7 +16,10 @@ import {
   EventSubmissionConflictError,
 } from '../services/content-submission-event.service';
 import { createOrUpdateDJFromSubmission } from '../services/content-submission-dj.service';
-import { createOrUpdateBrandFromSubmission } from '../services/content-submission-brand.service';
+import {
+  bindBrandDraftMediaToSubmission,
+  createOrUpdateBrandFromSubmission,
+} from '../services/content-submission-brand.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
 import {
@@ -254,6 +257,15 @@ const createSubmissionWithVersion = async (input: {
       },
     });
 
+    if (input.entityType === 'brand') {
+      await bindBrandDraftMediaToSubmission(
+        tx,
+        input.payload as Prisma.JsonObject,
+        input.submitterId,
+        submission.id
+      );
+    }
+
     return submission;
   });
 };
@@ -405,9 +417,6 @@ const createSetFromSubmission = async (payload: Prisma.JsonObject, submitterId: 
   });
 };
 
-const createBrandFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) =>
-  createOrUpdateBrandFromSubmission(prisma, payload, submitterId);
-
 const createLabelFromSubmission = async (payload: Prisma.JsonObject) => {
   const name = cleanText(payload.name);
   if (!name) throw new Error('厂牌名称不能为空');
@@ -546,7 +555,7 @@ const createEntityFromSubmission = async (
     case 'set':
       return createSetFromSubmission(payload, submitterId);
     case 'brand':
-      return createBrandFromSubmission(payload, submitterId);
+      return createOrUpdateBrandFromSubmission(prisma, payload, submitterId, options);
     case 'label':
       return createLabelFromSubmission(payload);
     case 'rating':
@@ -864,7 +873,7 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
 
       return tx.contentSubmission.update({
         where: { id: current.id },
-      data: {
+        data: {
           title,
           payload,
           status: 'processing',
@@ -881,6 +890,15 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
         },
       });
     });
+
+    if (current.entityType === 'brand') {
+      await bindBrandDraftMediaToSubmission(
+        prisma,
+        payload as Prisma.JsonObject,
+        userId,
+        updated.id
+      );
+    }
 
     await scheduleContentSubmissionProcessingBestEffort(updated.id);
     await publishSubmissionStatusNotification({

@@ -15,6 +15,12 @@ final class LiveWebFeatureService: WebFeatureService {
         let urls: [String]
     }
 
+    private struct DeleteWikiBrandImagesRequest: Encodable {
+        let brandId: String?
+        let draftId: String?
+        let urls: [String]
+    }
+
     private let baseURL: URL
     private let session: URLSession
     private let refreshGate = AppAuthRefreshGate.shared
@@ -567,11 +573,15 @@ final class LiveWebFeatureService: WebFeatureService {
         fileName: String,
         mimeType: String,
         brandID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse {
         var fields: [String: String] = [:]
         if let brandID, !brandID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             fields["brandId"] = brandID
+        }
+        if let draftID, !draftID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fields["draftId"] = draftID
         }
         if let usage, !usage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             fields["usage"] = usage
@@ -585,6 +595,27 @@ final class LiveWebFeatureService: WebFeatureService {
             fields: fields
         )
         return response.data
+    }
+
+    func deleteWikiBrandUploadedImages(
+        brandID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        let normalizedURLs = urls
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !normalizedURLs.isEmpty else { return }
+
+        let _: BFFEnvelope<GenericSuccess> = try await request(
+            path: "/v1/wiki/brands/delete-images",
+            method: "POST",
+            body: DeleteWikiBrandImagesRequest(
+                brandId: brandID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                draftId: draftID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+                urls: normalizedURLs
+            )
+        )
     }
 
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage {

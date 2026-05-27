@@ -66,6 +66,7 @@ import {
   attachContentSubmissionChangeSummary,
   changeSummaryTextFromPayload,
 } from '../services/content-submission-change-summary.service';
+import { bindBrandDraftMediaToSubmission } from '../services/content-submission-brand.service';
 import {
   ActiveEventEditSubmissionError,
   assertNoActiveEventEditSubmission,
@@ -618,6 +619,15 @@ const createPendingContentSubmission = async (input: {
         changeNote: 'Initial submission',
       },
     });
+
+    if (input.entityType === 'brand') {
+      await bindBrandDraftMediaToSubmission(
+        tx,
+        payloadWithSummary as Prisma.JsonObject,
+        input.submitterId,
+        submission.id
+      );
+    }
 
     return submission;
   });
@@ -2273,6 +2283,13 @@ const isWikiBrandOssObjectKey = (objectKey: string, brandId: string): boolean =>
   return objectKey.startsWith(`${ossWikiBrandsPrefix}/${safeBrandId}/`);
 };
 
+const isWikiBrandDraftOssObjectKey = (objectKey: string, userId: string, draftId: string): boolean => {
+  const safeUserId = sanitizeOssPathSegment(userId);
+  const safeDraftId = sanitizeOssPathSegment(draftId);
+  if (!safeUserId || !safeDraftId) return false;
+  return objectKey.startsWith(`${ossWikiBrandsPrefix}/drafts/${safeUserId}/${safeDraftId}/`);
+};
+
 const isRatingOssObjectKey = (objectKey: string): boolean => objectKey.startsWith(`${ossRatingsPrefix}/`);
 
 const normalizeDJNameKey = (value: string): string => value.trim().toLowerCase();
@@ -2859,6 +2876,28 @@ const buildWikiBrandMediaObjectKey = (
   const safeBrandId = sanitizeOssPathSegment(brandId || '') || 'unknown-brand';
   const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
   return `${ossWikiBrandsPrefix}/${safeBrandId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const buildWikiBrandDraftMediaObjectKey = (
+  userId: string,
+  draftId: string,
+  fileName: string,
+  mimeType: string,
+  usage: string | null
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = mimeType.includes('png')
+    ? '.png'
+    : mimeType.includes('webp')
+      ? '.webp'
+      : mimeType.includes('gif')
+        ? '.gif'
+        : '.jpg';
+  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const safeUserId = sanitizeOssPathSegment(userId) || 'unknown-user';
+  const safeDraftId = sanitizeOssPathSegment(draftId) || 'unknown-draft';
+  const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
+  return `${ossWikiBrandsPrefix}/drafts/${safeUserId}/${safeDraftId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
 const uploadRemoteDJAvatarToOss = async (
@@ -3828,7 +3867,16 @@ const uploadWikiBrandMediaToOss = async (
   brandId: string | null,
   usage: string | null,
   uploadedById?: string | null
-): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
+): Promise<{
+  assetId: string;
+  url: string;
+  originalUrl: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  ownerType: string;
+  ownerId: string | null;
+}> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
@@ -3869,9 +3917,82 @@ const uploadWikiBrandMediaToOss = async (
   return {
     assetId: asset.id,
     url,
+    originalUrl: url,
     fileName: path.basename(objectKey),
     mimeType,
     size: file.size,
+    ownerType: 'wiki_brand',
+    ownerId: brandId,
+  };
+};
+
+const uploadWikiBrandDraftMediaToOss = async (
+  file: Express.Multer.File,
+  userId: string,
+  draftId: string,
+  usage: string | null
+): Promise<{
+  assetId: string;
+  url: string;
+  originalUrl: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  ownerType: string;
+  ownerId: string;
+}> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  const mimeType = file.mimetype || 'image/jpeg';
+  const objectKey = buildWikiBrandDraftMediaObjectKey(
+    userId,
+    draftId,
+    file.originalname || file.filename || 'image.jpg',
+    mimeType,
+    usage
+  );
+
+  let putResult: { url?: string };
+  try {
+    putResult = await postMediaOssClient.put(objectKey, file.path, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+
+  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const asset = await mediaAssetService.register({
+    ownerType: 'wiki_brand_draft',
+    ownerId: draftId,
+    purpose: usage || 'image',
+    provider: 'oss',
+    objectKey,
+    url,
+    mimeType,
+    sizeBytes: file.size,
+    uploadedById: userId,
+    metadata: {
+      originalName: file.originalname,
+      source: 'v1/wiki/brands/upload-image:draft',
+    },
+  });
+
+  return {
+    assetId: asset.id,
+    url,
+    originalUrl: url,
+    fileName: path.basename(objectKey),
+    mimeType,
+    size: file.size,
+    ownerType: 'wiki_brand_draft',
+    ownerId: draftId,
   };
 };
 
@@ -8447,6 +8568,7 @@ router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.sing
     const authReq = req as BFFAuthRequest;
     const userId = requireAuth(authReq, res);
     if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
 
     const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {
@@ -8462,14 +8584,175 @@ router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.sing
 
     const formBody = req.body as Record<string, unknown>;
     const brandIdRaw = typeof formBody.brandId === 'string' ? formBody.brandId.trim() : '';
+    const draftIdRaw = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
     const usageRaw = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
     const brandId = brandIdRaw.length > 0 ? brandIdRaw : null;
+    const draftId = draftIdRaw.length > 0 ? draftIdRaw : null;
     const usage = usageRaw.length > 0 ? usageRaw : null;
+
+    if (brandId && draftId) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'brandId and draftId cannot be provided together' });
+      return;
+    }
+    if (!brandId && !draftId) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'brandId or draftId is required' });
+      return;
+    }
+
+    if (draftId) {
+      const uploaded = await uploadWikiBrandDraftMediaToOss(file, userId, draftId, usage);
+      ok(res, uploaded);
+      return;
+    }
+
+    const existing = await prisma.wikiFestival.findUnique({
+      where: { id: brandId! },
+      include: {
+        contributors: {
+          select: { userId: true },
+        },
+      },
+    });
+    if (!existing) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(404).json({ error: 'Festival not found' });
+      return;
+    }
+
+    const isContributor = existing.contributors.some((item) => item.userId === userId);
+    const canEdit = viewerRole === 'admin' || isContributor;
+    if (!canEdit) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
 
     const uploaded = await uploadWikiBrandMediaToOss(file, brandId, usage, userId);
     ok(res, uploaded);
   } catch (error) {
     console.error('BFF web upload wiki brand image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/wiki/brands/delete-images', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const brandId = typeof body.brandId === 'string' ? body.brandId.trim() : '';
+    const draftId = typeof body.draftId === 'string' ? body.draftId.trim() : '';
+    const urls = Array.isArray(body.urls)
+      ? body.urls
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+      : [];
+
+    if (!brandId && !draftId) {
+      res.status(400).json({ error: 'brandId or draftId is required' });
+      return;
+    }
+    if (brandId && draftId) {
+      res.status(400).json({ error: 'brandId and draftId cannot be provided together' });
+      return;
+    }
+    if (!urls.length) {
+      ok(res, { success: true });
+      return;
+    }
+
+    if (draftId) {
+      const assets = await prisma.mediaAsset.findMany({
+        where: {
+          ownerType: 'wiki_brand_draft',
+          ownerId: draftId,
+          uploadedById: userId,
+          url: { in: urls },
+          status: { in: ['active', 'replaced'] },
+        },
+        select: {
+          id: true,
+          url: true,
+          objectKey: true,
+        },
+      });
+
+      const keys = assets
+        .filter((asset) => typeof asset.objectKey === 'string' && isWikiBrandDraftOssObjectKey(asset.objectKey, userId, draftId))
+        .map((asset) => asset.objectKey as string);
+
+      for (const asset of assets) {
+        await mediaAssetService.markDeletedByUrl(asset.url);
+      }
+      await deleteOssObjects(keys);
+      ok(res, { success: true });
+      return;
+    }
+
+    const brand = await prisma.wikiFestival.findUnique({
+      where: { id: brandId },
+      include: {
+        contributors: {
+          select: { userId: true },
+        },
+      },
+    });
+    if (!brand) {
+      res.status(404).json({ error: 'Festival not found' });
+      return;
+    }
+
+    const isContributor = brand.contributors.some((item) => item.userId === userId);
+    const canEdit = viewerRole === 'admin' || isContributor;
+    if (!canEdit) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const protectedURLs = new Set<string>();
+    if (typeof brand.avatarUrl === 'string' && brand.avatarUrl.trim()) {
+      protectedURLs.add(brand.avatarUrl.trim().toLowerCase());
+    }
+    if (typeof brand.backgroundUrl === 'string' && brand.backgroundUrl.trim()) {
+      protectedURLs.add(brand.backgroundUrl.trim().toLowerCase());
+    }
+
+    const deletableURLs = urls.filter((url) => !protectedURLs.has(url.toLowerCase()));
+    if (!deletableURLs.length) {
+      ok(res, { success: true });
+      return;
+    }
+
+    const assets = await prisma.mediaAsset.findMany({
+      where: {
+        ownerType: 'wiki_brand',
+        ownerId: brandId,
+        url: { in: deletableURLs },
+        status: { in: ['active', 'replaced'] },
+      },
+      select: {
+        id: true,
+        url: true,
+        objectKey: true,
+      },
+    });
+
+    const keys = assets
+      .filter((asset) => typeof asset.objectKey === 'string' && isWikiBrandOssObjectKey(asset.objectKey, brandId))
+      .map((asset) => asset.objectKey as string);
+
+    for (const asset of assets) {
+      await mediaAssetService.markDeletedByUrl(asset.url);
+    }
+    await deleteOssObjects(keys);
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete wiki brand images error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

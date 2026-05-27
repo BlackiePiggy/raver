@@ -67,8 +67,14 @@ protocol WebFeatureService {
         fileName: String,
         mimeType: String,
         brandID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse
+    func deleteWikiBrandUploadedImages(
+        brandID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws
 
     func fetchDJs(page: Int, limit: Int, search: String?, sortBy: String) async throws -> DJListPage
     func fetchRecommendedDJs(limit: Int) async throws -> [WebDJ]

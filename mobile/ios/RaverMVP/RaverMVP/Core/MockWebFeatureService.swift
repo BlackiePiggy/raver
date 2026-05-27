@@ -1200,19 +1200,45 @@ actor MockWebFeatureService: WebFeatureService {
         fileName: String,
         mimeType: String,
         brandID: String?,
+        draftID: String?,
         usage: String?
     ) async throws -> UploadMediaResponse {
         _ = imageData
+        let safeDraft = draftID?.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeBrand = brandID?.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeUsage = usage?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedBrand = (safeBrand?.isEmpty == false) ? (safeBrand ?? "unknown-brand") : "unknown-brand"
         let resolvedUsage = (safeUsage?.isEmpty == false) ? (safeUsage ?? "image") : "image"
+        if let safeDraft, !safeDraft.isEmpty {
+            return UploadMediaResponse(
+                url: "/uploads/wiki/brands/drafts/\(safeDraft)/\(resolvedUsage)-mock-\(fileName)",
+                originalUrl: "/uploads/wiki/brands/drafts/\(safeDraft)/\(resolvedUsage)-mock-\(fileName)",
+                fileName: fileName,
+                mimeType: mimeType,
+                size: 1,
+                ownerType: "wiki_brand_draft",
+                ownerId: safeDraft
+            )
+        }
+        let resolvedBrand = (safeBrand?.isEmpty == false) ? (safeBrand ?? "unknown-brand") : "unknown-brand"
         return UploadMediaResponse(
             url: "/uploads/wiki/brands/\(resolvedBrand)/\(resolvedUsage)-mock-\(fileName)",
+            originalUrl: "/uploads/wiki/brands/\(resolvedBrand)/\(resolvedUsage)-mock-\(fileName)",
             fileName: fileName,
             mimeType: mimeType,
-            size: 1
+            size: 1,
+            ownerType: "wiki_brand",
+            ownerId: resolvedBrand
         )
+    }
+
+    func deleteWikiBrandUploadedImages(
+        brandID: String?,
+        draftID: String?,
+        urls: [String]
+    ) async throws {
+        _ = brandID
+        _ = draftID
+        _ = urls
     }
 
     func uploadDJImage(

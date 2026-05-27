@@ -1901,6 +1901,8 @@ struct UploadMediaResponse: Codable, Hashable {
     var fileName: String
     var mimeType: String
     var size: Int
+    var ownerType: String? = nil
+    var ownerId: String? = nil
 }
 
 struct EventLineupImageImportItem: Codable, Hashable, Identifiable {
