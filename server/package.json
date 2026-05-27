@@ -80,6 +80,8 @@
     "media:uploads:migrate-oss:apply": "ts-node src/scripts/migrate-local-uploads-to-oss.ts --apply",
     "media:uploads:reconcile": "ts-node src/scripts/migrate-local-uploads-to-oss.ts --reconcile",
     "media:uploads:reconcile:apply": "ts-node src/scripts/migrate-local-uploads-to-oss.ts --apply --reconcile",
+    "media:oss-hosts:migrate": "ts-node src/scripts/migrate-oss-host-urls.ts",
+    "media:oss-hosts:migrate:apply": "ts-node src/scripts/migrate-oss-host-urls.ts --apply",
     "share-links:smoke": "ts-node src/scripts/share-link-smoke.ts",
     "share-invites:smoke": "ts-node src/scripts/share-invite-smoke.ts",
     "squad:offline-demo": "ts-node src/scripts/seed-squad-offline-activity-demo.ts",

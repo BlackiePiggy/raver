@@ -77,6 +77,7 @@
 		3904070764292DABFC7E6F9B /* DemoAlignedChatSearchResultsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3872D49167C1A850138F91 /* DemoAlignedChatSearchResultsViewController.swift */; };
 		394035E581D2CB2205F3B616 /* DJUploadValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B61B33EA7093B4834782FCD3 /* DJUploadValidation.swift */; };
 		3B7AF8D25BBC7664722974CB /* ImageLoaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587F3AE5F94F3B906F641F5C /* ImageLoaderView.swift */; };
+		3BB9D6F92D4A1C5E7A91F203 /* MediaPreviewOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB9D6F82D4A1C5E7A91F203 /* MediaPreviewOverlay.swift */; };
 		3E415A85CF9129D45A8EA3F1 /* GlobalSearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19DD2085CCEEDED33F617E3C /* GlobalSearchModels.swift */; };
 		3EE83F344D1643C661625371 /* RecommendEventsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203242BB1BD2E82C81729C2C /* RecommendEventsViewModel.swift */; };
 		3F4AB59901BAC2520B33161F /* RaverMVPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09147CC250EE9B48A01FAA78 /* RaverMVPApp.swift */; };
@@ -451,6 +452,7 @@
 		581792D7AA4E89244B39D8B2 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		585B34854444ECDCEDAABB14 /* DemoAlignedChatScreenAssemblyPlanBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedChatScreenAssemblyPlanBuilder.swift; sourceTree = "<group>"; };
 		587F3AE5F94F3B906F641F5C /* ImageLoaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageLoaderView.swift; sourceTree = "<group>"; };
+		3BB9D6F82D4A1C5E7A91F203 /* MediaPreviewOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewOverlay.swift; sourceTree = "<group>"; };
 		58DA7470156F9993DC0CFC4A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		58DB7DEA399D18F3F93D63D7 /* DJsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJsModuleView.swift; sourceTree = "<group>"; };
 		593206FEE83459667A0A3851 /* ChatItemAlignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatItemAlignment.swift; sourceTree = "<group>"; };
@@ -1627,6 +1629,7 @@
 			children = (
 				D0B45B928FAA36BEC68A7B7E /* GlassCard.swift */,
 				587F3AE5F94F3B906F641F5C /* ImageLoaderView.swift */,
+				3BB9D6F82D4A1C5E7A91F203 /* MediaPreviewOverlay.swift */,
 				4A10D4C2B18B58489A03E3FD /* PostCardView.swift */,
 				93D5E00041C5689BD07853B7 /* PrimaryButtonStyle.swift */,
 				251FD05102AAEC3A1C79511B /* RaverNavigationChrome.swift */,
@@ -2059,6 +2062,7 @@
 				91EA09EDBD82B0FF3B773345 /* IMStorageGovernance.swift in Sources */,
 				EC339CD9AD3C63511278D18E /* ImageCacheBootstrap.swift in Sources */,
 				3B7AF8D25BBC7664722974CB /* ImageLoaderView.swift in Sources */,
+				3BB9D6F92D4A1C5E7A91F203 /* MediaPreviewOverlay.swift in Sources */,
 				B7B6140D6FB5F0D1228262DA /* ImageMaskedView.swift in Sources */,
 				FA9899B15DB41CDE8229205C /* IndexPath+Extension.swift in Sources */,
 				EBB3A26E3C850552AED87CAB /* ItemKind.swift in Sources */,

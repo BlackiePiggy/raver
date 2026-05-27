@@ -5969,12 +5969,18 @@ struct LearnFestivalDetailView: View {
                 }
             )
 
-            let persisted = try await wikiRepository.updateLearnFestival(id: updated.id, input: payload)
-            let hydrated = LearnFestival(web: persisted)
-            currentFestival = hydrated
-            onFestivalUpdated?(hydrated)
-            showFestivalEditSheet = false
-            errorMessage = LT("电音节信息已更新", "Festival info updated.", "フェス情報を更新しました。")
+            let result = try await wikiRepository.updateLearnFestival(id: updated.id, input: payload)
+            switch result {
+            case .created(let persisted):
+                let hydrated = LearnFestival(web: persisted)
+                currentFestival = hydrated
+                onFestivalUpdated?(hydrated)
+                showFestivalEditSheet = false
+                errorMessage = LT("电音节信息已更新", "Festival info updated.", "フェス情報を更新しました。")
+            case .submittedForReview:
+                showFestivalEditSheet = false
+                errorMessage = LT("品牌编辑任务已提交审核", "Brand edit submitted for review.", "ブランド編集を審査に送信しました。")
+            }
         } catch {
             errorMessage = LT("保存失败：\(error.userFacingMessage ?? "")", "Save failed: \(error.userFacingMessage ?? "")", "保存に失敗しました: \(error.userFacingMessage ?? "")")
         }
@@ -6620,10 +6626,16 @@ struct LearnFestivalEditorView: View {
                     }
                 )
 
-                let persisted = try await wikiRepository.updateLearnFestival(id: editing.id, input: payload)
-                let hydrated = LearnFestival(web: persisted)
-                onSaved(hydrated)
-                dismiss()
+                let result = try await wikiRepository.updateLearnFestival(id: editing.id, input: payload)
+                switch result {
+                case .created(let persisted):
+                    let hydrated = LearnFestival(web: persisted)
+                    onSaved(hydrated)
+                    dismiss()
+                case .submittedForReview:
+                    OperationBannerCenter.shared.success(LT("品牌编辑任务已提交审核", "Brand edit submitted for review", "ブランド編集を審査に送信しました"))
+                    dismiss()
+                }
             } else {
                 let normalizedWebsite = normalizeURL(website)
                 let links: [LearnFestivalLinkPayload] = {
@@ -6677,7 +6689,7 @@ struct LearnFestivalEditorView: View {
                 }
 
                 if uploadedAvatarURL != nil || uploadedBackgroundURL != nil {
-                    created = try await wikiRepository.updateLearnFestival(
+                    let updateResult = try await wikiRepository.updateLearnFestival(
                         id: created.id,
                         input: UpdateLearnFestivalInput(
                             name: nil,
@@ -6693,6 +6705,9 @@ struct LearnFestivalEditorView: View {
                             links: nil
                         )
                     )
+                    if case .created(let updatedFestival) = updateResult {
+                        created = updatedFestival
+                    }
                 }
 
                 let hydrated = LearnFestival(web: created)

@@ -2987,15 +2987,8 @@ private func aiRecognitionPreviewPresentation(
 }
 
 private func aiRecognitionPreviewOverlayButton(action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-        Image(systemName: "magnifyingglass")
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.white)
-            .frame(width: 26, height: 26)
-            .background(Color.black.opacity(0.58), in: Circle())
-    }
-    .buttonStyle(.plain)
-    .padding(8)
+    MediaPreviewOverlayButton(action: action)
+        .padding(8)
 }
 
 private func aiRecognitionCanPreview(_ image: EventUploadImageDraft) -> Bool {
@@ -3096,36 +3089,34 @@ private struct EventUploadPosterAIImportSheet: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        ZStack(alignment: .topTrailing) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                posterAIImagePreview(image)
-                                Text(image.zone.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                    .lineLimit(1)
-                                Text(image.fileName)
-                                    .font(.caption2)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                    .lineLimit(1)
-                            }
-                            .padding(8)
-                            .background(RaverTheme.card, in: shape)
-                            .overlay(
-                                shape
-                                    .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
-                            )
-                            .contentShape(shape)
-                            .onTapGesture {
-                                guard !isRunning else { return }
-                                selectedImageID = image.id
-                            }
-
+                        VStack(alignment: .leading, spacing: 8) {
+                            posterAIImagePreview(image)
+                            Text(image.zone.title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(1)
+                            Text(image.fileName)
+                                .font(.caption2)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+                        .padding(8)
+                        .background(RaverTheme.card, in: shape)
+                        .overlay(
+                            shape
+                                .stroke(selectedImageID == image.id ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageID == image.id ? 2 : 1)
+                        )
+                        .overlay(alignment: .topTrailing) {
                             if aiRecognitionCanPreview(image) {
                                 aiRecognitionPreviewOverlayButton {
                                     previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
                                 }
-                                .zIndex(1)
                             }
+                        }
+                        .contentShape(shape)
+                        .onTapGesture {
+                            guard !isRunning else { return }
+                            selectedImageID = image.id
                         }
                     }
                 }
@@ -3985,43 +3976,41 @@ private struct EventUploadLineupAIImportSheet: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        ZStack(alignment: .topTrailing) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                imagePreview(image)
-                                HStack(alignment: .top, spacing: 6) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(image.zone.title)
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(RaverTheme.primaryText)
-                                            .lineLimit(1)
-                                        Text(image.fileName)
-                                            .font(.caption2)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer(minLength: 0)
-                                    Image(systemName: selectedImageIDs.contains(image.id) ? "checkmark.circle.fill" : "circle")
-                                        .font(.headline)
-                                        .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                        VStack(alignment: .leading, spacing: 8) {
+                            imagePreview(image)
+                            HStack(alignment: .top, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(image.zone.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    Text(image.fileName)
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(1)
                                 }
+                                Spacer(minLength: 0)
+                                Image(systemName: selectedImageIDs.contains(image.id) ? "checkmark.circle.fill" : "circle")
+                                    .font(.headline)
+                                    .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
                             }
-                            .padding(8)
-                            .background(RaverTheme.card, in: shape)
-                            .overlay(
-                                shape
-                                    .stroke(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageIDs.contains(image.id) ? 2 : 1)
-                            )
-                            .contentShape(shape)
-                            .onTapGesture {
-                                toggleImageSelection(image.id)
-                            }
-
+                        }
+                        .padding(8)
+                        .background(RaverTheme.card, in: shape)
+                        .overlay(
+                            shape
+                                .stroke(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageIDs.contains(image.id) ? 2 : 1)
+                        )
+                        .overlay(alignment: .topTrailing) {
                             if aiRecognitionCanPreview(image) {
                                 aiRecognitionPreviewOverlayButton {
                                     previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
                                 }
-                                .zIndex(1)
                             }
+                        }
+                        .contentShape(shape)
+                        .onTapGesture {
+                            toggleImageSelection(image.id)
                         }
                     }
                 }
@@ -4093,15 +4082,14 @@ private struct EventUploadLineupAIImportSheet: View {
     private func taskCard(_ entry: RecognitionTaskEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                ZStack(alignment: .topTrailing) {
-                    imagePreview(entry.image)
-                    if aiRecognitionCanPreview(entry.image) {
-                        aiRecognitionPreviewOverlayButton {
-                            previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                imagePreview(entry.image)
+                    .overlay(alignment: .topTrailing) {
+                        if aiRecognitionCanPreview(entry.image) {
+                            aiRecognitionPreviewOverlayButton {
+                                previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                            }
                         }
-                        .zIndex(1)
                     }
-                }
                 .frame(width: 88, height: 72)
                 .clipped()
 
@@ -5125,43 +5113,41 @@ private struct EventUploadTimetableAIImportSheet: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(images) { image in
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        ZStack(alignment: .topTrailing) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                timetableAIImagePreview(image)
-                                HStack(alignment: .top, spacing: 6) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(image.zone.title)
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(RaverTheme.primaryText)
-                                            .lineLimit(1)
-                                        Text(image.fileName)
-                                            .font(.caption2)
-                                            .foregroundStyle(RaverTheme.secondaryText)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer(minLength: 0)
-                                    Image(systemName: selectedImageIDs.contains(image.id) ? "checkmark.circle.fill" : "circle")
-                                        .font(.headline)
-                                        .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                        VStack(alignment: .leading, spacing: 8) {
+                            timetableAIImagePreview(image)
+                            HStack(alignment: .top, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(image.zone.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    Text(image.fileName)
+                                        .font(.caption2)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineLimit(1)
                                 }
+                                Spacer(minLength: 0)
+                                Image(systemName: selectedImageIDs.contains(image.id) ? "checkmark.circle.fill" : "circle")
+                                    .font(.headline)
+                                    .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
                             }
-                            .padding(8)
-                            .background(RaverTheme.card, in: shape)
-                            .overlay(
-                                shape
-                                    .stroke(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageIDs.contains(image.id) ? 2 : 1)
-                            )
-                            .contentShape(shape)
-                            .onTapGesture {
-                                toggleImageSelection(image.id)
-                            }
-
+                        }
+                        .padding(8)
+                        .background(RaverTheme.card, in: shape)
+                        .overlay(
+                            shape
+                                .stroke(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: selectedImageIDs.contains(image.id) ? 2 : 1)
+                        )
+                        .overlay(alignment: .topTrailing) {
                             if aiRecognitionCanPreview(image) {
                                 aiRecognitionPreviewOverlayButton {
                                     previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: image.id)
                                 }
-                                .zIndex(1)
                             }
+                        }
+                        .contentShape(shape)
+                        .onTapGesture {
+                            toggleImageSelection(image.id)
                         }
                     }
                 }
@@ -5233,15 +5219,14 @@ private struct EventUploadTimetableAIImportSheet: View {
     private func taskCard(_ entry: RecognitionTaskEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                ZStack(alignment: .topTrailing) {
-                    timetableAIImagePreview(entry.image)
-                    if aiRecognitionCanPreview(entry.image) {
-                        aiRecognitionPreviewOverlayButton {
-                            previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                timetableAIImagePreview(entry.image)
+                    .overlay(alignment: .topTrailing) {
+                        if aiRecognitionCanPreview(entry.image) {
+                            aiRecognitionPreviewOverlayButton {
+                                previewPresentation = aiRecognitionPreviewPresentation(images: images, focusedImageID: entry.image.id)
+                            }
                         }
-                        .zIndex(1)
                     }
-                }
                 .frame(width: 88, height: 72)
                 .clipped()
 

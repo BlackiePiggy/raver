@@ -1531,13 +1531,18 @@ final class LiveWebFeatureService: WebFeatureService {
         }
     }
 
-    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
-        let response: BFFEnvelope<WebLearnFestival> = try await request(
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival> {
+        let response: BFFEnvelope<CreateContentResult<WebLearnFestival>> = try await request(
             path: "/v1/learn/festivals/\(id)",
             method: "PATCH",
             body: input
         )
-        return localizedLearnFestival(response.data)
+        switch response.data {
+        case .created(let festival):
+            return .created(localizedLearnFestival(festival))
+        case .submittedForReview(let payload):
+            return .submittedForReview(payload)
+        }
     }
 
     func fetchRankingBoards() async throws -> [RankingBoard] {

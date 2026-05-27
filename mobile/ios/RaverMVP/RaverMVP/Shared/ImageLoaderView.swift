@@ -352,9 +352,7 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
 
         if context.coordinator.resetToken != resetToken {
             context.coordinator.resetToken = resetToken
-            scrollView.setZoomScale(minimumZoomScale, animated: false)
-            scrollView.contentOffset = .zero
-            context.coordinator.centerImage()
+            context.coordinator.resetImagePosition()
         }
     }
 
@@ -406,12 +404,11 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
             loadTask?.cancel()
             imageView?.image = nil
             setLoading(true)
-            scrollView?.setZoomScale(scrollView?.minimumZoomScale ?? 1, animated: false)
-            scrollView?.contentOffset = .zero
+            resetImagePosition()
 
             if url.isFileURL {
                 imageView?.image = UIImage(contentsOfFile: url.path)
-                centerImage()
+                recenterAfterLayout()
                 setLoading(false)
                 return
             }
@@ -423,7 +420,7 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
                     if let data, let image = UIImage(data: data) {
                         self.imageView?.image = image
                     }
-                    self.centerImage()
+                    self.recenterAfterLayout()
                     self.setLoading(false)
                 }
             }
@@ -441,8 +438,35 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
             }
         }
 
-        func centerImage() {
+        func resetImagePosition() {
+            guard let scrollView else { return }
+            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: false)
+            centerImage(adjustContentOffset: true)
+            recenterAfterLayout()
+        }
+
+        func recenterAfterLayout() {
+            centerImage(adjustContentOffset: true)
+
+            // The first async image callback can arrive before Auto Layout has
+            // finalized the zoom container frame, especially inside paged TabViews.
+            // Re-centering on the next run loop keeps the initial presentation stable.
+            DispatchQueue.main.async { [weak self] in
+                self?.centerImage(adjustContentOffset: true)
+            }
+        }
+
+        func centerImage(adjustContentOffset: Bool = false) {
             guard let scrollView, let imageView else { return }
+            scrollView.layoutIfNeeded()
+
+            guard scrollView.bounds.width > 0,
+                  scrollView.bounds.height > 0,
+                  imageView.frame.width > 0,
+                  imageView.frame.height > 0 else {
+                return
+            }
+
             let horizontalInset = max(0, (scrollView.bounds.width - imageView.frame.width) / 2)
             let verticalInset = max(0, (scrollView.bounds.height - imageView.frame.height) / 2)
             scrollView.contentInset = UIEdgeInsets(
@@ -451,6 +475,14 @@ private struct FullscreenZoomableImageScrollView: UIViewRepresentable {
                 bottom: verticalInset,
                 right: horizontalInset
             )
+
+            guard adjustContentOffset else { return }
+
+            let centeredOffset = CGPoint(x: -horizontalInset, y: -verticalInset)
+            if abs(scrollView.contentOffset.x - centeredOffset.x) > 0.5 ||
+                abs(scrollView.contentOffset.y - centeredOffset.y) > 0.5 {
+                scrollView.contentOffset = centeredOffset
+            }
         }
     }
 }

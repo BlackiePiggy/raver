@@ -411,7 +411,7 @@ protocol DiscoverWikiRepository {
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel>
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
     func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival>
-    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival>
     func uploadWikiBrandImage(
         imageData: Data,
         fileName: String,
@@ -490,7 +490,7 @@ struct DiscoverWikiRepositoryAdapter: DiscoverWikiRepository {
         try await service.createLearnFestival(input: input)
     }
 
-    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival> {
         try await service.updateLearnFestival(id: id, input: input)
     }
 

@@ -187,6 +187,7 @@ struct EditProfileView: View {
     @State private var pendingBackgroundData: Data?
     @State private var uploadedBackgroundURL: String?
     @State private var isUploadingBackgroundOnSave = false
+    @State private var selectedBackgroundPreview: FullscreenMediaSelection?
     @State private var availableGenreTags: [String] = []
     @State private var tagSearchText = ""
     @State private var isLoadingGenreTags = false
@@ -410,6 +411,11 @@ struct EditProfileView: View {
                 isLoading: isLoadingGenreTags
             )
         }
+        .fullScreenCover(item: $selectedBackgroundPreview) { selection in
+            if let previewItem = backgroundPreviewItem {
+                FullscreenMediaViewer(items: [previewItem], initialIndex: selection.id)
+            }
+        }
     }
 
     private static func preparedAvatarData(from data: Data) -> Data {
@@ -466,31 +472,9 @@ struct EditProfileView: View {
 
     @ViewBuilder
     private var backgroundPreview: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let pendingBackgroundData,
-               let image = UIImage(data: pendingBackgroundData) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if let resolved = AppConfig.resolvedURLString(currentBackgroundURL),
-                      URL(string: resolved) != nil,
-                      resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                ImageLoaderView(urlString: resolved)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(RaverTheme.card)
-                    )
-            } else {
-                LinearGradient(
-                    colors: [
-                        RaverTheme.accent.opacity(0.42),
-                        Color.black.opacity(0.18),
-                        RaverTheme.card
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        ZStack {
+            backgroundPreviewImageLayer
 
             LinearGradient(
                 colors: [
@@ -501,14 +485,58 @@ struct EditProfileView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-
+            .allowsHitTesting(false)
+        }
+        .frame(height: 164)
+        .background(RaverTheme.card, in: shape)
+        .clipShape(shape)
+        .contentShape(shape)
+        .onTapGesture {
+            guard backgroundPreviewItem != nil else { return }
+            selectedBackgroundPreview = FullscreenMediaSelection(id: 0)
+        }
+        .overlay(alignment: .bottomLeading) {
             Text(LT("个人主页背景图", "Profile Background", "プロフィール背景"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.black.opacity(0.22), in: Capsule())
                 .padding(14)
         }
-        .frame(height: 164)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .mediaPreviewOverlay(
+            isVisible: backgroundPreviewItem != nil,
+            padding: 12,
+            buttonSize: 28
+        ) {
+            selectedBackgroundPreview = FullscreenMediaSelection(id: 0)
+        }
+        .overlay(shape.stroke(RaverTheme.cardBorder, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var backgroundPreviewImageLayer: some View {
+        if let pendingBackgroundData,
+           let image = UIImage(data: pendingBackgroundData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else if let resolved = AppConfig.resolvedURLString(currentBackgroundURL),
+                  URL(string: resolved) != nil,
+                  resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
+            ImageLoaderView(urlString: resolved)
+                .background(RaverTheme.card)
+        } else {
+            LinearGradient(
+                colors: [
+                    RaverTheme.accent.opacity(0.42),
+                    Color.black.opacity(0.18),
+                    RaverTheme.card
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     @MainActor
@@ -752,6 +780,32 @@ struct EditProfileView: View {
 
     private var isProfileSaveBusy: Bool {
         viewModel.isSaving || isUploadingBackgroundOnSave
+    }
+
+    private var backgroundPreviewItem: FullscreenMediaItem? {
+        if let pendingBackgroundData {
+            let fileURL = writeTemporaryBackgroundPreview(data: pendingBackgroundData)
+            return fileURL.map { FullscreenMediaItem(rawURL: $0.absoluteString, index: 0) }
+        }
+
+        if let resolved = AppConfig.resolvedURLString(currentBackgroundURL),
+           !resolved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return FullscreenMediaItem(rawURL: resolved, index: 0)
+        }
+
+        return nil
+    }
+
+    private func writeTemporaryBackgroundPreview(data: Data) -> URL? {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("raver-profile-preview", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+            let fileURL = directory.appendingPathComponent("background-preview.jpg")
+            try data.write(to: fileURL, options: .atomic)
+            return fileURL
+        } catch {
+            return nil
+        }
     }
 
     private var selectedTagsSummary: String {

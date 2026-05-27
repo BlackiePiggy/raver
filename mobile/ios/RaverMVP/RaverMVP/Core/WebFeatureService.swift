@@ -179,7 +179,7 @@ protocol WebFeatureService {
     func createLearnLabel(input: CreateLearnLabelInput) async throws -> CreateContentResult<LearnLabel>
     func fetchLearnFestivals(search: String?) async throws -> [WebLearnFestival]
     func createLearnFestival(input: CreateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival>
-    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival>
     func fetchRankingBoards() async throws -> [RankingBoard]
     func fetchRankingBoardDetail(boardID: String, year: Int?) async throws -> RankingBoardDetail
     func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse

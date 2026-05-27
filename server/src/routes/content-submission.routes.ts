@@ -16,6 +16,7 @@ import {
   EventSubmissionConflictError,
 } from '../services/content-submission-event.service';
 import { createOrUpdateDJFromSubmission } from '../services/content-submission-dj.service';
+import { createOrUpdateBrandFromSubmission } from '../services/content-submission-brand.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
 import {
@@ -275,17 +276,6 @@ const uniqueLabelSlug = async (name: string, requestedSlug?: string): Promise<st
   return candidate;
 };
 
-const uniqueWikiFestivalIdForName = async (name: string): Promise<string> => {
-  const base = slugify(name) || `brand-${Date.now()}`;
-  let candidate = base;
-  let seq = 1;
-  while (await prisma.wikiFestival.findUnique({ where: { id: candidate }, select: { id: true } })) {
-    seq += 1;
-    candidate = `${base}-${seq}`;
-  }
-  return candidate;
-};
-
 const uniqueDJSetSlug = async (title: string, requestedSlug?: string): Promise<string> => {
   const base = slugify(requestedSlug || title) || `set-${Date.now()}`;
   let candidate = base;
@@ -415,38 +405,8 @@ const createSetFromSubmission = async (payload: Prisma.JsonObject, submitterId: 
   });
 };
 
-const createBrandFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
-  const name = cleanText(payload.name);
-  if (!name) throw new Error('品牌名称不能为空');
-  const id = await uniqueWikiFestivalIdForName(name);
-  return prisma.wikiFestival.create({
-    data: {
-      id,
-      sourceRowId: integerOrNull(payload.sourceRowId),
-      name,
-      nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
-      abbreviation: cleanText(payload.abbreviation) || '',
-      aliases: stringArray(payload.aliases),
-      country: cleanText(payload.country) || '',
-      city: cleanText(payload.city) || '',
-      foundedYear: cleanText(payload.foundedYear) || '',
-      frequency: cleanText(payload.frequency) || '',
-      tagline: cleanText(payload.tagline) || '',
-      introduction: cleanText(payload.introduction) || cleanText(payload.description) || '',
-      descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.introduction) || cleanText(payload.description) || '')),
-      officialWebsite: cleanText(payload.officialWebsite) || null,
-      facebookUrl: cleanText(payload.facebookUrl) || null,
-      instagramUrl: cleanText(payload.instagramUrl) || null,
-      twitterUrl: cleanText(payload.twitterUrl) || null,
-      youtubeUrl: cleanText(payload.youtubeUrl) || null,
-      tiktokUrl: cleanText(payload.tiktokUrl) || null,
-      avatarUrl: cleanText(payload.avatarUrl) || null,
-      backgroundUrl: cleanText(payload.backgroundUrl) || null,
-      links: (payload.links as Prisma.InputJsonValue | undefined) ?? undefined,
-      contributors: { create: { userId: submitterId } },
-    } as any,
-  });
-};
+const createBrandFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) =>
+  createOrUpdateBrandFromSubmission(prisma, payload, submitterId);
 
 const createLabelFromSubmission = async (payload: Prisma.JsonObject) => {
   const name = cleanText(payload.name);

@@ -14,6 +14,7 @@ struct EventUploadImageZoneCard: View {
     let onMove: (UUID, Int) -> Void
 
     @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var previewPresentation: EventUploadImagePreviewPresentation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -121,6 +122,9 @@ struct EventUploadImageZoneCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(isRequired && images.isEmpty ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: 1)
         )
+        .fullScreenCover(item: $previewPresentation) { presentation in
+            FullscreenMediaViewer(items: presentation.items, initialIndex: presentation.initialIndex)
+        }
     }
 
     private func imageActionLabel(title: String, systemImage: String) -> some View {
@@ -188,6 +192,11 @@ struct EventUploadImageZoneCard: View {
                 .overlay {
                     thumbnailStatusOverlay(for: image)
                 }
+                .overlay(alignment: .topTrailing) {
+                    if canPreview(image), !uploadingImageIDs.contains(image.id) {
+                        previewOverlayButton(for: image.id)
+                    }
+                }
         } else if let remoteURL = image.remoteURL,
                   let url = URL(string: AppConfig.resolvedURLString(remoteURL) ?? remoteURL) {
             AsyncImage(url: url) { phase in
@@ -211,6 +220,11 @@ struct EventUploadImageZoneCard: View {
             .overlay {
                 thumbnailStatusOverlay(for: image)
             }
+            .overlay(alignment: .topTrailing) {
+                if canPreview(image), !uploadingImageIDs.contains(image.id) {
+                    previewOverlayButton(for: image.id)
+                }
+            }
         } else {
             Image(systemName: "photo")
                 .font(.caption.weight(.semibold))
@@ -222,6 +236,11 @@ struct EventUploadImageZoneCard: View {
                 .contentShape(shape)
                 .overlay {
                     thumbnailStatusOverlay(for: image)
+                }
+                .overlay(alignment: .topTrailing) {
+                    if canPreview(image), !uploadingImageIDs.contains(image.id) {
+                        previewOverlayButton(for: image.id)
+                    }
                 }
         }
     }
@@ -246,4 +265,49 @@ struct EventUploadImageZoneCard: View {
             }
         }
     }
+
+    private func previewOverlayButton(for imageID: UUID) -> some View {
+        MediaPreviewOverlayButton(size: 24, iconSize: 11) {
+            previewPresentation = makePreviewPresentation(focusedImageID: imageID)
+        }
+        .padding(6)
+    }
+
+    private func canPreview(_ image: EventUploadImageDraft) -> Bool {
+        previewRawURL(for: image) != nil
+    }
+
+    private func previewRawURL(for image: EventUploadImageDraft) -> String? {
+        if let localFileURL = image.localFileURL {
+            return localFileURL.absoluteString
+        }
+        if let remoteURL = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !remoteURL.isEmpty {
+            return remoteURL
+        }
+        return nil
+    }
+
+    private func makePreviewPresentation(focusedImageID: UUID) -> EventUploadImagePreviewPresentation? {
+        var items: [FullscreenMediaItem] = []
+        var initialIndex: Int?
+
+        for image in images {
+            guard let rawURL = previewRawURL(for: image) else { continue }
+            let itemIndex = items.count
+            items.append(FullscreenMediaItem(rawURL: rawURL, index: itemIndex))
+            if image.id == focusedImageID {
+                initialIndex = itemIndex
+            }
+        }
+
+        guard let initialIndex, !items.isEmpty else { return nil }
+        return EventUploadImagePreviewPresentation(items: items, initialIndex: initialIndex)
+    }
+}
+
+private struct EventUploadImagePreviewPresentation: Identifiable {
+    let id = UUID()
+    let items: [FullscreenMediaItem]
+    let initialIndex: Int
 }

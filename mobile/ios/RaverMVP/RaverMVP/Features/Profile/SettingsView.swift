@@ -3,6 +3,7 @@ import AVFoundation
 import CoreLocation
 import Foundation
 import Photos
+import SDWebImage
 import UIKit
 import UserNotifications
 
@@ -119,7 +120,7 @@ struct SettingsView: View {
                 // 数据与存储
                 Section(LT("数据与存储", "Data & Storage", "データとストレージ")) {
                     NavigationLink {
-                        Text(LT("缓存管理", "Cache Management", "キャッシュ管理"))
+                        CacheManagementSettingsView()
                     } label: {
                         Label(LT("缓存管理", "Cache Management", "キャッシュ管理"), systemImage: "externaldrive")
                     }
@@ -1537,6 +1538,759 @@ private struct ThemeSettingsView: View {
         .scrollContentBackground(.hidden)
         .background(RaverTheme.background)
         .raverSystemNavigation(title: LT("主题设置", "Appearance", "テーマ設定"))
+    }
+}
+
+private struct CacheManagementSettingsView: View {
+    @StateObject private var model = CacheManagementSettingsModel()
+    @State private var pendingClearTarget: CacheClearTarget?
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(LT("当前缓存占用", "Current Cache Usage", "現在のキャッシュ使用量"))
+                        .font(.headline)
+
+                    Text(model.formattedTotalBytes)
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    Text(
+                        LT(
+                            "可立即清理 \(model.formattedClearableBytes)。只会删除本地可重建缓存，不影响账号、草稿和已发布内容。",
+                            "You can safely clear \(model.formattedClearableBytes) now. This only removes rebuildable local cache and does not affect your account, drafts, or published content.",
+                            "今すぐ \(model.formattedClearableBytes) を安全に削除できます。再生成可能なローカルキャッシュのみを削除し、アカウント、下書き、公開済みコンテンツには影響しません。"
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                    if model.isLoading {
+                        ProgressView()
+                    } else {
+                        HStack(spacing: 12) {
+                            Button(LT("刷新", "Refresh", "再読み込み")) {
+                                Task { await model.refresh() }
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(LT("清理全部安全缓存", "Clear All Safe Cache", "安全なキャッシュをすべて削除")) {
+                                pendingClearTarget = .all
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.isClearing || model.clearableBytes == 0)
+                        }
+                    }
+                }
+                .padding(.vertical, 6)
+            } footer: {
+                Text(
+                    LT(
+                        "IM 本地数据库当前只展示占用，不在这里直接删，避免影响正在使用中的消息 SDK。图片、离线活动/DJ、消息媒体与本地快照可以安全清理。",
+                        "The IM local database is measured here but not deleted directly to avoid interfering with the live messaging SDK. Images, offline event/DJ cache, message media, and local snapshots are safe to clear.",
+                        "IM のローカルデータベースは使用量のみ表示し、稼働中のメッセージ SDK への影響を避けるためここでは直接削除しません。画像、オフラインイベント/DJ、メッセージメディア、ローカルスナップショットは安全に削除できます。"
+                    )
+                )
+            }
+
+            Section(LT("缓存分类", "Cache Categories", "キャッシュ分類")) {
+                ForEach(model.snapshot.categories) { category in
+                    cacheRow(category)
+                }
+            }
+
+            if let lastUpdatedText = model.lastUpdatedText {
+                Section {
+                    Text(
+                        LT(
+                            "最近统计时间：\(lastUpdatedText)",
+                            "Last measured: \(lastUpdatedText)",
+                            "最終計測: \(lastUpdatedText)"
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: LT("缓存管理", "Cache Management", "キャッシュ管理"))
+        .task {
+            await model.refresh()
+        }
+        .refreshable {
+            await model.refresh()
+        }
+        .confirmationDialog(
+            confirmationTitle,
+            isPresented: Binding(
+                get: { pendingClearTarget != nil },
+                set: { if !$0 { pendingClearTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(confirmationActionTitle, role: .destructive) {
+                guard let pendingClearTarget else { return }
+                Task {
+                    await model.clear(target: pendingClearTarget)
+                    self.pendingClearTarget = nil
+                }
+            }
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
+                pendingClearTarget = nil
+            }
+        } message: {
+            Text(confirmationMessage)
+        }
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+            get: { model.noticeMessage != nil },
+            set: { if !$0 { model.noticeMessage = nil } }
+        )) {
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
+        } message: {
+            Text(model.noticeMessage ?? "")
+        }
+    }
+
+    private func cacheRow(_ category: CacheCategorySummary) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: category.iconName)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(category.isClearable ? RaverTheme.accent : RaverTheme.secondaryText)
+                    .frame(width: 26)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(category.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+
+                        if !category.isClearable {
+                            Text(LT("自动治理", "Auto-managed", "自動管理"))
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(RaverTheme.secondaryText.opacity(0.14)))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+
+                    Text(category.description)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    if let detail = category.detail {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText.opacity(0.9))
+                    }
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(ByteCountFormatter.raverString(fromByteCount: category.totalBytes))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if let countText = category.countText {
+                        Text(countText)
+                            .font(.caption2)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            }
+
+            if category.isClearable {
+                Button(role: .destructive) {
+                    pendingClearTarget = .category(category.kind)
+                } label: {
+                    HStack {
+                        Text(LT("清理此分类", "Clear This Category", "この分類を削除"))
+                        Spacer()
+                        if model.isClearing {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(model.isClearing || category.totalBytes == 0)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var confirmationTitle: String {
+        switch pendingClearTarget {
+        case .all:
+            return LT("清理全部安全缓存", "Clear All Safe Cache", "安全なキャッシュをすべて削除")
+        case .category(let kind):
+            return kind.clearTitle
+        case nil:
+            return LT("清理缓存", "Clear Cache", "キャッシュを削除")
+        }
+    }
+
+    private var confirmationActionTitle: String {
+        switch pendingClearTarget {
+        case .all:
+            return LT("确认清理", "Clear Now", "今すぐ削除")
+        case .category:
+            return LT("确认删除", "Delete Now", "今すぐ削除")
+        case nil:
+            return LT("确认", "Confirm", "確認")
+        }
+    }
+
+    private var confirmationMessage: String {
+        switch pendingClearTarget {
+        case .all:
+            return LT(
+                "这会删除图片缓存、离线活动与 DJ 缓存、消息媒体缓存以及本地离线快照。服务器数据不会被删除。",
+                "This clears image cache, offline event and DJ cache, message media cache, and local offline snapshots. Server data will not be deleted.",
+                "画像キャッシュ、オフラインイベント/DJ キャッシュ、メッセージメディアキャッシュ、ローカルのオフラインスナップショットを削除します。サーバーデータは削除されません。"
+            )
+        case .category(let kind):
+            return kind.clearMessage
+        case nil:
+            return ""
+        }
+    }
+}
+
+private enum CacheCategoryKind: String, CaseIterable, Identifiable {
+    case images
+    case offlineContent
+    case messageMedia
+    case lightweightSnapshots
+    case imDatabase
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .images:
+            return LT("图片缓存", "Image Cache", "画像キャッシュ")
+        case .offlineContent:
+            return LT("离线内容", "Offline Content", "オフラインコンテンツ")
+        case .messageMedia:
+            return LT("消息媒体", "Message Media", "メッセージメディア")
+        case .lightweightSnapshots:
+            return LT("本地快照", "Local Snapshots", "ローカルスナップショット")
+        case .imDatabase:
+            return LT("IM 本地数据库", "IM Local Database", "IM ローカルデータベース")
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .images:
+            return "photo.on.rectangle"
+        case .offlineContent:
+            return "tray.full"
+        case .messageMedia:
+            return "message.badge"
+        case .lightweightSnapshots:
+            return "internaldrive"
+        case .imDatabase:
+            return "externaldrive.connected.to.line.below"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .images:
+            return LT(
+                "远程图片磁盘缓存，以及本地头像/背景预览文件。",
+                "Remote image disk cache and local avatar/background preview files.",
+                "リモート画像のディスクキャッシュと、ローカルのアバター/背景プレビューファイルです。"
+            )
+        case .offlineContent:
+            return LT(
+                "手动缓存的活动、DJ 详情，以及 widget 倒计时图片/快照。",
+                "Manually cached event and DJ details, plus widget countdown images and snapshots.",
+                "手動キャッシュしたイベント・DJ 詳細と、widget のカウントダウン画像/スナップショットです。"
+            )
+        case .messageMedia:
+            return LT(
+                "聊天图片、视频、语音等临时媒体文件，以及调试日志。",
+                "Temporary chat media files such as images, videos, and voice, plus diagnostics logs.",
+                "画像、動画、音声などの一時チャットメディアと診断ログです。"
+            )
+        case .lightweightSnapshots:
+            return LT(
+                "发现页、个人主页、虚拟资产外观、会话列表等本地快照。",
+                "Local snapshots for Discover, profile, virtual asset appearance, and conversation lists.",
+                "Discover、プロフィール、仮想アセット外観、会話一覧などのローカルスナップショットです。"
+            )
+        case .imDatabase:
+            return LT(
+                "消息 SDK 的本地库与索引，由 SDK 自身维护，不在这里直接删除。",
+                "The messaging SDK's local store and indexes, maintained by the SDK and not deleted directly here.",
+                "メッセージ SDK のローカルストアと索引です。SDK 自身が管理するため、ここでは直接削除しません。"
+            )
+        }
+    }
+
+    var clearTitle: String {
+        LT("清理 \(title)", "Clear \(title)", "\(title) を削除")
+    }
+
+    var clearMessage: String {
+        switch self {
+        case .images:
+            return LT(
+                "这会删除远程图片磁盘缓存和本地头像/背景预览文件。下次查看时会重新下载。",
+                "This removes remote image disk cache and local avatar/background preview files. They will be downloaded again when needed.",
+                "リモート画像のディスクキャッシュとローカルのアバター/背景プレビューファイルを削除します。必要になれば再ダウンロードされます。"
+            )
+        case .offlineContent:
+            return LT(
+                "这会删除手动缓存的活动、DJ 数据，以及 widget 使用的本地图片和快照。",
+                "This removes manually cached event and DJ data, along with widget-local images and snapshots.",
+                "手動キャッシュしたイベント・DJ データと、widget が使うローカル画像/スナップショットを削除します。"
+            )
+        case .messageMedia:
+            return LT(
+                "这会删除聊天媒体临时文件和消息诊断日志，不会删除服务器上的聊天记录。",
+                "This removes temporary chat media files and message diagnostics logs, but not server-side chat history.",
+                "一時チャットメディアと診断ログを削除します。サーバー上のチャット履歴は削除されません。"
+            )
+        case .lightweightSnapshots:
+            return LT(
+                "这会删除本地离线快照和列表缓存。页面下次打开时会重新拉取。",
+                "This removes local offline snapshots and list cache. Screens will refetch the next time they open.",
+                "ローカルのオフラインスナップショットと一覧キャッシュを削除します。次回画面を開くと再取得されます。"
+            )
+        case .imDatabase:
+            return LT(
+                "IM 本地数据库当前不支持在运行中直接删除。",
+                "The IM local database is not deleted directly while the app is running.",
+                "IM ローカルデータベースは実行中に直接削除できません。"
+            )
+        }
+    }
+
+    var isClearable: Bool {
+        self != .imDatabase
+    }
+}
+
+private enum CacheClearTarget {
+    case all
+    case category(CacheCategoryKind)
+}
+
+private struct CacheCategorySummary: Identifiable {
+    let kind: CacheCategoryKind
+    let totalBytes: Int64
+    let itemCount: Int
+    let detail: String?
+
+    var id: CacheCategoryKind { kind }
+    var title: String { kind.title }
+    var iconName: String { kind.iconName }
+    var description: String { kind.description }
+    var isClearable: Bool { kind.isClearable }
+
+    var countText: String? {
+        guard itemCount > 0 else { return nil }
+        return LT(
+            "\(itemCount) 项",
+            "\(itemCount) items",
+            "\(itemCount) 件"
+        )
+    }
+}
+
+private struct CacheManagementSnapshot {
+    let categories: [CacheCategorySummary]
+    let lastUpdatedAt: Date
+
+    static let empty = CacheManagementSnapshot(categories: [], lastUpdatedAt: .distantPast)
+
+    var totalBytes: Int64 {
+        categories.reduce(0) { $0 + $1.totalBytes }
+    }
+
+    var clearableBytes: Int64 {
+        categories
+            .filter(\.isClearable)
+            .reduce(0) { $0 + $1.totalBytes }
+    }
+}
+
+@MainActor
+private final class CacheManagementSettingsModel: ObservableObject {
+    @Published private(set) var snapshot: CacheManagementSnapshot = .empty
+    @Published private(set) var isLoading = false
+    @Published private(set) var isClearing = false
+    @Published var noticeMessage: String?
+
+    var formattedTotalBytes: String {
+        ByteCountFormatter.raverString(fromByteCount: snapshot.totalBytes)
+    }
+
+    var formattedClearableBytes: String {
+        ByteCountFormatter.raverString(fromByteCount: snapshot.clearableBytes)
+    }
+
+    var clearableBytes: Int64 {
+        snapshot.clearableBytes
+    }
+
+    var lastUpdatedText: String? {
+        guard snapshot.lastUpdatedAt != .distantPast else { return nil }
+        return Self.dateFormatter.string(from: snapshot.lastUpdatedAt)
+    }
+
+    func refresh() async {
+        isLoading = true
+        let nextSnapshot = await CacheManagementStore.loadSnapshot()
+        snapshot = nextSnapshot
+        isLoading = false
+    }
+
+    func clear(target: CacheClearTarget) async {
+        guard !isClearing else { return }
+        isClearing = true
+        defer { isClearing = false }
+
+        do {
+            try await CacheManagementStore.clear(target: target)
+            snapshot = await CacheManagementStore.loadSnapshot()
+            noticeMessage = successMessage(for: target)
+        } catch {
+            noticeMessage = error.userFacingMessage ?? error.localizedDescription
+        }
+    }
+
+    private func successMessage(for target: CacheClearTarget) -> String {
+        switch target {
+        case .all:
+            return LT(
+                "安全缓存已清理完成。",
+                "Safe cache has been cleared.",
+                "安全なキャッシュを削除しました。"
+            )
+        case .category(let kind):
+            return LT(
+                "\(kind.title) 已清理。",
+                "\(kind.title) cleared.",
+                "\(kind.title) を削除しました。"
+            )
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+private enum CacheManagementStore {
+    private static let eventManualCacheDirectoryName = "EventManualCache"
+    private static let djManualCacheDirectoryName = "DJManualCache"
+    private static let raverCacheDirectoryName = "Raver"
+    private static let localProfileAvatarsDirectoryName = "LocalProfileAvatars"
+    private static let imProbeLogFilename = "im-probe.log"
+    private static let imDataDirectoryName = "IM"
+    private static let profileOfflineSnapshotKey = "raver.profile.offlineSnapshot.v1"
+    private static let discoverEventsOfflineSnapshotsKey = "raver.discover.events.offlineSnapshots.v2"
+    private static let virtualAssetsMyAssetsKey = "raver.virtualAssets.myAssets.v1"
+    private static let virtualAssetsAppearancePrefix = "raver.virtualAssets.appearance.v1."
+    private static let imConversationSnapshotPrefix = "raver.im.conversation.snapshot."
+
+    static func loadSnapshot() async -> CacheManagementSnapshot {
+        await Task.detached(priority: .utility) {
+            collectSnapshot()
+        }.value
+    }
+
+    static func clear(target: CacheClearTarget) async throws {
+        switch target {
+        case .all:
+            for kind in CacheCategoryKind.allCases where kind.isClearable {
+                try await clear(kind: kind)
+            }
+        case .category(let kind):
+            guard kind.isClearable else { return }
+            try await clear(kind: kind)
+        }
+    }
+
+    private static func clear(kind: CacheCategoryKind) async throws {
+        switch kind {
+        case .images:
+            try await clearImageCache()
+        case .offlineContent:
+            try clearOfflineContentCache()
+        case .messageMedia:
+            try clearMessageMediaCache()
+        case .lightweightSnapshots:
+            clearLightweightSnapshots()
+        case .imDatabase:
+            return
+        }
+    }
+
+    private static func collectSnapshot() -> CacheManagementSnapshot {
+        let imageBytes = Int64(SDImageCache.shared.totalDiskSize()) + directorySize(at: localProfileAvatarsDirectoryURL())
+        let offlineSnapshot = offlineContentStats()
+        let messageSnapshot = messageMediaStats()
+        let lightweightSnapshot = lightweightSnapshotsStats()
+        let imDatabaseBytes = directorySize(at: imDatabaseDirectoryURL())
+
+        let categories: [CacheCategorySummary] = [
+            CacheCategorySummary(
+                kind: .images,
+                totalBytes: imageBytes,
+                itemCount: fileCount(at: URL(fileURLWithPath: SDImageCache.shared.diskCachePath))
+                    + fileCount(at: localProfileAvatarsDirectoryURL()),
+                detail: LT(
+                    "包含 SDWebImage 磁盘缓存与本地头像背景预览。",
+                    "Includes SDWebImage disk cache plus local avatar/background previews.",
+                    "SDWebImage のディスクキャッシュとローカルのアバター/背景プレビューを含みます。"
+                )
+            ),
+            CacheCategorySummary(
+                kind: .offlineContent,
+                totalBytes: offlineSnapshot.totalBytes,
+                itemCount: offlineSnapshot.itemCount,
+                detail: LT(
+                    "活动与 DJ 手动缓存会在弱网时回退展示；widget 会复用本地倒计时图片。",
+                    "Manual event and DJ cache is used for weak-network fallback; widgets reuse local countdown images.",
+                    "手動キャッシュしたイベント・DJ は低速回線時のフォールバックに使われ、widget はローカルのカウントダウン画像を再利用します。"
+                )
+            ),
+            CacheCategorySummary(
+                kind: .messageMedia,
+                totalBytes: messageSnapshot.totalBytes,
+                itemCount: messageSnapshot.itemCount,
+                detail: LT(
+                    "聊天媒体缓存自带 7 天 TTL 和 512 MB 上限，超限时会按最近最少访问淘汰。",
+                    "Chat media cache has a built-in 7-day TTL and 512 MB cap, evicting least-recently-used files when oversized.",
+                    "チャットメディアキャッシュには 7 日 TTL と 512 MB 上限があり、超過時は最近使われていないファイルから削除されます。"
+                )
+            ),
+            CacheCategorySummary(
+                kind: .lightweightSnapshots,
+                totalBytes: lightweightSnapshot.totalBytes,
+                itemCount: lightweightSnapshot.itemCount,
+                detail: LT(
+                    "主要是 UserDefaults 里的轻量 JSON 快照，不大，但能显著提升冷启动和离线首屏体验。",
+                    "Mostly lightweight JSON snapshots in UserDefaults. Small in size, but helpful for cold-start and offline first paint.",
+                    "主に UserDefaults の軽量 JSON スナップショットです。容量は小さいですが、コールドスタートやオフライン初期表示を改善します。"
+                )
+            ),
+            CacheCategorySummary(
+                kind: .imDatabase,
+                totalBytes: imDatabaseBytes,
+                itemCount: fileCount(at: imDatabaseDirectoryURL()),
+                detail: LT(
+                    "这部分由消息 SDK 自身维护，当前页面只做可视化统计。",
+                    "This portion is maintained by the messaging SDK and is surfaced here for visibility only.",
+                    "この部分はメッセージ SDK 自身が管理し、この画面では可視化のみ行います。"
+                )
+            )
+        ]
+
+        return CacheManagementSnapshot(categories: categories, lastUpdatedAt: Date())
+    }
+
+    private static func clearImageCache() async throws {
+        SDImageCache.shared.clearMemory()
+        await withCheckedContinuation { continuation in
+            SDImageCache.shared.clearDisk {
+                continuation.resume()
+            }
+        }
+        try removeItemIfExists(at: localProfileAvatarsDirectoryURL())
+    }
+
+    private static func clearOfflineContentCache() throws {
+        try removeItemIfExists(at: eventManualCacheDirectoryURL())
+        try removeItemIfExists(at: djManualCacheDirectoryURL())
+        try removeItemIfExists(at: WidgetCountdownStore.shared.baseDirectoryURL)
+    }
+
+    private static func clearMessageMediaCache() throws {
+        try removeItemIfExists(at: ChatMediaTempFileStore.managedRootURL())
+        try removeItemIfExists(at: imProbeLogFileURL())
+    }
+
+    private static func clearLightweightSnapshots() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: profileOfflineSnapshotKey)
+        defaults.removeObject(forKey: discoverEventsOfflineSnapshotsKey)
+        defaults.removeObject(forKey: virtualAssetsMyAssetsKey)
+        removeDefaultEntries(withPrefix: virtualAssetsAppearancePrefix, defaults: defaults)
+        removeDefaultEntries(withPrefix: imConversationSnapshotPrefix, defaults: defaults)
+    }
+
+    private static func offlineContentStats() -> (totalBytes: Int64, itemCount: Int) {
+        let eventDirectory = eventManualCacheDirectoryURL()
+        let djDirectory = djManualCacheDirectoryURL()
+        let widgetDirectory = WidgetCountdownStore.shared.baseDirectoryURL
+        let totalBytes = directorySize(at: eventDirectory)
+            + directorySize(at: djDirectory)
+            + directorySize(at: widgetDirectory)
+        let itemCount = fileCount(at: eventDirectory)
+            + fileCount(at: djDirectory)
+            + fileCount(at: widgetDirectory)
+        return (totalBytes, itemCount)
+    }
+
+    private static func messageMediaStats() -> (totalBytes: Int64, itemCount: Int) {
+        let mediaDirectory = ChatMediaTempFileStore.managedRootURL()
+        let totalBytes = directorySize(at: mediaDirectory) + fileSize(at: imProbeLogFileURL())
+        let itemCount = fileCount(at: mediaDirectory) + (fileExists(at: imProbeLogFileURL()) ? 1 : 0)
+        return (totalBytes, itemCount)
+    }
+
+    private static func lightweightSnapshotsStats() -> (totalBytes: Int64, itemCount: Int) {
+        let defaults = UserDefaults.standard
+        let fixedKeys = [profileOfflineSnapshotKey, discoverEventsOfflineSnapshotsKey, virtualAssetsMyAssetsKey]
+        let prefixKeys = defaults.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix(virtualAssetsAppearancePrefix) || $0.hasPrefix(imConversationSnapshotPrefix)
+        }
+        let allKeys = fixedKeys + prefixKeys
+        let totalBytes = allKeys.reduce(Int64(0)) { partial, key in
+            partial + storedBytes(forKey: key, defaults: defaults)
+        }
+        let itemCount = allKeys.filter { defaults.object(forKey: $0) != nil }.count
+        return (totalBytes, itemCount)
+    }
+
+    private static func storedBytes(forKey key: String, defaults: UserDefaults) -> Int64 {
+        if let data = defaults.data(forKey: key) {
+            return Int64(data.count)
+        }
+        if let string = defaults.string(forKey: key) {
+            return Int64(string.lengthOfBytes(using: .utf8))
+        }
+        return 0
+    }
+
+    private static func removeDefaultEntries(withPrefix prefix: String, defaults: UserDefaults) {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private static func removeItemIfExists(at url: URL?) throws {
+        guard let url else { return }
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private static func fileExists(at url: URL?) -> Bool {
+        guard let url else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    private static func fileSize(at url: URL?) -> Int64 {
+        guard let url,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+            return 0
+        }
+        return (attrs[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    private static func directorySize(at url: URL?) -> Int64 {
+        guard let url, FileManager.default.fileExists(atPath: url.path) else { return 0 }
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        while let fileURL = enumerator.nextObject() as? URL {
+            guard let values = try? fileURL.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else {
+                continue
+            }
+            if let allocated = values.totalFileAllocatedSize ?? values.fileAllocatedSize {
+                total += Int64(allocated)
+            } else if let fileSize = values.fileSize {
+                total += Int64(fileSize)
+            }
+        }
+        return total
+    }
+
+    private static func fileCount(at url: URL?) -> Int {
+        guard let url, FileManager.default.fileExists(atPath: url.path) else { return 0 }
+        let keys: Set<URLResourceKey> = [.isRegularFileKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else {
+            return 0
+        }
+
+        var total = 0
+        while let fileURL = enumerator.nextObject() as? URL {
+            guard let values = try? fileURL.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else {
+                continue
+            }
+            total += 1
+        }
+        return total
+    }
+
+    private static func cachesRootURL() -> URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+    }
+
+    private static func applicationSupportRootURL() -> URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    }
+
+    private static func raverCachesDirectoryURL() -> URL? {
+        cachesRootURL()?.appendingPathComponent(raverCacheDirectoryName, isDirectory: true)
+    }
+
+    private static func eventManualCacheDirectoryURL() -> URL? {
+        raverCachesDirectoryURL()?.appendingPathComponent(eventManualCacheDirectoryName, isDirectory: true)
+    }
+
+    private static func djManualCacheDirectoryURL() -> URL? {
+        raverCachesDirectoryURL()?.appendingPathComponent(djManualCacheDirectoryName, isDirectory: true)
+    }
+
+    private static func localProfileAvatarsDirectoryURL() -> URL? {
+        cachesRootURL()?.appendingPathComponent(localProfileAvatarsDirectoryName, isDirectory: true)
+    }
+
+    private static func imProbeLogFileURL() -> URL? {
+        cachesRootURL()?.appendingPathComponent(imProbeLogFilename, isDirectory: false)
+    }
+
+    private static func imDatabaseDirectoryURL() -> URL? {
+        applicationSupportRootURL()?.appendingPathComponent(imDataDirectoryName, isDirectory: true)
+    }
+}
+
+private extension ByteCountFormatter {
+    static func raverString(fromByteCount byteCount: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+        formatter.includesUnit = true
+        formatter.isAdaptive = true
+        return formatter.string(fromByteCount: max(0, byteCount))
     }
 }
 

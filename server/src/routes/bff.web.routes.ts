@@ -5351,24 +5351,6 @@ const parseWikiFestivalAliases = (value: unknown): string[] => {
   return [];
 };
 
-const uniqueWikiFestivalIdForName = async (name: string): Promise<string> => {
-  const base = slugify(name) || `festival-${Date.now()}`;
-  let candidate = base;
-  let seq = 1;
-
-  while (true) {
-    const exists = await prisma.wikiFestival.findUnique({
-      where: { id: candidate },
-      select: { id: true },
-    });
-    if (!exists) {
-      return candidate;
-    }
-    seq += 1;
-    candidate = `${base}-${seq}`;
-  }
-};
-
 const mapWikiFestival = (
   row: any,
   viewerId: string | null | undefined = null,
@@ -14076,7 +14058,6 @@ router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response
     const authReq = req as BFFAuthRequest;
     const userId = requireAuth(authReq, res);
     if (!userId) return;
-    const viewerRole = authReq.user?.role ?? null;
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const sourceRowIdRaw = normalizeWikiFestivalInteger(body.sourceRowId);
@@ -14093,96 +14074,13 @@ router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response
       return;
     }
 
-    if (!canBypassContentReview(viewerRole)) {
-      const submission = await createPendingContentSubmission({
-        submitterId: userId,
-        entityType: 'brand',
-        title: name,
-        payload: body,
-      });
-      acceptedSubmission(res, submission, '品牌信息已提交审核，管理员审核通过后才会入库');
-      return;
-    }
-
-    const abbreviation = normalizeWikiFestivalText(body.abbreviation);
-    const aliases = parseWikiFestivalAliases(body.aliases);
-    const rawCountry = normalizeWikiFestivalText(body.country);
-    const countryI18n = normalizeCountryBiText(body.countryI18n, rawCountry);
-    const country = rawCountry || pickWikiFestivalPrimaryText(countryI18n);
-    const rawCity = normalizeWikiFestivalText(body.city);
-    const cityI18n = normalizeWikiFestivalBiText(body.cityI18n, rawCity);
-    const city = rawCity || pickWikiFestivalPrimaryText(cityI18n);
-    const foundedYear = normalizeWikiFestivalText(body.foundedYear);
-    const rawFrequency = normalizeWikiFestivalText(body.frequency);
-    const frequencyI18n = normalizeWikiFestivalBiText(body.frequencyI18n, rawFrequency);
-    const frequency = rawFrequency || pickWikiFestivalPrimaryText(frequencyI18n);
-    const tagline = normalizeWikiFestivalText(body.tagline);
-    const rawIntroduction = normalizeWikiFestivalText(body.introduction);
-    const descriptionI18n = normalizeWikiFestivalBiText(body.descriptionI18n, rawIntroduction);
-    const introduction = rawIntroduction || pickWikiFestivalPrimaryText(descriptionI18n);
-    const officialWebsite = normalizeWikiFestivalText(body.officialWebsite);
-    const facebookUrl = normalizeWikiFestivalText(body.facebookUrl);
-    const instagramUrl = normalizeWikiFestivalText(body.instagramUrl);
-    const twitterUrl = normalizeWikiFestivalText(body.twitterUrl);
-    const youtubeUrl = normalizeWikiFestivalText(body.youtubeUrl);
-    const tiktokUrl = normalizeWikiFestivalText(body.tiktokUrl);
-    const avatarUrl = normalizeWikiFestivalText(body.avatarUrl);
-    const backgroundUrl = normalizeWikiFestivalText(body.backgroundUrl);
-    const links = mergeWikiFestivalLinks(parseWikiFestivalLinks(body.links), {
-      officialWebsite,
-      facebookUrl,
-      instagramUrl,
-      twitterUrl,
-      youtubeUrl,
-      tiktokUrl,
+    const submission = await createPendingContentSubmission({
+      submitterId: userId,
+      entityType: 'brand',
+      title: name,
+      payload: body,
     });
-    const festivalId = await uniqueWikiFestivalIdForName(name);
-
-    const created = await prisma.wikiFestival.create({
-      data: {
-        id: festivalId,
-        sourceRowId: sourceRowIdRaw,
-        name,
-        nameI18n: nameI18n ? (nameI18n as unknown as Prisma.InputJsonValue) : undefined,
-        abbreviation: abbreviation.length > 0 ? abbreviation : '',
-        aliases,
-        country: country || '',
-        countryI18n: countryI18n ? (countryI18n as unknown as Prisma.InputJsonValue) : undefined,
-        city: city || '',
-        cityI18n: cityI18n ? (cityI18n as unknown as Prisma.InputJsonValue) : undefined,
-        foundedYear,
-        frequency: frequency || '',
-        frequencyI18n: frequencyI18n ? (frequencyI18n as unknown as Prisma.InputJsonValue) : undefined,
-        tagline,
-        introduction: introduction || '',
-        descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : undefined,
-        officialWebsite: officialWebsite.length > 0 ? officialWebsite : null,
-        facebookUrl: facebookUrl.length > 0 ? facebookUrl : null,
-        instagramUrl: instagramUrl.length > 0 ? instagramUrl : null,
-        twitterUrl: twitterUrl.length > 0 ? twitterUrl : null,
-        youtubeUrl: youtubeUrl.length > 0 ? youtubeUrl : null,
-        tiktokUrl: tiktokUrl.length > 0 ? tiktokUrl : null,
-        avatarUrl: avatarUrl.length > 0 ? avatarUrl : null,
-        backgroundUrl: backgroundUrl.length > 0 ? backgroundUrl : null,
-        links: links as unknown as Prisma.InputJsonValue,
-        contributors: {
-          create: {
-            userId,
-          },
-        },
-      },
-      include: {
-        contributors: {
-          include: {
-            user: {
-              select: { id: true, username: true, displayName: true, avatarUrl: true },
-            },
-          },
-        },
-      },
-    });
-
-    ok(res, mapWikiFestival(created, userId, viewerRole));
+    acceptedSubmission(res, submission, '品牌任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
     console.error('BFF web create learn festival error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -14461,48 +14359,23 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
 
     const hasUpdateFields = Object.keys(updateData).length > 0;
 
-    const updated = await prisma.$transaction(async (tx) => {
-      if (hasUpdateFields) {
-        await tx.wikiFestival.update({
-          where: { id: festivalId },
-          data: updateData,
-        });
-      }
-
-      await tx.wikiFestivalContributor.upsert({
-        where: {
-          festivalId_userId: {
-            festivalId,
-            userId,
-          },
-        },
-        create: {
-          festivalId,
-          userId,
-        },
-        update: {},
-      });
-
-      return tx.wikiFestival.findUnique({
-        where: { id: festivalId },
-        include: {
-          contributors: {
-            include: {
-              user: {
-                select: { id: true, username: true, displayName: true, avatarUrl: true },
-              },
-            },
-          },
-        },
-      });
-    });
-
-    if (!updated) {
-      res.status(404).json({ error: 'Festival not found' });
+    if (!hasUpdateFields) {
+      ok(res, mapWikiFestival(existing, userId, viewerRole));
       return;
     }
 
-    ok(res, mapWikiFestival(updated, userId, viewerRole));
+    const submission = await createPendingContentSubmission({
+      submitterId: userId,
+      entityType: 'brand',
+      title: nextName || existing.name,
+      payload: {
+        ...body,
+        name: nextName || existing.name,
+        targetBrandId: festivalId,
+        editMode: 'patch',
+      },
+    });
+    acceptedSubmission(res, submission, '主办方编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
     console.error('BFF web update learn festival error:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -3551,7 +3551,7 @@ actor MockWebFeatureService: WebFeatureService {
         return .created(festival)
     }
 
-    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> WebLearnFestival {
+    func updateLearnFestival(id: String, input: UpdateLearnFestivalInput) async throws -> CreateContentResult<WebLearnFestival> {
         guard let index = learnFestivals.firstIndex(where: { $0.id == id }) else {
             throw ServiceError.message("电音节不存在")
         }
@@ -3599,7 +3599,7 @@ actor MockWebFeatureService: WebFeatureService {
             festival.contributors.append(currentUser)
         }
         learnFestivals[index] = festival
-        return festival
+        return .created(festival)
     }
 
     func fetchRankingBoards() async throws -> [RankingBoard] {
