@@ -11,6 +11,30 @@ const APP_ICON_PATH = path.resolve(
   '../../../../mobile/ios/RaverMVP/RaverMVP/Assets.xcassets/AppIcon.appiconset/icon-60@3x.png'
 );
 
+const isLikelyAliyunOssHost = (hostname: string): boolean => {
+  const normalized = String(hostname || '').trim().toLowerCase();
+  return normalized.includes('aliyuncs.com') || normalized.includes('ravehub.top');
+};
+
+const buildPosterFetchUrl = (rawUrl: string): { url: string; transformed: boolean; reason: string | null } => {
+  try {
+    const parsed = new URL(rawUrl);
+    const pathname = parsed.pathname.toLowerCase();
+    const isWebpLike = pathname.endsWith('.webp') || parsed.searchParams.get('x-oss-process')?.includes('format,webp');
+    if (isLikelyAliyunOssHost(parsed.hostname) && isWebpLike) {
+      parsed.searchParams.set('x-oss-process', 'image/format,png');
+      return {
+        url: parsed.toString(),
+        transformed: true,
+        reason: 'oss_webp_to_png',
+      };
+    }
+    return { url: rawUrl, transformed: false, reason: null };
+  } catch {
+    return { url: rawUrl, transformed: false, reason: 'invalid_url_parse' };
+  }
+};
+
 export const htmlEscape = (value: string | null | undefined): string =>
   String(value || '')
     .replace(/&/g, '&amp;')
@@ -35,12 +59,18 @@ export const toImageDataUri = async (
     );
     return null;
   }
+  const fetchTarget = buildPosterFetchUrl(normalized);
+  if (fetchTarget.transformed) {
+    console.info(
+      `[share-poster] ${debugLabel} image-fetch rewrite reason=${fetchTarget.reason} originalUrl=${normalized} fetchUrl=${fetchTarget.url}`
+    );
+  }
   try {
-    const response = await fetch(normalized);
+    const response = await fetch(fetchTarget.url);
     const contentType = response.headers.get('content-type') || 'unknown';
     if (!response.ok) {
       console.warn(
-        `[share-poster] ${debugLabel} image-fetch failed status=${response.status} contentType=${contentType} url=${normalized}`
+        `[share-poster] ${debugLabel} image-fetch failed status=${response.status} contentType=${contentType} url=${fetchTarget.url} originalUrl=${normalized}`
       );
       return null;
     }
@@ -48,18 +78,18 @@ export const toImageDataUri = async (
     const byteLength = arrayBuffer.byteLength;
     if (byteLength <= 0) {
       console.warn(
-        `[share-poster] ${debugLabel} image-fetch failed reason=empty_body contentType=${contentType} url=${normalized}`
+        `[share-poster] ${debugLabel} image-fetch failed reason=empty_body contentType=${contentType} url=${fetchTarget.url} originalUrl=${normalized}`
       );
       return null;
     }
     console.info(
-      `[share-poster] ${debugLabel} image-fetch success bytes=${byteLength} contentType=${contentType} url=${normalized}`
+      `[share-poster] ${debugLabel} image-fetch success bytes=${byteLength} contentType=${contentType} url=${fetchTarget.url} originalUrl=${normalized}`
     );
     return `data:${contentType === 'unknown' ? 'image/jpeg' : contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `[share-poster] ${debugLabel} image-fetch exception url=${normalized} message=${message}`
+      `[share-poster] ${debugLabel} image-fetch exception url=${fetchTarget.url} originalUrl=${normalized} message=${message}`
     );
     return null;
   }
