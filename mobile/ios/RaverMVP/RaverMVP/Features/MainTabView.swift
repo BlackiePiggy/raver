@@ -1379,13 +1379,6 @@ private struct CircleIDHubView: View {
                 Task { await openCircleIDPoster(payload) }
             },
             SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await saveCircleIDPoster(payload) }
-            },
-            SharePanelQuickAction(
                 title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
@@ -1457,17 +1450,6 @@ private struct CircleIDHubView: View {
             )
         } catch {
             errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
-        }
-    }
-
-    @MainActor
-    private func saveCircleIDPoster(_ payload: CircleIDShareCardPayload) async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: circleIDShareTarget(from: payload), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -1993,13 +1975,6 @@ private struct CircleIDDetailView: View {
                 Task { await openCircleIDPoster(payload) }
             },
             SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await saveCircleIDPoster(payload) }
-            },
-            SharePanelQuickAction(
                 title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
@@ -2074,16 +2049,6 @@ private struct CircleIDDetailView: View {
         }
     }
 
-    @MainActor
-    private func saveCircleIDPoster(_ payload: CircleIDShareCardPayload) async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: circleIDShareTarget(from: payload), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            actionErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
-        }
-    }
 }
 
 private struct CircleIDSharePreviewCard: View {
@@ -4108,13 +4073,6 @@ struct CircleRatingEventDetailView: View {
                 Task { await openRatingEventPoster() }
             },
             SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await saveRatingEventPoster() }
-            },
-            SharePanelQuickAction(
                 title: LT("新增打分单位", "Add Rating Unit", "評価ユニットを追加"),
                 systemImage: "plus.circle",
                 accentColor: Color(red: 0.99, green: 0.65, blue: 0.20)
@@ -4194,17 +4152,6 @@ struct CircleRatingEventDetailView: View {
             )
         } catch {
             actionErrorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
-        }
-    }
-
-    @MainActor
-    private func saveRatingEventPoster() async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: ratingShareTarget(from: makeSharePayload()), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            actionErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }
@@ -4758,13 +4705,6 @@ struct CircleRatingUnitDetailView: View {
                 Task { await openRatingUnitPoster() }
             },
             SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await saveRatingUnitPoster() }
-            },
-            SharePanelQuickAction(
                 title: LT("举报", "Report", "報告"),
                 systemImage: "flag",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
@@ -4837,17 +4777,6 @@ struct CircleRatingUnitDetailView: View {
             )
         } catch {
             actionErrorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
-        }
-    }
-
-    @MainActor
-    private func saveRatingUnitPoster() async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: ratingShareTarget(from: makeSharePayload()), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            actionErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 }

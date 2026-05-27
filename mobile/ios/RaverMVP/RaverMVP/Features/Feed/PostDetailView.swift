@@ -510,13 +510,6 @@ struct PostDetailView: View {
                 Task { await openPostPoster(payload: payload) }
             },
             SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "ポスターを保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await savePostPoster(payload: payload) }
-            },
-            SharePanelQuickAction(
                 title: LT("不感兴趣", "Not Interested", "興味がない"),
                 systemImage: "eye.slash",
                 accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
@@ -623,26 +616,6 @@ struct PostDetailView: View {
             )
         } catch {
             self.error = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有ポスターを開けませんでした。後でもう一度お試しください。")
-        }
-    }
-
-    @MainActor
-    private func savePostPoster(payload: PostSharePayload) async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(
-                target: ShareTarget(
-                    type: .post,
-                    id: post.id,
-                    title: payload.shareTitle,
-                    subtitle: payload.shareSummary,
-                    imageURL: post.images.first
-                ),
-                channel: "poster_save"
-            )
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            OperationBannerCenter.shared.success(LT("海报已保存到相册", "Poster saved to Photos", "ポスターを写真に保存しました"))
-        } catch {
-            self.error = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "ポスターの保存に失敗しました。後でもう一度お試しください。")
         }
     }
 

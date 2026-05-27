@@ -10,6 +10,10 @@ const APP_ICON_PATH = path.resolve(
   __dirname,
   '../../../../mobile/ios/RaverMVP/RaverMVP/Assets.xcassets/AppIcon.appiconset/icon-60@3x.png'
 );
+const POSTER_QR_SIZE = 72;
+const POSTER_QR_X = 280;
+const POSTER_QR_ICON_BOX_SIZE = 20;
+const POSTER_QR_ICON_SIZE = 16;
 
 const isLikelyAliyunOssHost = (hostname: string): boolean => {
   const normalized = String(hostname || '').trim().toLowerCase();
@@ -381,7 +385,11 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
   const dividerY = cursorY + 8;
   const footerLine1Y = dividerY + 27;
   const footerLine2Y = footerLine1Y + 19;
-  const qrY = dividerY + 13;
+  const qrY = footerLine2Y - 14;
+  const qrIconBoxX = POSTER_QR_X + (POSTER_QR_SIZE - POSTER_QR_ICON_BOX_SIZE) / 2;
+  const qrIconBoxY = qrY + (POSTER_QR_SIZE - POSTER_QR_ICON_BOX_SIZE) / 2;
+  const qrIconX = POSTER_QR_X + (POSTER_QR_SIZE - POSTER_QR_ICON_SIZE) / 2;
+  const qrIconY = qrY + (POSTER_QR_SIZE - POSTER_QR_ICON_SIZE) / 2;
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="700" viewBox="0 0 390 700">
@@ -414,13 +422,13 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
     <text x="25" y="${footerLine1Y}" font-weight="${input.locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${input.locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(excerpt(input.footerLine1, 42))}</text>
     <text x="25" y="${footerLine2Y}" font-family="${posterFonts.title}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(input.footerLine2)}</text>
   </g>
-  <rect x="292" y="${qrY}" width="60" height="60" fill="#ffffff"/>
-  <image href="${qrDataUrl}" x="292" y="${qrY}" width="60" height="60" preserveAspectRatio="none" />
+  <rect x="${POSTER_QR_X}" y="${qrY}" width="${POSTER_QR_SIZE}" height="${POSTER_QR_SIZE}" fill="#ffffff"/>
+  <image href="${qrDataUrl}" x="${POSTER_QR_X}" y="${qrY}" width="${POSTER_QR_SIZE}" height="${POSTER_QR_SIZE}" preserveAspectRatio="none" />
   ${
     appIconDataUrl
       ? `
-  <rect x="313.5" y="${qrY + 21.5}" width="17" height="17" rx="4" fill="#ffffff"/>
-  <image href="${appIconDataUrl}" x="315" y="${qrY + 23}" width="14" height="14" preserveAspectRatio="xMidYMid meet" />`
+  <rect x="${qrIconBoxX}" y="${qrIconBoxY}" width="${POSTER_QR_ICON_BOX_SIZE}" height="${POSTER_QR_ICON_BOX_SIZE}" rx="4" fill="#ffffff"/>
+  <image href="${appIconDataUrl}" x="${qrIconX}" y="${qrIconY}" width="${POSTER_QR_ICON_SIZE}" height="${POSTER_QR_ICON_SIZE}" preserveAspectRatio="xMidYMid meet" />`
       : ''
   }
 </svg>`;

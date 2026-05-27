@@ -9,6 +9,25 @@ const APP_ICON_PATH = path.resolve(
   __dirname,
   '../../../../mobile/ios/RaverMVP/RaverMVP/Assets.xcassets/AppIcon.appiconset/icon-60@3x.png'
 );
+const isLikelyAliyunOssHost = (hostname: string): boolean => {
+  const normalized = String(hostname || '').trim().toLowerCase();
+  return normalized.includes('aliyuncs.com') || normalized.includes('ravehub.top');
+};
+
+const buildPosterFetchUrl = (rawUrl: string): string => {
+  try {
+    const parsed = new URL(rawUrl);
+    const pathname = parsed.pathname.toLowerCase();
+    const isWebpLike = pathname.endsWith('.webp') || parsed.searchParams.get('x-oss-process')?.includes('format,webp');
+    if (isLikelyAliyunOssHost(parsed.hostname) && isWebpLike) {
+      parsed.searchParams.set('x-oss-process', 'image/format,png');
+      return parsed.toString();
+    }
+    return rawUrl;
+  } catch {
+    return rawUrl;
+  }
+};
 
 const font5x7: Record<string, string[]> = {
   ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000'],
@@ -261,7 +280,7 @@ export const loadRemoteImagePng = async (urlString: string | null | undefined): 
   const normalized = String(urlString || '').trim();
   if (!/^https?:\/\//i.test(normalized)) return null;
   try {
-    const response = await fetch(normalized);
+    const response = await fetch(buildPosterFetchUrl(normalized));
     if (!response.ok) return null;
     const arrayBuffer = await response.arrayBuffer();
     return decodeImageToPng(Buffer.from(arrayBuffer), response.headers.get('content-type'));

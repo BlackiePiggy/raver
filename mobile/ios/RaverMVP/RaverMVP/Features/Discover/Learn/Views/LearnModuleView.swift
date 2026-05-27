@@ -92,99 +92,99 @@ struct LearnModuleView: View {
                     .padding(.bottom, 8)
             }
 
-                if selectedSection == .labels {
-                    labelsToolbar
-                        .padding(.horizontal, 16)
-                        .padding(.top, showsSectionTabs ? 0 : 12)
-                        .padding(.bottom, 6)
-                } else if selectedSection == .festivals {
-                    festivalsToolbar
-                        .padding(.horizontal, 16)
-                        .padding(.top, showsSectionTabs ? 0 : 12)
-                        .padding(.bottom, 6)
-                }
-
-                Group {
-                    switch selectedSection {
-                    case .rankings:
-                        rankingsContent
-                    case .genres:
-                        genresContent
-                    case .labels:
-                        labelsContent
-                    case .festivals:
-                        festivalsContent
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if selectedSectionIsRefreshing || bannerMessage != nil {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if selectedSectionIsRefreshing {
-                            InlineLoadingBadge(title: LT("正在更新内容", "Updating content", "コンテンツを更新中"))
-                        }
-                        if let bannerMessage {
-                            ScreenStatusBanner(
-                                message: bannerMessage,
-                                style: .error,
-                                actionTitle: LT("重试", "Retry", "再試行")
-                            ) {
-                                Task { await refreshSelectedSection() }
-                            }
-                        }
-                    }
+            if selectedSection == .labels {
+                labelsToolbar
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .padding(.top, showsSectionTabs ? 0 : 12)
+                    .padding(.bottom, 6)
+            } else if selectedSection == .festivals {
+                festivalsToolbar
+                    .padding(.horizontal, 16)
+                    .padding(.top, showsSectionTabs ? 0 : 12)
+                    .padding(.bottom, 6)
+            }
+
+            Group {
+                switch selectedSection {
+                case .rankings:
+                    rankingsContent
+                case .genres:
+                    genresContent
+                case .labels:
+                    labelsContent
+                case .festivals:
+                    festivalsContent
                 }
             }
-            .background(RaverTheme.background)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await triggerInitialLoadIfNeeded()
-            }
-            .onChange(of: isActive) { _, _ in
-                Task { await triggerInitialLoadIfNeeded() }
-            }
-            .onChange(of: selectedSort) { _, next in
-                sortOrder = next.defaultOrder
-                Task { await loadLabels() }
-            }
-            .onChange(of: sortOrder) { _, _ in
-                Task { await loadLabels() }
-            }
-            .onChange(of: selectedGenreFilters) { _, _ in
-                Task { await loadLabels() }
-            }
-            .onChange(of: selectedNationFilters) { _, _ in
-                Task { await loadLabels() }
-            }
-            .onChange(of: createFestivalAvatarItem) { _, item in
-                Task { await loadFestivalCreatePhoto(item, target: .avatar) }
-            }
-            .onChange(of: createFestivalBackgroundItem) { _, item in
-                Task { await loadFestivalCreatePhoto(item, target: .background) }
-            }
-            .navigationDestination(item: $selectedFestivalRankingBoard) { board in
-                LearnFestivalRankingDetailView(
-                    board: board,
-                    rankedFestivals: festivalRankedEntries(for: board)
-                ) { updated in
-                    updateFestival(updated)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if selectedSectionIsRefreshing || bannerMessage != nil {
+                VStack(alignment: .leading, spacing: 10) {
+                    if selectedSectionIsRefreshing {
+                        InlineLoadingBadge(title: LT("正在更新内容", "Updating content", "コンテンツを更新中"))
+                    }
+                    if let bannerMessage {
+                        ScreenStatusBanner(
+                            message: bannerMessage,
+                            style: .error,
+                            actionTitle: LT("重试", "Retry", "再試行")
+                        ) {
+                            Task { await refreshSelectedSection() }
+                        }
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { _ in
-                guard selectedSection == .festivals else { return }
-                Task { await loadFestivals() }
+        }
+        .background(RaverTheme.background)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await triggerInitialLoadIfNeeded()
+        }
+        .onChange(of: isActive) { _, _ in
+            Task { await triggerInitialLoadIfNeeded() }
+        }
+        .onChange(of: selectedSort) { _, next in
+            sortOrder = next.defaultOrder
+            Task { await loadLabels() }
+        }
+        .onChange(of: sortOrder) { _, _ in
+            Task { await loadLabels() }
+        }
+        .onChange(of: selectedGenreFilters) { _, _ in
+            Task { await loadLabels() }
+        }
+        .onChange(of: selectedNationFilters) { _, _ in
+            Task { await loadLabels() }
+        }
+        .onChange(of: createFestivalAvatarItem) { _, item in
+            Task { await loadFestivalCreatePhoto(item, target: .avatar) }
+        }
+        .onChange(of: createFestivalBackgroundItem) { _, item in
+            Task { await loadFestivalCreatePhoto(item, target: .background) }
+        }
+        .navigationDestination(item: $selectedFestivalRankingBoard) { board in
+            LearnFestivalRankingDetailView(
+                board: board,
+                rankedFestivals: festivalRankedEntries(for: board)
+            ) { updated in
+                updateFestival(updated)
             }
-            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(LT("确定", "OK", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverFestivalDidSave)) { _ in
+            guard selectedSection == .festivals else { return }
+            Task { await loadFestivals() }
+        }
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     @MainActor
@@ -3814,15 +3814,6 @@ struct LearnLabelDetailView: View {
                 Task { await openLabelPoster() }
             }
         )
-        actions.append(
-            SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await saveLabelPoster() }
-            }
-        )
 
         actions.append(
             SharePanelQuickAction(
@@ -3934,16 +3925,6 @@ struct LearnLabelDetailView: View {
         }
     }
 
-    @MainActor
-    private func saveLabelPoster() async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
-        }
-    }
 }
 
 struct LearnFestival: Identifiable, Hashable {
@@ -5104,15 +5085,6 @@ struct LearnFestivalDetailView: View {
                     Task { await openFestivalPoster(festival) }
                 }
             )
-            actions.append(
-                SharePanelQuickAction(
-                    title: LT("保存海报", "Save Poster", "海報を保存"),
-                    systemImage: "photo.badge.arrow.down",
-                    accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-                ) {
-                    Task { await saveFestivalPoster(festival) }
-                }
-            )
         }
 
         if canEditFestival {
@@ -5230,17 +5202,6 @@ struct LearnFestivalDetailView: View {
             )
         } catch {
             errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
-        }
-    }
-
-    @MainActor
-    private func saveFestivalPoster(_ festival: LearnFestival) async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(for: festival), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 
@@ -7491,13 +7452,6 @@ struct RankingBoardDetailView: View {
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openRankingBoardPoster() }
-            },
-            SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await saveRankingBoardPoster() }
             }
         ]
     }
@@ -7557,17 +7511,6 @@ struct RankingBoardDetailView: View {
             )
         } catch {
             errorMessage = error.userFacingMessage ?? LT("打开分享海报失败，请稍后重试。", "Failed to open share poster. Please try again later.", "共有海報を開けませんでした。時間をおいて再試行してください。")
-        }
-    }
-
-    @MainActor
-    private func saveRankingBoardPoster() async {
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(target: shareTarget(), channel: "poster_save")
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
         }
     }
 

@@ -482,13 +482,6 @@ struct PostCardView: View {
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
             ) {
                 Task { await openPostPoster() }
-            },
-            SharePanelQuickAction(
-                title: LT("保存海报", "Save Poster", "海報を保存"),
-                systemImage: "photo.badge.arrow.down",
-                accentColor: Color(red: 0.21, green: 0.58, blue: 0.98)
-            ) {
-                Task { await savePostPoster() }
             }
         ]
 
@@ -609,26 +602,6 @@ struct PostCardView: View {
         }
     }
 
-    @MainActor
-    private func savePostPoster() async {
-        let payload = PostSharePayload(post: post)
-        do {
-            let resolved = try await shareLinkCoordinator.resolveLink(
-                target: ShareTarget(
-                    type: .post,
-                    id: post.id,
-                    title: payload.shareTitle,
-                    subtitle: payload.shareSummary,
-                    imageURL: post.images.first
-                ),
-                channel: "poster_save"
-            )
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            OperationBannerCenter.shared.success(LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            shareErrorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
-        }
-    }
 }
 
 private struct PostLocationMapView: View {

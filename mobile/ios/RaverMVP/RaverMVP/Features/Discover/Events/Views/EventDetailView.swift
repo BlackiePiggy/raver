@@ -11,6 +11,19 @@ import CoreText
 import SDWebImageSwiftUI
 import SDWebImage
 
+private extension UIImage {
+    func scaledDownIfNeeded(maxHeight: CGFloat) -> UIImage {
+        guard size.height > maxHeight, size.height > 0, size.width > 0 else { return self }
+        let ratio = maxHeight / size.height
+        let targetSize = CGSize(width: size.width * ratio, height: maxHeight)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+    }
+}
+
 #if DEBUG
 private enum EventDetailPerfLog {
     private static var lastLogByKey: [String: CFTimeInterval] = [:]
@@ -5160,30 +5173,6 @@ struct EventDetailView: View {
         }
     }
 
-    @MainActor
-    private func saveEventPoster(_ event: WebEvent) async {
-        do {
-            let subtitle = [event.city, event.organizerName].compactMap { value in
-                value?.trimmingCharacters(in: .whitespacesAndNewlines)
-            }.filter { !$0.isEmpty }.joined(separator: " · ")
-
-            let resolved = try await shareLinkCoordinator.resolveLink(
-                target: ShareTarget(
-                    type: .event,
-                    id: event.id,
-                    title: event.name,
-                    subtitle: subtitle.isEmpty ? nil : subtitle,
-                    imageURL: event.coverImageUrl
-                ),
-                channel: "poster_save"
-            )
-            try await ShareAssetPhotoSaver.saveRemoteImage(from: resolved.payload.posterURL)
-            showWidgetStatusBanner(message: LT("海报已保存到相册", "Poster saved to Photos", "海報を写真に保存しました"))
-        } catch {
-            errorMessage = error.userFacingMessage ?? LT("保存海报失败，请稍后重试。", "Failed to save poster. Please try again later.", "海報を保存できませんでした。時間をおいて再試行してください。")
-        }
-    }
-
     private func openEventFeedbackEntry() {
         // TODO: Wire to dedicated feedback route/page when available.
         errorMessage = LT("贡献信息入口即将开放，当前已记录该需求。", "Incorrect info entry is coming soon. We have recorded this request.", "情報修正の入口は近日公開予定です。この要望は記録しました。")
@@ -8478,19 +8467,16 @@ private struct EventRoutePlannerShareSnapshotView: View {
                         .lineLimit(2)
                 }
 
-                if days.count > 1 {
-                    daySelector
+                if let selectedDay, days.count > 1 {
+                    selectedDayBadge(selectedDay)
                 }
 
                 if let selectedDay {
-                    EventTimelineBoardView(
+                    EventTimelinePosterBoardView(
                         event: event,
                         day: selectedDay,
                         selectedSlotIDs: selectedSlotIDs,
-                        selectable: false,
-                        onToggleSlot: nil,
-                        maxVisibleStages: Int.max,
-                        stickyTopInset: 0
+                        availableWidth: contentWidth
                     )
                     .frame(width: contentWidth, height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots), alignment: .leading)
                 } else {
@@ -8506,29 +8492,283 @@ private struct EventRoutePlannerShareSnapshotView: View {
         .frame(width: contentWidth + 20)
     }
 
-    private var daySelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(days) { day in
-                    let selected = day.id == selectedDayID
-                    Text(day.subtitleWithoutTimeZone)
-                        .font(EventScheduleTypography.semibold(15))
-                        .foregroundStyle(selected ? selectedDayTextColor : unselectedDayTextColor)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(
-                            Capsule()
-                                .fill(selected ? selectedDayBackgroundColor : unselectedDayBackgroundColor)
-                                .overlay(
-                                    Capsule()
-                                        .stroke(unselectedDayStrokeColor, lineWidth: selected ? 0 : 1)
-                                )
-                        )
+    private func selectedDayBadge(_ day: EventScheduleDay) -> some View {
+        Text(day.subtitleWithoutTimeZone)
+            .font(EventScheduleTypography.semibold(15))
+            .foregroundStyle(selectedDayTextColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(selectedDayBackgroundColor)
+            )
+            .frame(width: contentWidth, alignment: .leading)
+    }
+}
+
+private struct EventTimelinePosterBoardView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let event: WebEvent
+    let day: EventScheduleDay
+    let selectedSlotIDs: Set<String>
+    let availableWidth: CGFloat
+
+    private var layout: EventTimelineLayout {
+        EventTimelineLayout(
+            slots: day.slots,
+            stageOrder: event.stageOrder ?? [],
+            availableWidth: max(availableWidth, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth),
+            maxVisibleStages: Int.max,
+            logicalDay: day.date,
+            timeZone: event.eventTimeZone
+        )
+    }
+
+    private var boardHeight: CGFloat {
+        EventTimelineLayout.estimatedHeight(for: day.slots, timeZone: event.eventTimeZone)
+    }
+
+    private var isDarkMode: Bool {
+        colorScheme == .dark
+    }
+
+    private var boardGradientColors: [Color] {
+        if isDarkMode {
+            return [
+                Color(red: 0.09, green: 0.10, blue: 0.14),
+                Color(red: 0.06, green: 0.06, blue: 0.09)
+            ]
+        }
+        return [
+            Color.white,
+            Color(red: 0.94, green: 0.94, blue: 0.985)
+        ]
+    }
+
+    private var boardStrokeColor: Color {
+        isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+    }
+
+    private var headerBackdropColor: Color {
+        isDarkMode ? Color(red: 0.08, green: 0.09, blue: 0.13) : Color(red: 0.965, green: 0.965, blue: 0.99)
+    }
+
+    private var axisHeaderTextColor: Color {
+        isDarkMode ? Color.white.opacity(0.72) : Color.black.opacity(0.54)
+    }
+
+    private var axisTextColor: Color {
+        isDarkMode ? Color.white.opacity(0.92) : Color.black.opacity(0.62)
+    }
+
+    private var stageHeaderTextColor: Color {
+        Color.black.opacity(0.78)
+    }
+
+    private var columnFillColor: Color {
+        isDarkMode ? Color.white.opacity(0.04) : Color.black.opacity(0.035)
+    }
+
+    private var gridLineColor: Color {
+        isDarkMode ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+    }
+
+    private var normalCardTextColor: Color {
+        Color.black.opacity(isDarkMode ? 0.84 : 0.78)
+    }
+
+    private var selectedCardFillColor: Color {
+        isDarkMode ? Color.black.opacity(0.88) : Color.white.opacity(0.94)
+    }
+
+    var body: some View {
+        let resolvedLayout = layout
+
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: boardGradientColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(boardStrokeColor, lineWidth: 1)
+                )
+
+            HStack(spacing: 0) {
+                timelineAxis(layout: resolvedLayout)
+                stageMatrix(layout: resolvedLayout)
+            }
+            .padding(.vertical, 10)
+        }
+        .frame(width: availableWidth, height: boardHeight)
+    }
+
+    private func stageMatrix(layout: EventTimelineLayout) -> some View {
+        let stageModels = layout.stageNames.map { stageColumnModel(stageName: $0, layout: layout) }
+
+        return ZStack(alignment: .topLeading) {
+            EventTimelineStageColumnsView(
+                models: stageModels,
+                spacing: EventTimelineLayout.stageGap,
+                selectedSlotIDs: selectedSlotIDs,
+                selectable: false,
+                normalCardTextColor: normalCardTextColor,
+                selectedCardFillColor: selectedCardFillColor,
+                columnFillColor: columnFillColor,
+                gridLineColor: gridLineColor,
+                onToggleSlot: nil,
+                onSelectSlot: nil
+            )
+            .equatable()
+
+            stageHeaderRow(layout: layout)
+                .zIndex(3)
+        }
+        .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight + layout.bodyHeight, alignment: .topLeading)
+    }
+
+    private func timelineAxis(layout: EventTimelineLayout) -> some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
+
+            ZStack(alignment: .topTrailing) {
+                ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
+                    Text(Self.axisTimeFormatter(timeZone: event.eventTimeZone).string(from: tick))
+                        .font(EventScheduleTypography.heavy(12))
+                        .foregroundStyle(axisTextColor)
+                        .frame(width: EventTimelineLayout.axisWidth - 8, alignment: .trailing)
+                        .offset(y: layout.yPosition(for: tick) - 12)
                 }
             }
-            .padding(.horizontal, 2)
+            .frame(width: EventTimelineLayout.axisWidth, height: layout.bodyHeight, alignment: .topTrailing)
         }
-        .frame(width: contentWidth, alignment: .leading)
+        .frame(width: EventTimelineLayout.axisWidth)
+        .overlay(alignment: .top) {
+            timelineAxisHeader()
+        }
+    }
+
+    private func timelineAxisHeader() -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(headerBackdropColor)
+            .overlay(
+                Text("TIME")
+                    .font(EventScheduleTypography.semibold(12))
+                    .tracking(1.2)
+                    .foregroundStyle(axisHeaderTextColor)
+            )
+            .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
+    }
+
+    private func stageHeaderRow(layout: EventTimelineLayout) -> some View {
+        ZStack(alignment: .topLeading) {
+            headerBackdrop(width: layout.stageContentWidth)
+
+            HStack(spacing: EventTimelineLayout.stageGap) {
+                ForEach(layout.stageNames, id: \.self) { stageName in
+                    let stageColor = layout.color(for: stageName)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    stageColor.opacity(0.98),
+                                    stageColor.opacity(0.93),
+                                    stageColor.opacity(0.86)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .stroke(Color.white.opacity(0.92), lineWidth: 1.4)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
+                                .inset(by: 2)
+                                .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+                        )
+                        .overlay(
+                            Text(stageName)
+                                .font(EventScheduleTypography.heavy(26))
+                                .minimumScaleFactor(0.24)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(stageHeaderTextColor)
+                                .padding(.horizontal, 4)
+                        )
+                        .shadow(color: stageColor.opacity(0.72), radius: 14, x: 0, y: 0)
+                        .shadow(color: stageColor.opacity(0.34), radius: 28, x: 0, y: 0)
+                        .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
+                }
+            }
+        }
+        .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight, alignment: .topLeading)
+    }
+
+    private func headerBackdrop(width: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            headerBackdropColor
+                .frame(width: width, height: EventTimelineLayout.stageHeaderHeight)
+
+            LinearGradient(
+                colors: [
+                    headerBackdropColor.opacity(isDarkMode ? 0.86 : 0.92),
+                    headerBackdropColor.opacity(isDarkMode ? 0.34 : 0.46),
+                    headerBackdropColor.opacity(0.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: width, height: EventTimelineLayout.stageHeaderFadeHeight)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func stageColumnModel(stageName: String, layout: EventTimelineLayout) -> EventTimelineStageColumnModel {
+        let stageSlots = (layout.slotsByStage[stageName] ?? []).sorted {
+            if $0.startTime == $1.startTime {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.startTime < $1.startTime
+        }
+
+        let frames = stageSlots.map { slot in
+            let startY = layout.yPosition(for: slot.startTime)
+            let endY = layout.yPosition(for: slot.endTime)
+            let act = EventLineupActCodec.parse(slot: slot)
+            return EventTimelineCardFrame(
+                id: slot.id,
+                slot: slot,
+                top: startY,
+                height: max(44, endY - startY),
+                displayName: act.displayName,
+                timeRangeText: EventTimelineBoardView.cardTimeRangeText(for: slot, logicalDay: layout.logicalDay, timeZone: event.eventTimeZone)
+            )
+        }
+
+        return EventTimelineStageColumnModel(
+            stageName: stageName,
+            stageColor: layout.color(for: stageName),
+            stageWidth: layout.stageWidth,
+            bodyHeight: layout.bodyHeight,
+            tickPositions: layout.tickDates.map { layout.yPosition(for: $0) },
+            frames: frames
+        )
+    }
+
+    private static func axisTimeFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "h a"
+        return formatter
     }
 }
 
@@ -9120,14 +9360,17 @@ private struct EventRoutePlannerView: View {
         .environment(\.colorScheme, colorScheme)
 
         let renderer = ImageRenderer(content: snapshotView)
-        renderer.scale = UIScreen.main.scale
-        renderer.proposedSize = ProposedViewSize(width: snapshotContentWidth + 20, height: nil)
+        renderer.scale = 3
+        renderer.proposedSize = ProposedViewSize(
+            width: snapshotContentWidth + 20,
+            height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 96
+        )
 
         guard let image = renderer.uiImage else {
             feedbackMessage = LT("路线图生成失败，请重试", "Failed to generate route image. Please try again.", "ルート画像を生成できませんでした。もう一度お試しください。")
             return nil
         }
-        return image
+        return image.scaledDownIfNeeded(maxHeight: 4000)
     }
 
     @MainActor

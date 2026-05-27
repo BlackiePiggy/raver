@@ -230,7 +230,15 @@ const renderEventPosterSvg = async (
   const dividerY = (organizerLines.length > 0 ? organizerBottomY : venueBottomY) + 28;
   const footerLine1Y = dividerY + 27;
   const footerLine2Y = footerLine1Y + 19;
-  const qrY = dividerY + 13;
+  const qrSize = 72;
+  const qrX = 280;
+  const qrY = footerLine2Y - 14;
+  const qrIconBoxSize = 20;
+  const qrIconSize = 16;
+  const qrIconBoxX = qrX + (qrSize - qrIconBoxSize) / 2;
+  const qrIconBoxY = qrY + (qrSize - qrIconBoxSize) / 2;
+  const qrIconX = qrX + (qrSize - qrIconSize) / 2;
+  const qrIconY = qrY + (qrSize - qrIconSize) / 2;
   const moreInfoLine1 = locale === 'zh' ? '更多活动与艺人信息请扫码查看' : 'SCAN FOR MORE EVENTS &';
   const moreInfoLine2 = locale === 'zh' ? 'RaveHub App' : 'LINEUP INFO ON RAVEHUB APP';
 
@@ -283,13 +291,13 @@ const renderEventPosterSvg = async (
     <text x="25" y="${footerLine1Y}" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
     <text x="25" y="${footerLine2Y}" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(moreInfoLine2)}</text>
   </g>
-  <rect x="292" y="${qrY}" width="60" height="60" fill="#ffffff"/>
-  <image href="${qrDataUrl}" x="292" y="${qrY}" width="60" height="60" preserveAspectRatio="none" />
+  <rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" fill="#ffffff"/>
+  <image href="${qrDataUrl}" x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="none" />
   ${
     appIconDataUrl
       ? `
-  <rect x="313.5" y="${qrY + 21.5}" width="17" height="17" rx="4" fill="#ffffff"/>
-  <image href="${appIconDataUrl}" x="315" y="${qrY + 23}" width="14" height="14" preserveAspectRatio="xMidYMid meet" />`
+  <rect x="${qrIconBoxX}" y="${qrIconBoxY}" width="${qrIconBoxSize}" height="${qrIconBoxSize}" rx="4" fill="#ffffff"/>
+  <image href="${appIconDataUrl}" x="${qrIconX}" y="${qrIconY}" width="${qrIconSize}" height="${qrIconSize}" preserveAspectRatio="xMidYMid meet" />`
       : ''
   }
 </svg>`;

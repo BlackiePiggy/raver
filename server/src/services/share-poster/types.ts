@@ -9,7 +9,7 @@ export type PosterRenderMode =
   | 'dj_svg'
   | 'user_card_svg'
   | 'festival_svg'
-  | 'default_png';
+  | 'default_svg';
 
 export type SharePosterSectionCell = {
   label: string;
@@ -35,7 +35,7 @@ export type SharePosterStructuredCardInput = {
   footerLine1: string;
   footerLine2: string;
   qrText: string;
-  mode: Exclude<PosterRenderMode, 'event_fallback_png' | 'default_png'>;
+  mode: Exclude<PosterRenderMode, 'event_fallback_png'>;
 };
 
 export type SharePosterRequestContext = {

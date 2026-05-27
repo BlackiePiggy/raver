@@ -1,77 +1,123 @@
-import QRCode from 'qrcode';
-import { PNG } from 'pngjs';
-import { SharePosterHandler } from '../types';
-import { buildShareShortUrl } from '../../share-link.service';
-import {
-  asciiText,
-  clampText,
-  drawText,
-  fillRect,
-  loadAppIconPng,
-  overlayPngScaled,
-  wrapAsciiText,
-} from '../raster-utils';
+import { buildPosterQrText, renderStructuredPosterSvg } from '../svg-utils';
+import { posterText } from '../localization';
+import { SharePosterHandler, SharePosterSectionRow } from '../types';
 
-const drawDefaultPoster = async (shareLink: any): Promise<Buffer> => {
-  const width = 900;
-  const height = 1400;
-  const png = new PNG({ width, height });
-  const dark: [number, number, number] = [23, 23, 23];
-  const muted: [number, number, number] = [82, 82, 82];
-  const paper: [number, number, number] = [246, 242, 234];
-  const accent: [number, number, number] = [221, 62, 44];
-  const black: [number, number, number] = [0, 0, 0];
-  const white: [number, number, number] = [255, 255, 255];
+const localizedTypeLabel = (targetType: string, locale: 'zh' | 'en'): string => {
+  const normalized = String(targetType || '').trim().toLowerCase();
+  const zhMap: Record<string, string> = {
+    post: '动态',
+    news: '资讯',
+    set: 'Set',
+    dj_set: 'Set',
+    label: '厂牌',
+    festival: '主办方',
+    squad_card: '小队',
+    squad_invite: '小队邀请',
+    rating_event: '打分事件',
+    rating_unit: '打分单位',
+    circle_id: '识曲',
+    user_card: '个人名片',
+  };
+  const enMap: Record<string, string> = {
+    post: 'POST',
+    news: 'NEWS',
+    set: 'SET',
+    dj_set: 'SET',
+    label: 'LABEL',
+    festival: 'ORGANIZER',
+    squad_card: 'SQUAD',
+    squad_invite: 'SQUAD INVITE',
+    rating_event: 'RATING EVENT',
+    rating_unit: 'RATING UNIT',
+    circle_id: 'TRACK ID',
+    user_card: 'PROFILE',
+  };
+  if (locale === 'zh') return zhMap[normalized] || '分享内容';
+  return enMap[normalized] || normalized.replace(/[_-]+/g, ' ').toUpperCase() || 'SHARE';
+};
 
-  fillRect(png, 0, 0, width, height, paper);
-  fillRect(png, 0, 0, width, 260, dark);
-  fillRect(png, 0, 260, width, 12, accent);
-  drawText(png, 'RAVER', 70, 80, 12, white);
-  drawText(png, String(shareLink.previewType || '').replace(/_/g, ' ').slice(0, 22), 72, 205, 4, [230, 230, 230]);
-
-  const title = asciiText(shareLink.title, `${shareLink.targetType} ${shareLink.code}`);
-  const subtitle = asciiText(shareLink.subtitle, 'OPEN RAVER TO VIEW THIS SHARE');
-  wrapAsciiText(title, 18, 3).forEach((line, index) => drawText(png, line, 72, 340 + index * 78, 9, dark));
-  wrapAsciiText(subtitle, 35, 4).forEach((line, index) => drawText(png, line, 76, 610 + index * 38, 5, muted));
-
-  const qrText = buildShareShortUrl(shareLink.code);
-  const qr = await QRCode.create(qrText, { errorCorrectionLevel: 'M' });
-  const modules = qr.modules.size;
-  const qrSize = 360;
-  const cell = Math.floor(qrSize / modules);
-  const actualQrSize = modules * cell;
-  const qrX = Math.floor((width - actualQrSize) / 2);
-  const qrY = 840;
-  fillRect(png, qrX - 28, qrY - 28, actualQrSize + 56, actualQrSize + 56, white);
-  for (let row = 0; row < modules; row += 1) {
-    for (let col = 0; col < modules; col += 1) {
-      if (qr.modules.get(row, col)) {
-        fillRect(png, qrX + col * cell, qrY + row * cell, cell, cell, black);
-      }
-    }
+const localizedPreviewType = (previewType: string | null | undefined, locale: 'zh' | 'en'): string => {
+  const normalized = String(previewType || '').trim().toLowerCase();
+  if (!normalized) return locale === 'zh' ? '默认模版' : 'DEFAULT TEMPLATE';
+  if (locale === 'zh') {
+    if (normalized === 'content_card') return '内容卡片';
+    if (normalized === 'invite_card') return '邀请卡片';
+    return normalized.replace(/[_-]+/g, ' ');
   }
+  return normalized.replace(/[_-]+/g, ' ').toUpperCase();
+};
 
-  const appIcon = loadAppIconPng();
-  if (appIcon) {
-    const logoSize = Math.round(actualQrSize * 0.18);
-    const logoX = Math.floor(qrX + (actualQrSize - logoSize) / 2);
-    const logoY = Math.floor(qrY + (actualQrSize - logoSize) / 2);
-    overlayPngScaled(png, appIcon, logoX, logoY, logoSize, logoSize);
-  }
+const buildDefaultRows = (
+  shareLink: {
+    targetType: string;
+    previewType: string | null;
+    subtitle: string | null;
+    code: string;
+  },
+  locale: 'zh' | 'en'
+): SharePosterSectionRow[] => {
+  const typeValue = localizedTypeLabel(shareLink.targetType, locale);
+  const previewValue = localizedPreviewType(shareLink.previewType, locale);
+  const summaryValue = posterText(
+    shareLink.subtitle,
+    locale === 'zh' ? '打开 RaveHub 查看完整内容' : 'OPEN RAVEHUB TO VIEW FULL DETAILS'
+  );
 
-  drawText(png, 'SCAN TO OPEN', 245, 1255, 6, dark);
-  drawText(png, `CODE ${clampText(shareLink.code, 8)}`, 250, 1315, 4, muted);
-  return PNG.sync.write(png);
+  return [
+    {
+      kind: 'pair',
+      left: {
+        label: locale === 'zh' ? '内容类型' : 'TYPE',
+        value: typeValue,
+      },
+      right: {
+        label: locale === 'zh' ? '分享卡片' : 'CARD',
+        value: previewValue,
+      },
+    },
+    {
+      kind: 'full',
+      cell: {
+        label: locale === 'zh' ? '内容摘要' : 'SUMMARY',
+        value: summaryValue,
+      },
+    },
+    {
+      kind: 'full',
+      cell: {
+        label: locale === 'zh' ? '分享代码' : 'SHARE CODE',
+        value: shareLink.code.toUpperCase(),
+      },
+    },
+  ];
 };
 
 export const defaultPosterHandler: SharePosterHandler = {
   id: 'default',
   supports: () => true,
   async render(context) {
-    const png = await drawDefaultPoster(context.shareLink);
+    const png = await renderStructuredPosterSvg({
+      locale: context.locale,
+      title: posterText(
+        context.shareLink.title,
+        context.locale === 'zh' ? 'RaveHub 分享内容' : 'RaveHub Share'
+      ),
+      imageUrl: context.shareLink.imageUrl || null,
+      rows: buildDefaultRows(context.shareLink, context.locale),
+      footerLine1:
+        context.locale === 'zh'
+          ? '扫码打开 RaveHub 查看完整内容与更多相关信息'
+          : 'SCAN TO OPEN RAVEHUB FOR FULL DETAILS & MORE',
+      footerLine2: 'RaveHub App',
+      qrText: buildPosterQrText(context.shareLink.code),
+      mode: 'default_svg',
+    });
+    console.info(
+      `[share-poster] code=${context.shareLink.code} targetType=${context.shareLink.targetType} svg-render success bytes=${png.length} handler=default`
+    );
     return {
       png,
-      mode: 'default_png',
+      mode: 'default_svg',
       handlerId: 'default',
       variant: context.variant,
     };
