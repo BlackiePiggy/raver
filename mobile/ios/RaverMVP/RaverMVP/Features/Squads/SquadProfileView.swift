@@ -728,6 +728,7 @@ private struct SquadManageFormView: View {
     @State private var bannerURL: String
     @State private var selectedAvatarPhotoItem: PhotosPickerItem?
     @State private var selectedFlagPhotoItem: PhotosPickerItem?
+    @State private var pendingCropSession: AppImageCropSession?
     @State private var isUploadingAvatar = false
     @State private var isUploadingFlag = false
     @State private var uploadError: String?
@@ -841,16 +842,36 @@ private struct SquadManageFormView: View {
         .onChange(of: selectedAvatarPhotoItem) { _, newItem in
             guard let newItem else { return }
             Task {
-                guard let data = try? await newItem.loadTransferable(type: Data.self) else { return }
-                await uploadAvatarImage(data: data)
+                await preparePickedImageForCropping(newItem, target: .avatar)
             }
         }
         .onChange(of: selectedFlagPhotoItem) { _, newItem in
             guard let newItem else { return }
             Task {
-                guard let data = try? await newItem.loadTransferable(type: Data.self) else { return }
-                await uploadFlagImage(data: data)
+                await preparePickedImageForCropping(newItem, target: .background)
             }
+        }
+        .sheet(item: $pendingCropSession) { session in
+            AppImageCropperSheet(
+                image: session.image,
+                aspectRatio: session.aspectRatio,
+                title: session.title,
+                onCancel: {
+                    pendingCropSession = nil
+                },
+                onCrop: { croppedImage in
+                    pendingCropSession = nil
+                    Task {
+                        switch session.target {
+                        case .avatar:
+                            await applyCroppedAvatarImage(croppedImage)
+                        case .background:
+                            await applyCroppedBannerImage(croppedImage)
+                        }
+                    }
+                }
+            )
+            .ignoresSafeArea()
         }
         .alert(LT("上传失败", "Upload Failed", "アップロードに失敗しました"), isPresented: Binding(
             get: { uploadError != nil },
@@ -869,6 +890,78 @@ private struct SquadManageFormView: View {
             from: nil,
             for: nil
         )
+    }
+
+    private func preparePickedImageForCropping(_ item: PhotosPickerItem, target: AppImageCropTarget) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                await MainActor.run {
+                    uploadError = LT("图片读取失败，请重新选择。", "Failed to read the image. Please choose again.", "画像の読み込みに失敗しました。もう一度選択してください。")
+                }
+                return
+            }
+
+            await MainActor.run {
+                switch target {
+                case .avatar:
+                    selectedAvatarPhotoItem = nil
+                case .background:
+                    selectedFlagPhotoItem = nil
+                }
+
+                pendingCropSession = AppImageCropSession(
+                    target: target,
+                    image: image,
+                    aspectRatio: cropAspectRatio(for: target),
+                    title: cropTitle(for: target)
+                )
+            }
+        } catch {
+            await MainActor.run {
+                uploadError = LT("图片读取失败，请重新选择。", "Failed to read the image. Please choose again.", "画像の読み込みに失敗しました。もう一度選択してください。")
+            }
+        }
+    }
+
+    private func applyCroppedAvatarImage(_ image: UIImage) async {
+        guard let data = image.raverEncodedImageData(compressionQuality: 0.95) else {
+            await MainActor.run {
+                uploadError = LT("头像裁剪失败，请重新选择。", "Avatar cropping failed. Please choose again.", "アバターの切り抜きに失敗しました。もう一度選択してください。")
+            }
+            return
+        }
+
+        await uploadAvatarImage(data: data)
+    }
+
+    private func applyCroppedBannerImage(_ image: UIImage) async {
+        guard let data = image.raverEncodedImageData(compressionQuality: 0.95) else {
+            await MainActor.run {
+                uploadError = LT("旗帜图裁剪失败，请重新选择。", "Banner cropping failed. Please choose again.", "バナー画像の切り抜きに失敗しました。もう一度選択してください。")
+            }
+            return
+        }
+
+        await uploadFlagImage(data: data)
+    }
+
+    private func cropAspectRatio(for target: AppImageCropTarget) -> CGSize {
+        switch target {
+        case .avatar:
+            return CGSize(width: 1, height: 1)
+        case .background:
+            return CGSize(width: 5, height: 3)
+        }
+    }
+
+    private func cropTitle(for target: AppImageCropTarget) -> String {
+        switch target {
+        case .avatar:
+            return LT("裁剪小队头像", "Crop Squad Avatar", "Squadアバターを切り抜く")
+        case .background:
+            return LT("裁剪小队旗帜图", "Crop Squad Banner", "Squadバナー画像を切り抜く")
+        }
     }
 
     @MainActor

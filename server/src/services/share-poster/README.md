@@ -14,9 +14,6 @@
 - `event-access`
   - Default event share poster.
   - Route example: `/poster/:code.png`
-- `event-timetable`
-  - Event timetable poster minimal case.
-  - Route example: `/poster/:code.png?variant=timetable`
 - `dj-profile`
   - DJ poster minimal case.
   - Works when share link `targetType = dj`
@@ -59,17 +56,6 @@ await renderSharePoster({
   prisma,
   shareLink,
   locale: 'zh',
-});
-```
-
-### Event Timetable Poster
-
-```ts
-await renderSharePoster({
-  prisma,
-  shareLink,
-  locale: 'en',
-  variant: 'timetable',
 });
 ```
 

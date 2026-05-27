@@ -347,8 +347,7 @@ const drawEventAccessPassPoster = async (
 export const eventPosterHandler: SharePosterHandler = {
   id: 'event-access',
   supports(context) {
-    if (context.shareLink.targetType !== 'event') return false;
-    return !context.variant || !['timetable', 'event_timetable', 'schedule'].includes(context.variant);
+    return context.shareLink.targetType === 'event';
   },
   async render(context) {
     const snapshot = await loadEventPosterSnapshot(context.prisma, context.shareLink, context.locale);

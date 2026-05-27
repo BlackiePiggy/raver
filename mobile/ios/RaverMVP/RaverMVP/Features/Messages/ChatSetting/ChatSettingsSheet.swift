@@ -188,6 +188,7 @@ struct ChatSettingsView: View {
     @State private var editingGroupInfoField: GroupInfoEditableField?
     @State private var groupInfoDraft = ""
     @State private var selectedGroupAvatarPhotoItem: PhotosPickerItem?
+    @State private var pendingGroupAvatarCropSession: AppImageCropSession?
     @State private var isUploadingGroupAvatar = false
     @State private var reportTarget: ReportSheetTarget?
 
@@ -354,6 +355,23 @@ struct ChatSettingsView: View {
                 )
             }
         }
+        .sheet(item: $pendingGroupAvatarCropSession) { session in
+            AppImageCropperSheet(
+                image: session.image,
+                aspectRatio: session.aspectRatio,
+                title: session.title,
+                onCancel: {
+                    pendingGroupAvatarCropSession = nil
+                },
+                onCrop: { croppedImage in
+                    pendingGroupAvatarCropSession = nil
+                    Task {
+                        await applyCroppedGroupAvatarImage(croppedImage)
+                    }
+                }
+            )
+            .ignoresSafeArea()
+        }
         .onChange(of: notificationsMuted) { oldValue, newValue in
             guard hasLoadedConversationSettings else { return }
             guard oldValue != newValue else { return }
@@ -387,7 +405,7 @@ struct ChatSettingsView: View {
         }
         .onChange(of: selectedGroupAvatarPhotoItem) { _, newValue in
             guard let newValue else { return }
-            Task { await updateGroupAvatar(from: newValue) }
+            Task { await prepareGroupAvatarForCropping(from: newValue) }
         }
     }
 
@@ -1170,31 +1188,47 @@ struct ChatSettingsView: View {
     }
 
     @MainActor
-    private func updateGroupAvatar(from item: PhotosPickerItem) async {
+    private func prepareGroupAvatarForCropping(from item: PhotosPickerItem) async {
         guard conversation.type == .group else { return }
         guard canManageInviteOption else { return }
         guard !isUploadingGroupAvatar else { return }
 
-        isUploadingGroupAvatar = true
-        defer {
-            isUploadingGroupAvatar = false
-            selectedGroupAvatarPhotoItem = nil
-        }
-
         do {
             guard let rawData = try await item.loadTransferable(type: Data.self),
-                  !rawData.isEmpty else {
+                  !rawData.isEmpty,
+                  let image = UIImage(data: rawData) else {
                 throw ServiceError.message(LT("无法读取所选图片", "Unable to read the selected image", "選択した画像を読み取れません"))
             }
 
-            let uploadData: Data
-            if let image = UIImage(data: rawData),
-               let jpegData = image.jpegData(compressionQuality: 0.88) {
-                uploadData = jpegData
-            } else {
-                uploadData = rawData
-            }
+            selectedGroupAvatarPhotoItem = nil
+            pendingGroupAvatarCropSession = AppImageCropSession(
+                target: .avatar,
+                image: image,
+                aspectRatio: CGSize(width: 1, height: 1),
+                title: LT("裁剪群头像", "Crop Group Avatar", "グループアイコンを切り抜く")
+            )
+        } catch {
+            errorMessage = error.userFacingMessage ?? LT("无法读取所选图片", "Unable to read the selected image", "選択した画像を読み取れません")
+        }
+    }
 
+    @MainActor
+    private func applyCroppedGroupAvatarImage(_ image: UIImage) async {
+        guard conversation.type == .group else { return }
+        guard canManageInviteOption else { return }
+        guard !isUploadingGroupAvatar else { return }
+
+        guard let uploadData = image.raverEncodedImageData(compressionQuality: 0.95) else {
+            errorMessage = LT("群头像裁剪失败，请重新选择。", "Group avatar cropping failed. Please choose again.", "グループアイコンの切り抜きに失敗しました。もう一度選択してください。")
+            return
+        }
+
+        isUploadingGroupAvatar = true
+        defer {
+            isUploadingGroupAvatar = false
+        }
+
+        do {
             let uploaded = try await repository.uploadSquadAvatar(
                 squadID: platformSquadID,
                 imageData: uploadData,

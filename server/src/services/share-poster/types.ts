@@ -5,7 +5,6 @@ export type SharePosterLocale = 'zh' | 'en';
 export type PosterRenderMode =
   | 'event_svg'
   | 'event_fallback_png'
-  | 'event_timetable_svg'
   | 'dj_svg'
   | 'user_card_svg'
   | 'festival_svg'
@@ -31,7 +30,6 @@ export type SharePosterStructuredCardInput = {
   locale: SharePosterLocale;
   title: string;
   imageUrl?: string | null;
-  heroTheme?: 'event_timetable';
   debugLabel?: string;
   rows: SharePosterSectionRow[];
   footerLine1: string;

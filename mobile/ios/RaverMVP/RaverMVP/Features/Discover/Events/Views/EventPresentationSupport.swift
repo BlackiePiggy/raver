@@ -226,6 +226,7 @@ extension WebEvent {
         }
         return posterAssetURLs.first ?? lineupAssetURLs.first
     }
+
 }
 
 struct EventRow: View {

@@ -2756,9 +2756,9 @@ struct EventDetailView: View {
             )
         case .routeAction:
             return AppGuidanceSpotlightStep(
-                title: LT("定制你的路线", "Customize your route", "自分のルートを作成"),
-                message: LT("点击右上角「定制路线」进入路线页面，按自己的节奏标注想看的阵容。", "Tap Customize Route to enter route planning and mark the sets you want to see.", "右上の「ルートを作成」から、見たい出演枠を自分のペースで選べます。"),
-                buttonTitle: LT("进入定制路线", "Open route planner", "ルート作成へ"),
+                title: LT("查看你的路线", "Open your route", "ルートを開く"),
+                message: LT("点击搜索框左侧的「我的路线」进入路线页面，按自己的节奏标注想看的阵容。", "Tap My Route to open route planning and mark the sets you want to see.", "検索欄の左にある「マイルート」から、見たい出演枠を自分のペースで選べます。"),
+                buttonTitle: LT("进入路线", "Open route", "ルートを開く"),
                 targetFrame: routeActionFrame == .zero ? contentSpotlightFrame : routeActionFrame,
                 cornerRadius: 14,
                 placement: .below
@@ -3678,8 +3678,11 @@ struct EventDetailView: View {
                         event: event,
                         scheduledSlots: scheduledSlots,
                         presentationStyle: .embedded,
-                        onRouteActionGlobalFrameChange: { frame in
-                            routeActionFrame = frame
+                        initialSelectedDayID: selectedScheduleDayID,
+                        onSelectedDayChange: { dayID in
+                            if selectedScheduleDayID != dayID {
+                                selectedScheduleDayID = dayID
+                            }
                         }
                     )
                     .transition(.opacity.combined(with: .move(edge: .leading)))
@@ -3704,7 +3707,9 @@ struct EventDetailView: View {
         HStack(alignment: .top, spacing: 10) {
             scheduleViewModePicker
 
-            Spacer(minLength: 8)
+            scheduleRouteButton
+
+            Spacer(minLength: 0)
 
             EventScheduleSearchPanel(
                 results: searchResults,
@@ -3715,6 +3720,48 @@ struct EventDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .zIndex(1000)
+    }
+
+    private var scheduleRouteButton: some View {
+        Button {
+            guard let event else { return }
+            appPush(
+                .eventRoute(
+                    eventID: event.id,
+                    ownerUserID: nil,
+                    ownerDisplayName: nil,
+                    selectedDayID: selectedScheduleDayID,
+                    selectedSlotIDs: nil
+                )
+            )
+        } label: {
+            Label(LT("我的路线", "My Route", "マイルート"), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.accent)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(RaverTheme.accent.opacity(0.13))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(RaverTheme.accent.opacity(0.42), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .overlay {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(
+                        key: EventRouteActionFramePreferenceKey.self,
+                        value: proxy.frame(in: .global)
+                    )
+            }
+        }
+        .onPreferenceChange(EventRouteActionFramePreferenceKey.self) { frame in
+            routeActionFrame = frame
+        }
     }
 
     private var scheduleViewModePicker: some View {
@@ -8131,6 +8178,11 @@ private struct EventRouteSharePreviewCard: View {
 }
 
 private enum EventRoutePosterRenderer {
+    struct TimetablePosterBackgroundSelection {
+        let source: String
+        let urlString: String?
+    }
+
     @MainActor
     static func generateImage(
         routeTitle: String,
@@ -8155,6 +8207,14 @@ private enum EventRoutePosterRenderer {
         )
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
         let qrCodeImage = await loadEventShareQRCodeImage(event: event)
+        let posterHeight =
+            EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 232
+        let backgroundSelection = timetablePosterBackgroundSelection(for: event)
+        let backgroundImage = await loadTimetablePosterBackgroundImage(
+            selection: backgroundSelection,
+            event: event,
+            logContext: "share-preview"
+        )
 
         let snapshotView = EventRoutePlannerShareSnapshotView(
             routeTitle: routeTitle,
@@ -8163,7 +8223,9 @@ private enum EventRoutePosterRenderer {
             selectedDayID: selectedDay.id,
             selectedSlotIDs: selectedSlotIDs,
             contentWidth: snapshotContentWidth,
-            qrCodeImage: qrCodeImage
+            posterHeight: posterHeight,
+            qrCodeImage: qrCodeImage,
+            backgroundImage: backgroundImage
         )
         .environment(\.colorScheme, colorScheme)
 
@@ -8171,11 +8233,60 @@ private enum EventRoutePosterRenderer {
         renderer.scale = 3
         renderer.proposedSize = ProposedViewSize(
             width: snapshotContentWidth + 20,
-            height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 232
+            height: posterHeight
         )
 
         guard let image = renderer.uiImage else { return nil }
+        print(
+            "[EventRoutePoster] eventId=\(event.id) context=share-preview render-success " +
+            "backgroundApplied=\(backgroundImage == nil ? "no" : "yes") " +
+            "posterHeight=\(Int(posterHeight))"
+        )
         return image.scaledDownIfNeeded(maxHeight: 4000)
+    }
+
+    static func timetablePosterBackgroundSelection(for event: WebEvent) -> TimetablePosterBackgroundSelection {
+        let coverAsset = event.imageAssets?
+            .sorted {
+                let leftOrder = $0.order ?? Int.max
+                let rightOrder = $1.order ?? Int.max
+                if leftOrder != rightOrder { return leftOrder < rightOrder }
+                let leftSort = $0.sort ?? Int.max
+                let rightSort = $1.sort ?? Int.max
+                if leftSort != rightSort { return leftSort < rightSort }
+                return $0.url < $1.url
+            }
+            .first { asset in
+                let normalized = (asset.type ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                    .replacingOccurrences(of: "_", with: "")
+                    .replacingOccurrences(of: "-", with: "")
+                return normalized.contains("cover")
+            }?
+            .url
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let coverAsset, !coverAsset.isEmpty {
+            return TimetablePosterBackgroundSelection(source: "cover_asset", urlString: coverAsset)
+        }
+
+        if let coverField = event.coverImageUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !coverField.isEmpty {
+            return TimetablePosterBackgroundSelection(source: "cover_field", urlString: coverField)
+        }
+
+        if let poster = event.posterAssetURLs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !poster.isEmpty {
+            return TimetablePosterBackgroundSelection(source: "poster_asset", urlString: poster)
+        }
+
+        if let lineup = event.lineupAssetURLs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !lineup.isEmpty {
+            return TimetablePosterBackgroundSelection(source: "lineup_asset", urlString: lineup)
+        }
+
+        return TimetablePosterBackgroundSelection(source: "none", urlString: nil)
     }
 
     private static func loadEventShareQRCodeImage(event: WebEvent) async -> UIImage? {
@@ -8212,6 +8323,56 @@ private enum EventRoutePosterRenderer {
         } catch {
             return nil
         }
+    }
+
+    static func loadTimetablePosterBackgroundImage(
+        selection: TimetablePosterBackgroundSelection,
+        event: WebEvent,
+        logContext: String
+    ) async -> UIImage? {
+        print(
+            "[EventRoutePoster] eventId=\(event.id) context=\(logContext) timetable-background-select " +
+            "source=\(selection.source) url=\(selection.urlString ?? "none")"
+        )
+
+        guard let rawURL = selection.urlString,
+              let resolvedURLString = AppConfig.resolvedURLString(rawURL),
+              let url = URL(string: resolvedURLString) else {
+            print(
+                "[EventRoutePoster] eventId=\(event.id) context=\(logContext) image-fetch skipped " +
+                "source=\(selection.source) reason=invalid_url"
+            )
+            return nil
+        }
+
+        let image: UIImage? = await withCheckedContinuation { (continuation: CheckedContinuation<UIImage?, Never>) in
+            SDWebImageManager.shared.loadImage(
+                with: url,
+                options: [.retryFailed, .highPriority, .scaleDownLargeImages],
+                progress: nil
+            ) { image, _, error, _, finished, _ in
+                guard finished else { return }
+                if let image {
+                    continuation.resume(returning: image)
+                } else {
+                    let message = error?.localizedDescription ?? "unknown"
+                    print(
+                        "[EventRoutePoster] eventId=\(event.id) context=\(logContext) image-fetch failed " +
+                        "source=\(selection.source) url=\(resolvedURLString) message=\(message)"
+                    )
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+
+        if let image {
+            print(
+                "[EventRoutePoster] eventId=\(event.id) context=\(logContext) image-fetch success " +
+                "source=\(selection.source) url=\(resolvedURLString) " +
+                "size=\(Int(image.size.width))x\(Int(image.size.height))"
+            )
+        }
+        return image
     }
 
     @MainActor
@@ -8270,7 +8431,7 @@ private struct EventScheduleSearchPanel: View {
             .overlay(alignment: .topTrailing) {
                 if !candidates.isEmpty {
                     candidateList
-                        .padding(.top, 46)
+                        .padding(.top, 42)
                         .zIndex(2000)
                 }
             }
@@ -8323,7 +8484,7 @@ private struct EventScheduleSearchPanel: View {
             }
         }
         .padding(.horizontal, 11)
-        .frame(width: 156, height: 38)
+        .frame(width: 156, height: 34)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(searchFieldBackground)
@@ -8931,13 +9092,19 @@ private struct EventRoutePlannerShareSnapshotView: View {
     let selectedDayID: String
     let selectedSlotIDs: Set<String>
     let contentWidth: CGFloat
+    let posterHeight: CGFloat
     let qrCodeImage: UIImage?
+    let backgroundImage: UIImage?
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
     }
 
     @Environment(\.colorScheme) private var colorScheme
+
+    private var hasBackgroundImage: Bool {
+        backgroundImage != nil
+    }
 
     private var selectedDayTextColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.85) : Color.white.opacity(0.97)
@@ -8976,6 +9143,14 @@ private struct EventRoutePlannerShareSnapshotView: View {
         event.name.nilIfBlank ?? routeTitle
     }
 
+    private var headerPrimaryTextColor: Color {
+        hasBackgroundImage ? Color.white.opacity(0.98) : RaverTheme.primaryText
+    }
+
+    private var headerSecondaryTextColor: Color {
+        hasBackgroundImage ? Color.white.opacity(0.76) : RaverTheme.secondaryText
+    }
+
     private var dateLineText: String? {
         selectedDay?.subtitleWithoutTimeZone.nilIfBlank
     }
@@ -8991,12 +9166,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: plannerBackgroundGradientColors,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            plannerBackgroundLayer
 
             VStack(alignment: .leading, spacing: 14) {
                 headerSection
@@ -9019,7 +9189,55 @@ private struct EventRoutePlannerShareSnapshotView: View {
             .padding(.bottom, 24)
             .frame(width: contentWidth + 20, alignment: .leading)
         }
-        .frame(width: contentWidth + 20)
+        .frame(width: contentWidth + 20, height: posterHeight)
+    }
+
+    @ViewBuilder
+    private var plannerBackgroundLayer: some View {
+        LinearGradient(
+            colors: plannerBackgroundGradientColors,
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+
+        if let backgroundImage {
+            Image(uiImage: backgroundImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: contentWidth + 20, height: posterHeight)
+                .clipped()
+                .ignoresSafeArea()
+
+            timetableThemeOverlay
+                .ignoresSafeArea()
+        }
+    }
+
+    private var timetableThemeOverlay: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(colorScheme == .dark ? 0.24 : 0.12),
+                    Color(red: 0.88, green: 0.15, blue: 0.39).opacity(0.14),
+                    Color(red: 0.11, green: 0.71, blue: 0.95).opacity(0.18),
+                    Color.black.opacity(colorScheme == .dark ? 0.48 : 0.28)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 44) {
+                ForEach(0..<7, id: \.self) { _ in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.08))
+                        .frame(height: 1)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 88)
+        }
+        .frame(width: contentWidth + 20, height: posterHeight)
     }
 
     private var headerSection: some View {
@@ -9027,21 +9245,21 @@ private struct EventRoutePlannerShareSnapshotView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(eventTitleText)
                     .font(EventScheduleTypography.heavy(24))
-                    .foregroundStyle(RaverTheme.primaryText)
+                    .foregroundStyle(headerPrimaryTextColor)
                     .lineLimit(2)
                     .minimumScaleFactor(0.72)
 
                 if let dateLineText {
                     Text(dateLineText)
                         .font(EventScheduleTypography.heavy(15))
-                        .foregroundStyle(RaverTheme.secondaryText)
+                        .foregroundStyle(headerSecondaryTextColor)
                         .lineLimit(1)
                 }
 
                 if let routeHeadlineText {
                     Text(routeHeadlineText)
                         .font(EventScheduleTypography.heavy(18))
-                        .foregroundStyle(RaverTheme.primaryText.opacity(0.92))
+                        .foregroundStyle(headerPrimaryTextColor.opacity(0.92))
                         .lineLimit(2)
                 }
             }
@@ -9058,7 +9276,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
 
             Text(LT("扫码加入RaveHub来定制你的路线", "Scan to join RaveHub and customize your route", "QRを読み取ってRaveHubでルートを作成"))
                 .font(EventScheduleTypography.heavy(9))
-                .foregroundStyle(RaverTheme.secondaryText)
+                .foregroundStyle(headerSecondaryTextColor)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 72, alignment: .leading)
@@ -9607,10 +9825,24 @@ private struct EventRoutePlannerView: View {
         .operationBannerHost()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                if isViewingOwnRoute {
+                    Button {
+                        saveCurrentRoute()
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     presentShareMorePanel()
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(RaverTheme.primaryText)
                         .frame(width: 36, height: 36)
@@ -9909,6 +10141,14 @@ private struct EventRoutePlannerView: View {
             EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth
         )
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
+        let posterHeight =
+            EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 96
+        let backgroundSelection = EventRoutePosterRenderer.timetablePosterBackgroundSelection(for: event)
+        let backgroundImage = await EventRoutePosterRenderer.loadTimetablePosterBackgroundImage(
+            selection: backgroundSelection,
+            event: event,
+            logContext: "route-save"
+        )
         let snapshotView = EventRoutePlannerShareSnapshotView(
             routeTitle: navigationTitleText,
             event: event,
@@ -9916,7 +10156,9 @@ private struct EventRoutePlannerView: View {
             selectedDayID: selectedDay.id,
             selectedSlotIDs: selectedSlotIDs,
             contentWidth: snapshotContentWidth,
-            qrCodeImage: nil
+            posterHeight: posterHeight,
+            qrCodeImage: nil,
+            backgroundImage: backgroundImage
         )
         .environment(\.colorScheme, colorScheme)
 
@@ -9924,13 +10166,18 @@ private struct EventRoutePlannerView: View {
         renderer.scale = 3
         renderer.proposedSize = ProposedViewSize(
             width: snapshotContentWidth + 20,
-            height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 96
+            height: posterHeight
         )
 
         guard let image = renderer.uiImage else {
             feedbackMessage = LT("路线图生成失败，请重试", "Failed to generate route image. Please try again.", "ルート画像を生成できませんでした。もう一度お試しください。")
             return nil
         }
+        print(
+            "[EventRoutePoster] eventId=\(event.id) context=route-save render-success " +
+            "backgroundApplied=\(backgroundImage == nil ? "no" : "yes") " +
+            "posterHeight=\(Int(posterHeight))"
+        )
         return image.scaledDownIfNeeded(maxHeight: 4000)
     }
 
@@ -9980,13 +10227,13 @@ private struct EventRoutineView: View {
     let event: WebEvent
     let scheduledSlots: [WebEventLineupSlot]
     var presentationStyle: PresentationStyle = .pushed
-    var onRouteActionGlobalFrameChange: ((CGRect) -> Void)? = nil
+    var initialSelectedDayID: String? = nil
+    var onSelectedDayChange: ((String) -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appPush) private var appPush
     @ObservedObject private var routeStore = EventRouteStore.shared
     @State private var selectedDayID: String = ""
-    @State private var showRoutePlanner = false
     @State private var showsSavedRouteOverlay = true
     @State private var pendingDJSelectionOptions: [EventScheduleDJSelectionOption] = []
     @State private var showDJSelectionDialog = false
@@ -10052,14 +10299,6 @@ private struct EventRoutineView: View {
         ]
     }
 
-    private var routeActionIdleFillColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035)
-    }
-
-    private var routeActionIdleStrokeColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
-    }
-
     private var timelineStickyTopInset: CGFloat {
         switch presentationStyle {
         case .embedded:
@@ -10083,15 +10322,16 @@ private struct EventRoutineView: View {
         }
         .onAppear {
             if selectedDayID.isEmpty {
-                selectedDayID = days.first?.id ?? ""
+                selectedDayID = initialSelectedDayID ?? days.first?.id ?? ""
             }
         }
-        .navigationDestination(isPresented: $showRoutePlanner) {
-            EventRoutePlannerView(
-                event: event,
-                days: days,
-                initialDayID: selectedDayID
-            )
+        .onChange(of: initialSelectedDayID) { _, newValue in
+            guard let newValue, !newValue.isEmpty, selectedDayID != newValue else { return }
+            selectedDayID = newValue
+        }
+        .onChange(of: selectedDayID) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            onSelectedDayChange?(newValue)
         }
         .confirmationDialog(
             "",
@@ -10131,8 +10371,6 @@ private struct EventRoutineView: View {
 
     private var embeddedContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            routeControlRow
-
             if days.count > 1 {
                 daySelector
             }
@@ -10144,8 +10382,6 @@ private struct EventRoutineView: View {
     private var standaloneContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                routeControlRow
-
                 if days.count > 1 {
                     daySelector
                 }
@@ -10164,62 +10400,6 @@ private struct EventRoutineView: View {
             )
         )
         .raverSystemNavigation(title: LT("活动日程", "Event Schedule", "イベント日程"))
-    }
-
-    private var routeControlRow: some View {
-        HStack(spacing: 10) {
-            Spacer()
-
-            if savedRoute != nil {
-                Button {
-                    showsSavedRouteOverlay.toggle()
-                } label: {
-                    Label(
-                        showsSavedRouteOverlay ? LT("隐藏路线", "隐藏路线", "ルートを非表示") : LT("显示路线", "显示路线", "ルートを表示"),
-                        systemImage: showsSavedRouteOverlay ? "eye.slash.fill" : "eye.fill"
-                    )
-                }
-                .buttonStyle(.plain)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(showsSavedRouteOverlay ? RaverTheme.accent : RaverTheme.secondaryText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(routeActionBackground(isHighlighted: showsSavedRouteOverlay))
-            }
-
-            Button {
-                showRoutePlanner = true
-            } label: {
-                Label(LT("定制路线", "定制路线", "ルートを作成"), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
-            }
-            .buttonStyle(.plain)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(RaverTheme.accent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(routeActionBackground(isHighlighted: true))
-            .overlay {
-                GeometryReader { proxy in
-                    Color.clear
-                        .preference(
-                            key: EventRouteActionFramePreferenceKey.self,
-                            value: proxy.frame(in: .global)
-                        )
-                }
-            }
-            .onPreferenceChange(EventRouteActionFramePreferenceKey.self) { frame in
-                onRouteActionGlobalFrameChange?(frame)
-            }
-        }
-    }
-
-    private func routeActionBackground(isHighlighted: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(isHighlighted ? RaverTheme.accent.opacity(0.13) : routeActionIdleFillColor)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(isHighlighted ? RaverTheme.accent.opacity(0.42) : routeActionIdleStrokeColor, lineWidth: 1)
-            )
     }
 
     @ViewBuilder
