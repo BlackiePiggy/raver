@@ -2127,6 +2127,13 @@ struct MovieBannerEditorView: View {
         !configuration.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var editorFontSizeRange: ClosedRange<Double> {
+        MovieBannerConfiguration.fontSizeRange(
+            for: UIScreen.main.bounds.size,
+            mode: configuration.mode
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
@@ -2190,7 +2197,7 @@ struct MovieBannerEditorView: View {
                             title: LT("字体大小", "Font Size", "文字サイズ"),
                             valueText: "\(Int(configuration.fontSize))",
                             value: $configuration.fontSize,
-                            range: MovieBannerConfiguration.fontSizeRange,
+                            range: editorFontSizeRange,
                             step: 2
                         )
 
@@ -2198,7 +2205,7 @@ struct MovieBannerEditorView: View {
                             title: LT("滚动速度", "Scroll Speed", "スクロール速度"),
                             valueText: "\(Int(configuration.scrollSpeed))",
                             value: $configuration.scrollSpeed,
-                            range: 20 ... 280,
+                            range: MovieBannerConfiguration.scrollSpeedRange,
                             step: 5
                         )
 
@@ -2240,6 +2247,12 @@ struct MovieBannerEditorView: View {
                 AppOrientationLock.shared.unlockLandscapeOnly(forcePortrait: true)
                 displayPreparedLandscapeLock = false
             }
+        }
+        .onAppear {
+            clampEditorFontSize()
+        }
+        .onChange(of: configuration.mode) { _, _ in
+            clampEditorFontSize()
         }
     }
 
@@ -2291,6 +2304,13 @@ struct MovieBannerEditorView: View {
             .interfaceOrientation
             .isLandscape ?? false
     }
+
+    private func clampEditorFontSize() {
+        configuration.fontSize = min(
+            max(configuration.fontSize, editorFontSizeRange.lowerBound),
+            editorFontSizeRange.upperBound
+        )
+    }
 }
 
 private struct MovieBannerDisplayView: View {
@@ -2307,6 +2327,9 @@ private struct MovieBannerDisplayView: View {
     @State private var isInteractionLocked = false
     @State private var lockButtonOpacity: Double = 1.0
     @State private var lockButtonFadeTask: Task<Void, Never>?
+    @State private var marqueeLayout = MovieBannerMarqueeLayout()
+    @State private var temporaryPauseDate: Date?
+    @State private var temporaryPauseTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -2344,6 +2367,9 @@ private struct MovieBannerDisplayView: View {
             controlsAutoHideTask = nil
             lockButtonFadeTask?.cancel()
             lockButtonFadeTask = nil
+            temporaryPauseTask?.cancel()
+            temporaryPauseTask = nil
+            temporaryPauseDate = nil
             if hasLandscapeLock {
                 AppOrientationLock.shared.unlockLandscapeOnly(forcePortrait: true)
                 hasLandscapeLock = false
@@ -2371,48 +2397,59 @@ private struct MovieBannerDisplayView: View {
         .onChange(of: configuration.fontSize) { _, _ in
             resetScrollProgress()
         }
+        .onChange(of: configuration.message) { _, _ in
+            resetScrollProgress()
+        }
     }
 
     @ViewBuilder
     private func bannerContent(in renderDate: Date) -> some View {
         GeometryReader { proxy in
+            let size = proxy.size
             if configuration.mode == .staticCentered {
-                centeredTextView(renderDate: renderDate)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+                centeredTextView(renderDate: renderDate, size: size)
+                    .frame(width: size.width, height: size.height)
             } else if configuration.autoScroll {
-                scrollingTextView(renderDate: renderDate, size: proxy.size)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+                scrollingTextView(renderDate: renderDate, size: size)
+                    .frame(width: size.width, height: size.height)
             } else {
-                centeredTextView(renderDate: renderDate)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+                centeredTextView(renderDate: renderDate, size: size)
+                    .frame(width: size.width, height: size.height)
             }
         }
     }
 
-    private func centeredTextView(renderDate: Date) -> some View {
-        bannerText
+    private func centeredTextView(renderDate: Date, size: CGSize) -> some View {
+        bannerText(layout: resolvedMarqueeLayout(for: size), text: resolvedMessage)
             .lineLimit(1)
             .minimumScaleFactor(0.12)
             .padding(.horizontal, 20)
             .opacity(blinkOpacity(at: renderDate))
+            .task(id: marqueeLayoutKey(for: size)) {
+                updateMarqueeLayout(for: size)
+            }
     }
 
     private func scrollingTextView(renderDate: Date, size: CGSize) -> some View {
-        let message = resolvedMessage
-        let font = UIFont.systemFont(ofSize: CGFloat(configuration.fontSize), weight: .bold)
-        let textWidth = max(1, NSString(string: message).size(withAttributes: [.font: font]).width)
-        let cycle = max(1, size.width + textWidth)
+        let layout = resolvedMarqueeLayout(for: size)
         let timelineDate = frozenDate(for: renderDate)
         let elapsed = max(0, timelineDate.timeIntervalSince(scrollStartDate) - pausedDuration)
-        let travel = CGFloat((elapsed * configuration.scrollSpeed).truncatingRemainder(dividingBy: Double(cycle)))
-        let leadingOffset = size.width - travel
+        let effectiveSpeed = configuration.scrollSpeed * layout.speedCompensation
+        let travel = CGFloat((elapsed * effectiveSpeed).truncatingRemainder(dividingBy: Double(layout.cycleWidth)))
 
-        return bannerText
-            .opacity(blinkOpacity(at: timelineDate))
+        return HStack(spacing: layout.gap) {
+            bannerText(layout: layout, text: layout.segmentText)
+            bannerText(layout: layout, text: layout.segmentText)
+        }
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: true)
-        .offset(x: leadingOffset)
+        .offset(x: -travel)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .clipped()
+        .opacity(blinkOpacity(at: timelineDate))
+        .task(id: marqueeLayoutKey(for: size)) {
+            updateMarqueeLayout(for: size)
+        }
     }
 
     private var controlsLayer: some View {
@@ -2494,7 +2531,7 @@ private struct MovieBannerDisplayView: View {
                         }
                         Slider(
                             value: $configuration.scrollSpeed,
-                            in: 20 ... 280,
+                            in: MovieBannerConfiguration.scrollSpeedRange,
                             step: 5
                         ) {
                             Text(LT("速度", "Speed", "速度"))
@@ -2523,7 +2560,7 @@ private struct MovieBannerDisplayView: View {
                     }
                     Slider(
                         value: $configuration.fontSize,
-                        in: MovieBannerConfiguration.fontSizeRange,
+                        in: MovieBannerConfiguration.fontSizeRange(for: UIScreen.main.bounds.size, mode: configuration.mode),
                         step: 2
                     ) {
                         Text(LT("字号", "Size", "文字サイズ"))
@@ -2582,10 +2619,19 @@ private struct MovieBannerDisplayView: View {
     }
 
     private var bannerText: some View {
-        Text(resolvedMessage)
-            .font(.system(size: configuration.fontSize, weight: .bold))
+        bannerText(layout: marqueeLayout, text: resolvedMessage)
+    }
+
+    private func bannerText(layout: MovieBannerMarqueeLayout, text: String) -> some View {
+        Text(text)
+            .font(.system(size: layout.effectiveFontSize, weight: .bold))
             .foregroundStyle(configuration.textColor.color)
-            .shadow(color: configuration.textColor.color.opacity(0.30), radius: 8, x: 0, y: 0)
+            .shadow(
+                color: configuration.textColor.color.opacity(0.24),
+                radius: layout.shadowRadius,
+                x: 0,
+                y: 0
+            )
     }
 
     private var resolvedMessage: String {
@@ -2630,6 +2676,7 @@ private struct MovieBannerDisplayView: View {
     }
 
     private func toggleControlsVisibility() {
+        freezeMarqueeForControlsAnimation()
         withAnimation(.easeInOut(duration: 0.2)) {
             controlsVisible.toggle()
         }
@@ -2652,6 +2699,7 @@ private struct MovieBannerDisplayView: View {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
             await MainActor.run {
+                freezeMarqueeForControlsAnimation()
                 withAnimation(.easeInOut(duration: 0.2)) {
                     controlsVisible = false
                 }
@@ -2683,16 +2731,65 @@ private struct MovieBannerDisplayView: View {
         scrollStartDate = Date()
         pausedDuration = 0
         pausedDate = isPaused ? Date() : nil
+        temporaryPauseTask?.cancel()
+        temporaryPauseTask = nil
+        temporaryPauseDate = nil
     }
 
     private func frozenDate(for date: Date) -> Date {
         guard configuration.mode == .scrolling, configuration.autoScroll else {
             return date
         }
+        if let temporaryPauseDate {
+            return temporaryPauseDate
+        }
         if isPaused, let pausedDate {
             return pausedDate
         }
         return date
+    }
+
+    private func marqueeLayoutKey(for size: CGSize) -> MovieBannerMarqueeLayoutKey {
+        MovieBannerMarqueeLayoutKey(
+            message: resolvedMessage,
+            mode: configuration.mode,
+            requestedFontSize: configuration.fontSize,
+            size: size
+        )
+    }
+
+    private func resolvedMarqueeLayout(for size: CGSize) -> MovieBannerMarqueeLayout {
+        let key = marqueeLayoutKey(for: size)
+        if marqueeLayout.cacheKey == key {
+            return marqueeLayout
+        }
+        return MovieBannerMarqueeLayout.build(
+            key: key,
+            size: size
+        )
+    }
+
+    private func updateMarqueeLayout(for size: CGSize) {
+        marqueeLayout = MovieBannerMarqueeLayout.build(
+            key: marqueeLayoutKey(for: size),
+            size: size
+        )
+    }
+
+    private func freezeMarqueeForControlsAnimation() {
+        guard configuration.mode == .scrolling, configuration.autoScroll, !isPaused else { return }
+        let pauseAnchor = temporaryPauseDate ?? Date()
+        temporaryPauseDate = pauseAnchor
+        temporaryPauseTask?.cancel()
+        temporaryPauseTask = Task {
+            try? await Task.sleep(nanoseconds: 240_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                pausedDuration += Date().timeIntervalSince(pauseAnchor)
+                temporaryPauseDate = nil
+                temporaryPauseTask = nil
+            }
+        }
     }
 
     private func forceLandscapeOrientation() {
@@ -2754,12 +2851,103 @@ private struct MovieBannerColorPickerRow: View {
     }
 }
 
+private struct MovieBannerMarqueeLayoutKey: Equatable, Hashable {
+    let message: String
+    let mode: MovieBannerMode
+    let requestedFontSize: Int
+    let width: Int
+    let height: Int
+
+    init(message: String, mode: MovieBannerMode, requestedFontSize: Double, size: CGSize) {
+        self.message = message
+        self.mode = mode
+        self.requestedFontSize = Int(requestedFontSize.rounded())
+        width = Int(size.width.rounded())
+        height = Int(size.height.rounded())
+    }
+}
+
+private struct MovieBannerMarqueeLayout {
+    var cacheKey = MovieBannerMarqueeLayoutKey(
+        message: "",
+        mode: .scrolling,
+        requestedFontSize: MovieBannerConfiguration.minimumFontSize,
+        size: .zero
+    )
+    var effectiveFontSize: CGFloat = CGFloat(MovieBannerConfiguration.minimumFontSize)
+    var segmentText: String = ""
+    var gap: CGFloat = 24
+    var cycleWidth: CGFloat = 1
+    var speedCompensation: Double = 1.0
+    var shadowRadius: CGFloat = 4
+
+    static func build(key: MovieBannerMarqueeLayoutKey, size: CGSize) -> MovieBannerMarqueeLayout {
+        let effectiveFontSize = CGFloat(
+            min(
+                max(MovieBannerConfiguration.minimumFontSize, Double(key.requestedFontSize)),
+                MovieBannerConfiguration.maximumFontSize(for: size, mode: key.mode)
+            )
+        )
+        let font = UIFont.systemFont(ofSize: effectiveFontSize, weight: .bold)
+        let separator = "   •   "
+        let baseMessage = key.message
+        let baseWidth = measureWidth(of: baseMessage, font: font)
+        let shortTrackThreshold = max(1, size.width * 0.6)
+        let targetTrackWidth = max(size.width * 1.35, shortTrackThreshold)
+        var segmentText = baseMessage
+        var segmentWidth = baseWidth
+
+        if key.mode == .scrolling, baseWidth < shortTrackThreshold {
+            var parts = [baseMessage]
+            while segmentWidth < targetTrackWidth, parts.count < 8 {
+                parts.append(baseMessage)
+                segmentText = parts.joined(separator: separator)
+                segmentWidth = measureWidth(of: segmentText, font: font)
+            }
+        }
+
+        let gap = max(24, min(72, effectiveFontSize * 0.35))
+        let cycleWidth = max(1, segmentWidth + gap)
+        let widthRatio = max(1.0, Double(segmentWidth / max(size.width, 1)))
+        let speedCompensation = min(1.8, max(1.0, sqrt(widthRatio)))
+        let shadowRadius: CGFloat = key.mode == .scrolling
+            ? max(3, min(6, effectiveFontSize * 0.024))
+            : max(4, min(10, effectiveFontSize * 0.036))
+
+        var layout = MovieBannerMarqueeLayout()
+        layout.cacheKey = key
+        layout.effectiveFontSize = effectiveFontSize
+        layout.segmentText = segmentText
+        layout.gap = gap
+        layout.cycleWidth = cycleWidth
+        layout.speedCompensation = speedCompensation
+        layout.shadowRadius = shadowRadius
+        return layout
+    }
+
+    private static func measureWidth(of text: String, font: UIFont) -> CGFloat {
+        max(1, ceil(NSString(string: text).size(withAttributes: [.font: font]).width))
+    }
+}
+
 private struct MovieBannerConfiguration {
-    static let fontSizeRange: ClosedRange<Double> = 64 ... 1200
+    static let minimumFontSize: Double = 64
+    static let scrollSpeedRange: ClosedRange<Double> = 40 ... 520
+    static let defaultScrollSpeed: Double = 140
+
+    static func fontSizeRange(for size: CGSize, mode: MovieBannerMode) -> ClosedRange<Double> {
+        minimumFontSize ... maximumFontSize(for: size, mode: mode)
+    }
+
+    static func maximumFontSize(for size: CGSize, mode: MovieBannerMode) -> Double {
+        let shortEdge = max(1, min(size.width, size.height))
+        let ratio = mode == .staticCentered ? 0.82 : 0.72
+        return max(minimumFontSize, floor(shortEdge * ratio))
+    }
 
     var message: String = ""
     var fontSize: Double = 120
-    var scrollSpeed: Double = 90
+    var scrollSpeed: Double = defaultScrollSpeed
     var isBlinkEnabled: Bool = false
     var autoScroll: Bool = true
     var mode: MovieBannerMode = .scrolling

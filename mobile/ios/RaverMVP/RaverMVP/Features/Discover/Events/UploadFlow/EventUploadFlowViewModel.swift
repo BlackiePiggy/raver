@@ -17,13 +17,14 @@ final class EventUploadFlowViewModel: ObservableObject {
     enum InlineSearchFeedback: Equatable {
         case idle
         case empty(message: String)
+        case info(message: String)
         case failure(message: String)
 
         var message: String? {
             switch self {
             case .idle:
                 return nil
-            case .empty(let message), .failure(let message):
+            case .empty(let message), .info(let message), .failure(let message):
                 return message
             }
         }
@@ -511,6 +512,19 @@ final class EventUploadFlowViewModel: ObservableObject {
         organizerSearchFeedback = .idle
         draft.dirty = true
         saveDraft()
+    }
+
+    func handleOrganizerCreationQueued() {
+        organizerSearchResults = []
+        organizerSearchFeedback = .info(
+            message: LT(
+                "主办方已提交审核，当前先保留手填名称；审核通过后即可绑定正式 ID。",
+                "The organizer was submitted for review. The manual name is kept for now, and the formal ID can be bound after approval.",
+                "主催者は審査に送信されました。現時点では手入力名を保持し、承認後に正式IDを紐付けできます。"
+            )
+        )
+        draft.dirty = true
+        saveDraft(immediate: true)
     }
 
     func updateSourceURL(_ value: String) {

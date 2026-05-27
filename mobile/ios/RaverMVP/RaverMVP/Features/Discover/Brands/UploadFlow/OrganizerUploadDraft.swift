@@ -16,6 +16,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
     var preferredLanguage: EventUploadPreferredLanguage = .current
     var name: String = ""
     var nameI18n: EventUploadLocalizedFields = EventUploadLocalizedFields()
+    var abbreviation: String = ""
     var aliases: [String] = []
     var country: String = ""
     var city: String = ""
@@ -61,6 +62,22 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         ].contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
+    var allImages: [OrganizerUploadImageDraft] {
+        [avatarImage, backgroundImage]
+            .compactMap { $0 } + proofImages + otherImages
+    }
+
+    func image(for zone: OrganizerUploadImageZone) -> OrganizerUploadImageDraft? {
+        switch zone {
+        case .avatar:
+            return avatarImage
+        case .background:
+            return backgroundImage
+        case .proof, .other:
+            return nil
+        }
+    }
+
     func images(for zone: OrganizerUploadImageZone) -> [OrganizerUploadImageDraft] {
         switch zone {
         case .avatar:
@@ -71,6 +88,37 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
             return proofImages
         case .other:
             return otherImages
+        }
+    }
+
+    mutating func appendImage(_ image: OrganizerUploadImageDraft, to zone: OrganizerUploadImageZone) {
+        switch zone {
+        case .proof:
+            proofImages.append(image)
+        case .other:
+            otherImages.append(image)
+        case .avatar, .background:
+            setSingleImage(image, for: zone)
+        }
+    }
+
+    @discardableResult
+    mutating func removeImage(id: UUID, from zone: OrganizerUploadImageZone) -> OrganizerUploadImageDraft? {
+        switch zone {
+        case .avatar:
+            guard avatarImage?.id == id else { return nil }
+            defer { avatarImage = nil }
+            return avatarImage
+        case .background:
+            guard backgroundImage?.id == id else { return nil }
+            defer { backgroundImage = nil }
+            return backgroundImage
+        case .proof:
+            guard let index = proofImages.firstIndex(where: { $0.id == id }) else { return nil }
+            return proofImages.remove(at: index)
+        case .other:
+            guard let index = otherImages.firstIndex(where: { $0.id == id }) else { return nil }
+            return otherImages.remove(at: index)
         }
     }
 
@@ -98,8 +146,14 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         }
     }
 
-    static func create() -> OrganizerUploadDraft {
-        OrganizerUploadDraft()
+    static func create(initialName: String = "") -> OrganizerUploadDraft {
+        var draft = OrganizerUploadDraft()
+        let trimmedName = initialName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return draft }
+        draft.name = trimmedName
+        draft.nameI18n.zh = trimmedName
+        draft.nameI18n.en = trimmedName
+        return draft
     }
 
     static func edit(from brand: WebLearnFestival) -> OrganizerUploadDraft {
@@ -110,6 +164,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
             name: brand.name,
             i18n: brand.nameI18n
         )
+        draft.abbreviation = brand.abbreviation ?? ""
         draft.aliases = brand.aliases
         draft.country = brand.country
         draft.city = brand.city

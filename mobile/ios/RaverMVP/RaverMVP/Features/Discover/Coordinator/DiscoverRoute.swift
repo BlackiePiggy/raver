@@ -7,6 +7,8 @@ enum DiscoverRoute: Hashable {
     case newsDetail(articleID: String)
     case learnFestivalCreate
     case learnFestivalEdit(festivalID: String)
+    case organizerCreate(initialName: String? = nil, sourceContextID: String? = nil)
+    case organizerEdit(brandID: String)
     case newsPublish
     case setCreate
     case setEdit(setID: String)
@@ -21,6 +23,8 @@ extension Notification.Name {
     static let discoverNewsDidPublish = Notification.Name("discoverNewsDidPublish")
     static let discoverSetDidSave = Notification.Name("discoverSetDidSave")
     static let discoverFestivalDidSave = Notification.Name("discoverFestivalDidSave")
+    static let discoverOrganizerDidCreate = Notification.Name("discoverOrganizerDidCreate")
+    static let discoverOrganizerSubmissionQueued = Notification.Name("discoverOrganizerSubmissionQueued")
     static let discoverRatingUnitDidUpdate = Notification.Name("discoverRatingUnitDidUpdate")
 }
 
@@ -110,6 +114,12 @@ func makeDiscoverRouteDestination(
         DiscoverFestivalEditorLoaderView(festivalID: festivalID, repository: appContainer.discoverWikiRepository) { updated in
             NotificationCenter.default.post(name: .discoverFestivalDidSave, object: updated.id)
         }
+
+    case .organizerCreate(let initialName, let sourceContextID):
+        OrganizerUploadFlowView(mode: .create, initialName: initialName, sourceContextID: sourceContextID)
+
+    case .organizerEdit(let brandID):
+        DiscoverOrganizerUploadLoaderView(brandID: brandID, repository: appContainer.discoverWikiRepository)
 
     case .setCreate:
         DJSetEditorView(mode: .create) {
@@ -398,6 +408,41 @@ private struct DiscoverFestivalEditorLoaderView: View {
             phase = .success
         } catch {
             phase = .failure(message: error.userFacingMessage ?? LT("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later.", "フェスを読み込めませんでした。時間をおいて再試行してください。"))
+        }
+    }
+}
+
+private struct DiscoverOrganizerUploadLoaderView: View {
+    let brandID: String
+    let repository: DiscoverWikiRepository
+
+    @State private var brand: WebLearnFestival?
+    @State private var phase: LoadPhase = .idle
+
+    var body: some View {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadBrand(force: true) }
+        } content: {
+            if let brand {
+                OrganizerUploadFlowView(mode: .edit(id: brand.id), initialBrand: brand)
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            await loadBrand(force: false)
+        }
+    }
+
+    @MainActor
+    private func loadBrand(force: Bool) async {
+        if brand != nil && !force { return }
+        phase = .initialLoading
+        do {
+            brand = try await repository.fetchLearnFestival(id: brandID)
+            phase = .success
+        } catch {
+            phase = .failure(message: error.userFacingMessage ?? LT("主办方加载失败，请稍后重试", "Failed to load organizer. Please try again later.", "主催者を読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }

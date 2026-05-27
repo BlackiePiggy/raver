@@ -25,7 +25,7 @@
 - [ ] 服务端 brand 图片草稿归属模型补齐
 - [x] iOS `OrganizerUploadFlow` 基础框架落地
 - [ ] iOS 草稿、图片、提交、成功态全链路打通
-- [ ] event 上传页接入“创建主办方”快捷流
+- [x] event 上传页接入“创建主办方”快捷流
 - [ ] 联调、回归、真机验收完成
 
 ## 执行日志
@@ -57,6 +57,22 @@
 - [x] iOS 构建方式已校正为使用 `.xcworkspace`，`SDWebImage` 缺失并非真实代码阻塞
 - [x] iOS 已新建 `Features/Discover/Brands/UploadFlow/` 骨架目录与基础 Swift 文件组
 - [x] iOS `OrganizerUploadFlow` 已具备本地 draft restore/save、step 切换、create/edit 标题与成功态占位
+- [x] iOS `DiscoverRoute` 已新增 `organizerCreate / organizerEdit` 独立路由，并接入 `OrganizerUploadFlow`
+- [x] Learn 页“新增主办方”与主办方详情“编辑”入口已切到新的 organizer 上传流
+- [x] event 上传页主办方搜索为空时，已提供“直接创建这个主办方”的快捷入口，并会携带当前手填名称
+- [x] iOS `OrganizerUploadFlow` 已补齐 create / edit 草稿 key、JSON 持久化、草稿恢复与继续/重开能力
+- [x] iOS `OrganizerUploadFlow` 已补齐基础信息 / 品牌介绍 / 官方链接 / 关联活动的首版可编辑表单
+- [x] iOS `OrganizerUploadFlow` 字段编辑已接入 debounce 草稿保存
+- [x] 按用户要求，新的 iOS build 验证已暂缓，等待用户自行在空闲时执行
+- [x] iOS `OrganizerUploadFlow` Step 1 已接入 avatar / background / proof / other 四类图片的真实上传、预览、删除与替换
+- [x] iOS `OrganizerUploadFlow` 放弃草稿时已补齐未持久化 brand draft 图片的远端清理
+- [x] iOS `OrganizerUploadFlow` 已接入 brand create / edit 的真实 payload mapper、审核提交流程与成功/失败文案
+- [x] iOS `OrganizerUploadFlow` review 步骤已补齐主视觉预览、主要字段摘要、proof 摘要与审核确认区
+- [x] event 上传页从“直接创建这个主办方”进入 organizer create 后，创建成功已可自动回填 `organizerFestivalID + organizerName`
+- [x] organizer create 若进入审核中，event 上传页已保留手填主办方名并展示“审核通过后可绑定正式 ID”提示
+- [x] event 详情页当前主办方品牌入口已确认继续使用 `festivalDetail`
+- [x] iOS `OrganizerUploadFlow` Step 5 已改成 event 搜索绑定卡片，支持搜索、绑定、已绑列表展示与重复绑定防止
+- [x] iOS `OrganizerUploadFlow` Step 6 已补齐“最终确认后再提交”链路，底部提交会先弹确认再发起真实 submit
 
 ## 分阶段落地计划
 
@@ -70,6 +86,7 @@
 - [x] 确认图片上传策略要补齐 `draftId`，不能继续只靠 `brandId`
 - [x] 和后端最终确认 `entityType = brand` 的编辑提交流程改造范围
 - [ ] 和 iOS 最终确认新目录、路由入口、旧页面保留策略
+- [x] 和 iOS 最终确认新目录、路由入口、旧页面保留策略
 - [ ] 和产品/运营最终确认主办方 proof 图片是否强制
 - [ ] 和审核侧最终确认驳回 reason code 列表
 
@@ -374,21 +391,21 @@
 - [x] 搭建底部固定操作栏
 - [x] 搭建 step 容器切换逻辑
 - [x] 支持 create / edit 两种 mode
-- [ ] 支持从 `WebLearnFestival` hydrate 到 draft
+- [x] 支持从 `WebLearnFestival` hydrate 到 draft
 - [x] 支持提交成功页替换编辑器内容
 
 #### 3.3 路由与入口
 
-- [ ] 新建 create route
-- [ ] 新建 edit route
-- [ ] Learn 页新增“上传主办方”入口
-- [ ] 品牌详情页基于 `canEdit` 展示“编辑主办方”
-- [ ] event 上传页搜索为空时提供“创建主办方”
+- [x] 新建 create route
+- [x] 新建 edit route
+- [x] Learn 页新增“上传主办方”入口
+- [x] 品牌详情页基于 `canEdit` 展示“编辑主办方”
+- [x] event 上传页搜索为空时提供“创建主办方”
 
 验收标准：
 
-- [ ] 可以从入口进入新的上传流
-- [ ] create / edit 两种模式路由正确
+- [x] 可以从入口进入新的上传流
+- [x] create / edit 两种模式路由正确
 - [ ] 不影响旧 `LearnFestivalEditorView` 现有使用路径
 
 ### Phase 4 - iOS 草稿系统
@@ -397,26 +414,26 @@
 
 #### 4.1 草稿存储
 
-- [ ] 设计 create 草稿 key
-- [ ] 设计 edit 草稿 key
-- [ ] `Codable` 持久化 draft JSON
+- [x] 设计 create 草稿 key
+- [x] 设计 edit 草稿 key
+- [x] `Codable` 持久化 draft JSON
 - [ ] 本地图片落盘到 sandbox 草稿目录
 - [ ] 草稿 TTL 设为 14 天
 
 #### 4.2 自动保存与恢复
 
-- [ ] 字段变化 debounce 保存
-- [ ] 退后台保存
-- [ ] 页面离开前保存
-- [ ] 新建页支持恢复上次草稿
-- [ ] 编辑页支持恢复该 brand 对应草稿
-- [ ] 支持“继续草稿 / 重新开始”
+- [x] 字段变化 debounce 保存
+- [x] 退后台保存
+- [x] 页面离开前保存
+- [x] 新建页支持恢复上次草稿
+- [x] 编辑页支持恢复该 brand 对应草稿
+- [x] 支持“继续草稿 / 重新开始”
 
 #### 4.3 放弃与清理
 
-- [ ] 离开时弹出“保存草稿 / 放弃草稿”
+- [x] 离开时弹出“保存草稿 / 放弃草稿”
 - [ ] 放弃草稿时删除本地图片
-- [ ] 放弃草稿时清理远端草稿图
+- [x] 放弃草稿时清理远端草稿图
 - [ ] 提交成功后清理对应草稿
 
 验收标准：
@@ -432,24 +449,24 @@
 #### 5.1 Step 1 媒体与主体证明
 
 - [ ] 实现图片分区：`avatar / background / poster / proof / other`
-- [ ] 实现图片区卡片
+- [x] 实现图片区卡片
 - [ ] 实现选择、预览、删除、替换、重排
-- [ ] proof 区增加“仅审核可见”提示
-- [ ] 实现图片校验与错误提示
+- [x] proof 区增加“仅审核可见”提示
+- [x] 实现图片校验与错误提示
 
 #### 5.2 Step 2 基础信息
 
-- [ ] 主办方名称输入
-- [ ] 多语言名称编辑
-- [ ] 别名编辑
-- [ ] 简称编辑
-- [ ] 国家 / 城市输入
-- [ ] 成立年份 / 频率 / tagline 输入
+- [x] 主办方名称输入
+- [x] 多语言名称编辑
+- [x] 别名编辑
+- [x] 简称编辑
+- [x] 国家 / 城市输入
+- [x] 成立年份 / 频率 / tagline 输入
 - [ ] 相似品牌搜索提醒卡
 
 #### 5.3 Step 3 品牌介绍
 
-- [ ] 简介输入
+- [x] 简介输入
 - [ ] 多语言简介输入
 - [ ] 主办方类型选择
 - [ ] 风格标签输入
@@ -457,27 +474,27 @@
 
 #### 5.4 Step 4 官方链接与身份校验
 
-- [ ] 官网输入
-- [ ] 各社媒链接输入
+- [x] 官网输入
+- [x] 各社媒链接输入
 - [ ] 额外链接列表编辑
 - [ ] rights confirmation 勾选
 - [ ] identity confirmation 勾选
 
 #### 5.5 Step 5 关联活动与运营上下文
 
-- [ ] 活动搜索
-- [ ] 绑定已有 event
-- [ ] 展示已绑定活动列表
+- [x] 活动搜索
+- [x] 绑定已有 event
+- [x] 展示已绑定活动列表
 - [ ] 运营地区 / 品牌类型补充字段
-- [ ] 避免重复绑定
+- [x] 避免重复绑定
 
 #### 5.6 Step 6 预览与提交
 
-- [ ] review 页总览
-- [ ] 主视觉图预览
-- [ ] 主要字段摘要
-- [ ] proof 摘要显示
-- [ ] 提交前最终确认
+- [x] review 页总览
+- [x] 主视觉图预览
+- [x] 主要字段摘要
+- [x] proof 摘要显示
+- [x] 提交前最终确认
 
 验收标准：
 
@@ -489,16 +506,16 @@
 
 目标：把图片上传体验做成 event 同级。
 
-- [ ] 提交图片前调用 `prepareAuthenticatedRequestForUserAction(source: ...)`
+- [x] 提交图片前调用 `prepareAuthenticatedRequestForUserAction(source: ...)`
 - [x] iOS 接口层已支持 brand 图片按 `draftId` 上传
-- [ ] 创建态图片按 `draftId` 上传
-- [ ] 编辑态未提交变更图片按 `draftId` 上传
+- [x] 创建态图片按 `draftId` 上传
+- [x] 编辑态未提交变更图片按 `draftId` 上传
 - [ ] 已持久化图片标记 `persistedBrand`
 - [ ] 单图上传失败支持重试
-- [ ] 替换图片时清理旧草稿图
+- [x] 替换图片时清理旧草稿图
 - [x] iOS 接口层已支持 brand 图片删除
-- [ ] 删除图片时同步更新 draft
-- [ ] 提交时把图片资产映射到 payload
+- [x] 删除图片时同步更新 draft
+- [x] 提交时把图片资产映射到 payload
 
 验收标准：
 
@@ -512,23 +529,23 @@
 
 #### 7.1 接口对齐
 
-- [ ] `createLearnFestival(...)` 继续使用 `CreateContentResult`
-- [ ] 将 `updateLearnFestival(...)` 改成 `CreateContentResult<WebLearnFestival>`
-- [ ] create / edit 两条链路都支持 `.created`
+- [x] `createLearnFestival(...)` 继续使用 `CreateContentResult`
+- [x] 将 `updateLearnFestival(...)` 改成 `CreateContentResult<WebLearnFestival>`
+- [x] create / edit 两条链路都支持 `.created`
 - [x] create / edit 两条链路都支持 `.submittedForReview`
 
 #### 7.2 提交逻辑
 
-- [ ] 提交前调用 `prepareAuthenticatedRequestForUserAction(source: "organizer-upload-submit")`
-- [ ] create payload mapper 落地
-- [ ] edit payload mapper 落地
-- [ ] 提交失败文案落地
-- [ ] 提交成功页落地
+- [x] 提交前调用 `prepareAuthenticatedRequestForUserAction(source: "organizer-upload-submit")`
+- [x] create payload mapper 落地
+- [x] edit payload mapper 落地
+- [x] 提交失败文案落地
+- [x] 提交成功页落地
 
 #### 7.3 成功态
 
-- [ ] 直接创建成功页
-- [ ] 审核提交成功页
+- [x] 直接创建成功页
+- [x] 审核提交成功页
 - [ ] 跳转“我的发布”
 - [ ] 跳转主办方详情
 - [ ] 清理草稿
@@ -543,15 +560,15 @@
 
 目标：让主办方上传不成为孤岛。
 
-- [ ] event 上传页主办方搜索为空时展示“创建新主办方”
-- [ ] 创建成功后自动回填 `organizerFestivalID`
-- [ ] 如果 brand 处于审核中，允许 event 先保留手填主办方名
-- [ ] event 详情页品牌信息展示继续使用 `festivalDetail`
+- [x] event 上传页主办方搜索为空时展示“创建新主办方”
+- [x] 创建成功后自动回填 `organizerFestivalID`
+- [x] 如果 brand 处于审核中，允许 event 先保留手填主办方名
+- [x] event 详情页品牌信息展示继续使用 `festivalDetail`
 - [ ] brand 审核通过后可被 event 上传页搜索到
 
 验收标准：
 
-- [ ] 用户不需要退出 event 上传页再手动去新建主办方
+- [x] 用户不需要退出 event 上传页再手动去新建主办方
 - [ ] brand 与 event 绑定链路自然流畅
 
 ### Phase 9 - 审核后台与运营配套

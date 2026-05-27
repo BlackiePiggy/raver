@@ -1,19 +1,31 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct OrganizerUploadFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: OrganizerUploadFlowViewModel
+    @State private var avatarItem: PhotosPickerItem?
+    @State private var backgroundItem: PhotosPickerItem?
+    @State private var proofItems: [PhotosPickerItem] = []
+    @State private var otherItems: [PhotosPickerItem] = []
+    @State private var previewPresentation: OrganizerUploadImagePreviewPresentation?
     @State private var showExitConfirmation = false
+    @State private var showSubmitConfirmation = false
 
     init(
         mode: OrganizerUploadMode = .create,
         initialBrand: WebLearnFestival? = nil,
+        initialName: String? = nil,
+        sourceContextID: String? = nil,
         userID: String = "current"
     ) {
         _viewModel = StateObject(wrappedValue: OrganizerUploadFlowViewModel(
             mode: mode,
             initialBrand: initialBrand,
+            initialName: initialName,
+            sourceContextID: sourceContextID,
             userID: userID
         ))
     }
@@ -45,6 +57,20 @@ struct OrganizerUploadFlowView: View {
             }
             .onDisappear {
                 viewModel.handleDisappear()
+            }
+            .onChange(of: avatarItem?.itemIdentifier) { _, _ in
+                Task { await loadSinglePhoto(avatarItem, zone: .avatar) }
+            }
+            .onChange(of: backgroundItem?.itemIdentifier) { _, _ in
+                Task { await loadSinglePhoto(backgroundItem, zone: .background) }
+            }
+            .onChange(of: proofItems.compactMap(\.itemIdentifier)) { _, _ in
+                let items = proofItems
+                Task { await loadMultiplePhotos(items, zone: .proof) }
+            }
+            .onChange(of: otherItems.compactMap(\.itemIdentifier)) { _, _ in
+                let items = otherItems
+                Task { await loadMultiplePhotos(items, zone: .other) }
             }
             .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredDraft) {
                 Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
@@ -79,6 +105,21 @@ struct OrganizerUploadFlowView: View {
             } message: {
                 Text(LT("未提交的内容会保存在本地草稿中。", "Unsubmitted changes can be kept as a local draft.", "未送信の内容はローカル下書きとして保存できます。"))
             }
+            .confirmationDialog(
+                LT("确认提交主办方？", "Confirm Organizer Submission?", "主催者を送信しますか？"),
+                isPresented: $showSubmitConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(LT("确认提交", "Confirm Submit", "送信する")) {
+                    viewModel.submitAfterConfirmation()
+                }
+                Button(LT("继续检查", "Keep Reviewing", "確認を続ける"), role: .cancel) {}
+            } message: {
+                Text(LT("确认后会立即发起主办方创建或编辑提交，后续状态会通过通知和我的发布更新。", "After confirmation, the organizer create or edit submission will start immediately. Later status updates will appear in notifications and My Posts.", "確認後、主催者の新規作成または編集送信を直ちに開始します。以降の状態更新は通知とマイ投稿で確認できます。"))
+            }
+            .fullScreenCover(item: $previewPresentation) { presentation in
+                FullscreenMediaViewer(items: presentation.items, initialIndex: presentation.initialIndex)
+            }
     }
 
     @ViewBuilder
@@ -112,7 +153,7 @@ struct OrganizerUploadFlowView: View {
                 isFinalStep: viewModel.draft.currentStep == .review,
                 isBusy: viewModel.isSubmitting,
                 onBack: viewModel.goBack,
-                onNext: viewModel.goNext
+                onNext: handlePrimaryAction
             )
         }
     }
@@ -134,43 +175,307 @@ struct OrganizerUploadFlowView: View {
     private var stepContent: some View {
         switch viewModel.draft.currentStep {
         case .media:
-            placeholderStep(
-                title: LT("媒体与证明", "Media & Proof", "メディアと証明"),
-                body: LT("这里会对齐 event 上传的图片分区、draft 上传和 proof 素材策略。", "This step will align with the event flow for media zones, draft uploads, and proof handling.", "このステップではイベント投稿に合わせて画像ゾーン、下書きアップロード、証明素材処理を揃えます。")
-            )
+            mediaStep
         case .basic:
-            placeholderStep(
-                title: LT("基础信息", "Basic Info", "基本情報"),
-                body: LT("这里会填写名称、别名、国家、城市、成立年份与频率。", "This step will cover name, aliases, country, city, founded year, and frequency.", "このステップでは名称、別名、国、都市、設立年、開催頻度を入力します。")
-            )
+            basicStep
         case .profile:
-            placeholderStep(
-                title: LT("资料介绍", "Profile", "プロフィール"),
-                body: LT("这里会接主办方介绍、tagline、多语言字段与审核说明。", "This step will handle intro, tagline, localized fields, and review-facing notes.", "このステップでは紹介文、タグライン、多言語項目、審査向け説明を扱います。")
-            )
+            profileStep
         case .links:
-            placeholderStep(
-                title: LT("官方链接", "Official Links", "公式リンク"),
-                body: LT("这里会接官网与社媒链接，并校验链接格式。", "This step will connect website and social links with validation.", "このステップでは公式サイトとSNSリンクを接続し、形式検証を行います。")
-            )
+            linksStep
         case .relations:
-            placeholderStep(
-                title: LT("关联活动", "Related Events", "関連イベント"),
-                body: LT("这里会接 event 搜索绑定，支持从活动上传流反向创建主办方。", "This step will support event binding and reverse entry from event upload.", "このステップではイベント紐付けと、イベント投稿からの逆導線を接続します。")
-            )
+            relationsStep
         case .review:
             reviewStep
         }
     }
 
-    private func placeholderStep(title: String, body: String) -> some View {
+    private var mediaStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            sectionCard(title: title, body: body)
             sectionCard(
-                title: LT("当前草稿摘要", "Current Draft Summary", "現在の下書き概要"),
-                body: OrganizerUploadMappers.summary(for: viewModel.draft).joined(separator: " · ").nilIfBlank
-                    ?? LT("当前还没有足够的摘要信息。", "Not enough summary data yet.", "まだ十分な概要情報がありません。")
+                title: LT("媒体与主体证明", "Media & Proof", "メディアと証明"),
+                body: LT(
+                    "主视觉与审核证明先按 event 标准管理：头像必填，proof 仅审核可见，所有图片先归属到当前 draft。",
+                    "Media follows the event standard: avatar is required, proof stays review-only, and all uploads belong to the current draft first.",
+                    "画像はイベント基準に合わせます。アバターは必須、proof は審査専用で、すべての画像はまず現在の下書きに紐づきます。"
+                )
             )
+
+            singleImageCard(
+                zone: .avatar,
+                title: LT("头像", "Avatar", "アバター"),
+                subtitle: LT("会作为主办方主图展示，建议使用清晰 Logo 或品牌主视觉。", "Used as the main organizer image. A clear logo or hero visual works best.", "主催者のメイン画像として表示されます。鮮明なロゴやキービジュアルがおすすめです。"),
+                item: $avatarItem,
+                required: true
+            )
+
+            singleImageCard(
+                zone: .background,
+                title: LT("背景图", "Background", "背景"),
+                subtitle: LT("用于详情页头图，可选但建议补充，以对齐 event 的视觉完整度。", "Used as the detail header image. Optional, but recommended for a fuller presentation.", "詳細ページのヘッダー画像です。任意ですが、見栄えを整えるため推奨です。"),
+                item: $backgroundItem,
+                required: false
+            )
+
+            multiImageCard(
+                zone: .proof,
+                title: LT("证明图", "Proof", "証明"),
+                subtitle: LT("上传官网后台、票务后台、主办方社媒后台截图等，帮助审核确认主体真实性。", "Upload dashboard or official backend screenshots to help reviewers verify organizer ownership.", "公式管理画面やSNS管理画面のスクリーンショットなどをアップロードし、主体確認を補助します。"),
+                items: $proofItems,
+                reviewOnly: true
+            )
+
+            multiImageCard(
+                zone: .other,
+                title: LT("补充图", "Other Media", "補足画像"),
+                subtitle: LT("可补充更多品牌素材，帮助审核和后续资料整理。", "Add extra brand assets to support review and later profile curation.", "審査や後続の資料整理に役立つ補足素材を追加できます。"),
+                items: $otherItems,
+                reviewOnly: false
+            )
+        }
+    }
+
+    private var basicStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionCard(
+                title: LT("基础信息", "Basic Info", "基本情報"),
+                body: LT("先补齐主办方名称、别名、简称和基础地域信息。", "Start with organizer name, aliases, abbreviation, and location basics.", "まず主催者名、別名、略称、地域情報を入力します。")
+            )
+
+            localizedNameCard
+
+            formCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    labeledField(LT("主办方主名称", "Primary Name", "主催者の主名称"), text: stringBinding(\.name))
+                    labeledField(LT("简称", "Abbreviation", "略称"), text: stringBinding(\.abbreviation))
+                    labeledField(LT("别名（逗号分隔）", "Aliases (comma separated)", "別名（カンマ区切り）"), text: aliasesBinding)
+                    HStack(spacing: 12) {
+                        labeledField(LT("国家", "Country", "国"), text: stringBinding(\.country))
+                        labeledField(LT("城市", "City", "City"), text: stringBinding(\.city))
+                    }
+                    HStack(spacing: 12) {
+                        labeledField(LT("成立年份", "Founded Year", "設立年"), text: stringBinding(\.foundedYear))
+                        labeledField(LT("举办频率", "Frequency", "開催頻度"), text: stringBinding(\.frequency))
+                    }
+                    labeledField(LT("一句话定位", "Tagline", "タグライン"), text: stringBinding(\.tagline))
+                }
+            }
+        }
+    }
+
+    private var profileStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionCard(
+                title: LT("资料介绍", "Profile", "プロフィール"),
+                body: LT("这一页先支持主介绍与多语言名称补充，后续会继续接主办方类型、风格标签与审核提示。", "This step currently supports the main profile text and localized naming, with organizer type and style tags planned next.", "このステップでは主な紹介文と多言語名称を先に対応し、次に主催者タイプやスタイルタグを接続します。")
+            )
+
+            formCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    labeledTextArea(
+                        LT("主办方介绍", "Organizer Introduction", "主催者紹介"),
+                        text: stringBinding(\.introduction),
+                        minHeight: 150
+                    )
+                    Text(
+                        LT(
+                            "当前长度 \(viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).count) 字",
+                            "Current length: \(viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).count)",
+                            "現在の文字数 \(viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).count)"
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var linksStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionCard(
+                title: LT("官方链接", "Official Links", "公式リンク"),
+                body: LT("这里先接官网与核心社媒链接，审核声明仍放在最后一步确认。", "This step currently covers the website and core social links, while review declarations stay on the final step.", "このステップでは公式サイトと主要SNSリンクを入力し、審査確認は最終ステップで行います。")
+            )
+
+            formCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    labeledField(LT("官网", "Official Website", "公式サイト"), text: stringBinding(\.officialWebsite), keyboard: .URL)
+                    labeledField(LT("Instagram", "Instagram", "Instagram"), text: stringBinding(\.instagram), keyboard: .URL)
+                    labeledField(LT("Facebook", "Facebook", "Facebook"), text: stringBinding(\.facebook), keyboard: .URL)
+                    labeledField(LT("Twitter / X", "Twitter / X", "Twitter / X"), text: stringBinding(\.twitter), keyboard: .URL)
+                    labeledField(LT("YouTube", "YouTube", "YouTube"), text: stringBinding(\.youtube), keyboard: .URL)
+                    labeledField(LT("TikTok", "TikTok", "TikTok"), text: stringBinding(\.tiktok), keyboard: .URL)
+                }
+            }
+        }
+    }
+
+    private var relationsStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionCard(
+                title: LT("关联活动", "Related Events", "関連イベント"),
+                body: LT("这里已经改成 event 搜索绑定卡片，可以直接搜索活动并加入当前主办方；重复绑定会自动去重。", "This step now uses searchable event binding cards so you can look up events and attach them directly to the organizer. Duplicate bindings are prevented automatically.", "このステップではイベント検索バインドカードに対応し、イベントを検索して主催者へ直接紐付けできます。重複紐付けは自動で防止されます。")
+            )
+
+            formCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(LT("搜索活动", "Search Events", "イベント検索"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+
+                        HStack(spacing: 10) {
+                            TextField(
+                                LT("输入活动名称", "Enter event name", "イベント名を入力"),
+                                text: Binding(
+                                    get: { viewModel.eventSearchQuery },
+                                    set: { viewModel.updateEventSearchQuery($0) }
+                                )
+                            )
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 11)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(RaverTheme.background)
+                            )
+                            .foregroundStyle(RaverTheme.primaryText)
+
+                            Button {
+                                Task { await viewModel.searchEvents() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    if viewModel.isSearchingEvents {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Image(systemName: "magnifyingglass")
+                                    }
+                                    Text(viewModel.isSearchingEvents
+                                         ? LT("搜索中", "Searching", "検索中")
+                                         : LT("搜索", "Search", "検索"))
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(RaverTheme.accent)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.isSearchingEvents)
+                        }
+                    }
+
+                    if viewModel.draft.boundEventIDs.isEmpty {
+                        Text(LT("当前还没有绑定任何活动。", "No events are bound yet.", "まだ関連イベントはありません。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(LT("当前已绑定", "Currently Bound", "現在の紐付け"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            ForEach(viewModel.draft.boundEventIDs, id: \.self) { eventID in
+                                HStack(spacing: 8) {
+                                    Text(viewModel.boundEventNameByID[eventID] ?? eventID)
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                    Button {
+                                        viewModel.removeBoundEvent(id: eventID)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(RaverTheme.background, in: Capsule())
+                            }
+                        }
+                    }
+
+                    if viewModel.isSearchingEvents {
+                        organizerInlineFeedbackRow(
+                            message: LT("正在搜索活动…", "Searching events...", "イベントを検索中..."),
+                            systemImage: "clock.arrow.circlepath",
+                            tint: RaverTheme.secondaryText
+                        )
+                    } else if !viewModel.eventSearchResults.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(LT("搜索结果", "Search Results", "検索結果"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+
+                            ForEach(viewModel.eventSearchResults.prefix(8)) { event in
+                                Button {
+                                    viewModel.toggleBoundEvent(event)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: viewModel.draft.boundEventIDs.contains(event.id) ? "checkmark.circle.fill" : "plus.circle")
+                                            .font(.title3)
+                                            .foregroundStyle(viewModel.draft.boundEventIDs.contains(event.id) ? RaverTheme.accent : RaverTheme.secondaryText)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(event.name)
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(RaverTheme.primaryText)
+                                                .lineLimit(1)
+                                            Text(organizerEventMetaText(for: event))
+                                                .font(.caption2)
+                                                .foregroundStyle(RaverTheme.secondaryText)
+                                                .lineLimit(2)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    } else if let message = viewModel.eventSearchFeedback.message {
+                        organizerInlineFeedbackRow(
+                            message: message,
+                            systemImage: viewModel.eventSearchFeedback.isFailure ? "exclamationmark.triangle.fill" : "info.circle.fill",
+                            tint: viewModel.eventSearchFeedback.isFailure ? .orange : RaverTheme.secondaryText
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var localizedNameCard: some View {
+        formCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(LT("多语言名称", "Localized Names", "多言語名称"))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Picker(LT("主要语言", "Preferred Language", "主要言語"), selection: Binding(
+                    get: { viewModel.draft.preferredLanguage },
+                    set: {
+                        viewModel.draft.preferredLanguage = $0
+                        viewModel.markDirty()
+                        viewModel.saveDraft(immediate: false)
+                    }
+                )) {
+                    Text("ZH").tag(EventUploadPreferredLanguage.zh)
+                    Text("EN").tag(EventUploadPreferredLanguage.en)
+                    Text("JA").tag(EventUploadPreferredLanguage.ja)
+                }
+                .pickerStyle(.segmented)
+
+                labeledField("ZH", text: localizedNameBinding(.zh))
+                labeledField("EN", text: localizedNameBinding(.en))
+                labeledField("JA", text: localizedNameBinding(.ja))
+            }
         }
     }
 
@@ -178,8 +483,70 @@ struct OrganizerUploadFlowView: View {
         VStack(alignment: .leading, spacing: 16) {
             sectionCard(
                 title: LT("提交前检查", "Review Before Submit", "送信前の確認"),
-                body: LT("这一版先完成流程骨架。下一阶段会在这里展示结构化 diff、图片归属、审核提示和我的发布状态说明。", "This first pass focuses on the flow skeleton. The next phase will show structured diffs, media ownership, review hints, and My Posts status guidance here.", "この初期版はフロー骨格の構築が中心です。次の段階で構造化差分、画像帰属、審査ヒント、マイ投稿状態案内をここに表示します。")
+                body: LT(
+                    "提交前再确认主名称、主视觉、proof 和官方链接。这里的内容会直接进入 brand 审核任务。",
+                    "Confirm the organizer name, main media, proof, and official links before submitting. These values go directly into the brand review task.",
+                    "送信前に主名称、メイン画像、proof、公式リンクを再確認します。ここでの内容はそのままブランド審査タスクに入ります。"
+                )
             )
+
+            formCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(LT("主办方概览", "Organizer Summary", "主催者概要"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if let heroImage = viewModel.draft.avatarImage ?? viewModel.draft.backgroundImage {
+                        organizerImageThumbnail(heroImage, height: 176)
+                    }
+
+                    reviewSummaryRow(LT("主名称", "Primary Name", "主名称"), value: viewModel.draft.primaryName)
+                    reviewSummaryRow(
+                        LT("地区", "Region", "地域"),
+                        value: [viewModel.draft.country, viewModel.draft.city]
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                            .joined(separator: " · ")
+                    )
+                    reviewSummaryRow(LT("简称", "Abbreviation", "略称"), value: viewModel.draft.abbreviation)
+                    reviewSummaryRow(LT("一句话定位", "Tagline", "タグライン"), value: viewModel.draft.tagline)
+                    reviewSummaryRow(LT("介绍", "Introduction", "紹介"), value: viewModel.draft.introduction)
+                }
+            }
+
+            formCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(LT("素材与审核信息", "Media & Review Info", "画像と審査情報"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    reviewSummaryRow(
+                        LT("图片统计", "Image Counts", "画像数"),
+                        value: LT(
+                            "头像 \(viewModel.draft.avatarImage == nil ? 0 : 1) · 背景 \(viewModel.draft.backgroundImage == nil ? 0 : 1) · proof \(viewModel.draft.proofImages.count) · 补充 \(viewModel.draft.otherImages.count)",
+                            "Avatar \(viewModel.draft.avatarImage == nil ? 0 : 1) · Background \(viewModel.draft.backgroundImage == nil ? 0 : 1) · Proof \(viewModel.draft.proofImages.count) · Other \(viewModel.draft.otherImages.count)",
+                            "アバター \(viewModel.draft.avatarImage == nil ? 0 : 1) · 背景 \(viewModel.draft.backgroundImage == nil ? 0 : 1) · proof \(viewModel.draft.proofImages.count) · 補足 \(viewModel.draft.otherImages.count)"
+                        )
+                    )
+                    reviewSummaryRow(
+                        LT("官方链接", "Official Links", "公式リンク"),
+                        value: reviewLinkSummary
+                    )
+                    reviewSummaryRow(
+                        LT("关联活动", "Related Events", "関連イベント"),
+                        value: viewModel.draft.boundEventIDs.isEmpty
+                            ? LT("当前未关联活动", "No related events yet", "関連イベントなし")
+                            : viewModel.draft.boundEventIDs.joined(separator: ", ")
+                    )
+                    reviewSummaryRow(
+                        LT("proof 摘要", "Proof Summary", "proof 概要"),
+                        value: viewModel.draft.proofImages.isEmpty
+                            ? LT("未上传 proof 图片", "No proof image uploaded", "proof 画像なし")
+                            : LT("已上传 \(viewModel.draft.proofImages.count) 张，仅审核可见", "\(viewModel.draft.proofImages.count) uploaded, review only", "\(viewModel.draft.proofImages.count)枚アップロード済み、審査のみ表示")
+                    )
+                }
+            }
+
             Toggle(
                 LT("我确认拥有资料与图片的使用权", "I confirm I have rights to use the profile and images", "プロフィールと画像の利用権を確認します"),
                 isOn: Binding(
@@ -202,6 +569,63 @@ struct OrganizerUploadFlowView: View {
                     }
                 )
             )
+
+            formCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(LT("最终确认", "Final Confirmation", "最終確認"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text(
+                        LT(
+                            "点击底部提交后，会先弹出最终确认。确认提交后，系统会按当前模式发起 brand 创建或编辑审核任务。",
+                            "Tapping submit will open one final confirmation first. Once confirmed, the app will start the brand create or edit review submission for the current mode.",
+                            "下部の送信を押すと、まず最終確認が表示されます。確認後、現在のモードに応じて brand の新規作成または編集審査送信を開始します。"
+                        )
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    reviewSummaryRow(
+                        LT("提交后去向", "What Happens Next", "送信後の流れ"),
+                        value: LT(
+                            "1. 进入处理中或直接发布\n2. 后续状态会在通知和我的发布里更新\n3. 若仍在审核中，event 侧会继续保留手填主办方名",
+                            "1. It enters processing or publishes directly\n2. Later status updates appear in notifications and My Posts\n3. If review is still pending, the event flow keeps the manual organizer name",
+                            "1. 処理中に入るか、そのまま公開されます\n2. 以降の状態更新は通知とマイ投稿に表示されます\n3. まだ審査中なら、event 側では手入力の主催者名を保持します"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private var reviewLinkSummary: String {
+        let values = [
+            viewModel.draft.officialWebsite,
+            viewModel.draft.instagram,
+            viewModel.draft.facebook,
+            viewModel.draft.twitter,
+            viewModel.draft.youtube,
+            viewModel.draft.tiktok,
+        ]
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        return values.isEmpty
+            ? LT("当前未填写官方链接", "No official links yet", "公式リンクなし")
+            : values.joined(separator: "\n")
+    }
+
+    private func reviewSummaryRow(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                 ? LT("未填写", "Not provided", "未入力")
+                 : value)
+                .font(.subheadline)
+                .foregroundStyle(RaverTheme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -285,7 +709,441 @@ struct OrganizerUploadFlowView: View {
         }
     }
 
+    private func formCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func labeledField(_ title: String, text: Binding<String>, keyboard: UIKeyboardType = .default) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            TextField(title, text: text, axis: .vertical)
+                .textInputAutocapitalization(keyboard == .URL ? .never : .sentences)
+                .keyboardType(keyboard)
+                .autocorrectionDisabled(keyboard == .URL)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(RaverTheme.background)
+                )
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+    }
+
+    private func labeledTextArea(_ title: String, text: Binding<String>, minHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            TextField(title, text: text, axis: .vertical)
+                .lineLimit(6...12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .frame(minHeight: minHeight, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(RaverTheme.background)
+                )
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+    }
+
+    private func stringBinding(_ keyPath: WritableKeyPath<OrganizerUploadDraft, String>) -> Binding<String> {
+        Binding(
+            get: { viewModel.draft[keyPath: keyPath] },
+            set: {
+                viewModel.draft[keyPath: keyPath] = $0
+                viewModel.markDirty()
+                viewModel.saveDraft(immediate: false)
+            }
+        )
+    }
+
+    private func localizedNameBinding(_ language: EventUploadPreferredLanguage) -> Binding<String> {
+        Binding(
+            get: { viewModel.draft.nameI18n.value(for: language) },
+            set: { newValue in
+                viewModel.draft.nameI18n.setValue(newValue, for: language)
+                if language == viewModel.draft.preferredLanguage {
+                    viewModel.draft.name = newValue
+                }
+                viewModel.markDirty()
+                viewModel.saveDraft(immediate: false)
+            }
+        )
+    }
+
+    private var aliasesBinding: Binding<String> {
+        Binding(
+            get: { viewModel.draft.aliases.joined(separator: ", ") },
+            set: { newValue in
+                viewModel.draft.aliases = newValue
+                    .split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "/" || $0 == "、" })
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                viewModel.markDirty()
+                viewModel.saveDraft(immediate: false)
+            }
+        )
+    }
+
+    private func singleImageCard(
+        zone: OrganizerUploadImageZone,
+        title: String,
+        subtitle: String,
+        item: Binding<PhotosPickerItem?>,
+        required: Bool
+    ) -> some View {
+        let image = viewModel.draft.image(for: zone)
+        let isUploading = viewModel.uploadingZones.contains(zone)
+
+        return formCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    if required {
+                        Text("*")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.red)
+                    }
+                    Spacer()
+                    if isUploading {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(RaverTheme.background)
+                        .frame(height: 188)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(required && image == nil ? Color.red.opacity(0.6) : RaverTheme.cardBorder, lineWidth: 1)
+                        )
+
+                    if let image {
+                        Button {
+                            presentPreview(for: zone, tappedImageID: image.id)
+                        } label: {
+                            organizerImageThumbnail(image, height: 188)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        PhotosPicker(selection: item, matching: .images) {
+                            VStack(spacing: 8) {
+                                Image(systemName: "photo.badge.plus")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                Text(LT("选择图片", "Choose Image", "画像を選択"))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 188)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isUploading)
+                    }
+                }
+
+                if image != nil {
+                    HStack(spacing: 10) {
+                        PhotosPicker(selection: item, matching: .images) {
+                            imageActionButtonLabel(
+                                title: LT("替换图片", "Replace", "差し替え"),
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isUploading)
+
+                        Button {
+                            Task { await viewModel.removeImage(zone: zone) }
+                        } label: {
+                            imageActionButtonLabel(
+                                title: LT("删除", "Delete", "削除"),
+                                systemImage: "trash"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isUploading)
+                    }
+                }
+            }
+        }
+    }
+
+    private func multiImageCard(
+        zone: OrganizerUploadImageZone,
+        title: String,
+        subtitle: String,
+        items: Binding<[PhotosPickerItem]>,
+        reviewOnly: Bool
+    ) -> some View {
+        let images = viewModel.draft.images(for: zone)
+        let isUploading = viewModel.uploadingZones.contains(zone)
+
+        return formCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    if reviewOnly {
+                        Text(LT("仅审核可见", "Review Only", "審査のみ表示"))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.12), in: Capsule())
+                    }
+                    Spacer()
+                    Text(LT("\(images.count) 张", "\(images.count) images", "\(images.count)枚"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                PhotosPicker(selection: items, maxSelectionCount: 10, matching: .images) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.accent)
+                        Text(images.isEmpty ? LT("选择图片", "Choose Images", "画像を選択") : LT("继续添加", "Add More", "さらに追加"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Spacer()
+                        if isUploading {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(isUploading)
+
+                if images.isEmpty {
+                    Text(reviewOnly
+                        ? LT("当前还没有 proof 图片。没有官方链接时，至少补一张 proof 方便审核。", "No proof images yet. If you don't have official links, add at least one proof image.", "まだ proof 画像はありません。公式リンクがない場合は、審査のため少なくとも1枚追加してください。")
+                        : LT("当前还没有补充图。", "No extra media yet.", "まだ補足画像はありません。"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
+                        ForEach(images) { image in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Button {
+                                    presentPreview(for: zone, tappedImageID: image.id)
+                                } label: {
+                                    organizerImageThumbnail(image, height: 96)
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    Task { await viewModel.removeImage(zone: zone, imageID: image.id) }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "trash")
+                                        Text(LT("删除", "Delete", "削除"))
+                                    }
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.red)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func imageActionButtonLabel(title: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+            Text(title)
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(RaverTheme.primaryText)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func organizerInlineFeedbackRow(message: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func organizerEventMetaText(for event: WebEvent) -> String {
+        let location = [event.city, event.country]
+            .compactMap { value -> String? in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            .joined(separator: " · ")
+        let dateText = organizerEventDateFormatter.string(from: event.startDate)
+        return location.isEmpty ? dateText : "\(location) · \(dateText)"
+    }
+
+    private var organizerEventDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }
+
+    private func handlePrimaryAction() {
+        if viewModel.draft.currentStep == .review {
+            if viewModel.prepareSubmitConfirmation() {
+                showSubmitConfirmation = true
+            }
+            return
+        }
+        viewModel.goNext()
+    }
+
+    private func organizerImageThumbnail(_ image: OrganizerUploadImageDraft, height: CGFloat) -> some View {
+        Group {
+            if let url = organizerImageURL(for: image) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let loadedImage):
+                        loadedImage
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        thumbnailPlaceholder
+                    }
+                }
+            } else {
+                thumbnailPlaceholder
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(RaverTheme.background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var thumbnailPlaceholder: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(RaverTheme.background)
+            Image(systemName: "photo")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(RaverTheme.accent)
+        }
+    }
+
+    private func organizerImageURL(for image: OrganizerUploadImageDraft) -> URL? {
+        guard let resolved = AppConfig.resolvedURLString(image.remoteURL) ?? image.remoteURL.nilIfBlank else {
+            return nil
+        }
+        return URL(string: resolved)
+    }
+
+    private func presentPreview(for zone: OrganizerUploadImageZone, tappedImageID: UUID) {
+        let images = viewModel.draft.images(for: zone)
+        let previewItems = images.enumerated().compactMap { index, image -> FullscreenMediaItem? in
+            guard let rawURL = organizerImageURL(for: image)?.absoluteString else { return nil }
+            return FullscreenMediaItem(rawURL: rawURL, index: index)
+        }
+        guard let selectedIndex = images.firstIndex(where: { $0.id == tappedImageID }),
+              !previewItems.isEmpty else { return }
+        previewPresentation = OrganizerUploadImagePreviewPresentation(items: previewItems, initialIndex: selectedIndex)
+    }
+
+    @MainActor
+    private func loadSinglePhoto(_ item: PhotosPickerItem?, zone: OrganizerUploadImageZone) async {
+        defer {
+            switch zone {
+            case .avatar:
+                avatarItem = nil
+            case .background:
+                backgroundItem = nil
+            case .proof, .other:
+                break
+            }
+        }
+        guard let item else { return }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            await viewModel.uploadImage(data, zone: zone)
+        } catch {
+            viewModel.statusMessage = error.userFacingMessage ?? LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像の読み込みに失敗しました。もう一度お試しください。")
+        }
+    }
+
+    @MainActor
+    private func loadMultiplePhotos(_ items: [PhotosPickerItem], zone: OrganizerUploadImageZone) async {
+        defer {
+            switch zone {
+            case .proof:
+                proofItems = []
+            case .other:
+                otherItems = []
+            case .avatar, .background:
+                break
+            }
+        }
+        guard !items.isEmpty else { return }
+        do {
+            for item in items {
+                guard let data = try await item.loadTransferable(type: Data.self) else { continue }
+                await viewModel.uploadImage(data, zone: zone)
+            }
+        } catch {
+            viewModel.statusMessage = error.userFacingMessage ?? LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像の読み込みに失敗しました。もう一度お試しください。")
+        }
+    }
+
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
+}
+
+private struct OrganizerUploadImagePreviewPresentation: Identifiable {
+    let id = UUID()
+    let items: [FullscreenMediaItem]
+    let initialIndex: Int
 }

@@ -97,6 +97,7 @@ struct EventUploadFlowView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: EventUploadFlowViewModel
     @State private var showLocationPicker = false
@@ -113,6 +114,7 @@ struct EventUploadFlowView: View {
     @State private var keyboardCandidateSpacing: CGFloat = 0
     @State private var stageIndexPendingDeletion: Int?
     @State private var showClearAllTimetableConfirmation = false
+    @State private var organizerCreateContextID: String?
 
     init(
         mode: EventUploadMode = .create,
@@ -164,6 +166,25 @@ struct EventUploadFlowView: View {
             withAnimation(.easeOut(duration: 0.18)) {
                 keyboardCandidateSpacing = 0
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverOrganizerDidCreate)) { notification in
+            guard let expectedContextID = organizerCreateContextID,
+                  let actualContextID = notification.userInfo?["sourceContextID"] as? String,
+                  actualContextID == expectedContextID,
+                  let organizer = notification.object as? WebLearnFestival else {
+                return
+            }
+            viewModel.applyOrganizer(organizer)
+            organizerCreateContextID = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .discoverOrganizerSubmissionQueued)) { notification in
+            guard let expectedContextID = organizerCreateContextID,
+                  let actualContextID = notification.userInfo?["sourceContextID"] as? String,
+                  actualContextID == expectedContextID else {
+                return
+            }
+            viewModel.handleOrganizerCreationQueued()
+            organizerCreateContextID = nil
         }
         .onDisappear {
             viewModel.handleDisappear()
@@ -2290,11 +2311,45 @@ struct EventUploadFlowView: View {
                     }
                 }
             } else if !isLocked, let message = viewModel.organizerSearchFeedback.message, !viewModel.isSearchingOrganizers {
-                inlineSearchFeedbackRow(
-                    message: message,
-                    systemImage: viewModel.organizerSearchFeedback.isFailure ? "exclamationmark.triangle.fill" : "building.2.crop.circle",
-                    tint: viewModel.organizerSearchFeedback.isFailure ? .orange : RaverTheme.secondaryText
-                )
+                VStack(alignment: .leading, spacing: 8) {
+                    inlineSearchFeedbackRow(
+                        message: message,
+                        systemImage: viewModel.organizerSearchFeedback.isFailure ? "exclamationmark.triangle.fill" : "building.2.crop.circle",
+                        tint: viewModel.organizerSearchFeedback.isFailure ? .orange : RaverTheme.secondaryText
+                    )
+
+                    if case .empty = viewModel.organizerSearchFeedback {
+                        Button {
+                            let seededName = viewModel.draft.organizerName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let contextID = UUID().uuidString
+                            organizerCreateContextID = contextID
+                            viewModel.saveDraft(immediate: true)
+                            discoverPush(.organizerCreate(initialName: seededName.nilIfBlank, sourceContextID: contextID))
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.caption.weight(.bold))
+                                Text(LT("直接创建这个主办方", "Create this organizer", "この主催者を作成"))
+                                    .font(.caption.weight(.semibold))
+                                Spacer(minLength: 0)
+                                Image(systemName: "arrow.right")
+                                    .font(.caption.weight(.bold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                LinearGradient(
+                                    colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }

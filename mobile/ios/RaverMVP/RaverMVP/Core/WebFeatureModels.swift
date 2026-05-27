@@ -309,6 +309,11 @@ struct UpdateLearnFestivalInput: Codable {
     var tiktokUrl: String? = nil
     var avatarUrl: String?
     var backgroundUrl: String?
+    var proofImageUrl: String? = nil
+    var imageAssets: [WebEventImageAsset]? = nil
+    var boundEventIDs: [String]? = nil
+    var rightsConfirmed: Bool? = nil
+    var identityConfirmed: Bool? = nil
     var links: [LearnFestivalLinkPayload]?
 }
 
@@ -336,6 +341,11 @@ struct CreateLearnFestivalInput: Codable {
     var tiktokUrl: String? = nil
     var avatarUrl: String?
     var backgroundUrl: String?
+    var proofImageUrl: String? = nil
+    var imageAssets: [WebEventImageAsset]? = nil
+    var boundEventIDs: [String]? = nil
+    var rightsConfirmed: Bool? = nil
+    var identityConfirmed: Bool? = nil
     var links: [LearnFestivalLinkPayload]?
 }
 

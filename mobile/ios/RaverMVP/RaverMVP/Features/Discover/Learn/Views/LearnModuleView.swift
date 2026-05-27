@@ -380,7 +380,7 @@ struct LearnModuleView: View {
 
                 Button {
                     prepareFestivalCreateDraft()
-                    discoverPush(.learnFestivalCreate)
+                    discoverPush(.organizerCreate(initialName: nil))
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
@@ -5089,7 +5089,7 @@ struct LearnFestivalDetailView: View {
                     accentColor: RaverTheme.accent
                 ) {
                     prepareFestivalEditDraft()
-                    discoverPush(.learnFestivalEdit(festivalID: currentFestival.id))
+                    discoverPush(.organizerEdit(brandID: currentFestival.id))
                 }
             )
         }

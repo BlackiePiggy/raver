@@ -2012,10 +2012,50 @@ const cozePosterWorkflowRunUrl = cleanEnv(process.env.COZE_POSTER_WORKFLOW_RUN_U
 const cozePosterWorkflowToken = cleanEnv(process.env.COZE_POSTER_WORKFLOW_TOKEN);
 const cozePosterWorkflowTimeoutMs =
   parseCozeTimeoutMs(process.env.COZE_POSTER_WORKFLOW_TIMEOUT_MS) ?? 300_000;
+const cozeOssAccelerateBaseUrl = (() => {
+  const explicit =
+    cleanEnv(process.env.COZE_OSS_ACCELERATE_BASE_URL) ||
+    cleanEnv(process.env.OSS_ACCELERATE_BASE_URL) ||
+    cleanEnv(process.env.COZE_ACCELERATE_OSS_BASE_URL);
+  if (explicit) return explicit.replace(/\/+$/g, '');
+  if (!ossBucket) return null;
+  return `https://${ossBucket}.oss-accelerate.aliyuncs.com`;
+})();
 const cozePublicBaseUrl =
   cleanEnv(process.env.COZE_PUBLIC_BASE_URL) ||
   cleanEnv(process.env.PUBLIC_API_BASE_URL) ||
   cleanEnv(process.env.PUBLIC_BASE_URL);
+
+const tryParseUrlHost = (value: string | null | undefined): string | null => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).host.toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+const publicOssBaseUrlForCurrentBucket = (() => {
+  if (!ossBucket || !ossRegion) return null;
+  const endpointHost = ossEndpoint
+    ? ossEndpoint.replace(/^https?:\/\//, '').replace(/^\/+|\/+$/g, '')
+    : `${ossRegion}.aliyuncs.com`;
+  const bucketHost = endpointHost.startsWith(`${ossBucket}.`) ? endpointHost : `${ossBucket}.${endpointHost}`;
+  return `https://${bucketHost}`;
+})();
+
+const cozeAcceleratedSourceHosts = new Set(
+  [
+    publicOssBaseUrlForCurrentBucket,
+    cozeOssAccelerateBaseUrl,
+    cleanEnv(process.env.MEDIA_PUBLIC_BASE_URL),
+    cleanEnv(process.env.OSS_PUBLIC_BASE_URL),
+    cleanEnv(process.env.MEDIA_CDN_BASE_URL),
+  ]
+    .map((value) => tryParseUrlHost(value))
+    .filter((value): value is string => Boolean(value))
+);
 
 const currentRequestOrigin = (req: Request): string => {
   if (cozePublicBaseUrl) {
@@ -2038,6 +2078,39 @@ const resolvePublicImageUrlForCoze = (req: Request, imageUrl: string): string =>
     return origin ? `${origin}${trimmed}` : trimmed;
   }
   return trimmed;
+};
+
+const rewriteImageUrlToCozeAcceleratedOss = (
+  imageUrl: string
+): { url: string; rewritten: boolean; reason: 'accelerate' | 'passthrough' } => {
+  const trimmed = imageUrl.trim();
+  if (!trimmed || !cozeOssAccelerateBaseUrl || !/^https?:\/\//i.test(trimmed)) {
+    return { url: trimmed, rewritten: false, reason: 'passthrough' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { url: trimmed, rewritten: false, reason: 'passthrough' };
+  }
+
+  if (!cozeAcceleratedSourceHosts.has(parsed.host.toLowerCase())) {
+    return { url: trimmed, rewritten: false, reason: 'passthrough' };
+  }
+
+  const objectKey = parsed.pathname.replace(/^\/+/, '');
+  if (!objectKey) {
+    return { url: trimmed, rewritten: false, reason: 'passthrough' };
+  }
+
+  const search = parsed.search || '';
+  const hash = parsed.hash || '';
+  return {
+    url: `${cozeOssAccelerateBaseUrl}/${objectKey}${search}${hash}`,
+    rewritten: true,
+    reason: 'accelerate',
+  };
 };
 
 const buildCozeImportObjectKey = (
@@ -2090,7 +2163,17 @@ const ensureCozeAccessibleImageUrl = async (
   if (isLegacyCozeUploadUrl(req, imageUrl)) {
     throw new Error(`Legacy /uploads image URLs are no longer supported for Coze ${scope} imports`);
   }
-  return resolvePublicImageUrlForCoze(req, imageUrl);
+  const publicUrl = resolvePublicImageUrlForCoze(req, imageUrl);
+  const accelerated = rewriteImageUrlToCozeAcceleratedOss(publicUrl);
+  console.info('[coze-image] resolve', {
+    scope,
+    originalUrl: imageUrl,
+    publicUrl,
+    resolvedUrl: accelerated.url,
+    rewritten: accelerated.rewritten,
+    mode: accelerated.reason,
+  });
+  return accelerated.url;
 };
 
 const postMediaOssClient =
@@ -8783,7 +8866,8 @@ router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload
 
     const uploaded = await uploadLineupImportImageToOss(file);
     try {
-      const imported = await runCozeLineupWorker(uploaded.url, uploaded.mimeType);
+      const cozeImageUrl = await ensureCozeAccessibleImageUrl(req, uploaded.url, uploaded.mimeType, 'lineup');
+      const imported = await runCozeLineupWorker(cozeImageUrl, uploaded.mimeType);
       console.info('[lineup-import] request.success', {
         userId,
         durationMs: Date.now() - requestStartedAt,
