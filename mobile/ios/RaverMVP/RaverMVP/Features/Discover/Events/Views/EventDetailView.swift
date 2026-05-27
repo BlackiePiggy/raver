@@ -1436,6 +1436,7 @@ struct EventDetailView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     @StateObject private var guidanceCenter = AppGuidanceCenter.shared
+    @ObservedObject private var routeStore = EventRouteStore.shared
 
     private var eventReadRepository: EventReadRepository { appContainer.eventReadRepository }
     private var ratingRepository: RatingRepository { appContainer.ratingRepository }
@@ -1621,6 +1622,7 @@ struct EventDetailView: View {
     @State private var selectedScheduleSearchResult: EventScheduleSearchResult?
     @State private var scheduleSearchIndexKey: String?
     @State private var scheduleSearchIndex: [EventScheduleSearchResult] = []
+    @State private var showsMarkedScheduleCards = true
 
     private static let relatedArticlesInitialCursor: String? = nil
     private static let relatedArticlesPageSizeHint = 5
@@ -3649,6 +3651,9 @@ struct EventDetailView: View {
             .filter { $0.endTime > $0.startTime }
             .sorted(by: { $0.startTime < $1.startTime })
         let searchIndexKey = eventScheduleSearchIndexKey(event: event, scheduledSlots: scheduledSlots)
+        let savedRoute = routeStore.route(for: event.id)
+        let hasMarkedRouteCards = !(savedRoute?.selectedSlotIDSet.isEmpty ?? true)
+        let displayedRouteSlotIDs = showsMarkedScheduleCards ? (savedRoute?.selectedSlotIDSet ?? []) : []
 
         if !didLoadEventSchedule && scheduledSlots.isEmpty && !eventScheduleLoadFailed {
             scheduleTabSkeletonView
@@ -3665,7 +3670,10 @@ struct EventDetailView: View {
                 .padding(.vertical, 8)
         } else {
             VStack(alignment: .leading, spacing: 12) {
-                scheduleToolbar(searchResults: scheduleSearchIndexKey == searchIndexKey ? scheduleSearchIndex : [])
+                scheduleToolbar(
+                    searchResults: scheduleSearchIndexKey == searchIndexKey ? scheduleSearchIndex : [],
+                    hasMarkedRouteCards: hasMarkedRouteCards
+                )
                     .zIndex(1000)
 
                 if let selectedScheduleSearchResult {
@@ -3678,6 +3686,7 @@ struct EventDetailView: View {
                         event: event,
                         scheduledSlots: scheduledSlots,
                         presentationStyle: .embedded,
+                        displayedRouteSlotIDs: displayedRouteSlotIDs,
                         initialSelectedDayID: selectedScheduleDayID,
                         onSelectedDayChange: { dayID in
                             if selectedScheduleDayID != dayID {
@@ -3687,7 +3696,11 @@ struct EventDetailView: View {
                     )
                     .transition(.opacity.combined(with: .move(edge: .leading)))
                 } else {
-                    eventScheduleStageList(event: event, scheduledSlots: scheduledSlots)
+                    eventScheduleStageList(
+                        event: event,
+                        scheduledSlots: scheduledSlots,
+                        routeSelectedSlotIDs: displayedRouteSlotIDs
+                    )
                         .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
             }
@@ -3703,11 +3716,18 @@ struct EventDetailView: View {
         }
     }
 
-    private func scheduleToolbar(searchResults: [EventScheduleSearchResult]) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+    private func scheduleToolbar(
+        searchResults: [EventScheduleSearchResult],
+        hasMarkedRouteCards: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 8) {
             scheduleViewModePicker
 
             scheduleRouteButton
+
+            if hasMarkedRouteCards {
+                scheduleMarkedCardsToggleButton
+            }
 
             Spacer(minLength: 0)
 
@@ -3720,6 +3740,36 @@ struct EventDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .zIndex(1000)
+    }
+
+    private var scheduleMarkedCardsToggleButton: some View {
+        Button {
+            withAnimation(.interactiveSpring(response: 0.24, dampingFraction: 0.86)) {
+                showsMarkedScheduleCards.toggle()
+            }
+        } label: {
+            Image(systemName: showsMarkedScheduleCards ? "eye.fill" : "eye.slash")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(showsMarkedScheduleCards ? RaverTheme.accent : RaverTheme.primaryText)
+                .frame(width: 38, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(showsMarkedScheduleCards ? RaverTheme.accent.opacity(0.13) : RaverTheme.card.opacity(0.86))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(
+                            showsMarkedScheduleCards ? RaverTheme.accent.opacity(0.42) : Color.white.opacity(0.10),
+                            lineWidth: 0.8
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            showsMarkedScheduleCards
+                ? LT("隐藏已标记卡片", "Hide marked cards", "マーク済みカードを隠す")
+                : LT("显示已标记卡片", "Show marked cards", "マーク済みカードを表示")
+        )
     }
 
     private var scheduleRouteButton: some View {
@@ -3735,7 +3785,7 @@ struct EventDetailView: View {
                 )
             )
         } label: {
-            Label(LT("我的路线", "My Route", "マイルート"), systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+            Text(LT("路线", "Route", "ルート"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.accent)
                 .padding(.horizontal, 12)
@@ -3793,7 +3843,11 @@ struct EventDetailView: View {
     }
 
     @ViewBuilder
-    private func eventScheduleStageList(event: WebEvent, scheduledSlots: [WebEventLineupSlot]) -> some View {
+    private func eventScheduleStageList(
+        event: WebEvent,
+        scheduledSlots: [WebEventLineupSlot],
+        routeSelectedSlotIDs: Set<String>
+    ) -> some View {
 #if DEBUG
         let _ = EventDetailPerfLog.throttled(
             "schedule-list-\(event.id)-\(selectedScheduleDayID ?? "nil")-\(selectedScheduleStageKey ?? "nil")",
@@ -3835,7 +3889,12 @@ struct EventDetailView: View {
                 eventScheduleStageTabs(sections: sections, activeStageID: activeStageID)
 
                 ForEach(visibleSections) { section in
-                    eventScheduleStageSectionCard(section, event: event, highlightedSlotID: selectedScheduleSearchResult?.slot.id)
+                    eventScheduleStageSectionCard(
+                        section,
+                        event: event,
+                        highlightedSlotID: selectedScheduleSearchResult?.slot.id,
+                        routeSelectedSlotIDs: routeSelectedSlotIDs
+                    )
                 }
             }
             .onAppear {
@@ -4174,7 +4233,12 @@ struct EventDetailView: View {
         return trimmed.isEmpty ? "__unknown_stage__" : trimmed.lowercased()
     }
 
-    private func eventScheduleStageSectionCard(_ section: EventScheduleStageSection, event: WebEvent, highlightedSlotID: String?) -> some View {
+    private func eventScheduleStageSectionCard(
+        _ section: EventScheduleStageSection,
+        event: WebEvent,
+        highlightedSlotID: String?,
+        routeSelectedSlotIDs: Set<String>
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(section.name)
@@ -4191,7 +4255,12 @@ struct EventDetailView: View {
 
             VStack(spacing: 0) {
                 ForEach(Array(section.slots.enumerated()), id: \.element.id) { index, slot in
-                    eventScheduleStageActRow(slot, event: event, isHighlighted: slot.id == highlightedSlotID)
+                    eventScheduleStageActRow(
+                        slot,
+                        event: event,
+                        isHighlighted: slot.id == highlightedSlotID,
+                        isRouteSelected: routeSelectedSlotIDs.contains(slot.id)
+                    )
                         .overlay(alignment: .bottom) {
                             if index < section.slots.count - 1 {
                                 Divider().opacity(0.36)
@@ -4210,7 +4279,12 @@ struct EventDetailView: View {
         }
     }
 
-    private func eventScheduleStageActRow(_ slot: WebEventLineupSlot, event: WebEvent, isHighlighted: Bool = false) -> some View {
+    private func eventScheduleStageActRow(
+        _ slot: WebEventLineupSlot,
+        event: WebEvent,
+        isHighlighted: Bool = false,
+        isRouteSelected: Bool = false
+    ) -> some View {
         let act = EventLineupActCodec.parse(slot: slot)
         let content = HStack(spacing: 12) {
             lineupActAvatars(act)
@@ -4235,6 +4309,12 @@ struct EventDetailView: View {
 
             Spacer(minLength: 0)
 
+            if isRouteSelected {
+                Image(systemName: "heart.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+            }
+
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.secondaryText.opacity(0.72))
@@ -4243,11 +4323,20 @@ struct EventDetailView: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isHighlighted ? RaverTheme.accent.opacity(0.14) : Color.clear)
+                .fill(
+                    isHighlighted
+                        ? RaverTheme.accent.opacity(0.18)
+                        : (isRouteSelected ? RaverTheme.accent.opacity(0.10) : Color.clear)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isHighlighted ? RaverTheme.accent.opacity(0.44) : Color.clear, lineWidth: 1)
+                .stroke(
+                    isHighlighted
+                        ? RaverTheme.accent.opacity(0.48)
+                        : (isRouteSelected ? RaverTheme.accent.opacity(0.28) : Color.clear),
+                    lineWidth: 1
+                )
         )
         .contentShape(Rectangle())
 
@@ -8178,6 +8267,13 @@ private struct EventRouteSharePreviewCard: View {
 }
 
 private enum EventRoutePosterRenderer {
+    struct TimetablePosterBackgroundCandidate: Identifiable, Hashable {
+        let id: String
+        let urlString: String
+        let source: String
+        let label: String
+    }
+
     struct TimetablePosterBackgroundSelection {
         let source: String
         let urlString: String?
@@ -8186,11 +8282,16 @@ private enum EventRoutePosterRenderer {
     @MainActor
     static func generateImage(
         routeTitle: String,
+        routeOwnerAvatarURL: String?,
+        routeOwnerUserID: String?,
+        routeOwnerDisplayName: String?,
         event: WebEvent,
         days: [EventScheduleDay],
         selectedDayID: String?,
         selectedSlotIDs: Set<String>,
-        colorScheme: ColorScheme
+        colorScheme: ColorScheme,
+        selectedBackgroundURLString: String? = nil,
+        selectedBackgroundUIImage: UIImage? = nil
     ) async -> UIImage? {
         guard let selectedDay = days.first(where: { $0.id == selectedDayID }) ?? days.first else {
             return nil
@@ -8207,13 +8308,32 @@ private enum EventRoutePosterRenderer {
         )
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
         let qrCodeImage = await loadEventShareQRCodeImage(event: event)
+        let routeOwnerAvatarImage = await loadPosterAvatarImage(
+            avatarURLString: routeOwnerAvatarURL,
+            userID: routeOwnerUserID,
+            displayName: routeOwnerDisplayName,
+            eventID: event.id,
+            logContext: "share-preview"
+        )
         let posterHeight =
             EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 232
-        let backgroundSelection = timetablePosterBackgroundSelection(for: event)
+        let backgroundSelection: TimetablePosterBackgroundSelection
+        if selectedBackgroundUIImage != nil {
+            backgroundSelection = TimetablePosterBackgroundSelection(
+                source: "manual_upload",
+                urlString: "local-photo"
+            )
+        } else {
+            backgroundSelection = timetablePosterBackgroundSelection(
+                for: event,
+                overrideURLString: selectedBackgroundURLString
+            )
+        }
         let backgroundImage = await loadTimetablePosterBackgroundImage(
             selection: backgroundSelection,
             event: event,
-            logContext: "share-preview"
+            logContext: "share-preview",
+            overrideImage: selectedBackgroundUIImage
         )
 
         let snapshotView = EventRoutePlannerShareSnapshotView(
@@ -8225,7 +8345,8 @@ private enum EventRoutePosterRenderer {
             contentWidth: snapshotContentWidth,
             posterHeight: posterHeight,
             qrCodeImage: qrCodeImage,
-            backgroundImage: backgroundImage
+            backgroundImage: backgroundImage,
+            routeOwnerAvatarImage: routeOwnerAvatarImage
         )
         .environment(\.colorScheme, colorScheme)
 
@@ -8245,7 +8366,28 @@ private enum EventRoutePosterRenderer {
         return image.scaledDownIfNeeded(maxHeight: 4000)
     }
 
-    static func timetablePosterBackgroundSelection(for event: WebEvent) -> TimetablePosterBackgroundSelection {
+    static func timetablePosterBackgroundCandidates(for event: WebEvent) -> [TimetablePosterBackgroundCandidate] {
+        var seen = Set<String>()
+        var candidates: [TimetablePosterBackgroundCandidate] = []
+
+        func append(urlString: String?, source: String, label: String) {
+            guard let trimmed = urlString?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !trimmed.isEmpty else {
+                return
+            }
+            let key = trimmed.lowercased()
+            guard !seen.contains(key) else { return }
+            seen.insert(key)
+            candidates.append(
+                TimetablePosterBackgroundCandidate(
+                    id: trimmed,
+                    urlString: trimmed,
+                    source: source,
+                    label: label
+                )
+            )
+        }
+
         let coverAsset = event.imageAssets?
             .sorted {
                 let leftOrder = $0.order ?? Int.max
@@ -8265,25 +8407,54 @@ private enum EventRoutePosterRenderer {
                 return normalized.contains("cover")
             }?
             .url
-            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if let coverAsset, !coverAsset.isEmpty {
-            return TimetablePosterBackgroundSelection(source: "cover_asset", urlString: coverAsset)
+        append(urlString: coverAsset, source: "cover_asset", label: LT("封面", "Cover", "カバー"))
+        append(urlString: event.coverImageUrl, source: "cover_field", label: LT("封面", "Cover", "カバー"))
+
+        for (index, urlString) in event.posterAssetURLs.enumerated() {
+            append(
+                urlString: urlString,
+                source: "poster_asset",
+                label: index == 0
+                    ? LT("海报", "Poster", "ポスター")
+                    : LT("海报 \(index + 1)", "Poster \(index + 1)", "ポスター \(index + 1)")
+            )
         }
 
-        if let coverField = event.coverImageUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !coverField.isEmpty {
-            return TimetablePosterBackgroundSelection(source: "cover_field", urlString: coverField)
+        for (index, urlString) in event.lineupAssetURLs.enumerated() {
+            append(
+                urlString: urlString,
+                source: "lineup_asset",
+                label: index == 0
+                    ? LT("阵容", "Lineup", "ラインナップ")
+                    : LT("阵容 \(index + 1)", "Lineup \(index + 1)", "ラインナップ \(index + 1)")
+            )
         }
 
-        if let poster = event.posterAssetURLs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !poster.isEmpty {
-            return TimetablePosterBackgroundSelection(source: "poster_asset", urlString: poster)
+        for (index, urlString) in event.timetableAssetURLs.enumerated() {
+            append(
+                urlString: urlString,
+                source: "timetable_asset",
+                label: index == 0
+                    ? LT("时间表", "Timetable", "タイムテーブル")
+                    : LT("时间表 \(index + 1)", "Timetable \(index + 1)", "タイムテーブル \(index + 1)")
+            )
         }
 
-        if let lineup = event.lineupAssetURLs.first?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !lineup.isEmpty {
-            return TimetablePosterBackgroundSelection(source: "lineup_asset", urlString: lineup)
+        return candidates
+    }
+
+    static func timetablePosterBackgroundSelection(
+        for event: WebEvent,
+        overrideURLString: String? = nil
+    ) -> TimetablePosterBackgroundSelection {
+        if let override = overrideURLString?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return TimetablePosterBackgroundSelection(source: "manual_selection", urlString: override)
+        }
+
+        if let candidate = timetablePosterBackgroundCandidates(for: event).first {
+            return TimetablePosterBackgroundSelection(source: candidate.source, urlString: candidate.urlString)
         }
 
         return TimetablePosterBackgroundSelection(source: "none", urlString: nil)
@@ -8325,15 +8496,77 @@ private enum EventRoutePosterRenderer {
         }
     }
 
+    static func loadPosterAvatarImage(
+        avatarURLString: String?,
+        userID: String?,
+        displayName: String?,
+        eventID: String,
+        logContext: String
+    ) async -> UIImage? {
+        let resolvedAvatarURLString = AppConfig.resolvedUserAvatarURLString(
+            userID: userID,
+            username: displayName,
+            avatarURL: avatarURLString
+        )
+
+        guard let resolvedAvatarURLString,
+              let url = URL(string: resolvedAvatarURLString) else {
+            print(
+                "[EventRoutePoster] eventId=\(eventID) context=\(logContext) avatar-fetch skipped " +
+                "reason=invalid_url"
+            )
+            return nil
+        }
+
+        let image: UIImage? = await withCheckedContinuation { (continuation: CheckedContinuation<UIImage?, Never>) in
+            SDWebImageManager.shared.loadImage(
+                with: url,
+                options: [.retryFailed, .highPriority, .scaleDownLargeImages],
+                progress: nil
+            ) { image, _, error, _, finished, _ in
+                guard finished else { return }
+                if let image {
+                    continuation.resume(returning: image)
+                } else {
+                    let message = error?.localizedDescription ?? "unknown"
+                    print(
+                        "[EventRoutePoster] eventId=\(eventID) context=\(logContext) avatar-fetch failed " +
+                        "url=\(resolvedAvatarURLString) message=\(message)"
+                    )
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+
+        if let image {
+            print(
+                "[EventRoutePoster] eventId=\(eventID) context=\(logContext) avatar-fetch success " +
+                "url=\(resolvedAvatarURLString) size=\(Int(image.size.width))x\(Int(image.size.height))"
+            )
+        }
+
+        return image
+    }
+
     static func loadTimetablePosterBackgroundImage(
         selection: TimetablePosterBackgroundSelection,
         event: WebEvent,
-        logContext: String
+        logContext: String,
+        overrideImage: UIImage? = nil
     ) async -> UIImage? {
         print(
             "[EventRoutePoster] eventId=\(event.id) context=\(logContext) timetable-background-select " +
             "source=\(selection.source) url=\(selection.urlString ?? "none")"
         )
+
+        if let overrideImage {
+            print(
+                "[EventRoutePoster] eventId=\(event.id) context=\(logContext) image-fetch success " +
+                "source=\(selection.source) url=\(selection.urlString ?? "local-photo") " +
+                "size=\(Int(overrideImage.size.width))x\(Int(overrideImage.size.height))"
+            )
+            return overrideImage
+        }
 
         guard let rawURL = selection.urlString,
               let resolvedURLString = AppConfig.resolvedURLString(rawURL),
@@ -8484,7 +8717,7 @@ private struct EventScheduleSearchPanel: View {
             }
         }
         .padding(.horizontal, 11)
-        .frame(width: 156, height: 34)
+        .frame(width: 138, height: 34)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(searchFieldBackground)
@@ -8723,12 +8956,35 @@ struct EventRouteShareDetailLoaderView: View {
     let selectedSlotIDs: [String]?
 
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @State private var event: WebEvent?
     @State private var phase: LoadPhase = .idle
+    @State private var ownerAvatarURL: String?
 
     private var routeOwnerName: String {
         let trimmed = ownerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? LT("我", "Me", "自分") : trimmed
+    }
+
+    private var currentUserID: String? {
+        let trimmed = appState.session?.user.id.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var currentUserAvatarURL: String? {
+        appState.session?.user.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+    }
+
+    private var normalizedOwnerUserID: String? {
+        ownerUserID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+    }
+
+    private var isViewingOwnRoute: Bool {
+        if let normalizedOwnerUserID, let currentUserID {
+            return normalizedOwnerUserID == currentUserID
+        }
+        return normalizedOwnerUserID == nil
     }
 
     private var navigationTitle: String {
@@ -8785,7 +9041,10 @@ struct EventRouteShareDetailLoaderView: View {
                         selectedDayID: selectedDayID,
                         selectedSlotIDs: Set(selectedSlotIDs ?? []),
                         colorScheme: colorScheme,
-                        hintText: hintText
+                        hintText: hintText,
+                        routeOwnerAvatarURL: ownerAvatarURL,
+                        routeOwnerUserID: normalizedOwnerUserID,
+                        routeOwnerDisplayName: routeOwnerName
                     )
                 } else {
                     ContentUnavailableView(
@@ -8809,12 +9068,227 @@ struct EventRouteShareDetailLoaderView: View {
         phase = .initialLoading
         do {
             event = try await eventReadRepository.fetchEvent(id: eventID)
+            await loadOwnerAvatarIfNeeded()
             phase = event == nil ? .empty : .success
         } catch {
             phase = .failure(
                 message: error.userFacingMessage
                     ?? LT("路线海报加载失败，请稍后重试", "Failed to load route poster. Please try again later.", "ルートポスターを読み込めませんでした。時間をおいて再試行してください。")
             )
+        }
+    }
+
+    @MainActor
+    private func loadOwnerAvatarIfNeeded() async {
+        if isViewingOwnRoute {
+            ownerAvatarURL = currentUserAvatarURL
+            return
+        }
+
+        guard let normalizedOwnerUserID else {
+            ownerAvatarURL = currentUserAvatarURL
+            return
+        }
+
+        do {
+            let profile = try await appContainer.profileUserRepository.fetchUserProfile(userID: normalizedOwnerUserID)
+            ownerAvatarURL = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        } catch {
+            ownerAvatarURL = nil
+        }
+    }
+}
+
+private struct EventRoutePosterBackgroundPickerCard: View {
+    let candidate: EventRoutePosterRenderer.TimetablePosterBackgroundCandidate
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 10) {
+                    thumbnail
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(candidate.label)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(1)
+
+                        Text(candidate.source.replacingOccurrences(of: "_", with: " ").uppercased())
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                }
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isSelected ? RaverTheme.accent : RaverTheme.secondaryText.opacity(0.72))
+                    .padding(10)
+            }
+            .frame(width: 132)
+            .background(
+                shape
+                    .fill(RaverTheme.card)
+            )
+            .overlay(
+                shape
+                    .stroke(
+                        isSelected ? RaverTheme.accent : RaverTheme.primaryText.opacity(0.08),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let resolved = AppConfig.resolvedURLString(candidate.urlString),
+           URL(string: resolved) != nil {
+            ImageLoaderView(urlString: resolved, resizingMode: .fill)
+                .frame(width: 132, height: 156)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(width: 132, height: 156)
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+        }
+    }
+}
+
+private struct EventRoutePosterCustomBackgroundPickerCard: View {
+    @Binding var selectedPhotoItem: PhotosPickerItem?
+
+    let image: UIImage?
+    let isSelected: Bool
+    let selectAction: () -> Void
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if let image {
+                Button(action: selectAction) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 132, height: 156)
+                            .clipped()
+                            .clipShape(shape)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(LT("自定义上传", "Custom Upload", "カスタム画像"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(1)
+
+                            Text(LT("本地图片", "Local Image", "ローカル画像"))
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                    }
+                    .frame(width: 132)
+                    .background(
+                        shape
+                            .fill(RaverTheme.card)
+                    )
+                    .overlay(
+                        shape
+                            .stroke(
+                                isSelected ? RaverTheme.accent : RaverTheme.primaryText.opacity(0.08),
+                                lineWidth: isSelected ? 2 : 1
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+
+                HStack(spacing: 6) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(isSelected ? RaverTheme.accent : RaverTheme.secondaryText.opacity(0.72))
+
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.white, RaverTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(10)
+            } else {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ZStack {
+                            shape
+                                .fill(RaverTheme.card)
+                                .overlay(
+                                    shape
+                                        .stroke(
+                                            RaverTheme.primaryText.opacity(0.14),
+                                            style: StrokeStyle(lineWidth: 1.2, dash: [7, 5])
+                                        )
+                                )
+
+                            VStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 30, weight: .semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+
+                                Text(LT("上传图片", "Upload Image", "画像を追加"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                            }
+                        }
+                        .frame(width: 132, height: 156)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(LT("自定义上传", "Custom Upload", "カスタム画像"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .lineLimit(1)
+
+                            Text(LT("从相册选择", "Choose from Photos", "写真から選択"))
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                    }
+                    .frame(width: 132)
+                    .background(
+                        shape
+                            .fill(RaverTheme.card)
+                    )
+                    .overlay(
+                        shape
+                            .stroke(RaverTheme.primaryText.opacity(0.08), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
@@ -8829,18 +9303,44 @@ private struct EventRouteShareDetailView: View {
     let selectedSlotIDs: Set<String>
     let colorScheme: ColorScheme
     let hintText: String
+    let routeOwnerAvatarURL: String?
+    let routeOwnerUserID: String?
+    let routeOwnerDisplayName: String?
 
     @State private var feedbackMessage: String?
     @State private var previewImage: UIImage?
     @State private var previewFileURL: URL?
     @State private var isGenerating = false
     @State private var fullscreenSelection: FullscreenMediaSelection?
+    @State private var selectedBackgroundCandidateID: String?
+    @State private var selectedCustomBackgroundPhoto: PhotosPickerItem?
+    @State private var selectedCustomBackgroundImage: UIImage?
+
+    private static let customBackgroundSelectionID = "__event_route_custom_background__"
+
+    private var backgroundCandidates: [EventRoutePosterRenderer.TimetablePosterBackgroundCandidate] {
+        EventRoutePosterRenderer.timetablePosterBackgroundCandidates(for: event)
+    }
+
+    private var selectedBackgroundURLString: String? {
+        guard let selectedBackgroundCandidateID,
+              selectedBackgroundCandidateID != Self.customBackgroundSelectionID else {
+            return nil
+        }
+        return backgroundCandidates.first(where: { $0.id == selectedBackgroundCandidateID })?.urlString
+    }
+
+    private var selectedBackgroundUIImage: UIImage? {
+        guard selectedBackgroundCandidateID == Self.customBackgroundSelectionID else { return nil }
+        return selectedCustomBackgroundImage
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 shareSubjectCard
                 previewCard
+                backgroundPickerCard
                 hintCard
             }
             .padding(16)
@@ -8856,9 +9356,13 @@ private struct EventRouteShareDetailView: View {
             Text(feedbackMessage ?? "")
         }
         .task {
+            syncSelectedBackgroundCandidate()
             if previewImage == nil {
                 await regeneratePreview(showFeedback: false)
             }
+        }
+        .onChange(of: selectedCustomBackgroundPhoto) { _, item in
+            Task { await loadSelectedCustomBackgroundImage(item) }
         }
         .fullScreenCover(item: $fullscreenSelection) { selection in
             if let url = previewFileURL {
@@ -8866,6 +9370,47 @@ private struct EventRouteShareDetailView: View {
                     items: [FullscreenMediaItem(rawURL: url.absoluteString, index: 0)],
                     initialIndex: selection.id
                 )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var backgroundPickerCard: some View {
+        if !backgroundCandidates.isEmpty {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(LT("海报背景图片", "Poster Background", "ポスター背景"))
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    Text(LT("选择一张图片后重新生成海报，即可切换时间表海报背景。", "Select an image and regenerate to switch the timetable poster background.", "画像を選んで再生成すると、タイムテーブル海報の背景を切り替えられます。"))
+                        .font(.footnote)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(backgroundCandidates) { candidate in
+                                EventRoutePosterBackgroundPickerCard(
+                                    candidate: candidate,
+                                    isSelected: selectedBackgroundCandidateID == candidate.id
+                                ) {
+                                    selectedBackgroundCandidateID = candidate.id
+                                }
+                            }
+
+                            EventRoutePosterCustomBackgroundPickerCard(
+                                selectedPhotoItem: $selectedCustomBackgroundPhoto,
+                                image: selectedCustomBackgroundImage,
+                                isSelected: selectedBackgroundCandidateID == Self.customBackgroundSelectionID
+                            ) {
+                                if selectedCustomBackgroundImage != nil {
+                                    selectedBackgroundCandidateID = Self.customBackgroundSelectionID
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 1)
+                    }
+                }
             }
         }
     }
@@ -9056,11 +9601,16 @@ private struct EventRouteShareDetailView: View {
 
         guard let image = await EventRoutePosterRenderer.generateImage(
             routeTitle: title,
+            routeOwnerAvatarURL: routeOwnerAvatarURL,
+            routeOwnerUserID: routeOwnerUserID,
+            routeOwnerDisplayName: routeOwnerDisplayName,
             event: event,
             days: days,
             selectedDayID: selectedDayID,
             selectedSlotIDs: selectedSlotIDs,
-            colorScheme: colorScheme
+            colorScheme: colorScheme,
+            selectedBackgroundURLString: selectedBackgroundURLString,
+            selectedBackgroundUIImage: selectedBackgroundUIImage
         ) else {
             feedbackMessage = LT("路线图生成失败，请重试", "Failed to generate route image. Please try again.", "ルート画像を生成できませんでした。もう一度お試しください。")
             return
@@ -9070,6 +9620,53 @@ private struct EventRouteShareDetailView: View {
         previewFileURL = EventRoutePosterRenderer.writePreviewFile(image, eventID: event.id)
         if showFeedback {
             feedbackMessage = LT("海报已重新生成", "Poster regenerated.", "海報を再生成しました。")
+        }
+    }
+
+    private func syncSelectedBackgroundCandidate() {
+        guard !backgroundCandidates.isEmpty else {
+            if selectedCustomBackgroundImage == nil {
+                selectedBackgroundCandidateID = nil
+            }
+            return
+        }
+
+        if selectedBackgroundCandidateID == Self.customBackgroundSelectionID,
+           selectedCustomBackgroundImage != nil {
+            return
+        }
+
+        if let selectedBackgroundCandidateID,
+           backgroundCandidates.contains(where: { $0.id == selectedBackgroundCandidateID }) {
+            return
+        }
+
+        let autoSelection = EventRoutePosterRenderer.timetablePosterBackgroundSelection(for: event)
+        let autoSelectionID = backgroundCandidates.first { candidate in
+            candidate.urlString.caseInsensitiveCompare(autoSelection.urlString ?? "") == .orderedSame
+        }?.id
+
+        selectedBackgroundCandidateID = autoSelectionID ?? backgroundCandidates.first?.id
+    }
+
+    @MainActor
+    private func loadSelectedCustomBackgroundImage(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+
+        do {
+            guard let loaded = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: loaded) else {
+                feedbackMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
+                return
+            }
+            selectedCustomBackgroundImage = image
+            selectedBackgroundCandidateID = Self.customBackgroundSelectionID
+            print(
+                "[EventRoutePoster] eventId=\(event.id) context=share-preview custom-upload-loaded " +
+                "size=\(Int(image.size.width))x\(Int(image.size.height))"
+            )
+        } catch {
+            feedbackMessage = LT("读取图片失败，请重试", "Failed to read image. Please try again.", "画像を読み込めませんでした。もう一度お試しください。")
         }
     }
 
@@ -9095,6 +9692,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
     let posterHeight: CGFloat
     let qrCodeImage: UIImage?
     let backgroundImage: UIImage?
+    let routeOwnerAvatarImage: UIImage?
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
@@ -9144,11 +9742,17 @@ private struct EventRoutePlannerShareSnapshotView: View {
     }
 
     private var headerPrimaryTextColor: Color {
-        hasBackgroundImage ? Color.white.opacity(0.98) : RaverTheme.primaryText
+        guard hasBackgroundImage else { return RaverTheme.primaryText }
+        return colorScheme == .dark
+            ? Color.white.opacity(0.98)
+            : Color.black.opacity(0.92)
     }
 
     private var headerSecondaryTextColor: Color {
-        hasBackgroundImage ? Color.white.opacity(0.76) : RaverTheme.secondaryText
+        guard hasBackgroundImage else { return RaverTheme.secondaryText }
+        return colorScheme == .dark
+            ? Color.white.opacity(0.76)
+            : Color.black.opacity(0.72)
     }
 
     private var dateLineText: String? {
@@ -9157,6 +9761,19 @@ private struct EventRoutePlannerShareSnapshotView: View {
 
     private var routeHeadlineText: String? {
         routeTitle.nilIfBlank
+    }
+
+    private var routeHeadlineRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            routeOwnerAvatarView
+
+            if let routeHeadlineText {
+                Text(routeHeadlineText)
+                    .font(EventScheduleTypography.heavy(18))
+                    .foregroundStyle(headerPrimaryTextColor.opacity(0.92))
+                    .lineLimit(2)
+            }
+        }
     }
 
     private var boardHeight: CGFloat {
@@ -9217,12 +9834,17 @@ private struct EventRoutePlannerShareSnapshotView: View {
     private var timetableThemeOverlay: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    Color.black.opacity(colorScheme == .dark ? 0.24 : 0.12),
-                    Color(red: 0.88, green: 0.15, blue: 0.39).opacity(0.14),
-                    Color(red: 0.11, green: 0.71, blue: 0.95).opacity(0.18),
-                    Color.black.opacity(colorScheme == .dark ? 0.48 : 0.28)
-                ],
+                colors: colorScheme == .dark
+                    ? [
+                        Color.black.opacity(0.66),
+                        Color.black.opacity(0.58),
+                        Color.black.opacity(0.78)
+                    ]
+                    : [
+                        Color.white.opacity(0.56),
+                        Color.white.opacity(0.46),
+                        Color.white.opacity(0.64)
+                    ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -9230,7 +9852,11 @@ private struct EventRoutePlannerShareSnapshotView: View {
             VStack(spacing: 44) {
                 ForEach(0..<7, id: \.self) { _ in
                     Rectangle()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.14)
+                                : Color.black.opacity(0.12)
+                        )
                         .frame(height: 1)
                 }
             }
@@ -9257,10 +9883,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
                 }
 
                 if let routeHeadlineText {
-                    Text(routeHeadlineText)
-                        .font(EventScheduleTypography.heavy(18))
-                        .foregroundStyle(headerPrimaryTextColor.opacity(0.92))
-                        .lineLimit(2)
+                    routeHeadlineRow
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -9280,6 +9903,39 @@ private struct EventRoutePlannerShareSnapshotView: View {
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 72, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var routeOwnerAvatarView: some View {
+        if let routeOwnerAvatarImage {
+            Image(uiImage: routeOwnerAvatarImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.26)
+                                : Color.black.opacity(0.14),
+                            lineWidth: 1
+                        )
+                )
+        } else {
+            Circle()
+                .fill(
+                    colorScheme == .dark
+                        ? Color.white.opacity(0.18)
+                        : Color.black.opacity(0.10)
+                )
+                .frame(width: 28, height: 28)
+                .overlay {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(headerPrimaryTextColor.opacity(0.82))
+                }
         }
     }
 
@@ -9740,7 +10396,7 @@ private struct EventRoutePlannerView: View {
         }
         .overlay {
             if showRouteSavedToast {
-                Text(LT("在个人主页-我的行程可以快速查看路线", "在个人主页-我的行程可以快速查看路线", "プロフィールの「マイ旅程」からルートをすばやく確認できます"))
+                Text(LT("路线已保存", "Route saved", "ルートを保存しました"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.white)
                     .multilineTextAlignment(.center)
@@ -9829,7 +10485,7 @@ private struct EventRoutePlannerView: View {
                     Button {
                         saveCurrentRoute()
                     } label: {
-                        Image(systemName: "square.and.arrow.down")
+                        Image(systemName: "externaldrive.badge.checkmark")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(RaverTheme.primaryText)
                             .frame(width: 36, height: 36)
@@ -10143,6 +10799,13 @@ private struct EventRoutePlannerView: View {
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
         let posterHeight =
             EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 96
+        let routeOwnerAvatarImage = await EventRoutePosterRenderer.loadPosterAvatarImage(
+            avatarURLString: appState.session?.user.avatarURL,
+            userID: currentUserID,
+            displayName: routeOwnerName,
+            eventID: event.id,
+            logContext: "route-save"
+        )
         let backgroundSelection = EventRoutePosterRenderer.timetablePosterBackgroundSelection(for: event)
         let backgroundImage = await EventRoutePosterRenderer.loadTimetablePosterBackgroundImage(
             selection: backgroundSelection,
@@ -10158,7 +10821,8 @@ private struct EventRoutePlannerView: View {
             contentWidth: snapshotContentWidth,
             posterHeight: posterHeight,
             qrCodeImage: nil,
-            backgroundImage: backgroundImage
+            backgroundImage: backgroundImage,
+            routeOwnerAvatarImage: routeOwnerAvatarImage
         )
         .environment(\.colorScheme, colorScheme)
 
@@ -10227,14 +10891,13 @@ private struct EventRoutineView: View {
     let event: WebEvent
     let scheduledSlots: [WebEventLineupSlot]
     var presentationStyle: PresentationStyle = .pushed
+    var displayedRouteSlotIDs: Set<String> = []
     var initialSelectedDayID: String? = nil
     var onSelectedDayChange: ((String) -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appPush) private var appPush
-    @ObservedObject private var routeStore = EventRouteStore.shared
     @State private var selectedDayID: String = ""
-    @State private var showsSavedRouteOverlay = true
     @State private var pendingDJSelectionOptions: [EventScheduleDJSelectionOption] = []
     @State private var showDJSelectionDialog = false
     @State private var pendingUnboundDJName: String?
@@ -10255,15 +10918,6 @@ private struct EventRoutineView: View {
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
-    }
-
-    private var savedRoute: SavedEventRoute? {
-        routeStore.route(for: event.id)
-    }
-
-    private var displayedRouteSlotIDs: Set<String> {
-        guard showsSavedRouteOverlay else { return [] }
-        return savedRoute?.selectedSlotIDSet ?? []
     }
 
     private var selectedDayTextColor: Color {

@@ -1940,6 +1940,30 @@ const djImageUpload = createImageUpload(djUploadDir, 10 * 1024 * 1024);
 const ratingImageUpload = createImageUpload(ratingUploadDir, 10 * 1024 * 1024);
 const wikiBrandImageUpload = createImageUpload(wikiBrandUploadDir, 10 * 1024 * 1024);
 
+type EventUploadTimingContext = {
+  requestId: string;
+  startedAtMs: number;
+  startedAtHr: bigint;
+};
+
+const elapsedMsFrom = (startedAtHr: bigint): number => Number(process.hrtime.bigint() - startedAtHr) / 1_000_000;
+
+const nextEventUploadRequestId = (): string =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const eventUploadTimingStart = (
+  req: Request & { eventUploadTiming?: EventUploadTimingContext },
+  _res: Response,
+  next: NextFunction
+): void => {
+  req.eventUploadTiming = {
+    requestId: nextEventUploadRequestId(),
+    startedAtMs: Date.now(),
+    startedAtHr: process.hrtime.bigint(),
+  };
+  next();
+};
+
 const cleanEnv = (value: string | undefined): string | null => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -3291,7 +3315,10 @@ const uploadEventMediaToOss = async (
   file: Express.Multer.File,
   eventId: string,
   usage: string | null,
-  uploadedById?: string | null
+  uploadedById?: string | null,
+  diagnostics?: {
+    requestId?: string;
+  }
 ): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
@@ -3300,6 +3327,7 @@ const uploadEventMediaToOss = async (
 
   const mimeType = file.mimetype || 'image/jpeg';
   const objectKey = buildEventMediaObjectKey(eventId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+  const ossPutStartedAt = process.hrtime.bigint();
 
   let putResult: { url?: string };
   try {
@@ -3312,8 +3340,10 @@ const uploadEventMediaToOss = async (
   } finally {
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
+  const ossPutDurationMs = elapsedMsFrom(ossPutStartedAt);
 
   const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const assetRegisterStartedAt = process.hrtime.bigint();
   const asset = await mediaAssetService.register({
     ownerType: 'event',
     ownerId: eventId,
@@ -3329,6 +3359,18 @@ const uploadEventMediaToOss = async (
       source: 'v1/events/upload-image',
     },
   });
+  const assetRegisterDurationMs = elapsedMsFrom(assetRegisterStartedAt);
+
+  console.info('[event-upload] oss.event.success', {
+    requestId: diagnostics?.requestId ?? null,
+    eventId,
+    usage: usage || 'image',
+    sizeBytes: file.size,
+    mimeType,
+    ossPutDurationMs: Number(ossPutDurationMs.toFixed(1)),
+    assetRegisterDurationMs: Number(assetRegisterDurationMs.toFixed(1)),
+    objectKey,
+  });
 
   return {
     assetId: asset.id,
@@ -3343,7 +3385,10 @@ const uploadEventDraftMediaToOss = async (
   file: Express.Multer.File,
   userId: string,
   draftId: string,
-  usage: string | null
+  usage: string | null,
+  diagnostics?: {
+    requestId?: string;
+  }
 ): Promise<{ assetId: string; url: string; fileName: string; mimeType: string; size: number }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
@@ -3358,6 +3403,7 @@ const uploadEventDraftMediaToOss = async (
     mimeType,
     usage
   );
+  const ossPutStartedAt = process.hrtime.bigint();
 
   let putResult: { url?: string };
   try {
@@ -3370,8 +3416,10 @@ const uploadEventDraftMediaToOss = async (
   } finally {
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
+  const ossPutDurationMs = elapsedMsFrom(ossPutStartedAt);
 
   const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+  const assetRegisterStartedAt = process.hrtime.bigint();
   const asset = await mediaAssetService.register({
     ownerType: 'event-draft',
     ownerId: draftId,
@@ -3386,6 +3434,19 @@ const uploadEventDraftMediaToOss = async (
       originalName: file.originalname,
       source: 'v1/events/upload-image:draft',
     },
+  });
+  const assetRegisterDurationMs = elapsedMsFrom(assetRegisterStartedAt);
+
+  console.info('[event-upload] oss.draft.success', {
+    requestId: diagnostics?.requestId ?? null,
+    userId,
+    draftId,
+    usage: usage || 'image',
+    sizeBytes: file.size,
+    mimeType,
+    ossPutDurationMs: Number(ossPutDurationMs.toFixed(1)),
+    assetRegisterDurationMs: Number(assetRegisterDurationMs.toFixed(1)),
+    objectKey,
   });
 
   return {
@@ -8145,9 +8206,14 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
   }
 });
 
-router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+router.post('/events/upload-image', optionalAuth, eventUploadTimingStart, eventImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
   try {
-    const authReq = req as BFFAuthRequest;
+    const authReq = req as BFFAuthRequest & { eventUploadTiming?: EventUploadTimingContext };
+    const timing = authReq.eventUploadTiming ?? {
+      requestId: nextEventUploadRequestId(),
+      startedAtMs: Date.now(),
+      startedAtHr: process.hrtime.bigint(),
+    };
     const userId = requireAuth(authReq, res);
     if (!userId) return;
     const file = (req as Request & { file?: Express.Multer.File }).file;
@@ -8155,22 +8221,36 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
+    const formBody = req.body as Record<string, unknown>;
+    const eventId = typeof formBody.eventId === 'string' ? formBody.eventId.trim() : '';
+    const draftId = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
+    const usage = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
+
+    console.info('[event-upload] route.start', {
+      requestId: timing.requestId,
+      elapsedMs: Number(elapsedMsFrom(timing.startedAtHr).toFixed(1)),
+      userId,
+      eventId: eventId || null,
+      draftId: draftId || null,
+      usage: usage || null,
+      mimeType: file.mimetype || null,
+      sizeBytes: file.size,
+      originalName: file.originalname || null,
+    });
+
     if (!postMediaOssClient) {
       await fs.promises.unlink(file.path).catch(() => undefined);
       res.status(503).json({ error: 'OSS is not configured for rating image upload' });
       return;
     }
 
-    const formBody = req.body as Record<string, unknown>;
-    const eventId = typeof formBody.eventId === 'string' ? formBody.eventId.trim() : '';
-    const draftId = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
-    const usage = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
-
     if (eventId) {
+      const eventLookupStartedAt = process.hrtime.bigint();
       const event = await prisma.event.findUnique({
         where: { id: eventId },
         select: { id: true, organizerId: true },
       });
+      const eventLookupDurationMs = elapsedMsFrom(eventLookupStartedAt);
 
       if (!event) {
         await fs.promises.unlink(file.path).catch(() => undefined);
@@ -8178,25 +8258,59 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
         return;
       }
 
+      const permissionCheckStartedAt = process.hrtime.bigint();
       const canManage = await canUserManageEvent(
         userId,
         authReq.user?.role ?? null,
         event.organizerId,
         authReq.user?.email ?? null
       );
+      const permissionCheckDurationMs = elapsedMsFrom(permissionCheckStartedAt);
       if (!canManage) {
         await fs.promises.unlink(file.path).catch(() => undefined);
         res.status(403).json({ error: 'Forbidden' });
         return;
       }
 
-      const uploaded = await uploadEventMediaToOss(file, eventId, usage || null, userId);
+      const uploaded = await uploadEventMediaToOss(file, eventId, usage || null, userId, {
+        requestId: timing.requestId,
+      });
+      const totalDurationMs = elapsedMsFrom(timing.startedAtHr);
+      const approximateIngressDurationMs = Math.max(
+        0,
+        totalDurationMs - eventLookupDurationMs - permissionCheckDurationMs
+      );
+      console.info('[event-upload] route.success', {
+        requestId: timing.requestId,
+        mode: 'event',
+        eventId,
+        usage: usage || null,
+        sizeBytes: file.size,
+        eventLookupDurationMs: Number(eventLookupDurationMs.toFixed(1)),
+        permissionCheckDurationMs: Number(permissionCheckDurationMs.toFixed(1)),
+        approximateIngressDurationMs: Number(approximateIngressDurationMs.toFixed(1)),
+        totalDurationMs: Number(totalDurationMs.toFixed(1)),
+        uploadedUrl: uploaded.url,
+      });
       ok(res, uploaded);
       return;
     }
 
     if (draftId) {
-      const uploaded = await uploadEventDraftMediaToOss(file, userId, draftId, usage || null);
+      const uploaded = await uploadEventDraftMediaToOss(file, userId, draftId, usage || null, {
+        requestId: timing.requestId,
+      });
+      const totalDurationMs = elapsedMsFrom(timing.startedAtHr);
+      console.info('[event-upload] route.success', {
+        requestId: timing.requestId,
+        mode: 'draft',
+        draftId,
+        usage: usage || null,
+        sizeBytes: file.size,
+        approximateIngressDurationMs: Number(totalDurationMs.toFixed(1)),
+        totalDurationMs: Number(totalDurationMs.toFixed(1)),
+        uploadedUrl: uploaded.url,
+      });
       ok(res, uploaded);
       return;
     }
@@ -8211,7 +8325,13 @@ router.post('/events/upload-image', optionalAuth, eventImageUpload.single('image
     res.status(503).json({ error: 'OSS is required for event image upload' });
     return;
   } catch (error) {
-    console.error('BFF web upload event image error:', error);
+    const authReq = req as BFFAuthRequest & { eventUploadTiming?: EventUploadTimingContext };
+    const timing = authReq.eventUploadTiming;
+    console.error('BFF web upload event image error:', {
+      requestId: timing?.requestId ?? null,
+      totalDurationMs: timing ? Number(elapsedMsFrom(timing.startedAtHr).toFixed(1)) : null,
+      error,
+    });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
