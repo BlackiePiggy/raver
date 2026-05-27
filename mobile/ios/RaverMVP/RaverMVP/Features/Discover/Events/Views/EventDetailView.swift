@@ -7907,20 +7907,18 @@ private struct EventTimelineStageColumnView: View, Equatable {
 
         let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(
-                LinearGradient(
-                    colors: isSelected
-                        ? [
-                            Color.black.opacity(0.92),
-                            model.stageColor.opacity(0.10),
-                            Color.black.opacity(0.95)
-                        ]
-                        : [
-                            cardFill,
-                            model.stageColor.opacity(0.90),
-                            model.stageColor.opacity(0.82)
-                        ],
-                    startPoint: .top,
-                    endPoint: .bottomTrailing
+                AnyShapeStyle(
+                    isSelected
+                        ? cardFill
+                        : LinearGradient(
+                            colors: [
+                                cardFill,
+                                model.stageColor.opacity(0.90),
+                                model.stageColor.opacity(0.82)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottomTrailing
+                        )
                 )
             )
             .overlay(
@@ -7935,13 +7933,23 @@ private struct EventTimelineStageColumnView: View, Equatable {
                     .inset(by: 2)
                     .stroke(
                         isSelected
-                            ? Color.white.opacity(0.10)
+                            ? model.stageColor.opacity(0.18)
                             : Color.white.opacity(0.24),
                         lineWidth: 0.8
                     )
             )
-            .shadow(color: model.stageColor.opacity(isSelected ? 0.82 : 0.58), radius: isSelected ? 16 : 13, x: 0, y: 0)
-            .shadow(color: model.stageColor.opacity(isSelected ? 0.36 : 0.24), radius: isSelected ? 28 : 22, x: 0, y: 0)
+            .shadow(
+                color: isSelected ? Color.black.opacity(0.14) : model.stageColor.opacity(0.58),
+                radius: isSelected ? 10 : 13,
+                x: 0,
+                y: isSelected ? 4 : 0
+            )
+            .shadow(
+                color: isSelected ? Color.clear : model.stageColor.opacity(0.24),
+                radius: isSelected ? 0 : 22,
+                x: 0,
+                y: 0
+            )
             .overlay(alignment: .bottomTrailing) {
                 VStack(alignment: .trailing, spacing: nameTimeSpacing) {
                     Text(frame.displayName)
