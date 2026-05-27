@@ -903,6 +903,7 @@ private struct RegisterProfileView: View {
     @State private var displayNameAvailability: DisplayNameAvailabilityState = .idle
     @State private var displayNameAvailabilityTask: Task<Void, Never>?
     @State private var selectedAvatarItem: PhotosPickerItem?
+    @State private var pendingCropSession: AppImageCropSession?
     @State private var selectedAvatarData: Data?
     @State private var selectedAvatarImage: UIImage?
     @State private var avatarUploadTask: Task<Void, Never>?
@@ -1011,7 +1012,8 @@ private struct RegisterProfileView: View {
         }
         .foregroundStyle(.white)
         .onChange(of: selectedAvatarItem) { _, newItem in
-            Task { await loadSelectedAvatar(newItem) }
+            guard newItem != nil else { return }
+            Task { await prepareRegistrationAvatarForCropping(newItem) }
         }
         .onChange(of: displayName) { _, newValue in
             scheduleDisplayNameAvailabilityCheck(newValue)
@@ -1032,6 +1034,23 @@ private struct RegisterProfileView: View {
             onboardingBrandSearchTask?.cancel()
             onboardingDJSearchTask?.cancel()
             avatarUploadTask?.cancel()
+        }
+        .sheet(item: $pendingCropSession) { session in
+            AppImageCropperSheet(
+                image: session.image,
+                aspectRatio: session.aspectRatio,
+                title: session.title,
+                onCancel: {
+                    pendingCropSession = nil
+                },
+                onCrop: { croppedImage in
+                    pendingCropSession = nil
+                    Task {
+                        await applyCroppedRegistrationAvatar(croppedImage)
+                    }
+                }
+            )
+            .ignoresSafeArea()
         }
         .interactiveDismissDisabled(true)
         .toolbar {
@@ -3018,6 +3037,59 @@ private struct RegisterProfileView: View {
                 registrationErrorMessage = LT("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.", "アイコンの読み込みに失敗しました。もう一度選択してください。")
             }
         }
+    }
+
+    private func prepareRegistrationAvatarForCropping(_ item: PhotosPickerItem?) async {
+        guard let item else {
+            await loadSelectedAvatar(nil)
+            return
+        }
+
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                await MainActor.run {
+                    registrationErrorMessage = LT("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.", "アイコンの読み込みに失敗しました。もう一度選択してください。")
+                }
+                return
+            }
+
+            await MainActor.run {
+                selectedAvatarItem = nil
+                pendingCropSession = AppImageCropSession(
+                    target: .avatar,
+                    image: image,
+                    aspectRatio: CGSize(width: 1, height: 1),
+                    title: LT("裁剪头像", "Crop Avatar", "アバターを切り抜き")
+                )
+            }
+        } catch {
+            await MainActor.run {
+                registrationErrorMessage = LT("头像读取失败，请重新选择", "Failed to read avatar. Please choose again.", "アイコンの読み込みに失敗しました。もう一度選択してください。")
+            }
+        }
+    }
+
+    private func applyCroppedRegistrationAvatar(_ image: UIImage) async {
+        guard let data = image.raverEncodedImageData(compressionQuality: 0.95) else {
+            await MainActor.run {
+                registrationErrorMessage = LT("头像裁剪失败，请重新选择", "Avatar cropping failed. Please choose again.", "アバターの切り抜きに失敗しました。もう一度選択してください。")
+            }
+            return
+        }
+
+        await loadSelectedAvatarData(data)
+    }
+
+    private func loadSelectedAvatarData(_ data: Data) async {
+        let preparedData = Self.preparedAvatarData(from: data)
+        await MainActor.run {
+            selectedAvatarData = preparedData
+            selectedAvatarImage = UIImage(data: preparedData)
+            hasPendingAvatarUpload = true
+        }
+        await cacheRegistrationAvatarLocally(preparedData)
+        scheduleAvatarUploadIfPossible(with: preparedData)
     }
 
     private func cacheRegistrationAvatarLocally(_ avatarData: Data) async {

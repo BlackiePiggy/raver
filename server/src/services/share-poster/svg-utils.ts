@@ -339,6 +339,31 @@ const renderRowFull = (row: Extract<SharePosterSectionRow, { kind: 'full' }>, y:
   };
 };
 
+const renderStructuredPosterHeroThemeOverlay = (
+  theme: SharePosterStructuredCardInput['heroTheme'],
+  hasHeroImage: boolean
+): string => {
+  if (!theme || !hasHeroImage) return '';
+  if (theme === 'event_timetable') {
+    return `
+  <rect x="0" y="60" width="390" height="300" fill="url(#eventTimetableTint)"/>
+  <path d="M0 112 C48 84, 102 88, 154 118 S262 172, 390 116 L390 188 C338 216, 280 220, 220 194 S94 148, 0 186 Z" fill="#f43f5e" fill-opacity="0.18"/>
+  <path d="M0 248 C72 214, 152 220, 232 250 S330 286, 390 262 L390 360 L0 360 Z" fill="#38bdf8" fill-opacity="0.16"/>
+  <g stroke="#ffffff" stroke-opacity="0.12" stroke-width="1" stroke-linecap="round">
+    <line x1="28" y1="108" x2="362" y2="108"/>
+    <line x1="28" y1="156" x2="362" y2="156"/>
+    <line x1="28" y1="204" x2="362" y2="204"/>
+    <line x1="28" y1="252" x2="362" y2="252"/>
+    <line x1="28" y1="300" x2="362" y2="300"/>
+    <line x1="82" y1="96" x2="82" y2="324"/>
+    <line x1="172" y1="96" x2="172" y2="324"/>
+    <line x1="262" y1="96" x2="262" y2="324"/>
+    <line x1="332" y1="96" x2="332" y2="324"/>
+  </g>`;
+  }
+  return '';
+};
+
 export const renderStructuredPosterSvg = async (input: SharePosterStructuredCardInput): Promise<Buffer> => {
   const qrDataUrl = await QRCode.toDataURL(input.qrText, {
     errorCorrectionLevel: 'H',
@@ -352,6 +377,7 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
   const heroImageDataUrl = await toImageDataUri(input.imageUrl, {
     debugLabel: `structured mode=${input.mode}`,
   });
+  const heroThemeOverlay = renderStructuredPosterHeroThemeOverlay(input.heroTheme, Boolean(heroImageDataUrl));
   const appIconDataUrl = getSharePosterAppIconDataUri();
   const titleFontSize = 28;
   const titleLines = wrapPosterMixedText(
@@ -402,6 +428,11 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
       <stop offset="52%" stop-color="#000" stop-opacity="0"/>
       <stop offset="100%" stop-color="#000" stop-opacity="0.82"/>
     </linearGradient>
+    <linearGradient id="eventTimetableTint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.22"/>
+      <stop offset="50%" stop-color="#d946ef" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.2"/>
+    </linearGradient>
   </defs>
   <rect width="390" height="700" rx="30" fill="#0f0f11" stroke="#27272a" stroke-width="1"/>
   <rect x="0" y="0" width="390" height="60" fill="rgba(255,255,255,0.03)"/>
@@ -410,6 +441,7 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
 
   <rect x="0" y="60" width="390" height="300" fill="#18181b"/>
   ${heroImageDataUrl ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="300" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />` : ''}
+  ${heroThemeOverlay}
   <rect x="0" y="60" width="390" height="300" fill="url(#titleMask)"/>
   <g>${titleBlock}</g>
 

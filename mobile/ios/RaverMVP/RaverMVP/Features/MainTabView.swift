@@ -1365,13 +1365,6 @@ private struct CircleIDHubView: View {
                 Task { await copyCircleIDShareLink(payload) }
             },
             SharePanelQuickAction(
-                title: LT("查看二维码", "View QR", "QRを見る"),
-                systemImage: "qrcode",
-                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
-            ) {
-                Task { await openCircleIDQRCode(payload) }
-            },
-            SharePanelQuickAction(
                 title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
@@ -1959,13 +1952,6 @@ private struct CircleIDDetailView: View {
                 accentColor: Color(red: 0.26, green: 0.57, blue: 0.96)
             ) {
                 Task { await copyCircleIDShareLink(payload) }
-            },
-            SharePanelQuickAction(
-                title: LT("查看二维码", "View QR", "QRを見る"),
-                systemImage: "qrcode",
-                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
-            ) {
-                Task { await openCircleIDQRCode(payload) }
             },
             SharePanelQuickAction(
                 title: LT("查看海报", "View Poster", "海報を見る"),
@@ -4059,13 +4045,6 @@ struct CircleRatingEventDetailView: View {
                 Task { await copyRatingEventShareLink() }
             },
             SharePanelQuickAction(
-                title: LT("查看二维码", "View QR", "QRを見る"),
-                systemImage: "qrcode",
-                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
-            ) {
-                Task { await openRatingEventQRCode() }
-            },
-            SharePanelQuickAction(
                 title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
@@ -4689,13 +4668,6 @@ struct CircleRatingUnitDetailView: View {
                 accentColor: Color(red: 0.30, green: 0.67, blue: 0.97)
             ) {
                 Task { await copyRatingUnitShareLink() }
-            },
-            SharePanelQuickAction(
-                title: LT("查看二维码", "View QR", "QRを見る"),
-                systemImage: "qrcode",
-                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
-            ) {
-                Task { await openRatingUnitQRCode() }
             },
             SharePanelQuickAction(
                 title: LT("查看海报", "View Poster", "海報を見る"),

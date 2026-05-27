@@ -29,6 +29,13 @@ enum AppRoute: Hashable {
         selectedDayID: String?,
         selectedSlotIDs: [String]?
     )
+    case eventRouteShareDetail(
+        eventID: String,
+        ownerUserID: String?,
+        ownerDisplayName: String?,
+        selectedDayID: String?,
+        selectedSlotIDs: [String]?
+    )
     case djDetail(djID: String)
     case labelDetail(labelID: String)
     case festivalDetail(festivalID: String)
@@ -63,6 +70,7 @@ extension AppRoute {
              .eventSchedule,
              .eventLiveDiscussion,
              .eventRoute,
+             .eventRouteShareDetail,
              .djDetail,
              .labelDetail,
              .festivalDetail,
@@ -99,6 +107,7 @@ extension AppRoute {
              .eventSchedule,
              .eventLiveDiscussion,
              .eventRoute,
+             .eventRouteShareDetail,
              .djDetail,
              .labelDetail,
              .festivalDetail,
@@ -149,6 +158,8 @@ extension AppRoute {
             return "event.live.discussion"
         case .eventRoute:
             return "event.route"
+        case .eventRouteShareDetail:
+            return "event.route.share.detail"
         case .djDetail:
             return "dj.detail"
         case .labelDetail:
@@ -204,7 +215,7 @@ extension AppRoute {
             return .circle
         case .squadOfflineActivity, .squadOfflineActivityHistory:
             return .messages
-        case .eventDetail, .newsDetail, .eventSchedule, .eventLiveDiscussion, .eventRoute, .djDetail, .labelDetail, .festivalDetail, .setDetail, .rankingBoardDetail, .globalSearchResults:
+        case .eventDetail, .newsDetail, .eventSchedule, .eventLiveDiscussion, .eventRoute, .eventRouteShareDetail, .djDetail, .labelDetail, .festivalDetail, .setDetail, .rankingBoardDetail, .globalSearchResults:
             return .discover
         case .userProfile:
             return .profile
@@ -297,6 +308,10 @@ final class AppRouter: ObservableObject {
                 let owner = ownerDisplayName ?? ownerUserID ?? "nil"
                 let slotCount = selectedSlotIDs?.count ?? 0
                 return "eventRoute(\(eventID),owner=\(owner),slots=\(slotCount))"
+            case .eventRouteShareDetail(let eventID, let ownerUserID, let ownerDisplayName, _, let selectedSlotIDs):
+                let owner = ownerDisplayName ?? ownerUserID ?? "nil"
+                let slotCount = selectedSlotIDs?.count ?? 0
+                return "eventRouteShareDetail(\(eventID),owner=\(owner),slots=\(slotCount))"
             case .djDetail(let djID):
                 return "djDetail(\(djID))"
             case .labelDetail(let labelID):
@@ -764,6 +779,16 @@ struct MainTabCoordinatorView: View {
                 selectedSlotIDs: selectedSlotIDs
             )
 
+        case let .eventRouteShareDetail(eventID, ownerUserID, ownerDisplayName, selectedDayID, selectedSlotIDs):
+            EventRouteShareDetailLoaderView(
+                eventID: eventID,
+                eventReadRepository: appContainer.eventReadRepository,
+                ownerUserID: ownerUserID,
+                ownerDisplayName: ownerDisplayName,
+                selectedDayID: selectedDayID,
+                selectedSlotIDs: selectedSlotIDs
+            )
+
         case .djDetail(let djID):
             DJDetailView(djID: djID)
 
@@ -1220,6 +1245,10 @@ struct MainTabCoordinatorView: View {
             let owner = ownerDisplayName ?? ownerUserID ?? "nil"
             let slotCount = selectedSlotIDs?.count ?? 0
             return "eventRoute(\(eventID),owner=\(owner),slots=\(slotCount))"
+        case .eventRouteShareDetail(let eventID, let ownerUserID, let ownerDisplayName, _, let selectedSlotIDs):
+            let owner = ownerDisplayName ?? ownerUserID ?? "nil"
+            let slotCount = selectedSlotIDs?.count ?? 0
+            return "eventRouteShareDetail(\(eventID),owner=\(owner),slots=\(slotCount))"
         case .djDetail(let djID):
             return "djDetail(\(djID))"
         case .labelDetail(let labelID):

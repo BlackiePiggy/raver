@@ -1,4 +1,5 @@
 import { buildPosterQrText, formatPosterDate, formatPosterTime, renderStructuredPosterSvg } from '../svg-utils';
+import { resolveEventPosterBackgroundImageUrl } from '../event-images';
 import { pickLocalizedText, posterText, resolvePosterVenueText } from '../localization';
 import { SharePosterHandler } from '../types';
 
@@ -74,7 +75,8 @@ export const eventTimetablePosterHandler: SharePosterHandler = {
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
       title,
-      imageUrl: event.coverImageUrl || event.lineupImageUrl || context.shareLink.imageUrl,
+      imageUrl: resolveEventPosterBackgroundImageUrl(event),
+      heroTheme: 'event_timetable',
       rows: [
         {
           kind: 'pair',

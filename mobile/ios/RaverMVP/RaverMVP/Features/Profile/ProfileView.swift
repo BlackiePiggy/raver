@@ -96,6 +96,9 @@ struct ProfileView: View {
                                 onBackgroundTap: {
                                     selectedBackgroundMedia = FullscreenMediaSelection(id: 0)
                                 },
+                                onQRCodeTap: {
+                                    Task { await openMyProfileQRCode(profile) }
+                                },
                                 onRealNameTap: profileRealNameTapAction,
                                 onFollowersTap: {
                                     profilePush(.followList(userID: currentUserID, kind: .followers))
@@ -284,10 +287,6 @@ struct ProfileView: View {
                     }
                     quickActionTile(title: LT("小工具", "Tools", "ツール"), icon: "wand.and.stars") {
                         profilePush(.tools)
-                    }
-                    quickActionTile(title: LT("二维码", "QR Code", "QRコード"), icon: "qrcode") {
-                        guard let profile = viewModel.profile else { return }
-                        Task { await openMyProfileQRCode(profile) }
                     }
                 }
             }
@@ -747,6 +746,7 @@ struct ProfileHeaderCard<Actions: View>: View {
     let realNameStatus: RealNameVerificationStatus?
     let onAvatarTap: (() -> Void)?
     let onBackgroundTap: (() -> Void)?
+    let onQRCodeTap: (() -> Void)?
     let onRealNameTap: (() -> Void)?
     let onFollowersTap: (() -> Void)?
     let onFollowingTap: (() -> Void)?
@@ -761,6 +761,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         realNameStatus: RealNameVerificationStatus? = nil,
         onAvatarTap: (() -> Void)? = nil,
         onBackgroundTap: (() -> Void)? = nil,
+        onQRCodeTap: (() -> Void)? = nil,
         onRealNameTap: (() -> Void)? = nil,
         onFollowersTap: (() -> Void)? = nil,
         onFollowingTap: (() -> Void)? = nil,
@@ -772,6 +773,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         self.realNameStatus = realNameStatus
         self.onAvatarTap = onAvatarTap
         self.onBackgroundTap = onBackgroundTap
+        self.onQRCodeTap = onQRCodeTap
         self.onRealNameTap = onRealNameTap
         self.onFollowersTap = onFollowersTap
         self.onFollowingTap = onFollowingTap
@@ -835,6 +837,17 @@ struct ProfileHeaderCard<Actions: View>: View {
                                     .foregroundStyle(heroPrimaryTextColor)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.82)
+
+                                if let onQRCodeTap {
+                                    Button(action: onQRCodeTap) {
+                                        Image(systemName: "qrcode")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundStyle(heroPrimaryTextColor)
+                                            .frame(width: 28, height: 28)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(LT("查看个人二维码", "View profile QR code", "プロフィールのQRコードを見る"))
+                                }
 
                                 if let titleMedal = appearance?.titleMedal {
                                     VirtualAssetTitleMedalView(asset: titleMedal, compact: true, maxWidth: 138)
@@ -3030,6 +3043,7 @@ struct ShareAssetDetailView: View {
     @State private var loadedAssetImage: UIImage?
     @State private var isAssetLoading = false
     @State private var isRegenerating = false
+    @State private var fullscreenSelection: FullscreenMediaSelection?
 
     init(
         navigationTitle: String,
@@ -3078,6 +3092,14 @@ struct ShareAssetDetailView: View {
         }
         .task(id: AppConfig.resolvedURLString(currentAssetURL) ?? "") {
             await loadAssetPreview()
+        }
+        .fullScreenCover(item: $fullscreenSelection) { selection in
+            if let resolved = AppConfig.resolvedURLString(currentAssetURL) {
+                FullscreenMediaViewer(
+                    items: [FullscreenMediaItem(rawURL: resolved, index: 0)],
+                    initialIndex: selection.id
+                )
+            }
         }
     }
 
@@ -3237,43 +3259,50 @@ struct ShareAssetDetailView: View {
                         .fill(RaverTheme.card)
 
                     if let loadedAssetImage {
-                        Image(uiImage: loadedAssetImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: availableWidth, height: resolvedHeight)
-                            .clipped()
+                        Button {
+                            fullscreenSelection = FullscreenMediaSelection(id: 0)
+                        } label: {
+                            ZStack {
+                                Image(uiImage: loadedAssetImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: availableWidth, height: resolvedHeight)
+                                    .clipped()
 
-                        VStack(spacing: 0) {
-                            LinearGradient(
-                                colors: [
-                                    RaverTheme.background.opacity(0.88),
-                                    RaverTheme.background.opacity(0.38),
-                                    .clear
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: min(104, resolvedHeight * 0.24))
+                                VStack(spacing: 0) {
+                                    LinearGradient(
+                                        colors: [
+                                            RaverTheme.background.opacity(0.88),
+                                            RaverTheme.background.opacity(0.38),
+                                            .clear
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: min(104, resolvedHeight * 0.24))
 
-                            Spacer(minLength: 0)
+                                    Spacer(minLength: 0)
 
-                            LinearGradient(
-                                colors: [
-                                    .clear,
-                                    RaverTheme.background.opacity(0.38),
-                                    RaverTheme.background.opacity(0.88)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: min(104, resolvedHeight * 0.24))
+                                    LinearGradient(
+                                        colors: [
+                                            .clear,
+                                            RaverTheme.background.opacity(0.38),
+                                            RaverTheme.background.opacity(0.88)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: min(104, resolvedHeight * 0.24))
+                                }
+                                .allowsHitTesting(false)
+
+                                Image(uiImage: loadedAssetImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: availableWidth, height: resolvedHeight)
+                            }
                         }
-                        .allowsHitTesting(false)
-
-                        Image(uiImage: loadedAssetImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: availableWidth, height: resolvedHeight)
+                        .buttonStyle(.plain)
                     } else if assetDidFailToLoad {
                         shareAssetEmptyState
                     } else {

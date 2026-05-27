@@ -2,6 +2,7 @@ import QRCode from 'qrcode';
 import { Resvg } from '@resvg/resvg-js';
 import { PNG } from 'pngjs';
 import { buildShareShortUrl } from '../../share-link.service';
+import { resolveEventPosterBackgroundImageUrl } from '../event-images';
 import {
   pickLocalizedText,
   posterText,
@@ -35,17 +36,6 @@ import {
 } from '../svg-utils';
 import { SharePosterHandler, SharePosterLocale } from '../types';
 
-type EventImageAssetPayload = {
-  bucket?: string | null;
-  zone?: string | null;
-  type?: string | null;
-  purpose?: string | null;
-  kind?: string | null;
-  url?: string | null;
-  sort?: number | null;
-  order?: number | null;
-};
-
 type EventPosterSnapshot = {
   title: string;
   venue: string;
@@ -55,46 +45,6 @@ type EventPosterSnapshot = {
   timeZone: string;
   artistCount: number;
   imageUrl: string | null;
-};
-
-const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is EventImageAssetPayload => Boolean(item && typeof item === 'object'));
-};
-
-const resolveEventImageAssetBucket = (asset: EventImageAssetPayload): 'poster' | 'cover' | 'lineup' | 'other' => {
-  const raw = [asset.bucket, asset.zone, asset.type, asset.purpose, asset.kind]
-    .map((item) => String(item || '').trim().toLowerCase())
-    .find(Boolean) || '';
-  if (raw.includes('poster')) return 'poster';
-  if (raw.includes('cover')) return 'cover';
-  if (raw.includes('lineup')) return 'lineup';
-  return 'other';
-};
-
-const sortEventImageAssetsForDisplay = (assets: EventImageAssetPayload[]): EventImageAssetPayload[] =>
-  [...assets].sort((a, b) => {
-    const aOrder = typeof a.sort === 'number' ? a.sort : typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
-    const bOrder = typeof b.sort === 'number' ? b.sort : typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
-    return aOrder - bOrder;
-  });
-
-const resolveEventPosterImageUrl = (row: {
-  imageAssets?: unknown;
-  coverImageUrl?: unknown;
-  lineupImageUrl?: unknown;
-}): string | null => {
-  const assets = sortEventImageAssetsForDisplay(parseEventImageAssets(row.imageAssets ?? []));
-  const firstAssetUrl = (bucket: ReturnType<typeof resolveEventImageAssetBucket>) =>
-    normalizeText(assets.find((asset) => resolveEventImageAssetBucket(asset) === bucket)?.url);
-  return (
-    normalizeText(row.coverImageUrl) ||
-    firstAssetUrl('poster') ||
-    normalizeText(row.lineupImageUrl) ||
-    firstAssetUrl('lineup') ||
-    firstAssetUrl('cover') ||
-    null
-  );
 };
 
 const posterCopy = (locale: SharePosterLocale) =>
@@ -168,7 +118,7 @@ const loadEventPosterSnapshot = async (
     endDate: event.endDate ?? null,
     timeZone: event.timeZone || 'UTC',
     artistCount: Math.max(0, Number(event._count?.canonicalArtists ?? 0)),
-    imageUrl: resolveEventPosterImageUrl(event) || shareLink.imageUrl || null,
+    imageUrl: resolveEventPosterBackgroundImageUrl(event) || shareLink.imageUrl || null,
   };
 };
 

@@ -85,6 +85,19 @@ private struct UserProfileScreen: View {
                                 onBackgroundTap: {
                                     selectedBackgroundMedia = FullscreenMediaSelection(id: 0)
                                 },
+                                onQRCodeTap: {
+                                    appPush(
+                                        .profile(
+                                            .shareQRCode(
+                                                title: profile.displayName,
+                                                subtitle: profile.bio.isEmpty ? nil : profile.bio,
+                                                imageURL: profile.avatarURL,
+                                                shortURL: nil,
+                                                qrCodeURL: profile.qrCodeURL
+                                            )
+                                        )
+                                    )
+                                },
                                 onFollowersTap: {
                                     if profile.canViewFollowersList {
                                         profilePush(.followList(userID: profile.id, kind: .followers))
@@ -235,25 +248,6 @@ private struct UserProfileScreen: View {
         .background(RaverTheme.background)
         .raverSystemNavigation(title: LT("用户主页", "Profile", "プロフィール"))
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if let profile = viewModel.profile {
-                    Button {
-                        appPush(
-                            .profile(
-                                .shareQRCode(
-                                    title: profile.displayName,
-                                    subtitle: profile.bio.isEmpty ? nil : profile.bio,
-                                    imageURL: profile.avatarURL,
-                                    shortURL: nil,
-                                    qrCodeURL: profile.qrCodeURL
-                                )
-                            )
-                        )
-                    } label: {
-                        Image(systemName: "qrcode")
-                    }
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 if viewModel.profile != nil {
                     Button {

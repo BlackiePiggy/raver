@@ -1753,8 +1753,8 @@
 			mainGroup = A4B11345E9C0768E62BC4DB1;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				32B143161293B7F77DFA721B /* XCLocalSwiftPackageReference "../../../thirdparty/chat" */,
-				6929CFD7696C2F312BA79D34 /* XCLocalSwiftPackageReference "../../../thirdparty/giphy-ios-sdk" */,
+				32B143161293B7F77DFA721B /* XCLocalSwiftPackageReference "chat" */,
+				6929CFD7696C2F312BA79D34 /* XCLocalSwiftPackageReference "giphy-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1CE0F5F922752E993342B22C /* Products */;
@@ -1811,12 +1811,8 @@
 			);
 			inputFileListPaths = (
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1871,12 +1867,8 @@
 			);
 			inputFileListPaths = (
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -2536,11 +2528,11 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		32B143161293B7F77DFA721B /* XCLocalSwiftPackageReference "../../../thirdparty/chat" */ = {
+		32B143161293B7F77DFA721B /* XCLocalSwiftPackageReference "chat" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../../thirdparty/chat;
 		};
-		6929CFD7696C2F312BA79D34 /* XCLocalSwiftPackageReference "../../../thirdparty/giphy-ios-sdk" */ = {
+		6929CFD7696C2F312BA79D34 /* XCLocalSwiftPackageReference "giphy-ios-sdk" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../../../thirdparty/giphy-ios-sdk";
 		};

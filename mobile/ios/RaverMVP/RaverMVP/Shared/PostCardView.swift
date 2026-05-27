@@ -470,13 +470,6 @@ struct PostCardView: View {
                 Task { await copyPostShareLink() }
             },
             SharePanelQuickAction(
-                title: LT("查看二维码", "View QR", "QRを見る"),
-                systemImage: "qrcode",
-                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
-            ) {
-                Task { await openPostQRCode() }
-            },
-            SharePanelQuickAction(
                 title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)

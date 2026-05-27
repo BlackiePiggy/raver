@@ -31,6 +31,7 @@ export type SharePosterStructuredCardInput = {
   locale: SharePosterLocale;
   title: string;
   imageUrl?: string | null;
+  heroTheme?: 'event_timetable';
   rows: SharePosterSectionRow[];
   footerLine1: string;
   footerLine2: string;

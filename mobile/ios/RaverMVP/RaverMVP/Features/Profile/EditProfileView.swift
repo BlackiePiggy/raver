@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import CropViewController
 
 struct SaveProfileUseCase {
     private let repository: ProfileUserRepository
@@ -96,6 +97,73 @@ private extension UIImage {
     }
 }
 
+extension UIImage {
+    func raverEncodedImageData(compressionQuality: CGFloat = 0.92) -> Data? {
+        jpegData(compressionQuality: compressionQuality) ?? pngData()
+    }
+}
+
+enum AppImageCropTarget: String {
+    case avatar
+    case background
+}
+
+struct AppImageCropSession: Identifiable {
+    let id = UUID()
+    let target: AppImageCropTarget
+    let image: UIImage
+    let aspectRatio: CGSize
+    let title: String
+}
+
+struct AppImageCropperSheet: UIViewControllerRepresentable {
+    let image: UIImage
+    let aspectRatio: CGSize
+    let title: String
+    let onCancel: () -> Void
+    let onCrop: (UIImage) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCancel: onCancel, onCrop: onCrop)
+    }
+
+    func makeUIViewController(context: Context) -> CropViewController {
+        let controller = CropViewController(image: image)
+        controller.delegate = context.coordinator
+        controller.title = title
+        controller.aspectRatioPreset = aspectRatio
+        controller.aspectRatioLockEnabled = true
+        controller.resetAspectRatioEnabled = false
+        controller.aspectRatioPickerButtonHidden = true
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: CropViewController, context: Context) {}
+
+    final class Coordinator: NSObject, CropViewControllerDelegate {
+        private let onCancel: () -> Void
+        private let onCrop: (UIImage) -> Void
+
+        init(onCancel: @escaping () -> Void, onCrop: @escaping (UIImage) -> Void) {
+            self.onCancel = onCancel
+            self.onCrop = onCrop
+        }
+
+        func cropViewController(
+            _ cropViewController: CropViewController,
+            didCropToImage image: UIImage,
+            withRect cropRect: CGRect,
+            angle: Int
+        ) {
+            onCrop(image)
+        }
+
+        func cropViewController(_ cropViewController: CropViewController, didFinishCancelled cancelled: Bool) {
+            onCancel()
+        }
+    }
+}
+
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
@@ -114,6 +182,7 @@ struct EditProfileView: View {
     @State private var isFollowingListPublic: Bool
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedBackgroundPhotoItem: PhotosPickerItem?
+    @State private var pendingCropSession: AppImageCropSession?
     @State private var pendingAvatarData: Data?
     @State private var pendingBackgroundData: Data?
     @State private var uploadedBackgroundURL: String?
@@ -298,22 +367,40 @@ struct EditProfileView: View {
             guard let newItem else { return }
             guard !appState.accountEnforcementStatus.blocks(.mediaUpload) else { return }
             Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self) {
-                    await applyPickedAvatarData(data)
-                }
+                await preparePickedImageForCropping(newItem, target: .avatar)
             }
         }
         .onChange(of: selectedBackgroundPhotoItem) { _, newItem in
             guard let newItem else { return }
             guard !appState.accountEnforcementStatus.blocks(.mediaUpload) else { return }
             Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self) {
-                    await applyPickedBackgroundData(data)
-                }
+                await preparePickedImageForCropping(newItem, target: .background)
             }
         }
         .task {
             await loadGenreTagsIfNeeded()
+        }
+        .sheet(item: $pendingCropSession) { session in
+            AppImageCropperSheet(
+                image: session.image,
+                aspectRatio: session.aspectRatio,
+                title: session.title,
+                onCancel: {
+                    pendingCropSession = nil
+                },
+                onCrop: { croppedImage in
+                    pendingCropSession = nil
+                    Task {
+                        switch session.target {
+                        case .avatar:
+                            await applyCroppedAvatarImage(croppedImage)
+                        case .background:
+                            await applyCroppedBackgroundImage(croppedImage)
+                        }
+                    }
+                }
+            )
+            .ignoresSafeArea()
         }
         .sheet(isPresented: $isShowingTagPicker) {
             GenreTagPickerSheet(
@@ -469,6 +556,76 @@ struct EditProfileView: View {
         let prepared = Self.preparedBackgroundData(from: data)
         pendingBackgroundData = prepared
         uploadedBackgroundURL = nil
+    }
+
+    private func preparePickedImageForCropping(_ item: PhotosPickerItem, target: AppImageCropTarget) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                await MainActor.run {
+                    viewModel.error = LT("图片读取失败，请重新选择。", "Failed to read the image. Please choose again.", "画像の読み込みに失敗しました。もう一度選択してください。")
+                }
+                return
+            }
+
+            await MainActor.run {
+                switch target {
+                case .avatar:
+                    selectedPhotoItem = nil
+                case .background:
+                    selectedBackgroundPhotoItem = nil
+                }
+
+                pendingCropSession = AppImageCropSession(
+                    target: target,
+                    image: image,
+                    aspectRatio: cropAspectRatio(for: target),
+                    title: cropTitle(for: target)
+                )
+            }
+        } catch {
+            await MainActor.run {
+                viewModel.error = LT("图片读取失败，请重新选择。", "Failed to read the image. Please choose again.", "画像の読み込みに失敗しました。もう一度選択してください。")
+            }
+        }
+    }
+
+    private func applyCroppedAvatarImage(_ image: UIImage) async {
+        guard let data = image.raverEncodedImageData(compressionQuality: 0.95) else {
+            await MainActor.run {
+                viewModel.error = LT("头像裁剪失败，请重新选择。", "Avatar cropping failed. Please choose again.", "アバターの切り抜きに失敗しました。もう一度選択してください。")
+            }
+            return
+        }
+        await applyPickedAvatarData(data)
+    }
+
+    private func applyCroppedBackgroundImage(_ image: UIImage) async {
+        guard let data = image.raverEncodedImageData(compressionQuality: 0.95) else {
+            await MainActor.run {
+                viewModel.error = LT("背景图裁剪失败，请重新选择。", "Background cropping failed. Please choose again.", "背景画像の切り抜きに失敗しました。もう一度選択してください。")
+            }
+            return
+        }
+        await applyPickedBackgroundData(data)
+    }
+
+    private func cropAspectRatio(for target: AppImageCropTarget) -> CGSize {
+        switch target {
+        case .avatar:
+            return CGSize(width: 1, height: 1)
+        case .background:
+            return CGSize(width: 5, height: 3)
+        }
+    }
+
+    private func cropTitle(for target: AppImageCropTarget) -> String {
+        switch target {
+        case .avatar:
+            return LT("裁剪头像", "Crop Avatar", "アバターを切り抜き")
+        case .background:
+            return LT("裁剪背景图", "Crop Background", "背景画像を切り抜き")
+        }
     }
 
     private func uploadPendingBackgroundIfNeeded() async throws -> String? {

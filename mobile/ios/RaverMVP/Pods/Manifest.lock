@@ -1,4 +1,5 @@
 PODS:
+  - CropViewController (3.1.2)
   - FirebaseAppCheckInterop (12.6.0)
   - FirebaseAuth (12.6.0):
     - FirebaseAppCheckInterop (~> 12.6.0)
@@ -72,6 +73,7 @@ PODS:
   - TXIMSDK_Plus_iOS_XCFramework (8.9.7511)
 
 DEPENDENCIES:
+  - CropViewController
   - FirebaseAuth (= 12.6.0)
   - SDWebImageSwiftUI (= 3.1.4)
   - SnapKit (from `../../../thirdparty/SnapKit-5.7.1`)
@@ -83,6 +85,7 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - CropViewController
     - FirebaseAppCheckInterop
     - FirebaseAuth
     - FirebaseAuthInterop
@@ -109,6 +112,7 @@ EXTERNAL SOURCES:
     :path: "../../../thirdparty/Chat_UIKit-main/Swift/TUIKit/TUICore"
 
 SPEC CHECKSUMS:
+  CropViewController: 82d9a8e1ce6e35eaac92fe14f53634ba53eaced4
   FirebaseAppCheckInterop: e2178171b4145013c7c1a3cc464d1d446d3a1896
   FirebaseAuth: 613c463cb43545a7fd2cd99ade09b78ac472c544
   FirebaseAuthInterop: db06756ef028006d034b6004dc0c37c24f7828d4
@@ -127,6 +131,6 @@ SPEC CHECKSUMS:
   TUICore: 7c576e9317fd13c52036edec6b7078fddf21aa21
   TXIMSDK_Plus_iOS_XCFramework: 10893791aa5c27b2b689ae3547878d10aeea9b7b
 
-PODFILE CHECKSUM: afb0f315da62c4828a8f346180475b6039396280
+PODFILE CHECKSUM: ea020784914207efd0865e1c2f2eb4cf51daef1b
 
 COCOAPODS: 1.16.2

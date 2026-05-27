@@ -5008,16 +5008,6 @@ struct EventDetailView: View {
         )
         actions.append(
             SharePanelQuickAction(
-                title: LT("查看二维码", "View QR", "QRを見る"),
-                systemImage: "qrcode",
-                accentColor: Color(red: 0.46, green: 0.35, blue: 0.96)
-            ) {
-                guard let event else { return }
-                Task { await openEventQRCode(event) }
-            }
-        )
-        actions.append(
-            SharePanelQuickAction(
                 title: LT("查看海报", "View Poster", "海報を見る"),
                 systemImage: "photo.on.rectangle",
                 accentColor: Color(red: 0.98, green: 0.71, blue: 0.22)
@@ -7325,7 +7315,7 @@ private struct EventTimelineLayout {
     static let stageHeaderFadeHeight: CGFloat = 20
     static let stageGap: CGFloat = 4
     static let timelineTopInset: CGFloat = 50
-    static let timelineBottomInset: CGFloat = 40
+    static let timelineBottomInset: CGFloat = 72
     static let maxVisibleStageCount = 5
     static let minStageWidth: CGFloat = 92
     static let pixelsPerHour: CGFloat = 75
@@ -7544,6 +7534,11 @@ private struct EventTimelineBoardView: View {
     var onSelectSlot: ((WebEventLineupSlot) -> Void)? = nil
     var maxVisibleStages: Int = EventTimelineLayout.maxVisibleStageCount
     var stickyTopInset: CGFloat = 0
+    var showsBoardBackground: Bool = true
+    var showsHeaderBackdrop: Bool = true
+    var showsColumnFill: Bool = true
+    var showsGridLines: Bool = true
+    var usesHorizontalScrollContainer: Bool = true
 
     @State private var layoutCache = EventTimelineBoardLayoutCache()
 
@@ -7605,7 +7600,7 @@ private struct EventTimelineBoardView: View {
     }
 
     private var selectedCardFillColor: Color {
-        isDarkMode ? Color.black.opacity(0.88) : Color.white.opacity(0.94)
+        isDarkMode ? Color(red: 0.16, green: 0.17, blue: 0.20) : Color(red: 0.96, green: 0.95, blue: 0.92)
     }
 
     var body: some View {
@@ -7642,18 +7637,20 @@ private struct EventTimelineBoardView: View {
 #endif
 
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: boardGradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                if showsBoardBackground {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: boardGradientColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(boardStrokeColor, lineWidth: 1)
-                    )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(boardStrokeColor, lineWidth: 1)
+                        )
+                }
 
                 HStack(spacing: 0) {
                     timelineAxis(layout: layout)
@@ -7674,29 +7671,38 @@ private struct EventTimelineBoardView: View {
     private func stageMatrix(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
         let stageModels = stageColumnModels(layout: layout)
 
-        ScrollView(.horizontal, showsIndicators: false) {
-            ZStack(alignment: .topLeading) {
-                EventTimelineStageColumnsView(
-                    models: stageModels,
-                    spacing: EventTimelineLayout.stageGap,
-                    selectedSlotIDs: selectedSlotIDs,
-                    selectable: selectable,
-                    normalCardTextColor: normalCardTextColor,
-                    selectedCardFillColor: selectedCardFillColor,
-                    columnFillColor: columnFillColor,
-                    gridLineColor: gridLineColor,
-                    onToggleSlot: onToggleSlot,
-                    onSelectSlot: onSelectSlot
-                )
-                .equatable()
+        let stageContent = ZStack(alignment: .topLeading) {
+            EventTimelineStageColumnsView(
+                models: stageModels,
+                spacing: EventTimelineLayout.stageGap,
+                selectedSlotIDs: selectedSlotIDs,
+                selectable: selectable,
+                normalCardTextColor: normalCardTextColor,
+                selectedCardFillColor: selectedCardFillColor,
+                columnFillColor: columnFillColor,
+                gridLineColor: gridLineColor,
+                showsColumnFill: showsColumnFill,
+                showsGridLines: showsGridLines,
+                includesStageHeaderPadding: true,
+                onToggleSlot: onToggleSlot,
+                onSelectSlot: onSelectSlot
+            )
+            .equatable()
 
-                stageHeaderRow(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
-                    .offset(y: stickyHeaderOffset)
-                    .zIndex(3)
-            }
-            .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight + layout.bodyHeight, alignment: .topLeading)
+            stageHeaderRow(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+                .offset(y: stickyHeaderOffset)
+                .zIndex(3)
         }
-        .frame(width: layout.stageViewportWidth, alignment: .leading)
+        .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight + layout.bodyHeight, alignment: .topLeading)
+
+        if usesHorizontalScrollContainer {
+            ScrollView(.horizontal, showsIndicators: false) {
+                stageContent
+            }
+            .frame(width: layout.stageViewportWidth, alignment: .leading)
+        } else {
+            stageContent
+        }
     }
 
     private func timelineAxis(layout: EventTimelineLayout) -> some View {
@@ -7723,7 +7729,7 @@ private struct EventTimelineBoardView: View {
 
     private func timelineAxisStickyHeader() -> some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(headerBackdropColor)
+            .fill(showsHeaderBackdrop ? headerBackdropColor : .clear)
             .overlay(
                 Text("TIME")
                     .font(EventScheduleTypography.semibold(12))
@@ -7741,37 +7747,16 @@ private struct EventTimelineBoardView: View {
                 ForEach(layout.stageNames, id: \.self) { stageName in
                     let stageColor = layout.color(for: stageName)
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    stageColor.opacity(0.98),
-                                    stageColor.opacity(0.93),
-                                    stageColor.opacity(0.86)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(Color.white.opacity(0.92), lineWidth: 1.4)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
-                                .inset(by: 2)
-                                .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
-                        )
+                        .fill(headerBackdropColor)
                         .overlay(
                             Text(stageName)
                                 .font(EventScheduleTypography.heavy(26))
                                 .minimumScaleFactor(0.24)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.center)
-                                .foregroundStyle(stageHeaderTextColor)
+                                .foregroundStyle(stageColor)
                                 .padding(.horizontal, 4)
                         )
-                        .shadow(color: stageColor.opacity(0.72), radius: 14, x: 0, y: 0)
-                        .shadow(color: stageColor.opacity(0.34), radius: 28, x: 0, y: 0)
                         .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
                 }
             }
@@ -7779,10 +7764,14 @@ private struct EventTimelineBoardView: View {
         .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight, alignment: .topLeading)
     }
 
+    @ViewBuilder
     private func headerBackdrop(width: CGFloat, topExtension: CGFloat = 0) -> some View {
+        if !showsHeaderBackdrop {
+            EmptyView()
+        } else {
         let resolvedTopExtension = max(0, topExtension)
 
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             if resolvedTopExtension > 0 {
                 headerBackdropColor
                     .frame(
@@ -7805,6 +7794,7 @@ private struct EventTimelineBoardView: View {
             }
         }
         .allowsHitTesting(false)
+        }
     }
 
     private func stageColumnModels(layout: EventTimelineLayout) -> [EventTimelineStageColumnModel] {
@@ -7865,6 +7855,9 @@ private struct EventTimelineStageColumnView: View, Equatable {
     let selectedCardFillColor: Color
     let columnFillColor: Color
     let gridLineColor: Color
+    let showsColumnFill: Bool
+    let showsGridLines: Bool
+    let includesStageHeaderPadding: Bool
     let onToggleSlot: ((WebEventLineupSlot) -> Void)?
     let onSelectSlot: ((WebEventLineupSlot) -> Void)?
 
@@ -7876,18 +7869,25 @@ private struct EventTimelineStageColumnView: View, Equatable {
             && lhs.selectedCardFillColor == rhs.selectedCardFillColor
             && lhs.columnFillColor == rhs.columnFillColor
             && lhs.gridLineColor == rhs.gridLineColor
+            && lhs.showsColumnFill == rhs.showsColumnFill
+            && lhs.showsGridLines == rhs.showsGridLines
+            && lhs.includesStageHeaderPadding == rhs.includesStageHeaderPadding
     }
 
     var body: some View {
         ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(columnFillColor)
+            if showsColumnFill {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(columnFillColor)
+            }
 
-            ForEach(Array(model.tickPositions.enumerated()), id: \.offset) { _, position in
-                Rectangle()
-                    .fill(gridLineColor)
-                    .frame(height: 1)
-                    .offset(y: position)
+            if showsGridLines {
+                ForEach(Array(model.tickPositions.enumerated()), id: \.offset) { _, position in
+                    Rectangle()
+                        .fill(gridLineColor)
+                        .frame(height: 1)
+                        .offset(y: position)
+                }
             }
 
             ForEach(model.frames) { frame in
@@ -7896,7 +7896,12 @@ private struct EventTimelineStageColumnView: View, Equatable {
                     .offset(y: frame.top)
             }
         }
-        .frame(width: model.stageWidth, height: model.bodyHeight)
+        .padding(.top, includesStageHeaderPadding ? EventTimelineLayout.stageHeaderHeight : 0)
+        .frame(
+            width: model.stageWidth,
+            height: model.bodyHeight + (includesStageHeaderPadding ? EventTimelineLayout.stageHeaderHeight : 0),
+            alignment: .top
+        )
     }
 
     private func timelineCard(frame: EventTimelineCardFrame) -> some View {
@@ -7904,28 +7909,29 @@ private struct EventTimelineStageColumnView: View, Equatable {
         let cardFill = isSelected ? selectedCardFillColor : model.stageColor.opacity(0.95)
         let textColor = isSelected ? model.stageColor.opacity(0.98) : normalCardTextColor
         let nameTimeSpacing: CGFloat = 0.2
-
-        let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(
-                AnyShapeStyle(
-                    isSelected
-                        ? cardFill
-                        : LinearGradient(
-                            colors: [
-                                cardFill,
-                                model.stageColor.opacity(0.90),
-                                model.stageColor.opacity(0.82)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottomTrailing
-                        )
+        let cardFillStyle: AnyShapeStyle = if isSelected {
+            AnyShapeStyle(cardFill)
+        } else {
+            AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        cardFill,
+                        model.stageColor.opacity(0.90),
+                        model.stageColor.opacity(0.82)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottomTrailing
                 )
             )
+        }
+
+        let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(cardFillStyle)
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
-                        isSelected ? model.stageColor.opacity(0.98) : Color.white.opacity(0.92),
-                        lineWidth: isSelected ? 2.2 : 1.4
+                        isSelected ? model.stageColor.opacity(0.46) : Color.white.opacity(0.34),
+                        lineWidth: isSelected ? 1.6 : 1
                     )
             )
             .overlay(
@@ -7933,23 +7939,32 @@ private struct EventTimelineStageColumnView: View, Equatable {
                     .inset(by: 2)
                     .stroke(
                         isSelected
-                            ? model.stageColor.opacity(0.18)
-                            : Color.white.opacity(0.24),
+                            ? model.stageColor.opacity(0.14)
+                            : Color.white.opacity(0.14),
                         lineWidth: 0.8
                     )
             )
             .shadow(
-                color: isSelected ? Color.black.opacity(0.14) : model.stageColor.opacity(0.58),
-                radius: isSelected ? 10 : 13,
+                color: isSelected ? Color.black.opacity(0.12) : Color.black.opacity(0.08),
+                radius: isSelected ? 10 : 7,
                 x: 0,
-                y: isSelected ? 4 : 0
+                y: isSelected ? 4 : 2
             )
             .shadow(
-                color: isSelected ? Color.clear : model.stageColor.opacity(0.24),
-                radius: isSelected ? 0 : 22,
+                color: isSelected ? model.stageColor.opacity(0.42) : Color.clear,
+                radius: isSelected ? 18 : 0,
                 x: 0,
                 y: 0
             )
+            .overlay(alignment: .topLeading) {
+                if isSelected {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(model.stageColor.opacity(0.98))
+                        .padding(.top, 5)
+                        .padding(.leading, 5)
+                }
+            }
             .overlay(alignment: .bottomTrailing) {
                 VStack(alignment: .trailing, spacing: nameTimeSpacing) {
                     Text(frame.displayName)
@@ -7964,7 +7979,7 @@ private struct EventTimelineStageColumnView: View, Equatable {
                     Text(frame.timeRangeText)
                         .font(EventScheduleTypography.heavy(12))
                         .monospacedDigit()
-                        .foregroundStyle(isSelected ? model.stageColor.opacity(0.88) : textColor.opacity(0.95))
+                        .foregroundStyle(isSelected ? model.stageColor.opacity(0.82) : textColor.opacity(0.95))
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 3)
@@ -8003,6 +8018,9 @@ private struct EventTimelineStageColumnsView: View, Equatable {
     let selectedCardFillColor: Color
     let columnFillColor: Color
     let gridLineColor: Color
+    let showsColumnFill: Bool
+    let showsGridLines: Bool
+    let includesStageHeaderPadding: Bool
     let onToggleSlot: ((WebEventLineupSlot) -> Void)?
     let onSelectSlot: ((WebEventLineupSlot) -> Void)?
 
@@ -8015,6 +8033,9 @@ private struct EventTimelineStageColumnsView: View, Equatable {
             && lhs.selectedCardFillColor == rhs.selectedCardFillColor
             && lhs.columnFillColor == rhs.columnFillColor
             && lhs.gridLineColor == rhs.gridLineColor
+            && lhs.showsColumnFill == rhs.showsColumnFill
+            && lhs.showsGridLines == rhs.showsGridLines
+            && lhs.includesStageHeaderPadding == rhs.includesStageHeaderPadding
     }
 
     var body: some View {
@@ -8028,13 +8049,18 @@ private struct EventTimelineStageColumnsView: View, Equatable {
                     selectedCardFillColor: selectedCardFillColor,
                     columnFillColor: columnFillColor,
                     gridLineColor: gridLineColor,
+                    showsColumnFill: showsColumnFill,
+                    showsGridLines: showsGridLines,
+                    includesStageHeaderPadding: includesStageHeaderPadding,
                     onToggleSlot: onToggleSlot,
                     onSelectSlot: onSelectSlot
                 )
             }
         }
-        .padding(.top, EventTimelineLayout.stageHeaderHeight)
-        .frame(height: (models.first?.bodyHeight ?? 0) + EventTimelineLayout.stageHeaderHeight, alignment: .top)
+        .frame(
+            height: (models.first?.bodyHeight ?? 0) + (includesStageHeaderPadding ? EventTimelineLayout.stageHeaderHeight : 0),
+            alignment: .top
+        )
     }
 }
 
@@ -8101,6 +8127,129 @@ private struct EventRouteSharePreviewCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(RaverTheme.cardBorder.opacity(0.45), lineWidth: 1)
         )
+    }
+}
+
+private enum EventRoutePosterRenderer {
+    @MainActor
+    static func generateImage(
+        routeTitle: String,
+        event: WebEvent,
+        days: [EventScheduleDay],
+        selectedDayID: String?,
+        selectedSlotIDs: Set<String>,
+        colorScheme: ColorScheme
+    ) async -> UIImage? {
+        guard let selectedDay = days.first(where: { $0.id == selectedDayID }) ?? days.first else {
+            return nil
+        }
+
+        let stageCount = EventTimelineLayout.stageCount(for: selectedDay.slots)
+        let stageRegionWidth =
+            CGFloat(stageCount) * EventTimelineLayout.minStageWidth +
+            CGFloat(max(stageCount - 1, 0)) * EventTimelineLayout.stageGap
+        let fullBoardWidth = EventTimelineLayout.axisWidth + stageRegionWidth
+        let viewportContentWidth = max(
+            UIScreen.main.bounds.width - 20,
+            EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth
+        )
+        let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
+        let qrCodeImage = await loadEventShareQRCodeImage(event: event)
+
+        let snapshotView = EventRoutePlannerShareSnapshotView(
+            routeTitle: routeTitle,
+            event: event,
+            days: days,
+            selectedDayID: selectedDay.id,
+            selectedSlotIDs: selectedSlotIDs,
+            contentWidth: snapshotContentWidth,
+            qrCodeImage: qrCodeImage
+        )
+        .environment(\.colorScheme, colorScheme)
+
+        let renderer = ImageRenderer(content: snapshotView)
+        renderer.scale = 3
+        renderer.proposedSize = ProposedViewSize(
+            width: snapshotContentWidth + 20,
+            height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 232
+        )
+
+        guard let image = renderer.uiImage else { return nil }
+        return image.scaledDownIfNeeded(maxHeight: 4000)
+    }
+
+    private static func loadEventShareQRCodeImage(event: WebEvent) async -> UIImage? {
+        let subtitle = [event.city, event.organizerName]
+            .compactMap { value in
+                value?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+            }
+            .joined(separator: " · ")
+
+        do {
+            let resolved = try await ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository()).resolveLink(
+                target: ShareTarget(
+                    type: .event,
+                    id: event.id,
+                    title: event.name,
+                    subtitle: subtitle.nilIfBlank,
+                    imageURL: event.coverImageUrl
+                ),
+                channel: "route_poster"
+            )
+
+            guard let qrURLString = AppConfig.resolvedURLString(resolved.payload.qrCodeURL),
+                  let url = URL(string: qrURLString) else {
+                return nil
+            }
+
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  200..<300 ~= httpResponse.statusCode else {
+                return nil
+            }
+
+            return UIImage(data: data)
+        } catch {
+            return nil
+        }
+    }
+
+    @MainActor
+    static func saveImageToPhotos(_ image: UIImage) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw ServiceError.message(
+                LT("未获得相册权限，可稍后重新授权后再试。", "Photo permission denied. Please grant access and try again.", "写真へのアクセスが拒否されています。許可してからもう一度お試しください。")
+            )
+        }
+
+        try await withCheckedThrowingContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }) { success, error in
+                DispatchQueue.main.async {
+                    if success {
+                        continuation.resume()
+                    } else if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(throwing: ShareAssetPhotoSaverError.saveFailed)
+                    }
+                }
+            }
+        }
+    }
+
+    static func writePreviewFile(_ image: UIImage, eventID: String) -> URL? {
+        let fileName = "event-route-\(eventID)-\(UUID().uuidString).jpg"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        guard let data = image.jpegData(compressionQuality: 0.96) else { return nil }
+        do {
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
     }
 }
 
@@ -8404,13 +8553,385 @@ struct EventRoutePlannerLoaderView: View {
     }
 }
 
-private struct EventRoutePlannerShareSnapshotView: View {
+struct EventRouteShareDetailLoaderView: View {
+    let eventID: String
+    let eventReadRepository: EventReadRepository
+    let ownerUserID: String?
+    let ownerDisplayName: String?
+    let selectedDayID: String?
+    let selectedSlotIDs: [String]?
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var event: WebEvent?
+    @State private var phase: LoadPhase = .idle
+
+    private var routeOwnerName: String {
+        let trimmed = ownerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? LT("我", "Me", "自分") : trimmed
+    }
+
+    private var navigationTitle: String {
+        LT("分享路线", "Share Route", "ルートを共有")
+    }
+
+    private var posterTitle: String {
+        LT("\(routeOwnerName)的路线", "\(routeOwnerName)'s Route", "\(routeOwnerName) のルート")
+    }
+
+    private var hintText: String {
+        LT("路线图片会根据当前选中的演出、日期和时间表重新生成，方便保存或继续分享。", "The route image is regenerated from the currently selected sets, day, and timetable so you can save it or share it again.", "ルート画像は現在選択中の出演、日付、タイムテーブルから再生成され、保存や再共有に使えます。")
+    }
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                EventDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(
+                        title: LT("路线海报加载失败", "Route Poster Failed to Load", "ルートポスターの読み込みに失敗しました"),
+                        message: message,
+                        retryAction: {
+                            Task { await load(force: true) }
+                        }
+                    )
+                    .padding(16)
+                    .padding(.top, 96)
+                }
+                .background(RaverTheme.background)
+            case .empty:
+                ContentUnavailableView(
+                    LT("活动不存在", "Event Not Found", "イベントが見つかりません"),
+                    systemImage: "music.note.house"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .success:
+                if let event {
+                    EventRouteShareDetailView(
+                        navigationTitle: navigationTitle,
+                        title: posterTitle,
+                        subtitle: event.name,
+                        event: event,
+                        days: EventScheduleDay.build(
+                            from: event.lineupSlots,
+                            anchorDate: event.startDate,
+                            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+                            dayRolloverHour: event.dayRolloverHour,
+                            timeZone: event.eventTimeZone
+                        ),
+                        selectedDayID: selectedDayID,
+                        selectedSlotIDs: Set(selectedSlotIDs ?? []),
+                        colorScheme: colorScheme,
+                        hintText: hintText
+                    )
+                } else {
+                    ContentUnavailableView(
+                        LT("活动不存在", "Event Not Found", "イベントが見つかりません"),
+                        systemImage: "music.note.house"
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+                }
+            }
+        }
+        .task {
+            guard phase == .idle else { return }
+            await load(force: false)
+        }
+    }
+
+    @MainActor
+    private func load(force: Bool) async {
+        if !force, event != nil, phase == .success { return }
+        phase = .initialLoading
+        do {
+            event = try await eventReadRepository.fetchEvent(id: eventID)
+            phase = event == nil ? .empty : .success
+        } catch {
+            phase = .failure(
+                message: error.userFacingMessage
+                    ?? LT("路线海报加载失败，请稍后重试", "Failed to load route poster. Please try again later.", "ルートポスターを読み込めませんでした。時間をおいて再試行してください。")
+            )
+        }
+    }
+}
+
+private struct EventRouteShareDetailView: View {
+    let navigationTitle: String
     let title: String
+    let subtitle: String?
+    let event: WebEvent
+    let days: [EventScheduleDay]
+    let selectedDayID: String?
+    let selectedSlotIDs: Set<String>
+    let colorScheme: ColorScheme
+    let hintText: String
+
+    @State private var feedbackMessage: String?
+    @State private var previewImage: UIImage?
+    @State private var previewFileURL: URL?
+    @State private var isGenerating = false
+    @State private var fullscreenSelection: FullscreenMediaSelection?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                shareSubjectCard
+                previewCard
+                hintCard
+            }
+            .padding(16)
+        }
+        .background(RaverTheme.background)
+        .raverSystemNavigation(title: navigationTitle)
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+            get: { feedbackMessage != nil },
+            set: { if !$0 { feedbackMessage = nil } }
+        )) {
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
+        } message: {
+            Text(feedbackMessage ?? "")
+        }
+        .task {
+            if previewImage == nil {
+                await regeneratePreview(showFeedback: false)
+            }
+        }
+        .fullScreenCover(item: $fullscreenSelection) { selection in
+            if let url = previewFileURL {
+                FullscreenMediaViewer(
+                    items: [FullscreenMediaItem(rawURL: url.absoluteString, index: 0)],
+                    initialIndex: selection.id
+                )
+            }
+        }
+    }
+
+    private var shareSubjectCard: some View {
+        GlassCard {
+            HStack(spacing: 12) {
+                if let resolved = AppConfig.resolvedURLString(event.coverImageUrl),
+                   !resolved.isEmpty {
+                    ImageLoaderView(urlString: resolved)
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(RaverTheme.card)
+                        .frame(width: 52, height: 52)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(3)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var previewCard: some View {
+        GlassCard {
+            VStack(spacing: 14) {
+                previewContent
+
+                HStack(spacing: 12) {
+                    Button {
+                        Task { await regeneratePreview(showFeedback: true) }
+                    } label: {
+                        if isGenerating {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .tint(.white)
+                                Text(LT("重新生成海报", "Regenerate", "海報を再生成"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            Label(LT("重新生成海报", "Regenerate", "海報を再生成"), systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(RaverTheme.accent)
+                    .disabled(isGenerating)
+
+                    Button {
+                        Task { await savePreviewImage() }
+                    } label: {
+                        Label(LT("保存图片", "Save Image", "画像を保存"), systemImage: "photo.badge.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(RaverTheme.accent)
+                    .foregroundStyle(.white)
+                    .disabled(previewImage == nil || isGenerating)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var previewContent: some View {
+        if let image = previewImage {
+            let width = max(UIScreen.main.bounds.width - 56, 1)
+            let ratio = image.size.width > 0 ? image.size.height / image.size.width : 1.4
+            let height = max(280, width * ratio)
+
+            Button {
+                fullscreenSelection = FullscreenMediaSelection(id: 0)
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(RaverTheme.card)
+
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: width, height: height)
+                        .clipped()
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            colors: [
+                                RaverTheme.background.opacity(0.88),
+                                RaverTheme.background.opacity(0.38),
+                                .clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: min(104, height * 0.24))
+
+                        Spacer(minLength: 0)
+
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                RaverTheme.background.opacity(0.38),
+                                RaverTheme.background.opacity(0.88)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: min(104, height * 0.24))
+                    }
+                    .allowsHitTesting(false)
+
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: width, height: height)
+                }
+                .frame(width: width, height: height)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+        } else if isGenerating {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(maxWidth: .infinity)
+                .frame(height: 320)
+                .overlay {
+                    ProgressView()
+                        .tint(RaverTheme.primaryText)
+                }
+        } else {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(RaverTheme.card)
+                .frame(maxWidth: .infinity)
+                .frame(height: 320)
+                .overlay {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 56, weight: .medium))
+                        Text(LT("路线图片暂未生成", "Route Image Unavailable", "ルート画像はまだ生成されていません"))
+                            .font(.headline)
+                        Text(LT("请稍后重新生成后再试。", "Please regenerate and try again.", "再生成してからもう一度お試しください。"))
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.horizontal, 28)
+                }
+        }
+    }
+
+    private var hintCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(LT("当前说明", "Notes", "説明"))
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Text(hintText)
+                    .font(.subheadline)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+    }
+
+    @MainActor
+    private func regeneratePreview(showFeedback: Bool) async {
+        guard !isGenerating else { return }
+        isGenerating = true
+        defer { isGenerating = false }
+
+        guard let image = await EventRoutePosterRenderer.generateImage(
+            routeTitle: title,
+            event: event,
+            days: days,
+            selectedDayID: selectedDayID,
+            selectedSlotIDs: selectedSlotIDs,
+            colorScheme: colorScheme
+        ) else {
+            feedbackMessage = LT("路线图生成失败，请重试", "Failed to generate route image. Please try again.", "ルート画像を生成できませんでした。もう一度お試しください。")
+            return
+        }
+
+        previewImage = image
+        previewFileURL = EventRoutePosterRenderer.writePreviewFile(image, eventID: event.id)
+        if showFeedback {
+            feedbackMessage = LT("海报已重新生成", "Poster regenerated.", "海報を再生成しました。")
+        }
+    }
+
+    @MainActor
+    private func savePreviewImage() async {
+        guard let previewImage else { return }
+        do {
+            try await EventRoutePosterRenderer.saveImageToPhotos(previewImage)
+            feedbackMessage = LT("已保存到相册", "Saved to Photos.", "写真に保存しました。")
+        } catch {
+            feedbackMessage = error.userFacingMessage ?? LT("保存失败，请重试", "Save failed. Please try again.", "保存に失敗しました。もう一度お試しください。")
+        }
+    }
+}
+
+private struct EventRoutePlannerShareSnapshotView: View {
+    let routeTitle: String
     let event: WebEvent
     let days: [EventScheduleDay]
     let selectedDayID: String
     let selectedSlotIDs: Set<String>
     let contentWidth: CGFloat
+    let qrCodeImage: UIImage?
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
@@ -8451,6 +8972,23 @@ private struct EventRoutePlannerShareSnapshotView: View {
         ]
     }
 
+    private var eventTitleText: String {
+        event.name.nilIfBlank ?? routeTitle
+    }
+
+    private var dateLineText: String? {
+        selectedDay?.subtitleWithoutTimeZone.nilIfBlank
+    }
+
+    private var routeHeadlineText: String? {
+        routeTitle.nilIfBlank
+    }
+
+    private var boardHeight: CGFloat {
+        guard let selectedDay else { return 0 }
+        return EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone)
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -8461,23 +8999,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
             .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
-                if let trimmedTitle = title.nilIfBlank {
-                    Text(trimmedTitle)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                        .lineLimit(2)
-                }
-
-                if let eventName = event.name.nilIfBlank {
-                    Text(eventName)
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                        .lineLimit(2)
-                }
-
-                if let selectedDay, days.count > 1 {
-                    selectedDayBadge(selectedDay)
-                }
+                headerSection
 
                 if let selectedDay {
                     EventTimelinePosterBoardView(
@@ -8486,7 +9008,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
                         selectedSlotIDs: selectedSlotIDs,
                         availableWidth: contentWidth
                     )
-                    .frame(width: contentWidth, height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots), alignment: .leading)
+                    .frame(width: contentWidth, height: boardHeight, alignment: .topLeading)
                 } else {
                     ContentUnavailableView(LT("等待时间表发布", "等待时间表发布", "タイムテーブル公開待ち"), systemImage: "calendar.badge.exclamationmark")
                         .frame(width: contentWidth, alignment: .leading)
@@ -8500,17 +9022,82 @@ private struct EventRoutePlannerShareSnapshotView: View {
         .frame(width: contentWidth + 20)
     }
 
-    private func selectedDayBadge(_ day: EventScheduleDay) -> some View {
-        Text(day.subtitleWithoutTimeZone)
-            .font(EventScheduleTypography.semibold(15))
-            .foregroundStyle(selectedDayTextColor)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                Capsule()
-                    .fill(selectedDayBackgroundColor)
-            )
-            .frame(width: contentWidth, alignment: .leading)
+    private var headerSection: some View {
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(eventTitleText)
+                    .font(EventScheduleTypography.heavy(24))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+
+                if let dateLineText {
+                    Text(dateLineText)
+                        .font(EventScheduleTypography.heavy(15))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .lineLimit(1)
+                }
+
+                if let routeHeadlineText {
+                    Text(routeHeadlineText)
+                        .font(EventScheduleTypography.heavy(18))
+                        .foregroundStyle(RaverTheme.primaryText.opacity(0.92))
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            posterQRPanel
+        }
+        .frame(width: contentWidth, alignment: .topLeading)
+    }
+
+    private var posterQRPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            qrCodeBlock
+
+            Text(LT("扫码加入RaveHub来定制你的路线", "Scan to join RaveHub and customize your route", "QRを読み取ってRaveHubでルートを作成"))
+                .font(EventScheduleTypography.heavy(9))
+                .foregroundStyle(RaverTheme.secondaryText)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 72, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var qrCodeBlock: some View {
+        if let qrCodeImage {
+            Image(uiImage: qrCodeImage)
+                .resizable()
+                .interpolation(.none)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 64, height: 64)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.05))
+                .frame(width: 72, height: 72)
+                .overlay {
+                    VStack(spacing: 8) {
+                        Image(systemName: "qrcode")
+                            .font(.system(size: 22, weight: .medium))
+                        Text(LT("二维码加载中", "QR loading", "QRコードを読み込み中"))
+                            .font(EventScheduleTypography.heavy(8))
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(8)
+                }
+        }
     }
 }
 
@@ -8587,79 +9174,63 @@ private struct EventTimelinePosterBoardView: View {
     }
 
     private var selectedCardFillColor: Color {
-        isDarkMode ? Color.black.opacity(0.88) : Color.white.opacity(0.94)
+        isDarkMode ? Color(red: 0.16, green: 0.17, blue: 0.20) : Color(red: 0.96, green: 0.95, blue: 0.92)
     }
 
     var body: some View {
         let resolvedLayout = layout
 
-        ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: boardGradientColors,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(boardStrokeColor, lineWidth: 1)
-                )
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                timelineAxisHeader()
+                stageHeaderRow(layout: resolvedLayout)
+            }
 
             HStack(spacing: 0) {
-                timelineAxis(layout: resolvedLayout)
-                stageMatrix(layout: resolvedLayout)
+                timelineAxisBody(layout: resolvedLayout)
+                stageBodyMatrix(layout: resolvedLayout)
             }
-            .padding(.vertical, 10)
         }
+        .padding(.vertical, 10)
         .frame(width: availableWidth, height: boardHeight)
     }
 
-    private func stageMatrix(layout: EventTimelineLayout) -> some View {
+    private func stageBodyMatrix(layout: EventTimelineLayout) -> some View {
         let stageModels = layout.stageNames.map { stageColumnModel(stageName: $0, layout: layout) }
 
-        return ZStack(alignment: .topLeading) {
-            EventTimelineStageColumnsView(
-                models: stageModels,
-                spacing: EventTimelineLayout.stageGap,
-                selectedSlotIDs: selectedSlotIDs,
-                selectable: false,
-                normalCardTextColor: normalCardTextColor,
-                selectedCardFillColor: selectedCardFillColor,
-                columnFillColor: columnFillColor,
-                gridLineColor: gridLineColor,
-                onToggleSlot: nil,
-                onSelectSlot: nil
-            )
-            .equatable()
-
-            stageHeaderRow(layout: layout)
-                .zIndex(3)
+        return HStack(spacing: EventTimelineLayout.stageGap) {
+            ForEach(stageModels) { model in
+                EventTimelineStageColumnView(
+                    model: model,
+                    selectedSlotIDs: selectedSlotIDs,
+                    selectable: false,
+                    normalCardTextColor: normalCardTextColor,
+                    selectedCardFillColor: selectedCardFillColor,
+                    columnFillColor: .clear,
+                    gridLineColor: .clear,
+                    showsColumnFill: false,
+                    showsGridLines: false,
+                    includesStageHeaderPadding: false,
+                    onToggleSlot: nil,
+                    onSelectSlot: nil
+                )
+                .equatable()
+            }
         }
-        .frame(width: layout.stageContentWidth, height: EventTimelineLayout.stageHeaderHeight + layout.bodyHeight, alignment: .topLeading)
+        .frame(width: layout.stageContentWidth, height: layout.bodyHeight, alignment: .topLeading)
     }
 
-    private func timelineAxis(layout: EventTimelineLayout) -> some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(width: EventTimelineLayout.axisWidth, height: EventTimelineLayout.stageHeaderHeight)
-
-            ZStack(alignment: .topTrailing) {
-                ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
-                    Text(Self.axisTimeFormatter(timeZone: event.eventTimeZone).string(from: tick))
-                        .font(EventScheduleTypography.heavy(12))
-                        .foregroundStyle(axisTextColor)
-                        .frame(width: EventTimelineLayout.axisWidth - 8, alignment: .trailing)
-                        .offset(y: layout.yPosition(for: tick) - 12)
-                }
+    private func timelineAxisBody(layout: EventTimelineLayout) -> some View {
+        ZStack(alignment: .topTrailing) {
+            ForEach(layout.tickDates, id: \.timeIntervalSinceReferenceDate) { tick in
+                Text(Self.axisTimeFormatter(timeZone: event.eventTimeZone).string(from: tick))
+                    .font(EventScheduleTypography.heavy(12))
+                    .foregroundStyle(axisTextColor)
+                    .frame(width: EventTimelineLayout.axisWidth - 8, alignment: .trailing)
+                    .offset(y: layout.yPosition(for: tick) - 12)
             }
-            .frame(width: EventTimelineLayout.axisWidth, height: layout.bodyHeight, alignment: .topTrailing)
         }
-        .frame(width: EventTimelineLayout.axisWidth)
-        .overlay(alignment: .top) {
-            timelineAxisHeader()
-        }
+        .frame(width: EventTimelineLayout.axisWidth, height: layout.bodyHeight, alignment: .topTrailing)
     }
 
     private func timelineAxisHeader() -> some View {
@@ -8682,37 +9253,16 @@ private struct EventTimelinePosterBoardView: View {
                 ForEach(layout.stageNames, id: \.self) { stageName in
                     let stageColor = layout.color(for: stageName)
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    stageColor.opacity(0.98),
-                                    stageColor.opacity(0.93),
-                                    stageColor.opacity(0.86)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(Color.white.opacity(0.92), lineWidth: 1.4)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9.5, style: .continuous)
-                                .inset(by: 2)
-                                .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
-                        )
+                        .fill(headerBackdropColor)
                         .overlay(
                             Text(stageName)
                                 .font(EventScheduleTypography.heavy(26))
                                 .minimumScaleFactor(0.24)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.center)
-                                .foregroundStyle(stageHeaderTextColor)
+                                .foregroundStyle(stageColor)
                                 .padding(.horizontal, 4)
                         )
-                        .shadow(color: stageColor.opacity(0.72), radius: 14, x: 0, y: 0)
-                        .shadow(color: stageColor.opacity(0.34), radius: 28, x: 0, y: 0)
                         .frame(width: layout.stageWidth, height: EventTimelineLayout.stageHeaderHeight)
                 }
             }
@@ -9185,22 +9735,27 @@ private struct EventRoutePlannerView: View {
         }
     }
 
-    private func savePosterImage() {
-        Task {
-            guard let image = await generatePosterImage() else { return }
-            await savePosterToPhotos(image)
-        }
+    private func openRouteShareDetail() {
+        appPush(
+            .eventRouteShareDetail(
+                eventID: event.id,
+                ownerUserID: isViewingOwnRoute ? currentUserID : normalizedRouteOwnerUserID,
+                ownerDisplayName: routeOwnerName,
+                selectedDayID: selectedDayID.nilIfBlank,
+                selectedSlotIDs: selectedSlotIDs.sorted()
+            )
+        )
     }
 
     private func shareMoreQuickActions() -> [SharePanelQuickAction] {
         if isViewingOwnRoute {
             return [
                 SharePanelQuickAction(
-                    title: LT("保存图片", "Save Image", "画像を保存"),
-                    systemImage: "photo.badge.arrow.down",
+                    title: LT("分享路线", "Share Route", "ルートを共有"),
+                    systemImage: "photo.on.rectangle.angled",
                     accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
                 ) {
-                    savePosterImage()
+                    openRouteShareDetail()
                 },
                 SharePanelQuickAction(
                     title: LT("保存路线", "Save Route", "ルートを保存"),
@@ -9229,11 +9784,11 @@ private struct EventRoutePlannerView: View {
                 )
             },
             SharePanelQuickAction(
-                title: LT("保存图片", "Save Image", "画像を保存"),
-                systemImage: "photo.badge.arrow.down",
+                title: LT("分享路线", "Share Route", "ルートを共有"),
+                systemImage: "photo.on.rectangle.angled",
                 accentColor: Color(red: 0.33, green: 0.73, blue: 0.95)
             ) {
-                savePosterImage()
+                openRouteShareDetail()
             }
         ]
     }
@@ -9290,8 +9845,6 @@ private struct EventRoutePlannerView: View {
     }
 
     private func makeSharePayload() -> EventRouteShareCardPayload? {
-        guard !selectedSlotIDs.isEmpty else { return nil }
-
         return EventRouteShareCardPayload(
             eventID: event.id,
             eventName: event.name,
@@ -9356,14 +9909,14 @@ private struct EventRoutePlannerView: View {
             EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth
         )
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
-
         let snapshotView = EventRoutePlannerShareSnapshotView(
-            title: navigationTitleText,
+            routeTitle: navigationTitleText,
             event: event,
             days: days,
             selectedDayID: selectedDay.id,
             selectedSlotIDs: selectedSlotIDs,
-            contentWidth: snapshotContentWidth
+            contentWidth: snapshotContentWidth,
+            qrCodeImage: nil
         )
         .environment(\.colorScheme, colorScheme)
 
