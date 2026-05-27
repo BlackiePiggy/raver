@@ -365,6 +365,7 @@ const renderStructuredPosterHeroThemeOverlay = (
 };
 
 export const renderStructuredPosterSvg = async (input: SharePosterStructuredCardInput): Promise<Buffer> => {
+  const debugLabel = input.debugLabel || `structured mode=${input.mode}`;
   const qrDataUrl = await QRCode.toDataURL(input.qrText, {
     errorCorrectionLevel: 'H',
     margin: 0,
@@ -375,9 +376,13 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
     },
   });
   const heroImageDataUrl = await toImageDataUri(input.imageUrl, {
-    debugLabel: `structured mode=${input.mode}`,
+    debugLabel,
   });
+  const heroImageRendered = Boolean(heroImageDataUrl);
   const heroThemeOverlay = renderStructuredPosterHeroThemeOverlay(input.heroTheme, Boolean(heroImageDataUrl));
+  console.info(
+    `[share-poster] ${debugLabel} hero-render imageUrl=${input.imageUrl || 'none'} imageFetch=${heroImageRendered ? 'success' : 'miss'} imageApplied=${heroImageRendered ? 'yes' : 'no'} theme=${input.heroTheme || 'none'} themeApplied=${heroThemeOverlay ? 'yes' : 'no'}`
+  );
   const appIconDataUrl = getSharePosterAppIconDataUri();
   const titleFontSize = 28;
   const titleLines = wrapPosterMixedText(

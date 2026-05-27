@@ -32,6 +32,7 @@ export type SharePosterStructuredCardInput = {
   title: string;
   imageUrl?: string | null;
   heroTheme?: 'event_timetable';
+  debugLabel?: string;
   rows: SharePosterSectionRow[];
   footerLine1: string;
   footerLine2: string;

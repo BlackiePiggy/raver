@@ -1,5 +1,5 @@
 import { buildPosterQrText, formatPosterDate, formatPosterTime, renderStructuredPosterSvg } from '../svg-utils';
-import { resolveEventPosterBackgroundImageUrl } from '../event-images';
+import { resolveEventPosterBackgroundImage } from '../event-images';
 import { pickLocalizedText, posterText, resolvePosterVenueText } from '../localization';
 import { SharePosterHandler } from '../types';
 
@@ -72,10 +72,14 @@ export const eventTimetablePosterHandler: SharePosterHandler = {
         },
       });
     }
+    const backgroundSelection = resolveEventPosterBackgroundImage(event);
+    console.info(
+      `[share-poster] code=${context.shareLink.code} targetType=event variant=${context.variant} timetable-background-select source=${backgroundSelection.source} url=${backgroundSelection.url || 'none'}`
+    );
     const png = await renderStructuredPosterSvg({
       locale: context.locale,
       title,
-      imageUrl: resolveEventPosterBackgroundImageUrl(event),
+      imageUrl: backgroundSelection.url,
       heroTheme: 'event_timetable',
       rows: [
         {
@@ -93,6 +97,7 @@ export const eventTimetablePosterHandler: SharePosterHandler = {
       footerLine2: 'RaveHub App',
       qrText: buildPosterQrText(context.shareLink.code),
       mode: 'event_timetable_svg',
+      debugLabel: `code=${context.shareLink.code} targetType=event variant=${context.variant || 'default'} handler=event-timetable backgroundSource=${backgroundSelection.source}`,
     });
     console.info(`[share-poster] code=${context.shareLink.code} targetType=event variant=${context.variant} svg-render success bytes=${png.length}`);
     return {

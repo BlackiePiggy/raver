@@ -15,6 +15,19 @@ type EventImageAssetPayload = {
 
 type EventImageBucket = 'cover' | 'poster' | 'lineup' | 'timetable' | 'other';
 
+export type EventPosterBackgroundSource =
+  | 'cover_field'
+  | 'cover_asset'
+  | 'poster_asset'
+  | 'lineup_field'
+  | 'lineup_asset'
+  | 'none';
+
+export type EventPosterBackgroundSelection = {
+  url: string | null;
+  source: EventPosterBackgroundSource;
+};
+
 export const parseEventImageAssets = (value: unknown): EventImageAssetPayload[] => {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is EventImageAssetPayload => Boolean(item && typeof item === 'object'));
@@ -77,17 +90,25 @@ export const resolveEventPosterBackgroundImageUrl = (row: {
   coverImageUrl?: unknown;
   lineupImageUrl?: unknown;
 }): string | null => {
+  return resolveEventPosterBackgroundImage(row).url;
+};
+
+export const resolveEventPosterBackgroundImage = (row: {
+  imageAssets?: unknown;
+  coverImageUrl?: unknown;
+  lineupImageUrl?: unknown;
+}): EventPosterBackgroundSelection => {
   const assets = sortEventImageAssetsForDisplay(parseEventImageAssets(row.imageAssets ?? []));
   const coverAssetUrl = resolveFirstAssetUrl(assets, 'cover');
   const posterAssetUrl = resolveFirstAssetUrl(assets, 'poster');
   const lineupAssetUrl = resolveFirstAssetUrl(assets, 'lineup');
+  const coverFieldUrl = normalizeText(row.coverImageUrl);
+  const lineupFieldUrl = normalizeText(row.lineupImageUrl);
 
-  return (
-    normalizeText(row.coverImageUrl) ||
-    coverAssetUrl ||
-    posterAssetUrl ||
-    normalizeText(row.lineupImageUrl) ||
-    lineupAssetUrl ||
-    null
-  );
+  if (coverFieldUrl) return { url: coverFieldUrl, source: 'cover_field' };
+  if (coverAssetUrl) return { url: coverAssetUrl, source: 'cover_asset' };
+  if (posterAssetUrl) return { url: posterAssetUrl, source: 'poster_asset' };
+  if (lineupFieldUrl) return { url: lineupFieldUrl, source: 'lineup_field' };
+  if (lineupAssetUrl) return { url: lineupAssetUrl, source: 'lineup_asset' };
+  return { url: null, source: 'none' };
 };
