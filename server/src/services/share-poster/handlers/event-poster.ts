@@ -187,7 +187,9 @@ const renderEventPosterSvg = async (
       light: '#FFFFFFFF',
     },
   });
-  const heroImageDataUrl = await toImageDataUri(event.imageUrl);
+  const heroImageDataUrl = await toImageDataUri(event.imageUrl, {
+    debugLabel: `event-access code=${shareLink.code}`,
+  });
   const appIconDataUrl = getSharePosterAppIconDataUri();
   const safeStart = svgEscape(formatPosterDate(event.startDate, event.timeZone, locale));
   const safeEnd = svgEscape(formatPosterDate(event.endDate, event.timeZone, locale));

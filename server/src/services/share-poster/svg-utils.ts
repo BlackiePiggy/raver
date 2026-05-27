@@ -21,16 +21,46 @@ export const htmlEscape = (value: string | null | undefined): string =>
 
 export const svgEscape = (value: string | null | undefined): string => htmlEscape(value);
 
-export const toImageDataUri = async (urlString: string | null | undefined): Promise<string | null> => {
+export const toImageDataUri = async (
+  urlString: string | null | undefined,
+  options?: {
+    debugLabel?: string;
+  }
+): Promise<string | null> => {
   const normalized = String(urlString || '').trim();
-  if (!/^https?:\/\//i.test(normalized)) return null;
+  const debugLabel = options?.debugLabel || 'share-poster-image';
+  if (!/^https?:\/\//i.test(normalized)) {
+    console.warn(
+      `[share-poster] ${debugLabel} image-fetch skipped reason=invalid_url url=${normalized || 'empty'}`
+    );
+    return null;
+  }
   try {
     const response = await fetch(normalized);
-    if (!response.ok) return null;
+    const contentType = response.headers.get('content-type') || 'unknown';
+    if (!response.ok) {
+      console.warn(
+        `[share-poster] ${debugLabel} image-fetch failed status=${response.status} contentType=${contentType} url=${normalized}`
+      );
+      return null;
+    }
     const arrayBuffer = await response.arrayBuffer();
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    return `data:${contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
-  } catch {
+    const byteLength = arrayBuffer.byteLength;
+    if (byteLength <= 0) {
+      console.warn(
+        `[share-poster] ${debugLabel} image-fetch failed reason=empty_body contentType=${contentType} url=${normalized}`
+      );
+      return null;
+    }
+    console.info(
+      `[share-poster] ${debugLabel} image-fetch success bytes=${byteLength} contentType=${contentType} url=${normalized}`
+    );
+    return `data:${contentType === 'unknown' ? 'image/jpeg' : contentType};base64,${Buffer.from(arrayBuffer).toString('base64')}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[share-poster] ${debugLabel} image-fetch exception url=${normalized} message=${message}`
+    );
     return null;
   }
 };
@@ -285,7 +315,9 @@ export const renderStructuredPosterSvg = async (input: SharePosterStructuredCard
       light: '#FFFFFFFF',
     },
   });
-  const heroImageDataUrl = await toImageDataUri(input.imageUrl);
+  const heroImageDataUrl = await toImageDataUri(input.imageUrl, {
+    debugLabel: `structured mode=${input.mode}`,
+  });
   const appIconDataUrl = getSharePosterAppIconDataUri();
   const titleFontSize = 28;
   const titleLines = wrapPosterMixedText(
