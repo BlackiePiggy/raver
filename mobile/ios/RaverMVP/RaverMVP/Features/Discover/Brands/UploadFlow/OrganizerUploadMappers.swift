@@ -12,7 +12,8 @@ enum OrganizerUploadMappers {
             foundedYear: normalizedString(draft.foundedYear),
             frequency: normalizedString(draft.frequency),
             tagline: normalizedString(draft.tagline),
-            introduction: normalizedString(draft.introduction),
+            introduction: normalizedString(draft.primaryIntroduction),
+            descriptionI18n: webBiText(from: draft.descriptionI18n, preferredLanguage: draft.preferredLanguage),
             officialWebsite: normalizedString(draft.officialWebsite),
             facebookUrl: normalizedString(draft.facebook),
             instagramUrl: normalizedString(draft.instagram),
@@ -34,6 +35,8 @@ enum OrganizerUploadMappers {
         UpdateLearnFestivalInput(
             name: draft.primaryName,
             nameI18n: webBiText(from: draft.nameI18n, preferredLanguage: draft.preferredLanguage, includeEmptyForEdit: true),
+            baseBrandRevision: draft.baseBrandRevision,
+            editMode: "patch",
             abbreviation: draft.abbreviation.trimmingCharacters(in: .whitespacesAndNewlines),
             aliases: normalizedList(draft.aliases) ?? [],
             country: draft.country.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -41,7 +44,8 @@ enum OrganizerUploadMappers {
             foundedYear: draft.foundedYear.trimmingCharacters(in: .whitespacesAndNewlines),
             frequency: draft.frequency.trimmingCharacters(in: .whitespacesAndNewlines),
             tagline: draft.tagline.trimmingCharacters(in: .whitespacesAndNewlines),
-            introduction: draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines),
+            introduction: draft.primaryIntroduction,
+            descriptionI18n: webBiText(from: draft.descriptionI18n, preferredLanguage: draft.preferredLanguage, includeEmptyForEdit: true),
             officialWebsite: draft.officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines),
             facebookUrl: draft.facebook.trimmingCharacters(in: .whitespacesAndNewlines),
             instagramUrl: draft.instagram.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -78,19 +82,19 @@ enum OrganizerUploadMappers {
 
     private static func imageAssets(from draft: OrganizerUploadDraft) -> [WebEventImageAsset] {
         OrganizerUploadImageZone.allCases.flatMap { zone in
-            draft.images(for: zone).enumerated().compactMap { index, image in
+            draft.images(for: zone).enumerated().reduce(into: [WebEventImageAsset]()) { result, item in
+                let (index, image) = item
                 let url = image.remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !url.isEmpty else { return nil }
-                return WebEventImageAsset(
+                guard !url.isEmpty else { return }
+                result.append(WebEventImageAsset(
                     url: url,
                     type: zone.backendUsage,
                     label: zone.title,
                     sort: index,
                     order: index + 1,
                     source: "ios-organizer-upload-v1",
-                    fileName: image.fileName,
-                    visibility: zone == .proof ? "review_only" : "public"
-                )
+                    fileName: image.fileName
+                ))
             }
         }
     }

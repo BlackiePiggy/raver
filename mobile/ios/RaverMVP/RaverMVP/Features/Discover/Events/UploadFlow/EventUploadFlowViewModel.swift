@@ -4,7 +4,10 @@ import Foundation
 final class EventUploadFlowViewModel: ObservableObject {
     struct LineupTimetableAlignmentPrompt: Identifiable, Hashable {
         var id = UUID()
+        var title: String
         var message: String
+        var additions: [String]
+        var removals: [String]
         var alignedLineupArtists: [EventLineupArtistInput]
     }
 
@@ -285,10 +288,10 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func submit() async {
-        await submit(skipLineupAlignmentPreview: false)
+        await performSubmit()
     }
 
-    private func submit(skipLineupAlignmentPreview: Bool) async {
+    private func performSubmit() async {
         guard !isSubmitting else { return }
         validationIssues = EventUploadValidation.issues(for: draft)
         if let firstIssue = validationIssues.first {
@@ -355,18 +358,146 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    func applyLineupTimetableAlignmentAndSubmit() {
+    func confirmExactLineupAlignment() {
         guard let prompt = lineupTimetableAlignmentPrompt else { return }
         applyAlignedLineupArtists(prompt.alignedLineupArtists)
         lineupTimetableAlignmentPrompt = nil
         draft.dirty = true
         saveDraft(immediate: true)
-        Task { await submit(skipLineupAlignmentPreview: true) }
+        EventUploadAnalytics.track(
+            "event_upload_v2_lineup_exact_alignment_applied",
+            properties: [
+                "additionCount": "\(prompt.additions.count)",
+                "removalCount": "\(prompt.removals.count)",
+            ]
+        )
+        statusMessage = LT(
+            "阵容已按当前时间表精确对齐。未提交前你仍可以继续手动调整。",
+            "The lineup now exactly matches the current timetable. You can still make manual changes before submitting.",
+            "ラインナップを現在のタイムテーブルに完全同期しました。送信前なら引き続き手動調整できます。"
+        )
     }
 
     func dismissLineupTimetableAlignmentPrompt() {
         lineupTimetableAlignmentPrompt = nil
-        statusMessage = LT("请先让阵容和时间表中的 DJ 完全一致，再提交活动。", "Make the lineup and timetable DJs match before submitting.", "送信前にラインナップとタイムテーブルのDJを一致させてください。")
+    }
+
+    var lineupArtistsMissingFromLineup: [String] {
+        let lineupKeys = Set(draft.lineupOnlySlots.compactMap(lineupIdentityKey(for:)))
+        var seen = Set<String>()
+        var missing: [String] = []
+        for slot in draft.timetableSlots {
+            guard let key = timetableIdentityKey(for: slot), !lineupKeys.contains(key) else { continue }
+            if seen.insert(key).inserted {
+                missing.append(timetableDisplayName(slot))
+            }
+        }
+        return missing
+    }
+
+    var lineupArtistsOnlyInLineup: [String] {
+        let timetableKeys = Set(draft.timetableSlots.compactMap(timetableIdentityKey(for:)))
+        var seen = Set<String>()
+        var extra: [String] = []
+        for slot in draft.lineupOnlySlots {
+            guard let key = lineupIdentityKey(for: slot), !timetableKeys.contains(key) else { continue }
+            if seen.insert(key).inserted {
+                extra.append(lineupDisplayName(slot))
+            }
+        }
+        return extra
+    }
+
+    var lineupNeedsIncrementalFill: Bool {
+        !lineupArtistsMissingFromLineup.isEmpty
+    }
+
+    @discardableResult
+    func applyTimetableIncrementalFillToLineup() -> Int {
+        let existingKeys = Set(draft.lineupOnlySlots.compactMap(lineupIdentityKey(for:)))
+        var appendedCount = 0
+        var seenKeys = existingKeys
+
+        for slot in draft.timetableSlots {
+            guard let key = timetableIdentityKey(for: slot), !seenKeys.contains(key) else { continue }
+            var next = EventUploadLineupOnlySlotDraft(
+                canonicalArtistId: nil,
+                actType: slot.actType,
+                performerNames: Array(slot.performerNames.prefix(slot.actType.performerCount)),
+                performerDJIDs: Array(slot.performerDJIDs.prefix(slot.actType.performerCount)),
+                performerAvatarURLs: Array(slot.performerAvatarURLs.prefix(slot.actType.performerCount))
+            )
+            next.normalizePerformers()
+            draft.lineupOnlySlots.append(next)
+            seenKeys.insert(key)
+            appendedCount += 1
+        }
+
+        guard appendedCount > 0 else {
+            statusMessage = LT("当前时间表里的 DJ 已经都在阵容中了。", "All timetable DJs are already in the lineup.", "現在のタイムテーブルDJはすべてラインナップに含まれています。")
+            return 0
+        }
+
+        draft.dirty = true
+        saveDraft()
+        EventUploadAnalytics.track(
+            "event_upload_v2_lineup_incremental_fill_applied",
+            properties: ["count": "\(appendedCount)"]
+        )
+        statusMessage = LT("已从时间表补齐 \(appendedCount) 个阵容艺人。", "Added \(appendedCount) artists from the timetable to the lineup.", "タイムテーブルから \(appendedCount) 件の出演者をラインナップへ補完しました。")
+        return appendedCount
+    }
+
+    func prepareExactLineupAlignment() async {
+        do {
+            EventUploadAnalytics.track(
+                "event_upload_v2_lineup_exact_alignment_preview_started",
+                properties: ["mode": draft.mode.storageKeyPart]
+            )
+            try await webService.prepareAuthenticatedRequestForUserAction(source: "event-upload-lineup-align-preview")
+            await waitForOutstandingImageUploads()
+            try await uploadPendingImagesIfNeeded()
+
+            let preview = try await webService.previewEventLineupTimetableAlignment(
+                input: EventUploadMappers.createInput(from: draft)
+            )
+            let currentArtists = EventUploadMappers.lineupArtistInputs(from: draft) ?? []
+            let currentKeys = Set(currentArtists.compactMap { artistIdentityKey($0) })
+            let nextKeys = Set(preview.lineupArtists.compactMap { artistIdentityKey($0) })
+            let additions = preview.lineupArtists
+                .filter { artist in
+                    guard let key = artistIdentityKey(artist) else { return false }
+                    return !currentKeys.contains(key)
+                }
+                .map(\.djName)
+            let removals = currentArtists
+                .filter { artist in
+                    guard let key = artistIdentityKey(artist) else { return false }
+                    return !nextKeys.contains(key)
+                }
+                .map(\.djName)
+
+            lineupTimetableAlignmentPrompt = LineupTimetableAlignmentPrompt(
+                title: LT("按时间表精确对齐阵容？", "Align lineup exactly to timetable?", "タイムテーブルに完全同期しますか？"),
+                message: exactAlignmentMessage(additions: additions, removals: removals),
+                additions: additions,
+                removals: removals,
+                alignedLineupArtists: preview.lineupArtists
+            )
+            EventUploadAnalytics.track(
+                "event_upload_v2_lineup_exact_alignment_preview_succeeded",
+                properties: [
+                    "additionCount": "\(additions.count)",
+                    "removalCount": "\(removals.count)",
+                ]
+            )
+        } catch {
+            EventUploadAnalytics.track(
+                "event_upload_v2_lineup_exact_alignment_preview_failed",
+                properties: ["mode": draft.mode.storageKeyPart]
+            )
+            statusMessage = error.userFacingMessage ?? LT("暂时无法预览精确对齐结果，请稍后重试。", "Unable to preview exact alignment right now. Please try again.", "現在は完全同期のプレビューを表示できません。後でもう一度お試しください。")
+        }
     }
 
     private func applyAlignedLineupArtists(_ artists: [EventLineupArtistInput]) {
@@ -412,6 +543,93 @@ final class EventUploadFlowViewModel: ObservableObject {
         if performerCount >= 3 { return .b3b }
         if performerCount == 2 { return .b2b }
         return .solo
+    }
+
+    private func normalizedIdentityPart(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed.lowercased()
+    }
+
+    private func normalizedIdentityParts(names: [String], ids: [String?]) -> [String] {
+        let normalizedIDs = ids.compactMap(normalizedIdentityPart)
+        if !normalizedIDs.isEmpty {
+            return normalizedIDs
+        }
+        return names
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func lineupIdentityKey(for slot: EventUploadLineupOnlySlotDraft) -> String? {
+        let names = Array(slot.performerNames.prefix(slot.actType.performerCount))
+        let ids = Array(slot.performerDJIDs.prefix(slot.actType.performerCount))
+        let parts = normalizedIdentityParts(names: names, ids: ids)
+        guard !parts.isEmpty else { return nil }
+        return "\(slot.actType.rawValue)|\(parts.joined(separator: "|"))"
+    }
+
+    private func timetableIdentityKey(for slot: EventUploadLineupSlotDraft) -> String? {
+        let names = Array(slot.performerNames.prefix(slot.actType.performerCount))
+        let ids = Array(slot.performerDJIDs.prefix(slot.actType.performerCount))
+        let parts = normalizedIdentityParts(names: names, ids: ids)
+        guard !parts.isEmpty else { return nil }
+        return "\(slot.actType.rawValue)|\(parts.joined(separator: "|"))"
+    }
+
+    private func artistIdentityKey(_ artist: EventLineupArtistInput) -> String? {
+        let sourceNames = artist.memberNames?.isEmpty == false ? (artist.memberNames ?? []) : [artist.djName]
+        let names = sourceNames.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let ids = artist.memberDjIds?.isEmpty == false ? artist.memberDjIds ?? [] : [artist.djId]
+        let performerCount = max(names.filter { !$0.isEmpty }.count, ids.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank }.count, 1)
+        let actType = alignmentActType(performerCount: performerCount)
+        let parts = normalizedIdentityParts(names: names, ids: ids)
+        guard !parts.isEmpty else { return nil }
+        return "\(actType.rawValue)|\(parts.joined(separator: "|"))"
+    }
+
+    private func lineupDisplayName(_ slot: EventUploadLineupOnlySlotDraft) -> String {
+        let value = EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames)
+        return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? LT("未命名阵容", "Untitled Lineup", "未命名ラインナップ")
+            : value
+    }
+
+    private func timetableDisplayName(_ slot: EventUploadLineupSlotDraft) -> String {
+        let value = EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames)
+        return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? LT("未命名演出", "Untitled Act", "未命名の出演")
+            : value
+    }
+
+    private func exactAlignmentMessage(additions: [String], removals: [String]) -> String {
+        var parts: [String] = [
+            LT(
+                "这个操作会让阵容精确等于当前时间表推导出的艺人列表。",
+                "This will make the lineup exactly match the artists inferred from the current timetable.",
+                "現在のタイムテーブルから推定した出演者にラインナップを完全一致させます。"
+            )
+        ]
+        if !additions.isEmpty {
+            parts.append(
+                LT(
+                    "将新增：\(additions.joined(separator: "、"))",
+                    "Will add: \(additions.joined(separator: ", "))",
+                    "追加: \(additions.joined(separator: "、"))"
+                )
+            )
+        }
+        if !removals.isEmpty {
+            parts.append(
+                LT(
+                    "将移除：\(removals.joined(separator: "、"))",
+                    "Will remove: \(removals.joined(separator: ", "))",
+                    "削除: \(removals.joined(separator: "、"))"
+                )
+            )
+        }
+        return parts.joined(separator: "\n")
     }
 
     func updateLocalizedField(_ keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>, value: String) {
@@ -1346,6 +1564,11 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
         draft.dirty = true
         saveDraft()
+        statusMessage = LT(
+            "已删除该舞台下的时间表，阵容页里已有艺人保持不变。",
+            "Removed this stage's timetable. Artists already listed in the lineup were kept.",
+            "このステージのタイムテーブルを削除しました。ラインナップ側の出演者はそのまま保持されます。"
+        )
         EventUploadAnalytics.track("event_upload_v2_stage_removed", properties: ["count": "\(draft.stageEntries.count)"])
     }
 
@@ -1380,6 +1603,11 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.timetableSlots.removeAll()
         draft.dirty = true
         saveDraft()
+        statusMessage = LT(
+            "已清空全部时间表和舞台信息，阵容页里的艺人不会被自动删除。",
+            "Cleared all stages and timetable data. Lineup artists were not removed automatically.",
+            "すべてのステージとタイムテーブル情報を削除しました。ラインナップ側の出演者は自動削除されません。"
+        )
         EventUploadAnalytics.track("event_upload_v2_timetable_cleared_all")
     }
 
@@ -1433,6 +1661,11 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.timetableSlots.removeAll { $0.id == id }
         draft.dirty = true
         saveDraft()
+        statusMessage = LT(
+            "已删除该时间表条目，这只会影响时间表，不会自动删除阵容艺人。",
+            "Removed this timetable entry. This only affects the timetable and will not delete lineup artists automatically.",
+            "このタイムテーブル項目を削除しました。影響するのはタイムテーブルのみで、ラインナップ出演者は自動削除されません。"
+        )
         EventUploadAnalytics.track("event_upload_v2_lineup_slot_removed", properties: ["count": "\(draft.timetableSlots.count)"])
     }
 

@@ -33,6 +33,25 @@ const integerOrNull = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 };
 
+export class BrandSubmissionConflictError extends Error {
+  readonly code = 'BRAND_SUBMISSION_STALE_EDIT';
+  readonly details?: {
+    targetBrandId?: string;
+    baseBrandRevision?: number | null;
+    currentBrandRevision?: number | null;
+  };
+
+  constructor(message: string, details?: {
+    targetBrandId?: string;
+    baseBrandRevision?: number | null;
+    currentBrandRevision?: number | null;
+  }) {
+    super(message);
+    this.name = 'BrandSubmissionConflictError';
+    this.details = details;
+  }
+}
+
 const slugify = (value: string): string =>
   value
     .toLowerCase()
@@ -179,6 +198,292 @@ const collectImageAssetUrls = (value: unknown): string[] => {
     .filter((item): item is string => Boolean(item));
 };
 
+export const getBrandEditTargetIdFromPayload = (
+  payload: Prisma.JsonObject | Prisma.InputJsonObject
+): string | null =>
+  cleanText(payload.targetBrandId) || cleanText(payload.editTargetBrandId) || null;
+
+const validateBaseBrandRevision = (
+  payload: Prisma.JsonObject,
+  currentRevision: number
+): void => {
+  const targetBrandId = getBrandEditTargetIdFromPayload(payload);
+  if (!targetBrandId) return;
+  const baseBrandRevision = integerOrNull(payload.baseBrandRevision);
+  if (baseBrandRevision === null) {
+    throw new BrandSubmissionConflictError('编辑基线已失效，请重新打开主办方后再提交', {
+      targetBrandId,
+      baseBrandRevision: null,
+      currentBrandRevision: currentRevision,
+    });
+  }
+  if (baseBrandRevision !== currentRevision) {
+    throw new BrandSubmissionConflictError('主办方在你编辑期间已被更新，请刷新最新内容后重新编辑提交', {
+      targetBrandId,
+      baseBrandRevision,
+      currentBrandRevision: currentRevision,
+    });
+  }
+};
+
+export const assertBrandSubmissionBaseRevision = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  payload: Prisma.JsonObject
+): Promise<void> => {
+  const targetBrandId = getBrandEditTargetIdFromPayload(payload);
+  if (!targetBrandId) return;
+  const existing = await db.wikiFestival.findUnique({
+    where: { id: targetBrandId },
+    select: {
+      id: true,
+      revision: true,
+    },
+  });
+  if (!existing) {
+    throw new Error('待更新的主办方不存在');
+  }
+  validateBaseBrandRevision(payload, existing.revision);
+};
+
+const normalizedBrandNamesFromPayload = (payload: Prisma.JsonObject): string[] => {
+  const names = [
+    resolvePrimaryName(payload),
+    ...stringArray(payload.aliases),
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => item.toLowerCase());
+  return Array.from(new Set(names));
+};
+
+export const buildBrandSubmissionReviewNotes = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  payload: Prisma.JsonObject
+): Promise<Prisma.InputJsonObject> => {
+  const targetBrandId = getBrandEditTargetIdFromPayload(payload);
+  const normalizedNames = normalizedBrandNamesFromPayload(payload);
+  const searchName = resolvePrimaryName(payload).trim();
+
+  if (!normalizedNames.length && !searchName) {
+    return {};
+  }
+
+  const [duplicateBrands, similarEvents] = await Promise.all([
+    normalizedNames.length
+      ? db.wikiFestival.findMany({
+          where: {
+            isActive: true,
+            ...(targetBrandId ? { id: { not: targetBrandId } } : {}),
+            OR: normalizedNames.flatMap((name) => ([
+              { name: { equals: name, mode: 'insensitive' as const } },
+              { aliases: { has: name } },
+            ])),
+          },
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            country: true,
+            revision: true,
+          },
+          take: 5,
+        })
+      : Promise.resolve([]),
+    searchName
+      ? db.event.findMany({
+          where: {
+            OR: [
+              { name: { contains: searchName, mode: 'insensitive' } },
+              { organizerName: { contains: searchName, mode: 'insensitive' } },
+            ],
+          },
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            country: true,
+            startDate: true,
+          },
+          orderBy: { startDate: 'desc' },
+          take: 5,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    brandScreening: {
+      duplicateBrandWarning: duplicateBrands.length > 0,
+      duplicateBrands: duplicateBrands.map((item) => ({
+        id: item.id,
+        name: item.name,
+        city: item.city,
+        country: item.country,
+        revision: item.revision,
+      })),
+      eventNameConflictWarning: similarEvents.length > 0,
+      similarEvents: similarEvents.map((item) => ({
+        id: item.id,
+        name: item.name,
+        city: item.city,
+        country: item.country,
+        startDate: item.startDate.toISOString(),
+      })),
+    } as Prisma.InputJsonValue,
+  };
+};
+
+type BrandImageAssetPayload = {
+  type: 'avatar' | 'background' | 'proof' | 'poster' | 'other';
+  label: string;
+  url: string;
+  source?: string;
+  originalUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  sort?: number;
+  order?: number;
+  visibility?: 'public' | 'review_only';
+};
+
+const normalizeBrandImageAssetType = (value: unknown): BrandImageAssetPayload['type'] => {
+  const text = cleanText(value)?.toLowerCase() || '';
+  switch (text) {
+    case 'avatar':
+    case 'background':
+    case 'proof':
+    case 'poster':
+      return text;
+    default:
+      return 'other';
+  }
+};
+
+const brandImageAssetLabel = (type: BrandImageAssetPayload['type']): string => {
+  switch (type) {
+    case 'avatar':
+      return 'Avatar';
+    case 'background':
+      return 'Background';
+    case 'proof':
+      return 'Proof';
+    case 'poster':
+      return 'Poster';
+    case 'other':
+      return 'Other';
+  }
+};
+
+const normalizeBrandImageAssetVisibility = (
+  type: BrandImageAssetPayload['type']
+): BrandImageAssetPayload['visibility'] =>
+  type === 'proof' ? 'review_only' : 'public';
+
+const normalizeBrandImageAssets = (payload: Prisma.JsonObject): BrandImageAssetPayload[] => {
+  const seeded: Array<Partial<BrandImageAssetPayload> & { url: string }> = [];
+
+  if (Array.isArray(payload.imageAssets)) {
+    for (const item of payload.imageAssets) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const row = item as Record<string, unknown>;
+      const url = cleanText(row.url);
+      if (!url) continue;
+      seeded.push({
+        type: normalizeBrandImageAssetType(row.type),
+        label: cleanText(row.label) || undefined,
+        url,
+        source: cleanText(row.source),
+        originalUrl: cleanText(row.originalUrl),
+        fileName: cleanText(row.fileName),
+        mimeType: cleanText(row.mimeType),
+        sort: integerOrNull(row.sort) ?? integerOrNull(row.order) ?? undefined,
+      });
+    }
+  }
+
+  const avatarUrl = cleanText(payload.avatarUrl);
+  if (avatarUrl) {
+    seeded.push({ type: 'avatar', label: 'Avatar', url: avatarUrl, sort: 0 });
+  }
+  const backgroundUrl = cleanText(payload.backgroundUrl);
+  if (backgroundUrl) {
+    seeded.push({ type: 'background', label: 'Background', url: backgroundUrl, sort: 0 });
+  }
+  const proofImageUrl = cleanText(payload.proofImageUrl);
+  if (proofImageUrl) {
+    seeded.push({ type: 'proof', label: 'Proof', url: proofImageUrl, sort: 0 });
+  }
+
+  const deduped = new Map<string, BrandImageAssetPayload>();
+  let nextSort = 0;
+
+  for (const asset of seeded) {
+    const url = asset.url.trim();
+    const key = url.toLowerCase();
+    if (deduped.has(key)) {
+      const existing = deduped.get(key)!;
+      if (existing.type === 'other' && asset.type && asset.type !== 'other') {
+        existing.type = asset.type;
+        existing.label = asset.label || brandImageAssetLabel(asset.type);
+        existing.visibility = normalizeBrandImageAssetVisibility(asset.type);
+      }
+      if (!existing.originalUrl) existing.originalUrl = asset.originalUrl || url;
+      if (!existing.fileName && asset.fileName) existing.fileName = asset.fileName;
+      if (!existing.mimeType && asset.mimeType) existing.mimeType = asset.mimeType;
+      if (!existing.source && asset.source) existing.source = asset.source;
+      if (asset.sort !== undefined) {
+        existing.sort = existing.sort === undefined ? asset.sort : Math.min(existing.sort, asset.sort);
+        existing.order = (existing.sort ?? 0) + 1;
+      }
+      continue;
+    }
+
+    const type = asset.type ?? 'other';
+    const sort = asset.sort ?? nextSort;
+    deduped.set(key, {
+      type,
+      label: asset.label || brandImageAssetLabel(type),
+      url,
+      source: asset.source || 'brand_submission',
+      originalUrl: asset.originalUrl || url,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType,
+      sort,
+      order: sort + 1,
+      visibility: normalizeBrandImageAssetVisibility(type),
+    });
+    nextSort = Math.max(nextSort, sort + 1);
+  }
+
+  return Array.from(deduped.values()).sort((left, right) => {
+    const leftSort = typeof left.sort === 'number' ? left.sort : Number.MAX_SAFE_INTEGER;
+    const rightSort = typeof right.sort === 'number' ? right.sort : Number.MAX_SAFE_INTEGER;
+    return leftSort - rightSort;
+  });
+};
+
+export const normalizeBrandSubmissionPayload = (
+  payload: Prisma.InputJsonObject | Prisma.JsonObject
+): Prisma.InputJsonObject => {
+  const normalized = { ...(payload as Prisma.JsonObject) } as Record<string, Prisma.InputJsonValue>;
+  const imageAssets = normalizeBrandImageAssets(payload as Prisma.JsonObject);
+  const avatarAsset = imageAssets.find((item) => item.type === 'avatar');
+  const backgroundAsset = imageAssets.find((item) => item.type === 'background');
+  const proofAsset = imageAssets.find((item) => item.type === 'proof');
+  if (!cleanText((payload as Prisma.JsonObject).avatarUrl) && avatarAsset?.url) {
+    normalized.avatarUrl = avatarAsset.url;
+  }
+  if (!cleanText((payload as Prisma.JsonObject).backgroundUrl) && backgroundAsset?.url) {
+    normalized.backgroundUrl = backgroundAsset.url;
+  }
+  if (!cleanText((payload as Prisma.JsonObject).proofImageUrl) && proofAsset?.url) {
+    normalized.proofImageUrl = proofAsset.url;
+  }
+  if (imageAssets.length > 0) {
+    normalized.imageAssets = imageAssets as unknown as Prisma.InputJsonValue;
+  }
+  return normalized as Prisma.InputJsonObject;
+};
+
 export const collectBrandSubmissionMediaUrls = (payload: Prisma.JsonObject): string[] => {
   const urls = [
     cleanText(payload.avatarUrl) || null,
@@ -199,6 +504,10 @@ export const bindBrandDraftMediaToSubmission = async (
   const urls = collectBrandSubmissionMediaUrls(payload);
   if (!urls.length) return;
 
+  // Once the user submits, brand media should leave the draft bucket and belong to
+  // the submission review record. If review later rejects the submission, we keep
+  // these assets attached to the submission for audit/history and possible resubmit,
+  // matching the current event submission behavior.
   await db.mediaAsset.updateMany({
     where: {
       ownerType: 'wiki_brand_draft',
@@ -213,6 +522,55 @@ export const bindBrandDraftMediaToSubmission = async (
   });
 };
 
+export const cleanupOrphanedBrandDraftMediaAfterSubmission = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  payload: Prisma.JsonObject,
+  submitterId: string
+): Promise<string[]> => {
+  const draftId = cleanText(payload.draftId);
+  if (!draftId) return [];
+
+  const referencedUrls = new Set(
+    collectBrandSubmissionMediaUrls(payload).map((item) => item.trim().toLowerCase())
+  );
+
+  const staleAssets = await db.mediaAsset.findMany({
+    where: {
+      ownerType: 'wiki_brand_draft',
+      ownerId: draftId,
+      uploadedById: submitterId,
+      status: 'active',
+    },
+    select: {
+      id: true,
+      url: true,
+      objectKey: true,
+    },
+  });
+
+  const staleIds = staleAssets
+    .filter((asset) => !referencedUrls.has(asset.url.trim().toLowerCase()))
+    .map((asset) => asset.id);
+
+  if (!staleIds.length) return [];
+
+  await db.mediaAsset.updateMany({
+    where: {
+      id: { in: staleIds },
+    },
+    data: {
+      status: 'deleted',
+      deletedAt: new Date(),
+      purgeNextRunAt: new Date(),
+    },
+  });
+
+  return staleAssets
+    .filter((asset) => staleIds.includes(asset.id))
+    .map((asset) => cleanText(asset.objectKey))
+    .filter((item): item is string => Boolean(item));
+};
+
 export const rebindBrandSubmissionMediaToBrand = async (
   db: Prisma.TransactionClient | PrismaClient,
   payload: Prisma.JsonObject,
@@ -222,6 +580,9 @@ export const rebindBrandSubmissionMediaToBrand = async (
   const urls = collectBrandSubmissionMediaUrls(payload);
   if (!urls.length) return;
 
+  // Only approved submissions promote media onto the public brand entity. Rejected
+  // submissions intentionally stay on the content submission record instead of being
+  // deleted here, which keeps moderation evidence and aligns with event handling.
   await db.mediaAsset.updateMany({
     where: {
       ownerType: 'content-submission',
@@ -253,6 +614,7 @@ export const createOrUpdateBrandFromSubmission = async (
     if (!existing) {
       throw new Error('目标主办方不存在');
     }
+    validateBaseBrandRevision(payload, existing.revision);
 
     const name = resolvePrimaryName(payload, existing.name);
     if (!name) {
@@ -409,6 +771,7 @@ export const createOrUpdateBrandFromSubmission = async (
         tiktokUrl: nextTiktokUrl,
         avatarUrl: resolveOptionalString(payload, 'avatarUrl', existing.avatarUrl),
         backgroundUrl: resolveOptionalString(payload, 'backgroundUrl', existing.backgroundUrl),
+        revision: { increment: 1 },
         links: nextLinks === null
           ? (existing.links ?? undefined)
           : (nextLinks as unknown as Prisma.InputJsonValue),

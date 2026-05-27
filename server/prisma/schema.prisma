@@ -1043,6 +1043,7 @@ model WikiFestival {
   backgroundUrl   String?  @map("background_url")
   links           Json?
   isActive        Boolean  @default(true) @map("is_active")
+  revision        Int      @default(1)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

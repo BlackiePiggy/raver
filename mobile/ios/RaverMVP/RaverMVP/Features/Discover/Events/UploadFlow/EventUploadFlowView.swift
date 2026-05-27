@@ -237,14 +237,14 @@ struct EventUploadFlowView: View {
         } message: {
             Text(viewModel.statusMessage ?? "")
         }
-        .alert(LT("阵容和时间表未对齐", "Lineup Mismatch", "ラインナップ不一致"), isPresented: Binding(
+        .alert(viewModel.lineupTimetableAlignmentPrompt?.title ?? LT("按时间表精确对齐阵容", "Align Lineup Exactly", "タイムテーブルに完全同期"), isPresented: Binding(
             get: { viewModel.lineupTimetableAlignmentPrompt != nil },
             set: { if !$0 { viewModel.dismissLineupTimetableAlignmentPrompt() } }
         )) {
-            Button(LT("一键对齐并提交", "Align & Submit", "揃えて送信")) {
-                viewModel.applyLineupTimetableAlignmentAndSubmit()
+            Button(LT("确认对齐", "Confirm Align", "同期する"), role: .destructive) {
+                viewModel.confirmExactLineupAlignment()
             }
-            Button(LT("返回手动修改", "Edit Manually", "手動で修正"), role: .cancel) {
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
                 viewModel.dismissLineupTimetableAlignmentPrompt()
             }
         } message: {
@@ -283,7 +283,7 @@ struct EventUploadFlowView: View {
                 stageIndexPendingDeletion = nil
             }
         } message: {
-            Text(LT("这个舞台下的所有时间表节目都会一起删除，不会保留。", "All timetable sets under this stage will be deleted too.", "このステージ配下のタイムテーブル出演はすべて一緒に削除されます。"))
+            Text(LT("这个舞台下的所有时间表节目都会一起删除，但阵容页里已有的艺人会保留，不会自动删除。", "All timetable sets under this stage will be deleted, but lineup artists already listed on the lineup page will be kept.", "このステージ配下のタイムテーブル出演はすべて削除されますが、ラインナップページ上の出演者は自動削除されません。"))
         }
         .confirmationDialog(
             LT("清空全部时间表？", "Clear all timetable data?", "タイムテーブルをすべて削除しますか？"),
@@ -295,7 +295,7 @@ struct EventUploadFlowView: View {
             }
             Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
         } message: {
-            Text(LT("会一次性清空当前草稿里的全部舞台信息和全部时间表信息，不留任何条目。", "This removes every stage and every timetable item from the current draft.", "現在の下書きにある全ステージ情報と全タイムテーブル情報をまとめて削除します。"))
+            Text(LT("会一次性清空当前草稿里的全部舞台信息和全部时间表信息；阵容页中已有艺人不会自动删除。", "This removes every stage and every timetable item from the current draft; existing lineup artists will not be deleted automatically.", "現在の下書きにある全ステージ情報と全タイムテーブル情報をまとめて削除します。ラインナップ側の出演者は自動削除されません。"))
         }
     }
 
@@ -1038,6 +1038,7 @@ struct EventUploadFlowView: View {
                 HStack(spacing: 10) {
                     reviewSummaryChip(title: LT("时间表节目", "Timetable Sets", "タイムテーブル"), value: "\(viewModel.draft.timetableSlots.count)")
                     reviewSummaryChip(title: LT("仅阵容条目", "Lineup Only", "ラインナップのみ"), value: "\(viewModel.draft.lineupOnlySlots.count)")
+                    reviewSummaryChip(title: LT("待补齐", "Missing", "補完待ち"), value: "\(viewModel.lineupArtistsMissingFromLineup.count)")
                     reviewSummaryChip(title: LT("图片数量", "Images", "画像"), value: "\(uploadedImageCount)")
                 }
             }
@@ -1089,6 +1090,56 @@ struct EventUploadFlowView: View {
                     EventLineupActCodec.composeName(type: slot.actType, performerNames: slot.performerNames)
                 })
             )
+
+            if viewModel.lineupNeedsIncrementalFill || !viewModel.lineupArtistsOnlyInLineup.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(LT("阵容与时间表差异", "Lineup vs Timetable", "ラインナップ差分"))
+                        .font(.headline)
+                        .foregroundStyle(RaverTheme.primaryText)
+                    if viewModel.lineupNeedsIncrementalFill {
+                        inlineInfoCard(
+                            LT(
+                                "时间表里有 \(viewModel.lineupArtistsMissingFromLineup.count) 位 DJ 还没进入阵容，可以先补齐后再提交。",
+                                "\(viewModel.lineupArtistsMissingFromLineup.count) timetable DJs are not yet in the lineup. You can fill them into the lineup before submitting.",
+                                "タイムテーブル内の \(viewModel.lineupArtistsMissingFromLineup.count) 件のDJがまだラインナップに入っていません。送信前に補完できます。"
+                            )
+                        )
+                    }
+                    if !viewModel.lineupArtistsOnlyInLineup.isEmpty {
+                        inlineInfoCard(
+                            LT(
+                                "当前有 \(viewModel.lineupArtistsOnlyInLineup.count) 位艺人只存在于阵容中，默认提交会保留他们。",
+                                "\(viewModel.lineupArtistsOnlyInLineup.count) artists exist only in the lineup right now. Default submit will keep them.",
+                                "現在 \(viewModel.lineupArtistsOnlyInLineup.count) 件の出演者がラインナップのみに存在しています。通常送信では保持されます。"
+                            )
+                        )
+                    }
+                    HStack(spacing: 10) {
+                        Button {
+                            _ = viewModel.applyTimetableIncrementalFillToLineup()
+                        } label: {
+                            compactActionButtonLabel(
+                                title: LT("补齐阵容", "Fill Lineup", "ラインナップ補完"),
+                                systemImage: "plus.circle.fill",
+                                filled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!viewModel.lineupNeedsIncrementalFill)
+
+                        Button {
+                            Task { await viewModel.prepareExactLineupAlignment() }
+                        } label: {
+                            compactActionButtonLabel(
+                                title: LT("精确对齐", "Exact Align", "完全同期"),
+                                systemImage: "arrow.triangle.2.circlepath",
+                                filled: false
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 
@@ -1106,6 +1157,53 @@ struct EventUploadFlowView: View {
             inlineInfoCard(
                 LT("如果暂时没有阵容信息，也可以直接跳过这一页。", "You can also skip this page if you do not have lineup details yet.", "ラインナップ情報がまだなければ、このページもそのままスキップできます。")
             )
+
+            if viewModel.lineupNeedsIncrementalFill || !viewModel.lineupArtistsOnlyInLineup.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    if viewModel.lineupNeedsIncrementalFill {
+                        inlineInfoCard(
+                            LT(
+                                "时间表中有 \(viewModel.lineupArtistsMissingFromLineup.count) 位 DJ 尚未加入阵容。默认提交不会自动删阵容，但你可以先一键补齐。",
+                                "\(viewModel.lineupArtistsMissingFromLineup.count) timetable DJs are not yet in the lineup. Default submit will not remove lineup artists, but you can fill the lineup first.",
+                                "タイムテーブル内の \(viewModel.lineupArtistsMissingFromLineup.count) 件のDJがまだラインナップに入っていません。通常送信ではラインナップを削除しませんが、先に補完できます。"
+                            )
+                        )
+                    }
+                    if !viewModel.lineupArtistsOnlyInLineup.isEmpty {
+                        inlineInfoCard(
+                            LT(
+                                "阵容中有 \(viewModel.lineupArtistsOnlyInLineup.count) 位艺人目前不在时间表里，这些艺人默认会保留。",
+                                "\(viewModel.lineupArtistsOnlyInLineup.count) lineup artists are not currently in the timetable. They will be kept by default.",
+                                "ラインナップ内の \(viewModel.lineupArtistsOnlyInLineup.count) 件の出演者は現在タイムテーブルにありませんが、通常は保持されます。"
+                            )
+                        )
+                    }
+                    HStack(spacing: 10) {
+                        Button {
+                            _ = viewModel.applyTimetableIncrementalFillToLineup()
+                        } label: {
+                            compactActionButtonLabel(
+                                title: LT("用时间表补齐阵容", "Fill from Timetable", "タイムテーブルで補完"),
+                                systemImage: "plus.circle.fill",
+                                filled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!viewModel.lineupNeedsIncrementalFill)
+
+                        Button {
+                            Task { await viewModel.prepareExactLineupAlignment() }
+                        } label: {
+                            compactActionButtonLabel(
+                                title: LT("按时间表精确对齐", "Exact Align to Timetable", "タイムテーブルに完全同期"),
+                                systemImage: "exclamationmark.arrow.triangle.2.circlepath",
+                                filled: false
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
 
             HStack(spacing: 8) {
                 Image(systemName: "music.mic")
@@ -1556,6 +1654,41 @@ struct EventUploadFlowView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func compactActionButtonLabel(title: String, systemImage: String, filled: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+            Text(title)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(filled ? .white : RaverTheme.primaryText)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            Group {
+                if filled {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(RaverTheme.card)
+                }
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(filled ? RaverTheme.accent.opacity(0.15) : RaverTheme.cardBorder, lineWidth: 1)
+        )
     }
 
     private func ticketFieldCard(title: String, text: Binding<String>) -> some View {
@@ -3155,6 +3288,7 @@ private struct EventUploadPosterAIImportSheet: View {
                                 .foregroundStyle(RaverTheme.secondaryText)
                                 .lineLimit(1)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(RaverTheme.card, in: shape)
                         .overlay(
@@ -3168,6 +3302,7 @@ private struct EventUploadPosterAIImportSheet: View {
                                 }
                             }
                         }
+                        .clipShape(shape)
                         .contentShape(shape)
                         .onTapGesture {
                             guard !isRunning else { return }
@@ -3349,7 +3484,8 @@ private struct EventUploadPosterAIImportSheet: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(height: 104)
+        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104)
+        .clipped()
         .clipShape(shape)
         .contentShape(shape)
     }
@@ -4050,6 +4186,7 @@ private struct EventUploadLineupAIImportSheet: View {
                                     .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(RaverTheme.card, in: shape)
                         .overlay(
@@ -4063,6 +4200,7 @@ private struct EventUploadLineupAIImportSheet: View {
                                 }
                             }
                         }
+                        .clipShape(shape)
                         .contentShape(shape)
                         .onTapGesture {
                             toggleImageSelection(image.id)
@@ -4145,8 +4283,10 @@ private struct EventUploadLineupAIImportSheet: View {
                             }
                         }
                     }
-                .frame(width: 88, height: 72)
-                .clipped()
+                    .frame(width: 88, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipped()
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.image.fileName)
@@ -4410,7 +4550,8 @@ private struct EventUploadLineupAIImportSheet: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(height: 104)
+        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104)
+        .clipped()
         .clipShape(shape)
         .contentShape(shape)
     }
@@ -5187,6 +5328,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                                     .foregroundStyle(selectedImageIDs.contains(image.id) ? RaverTheme.accent : RaverTheme.secondaryText)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(RaverTheme.card, in: shape)
                         .overlay(
@@ -5200,6 +5342,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                                 }
                             }
                         }
+                        .clipShape(shape)
                         .contentShape(shape)
                         .onTapGesture {
                             toggleImageSelection(image.id)
@@ -5282,8 +5425,10 @@ private struct EventUploadTimetableAIImportSheet: View {
                             }
                         }
                     }
-                .frame(width: 88, height: 72)
-                .clipped()
+                    .frame(width: 88, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipped()
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(entry.image.fileName)
@@ -5702,7 +5847,8 @@ private struct EventUploadTimetableAIImportSheet: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(height: 104)
+        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104)
+        .clipped()
         .clipShape(shape)
         .contentShape(shape)
     }

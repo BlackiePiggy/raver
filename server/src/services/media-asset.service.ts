@@ -13,6 +13,8 @@ type RegisterMediaAssetInput = {
   url: string;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  width?: number | null;
+  height?: number | null;
   uploadedById?: string | null;
   metadata?: Prisma.InputJsonValue | null;
 };
@@ -38,6 +40,8 @@ export const mediaAssetService = {
         url: input.url,
         mimeType: input.mimeType || null,
         sizeBytes: input.sizeBytes ?? null,
+        width: input.width ?? null,
+        height: input.height ?? null,
         uploadedById: input.uploadedById || null,
         metadata: input.metadata || undefined,
       },

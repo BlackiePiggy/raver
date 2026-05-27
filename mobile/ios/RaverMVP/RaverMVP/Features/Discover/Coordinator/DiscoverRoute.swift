@@ -5,8 +5,6 @@ enum DiscoverRoute: Hashable {
     case festivalDetail(festivalID: String, prefetchedFestival: LearnFestival? = nil)
     case setDetail(setID: String)
     case newsDetail(articleID: String)
-    case learnFestivalCreate
-    case learnFestivalEdit(festivalID: String)
     case organizerCreate(initialName: String? = nil, sourceContextID: String? = nil)
     case organizerEdit(brandID: String)
     case newsPublish
@@ -22,7 +20,7 @@ extension Notification.Name {
     static let contentSubmissionDidQueue = Notification.Name("contentSubmissionDidQueue")
     static let discoverNewsDidPublish = Notification.Name("discoverNewsDidPublish")
     static let discoverSetDidSave = Notification.Name("discoverSetDidSave")
-    static let discoverFestivalDidSave = Notification.Name("discoverFestivalDidSave")
+    static let discoverOrganizerDidSave = Notification.Name("discoverOrganizerDidSave")
     static let discoverOrganizerDidCreate = Notification.Name("discoverOrganizerDidCreate")
     static let discoverOrganizerSubmissionQueued = Notification.Name("discoverOrganizerSubmissionQueued")
     static let discoverRatingUnitDidUpdate = Notification.Name("discoverRatingUnitDidUpdate")
@@ -103,16 +101,6 @@ func makeDiscoverRouteDestination(
         DiscoverNewsPublishSheet { draft in
             _ = try await appContainer.discoverNewsRepository.publish(draft: draft)
             NotificationCenter.default.post(name: .discoverNewsDidPublish, object: nil)
-        }
-
-    case .learnFestivalCreate:
-        LearnFestivalEditorView(mode: .create) { festival in
-            NotificationCenter.default.post(name: .discoverFestivalDidSave, object: festival.id)
-        }
-
-    case .learnFestivalEdit(let festivalID):
-        DiscoverFestivalEditorLoaderView(festivalID: festivalID, repository: appContainer.discoverWikiRepository) { updated in
-            NotificationCenter.default.post(name: .discoverFestivalDidSave, object: updated.id)
         }
 
     case .organizerCreate(let initialName, let sourceContextID):
@@ -367,42 +355,6 @@ private struct DiscoverFestivalDetailLoaderView: View {
         if festival == nil {
             phase = .initialLoading
         }
-        do {
-            festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
-            phase = .success
-        } catch {
-            phase = .failure(message: error.userFacingMessage ?? LT("电音节加载失败，请稍后重试", "Failed to load festival. Please try again later.", "フェスを読み込めませんでした。時間をおいて再試行してください。"))
-        }
-    }
-}
-
-private struct DiscoverFestivalEditorLoaderView: View {
-    let festivalID: String
-    let repository: DiscoverWikiRepository
-    let onSave: (LearnFestival) -> Void
-
-    @State private var festival: LearnFestival?
-    @State private var phase: LoadPhase = .idle
-
-    var body: some View {
-        DiscoverRouteLoaderScaffold(phase: phase) {
-            Task { await loadFestival(force: true) }
-        } content: {
-            if let festival {
-                LearnFestivalEditorView(mode: .edit(festival), onSaved: onSave)
-            } else {
-                Color.clear
-            }
-        }
-        .task {
-            await loadFestival(force: false)
-        }
-    }
-
-    @MainActor
-    private func loadFestival(force: Bool) async {
-        if festival != nil && !force { return }
-        phase = .initialLoading
         do {
             festival = try await fetchLearnFestivalByID(festivalID, repository: repository)
             phase = .success

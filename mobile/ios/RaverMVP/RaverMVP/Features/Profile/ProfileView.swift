@@ -2119,6 +2119,8 @@ private struct WidgetLayoutStylePreviewCard: View {
 struct MovieBannerEditorView: View {
     @State private var configuration = MovieBannerConfiguration()
     @State private var showDisplay = false
+    @State private var inlinePreviewStarted = false
+    @State private var inlinePreviewRevision = 0
     @State private var displayPreparedLandscapeLock = false
     @State private var prepareDisplayTask: Task<Void, Never>?
     @FocusState private var isInputFocused: Bool
@@ -2129,7 +2131,7 @@ struct MovieBannerEditorView: View {
 
     private var editorFontSizeRange: ClosedRange<Double> {
         MovieBannerConfiguration.fontSizeRange(
-            for: UIScreen.main.bounds.size,
+            for: MovieBannerConfiguration.referenceLandscapeCanvasSize,
             mode: configuration.mode
         )
     }
@@ -2160,72 +2162,187 @@ struct MovieBannerEditorView: View {
                                 .fill(Color.white.opacity(0.06))
                         )
 
-                        Button {
-                            isInputFocused = false
-                            prepareDisplayTask?.cancel()
-                            prepareDisplayTask = Task {
-                                await prepareLandscapeDisplay()
+                        HStack(spacing: 10) {
+                            Button {
+                                isInputFocused = false
+                                inlinePreviewStarted = true
+                                inlinePreviewRevision += 1
+                            } label: {
+                                HStack {
+                                    Image(systemName: "sparkles.tv")
+                                    Text(LT("预览效果", "Preview", "プレビュー"))
+                                }
                             }
-                        } label: {
-                            HStack {
-                                Image(systemName: "play.fill")
-                                Text(LT("开始展示", "Start", "表示開始"))
+                            .buttonStyle(.bordered)
+                            .disabled(!canStart)
+
+                            Button {
+                                isInputFocused = false
+                                prepareDisplayTask?.cancel()
+                                prepareDisplayTask = Task {
+                                    await prepareLandscapeDisplay()
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "play.fill")
+                                    Text(LT("开始展示", "Start", "表示開始"))
+                                }
                             }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .disabled(!canStart)
+                            .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .disabled(!canStart)
                     }
                 }
 
                 GlassCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(LT("展示设置", "Display Settings", "表示設定"))
-                            .font(.headline)
-                            .foregroundStyle(RaverTheme.primaryText)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(LT("横屏预览", "Landscape Preview", "横向きプレビュー"))
+                                .font(.headline)
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Spacer(minLength: 12)
+                            Text(LT("竖屏内先调效果", "Tune It Before Fullscreen", "全画面前に調整"))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
 
-                        Picker(
-                            LT("展示模式", "Display Mode", "表示モード"),
-                            selection: $configuration.mode
+                        Text(LT(
+                            "这里模拟手机横屏全屏区域。先点一次预览，再在竖屏里快速微调参数。",
+                            "This simulates the landscape fullscreen area. Tap preview once, then fine-tune here in portrait.",
+                            "ここで横向き全画面エリアを再現します。先にプレビューしてから縦画面で微調整できます。"
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                        MovieBannerInlinePreviewView(
+                            configuration: configuration,
+                            isActive: inlinePreviewStarted,
+                            revision: inlinePreviewRevision
+                        )
+                    }
+                }
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(LT("展示设置", "Display Settings", "表示設定"))
+                                    .font(.headline)
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                Text(LT(
+                                    "在竖屏里快速调准视觉效果，再一键进入横屏全屏。",
+                                    "Tune the visual feel in portrait, then jump into fullscreen.",
+                                    "縦画面で見た目を整えてから、そのまま全画面へ。"
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Text(configuration.mode.shortTitle)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(RaverTheme.accent.opacity(0.16))
+                                )
+                        }
+
+                        settingsPanel(
+                            title: LT("版式与字号", "Layout & Size", "レイアウトと文字サイズ"),
+                            icon: "textformat.size"
                         ) {
-                            ForEach(MovieBannerMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
+                            Picker(
+                                LT("展示模式", "Display Mode", "表示モード"),
+                                selection: $configuration.mode
+                            ) {
+                                ForEach(MovieBannerMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            settingSliderRow(
+                                title: LT("字体大小", "Font Size", "文字サイズ"),
+                                valueText: "\(Int(configuration.fontSize))",
+                                value: $configuration.fontSize,
+                                range: editorFontSizeRange,
+                                step: 2
+                            )
+                        }
+
+                        settingsPanel(
+                            title: LT("滚动与节奏", "Motion & Rhythm", "動きとリズム"),
+                            icon: "waveform.path.ecg"
+                        ) {
+                            Toggle(LT("自动滚动", "Auto Scroll", "自動スクロール"), isOn: $configuration.autoScroll)
+                                .tint(RaverTheme.accent)
+                                .foregroundStyle(RaverTheme.primaryText)
+
+                            settingSliderRow(
+                                title: LT("滚动速度", "Scroll Speed", "スクロール速度"),
+                                valueText: "\(Int(configuration.scrollSpeed))",
+                                value: $configuration.scrollSpeed,
+                                range: MovieBannerConfiguration.scrollSpeedRange,
+                                step: 5
+                            )
+
+                            if configuration.mode == .scrolling {
+                                settingSliderRow(
+                                    title: LT("短文循环间距", "Short Loop Gap", "短文ループ間隔"),
+                                    valueText: "\(Int(configuration.shortLoopGap))",
+                                    value: $configuration.shortLoopGap,
+                                    range: MovieBannerConfiguration.shortLoopGapRange,
+                                    step: 2
+                                )
                             }
                         }
-                        .pickerStyle(.segmented)
 
-                        settingSliderRow(
-                            title: LT("字体大小", "Font Size", "文字サイズ"),
-                            valueText: "\(Int(configuration.fontSize))",
-                            value: $configuration.fontSize,
-                            range: editorFontSizeRange,
-                            step: 2
-                        )
+                        settingsPanel(
+                            title: LT("闪烁效果", "Blink Effect", "点滅効果"),
+                            icon: "bolt"
+                        ) {
+                            Toggle(LT("启用闪烁", "Enable Blink", "点滅を有効化"), isOn: $configuration.isBlinkEnabled)
+                                .tint(RaverTheme.accent)
+                                .foregroundStyle(RaverTheme.primaryText)
 
-                        settingSliderRow(
-                            title: LT("滚动速度", "Scroll Speed", "スクロール速度"),
-                            valueText: "\(Int(configuration.scrollSpeed))",
-                            value: $configuration.scrollSpeed,
-                            range: MovieBannerConfiguration.scrollSpeedRange,
-                            step: 5
-                        )
+                            if configuration.isBlinkEnabled {
+                                settingSliderRow(
+                                    title: LT("闪烁速度", "Blink Speed", "点滅速度"),
+                                    valueText: "\(Int(configuration.blinkSpeed))",
+                                    value: $configuration.blinkSpeed,
+                                    range: MovieBannerConfiguration.blinkSpeedRange,
+                                    step: 1
+                                )
 
-                        Toggle(LT("闪烁效果", "Blink", "点滅効果"), isOn: $configuration.isBlinkEnabled)
-                            .tint(RaverTheme.accent)
-                            .foregroundStyle(RaverTheme.primaryText)
+                                settingSliderRow(
+                                    title: LT("熄灭亮度", "Dim Brightness", "消灯亮度"),
+                                    valueText: "\(Int(configuration.blinkMinOpacity * 100))%",
+                                    value: $configuration.blinkMinOpacity,
+                                    range: MovieBannerConfiguration.blinkMinOpacityRange,
+                                    step: 0.05
+                                )
+                            }
+                        }
 
-                        Toggle(LT("自动滚动", "Auto Scroll", "自動スクロール"), isOn: $configuration.autoScroll)
-                            .tint(RaverTheme.accent)
-                            .foregroundStyle(RaverTheme.primaryText)
+                        settingsPanel(
+                            title: LT("颜色与氛围", "Color & Mood", "色とムード"),
+                            icon: "paintpalette"
+                        ) {
+                            MovieBannerColorPickerRow(
+                                title: LT("文字颜色", "Text Color", "Text Color"),
+                                selection: $configuration.textColor
+                            )
 
-                        MovieBannerColorPickerRow(
-                            title: LT("文字颜色", "Text Color", "Text Color"),
-                            selection: $configuration.textColor
-                        )
-
-                        MovieBannerColorPickerRow(
-                            title: LT("背景颜色", "Background", "背景色"),
-                            selection: $configuration.backgroundColor
-                        )
+                            MovieBannerColorPickerRow(
+                                title: LT("背景颜色", "Background", "背景色"),
+                                selection: $configuration.backgroundColor
+                            )
+                        }
                     }
                 }
             }
@@ -2282,6 +2399,39 @@ struct MovieBannerEditorView: View {
         }
     }
 
+    @ViewBuilder
+    private func settingsPanel<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+
+            content()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.08),
+                            Color.white.opacity(0.04)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
     @MainActor
     private func prepareLandscapeDisplay() async {
         AppOrientationLock.shared.lockLandscapeOnly(forceRotate: true)
@@ -2310,6 +2460,266 @@ struct MovieBannerEditorView: View {
             max(configuration.fontSize, editorFontSizeRange.lowerBound),
             editorFontSizeRange.upperBound
         )
+    }
+}
+
+private struct MovieBannerInlinePreviewView: View {
+    let configuration: MovieBannerConfiguration
+    let isActive: Bool
+    let revision: Int
+
+    @State private var scrollStartDate = Date()
+    @State private var marqueeLayout = MovieBannerMarqueeLayout()
+
+    private var hasContent: Bool {
+        !configuration.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var simulatedLandscapeCanvasSize: CGSize {
+        let bounds = UIScreen.main.bounds.size
+        let longEdge = max(bounds.width, bounds.height)
+        let shortEdge = min(bounds.width, bounds.height)
+        return CGSize(width: longEdge, height: shortEdge)
+    }
+
+    private var simulatedAspectRatio: CGFloat {
+        simulatedLandscapeCanvasSize.width / max(simulatedLandscapeCanvasSize.height, 1)
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.black.opacity(0.82))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 8)
+
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(configuration.backgroundColor.color)
+                .padding(8)
+                .overlay {
+                    if isActive, hasContent {
+                        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                            GeometryReader { proxy in
+                                let canvasSize = simulatedLandscapeCanvasSize
+                                let scale = min(
+                                    proxy.size.width / max(canvasSize.width, 1),
+                                    proxy.size.height / max(canvasSize.height, 1)
+                                )
+
+                                bannerContent(in: context.date, size: canvasSize)
+                                    .frame(width: canvasSize.width, height: canvasSize.height)
+                                    .scaleEffect(scale, anchor: .topLeading)
+                                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                            }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .padding(8)
+                    } else {
+                        previewPlaceholder
+                            .padding(8)
+                    }
+                }
+
+            previewBadge
+        }
+        .aspectRatio(simulatedAspectRatio, contentMode: .fit)
+        .onAppear {
+            resetScrollProgress()
+        }
+        .onChange(of: revision) { _, _ in
+            resetScrollProgress()
+        }
+        .onChange(of: configuration.mode) { _, _ in
+            resetScrollProgress()
+        }
+        .onChange(of: configuration.autoScroll) { _, _ in
+            resetScrollProgress()
+        }
+        .onChange(of: configuration.message) { _, _ in
+            resetScrollProgress()
+        }
+        .onChange(of: configuration.fontSize) { _, _ in
+            resetScrollProgress()
+        }
+        .onChange(of: configuration.scrollSpeed) { _, _ in
+            resetScrollProgress()
+        }
+        .onChange(of: configuration.shortLoopGap) { _, _ in
+            resetScrollProgress()
+        }
+    }
+
+    private var previewBadge: some View {
+        VStack {
+            HStack {
+                Label(
+                    LT("横屏模拟预览", "Landscape Mock Preview", "横向き模擬プレビュー"),
+                    systemImage: "iphone.landscape"
+                )
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.78))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.black.opacity(0.42))
+                )
+
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .allowsHitTesting(false)
+    }
+
+    private var previewPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(configuration.backgroundColor.color)
+            .overlay {
+                VStack(spacing: 10) {
+                    Image(systemName: hasContent ? "play.rectangle" : "text.cursor")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.75))
+
+                    Text(
+                        hasContent
+                            ? LT("点击上方“预览效果”后，这里会模拟全屏展示。", "Tap Preview above to simulate fullscreen here.", "上のプレビューを押すと、ここで全画面表示を再現します。")
+                            : LT("先输入文案，再点击“预览效果”。", "Enter a message, then tap Preview.", "先に文言を入力してからプレビューしてください。")
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func bannerContent(in renderDate: Date, size: CGSize) -> some View {
+        if configuration.mode == .staticCentered || !configuration.autoScroll {
+            centeredTextView(renderDate: renderDate, size: size)
+                .frame(width: size.width, height: size.height)
+        } else {
+            scrollingTextView(renderDate: renderDate, size: size)
+                .frame(width: size.width, height: size.height)
+        }
+    }
+
+    private func centeredTextView(renderDate: Date, size: CGSize) -> some View {
+        bannerText(layout: resolvedMarqueeLayout(for: size), text: resolvedMessage)
+            .lineLimit(1)
+            .minimumScaleFactor(0.12)
+            .padding(.horizontal, 20)
+            .opacity(blinkOpacity(at: renderDate))
+            .task(id: marqueeLayoutKey(for: size)) {
+                updateMarqueeLayout(for: size)
+            }
+    }
+
+    private func scrollingTextView(renderDate: Date, size: CGSize) -> some View {
+        let layout = resolvedMarqueeLayout(for: size)
+        let elapsed = max(0, renderDate.timeIntervalSince(scrollStartDate))
+        let effectiveSpeed = configuration.scrollSpeed * layout.speedCompensation
+        let travel = CGFloat((elapsed * effectiveSpeed).truncatingRemainder(dividingBy: Double(layout.cycleWidth)))
+
+        return marqueeLoopContent(layout: layout)
+        .offset(x: layout.leadingOffset - travel)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .clipped()
+        .opacity(blinkOpacity(at: renderDate))
+        .task(id: marqueeLayoutKey(for: size)) {
+            updateMarqueeLayout(for: size)
+        }
+    }
+
+    @ViewBuilder
+    private func marqueeLoopContent(layout: MovieBannerMarqueeLayout) -> some View {
+        if layout.usesUnitCycling {
+            marqueeTrack(layout: layout)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: true)
+        } else {
+            HStack(spacing: layout.seamSpacing) {
+                marqueeTrack(layout: layout)
+                marqueeTrack(layout: layout)
+            }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+        }
+    }
+
+    private func bannerText(layout: MovieBannerMarqueeLayout, text: String) -> some View {
+        Text(text)
+            .font(.system(size: layout.effectiveFontSize, weight: .bold))
+            .foregroundStyle(configuration.textColor.color)
+            .shadow(
+                color: configuration.textColor.color.opacity(0.24),
+                radius: layout.shadowRadius,
+                x: 0,
+                y: 0
+            )
+    }
+
+    private var resolvedMessage: String {
+        let trimmed = configuration.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? LT("请输入内容", "Type Something", "内容を入力") : trimmed
+    }
+
+    private func blinkOpacity(at date: Date) -> Double {
+        guard configuration.isBlinkEnabled else { return 1.0 }
+        let phase = sin(date.timeIntervalSinceReferenceDate * configuration.blinkSpeed)
+        return phase > 0 ? 1.0 : configuration.blinkMinOpacity
+    }
+
+    private func marqueeLayoutKey(for size: CGSize) -> MovieBannerMarqueeLayoutKey {
+        MovieBannerMarqueeLayoutKey(
+            message: resolvedMessage,
+            mode: configuration.mode,
+            requestedFontSize: configuration.fontSize,
+            shortLoopGap: configuration.shortLoopGap,
+            size: size
+        )
+    }
+
+    private func resolvedMarqueeLayout(for size: CGSize) -> MovieBannerMarqueeLayout {
+        let key = marqueeLayoutKey(for: size)
+        if marqueeLayout.cacheKey == key {
+            return marqueeLayout
+        }
+        return MovieBannerMarqueeLayout.build(
+            key: key,
+            size: size
+        )
+    }
+
+    private func updateMarqueeLayout(for size: CGSize) {
+        marqueeLayout = MovieBannerMarqueeLayout.build(
+            key: marqueeLayoutKey(for: size),
+            size: size
+        )
+    }
+
+    @ViewBuilder
+    private func marqueeTrack(layout: MovieBannerMarqueeLayout) -> some View {
+        if layout.usesRepeatedItems {
+            HStack(spacing: layout.itemSpacing) {
+                ForEach(0 ..< layout.repeatedItemCount, id: \.self) { _ in
+                    bannerText(layout: layout, text: resolvedMessage)
+                }
+            }
+        } else {
+            bannerText(layout: layout, text: layout.segmentText)
+        }
+    }
+
+    private func resetScrollProgress() {
+        scrollStartDate = Date()
+        marqueeLayout = MovieBannerMarqueeLayout()
     }
 }
 
@@ -2437,13 +2847,8 @@ private struct MovieBannerDisplayView: View {
         let effectiveSpeed = configuration.scrollSpeed * layout.speedCompensation
         let travel = CGFloat((elapsed * effectiveSpeed).truncatingRemainder(dividingBy: Double(layout.cycleWidth)))
 
-        return HStack(spacing: layout.gap) {
-            bannerText(layout: layout, text: layout.segmentText)
-            bannerText(layout: layout, text: layout.segmentText)
-        }
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: true)
-        .offset(x: -travel)
+        return marqueeLoopContent(layout: layout)
+        .offset(x: layout.leadingOffset - travel)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .clipped()
         .opacity(blinkOpacity(at: timelineDate))
@@ -2452,129 +2857,40 @@ private struct MovieBannerDisplayView: View {
         }
     }
 
+    @ViewBuilder
+    private func marqueeLoopContent(layout: MovieBannerMarqueeLayout) -> some View {
+        if layout.usesUnitCycling {
+            marqueeTrack(layout: layout)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: true)
+        } else {
+            HStack(spacing: layout.seamSpacing) {
+                marqueeTrack(layout: layout)
+                marqueeTrack(layout: layout)
+            }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+        }
+    }
+
     private var controlsLayer: some View {
         VStack {
             Spacer()
             VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Button {
-                        isPresented = false
-                    } label: {
-                        Label(LT("返回", "Back", "戻る"), systemImage: "chevron.backward")
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    if configuration.mode == .scrolling {
-                        Button {
-                            if configuration.autoScroll {
-                                togglePause()
-                            } else {
-                                configuration.autoScroll = true
-                                isPaused = false
-                                resetScrollProgress()
-                            }
-                        } label: {
-                            Label(
-                                configuration.autoScroll
-                                    ? (isPaused ? LT("继续", "Resume", "再開") : LT("暂停", "Pause", "Pause"))
-                                    : LT("开始滚动", "Start Scroll", "スクロール開始"),
-                                systemImage: configuration.autoScroll
-                                    ? (isPaused ? "play.fill" : "pause.fill")
-                                    : "play.fill"
-                            )
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        configuration.textColor = configuration.textColor.next
-                        keepControlsVisible()
-                    } label: {
-                        Label(LT("文字色", "Text", "Text"), systemImage: "paintpalette")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        configuration.backgroundColor = configuration.backgroundColor.next
-                        keepControlsVisible()
-                    } label: {
-                        Label(LT("背景色", "BG", "BG"), systemImage: "circle.lefthalf.filled")
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Picker(
-                    LT("模式", "Mode", "モード"),
-                    selection: $configuration.mode
-                ) {
-                    ForEach(MovieBannerMode.allCases) { mode in
-                        Text(mode.shortTitle).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: configuration.mode) { _, _ in
-                    keepControlsVisible()
-                }
+                topControlsRow
+                modePickerControl
 
                 if configuration.mode == .scrolling {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(LT("速度", "Speed", "速度"))
-                                .font(.caption)
-                                .foregroundStyle(Color.white.opacity(0.85))
-                            Spacer(minLength: 8)
-                            Text("\(Int(configuration.scrollSpeed))")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(Color.white.opacity(0.7))
-                        }
-                        Slider(
-                            value: $configuration.scrollSpeed,
-                            in: MovieBannerConfiguration.scrollSpeedRange,
-                            step: 5
-                        ) {
-                            Text(LT("速度", "Speed", "速度"))
-                        } minimumValueLabel: {
-                            Text(LT("慢", "Slow", "遅い"))
-                                .font(.caption2)
-                        } maximumValueLabel: {
-                            Text(LT("快", "Fast", "速い"))
-                                .font(.caption2)
-                        } onEditingChanged: { _ in
-                            keepControlsVisible()
-                        }
-                        .tint(.white)
-                    }
+                    scrollSpeedControl
+                    shortGapControl
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(LT("字号", "Size", "文字サイズ"))
-                            .font(.caption)
-                            .foregroundStyle(Color.white.opacity(0.85))
-                        Spacer(minLength: 8)
-                        Text("\(Int(configuration.fontSize))")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(Color.white.opacity(0.7))
-                    }
-                    Slider(
-                        value: $configuration.fontSize,
-                        in: MovieBannerConfiguration.fontSizeRange(for: UIScreen.main.bounds.size, mode: configuration.mode),
-                        step: 2
-                    ) {
-                        Text(LT("字号", "Size", "文字サイズ"))
-                    } minimumValueLabel: {
-                        Text(LT("小", "Small", "小"))
-                            .font(.caption2)
-                    } maximumValueLabel: {
-                        Text(LT("大", "Large", "大"))
-                            .font(.caption2)
-                    } onEditingChanged: { _ in
-                        keepControlsVisible()
-                    }
-                    .tint(.white)
+                if configuration.isBlinkEnabled {
+                    blinkSpeedControl
+                    blinkBrightnessControl
                 }
+
+                fontSizeControl
             }
             .padding(14)
             .background(
@@ -2587,6 +2903,185 @@ private struct MovieBannerDisplayView: View {
             )
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
+        }
+    }
+
+    private var topControlsRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                isPresented = false
+            } label: {
+                Label(LT("返回", "Back", "戻る"), systemImage: "chevron.backward")
+            }
+            .buttonStyle(.borderedProminent)
+
+            if configuration.mode == .scrolling {
+                Button {
+                    if configuration.autoScroll {
+                        togglePause()
+                    } else {
+                        configuration.autoScroll = true
+                        isPaused = false
+                        resetScrollProgress()
+                    }
+                } label: {
+                    Label(
+                        configuration.autoScroll
+                            ? (isPaused ? LT("继续", "Resume", "再開") : LT("暂停", "Pause", "Pause"))
+                            : LT("开始滚动", "Start Scroll", "スクロール開始"),
+                        systemImage: configuration.autoScroll
+                            ? (isPaused ? "play.fill" : "pause.fill")
+                            : "play.fill"
+                    )
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                configuration.textColor = configuration.textColor.nextPreset
+                keepControlsVisible()
+            } label: {
+                Label(LT("文字色", "Text", "Text"), systemImage: "paintpalette")
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                configuration.backgroundColor = configuration.backgroundColor.nextPreset
+                keepControlsVisible()
+            } label: {
+                Label(LT("背景色", "BG", "BG"), systemImage: "circle.lefthalf.filled")
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                configuration.isBlinkEnabled.toggle()
+                keepControlsVisible()
+            } label: {
+                Label(
+                    LT("闪烁", "Blink", "点滅"),
+                    systemImage: configuration.isBlinkEnabled ? "bolt.fill" : "bolt.slash"
+                )
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private var modePickerControl: some View {
+        Picker(
+            LT("模式", "Mode", "モード"),
+            selection: $configuration.mode
+        ) {
+            ForEach(MovieBannerMode.allCases) { mode in
+                Text(mode.shortTitle).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: configuration.mode) { _, _ in
+            keepControlsVisible()
+        }
+    }
+
+    private var scrollSpeedControl: some View {
+        controlsSliderSection(
+            title: LT("速度", "Speed", "速度"),
+            valueText: "\(Int(configuration.scrollSpeed))",
+            value: $configuration.scrollSpeed,
+            range: MovieBannerConfiguration.scrollSpeedRange,
+            step: 5,
+            minimumLabel: LT("慢", "Slow", "遅い"),
+            maximumLabel: LT("快", "Fast", "速い")
+        )
+    }
+
+    private var shortGapControl: some View {
+        controlsSliderSection(
+            title: LT("短文间距", "Short Gap", "短文間隔"),
+            valueText: "\(Int(configuration.shortLoopGap))",
+            value: $configuration.shortLoopGap,
+            range: MovieBannerConfiguration.shortLoopGapRange,
+            step: 2,
+            minimumLabel: LT("近", "Tight", "狭い"),
+            maximumLabel: LT("远", "Wide", "広い")
+        )
+    }
+
+    private var blinkSpeedControl: some View {
+        controlsSliderSection(
+            title: LT("闪烁速度", "Blink Speed", "点滅速度"),
+            valueText: "\(Int(configuration.blinkSpeed))",
+            value: $configuration.blinkSpeed,
+            range: MovieBannerConfiguration.blinkSpeedRange,
+            step: 1,
+            minimumLabel: LT("慢", "Slow", "遅い"),
+            maximumLabel: LT("快", "Fast", "速い")
+        )
+    }
+
+    private var blinkBrightnessControl: some View {
+        controlsSliderSection(
+            title: LT("熄灭亮度", "Dim Brightness", "消灯亮度"),
+            valueText: "\(Int(configuration.blinkMinOpacity * 100))%",
+            value: $configuration.blinkMinOpacity,
+            range: MovieBannerConfiguration.blinkMinOpacityRange,
+            step: 0.05,
+            minimumLabel: LT("灭", "Off", "消灯"),
+            maximumLabel: LT("透", "Dim", "薄い")
+        )
+    }
+
+    private var fontSizeControl: some View {
+        controlsSliderSection(
+            title: LT("字号", "Size", "文字サイズ"),
+            valueText: "\(Int(configuration.fontSize))",
+            value: $configuration.fontSize,
+            range: MovieBannerConfiguration.fontSizeRange(
+                for: MovieBannerConfiguration.referenceLandscapeCanvasSize,
+                mode: configuration.mode
+            ),
+            step: 2,
+            minimumLabel: LT("小", "Small", "小"),
+            maximumLabel: LT("大", "Large", "大")
+        )
+    }
+
+    @ViewBuilder
+    private func controlsSliderSection(
+        title: String,
+        valueText: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        minimumLabel: String,
+        maximumLabel: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.85))
+                Spacer(minLength: 8)
+                Text(valueText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.7))
+            }
+            Slider(
+                value: value,
+                in: range,
+                step: step
+            ) {
+                Text(title)
+            } minimumValueLabel: {
+                Text(minimumLabel)
+                    .font(.caption2)
+            } maximumValueLabel: {
+                Text(maximumLabel)
+                    .font(.caption2)
+            } onEditingChanged: { _ in
+                keepControlsVisible()
+            }
+            .tint(.white)
         }
     }
 
@@ -2641,8 +3136,8 @@ private struct MovieBannerDisplayView: View {
 
     private func blinkOpacity(at date: Date) -> Double {
         guard configuration.isBlinkEnabled else { return 1.0 }
-        let phase = sin(date.timeIntervalSinceReferenceDate * 8.0)
-        return phase > 0 ? 1.0 : 0.28
+        let phase = sin(date.timeIntervalSinceReferenceDate * configuration.blinkSpeed)
+        return phase > 0 ? 1.0 : configuration.blinkMinOpacity
     }
 
     private func togglePause() {
@@ -2754,6 +3249,7 @@ private struct MovieBannerDisplayView: View {
             message: resolvedMessage,
             mode: configuration.mode,
             requestedFontSize: configuration.fontSize,
+            shortLoopGap: configuration.shortLoopGap,
             size: size
         )
     }
@@ -2774,6 +3270,19 @@ private struct MovieBannerDisplayView: View {
             key: marqueeLayoutKey(for: size),
             size: size
         )
+    }
+
+    @ViewBuilder
+    private func marqueeTrack(layout: MovieBannerMarqueeLayout) -> some View {
+        if layout.usesRepeatedItems {
+            HStack(spacing: layout.itemSpacing) {
+                ForEach(0 ..< layout.repeatedItemCount, id: \.self) { _ in
+                    bannerText(layout: layout, text: resolvedMessage)
+                }
+            }
+        } else {
+            bannerText(layout: layout, text: layout.segmentText)
+        }
     }
 
     private func freezeMarqueeForControlsAnimation() {
@@ -2812,34 +3321,61 @@ private struct MovieBannerDisplayView: View {
 
 private struct MovieBannerColorPickerRow: View {
     let title: String
-    @Binding var selection: MovieBannerColorPreset
+    @Binding var selection: MovieBannerColorValue
+
+    private var colorBinding: Binding<Color> {
+        Binding(
+            get: { selection.color },
+            set: { selection = MovieBannerColorValue(color: $0) }
+        )
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .foregroundStyle(RaverTheme.primaryText)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                Text(title)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                Spacer(minLength: 12)
+
+                Text(selection.hexDescription)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.06))
+                    )
+
+                ColorPicker("", selection: colorBinding, supportsOpacity: true)
+                    .labelsHidden()
+                    .frame(width: 30, height: 30)
+            }
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(MovieBannerColorPreset.allCases) { preset in
+                    ForEach(MovieBannerColorSwatch.allCases) { swatch in
+                        let isSelected = selection.matches(swatch.value)
                         Button {
-                            selection = preset
+                            selection = swatch.value
                         } label: {
                             HStack(spacing: 6) {
                                 Circle()
-                                    .fill(preset.color)
+                                    .fill(swatch.value.color)
                                     .frame(width: 14, height: 14)
                                     .overlay(
                                         Circle().stroke(Color.white.opacity(0.45), lineWidth: 1)
                                     )
-                                Text(preset.title)
+                                Text(swatch.title)
                                     .font(.caption)
                             }
-                            .foregroundStyle(selection == preset ? RaverTheme.primaryText : RaverTheme.secondaryText)
+                            .foregroundStyle(isSelected ? RaverTheme.primaryText : RaverTheme.secondaryText)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background(
                                 Capsule(style: .continuous)
-                                    .fill(selection == preset ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+                                    .fill(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
                             )
                         }
                         .buttonStyle(.plain)
@@ -2855,13 +3391,15 @@ private struct MovieBannerMarqueeLayoutKey: Equatable, Hashable {
     let message: String
     let mode: MovieBannerMode
     let requestedFontSize: Int
+    let shortLoopGap: Int
     let width: Int
     let height: Int
 
-    init(message: String, mode: MovieBannerMode, requestedFontSize: Double, size: CGSize) {
+    init(message: String, mode: MovieBannerMode, requestedFontSize: Double, shortLoopGap: Double, size: CGSize) {
         self.message = message
         self.mode = mode
         self.requestedFontSize = Int(requestedFontSize.rounded())
+        self.shortLoopGap = Int(shortLoopGap.rounded())
         width = Int(size.width.rounded())
         height = Int(size.height.rounded())
     }
@@ -2872,11 +3410,17 @@ private struct MovieBannerMarqueeLayout {
         message: "",
         mode: .scrolling,
         requestedFontSize: MovieBannerConfiguration.minimumFontSize,
+        shortLoopGap: 40,
         size: .zero
     )
     var effectiveFontSize: CGFloat = CGFloat(MovieBannerConfiguration.minimumFontSize)
     var segmentText: String = ""
-    var gap: CGFloat = 24
+    var usesRepeatedItems = false
+    var usesUnitCycling = false
+    var repeatedItemCount = 1
+    var itemSpacing: CGFloat = 24
+    var seamSpacing: CGFloat = 24
+    var leadingOffset: CGFloat = 0
     var cycleWidth: CGFloat = 1
     var speedCompensation: Double = 1.0
     var shadowRadius: CGFloat = 4
@@ -2889,26 +3433,37 @@ private struct MovieBannerMarqueeLayout {
             )
         )
         let font = UIFont.systemFont(ofSize: effectiveFontSize, weight: .bold)
-        let separator = "   •   "
         let baseMessage = key.message
         let baseWidth = measureWidth(of: baseMessage, font: font)
         let shortTrackThreshold = max(1, size.width * 0.6)
         let targetTrackWidth = max(size.width * 1.35, shortTrackThreshold)
-        var segmentText = baseMessage
-        var segmentWidth = baseWidth
+        let segmentText = baseMessage
+        var usesRepeatedItems = false
+        var usesUnitCycling = false
+        var repeatedItemCount = 1
+        var trackWidth = baseWidth
+        let shortLoopGap = CGFloat(max(Int(MovieBannerConfiguration.shortLoopGapRange.lowerBound), key.shortLoopGap))
+        var itemSpacing = shortLoopGap
+        var seamSpacing = max(24, min(72, effectiveFontSize * 0.35))
+        var leadingOffset: CGFloat = 0
+        var cycleWidth = max(1, baseWidth + seamSpacing)
 
         if key.mode == .scrolling, baseWidth < shortTrackThreshold {
-            var parts = [baseMessage]
-            while segmentWidth < targetTrackWidth, parts.count < 8 {
-                parts.append(baseMessage)
-                segmentText = parts.joined(separator: separator)
-                segmentWidth = measureWidth(of: segmentText, font: font)
+            usesRepeatedItems = true
+            usesUnitCycling = true
+            seamSpacing = shortLoopGap
+            itemSpacing = shortLoopGap
+            while trackWidth < targetTrackWidth, repeatedItemCount < 16 {
+                repeatedItemCount += 1
+                trackWidth = baseWidth * CGFloat(repeatedItemCount) + itemSpacing * CGFloat(repeatedItemCount - 1)
             }
+            cycleWidth = max(1, baseWidth + itemSpacing)
+            leadingOffset = -cycleWidth
+        } else {
+            cycleWidth = max(1, trackWidth + seamSpacing)
         }
 
-        let gap = max(24, min(72, effectiveFontSize * 0.35))
-        let cycleWidth = max(1, segmentWidth + gap)
-        let widthRatio = max(1.0, Double(segmentWidth / max(size.width, 1)))
+        let widthRatio = max(1.0, Double(trackWidth / max(size.width, 1)))
         let speedCompensation = min(1.8, max(1.0, sqrt(widthRatio)))
         let shadowRadius: CGFloat = key.mode == .scrolling
             ? max(3, min(6, effectiveFontSize * 0.024))
@@ -2918,7 +3473,12 @@ private struct MovieBannerMarqueeLayout {
         layout.cacheKey = key
         layout.effectiveFontSize = effectiveFontSize
         layout.segmentText = segmentText
-        layout.gap = gap
+        layout.usesRepeatedItems = usesRepeatedItems
+        layout.usesUnitCycling = usesUnitCycling
+        layout.repeatedItemCount = repeatedItemCount
+        layout.itemSpacing = itemSpacing
+        layout.seamSpacing = seamSpacing
+        layout.leadingOffset = leadingOffset
         layout.cycleWidth = cycleWidth
         layout.speedCompensation = speedCompensation
         layout.shadowRadius = shadowRadius
@@ -2933,7 +3493,16 @@ private struct MovieBannerMarqueeLayout {
 private struct MovieBannerConfiguration {
     static let minimumFontSize: Double = 64
     static let scrollSpeedRange: ClosedRange<Double> = 40 ... 520
+    static let blinkSpeedRange: ClosedRange<Double> = 1 ... 20
+    static let blinkMinOpacityRange: ClosedRange<Double> = 0 ... 0.75
+    static let shortLoopGapRange: ClosedRange<Double> = 12 ... 220
     static let defaultScrollSpeed: Double = 140
+    static var referenceLandscapeCanvasSize: CGSize {
+        let bounds = UIScreen.main.bounds.size
+        let longEdge = max(bounds.width, bounds.height)
+        let shortEdge = min(bounds.width, bounds.height)
+        return CGSize(width: longEdge, height: shortEdge)
+    }
 
     static func fontSizeRange(for size: CGSize, mode: MovieBannerMode) -> ClosedRange<Double> {
         minimumFontSize ... maximumFontSize(for: size, mode: mode)
@@ -2941,7 +3510,7 @@ private struct MovieBannerConfiguration {
 
     static func maximumFontSize(for size: CGSize, mode: MovieBannerMode) -> Double {
         let shortEdge = max(1, min(size.width, size.height))
-        let ratio = mode == .staticCentered ? 0.82 : 0.72
+        let ratio = mode == .staticCentered ? 0.9 : 0.8
         return max(minimumFontSize, floor(shortEdge * ratio))
     }
 
@@ -2949,10 +3518,13 @@ private struct MovieBannerConfiguration {
     var fontSize: Double = 120
     var scrollSpeed: Double = defaultScrollSpeed
     var isBlinkEnabled: Bool = false
+    var blinkSpeed: Double = 8
+    var blinkMinOpacity: Double = 0.28
     var autoScroll: Bool = true
+    var shortLoopGap: Double = 40
     var mode: MovieBannerMode = .scrolling
-    var textColor: MovieBannerColorPreset = .white
-    var backgroundColor: MovieBannerColorPreset = .black
+    var textColor: MovieBannerColorValue = .white
+    var backgroundColor: MovieBannerColorValue = .black
 }
 
 private enum MovieBannerMode: String, CaseIterable, Identifiable {
@@ -2980,17 +3552,83 @@ private enum MovieBannerMode: String, CaseIterable, Identifiable {
     }
 }
 
-private enum MovieBannerColorPreset: String, CaseIterable, Identifiable {
+private struct MovieBannerColorValue: Equatable, Hashable {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var alpha: Double = 1
+
+    init(red: Double, green: Double, blue: Double, alpha: Double = 1) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.alpha = alpha
+    }
+
+    init(color: Color) {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 1
+        var green: CGFloat = 1
+        var blue: CGFloat = 1
+        var alpha: CGFloat = 1
+        if uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+            self.alpha = alpha
+        } else {
+            self = .white
+        }
+    }
+
+    static let white = MovieBannerColorValue(red: 1, green: 1, blue: 1)
+    static let black = MovieBannerColorValue(red: 0, green: 0, blue: 0)
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    var hexDescription: String {
+        let r = Int((red * 255).rounded())
+        let g = Int((green * 255).rounded())
+        let b = Int((blue * 255).rounded())
+        let a = Int((alpha * 255).rounded())
+        if a < 255 {
+            return String(format: "#%02X%02X%02X %02X", r, g, b, a)
+        }
+        return String(format: "#%02X%02X%02X", r, g, b)
+    }
+
+    func matches(_ other: MovieBannerColorValue, tolerance: Double = 0.01) -> Bool {
+        abs(red - other.red) <= tolerance &&
+            abs(green - other.green) <= tolerance &&
+            abs(blue - other.blue) <= tolerance &&
+            abs(alpha - other.alpha) <= tolerance
+    }
+
+    var nextPreset: MovieBannerColorValue {
+        let all = MovieBannerColorSwatch.allCases
+        if let index = all.firstIndex(where: { matches($0.value) }) {
+            let nextIndex = all.index(after: index)
+            return nextIndex == all.endIndex ? all[all.startIndex].value : all[nextIndex].value
+        }
+        return all.first?.value ?? self
+    }
+}
+
+private enum MovieBannerColorSwatch: String, CaseIterable, Identifiable {
     case white
     case black
     case red
     case yellow
-    case green
+    case lime
     case cyan
     case pink
-    case purple
+    case violet
     case orange
     case blue
+    case mint
+    case gold
 
     var id: String { rawValue }
 
@@ -3004,51 +3642,52 @@ private enum MovieBannerColorPreset: String, CaseIterable, Identifiable {
             return LT("红", "Red", "赤")
         case .yellow:
             return LT("黄", "Yellow", "黄")
-        case .green:
-            return LT("绿", "Green", "緑")
+        case .lime:
+            return LT("荧绿", "Lime", "ライム")
         case .cyan:
             return LT("青", "Cyan", "シアン")
         case .pink:
             return LT("粉", "Pink", "ピンク")
-        case .purple:
-            return LT("紫", "Purple", "紫")
+        case .violet:
+            return LT("紫", "Violet", "バイオレット")
         case .orange:
             return LT("橙", "Orange", "オレンジ")
         case .blue:
             return LT("蓝", "Blue", "青")
+        case .mint:
+            return LT("薄荷", "Mint", "ミント")
+        case .gold:
+            return LT("金", "Gold", "ゴールド")
         }
     }
 
-    var color: Color {
+    var value: MovieBannerColorValue {
         switch self {
         case .white:
             return .white
         case .black:
             return .black
         case .red:
-            return .red
+            return MovieBannerColorValue(red: 1.0, green: 0.23, blue: 0.19)
         case .yellow:
-            return .yellow
-        case .green:
-            return .green
+            return MovieBannerColorValue(red: 1.0, green: 0.88, blue: 0.16)
+        case .lime:
+            return MovieBannerColorValue(red: 0.62, green: 1.0, blue: 0.23)
         case .cyan:
-            return .cyan
+            return MovieBannerColorValue(red: 0.17, green: 0.93, blue: 1.0)
         case .pink:
-            return .pink
-        case .purple:
-            return .purple
+            return MovieBannerColorValue(red: 1.0, green: 0.35, blue: 0.73)
+        case .violet:
+            return MovieBannerColorValue(red: 0.58, green: 0.36, blue: 1.0)
         case .orange:
-            return .orange
+            return MovieBannerColorValue(red: 1.0, green: 0.54, blue: 0.15)
         case .blue:
-            return .blue
+            return MovieBannerColorValue(red: 0.21, green: 0.56, blue: 1.0)
+        case .mint:
+            return MovieBannerColorValue(red: 0.53, green: 0.97, blue: 0.78)
+        case .gold:
+            return MovieBannerColorValue(red: 0.98, green: 0.76, blue: 0.22)
         }
-    }
-
-    var next: MovieBannerColorPreset {
-        let all = Self.allCases
-        guard let index = all.firstIndex(of: self) else { return self }
-        let nextIndex = all.index(after: index)
-        return nextIndex == all.endIndex ? all[all.startIndex] : all[nextIndex]
     }
 }
 

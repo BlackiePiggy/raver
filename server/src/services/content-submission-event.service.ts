@@ -23,11 +23,22 @@ const EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS = 120_000;
 const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 30_000;
 
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
+const EVENT_LINEUP_SYNC_MODES = ['incremental_fill', 'exact_align'] as const;
+type EventLineupSyncMode = typeof EVENT_LINEUP_SYNC_MODES[number];
 
 const cleanText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+};
+
+const resolveEventLineupSyncMode = (
+  payload: Prisma.JsonObject | Prisma.InputJsonObject | Record<string, unknown>
+): EventLineupSyncMode => {
+  const raw = cleanText((payload as Record<string, unknown>).lineupSyncMode)?.toLowerCase();
+  return raw && EVENT_LINEUP_SYNC_MODES.includes(raw as EventLineupSyncMode)
+    ? raw as EventLineupSyncMode
+    : 'incremental_fill';
 };
 
 export class EventSubmissionConflictError extends Error {
@@ -536,6 +547,34 @@ const mergeAlignedLineupArtists = (
     .sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
+const mergeIncrementalLineupArtists = (
+  currentArtists: CanonicalLineupArtistInput[],
+  timetableArtists: CanonicalLineupArtistInput[]
+): CanonicalLineupArtistInput[] => {
+  const currentByKey = new Map<string, CanonicalLineupArtistInput>();
+  for (const artist of currentArtists) {
+    currentByKey.set(lineupIdentityKey(artist), artist);
+  }
+
+  const result = currentArtists.map(cloneArtistInput);
+  let nextSortOrder = result.reduce((max, artist) => Math.max(max, artist.sortOrder), 0);
+
+  for (const artist of timetableArtists) {
+    const key = lineupIdentityKey(artist);
+    if (currentByKey.has(key)) continue;
+    result.push({
+      ...artist,
+      sortOrder: ++nextSortOrder,
+    });
+    currentByKey.set(key, artist);
+  }
+
+  return result
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((artist, index) => ({ ...artist, sortOrder: artist.sortOrder || index + 1 }));
+};
+
 const relinkSlotsToAlignedArtists = (
   slots: CanonicalLineupSlotInput[],
   artists: CanonicalLineupArtistInput[]
@@ -564,103 +603,6 @@ const cloneArtistInput = (artist: CanonicalLineupArtistInput): CanonicalLineupAr
   djName: artist.djName,
   sortOrder: artist.sortOrder,
 });
-
-const syncLineupArtistsForAffectedTimetableKeys = (
-  currentArtists: CanonicalLineupArtistInput[],
-  currentSlots: CanonicalLineupSlotInput[],
-  affectedKeys: Set<string>
-): CanonicalLineupArtistInput[] => {
-  if (affectedKeys.size === 0) return currentArtists;
-
-  const slotArtists = normalizeCanonicalLineupArtists([], currentSlots);
-  const slotArtistByKey = new Map<string, CanonicalLineupArtistInput>();
-  for (const artist of slotArtists) {
-    slotArtistByKey.set(lineupIdentityKey(artist), artist);
-  }
-
-  const currentByKey = new Map<string, CanonicalLineupArtistInput>();
-  for (const artist of currentArtists) {
-    currentByKey.set(lineupIdentityKey(artist), artist);
-  }
-
-  const result = currentArtists
-    .filter((artist) => !affectedKeys.has(lineupIdentityKey(artist)))
-    .map(cloneArtistInput);
-
-  const removedAffectedArtists = currentArtists
-    .filter((artist) => affectedKeys.has(lineupIdentityKey(artist)) && !slotArtistByKey.has(lineupIdentityKey(artist)))
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  const reusableSortOrders = removedAffectedArtists.map((artist) => artist.sortOrder).filter((value) => Number.isFinite(value));
-  let nextSortOrder = result.reduce((max, artist) => Math.max(max, artist.sortOrder), 0);
-
-  for (const slotArtist of slotArtists) {
-    const key = lineupIdentityKey(slotArtist);
-    if (!affectedKeys.has(key)) continue;
-    const existing = currentByKey.get(key);
-    const reusedSortOrder = reusableSortOrders.shift();
-    const sortOrder = existing?.sortOrder
-      ?? reusedSortOrder
-      ?? ++nextSortOrder;
-    result.push({
-      ...slotArtist,
-      id: existing?.id,
-      sortOrder,
-    });
-    nextSortOrder = Math.max(nextSortOrder, sortOrder);
-  }
-
-  return result
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((artist, index) => ({ ...artist, sortOrder: artist.sortOrder || index + 1 }));
-};
-
-const collectAffectedTimetableIdentityKeys = (
-  previousSlots: CanonicalLineupSlotInput[],
-  nextSlots: CanonicalLineupSlotInput[]
-): Set<string> => {
-  const affected = new Set<string>();
-  const previousById = new Map(previousSlots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
-  const nextById = new Map(nextSlots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
-
-  for (const [id, previous] of previousById) {
-    const next = nextById.get(id);
-    if (!next) {
-      affected.add(lineupIdentityKey({
-        djId: previous.djId,
-        memberDjIds: previous.memberDjIds,
-        djName: previous.djName,
-      }));
-      continue;
-    }
-    const previousKey = lineupIdentityKey({
-      djId: previous.djId,
-      memberDjIds: previous.memberDjIds,
-      djName: previous.djName,
-    });
-    const nextKey = lineupIdentityKey({
-      djId: next.djId,
-      memberDjIds: next.memberDjIds,
-      djName: next.djName,
-    });
-    if (previousKey !== nextKey) {
-      affected.add(previousKey);
-      affected.add(nextKey);
-    }
-  }
-
-  for (const next of nextSlots) {
-    if (!next.id || previousById.has(next.id)) continue;
-    affected.add(lineupIdentityKey({
-      djId: next.djId,
-      memberDjIds: next.memberDjIds,
-      djName: next.djName,
-    }));
-  }
-
-  return affected;
-};
 
 export const buildAlignedLineupArtistsFromTimetablePayload = (
   payload: Prisma.JsonObject,
@@ -692,6 +634,24 @@ export const autoAlignEventLineupToTimetablePayload = (
     ...payload,
     lineupArtists: alignedArtists as unknown as Prisma.JsonValue,
     lineupSlots: relinkSlotsToAlignedArtists(slots, alignedArtists) as unknown as Prisma.JsonValue,
+  } as Prisma.JsonObject;
+};
+
+export const incrementallyFillEventLineupFromTimetablePayload = (
+  payload: Prisma.JsonObject,
+  eventStartDate: Date,
+  dayRolloverHour: number,
+  timeZone: string
+): Prisma.JsonObject => {
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  if (slots.length === 0) return payload;
+  const currentArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
+  const timetableArtists = normalizeCanonicalLineupArtists([], slots);
+  const mergedArtists = mergeIncrementalLineupArtists(currentArtists, timetableArtists);
+  return {
+    ...payload,
+    lineupArtists: mergedArtists as unknown as Prisma.JsonValue,
+    lineupSlots: relinkSlotsToAlignedArtists(slots, mergedArtists) as unknown as Prisma.JsonValue,
   } as Prisma.JsonObject;
 };
 
@@ -770,7 +730,6 @@ const applySubmissionLineupPatch = async (
   const snapshot: CanonicalLineupSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
   let artists = snapshot.artists.slice();
   let slots = snapshot.slots.slice();
-  const affectedTimetableIdentityKeys = new Set<string>();
   let stageOrder = normalizeEventStageOrder(payload.stageOrder);
   if (stageOrder.length === 0) stageOrder = snapshot.stageOrder.slice();
 
@@ -832,11 +791,6 @@ const applySubmissionLineupPatch = async (
       const slotPayload = jsonObjectOrNull(rawChange.slot);
       const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], eventStartDate, dayRolloverHour, timeZone);
       if (normalized.length === 0) throw new Error('新增 time slot 缺少艺人或时间信息');
-      affectedTimetableIdentityKeys.add(lineupIdentityKey({
-        djId: normalized[0].djId,
-        memberDjIds: normalized[0].memberDjIds,
-        djName: normalized[0].djName,
-      }));
       slots.push({
         ...normalized[0],
         sortOrder: normalized[0].sortOrder || slots.length + 1,
@@ -847,11 +801,6 @@ const applySubmissionLineupPatch = async (
     const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
     const existing = slotById().get(slotId);
     if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
-    affectedTimetableIdentityKeys.add(lineupIdentityKey({
-      djId: existing.djId,
-      memberDjIds: existing.memberDjIds,
-      djName: existing.djName,
-    }));
 
     if (op === 'delete') {
       slots = slots.filter((slot) => slot.id !== slotId);
@@ -863,11 +812,6 @@ const applySubmissionLineupPatch = async (
       if (!patch) throw new Error('time slot 更新缺少 patch 内容');
       const normalized = normalizeSubmissionLineupSlots([{ ...existing, ...patch, id: slotId }], eventStartDate, dayRolloverHour, timeZone);
       if (normalized.length === 0) throw new Error(`time slot 更新内容无效：${slotId}`);
-      affectedTimetableIdentityKeys.add(lineupIdentityKey({
-        djId: normalized[0].djId,
-        memberDjIds: normalized[0].memberDjIds,
-        djName: normalized[0].djName,
-      }));
       slots = slots.map((slot) => slot.id === slotId ? { ...normalized[0], id: slotId } : slot);
       continue;
     }
@@ -931,11 +875,13 @@ const applySubmissionLineupPatch = async (
     .map((slot, index) => ({ ...slot, sortOrder: slot.sortOrder || index + 1 }));
   const normalizedArtists = normalizeCanonicalLineupArtists(
     artists.slice().sort((a, b) => a.sortOrder - b.sortOrder),
-    normalizedSlots
+    []
   );
-  const finalArtists = affectedTimetableIdentityKeys.size > 0
-    ? syncLineupArtistsForAffectedTimetableKeys(normalizedArtists, normalizedSlots, affectedTimetableIdentityKeys)
-    : normalizedArtists;
+  const timetableArtists = normalizeCanonicalLineupArtists([], normalizedSlots);
+  const lineupSyncMode = resolveEventLineupSyncMode(payload);
+  const finalArtists = lineupSyncMode === 'exact_align'
+    ? mergeAlignedLineupArtists(normalizedArtists, timetableArtists)
+    : mergeIncrementalLineupArtists(normalizedArtists, timetableArtists);
   const finalSlots = relinkSlotsToAlignedArtists(normalizedSlots, finalArtists);
 
   return {
@@ -959,16 +905,14 @@ const syncSubmissionEventLineupAndTimetable = async (
     return;
   }
 
-  const snapshot: CanonicalLineupSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
   const submittedArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
-  const normalizedArtists = normalizeCanonicalLineupArtists(submittedArtists, slots);
-  const affectedIdentityKeys = collectAffectedTimetableIdentityKeys(snapshot.slots, slots);
-  const artists = slots.length > 0
-    ? (affectedIdentityKeys.size > 0
-      ? syncLineupArtistsForAffectedTimetableKeys(normalizedArtists, slots, affectedIdentityKeys)
-      : normalizedArtists)
-    : normalizeCanonicalLineupArtists(submittedArtists, slots);
+  const normalizedArtists = normalizeCanonicalLineupArtists(submittedArtists, []);
+  const timetableArtists = normalizeCanonicalLineupArtists([], slots);
+  const lineupSyncMode = resolveEventLineupSyncMode(payload);
+  const artists = lineupSyncMode === 'exact_align'
+    ? mergeAlignedLineupArtists(normalizedArtists, timetableArtists)
+    : mergeIncrementalLineupArtists(normalizedArtists, timetableArtists);
   const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
   await syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);

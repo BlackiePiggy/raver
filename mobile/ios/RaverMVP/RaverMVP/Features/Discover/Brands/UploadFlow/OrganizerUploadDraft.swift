@@ -24,6 +24,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
     var frequency: String = ""
     var tagline: String = ""
     var introduction: String = ""
+    var descriptionI18n: EventUploadLocalizedFields = EventUploadLocalizedFields()
     var officialWebsite: String = ""
     var instagram: String = ""
     var facebook: String = ""
@@ -35,6 +36,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
     var proofImages: [OrganizerUploadImageDraft] = []
     var otherImages: [OrganizerUploadImageDraft] = []
     var boundEventIDs: [String] = []
+    var baseBrandRevision: Int? = nil
     var rightsConfirmed = false
     var identityConfirmed = false
     var dirty = false
@@ -49,6 +51,12 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         let localized = nameI18n.primaryValue(preferredLanguage: preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines)
         if !localized.isEmpty { return localized }
         return name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var primaryIntroduction: String {
+        let localized = descriptionI18n.primaryValue(preferredLanguage: preferredLanguage).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !localized.isEmpty { return localized }
+        return introduction.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var hasAnyLink: Bool {
@@ -153,6 +161,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         draft.name = trimmedName
         draft.nameI18n.zh = trimmedName
         draft.nameI18n.en = trimmedName
+        draft.descriptionI18n.setValue(draft.introduction, for: draft.preferredLanguage)
         return draft
     }
 
@@ -172,6 +181,10 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         draft.frequency = brand.frequency
         draft.tagline = brand.tagline
         draft.introduction = brand.introduction
+        draft.descriptionI18n = OrganizerUploadMappers.localizedFields(
+            name: brand.introduction,
+            i18n: brand.descriptionI18n
+        )
         draft.officialWebsite = brand.officialWebsite ?? ""
         draft.instagram = brand.instagramUrl ?? ""
         draft.facebook = brand.facebookUrl ?? ""
@@ -179,6 +192,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         draft.youtube = brand.youtubeUrl ?? ""
         draft.tiktok = brand.tiktokUrl ?? ""
         draft.boundEventIDs = []
+        draft.baseBrandRevision = brand.revision
         if let avatarURL = brand.avatarUrl?.nilIfBlank {
             draft.avatarImage = OrganizerUploadImageDraft(
                 zone: .avatar,

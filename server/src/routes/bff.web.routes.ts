@@ -6,6 +6,8 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import jpeg from 'jpeg-js';
+import { PNG } from 'pngjs';
 import { commentService } from '../modules/feed';
 import {
   djSetService,
@@ -66,7 +68,14 @@ import {
   attachContentSubmissionChangeSummary,
   changeSummaryTextFromPayload,
 } from '../services/content-submission-change-summary.service';
-import { bindBrandDraftMediaToSubmission } from '../services/content-submission-brand.service';
+import {
+  assertBrandSubmissionBaseRevision,
+  bindBrandDraftMediaToSubmission,
+  BrandSubmissionConflictError,
+  buildBrandSubmissionReviewNotes,
+  cleanupOrphanedBrandDraftMediaAfterSubmission,
+  normalizeBrandSubmissionPayload,
+} from '../services/content-submission-brand.service';
 import {
   ActiveEventEditSubmissionError,
   assertNoActiveEventEditSubmission,
@@ -75,6 +84,7 @@ import {
   buildAlignedLineupArtistsFromTimetablePayload,
   EventSubmissionConflictError,
   formatEventLineupTimetableAlignmentError,
+  incrementallyFillEventLineupFromTimetablePayload,
   validateEventLineupTimetableAlignment,
 } from '../services/content-submission-event.service';
 
@@ -111,6 +121,7 @@ const learnFestivalListSelect = {
   avatarUrl: true,
   backgroundUrl: true,
   links: true,
+  revision: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.WikiFestivalSelect;
@@ -520,18 +531,139 @@ const buildI18nReviewNotes = (entityType: string, payload: Record<string, unknow
   compliance: contentCompliance.reviewNotes(entityType, payload),
 });
 
+const buildSubmissionReviewNotes = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  entityType: string,
+  payload: Record<string, unknown>
+): Promise<Prisma.InputJsonObject> => {
+  if (entityType !== 'brand') {
+    return buildI18nReviewNotes(entityType, payload);
+  }
+  const brandScreening = await buildBrandSubmissionReviewNotes(
+    db,
+    payload as Prisma.JsonObject
+  );
+  return {
+    ...buildI18nReviewNotes(entityType, payload),
+    ...brandScreening,
+  };
+};
+
+const cleanSubmittedBrandText = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const hasSubmittedBrandImageAssetType = (
+  payload: Record<string, unknown>,
+  acceptedTypes: Set<string>
+): boolean =>
+  Array.isArray(payload.imageAssets) && payload.imageAssets.some((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const row = item as Record<string, unknown>;
+    const type = cleanSubmittedBrandText(row.type)?.toLowerCase() || 'other';
+    return acceptedTypes.has(type) && Boolean(cleanSubmittedBrandText(row.url));
+  });
+
+const hasSubmittedBrandPrimaryVisual = (payload: Record<string, unknown>): boolean =>
+  Boolean(cleanSubmittedBrandText(payload.avatarUrl))
+  || Boolean(cleanSubmittedBrandText(payload.backgroundUrl))
+  || hasSubmittedBrandImageAssetType(payload, new Set(['avatar', 'background', 'poster']));
+
+const hasSubmittedBrandOfficialLink = (payload: Record<string, unknown>): boolean =>
+  [
+    payload.officialWebsite,
+    payload.facebookUrl,
+    payload.instagramUrl,
+    payload.twitterUrl,
+    payload.youtubeUrl,
+    payload.tiktokUrl,
+  ].some((item) => Boolean(cleanSubmittedBrandText(item)))
+  || (Array.isArray(payload.links) && payload.links.some((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    return Boolean(cleanSubmittedBrandText((item as Record<string, unknown>).url));
+  }));
+
+const hasSubmittedBrandProofImage = (payload: Record<string, unknown>): boolean =>
+  Boolean(cleanSubmittedBrandText(payload.proofImageUrl))
+  || hasSubmittedBrandImageAssetType(payload, new Set(['proof']));
+
+const submittedBrandFlag = (value: unknown): boolean =>
+  value === true || cleanSubmittedBrandText(value)?.toLowerCase() === 'true';
+
+const validateBrandSubmissionPayload = (payload: Record<string, unknown>): string | null => {
+  if (!cleanSubmittedBrandText(payload.name)) {
+    return 'name is required';
+  }
+  if (!hasSubmittedBrandPrimaryVisual(payload)) {
+    return 'brand primary visual is required';
+  }
+  if (!hasSubmittedBrandOfficialLink(payload) && !hasSubmittedBrandProofImage(payload)) {
+    return 'official link or proof image is required';
+  }
+  if (!submittedBrandFlag(payload.rightsConfirmed) || !submittedBrandFlag(payload.identityConfirmed)) {
+    return 'rightsConfirmed and identityConfirmed are required';
+  }
+  return null;
+};
+
+const brandPayloadForValidation = (
+  body: Record<string, unknown>,
+  existing?: {
+    name: string;
+    avatarUrl?: string | null;
+    backgroundUrl?: string | null;
+    officialWebsite?: string | null;
+    facebookUrl?: string | null;
+    instagramUrl?: string | null;
+    twitterUrl?: string | null;
+    youtubeUrl?: string | null;
+    tiktokUrl?: string | null;
+    links?: Prisma.JsonValue | null;
+  } | null
+): Record<string, unknown> => {
+  if (!existing) {
+    return body;
+  }
+  return {
+    name: existing.name,
+    avatarUrl: existing.avatarUrl ?? null,
+    backgroundUrl: existing.backgroundUrl ?? null,
+    officialWebsite: existing.officialWebsite ?? null,
+    facebookUrl: existing.facebookUrl ?? null,
+    instagramUrl: existing.instagramUrl ?? null,
+    twitterUrl: existing.twitterUrl ?? null,
+    youtubeUrl: existing.youtubeUrl ?? null,
+    tiktokUrl: existing.tiktokUrl ?? null,
+    links: existing.links ?? null,
+    ...body,
+  };
+};
+
 const normalizeSubmittedEventLineupToTimetable = (payload: Record<string, unknown>): Record<string, unknown> => {
   if (typeof payload.targetEventId === 'string' && payload.targetEventId.trim()) {
     return payload;
   }
   const { startDate, dayRolloverHour, timeZone } = resolveSubmittedEventTimelineContext(payload);
   if (!startDate) return payload;
-  return autoAlignEventLineupToTimetablePayload(
+  const lineupSyncMode = typeof payload.lineupSyncMode === 'string'
+    ? payload.lineupSyncMode.trim().toLowerCase()
+    : 'incremental_fill';
+  const normalizedPayload = lineupSyncMode === 'exact_align'
+    ? autoAlignEventLineupToTimetablePayload(
+      payload as unknown as Prisma.JsonObject,
+      startDate,
+      dayRolloverHour,
+      timeZone
+    )
+    : incrementallyFillEventLineupFromTimetablePayload(
     payload as unknown as Prisma.JsonObject,
     startDate,
     dayRolloverHour,
     timeZone
-  ) as unknown as Record<string, unknown>;
+    );
+  return normalizedPayload as unknown as Record<string, unknown>;
 };
 
 const resolveSubmittedEventTimelineContext = (payload: Record<string, unknown>): {
@@ -578,10 +710,15 @@ const createPendingContentSubmission = async (input: {
   payload: Record<string, unknown>;
   idempotencyKey?: string | null;
 }) => {
+  const normalizedPayload =
+    input.entityType === 'brand'
+      ? normalizeBrandSubmissionPayload(input.payload as Prisma.InputJsonObject)
+      : (input.payload as Prisma.InputJsonObject);
   const payloadWithSummary = attachContentSubmissionChangeSummary(
     input.entityType,
-    input.payload as Prisma.InputJsonObject
+    normalizedPayload
   );
+  let orphanedBrandDraftObjectKeys: string[] = [];
   const submission = await prisma.$transaction(async (tx) => {
     if (input.idempotencyKey) {
       const existing = await tx.contentSubmission.findFirst({
@@ -597,6 +734,10 @@ const createPendingContentSubmission = async (input: {
         lockTargetEvent: true,
       });
     }
+    if (input.entityType === 'brand') {
+      await assertBrandSubmissionBaseRevision(tx, payloadWithSummary as Prisma.JsonObject);
+    }
+    const reviewNotes = await buildSubmissionReviewNotes(tx, input.entityType, payloadWithSummary);
     const submission = await tx.contentSubmission.create({
       data: {
         submitterId: input.submitterId,
@@ -604,7 +745,7 @@ const createPendingContentSubmission = async (input: {
         title: input.title,
         payload: payloadWithSummary,
         idempotencyKey: input.idempotencyKey || null,
-        reviewNotes: buildI18nReviewNotes(input.entityType, payloadWithSummary),
+        reviewNotes,
         status: 'processing',
       },
     });
@@ -627,10 +768,19 @@ const createPendingContentSubmission = async (input: {
         input.submitterId,
         submission.id
       );
+      orphanedBrandDraftObjectKeys = await cleanupOrphanedBrandDraftMediaAfterSubmission(
+        tx,
+        payloadWithSummary as Prisma.JsonObject,
+        input.submitterId
+      );
     }
 
     return submission;
   });
+
+  if (orphanedBrandDraftObjectKeys.length > 0) {
+    await deleteOssObjects(Array.from(new Set(orphanedBrandDraftObjectKeys)));
+  }
 
   const typeLabelMap: Record<string, string> = {
     event: '活动',
@@ -1940,15 +2090,16 @@ const createVideoUpload = (destinationDir: string, maxSize: number) =>
     },
   });
 
-const eventImageUpload = createImageUpload(eventUploadDir, 10 * 1024 * 1024);
-const lineupImportImageUpload = createImageUpload(eventUploadDir, 10 * 1024 * 1024);
-const djSetThumbUpload = createImageUpload(djSetUploadDir, 10 * 1024 * 1024);
+const STANDARD_IMAGE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const eventImageUpload = createImageUpload(eventUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
+const lineupImportImageUpload = createImageUpload(eventUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
+const djSetThumbUpload = createImageUpload(djSetUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
 const djSetVideoUpload = createVideoUpload(djSetUploadDir, 300 * 1024 * 1024);
-const feedImageUpload = createImageUpload(feedUploadDir, 10 * 1024 * 1024);
+const feedImageUpload = createImageUpload(feedUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
 const feedVideoUpload = createVideoUpload(feedUploadDir, 300 * 1024 * 1024);
-const djImageUpload = createImageUpload(djUploadDir, 10 * 1024 * 1024);
-const ratingImageUpload = createImageUpload(ratingUploadDir, 10 * 1024 * 1024);
-const wikiBrandImageUpload = createImageUpload(wikiBrandUploadDir, 10 * 1024 * 1024);
+const djImageUpload = createImageUpload(djUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
+const ratingImageUpload = createImageUpload(ratingUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
+const wikiBrandImageUpload = createImageUpload(wikiBrandUploadDir, STANDARD_IMAGE_UPLOAD_MAX_BYTES);
 
 type EventUploadTimingContext = {
   requestId: string;
@@ -2003,15 +2154,15 @@ const cozeTimetableWorkflowToken = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_
 const cozeTimetableWorkflowImageField =
   cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
 const cozeTimetableWorkflowTimeoutMs =
-  parseCozeTimeoutMs(process.env.COZE_TIMETABLE_WORKFLOW_TIMEOUT_MS) ?? 300_000;
+  parseCozeTimeoutMs(process.env.COZE_TIMETABLE_WORKFLOW_TIMEOUT_MS) ?? 480_000;
 const cozeLineupWorkflowRunUrl = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_RUN_URL);
 const cozeLineupWorkflowToken = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_TOKEN);
 const cozeLineupWorkflowTimeoutMs =
-  parseCozeTimeoutMs(process.env.COZE_LINEUP_WORKFLOW_TIMEOUT_MS) ?? 300_000;
+  parseCozeTimeoutMs(process.env.COZE_LINEUP_WORKFLOW_TIMEOUT_MS) ?? 480_000;
 const cozePosterWorkflowRunUrl = cleanEnv(process.env.COZE_POSTER_WORKFLOW_RUN_URL);
 const cozePosterWorkflowToken = cleanEnv(process.env.COZE_POSTER_WORKFLOW_TOKEN);
 const cozePosterWorkflowTimeoutMs =
-  parseCozeTimeoutMs(process.env.COZE_POSTER_WORKFLOW_TIMEOUT_MS) ?? 300_000;
+  parseCozeTimeoutMs(process.env.COZE_POSTER_WORKFLOW_TIMEOUT_MS) ?? 480_000;
 const cozeOssAccelerateBaseUrl = (() => {
   const explicit =
     cleanEnv(process.env.COZE_OSS_ACCELERATE_BASE_URL) ||
@@ -2229,6 +2380,239 @@ const normalizeUploadedOssUrl = (rawUrl: string | undefined, objectKey: string):
     : `${ossRegion}.aliyuncs.com`;
   const bucketHost = endpointHost.startsWith(`${ossBucket}.`) ? endpointHost : `${ossBucket}.${endpointHost}`;
   return `https://${bucketHost}/${objectKey}`;
+};
+
+const parseOptionalImageSort = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.trunc(parsed));
+};
+
+type WikiBrandImageUsage = 'avatar' | 'background' | 'poster' | 'proof' | 'other';
+const WIKI_BRAND_IMAGE_USAGES = new Set<WikiBrandImageUsage>([
+  'avatar',
+  'background',
+  'poster',
+  'proof',
+  'other',
+]);
+
+const parseWikiBrandImageUsage = (value: unknown): WikiBrandImageUsage | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return WIKI_BRAND_IMAGE_USAGES.has(normalized as WikiBrandImageUsage)
+    ? (normalized as WikiBrandImageUsage)
+    : null;
+};
+
+const computeBufferSha256 = (buffer: Buffer): string =>
+  crypto.createHash('sha256').update(buffer).digest('hex');
+
+class WikiBrandImageValidationError extends Error {}
+
+const WIKI_BRAND_PROOF_MIN_SHORT_EDGE_PX = 1200;
+const WIKI_BRAND_PUBLIC_IMAGE_JPEG_QUALITY = 90;
+
+const canonicalizeImageMimeType = (mimeType: string | null | undefined): string => {
+  const normalized = String(mimeType || '').toLowerCase();
+  if (normalized.includes('png')) return 'image/png';
+  if (normalized.includes('webp')) return 'image/webp';
+  if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'image/jpeg';
+  if (normalized.includes('gif')) return 'image/gif';
+  return 'image/jpeg';
+};
+
+const normalizedImageExtensionFromMimeType = (mimeType: string): string => {
+  if (mimeType.includes('png')) return '.png';
+  if (mimeType.includes('webp')) return '.webp';
+  if (mimeType.includes('gif')) return '.gif';
+  return '.jpg';
+};
+
+const normalizeWikiBrandUploadImage = (
+  buffer: Buffer,
+  mimeType: string | null | undefined,
+  usage: string | null
+): {
+  buffer: Buffer;
+  mimeType: string;
+} => {
+  const canonicalMimeType = canonicalizeImageMimeType(mimeType);
+
+  if (usage === 'proof') {
+    if (canonicalMimeType === 'image/png' || canonicalMimeType === 'image/jpeg' || canonicalMimeType === 'image/webp') {
+      return {
+        buffer,
+        mimeType: canonicalMimeType,
+      };
+    }
+    throw new WikiBrandImageValidationError('proof image must be png, jpeg, or webp');
+  }
+
+  if (canonicalMimeType === 'image/webp') {
+    return {
+      buffer,
+      mimeType: canonicalMimeType,
+    };
+  }
+
+  if (canonicalMimeType === 'image/png') {
+    const decoded = PNG.sync.read(buffer);
+    const encoded = jpeg.encode(
+      {
+        data: decoded.data,
+        width: decoded.width,
+        height: decoded.height,
+      },
+      WIKI_BRAND_PUBLIC_IMAGE_JPEG_QUALITY
+    );
+    return {
+      buffer: Buffer.from(encoded.data),
+      mimeType: 'image/jpeg',
+    };
+  }
+
+  if (canonicalMimeType === 'image/jpeg') {
+    const decoded = jpeg.decode(buffer, { useTArray: true });
+    const encoded = jpeg.encode(
+      {
+        data: decoded.data,
+        width: decoded.width,
+        height: decoded.height,
+      },
+      WIKI_BRAND_PUBLIC_IMAGE_JPEG_QUALITY
+    );
+    return {
+      buffer: Buffer.from(encoded.data),
+      mimeType: 'image/jpeg',
+    };
+  }
+
+  throw new WikiBrandImageValidationError('brand image must be png, jpeg, or webp');
+};
+
+const validateWikiBrandImageDimensions = (
+  usage: string | null,
+  dimensions: { width: number | null; height: number | null }
+): void => {
+  if (usage !== 'proof') return;
+  if (!dimensions.width || !dimensions.height) return;
+  const shortEdge = Math.min(dimensions.width, dimensions.height);
+  if (shortEdge < WIKI_BRAND_PROOF_MIN_SHORT_EDGE_PX) {
+    throw new WikiBrandImageValidationError(
+      `proof image is too small; shortest edge must be at least ${WIKI_BRAND_PROOF_MIN_SHORT_EDGE_PX}px`
+    );
+  }
+};
+
+const buildWikiBrandUploadResponseFromAsset = (
+  asset: {
+    id: string;
+    url: string;
+    mimeType: string | null;
+    sizeBytes: number | null;
+    width: number | null;
+    height: number | null;
+    ownerType: string;
+    ownerId: string | null;
+    objectKey: string | null;
+    metadata: Prisma.JsonValue | null;
+  },
+  fallbackSort: number | null
+) => {
+  const metadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+    ? (asset.metadata as Record<string, unknown>)
+    : {};
+  const sortRaw = metadata.sort;
+  const originalUrlRaw = metadata.originalUrl;
+  const normalizedSort =
+    typeof sortRaw === 'number' && Number.isFinite(sortRaw)
+      ? Math.max(0, Math.trunc(sortRaw))
+      : fallbackSort;
+  const originalUrl =
+    typeof originalUrlRaw === 'string' && originalUrlRaw.trim().length > 0
+      ? originalUrlRaw.trim()
+      : asset.url;
+
+  return {
+    assetId: asset.id,
+    url: asset.url,
+    originalUrl,
+    fileName: path.basename(asset.objectKey || asset.url.split('?')[0] || 'image.jpg'),
+    mimeType: asset.mimeType || 'image/jpeg',
+    size: asset.sizeBytes ?? 0,
+    width: asset.width,
+    height: asset.height,
+    sort: normalizedSort,
+    ownerType: asset.ownerType,
+    ownerId: asset.ownerId,
+  };
+};
+
+const findReusableWikiBrandMediaAsset = async (
+  ownerType: 'wiki_brand' | 'wiki_brand_draft',
+  ownerId: string,
+  purpose: string,
+  contentHash: string
+) => prisma.mediaAsset.findFirst({
+  where: {
+    ownerType,
+    ownerId,
+    purpose,
+    status: 'active',
+    metadata: {
+      path: ['contentHash'],
+      equals: contentHash,
+    },
+  },
+  select: {
+    id: true,
+    url: true,
+    mimeType: true,
+    sizeBytes: true,
+    width: true,
+    height: true,
+    ownerType: true,
+    ownerId: true,
+    objectKey: true,
+    metadata: true,
+  },
+});
+
+const normalizeWikiBrandImageVisibility = (usage: string | null): 'public' | 'review_only' =>
+  usage === 'proof' ? 'review_only' : 'public';
+
+const inferImageDimensionsFromBuffer = (
+  buffer: Buffer,
+  mimeType: string | null | undefined
+): { width: number | null; height: number | null } => {
+  if (!buffer.length) return { width: null, height: null };
+
+  const normalizedMime = String(mimeType || '').toLowerCase();
+  try {
+    if (normalizedMime.includes('png')) {
+      const png = PNG.sync.read(buffer);
+      return {
+        width: Number.isFinite(png.width) ? png.width : null,
+        height: Number.isFinite(png.height) ? png.height : null,
+      };
+    }
+    if (normalizedMime.includes('jpeg') || normalizedMime.includes('jpg')) {
+      const decoded = jpeg.decode(buffer, { useTArray: true });
+      return {
+        width: Number.isFinite(decoded.width) ? decoded.width : null,
+        height: Number.isFinite(decoded.height) ? decoded.height : null,
+      };
+    }
+  } catch (error) {
+    console.warn('BFF web infer image dimensions failed:', {
+      mimeType: normalizedMime,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return { width: null, height: null };
 };
 
 const sanitizeOssPathSegment = (value: string): string =>
@@ -2948,14 +3332,8 @@ const buildWikiBrandMediaObjectKey = (
   usage: string | null
 ): string => {
   const rawExt = path.extname(fileName || '').toLowerCase();
-  const mimeExt = mimeType.includes('png')
-    ? '.png'
-    : mimeType.includes('webp')
-      ? '.webp'
-      : mimeType.includes('gif')
-        ? '.gif'
-        : '.jpg';
-  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const mimeExt = normalizedImageExtensionFromMimeType(mimeType);
+  const ext = rawExt === mimeExt ? rawExt : mimeExt;
   const safeBrandId = sanitizeOssPathSegment(brandId || '') || 'unknown-brand';
   const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
   return `${ossWikiBrandsPrefix}/${safeBrandId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
@@ -2969,14 +3347,8 @@ const buildWikiBrandDraftMediaObjectKey = (
   usage: string | null
 ): string => {
   const rawExt = path.extname(fileName || '').toLowerCase();
-  const mimeExt = mimeType.includes('png')
-    ? '.png'
-    : mimeType.includes('webp')
-      ? '.webp'
-      : mimeType.includes('gif')
-        ? '.gif'
-        : '.jpg';
-  const ext = rawExt && rawExt.length <= 10 ? rawExt : mimeExt;
+  const mimeExt = normalizedImageExtensionFromMimeType(mimeType);
+  const ext = rawExt === mimeExt ? rawExt : mimeExt;
   const safeUserId = sanitizeOssPathSegment(userId) || 'unknown-user';
   const safeDraftId = sanitizeOssPathSegment(draftId) || 'unknown-draft';
   const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
@@ -3949,7 +4321,8 @@ const uploadWikiBrandMediaToOss = async (
   file: Express.Multer.File,
   brandId: string | null,
   usage: string | null,
-  uploadedById?: string | null
+  uploadedById?: string | null,
+  sort?: number | null
 ): Promise<{
   assetId: string;
   url: string;
@@ -3957,6 +4330,9 @@ const uploadWikiBrandMediaToOss = async (
   fileName: string;
   mimeType: string;
   size: number;
+  width: number | null;
+  height: number | null;
+  sort: number | null;
   ownerType: string;
   ownerId: string | null;
 }> => {
@@ -3965,55 +4341,67 @@ const uploadWikiBrandMediaToOss = async (
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
   }
 
-  const mimeType = file.mimetype || 'image/jpeg';
-  const objectKey = buildWikiBrandMediaObjectKey(brandId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
-
-  let putResult: { url?: string };
   try {
-    putResult = await postMediaOssClient.put(objectKey, file.path, {
+    const fileBuffer = await fs.promises.readFile(file.path);
+    const normalizedUpload = normalizeWikiBrandUploadImage(fileBuffer, file.mimetype, usage);
+    const mimeType = normalizedUpload.mimeType;
+    const normalizedBuffer = normalizedUpload.buffer;
+    const dimensions = inferImageDimensionsFromBuffer(normalizedBuffer, mimeType);
+    validateWikiBrandImageDimensions(usage, dimensions);
+    const normalizedSort = typeof sort === 'number' && Number.isFinite(sort) ? sort : null;
+    const contentHash = computeBufferSha256(normalizedBuffer);
+    const existingAsset = await findReusableWikiBrandMediaAsset(
+      'wiki_brand',
+      brandId || 'unknown-brand',
+      usage || 'image',
+      contentHash
+    );
+    if (existingAsset) {
+      return buildWikiBrandUploadResponseFromAsset(existingAsset, normalizedSort);
+    }
+    const objectKey = buildWikiBrandMediaObjectKey(brandId, file.originalname || file.filename || 'image.jpg', mimeType, usage);
+
+    const putResult = await postMediaOssClient.put(objectKey, normalizedBuffer, {
       headers: {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
+    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: 'wiki_brand',
+      ownerId: brandId,
+      purpose: usage || 'image',
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType,
+      sizeBytes: file.size,
+      width: dimensions.width,
+      height: dimensions.height,
+      uploadedById: uploadedById || null,
+      metadata: {
+        originalName: file.originalname,
+        originalUrl: url,
+        contentHash,
+        sort: normalizedSort,
+        visibility: normalizeWikiBrandImageVisibility(usage),
+        source: 'v1/wiki/brands/upload-image',
+      },
+    });
+
+    return buildWikiBrandUploadResponseFromAsset(asset, normalizedSort);
   } finally {
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
-
-  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
-  const asset = await mediaAssetService.register({
-    ownerType: 'wiki_brand',
-    ownerId: brandId,
-    purpose: usage || 'image',
-    provider: 'oss',
-    objectKey,
-    url,
-    mimeType,
-    sizeBytes: file.size,
-    uploadedById: uploadedById || null,
-    metadata: {
-      originalName: file.originalname,
-      source: 'v1/wiki/brands/upload-image',
-    },
-  });
-
-  return {
-    assetId: asset.id,
-    url,
-    originalUrl: url,
-    fileName: path.basename(objectKey),
-    mimeType,
-    size: file.size,
-    ownerType: 'wiki_brand',
-    ownerId: brandId,
-  };
 };
 
 const uploadWikiBrandDraftMediaToOss = async (
   file: Express.Multer.File,
   userId: string,
   draftId: string,
-  usage: string | null
+  usage: string | null,
+  sort?: number | null
 ): Promise<{
   assetId: string;
   url: string;
@@ -4021,62 +4409,76 @@ const uploadWikiBrandDraftMediaToOss = async (
   fileName: string;
   mimeType: string;
   size: number;
+  width: number | null;
+  height: number | null;
+  sort: number | null;
   ownerType: string;
-  ownerId: string;
+  ownerId: string | null;
 }> => {
   if (!postMediaOssClient) {
     await fs.promises.unlink(file.path).catch(() => undefined);
     throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
   }
 
-  const mimeType = file.mimetype || 'image/jpeg';
-  const objectKey = buildWikiBrandDraftMediaObjectKey(
-    userId,
-    draftId,
-    file.originalname || file.filename || 'image.jpg',
-    mimeType,
-    usage
-  );
-
-  let putResult: { url?: string };
   try {
-    putResult = await postMediaOssClient.put(objectKey, file.path, {
+    const fileBuffer = await fs.promises.readFile(file.path);
+    const normalizedUpload = normalizeWikiBrandUploadImage(fileBuffer, file.mimetype, usage);
+    const mimeType = normalizedUpload.mimeType;
+    const normalizedBuffer = normalizedUpload.buffer;
+    const dimensions = inferImageDimensionsFromBuffer(normalizedBuffer, mimeType);
+    validateWikiBrandImageDimensions(usage, dimensions);
+    const normalizedSort = typeof sort === 'number' && Number.isFinite(sort) ? sort : null;
+    const contentHash = computeBufferSha256(normalizedBuffer);
+    const existingAsset = await findReusableWikiBrandMediaAsset(
+      'wiki_brand_draft',
+      draftId,
+      usage || 'image',
+      contentHash
+    );
+    if (existingAsset) {
+      return buildWikiBrandUploadResponseFromAsset(existingAsset, normalizedSort);
+    }
+    const objectKey = buildWikiBrandDraftMediaObjectKey(
+      userId,
+      draftId,
+      file.originalname || file.filename || 'image.jpg',
+      mimeType,
+      usage
+    );
+
+    const putResult = await postMediaOssClient.put(objectKey, normalizedBuffer, {
       headers: {
         'Content-Type': mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
+    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: 'wiki_brand_draft',
+      ownerId: draftId,
+      purpose: usage || 'image',
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType,
+      sizeBytes: file.size,
+      width: dimensions.width,
+      height: dimensions.height,
+      uploadedById: userId,
+      metadata: {
+        originalName: file.originalname,
+        originalUrl: url,
+        contentHash,
+        sort: normalizedSort,
+        visibility: normalizeWikiBrandImageVisibility(usage),
+        source: 'v1/wiki/brands/upload-image:draft',
+      },
+    });
+
+    return buildWikiBrandUploadResponseFromAsset(asset, normalizedSort);
   } finally {
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
-
-  const url = normalizeUploadedOssUrl(putResult.url, objectKey);
-  const asset = await mediaAssetService.register({
-    ownerType: 'wiki_brand_draft',
-    ownerId: draftId,
-    purpose: usage || 'image',
-    provider: 'oss',
-    objectKey,
-    url,
-    mimeType,
-    sizeBytes: file.size,
-    uploadedById: userId,
-    metadata: {
-      originalName: file.originalname,
-      source: 'v1/wiki/brands/upload-image:draft',
-    },
-  });
-
-  return {
-    assetId: asset.id,
-    url,
-    originalUrl: url,
-    fileName: path.basename(objectKey),
-    mimeType,
-    size: file.size,
-    ownerType: 'wiki_brand_draft',
-    ownerId: draftId,
-  };
 };
 
 const uploadLineupImportImageToOss = async (
@@ -5608,6 +6010,7 @@ const mapWikiFestival = (
     avatarUrl: row.avatarUrl ?? null,
     backgroundUrl: row.backgroundUrl ?? null,
     links,
+    revision: typeof row.revision === 'number' ? row.revision : 1,
     contributors,
     isFollowing,
     canEdit,
@@ -8668,10 +9071,10 @@ router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.sing
     const formBody = req.body as Record<string, unknown>;
     const brandIdRaw = typeof formBody.brandId === 'string' ? formBody.brandId.trim() : '';
     const draftIdRaw = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
-    const usageRaw = typeof formBody.usage === 'string' ? formBody.usage.trim() : '';
+    const usage = parseWikiBrandImageUsage(formBody.usage);
+    const sort = parseOptionalImageSort(formBody.sort);
     const brandId = brandIdRaw.length > 0 ? brandIdRaw : null;
     const draftId = draftIdRaw.length > 0 ? draftIdRaw : null;
-    const usage = usageRaw.length > 0 ? usageRaw : null;
 
     if (brandId && draftId) {
       await fs.promises.unlink(file.path).catch(() => undefined);
@@ -8683,9 +9086,14 @@ router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.sing
       res.status(400).json({ error: 'brandId or draftId is required' });
       return;
     }
+    if (!usage) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'usage must be avatar, background, poster, proof, or other' });
+      return;
+    }
 
     if (draftId) {
-      const uploaded = await uploadWikiBrandDraftMediaToOss(file, userId, draftId, usage);
+      const uploaded = await uploadWikiBrandDraftMediaToOss(file, userId, draftId, usage, sort);
       ok(res, uploaded);
       return;
     }
@@ -8712,9 +9120,13 @@ router.post('/wiki/brands/upload-image', optionalAuth, wikiBrandImageUpload.sing
       return;
     }
 
-    const uploaded = await uploadWikiBrandMediaToOss(file, brandId, usage, userId);
+    const uploaded = await uploadWikiBrandMediaToOss(file, brandId, usage, userId, sort);
     ok(res, uploaded);
   } catch (error) {
+    if (error instanceof WikiBrandImageValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error('BFF web upload wiki brand image error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -14440,6 +14852,13 @@ router.post('/learn/festivals', optionalAuth, async (req: Request, res: Response
       res.status(400).json({ error: 'name is required' });
       return;
     }
+    const brandValidationError = validateBrandSubmissionPayload(
+      normalizeBrandSubmissionPayload(body as Prisma.InputJsonObject)
+    );
+    if (brandValidationError) {
+      res.status(400).json({ error: brandValidationError });
+      return;
+    }
 
     const submission = await createPendingContentSubmission({
       submitterId: userId,
@@ -14532,6 +14951,15 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
     }
 
     const body = (req.body ?? {}) as Record<string, unknown>;
+    const brandValidationError = validateBrandSubmissionPayload(
+      normalizeBrandSubmissionPayload(
+        brandPayloadForValidation(body, existing) as Prisma.InputJsonObject
+      )
+    );
+    if (brandValidationError) {
+      res.status(400).json({ error: brandValidationError });
+      return;
+    }
     const updateData: Prisma.WikiFestivalUpdateInput = {};
     const hasNameField = Object.prototype.hasOwnProperty.call(body, 'name');
     const hasNameI18nField = Object.prototype.hasOwnProperty.call(body, 'nameI18n');
@@ -14738,12 +15166,21 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
       payload: {
         ...body,
         name: nextName || existing.name,
+        baseBrandRevision: body.baseBrandRevision,
         targetBrandId: festivalId,
         editMode: 'patch',
       },
     });
     acceptedSubmission(res, submission, '主办方编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
+    if (error instanceof BrandSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
     console.error('BFF web update learn festival error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

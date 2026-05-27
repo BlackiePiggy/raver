@@ -28,7 +28,10 @@ enum EventUploadMappers {
         firstRemoteURL(in: .lineup, draft: draft)
     }
 
-    static func createInput(from draft: EventUploadDraft) -> CreateEventInput {
+    static func createInput(
+        from draft: EventUploadDraft,
+        lineupSyncMode: EventLineupSyncMode = .incrementalFill
+    ) -> CreateEventInput {
         let language = draft.preferredLanguage
         let name = draft.name.primaryValue(preferredLanguage: language).trimmed
         let city = draft.city.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
@@ -91,12 +94,16 @@ enum EventUploadMappers {
             ticketTiers: ticketTiers,
             lineupArtists: lineupArtistInputs(from: draft),
             lineupSlots: lineupSlotInputs(from: draft),
+            lineupSyncMode: lineupSyncMode,
             status: EventVisualStatus.resolve(startDate: draft.startDate, endDate: draft.endDate).apiValue
         )
     }
 
-    static func updateInput(from draft: EventUploadDraft) -> UpdateEventInput {
-        let create = createInput(from: draft)
+    static func updateInput(
+        from draft: EventUploadDraft,
+        lineupSyncMode: EventLineupSyncMode = .incrementalFill
+    ) -> UpdateEventInput {
+        let create = createInput(from: draft, lineupSyncMode: lineupSyncMode)
         let shouldSubmitTimeZoneSelection = draft.selectedTimeZoneLookup?.matchSource != "event-edit-hydrate"
         var input = UpdateEventInput(
             name: create.name,
@@ -136,6 +143,7 @@ enum EventUploadMappers {
             ticketTiers: create.ticketTiers,
             lineupArtists: create.lineupArtists,
             lineupSlots: create.lineupSlots,
+            lineupSyncMode: create.lineupSyncMode,
             baseEventRevision: draft.incrementalBaseline?.eventRevision,
             status: create.status,
             clearManualLocation: create.manualLocation == nil,
@@ -364,7 +372,7 @@ enum EventUploadMappers {
         return tiers.isEmpty ? nil : tiers
     }
 
-    private static func lineupArtistInputs(from draft: EventUploadDraft) -> [EventLineupArtistInput]? {
+    static func lineupArtistInputs(from draft: EventUploadDraft) -> [EventLineupArtistInput]? {
         let lineupArtists = draft.lineupOnlySlots.enumerated().compactMap { offset, slot -> EventLineupArtistInput? in
             let performerNames = slot.performerNames
                 .prefix(slot.actType.performerCount)

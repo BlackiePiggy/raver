@@ -256,6 +256,7 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
     let id: String
     var name: String
     var nameI18n: WebBiText? = nil
+    var revision: Int? = nil
     var sourceRowId: Int? = nil
     var abbreviation: String? = nil
     var aliases: [String]
@@ -288,6 +289,8 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
 struct UpdateLearnFestivalInput: Codable {
     var name: String?
     var nameI18n: WebBiText? = nil
+    var baseBrandRevision: Int? = nil
+    var editMode: String? = nil
     var sourceRowId: Int? = nil
     var abbreviation: String? = nil
     var aliases: [String]?
@@ -495,6 +498,11 @@ struct EventLineupTimetableAlignmentPreview: Codable, Hashable {
     var issue: EventLineupTimetableAlignmentIssue? = nil
     var message: String? = nil
     var lineupArtists: [EventLineupArtistInput]
+}
+
+enum EventLineupSyncMode: String, Codable, Hashable {
+    case incrementalFill = "incremental_fill"
+    case exactAlign = "exact_align"
 }
 
 struct EventTicketTierInput: Codable, Hashable {
@@ -757,6 +765,7 @@ struct CreateEventInput: Encodable {
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
+    var lineupSyncMode: EventLineupSyncMode? = .incrementalFill
     var idempotencyKey: String? = nil
     var status: String?
 
@@ -800,6 +809,7 @@ struct CreateEventInput: Encodable {
         case ticketTiers
         case lineupArtists
         case lineupSlots
+        case lineupSyncMode
         case idempotencyKey
         case status
     }
@@ -846,6 +856,7 @@ struct CreateEventInput: Encodable {
         try container.encodeIfPresent(ticketTiers, forKey: .ticketTiers)
         try container.encodeIfPresent(lineupArtists, forKey: .lineupArtists)
         try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
+        try container.encodeIfPresent(lineupSyncMode, forKey: .lineupSyncMode)
         try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
         try container.encodeIfPresent(status, forKey: .status)
     }
@@ -1045,6 +1056,7 @@ struct UpdateEventInput: Encodable {
     var ticketTiers: [EventTicketTierInput]? = nil
     var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
+    var lineupSyncMode: EventLineupSyncMode? = .incrementalFill
     var baseEventRevision: Int? = nil
     var editMode: String? = nil
     var lineupChanges: [EventLineupArtistPatchChange]? = nil
@@ -1104,6 +1116,7 @@ struct UpdateEventInput: Encodable {
         case ticketTiers
         case lineupArtists
         case lineupSlots
+        case lineupSyncMode
         case baseEventRevision
         case editMode
         case lineupChanges
@@ -1195,6 +1208,7 @@ struct UpdateEventInput: Encodable {
         } else {
             try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
         }
+        try container.encodeIfPresent(lineupSyncMode, forKey: .lineupSyncMode)
         try container.encodeIfPresent(baseEventRevision, forKey: .baseEventRevision)
         try container.encodeIfPresent(editMode, forKey: .editMode)
         try container.encodeIfPresent(lineupChanges, forKey: .lineupChanges)
@@ -1911,6 +1925,9 @@ struct UploadMediaResponse: Codable, Hashable {
     var fileName: String
     var mimeType: String
     var size: Int
+    var width: Int? = nil
+    var height: Int? = nil
+    var sort: Int? = nil
     var ownerType: String? = nil
     var ownerId: String? = nil
 }

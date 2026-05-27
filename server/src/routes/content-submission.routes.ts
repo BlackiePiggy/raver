@@ -14,11 +14,16 @@ import {
   assertEventSubmissionBaseRevision,
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
+  incrementallyFillEventLineupFromTimetablePayload,
 } from '../services/content-submission-event.service';
 import { createOrUpdateDJFromSubmission } from '../services/content-submission-dj.service';
 import {
+  assertBrandSubmissionBaseRevision,
   bindBrandDraftMediaToSubmission,
+  BrandSubmissionConflictError,
+  buildBrandSubmissionReviewNotes,
   createOrUpdateBrandFromSubmission,
+  normalizeBrandSubmissionPayload,
 } from '../services/content-submission-brand.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
@@ -144,6 +149,61 @@ const buildI18nReviewNotes = (
   };
 };
 
+const hasBrandImageAssetType = (
+  payload: Prisma.InputJsonObject,
+  acceptedTypes: Set<string>
+): boolean =>
+  Array.isArray(payload.imageAssets) && payload.imageAssets.some((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const row = item as Record<string, unknown>;
+    const type = cleanText(row.type)?.toLowerCase() || 'other';
+    return acceptedTypes.has(type) && Boolean(cleanText(row.url));
+  });
+
+const hasBrandPrimaryVisual = (payload: Prisma.InputJsonObject): boolean =>
+  Boolean(cleanText(payload.avatarUrl))
+  || Boolean(cleanText(payload.backgroundUrl))
+  || hasBrandImageAssetType(payload, new Set(['avatar', 'background', 'poster']));
+
+const hasBrandOfficialLink = (payload: Prisma.InputJsonObject): boolean =>
+  [
+    payload.officialWebsite,
+    payload.facebookUrl,
+    payload.instagramUrl,
+    payload.twitterUrl,
+    payload.youtubeUrl,
+    payload.tiktokUrl,
+  ].some((item) => Boolean(cleanText(item)))
+  || (Array.isArray(payload.links) && payload.links.some((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    return Boolean(cleanText((item as Record<string, unknown>).url));
+  }));
+
+const hasBrandProofImage = (payload: Prisma.InputJsonObject): boolean =>
+  Boolean(cleanText(payload.proofImageUrl))
+  || hasBrandImageAssetType(payload, new Set(['proof']));
+
+const isTruthyFlag = (value: unknown): boolean =>
+  value === true || cleanText(value)?.toLowerCase() === 'true';
+
+const hasBrandRightsConfirmation = (payload: Prisma.InputJsonObject): boolean =>
+  isTruthyFlag(payload.rightsConfirmed);
+
+const hasBrandIdentityConfirmation = (payload: Prisma.InputJsonObject): boolean =>
+  isTruthyFlag(payload.identityConfirmed);
+
+const buildSubmissionReviewNotes = async (
+  db: PrismaClient | Prisma.TransactionClient,
+  entityType: string,
+  payload: Prisma.InputJsonObject
+): Promise<Prisma.InputJsonObject> => {
+  if (entityType !== 'brand') {
+    return buildI18nReviewNotes(entityType, payload);
+  }
+  const brandScreening = await buildBrandSubmissionReviewNotes(db, payload as Prisma.JsonObject);
+  return buildI18nReviewNotes(entityType, payload, brandScreening);
+};
+
 const ensureSubmissionPayload = (entityType: string, payload: Prisma.InputJsonObject): string | null => {
   const name = cleanText(payload.name);
   const title = cleanText(payload.title);
@@ -179,6 +239,17 @@ const ensureSubmissionPayload = (entityType: string, payload: Prisma.InputJsonOb
       return '活动开始和结束日期不能为空';
     }
   }
+  if (entityType === 'brand') {
+    if (!hasBrandPrimaryVisual(payload)) {
+      return '品牌主视觉图片不能为空';
+    }
+    if (!hasBrandOfficialLink(payload) && !hasBrandProofImage(payload)) {
+      return '至少需要填写一个官方链接或上传一张证明图片';
+    }
+    if (!hasBrandRightsConfirmation(payload) || !hasBrandIdentityConfirmation(payload)) {
+      return '请先确认版权与主体声明';
+    }
+  }
   const complianceError = contentCompliance.validationError(entityType, payload);
   if (complianceError) return complianceError;
   return null;
@@ -194,12 +265,21 @@ const normalizeEventSubmissionPayload = (payload: Prisma.InputJsonObject): Prism
   if (!startDate) return payload;
   const dayRolloverHourRaw = Number(payload.dayRolloverHour);
   const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
-  return autoAlignEventLineupToTimetablePayload(
+  const lineupSyncMode = cleanText(payload.lineupSyncMode)?.toLowerCase() || 'incremental_fill';
+  const normalizedPayload = lineupSyncMode === 'exact_align'
+    ? autoAlignEventLineupToTimetablePayload(
+      payload as unknown as Prisma.JsonObject,
+      startDate,
+      dayRolloverHour,
+      timeZone
+    )
+    : incrementallyFillEventLineupFromTimetablePayload(
     payload as unknown as Prisma.JsonObject,
     startDate,
     dayRolloverHour,
     timeZone
-  ) as unknown as Prisma.InputJsonObject;
+    );
+  return normalizedPayload as unknown as Prisma.InputJsonObject;
 };
 
 const createSubmissionWithVersion = async (input: {
@@ -229,6 +309,10 @@ const createSubmissionWithVersion = async (input: {
         lockTargetEvent: true,
       });
     }
+    if (input.entityType === 'brand') {
+      await assertBrandSubmissionBaseRevision(tx, input.payload as Prisma.JsonObject);
+    }
+    const reviewNotes = await buildSubmissionReviewNotes(tx, input.entityType, input.payload);
     const submission = await tx.contentSubmission.create({
       data: {
         submitterId: input.submitterId,
@@ -236,7 +320,7 @@ const createSubmissionWithVersion = async (input: {
         title: input.title,
         payload: input.payload,
         idempotencyKey: input.idempotencyKey || null,
-        reviewNotes: buildI18nReviewNotes(input.entityType, input.payload),
+        reviewNotes,
         status: 'processing',
       },
       include: {
@@ -681,7 +765,11 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       return;
     }
     const rawPayload = toJsonObject(req.body.payload);
-    const normalizedPayload = entityType === 'event' ? normalizeEventSubmissionPayload(rawPayload) : rawPayload;
+    const normalizedPayload = entityType === 'event'
+      ? normalizeEventSubmissionPayload(rawPayload)
+      : entityType === 'brand'
+        ? normalizeBrandSubmissionPayload(rawPayload)
+        : rawPayload;
     if (entityType === 'event') {
       await assertEventSubmissionBaseRevision(
         prisma,
@@ -727,6 +815,14 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       return;
     }
     if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
+    if (error instanceof BrandSubmissionConflictError) {
       res.status(409).json({
         error: error.message,
         code: error.code,
@@ -836,7 +932,11 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       return;
     }
     const rawPayload = toJsonObject(req.body.payload);
-    const normalizedPayload = current.entityType === 'event' ? normalizeEventSubmissionPayload(rawPayload) : rawPayload;
+    const normalizedPayload = current.entityType === 'event'
+      ? normalizeEventSubmissionPayload(rawPayload)
+      : current.entityType === 'brand'
+        ? normalizeBrandSubmissionPayload(rawPayload)
+        : rawPayload;
     const payload = attachContentSubmissionChangeSummary(current.entityType, normalizedPayload);
 
     const validationError = ensureSubmissionPayload(current.entityType, payload);
@@ -852,6 +952,9 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
           excludeSubmissionId: current.id,
           lockTargetEvent: true,
         });
+      }
+      if (current.entityType === 'brand') {
+        await assertBrandSubmissionBaseRevision(tx, payload as Prisma.JsonObject);
       }
       const latest = await (tx as any).contentSubmissionVersion.findFirst({
         where: { submissionId: current.id },
@@ -870,7 +973,7 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
           changeNote: changeNote || 'Resubmitted by user',
         },
       });
-
+      const reviewNotes = await buildSubmissionReviewNotes(tx, current.entityType, payload);
       return tx.contentSubmission.update({
         where: { id: current.id },
         data: {
@@ -878,7 +981,7 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
           payload,
           status: 'processing',
           reviewReason: null,
-          reviewNotes: buildI18nReviewNotes(current.entityType, payload),
+          reviewNotes,
           reviewedAt: null,
           reviewedBy: null,
           createdEntityId: null,
@@ -924,6 +1027,14 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       return;
     }
     if (error instanceof EventSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
+    if (error instanceof BrandSubmissionConflictError) {
       res.status(409).json({
         error: error.message,
         code: error.code,
@@ -1076,6 +1187,10 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
       }
     }
 
+    // Rejected submissions intentionally keep their content-submission-owned media.
+    // This matches the current event moderation flow: assets remain available for
+    // audit history and future resubmission, but they are never rebound to the
+    // public entity unless the review decision is approved.
     const updated = await prisma.contentSubmission.update({
       where: { id: current.id },
       data: {
@@ -1122,6 +1237,14 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
     console.error('Review content submission error:', error);
     if (error instanceof EventSubmissionConflictError) {
       res.status(409).json({ error: error.message, code: error.code });
+      return;
+    }
+    if (error instanceof BrandSubmissionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
       return;
     }
     res.status(500).json({ error: error instanceof Error ? error.message : '审核处理失败' });

@@ -29,6 +29,7 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
     @Published var submitSuccess: OrganizerUploadSubmitSuccess?
     @Published var isSubmitting = false
     @Published var uploadingZones: Set<OrganizerUploadImageZone> = []
+    @Published var failedUploadZones: Set<OrganizerUploadImageZone> = []
     @Published var eventSearchQuery = ""
     @Published var eventSearchResults: [WebEvent] = []
     @Published var isSearchingEvents = false
@@ -140,6 +141,7 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
 
     func uploadImage(_ imageData: Data, zone: OrganizerUploadImageZone) async {
         let previousSingle = draft.image(for: zone)
+        failedUploadZones.remove(zone)
         uploadingZones.insert(zone)
         defer { uploadingZones.remove(zone) }
 
@@ -167,6 +169,7 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
             case .proof, .other:
                 draft.appendImage(uploaded, to: zone)
             }
+            failedUploadZones.remove(zone)
             draft.dirty = true
             saveDraft()
 
@@ -178,6 +181,7 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
                 )
             }
         } catch {
+            failedUploadZones.insert(zone)
             statusMessage = error.userFacingMessage ?? LT("图片上传失败", "Image upload failed", "画像のアップロードに失敗しました")
         }
     }
@@ -342,12 +346,14 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
                 )
             }
 
-            draftSaveTask?.cancel()
-            store.clear(mode: draft.mode, userID: userID)
-            draft.dirty = false
+            finalizeDraftCleanupAfterSubmit()
             let createdBrand = extractCreatedBrand(from: result)
 
             if let createdBrand {
+                NotificationCenter.default.post(
+                    name: .discoverOrganizerDidSave,
+                    object: createdBrand.id
+                )
                 NotificationCenter.default.post(
                     name: .discoverOrganizerDidCreate,
                     object: createdBrand,
@@ -365,36 +371,36 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方任务已提交", "Organizer Task Submitted", "主催者タスクを送信しました"),
                     message: LT(
-                        "当前正在处理中，后续会通过通知更新为审核中或已入库。你也可以在我的发布里查看状态。",
-                        "The task is processing now. Later updates will appear in notifications and My Posts.",
-                        "現在処理中です。以降の更新は通知とマイ投稿で確認できます。"
+                        "当前正在处理中，返回上一页后可继续原来的流程；后续会通过通知更新为审核中或已入库。",
+                        "The task is processing now. After you go back, you can continue the flow you came from, and later updates will arrive through notifications.",
+                        "現在処理中です。前の画面に戻って元のフローを続けられ、以降の更新は通知で確認できます。"
                     )
                 )
             case (.create, .created(_)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方已发布", "Organizer Published", "主催者を公開しました"),
                     message: LT(
-                        "主办方资料已经生效，也可以在我的发布里继续管理。",
-                        "The organizer profile is now live, and you can keep managing it from My Posts.",
-                        "主催者プロフィールは公開されました。マイ投稿から引き続き管理できます。"
+                        "主办方资料已经生效，返回上一页后可以继续你刚才的流程。",
+                        "The organizer profile is now live. After you go back, you can continue the flow you were in.",
+                        "主催者プロフィールは公開されました。前の画面に戻って、さきほどのフローを続けられます。"
                     )
                 )
             case (.edit(_), .submittedForReview(_)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方编辑已提交", "Organizer Edit Submitted", "主催者編集を送信しました"),
                     message: LT(
-                        "当前正在处理中，后续会通过通知更新为审核中或已入库。你也可以在我的发布里查看状态。",
-                        "The edit task is processing now. Later updates will appear in notifications and My Posts.",
-                        "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。"
+                        "当前正在处理中，返回上一页后可继续原来的流程；后续会通过通知更新为审核中或已入库。",
+                        "The edit task is processing now. After you go back, you can continue the flow you came from, and later updates will arrive through notifications.",
+                        "編集タスクは現在処理中です。前の画面に戻って元のフローを続けられ、以降の更新は通知で確認できます。"
                     )
                 )
             case (.edit(_), .created(_)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方已更新", "Organizer Updated", "主催者を更新しました"),
                     message: LT(
-                        "更新已保存。你可以返回主办方页面查看最新内容，也可以在我的发布里继续管理。",
-                        "Your changes are saved. Return to the organizer page for the latest content, or manage it from My Posts.",
-                        "更新を保存しました。主催者ページで最新内容を確認するか、マイ投稿から管理できます。"
+                        "更新已保存，返回上一页后可以继续你刚才的流程。",
+                        "Your changes are saved. After you go back, you can continue the flow you were in.",
+                        "更新を保存しました。前の画面に戻って、さきほどのフローを続けられます。"
                     )
                 )
             }
@@ -417,6 +423,21 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
 
     private func persistDraftNow() {
         store.save(draft, userID: userID)
+    }
+
+    private func finalizeDraftCleanupAfterSubmit() {
+        draftSaveTask?.cancel()
+        store.clear(mode: draft.mode, userID: userID)
+        draft.dirty = false
+        draft.lastSavedAt = nil
+        shouldConfirmRestoredDraft = false
+        statusMessage = nil
+        eventSearchQuery = ""
+        eventSearchResults = []
+        eventSearchFeedback = .idle
+        boundEventNameByID = [:]
+        uploadingZones = []
+        failedUploadZones = []
     }
 
     private func extractCreatedBrand(from result: CreateContentResult<WebLearnFestival>) -> WebLearnFestival? {

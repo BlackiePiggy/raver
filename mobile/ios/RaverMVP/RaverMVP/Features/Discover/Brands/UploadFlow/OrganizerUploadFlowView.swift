@@ -266,25 +266,36 @@ struct OrganizerUploadFlowView: View {
         VStack(alignment: .leading, spacing: 16) {
             sectionCard(
                 title: LT("资料介绍", "Profile", "プロフィール"),
-                body: LT("这一页先支持主介绍与多语言名称补充，后续会继续接主办方类型、风格标签与审核提示。", "This step currently supports the main profile text and localized naming, with organizer type and style tags planned next.", "このステップでは主な紹介文と多言語名称を先に対応し、次に主催者タイプやスタイルタグを接続します。")
+                body: LT("这一页现在支持主介绍与多语言简介补充，后续会继续接主办方类型、风格标签与审核提示。", "This step now supports the main profile text and localized introductions, with organizer type and style tags planned next.", "このステップでは主な紹介文と多言語紹介に対応し、次に主催者タイプやスタイルタグを接続します。")
             )
 
             formCard {
                 VStack(alignment: .leading, spacing: 14) {
                     labeledTextArea(
                         LT("主办方介绍", "Organizer Introduction", "主催者紹介"),
-                        text: stringBinding(\.introduction),
+                        text: localizedIntroductionBinding(viewModel.draft.preferredLanguage),
                         minHeight: 150
                     )
+                    Text(LT("多语言简介", "Localized Introductions", "多言語紹介"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    labeledTextArea("ZH", text: localizedIntroductionBinding(.zh), minHeight: 96)
+                    labeledTextArea("EN", text: localizedIntroductionBinding(.en), minHeight: 96)
+                    labeledTextArea("JA", text: localizedIntroductionBinding(.ja), minHeight: 96)
+                    let introductionLength = viewModel.draft.primaryIntroduction.count
                     Text(
                         LT(
-                            "当前长度 \(viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).count) 字",
-                            "Current length: \(viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).count)",
-                            "現在の文字数 \(viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).count)"
+                            "当前长度 \(introductionLength) 字，建议至少 \(OrganizerUploadValidation.minimumIntroductionLength) 字",
+                            "Current length: \(introductionLength), recommended minimum \(OrganizerUploadValidation.minimumIntroductionLength)",
+                            "現在の文字数 \(introductionLength) 字、推奨最小文字数 \(OrganizerUploadValidation.minimumIntroductionLength) 字"
                         )
                     )
                     .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
+                    .foregroundStyle(
+                        introductionLength == 0 || introductionLength >= OrganizerUploadValidation.minimumIntroductionLength
+                            ? RaverTheme.secondaryText
+                            : .orange
+                    )
                 }
             }
         }
@@ -510,7 +521,7 @@ struct OrganizerUploadFlowView: View {
                     )
                     reviewSummaryRow(LT("简称", "Abbreviation", "略称"), value: viewModel.draft.abbreviation)
                     reviewSummaryRow(LT("一句话定位", "Tagline", "タグライン"), value: viewModel.draft.tagline)
-                    reviewSummaryRow(LT("介绍", "Introduction", "紹介"), value: viewModel.draft.introduction)
+                    reviewSummaryRow(LT("介绍", "Introduction", "紹介"), value: viewModel.draft.primaryIntroduction)
                 }
             }
 
@@ -683,7 +694,7 @@ struct OrganizerUploadFlowView: View {
                 viewModel.closeAfterSuccess()
             } label: {
                 HStack {
-                    Text(LT("返回主办方页", "Back to Organizers", "主催者ページへ戻る"))
+                    Text(LT("返回上一页", "Back", "前の画面に戻る"))
                         .font(.headline.weight(.semibold))
                     Spacer()
                     Image(systemName: "arrow.right")
@@ -787,6 +798,23 @@ struct OrganizerUploadFlowView: View {
         )
     }
 
+    private func localizedIntroductionBinding(_ language: EventUploadPreferredLanguage) -> Binding<String> {
+        Binding(
+            get: { viewModel.draft.descriptionI18n.value(for: language) },
+            set: { newValue in
+                viewModel.draft.descriptionI18n.setValue(newValue, for: language)
+                if language == viewModel.draft.preferredLanguage {
+                    viewModel.draft.introduction = newValue
+                } else if viewModel.draft.introduction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    viewModel.draft.introduction = viewModel.draft.primaryIntroduction
+                }
+                viewModel.markDirty()
+                viewModel.saveDraft(immediate: false)
+            }
+        )
+    }
+
     private var aliasesBinding: Binding<String> {
         Binding(
             get: { viewModel.draft.aliases.joined(separator: ", ") },
@@ -810,6 +838,7 @@ struct OrganizerUploadFlowView: View {
     ) -> some View {
         let image = viewModel.draft.image(for: zone)
         let isUploading = viewModel.uploadingZones.contains(zone)
+        let hasUploadFailure = viewModel.failedUploadZones.contains(zone)
 
         return formCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -840,7 +869,12 @@ struct OrganizerUploadFlowView: View {
                         .frame(height: 188)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(required && image == nil ? Color.red.opacity(0.6) : RaverTheme.cardBorder, lineWidth: 1)
+                                .stroke(
+                                    hasUploadFailure
+                                        ? Color.orange.opacity(0.85)
+                                        : (required && image == nil ? Color.red.opacity(0.6) : RaverTheme.cardBorder),
+                                    lineWidth: 1
+                                )
                         )
 
                     if let image {
@@ -852,19 +886,36 @@ struct OrganizerUploadFlowView: View {
                         .buttonStyle(.plain)
                     } else {
                         PhotosPicker(selection: item, matching: .images) {
-                            VStack(spacing: 8) {
-                                Image(systemName: "photo.badge.plus")
+                            VStack(spacing: 10) {
+                                Image(systemName: hasUploadFailure ? "arrow.clockwise.circle.fill" : "photo.badge.plus")
                                     .font(.system(size: 22, weight: .semibold))
-                                    .foregroundStyle(RaverTheme.accent)
-                                Text(LT("选择图片", "Choose Image", "画像を選択"))
+                                    .foregroundStyle(hasUploadFailure ? .orange : RaverTheme.accent)
+                                Text(hasUploadFailure
+                                     ? LT("重新选择并重传", "Choose Again to Retry", "再選択して再アップロード")
+                                     : LT("选择图片", "Choose Image", "画像を選択"))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(RaverTheme.primaryText)
+                                if hasUploadFailure {
+                                    Text(LT("上一次上传失败，请重新选择图片后重试。", "The last upload failed. Choose the image again to retry.", "前回のアップロードに失敗しました。画像を再選択して再試行してください。"))
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 20)
+                                }
                             }
                             .frame(maxWidth: .infinity, minHeight: 188)
                         }
                         .buttonStyle(.plain)
                         .disabled(isUploading)
                     }
+                }
+
+                if hasUploadFailure && image == nil {
+                    organizerInlineFeedbackRow(
+                        message: LT("当前图片尚未上传成功，重新选择后会再次发起上传。", "This image has not uploaded successfully yet. Choosing it again will retry the upload.", "この画像はまだ正常にアップロードされていません。再選択すると再度アップロードします。"),
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: .orange
+                    )
                 }
 
                 if image != nil {

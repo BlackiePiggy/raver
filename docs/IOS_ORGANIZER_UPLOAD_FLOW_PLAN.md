@@ -73,6 +73,26 @@
 - [x] event 详情页当前主办方品牌入口已确认继续使用 `festivalDetail`
 - [x] iOS `OrganizerUploadFlow` Step 5 已改成 event 搜索绑定卡片，支持搜索、绑定、已绑列表展示与重复绑定防止
 - [x] iOS `OrganizerUploadFlow` Step 6 已补齐“最终确认后再提交”链路，底部提交会先弹确认再发起真实 submit
+- [x] 已修复 `OrganizerUploadMappers.imageAssets(from:)` 的 Swift 可空性推断编译错误，避免 `nil` 与 `WebEventImageAsset` 闭包返回类型冲突
+- [x] iOS `OrganizerUploadFlow` 提交成功后已补齐草稿清理，当前 draft 恢复态、搜索态与本地缓存会一起重置
+- [x] iOS `OrganizerUploadFlow` 成功态已统一改为“返回上一页”，不再跳转固定主办方页或我的发布页
+- [x] iOS `OrganizerUploadFlow` review 步骤中的 `rights confirmation / identity confirmation` 勾选已接入真实 draft 状态保存
+- [x] iOS `OrganizerUploadFlow` 单图上传失败已支持显式重试，avatar / background 失败后可重新选择图片重传
+- [x] iOS `OrganizerUploadFlow` Step 3 已补齐最小简介长度校验，当前介绍少于 30 字会在步骤校验与页面提示中同步拦截
+- [x] iOS `OrganizerUploadFlow` Step 3 已补齐多语言简介输入，当前 `descriptionI18n` 已接入 draft 持久化、review 展示与 create/edit payload 映射
+- [x] 已再次核对服务端 `brand` submission / worker / 审核状态链路，补齐 Phase 1.3 / 1.4 中已实现但未勾选的文档项
+- [x] 已按最新要求移除 iOS 旧主办方上传页面链路，`LearnModuleView` / 主办方详情仅保留新的 `OrganizerUploadFlow`
+- [x] 主办方保存后的刷新通知已统一切到 `discoverOrganizerDidSave`，列表页与详情页均会回刷最新数据
+- [x] 服务端 brand 图片上传已补齐 `sort / width / height / originalUrl / ownerType / ownerId` 返回，draft 与 persisted brand 两条链路字段统一
+- [x] 服务端 brand submission 已增加图片资产标准化，proof 会被兜底标记为 `review_only`，avatar/background/poster/other 兜底标记为 `public`
+- [x] 服务端 brand 创建/编辑提交成功时，已对当前 draft 下未被 submission 引用的草稿图做无主清理与 OSS 删除兜底
+- [x] 已核对 brand `rejected / cancelled` 图片策略并与 event 对齐：`rejected` 保留 submission 图片，不回绑线上 brand，brand 当前无独立 `cancelled` 清图入口
+- [x] 服务端图片上传已抽成统一 `10MB` 限制常量，brand 上传 `usage` 也已收口为 `avatar/background/poster/proof/other`
+- [x] 服务端 brand 图片上传已增加同 owner + 同 usage + 同文件内容去重复用，避免重复上传生成多份草稿/线上资产
+- [x] 服务端 brand 图片上传已区分公开图与 proof 图格式策略：公开图统一收口稳定格式，proof 保留审核清晰度并增加最短边 `1200px` 校验
+- [x] 服务端 brand submission 已补齐 `revision` 并发保护，`wiki_festival.revision`、BFF 提交入口、submission create/resubmit 与 approve 入库链路现已统一校验 `baseBrandRevision`
+- [x] 服务端 brand submission 已补齐主视觉必填、`official link / proof` 二选一、版权/主体声明必填校验，并把重复品牌初筛与 event 名称近似冲突预警写入 `reviewNotes.brandScreening`
+- [x] iOS `OrganizerUploadFlow` 编辑草稿已接入 `brand.revision -> draft.baseBrandRevision -> UpdateLearnFestivalInput.baseBrandRevision` 透传，brand edit 并发冲突现已与 event 对齐
 
 ## 分阶段落地计划
 
@@ -106,8 +126,8 @@
 - [x] 设计 `brand` edit payload 标准结构
 - [x] 设计 `brand` payload 中的 `changeSummary` 生成规则
 - [x] 为 brand 编辑提交增加 `targetBrandId` / `editMode` 等 submission 字段
-- [ ] 确认 brand 是否需要 `revision` 字段以对齐 event 的并发保护
-- [ ] 若缺失 `revision`，补 schema 与迁移方案
+- [x] 确认 brand 是否需要 `revision` 字段以对齐 event 的并发保护
+- [x] 若缺失 `revision`，补 schema 与迁移方案
 
 ##### 建议的 `brand` create submission payload
 
@@ -200,7 +220,7 @@
   "payload": {
     "isEditSubmission": true,
     "targetBrandId": "festival-tomorrowland",
-    "baseRevision": 12,
+    "baseBrandRevision": 12,
     "name": "Tomorrowland",
     "nameI18n": {
       "zh": "明日世界",
@@ -304,27 +324,27 @@
 #### 1.3 worker 支持 brand
 
 - [x] 为 `contentSubmissionProcessingService` 增加 `brand` 类型处理
-- [ ] brand `processing -> reviewing` 状态流转落地
+- [x] brand `processing -> reviewing` 状态流转落地
 - [x] brand `reviewing -> approved` 入库逻辑落地
-- [ ] brand `processing -> failed` 错误处理落地
-- [ ] brand `reviewing -> rejected` 审核驳回逻辑复用并验证
+- [x] brand `processing -> failed` 错误处理落地
+- [x] brand `reviewing -> rejected` 审核驳回逻辑复用并验证
 - [x] 入库时写回 `createdEntityId`
 
 #### 1.4 brand 审核校验
 
-- [ ] 增加名称必填校验
-- [ ] 增加主视觉图片必填校验
-- [ ] 增加 `official link` 或 `proof` 至少满足一项校验
-- [ ] 增加重复品牌初筛
-- [ ] 增加 event 名称近似冲突预警
-- [ ] 增加版权/主体声明字段校验
+- [x] 增加名称必填校验
+- [x] 增加主视觉图片必填校验
+- [x] 增加 `official link` 或 `proof` 至少满足一项校验
+- [x] 增加重复品牌初筛
+- [x] 增加 event 名称近似冲突预警
+- [x] 增加版权/主体声明字段校验
 
 验收标准：
 
 - [x] brand 创建提交后不再同步创建线上实体
 - [x] brand 编辑提交后不再直接修改线上实体
-- [ ] `My Publishes` 能看到 brand 的 `处理中 / 审核中 / 已入库 / 未通过 / 处理失败`
-- [ ] worker 失败时用户可见，不会 silently fail
+- [x] `My Publishes` 能看到 brand 的 `处理中 / 审核中 / 已入库 / 未通过 / 处理失败`
+- [x] worker 失败时用户可见，不会 silently fail
 
 ### Phase 2 - 服务端图片草稿归属模型
 
@@ -335,38 +355,39 @@
 - [x] 盘点 `/v1/wiki/brands/upload-image` 当前请求字段和返回字段
 - [x] 给上传接口增加 `draftId`
 - [x] 给上传接口增加 `usage`
-- [ ] 给上传接口增加 `sort`
+- [x] 给上传接口增加 `sort`
 - [x] 给返回值补齐 `ownerType` / `ownerId`
-- [ ] 给返回值补齐 `width` / `height` / `originalUrl`
+- [x] 给返回值补齐 `width` / `height`
+- [x] 给返回值补齐 `originalUrl`
 
 #### 2.2 删除与清理接口
 
 - [x] 新增或改造 brand 上传图删除接口
 - [x] 支持按 `draftId + urls` 删除
 - [x] 支持按 `brandId + urls` 删除
-- [ ] 支持提交成功后清理无主草稿图
-- [ ] 支持放弃草稿时批量清理
+- [x] 支持提交成功后清理无主草稿图
+- [x] 支持放弃草稿时批量清理
 
 #### 2.3 提交后绑定策略
 
 - [x] brand submission payload 中纳入图片资产数组
 - [x] 审核通过时把 draft 归属图片绑定到最终 brand
-- [ ] proof 类图片标记为“仅审核可见”
-- [ ] avatar/background/poster 标记为“可公开展示”
-- [ ] 校验 rejected / cancelled submission 是否要保留或清理图片
+- [x] proof 类图片标记为“仅审核可见”
+- [x] avatar/background/poster 标记为“可公开展示”
+- [x] 校验 rejected / cancelled submission 是否要保留或清理图片
 
 #### 2.4 图片处理约束
 
-- [ ] 统一图片大小限制
-- [ ] 统一图片格式转换策略
-- [ ] 统一 proof 图片清晰度保留策略
-- [ ] 统一失败重传与重复图处理策略
+- [x] 统一图片大小限制
+- [x] 统一图片格式转换策略
+- [x] 统一 proof 图片清晰度保留策略
+- [x] 统一失败重传与重复图处理策略
 
 验收标准：
 
 - [x] 创建 brand 前即可上传图片到 draft
 - [x] 编辑 brand 时草稿图片不会污染线上实体
-- [ ] 放弃草稿后远端草稿图可清理
+- [x] 放弃草稿后远端草稿图可清理
 - [x] 审核通过后图片归属正确
 
 ### Phase 3 - iOS 上传流骨架
@@ -406,7 +427,7 @@
 
 - [x] 可以从入口进入新的上传流
 - [x] create / edit 两种模式路由正确
-- [ ] 不影响旧 `LearnFestivalEditorView` 现有使用路径
+- [x] 旧 `LearnFestivalEditorView` 上传链路已移除，iOS 仅保留新的 `OrganizerUploadFlow`
 
 ### Phase 4 - iOS 草稿系统
 
@@ -434,7 +455,7 @@
 - [x] 离开时弹出“保存草稿 / 放弃草稿”
 - [ ] 放弃草稿时删除本地图片
 - [x] 放弃草稿时清理远端草稿图
-- [ ] 提交成功后清理对应草稿
+- [x] 提交成功后清理对应草稿
 
 验收标准：
 
@@ -467,18 +488,18 @@
 #### 5.3 Step 3 品牌介绍
 
 - [x] 简介输入
-- [ ] 多语言简介输入
+- [x] 多语言简介输入
 - [ ] 主办方类型选择
 - [ ] 风格标签输入
-- [ ] 最小简介长度校验
+- [x] 最小简介长度校验
 
 #### 5.4 Step 4 官方链接与身份校验
 
 - [x] 官网输入
 - [x] 各社媒链接输入
 - [ ] 额外链接列表编辑
-- [ ] rights confirmation 勾选
-- [ ] identity confirmation 勾选
+- [x] rights confirmation 勾选
+- [x] identity confirmation 勾选
 
 #### 5.5 Step 5 关联活动与运营上下文
 
@@ -511,7 +532,7 @@
 - [x] 创建态图片按 `draftId` 上传
 - [x] 编辑态未提交变更图片按 `draftId` 上传
 - [ ] 已持久化图片标记 `persistedBrand`
-- [ ] 单图上传失败支持重试
+- [x] 单图上传失败支持重试
 - [x] 替换图片时清理旧草稿图
 - [x] iOS 接口层已支持 brand 图片删除
 - [x] 删除图片时同步更新 draft
@@ -546,13 +567,12 @@
 
 - [x] 直接创建成功页
 - [x] 审核提交成功页
-- [ ] 跳转“我的发布”
-- [ ] 跳转主办方详情
-- [ ] 清理草稿
+- [x] 成功后返回来源页（从哪儿进来就回到哪儿）
+- [x] 清理草稿
 
 验收标准：
 
-- [ ] create / edit 成功态行为一致
+- [x] create / edit 成功态行为一致
 - [ ] 审核态文案与 event 保持一致
 - [ ] 用户可以清楚知道后续去哪里看状态
 
@@ -983,6 +1003,8 @@ OrganizerUploadDraft
 - 创建态优先使用 `draftId`
 - 编辑态未提交变更也优先使用 `draftId`
 - 审核通过或自动入库时，再把图片从草稿归属绑定到最终 brand
+- `rejected` 时保留 `content-submission` 归属图片，方便审核追溯、用户查看驳回材料与后续重提复用
+- `cancelled` 当前沿用 event 语义理解为任务级/被新版本顶替状态，brand 现阶段没有独立取消入口，因此不额外做 submission 图片清理
 
 ### 建议接口
 
@@ -1017,10 +1039,12 @@ OrganizerUploadDraft
 
 ### 上传约束
 
-- 单图大小建议 15MB 内
-- 上传前统一转 jpeg/webp
-- 超长边压到合理范围，例如 2048px
-- `proof` 图保留足够清晰度，避免文字不可读
+- 单图大小统一按服务端 `10MB` 限制执行
+- `avatar/background/poster/other` 公开图上传时统一收口到稳定格式：
+  - `webp` 原样保留
+  - `png/jpeg` 服务端归一为 `jpeg`
+- `proof` 图仅接受 `png/jpeg/webp`
+- `proof` 图服务端增加最短边 `1200px` 校验，避免审核文字与主体信息不可读
 - 失败图片支持单张重试
 - 页面离开时不自动上传未确认图片
 
