@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { eventDateOnlyToStorageDate, storageDateToEventDate } from '../utils/event-timezone';
 
 export type CanonicalLineupArtistInput = {
   id?: string;
@@ -320,7 +321,11 @@ export const loadCanonicalEventLineupSnapshot = async (
   db: Prisma.TransactionClient | Prisma.DefaultPrismaClient,
   eventId: string
 ): Promise<CanonicalLineupSnapshot> => {
-  const [artists, stages, performances] = await Promise.all([
+  const [event, artists, stages, performances] = await Promise.all([
+    db.event.findUnique({
+      where: { id: eventId },
+      select: { timeZone: true },
+    }),
     db.eventArtist.findMany({
       where: { eventId },
       include: {
@@ -353,6 +358,7 @@ export const loadCanonicalEventLineupSnapshot = async (
       orderBy: [{ startAt: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
     }),
   ]);
+  const eventTimeZone = event?.timeZone ?? 'UTC';
 
   const stageNameById = new Map(stages.map((stage) => [stage.id, stage.name]));
 
@@ -375,7 +381,7 @@ export const loadCanonicalEventLineupSnapshot = async (
       weekIndex: slot.weekIndex ?? null,
       dayIndexInWeek: slot.dayIndexInWeek ?? null,
       overallDayIndex: slot.overallDayIndex ?? null,
-      localDate: slot.localDate ?? null,
+      localDate: slot.localDate ? storageDateToEventDate(slot.localDate, eventTimeZone) : null,
       djId: slot.eventArtist.primaryDjId,
       memberDjIds: slot.eventArtist.members.map((member) => {
         const id = String(member.djId || '').trim();
@@ -507,7 +513,7 @@ const buildCanonicalTargetRows = (
       weekIndex: slot.weekIndex ?? null,
       dayIndexInWeek: slot.dayIndexInWeek ?? null,
       overallDayIndex: slot.overallDayIndex ?? null,
-      localDate: slot.localDate ?? null,
+      localDate: slot.localDate ?? eventDateOnlyToStorageDate(slot.startTime, 'UTC'),
       startAt: slot.startTime,
       endAt: slot.endTime,
       sortOrder: slot.sortOrder || index + 1,
@@ -531,6 +537,11 @@ export const syncCanonicalEventLineupAndTimetable = async (
   artists: CanonicalLineupArtistInput[],
   explicitStageOrder: string[] = []
 ): Promise<void> => {
+  const eventRow = await tx.event.findUnique({
+    where: { id: eventId },
+    select: { timeZone: true },
+  });
+  const eventTimeZone = eventRow?.timeZone ?? 'UTC';
   const existingArtists = await tx.eventArtist.findMany({
     where: { eventId },
     include: {
@@ -557,7 +568,11 @@ export const syncCanonicalEventLineupAndTimetable = async (
   const existingStageById = new Map(existingStages.map((stage) => [stage.id, stage]));
   const existingStageByName = new Map(existingStages.map((stage) => [stage.normalizedName, stage]));
 
-  const target = buildCanonicalTargetRows(eventId, slots, artists, explicitStageOrder);
+  const normalizedSlots = slots.map((slot) => ({
+    ...slot,
+    localDate: slot.localDate ? eventDateOnlyToStorageDate(slot.localDate, eventTimeZone) : null,
+  }));
+  const target = buildCanonicalTargetRows(eventId, normalizedSlots, artists, explicitStageOrder);
 
   for (const artist of target.artistRows) {
     if (existingArtistById.has(artist.id)) continue;

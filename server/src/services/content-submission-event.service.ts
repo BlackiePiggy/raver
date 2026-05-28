@@ -2,9 +2,12 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
+  eventDateKey,
+  eventDateOnlyToStorageDate,
   normalizeEventTimeZone,
   parseEventDateInput,
   startOfEventDay,
+  storageDateToEventDate,
   zonedTimeToUtc,
 } from '../utils/event-timezone';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
@@ -160,24 +163,18 @@ const normalizeScheduleMode = (value: unknown): 'single_day' | 'multi_day' | 'mu
   }
 };
 
-const eventDateKey = (date: Date, timeZone: string): string => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-};
-
 const parseEventDateOnlyOrThrow = (
   value: unknown,
   label: string,
   timeZone: string
 ): Date => {
-  const text = cleanText(value);
-  const parsed = text ? parseEventDateInput(text, timeZone, 'start') : null;
+  let parsed: Date | null = null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    parsed = parseEventDateInput(eventDateKey(value, timeZone), timeZone, 'start');
+  } else {
+    const text = cleanText(value);
+    parsed = text ? parseEventDateInput(text, timeZone, 'start') : null;
+  }
   if (!parsed) {
     throw new EventSubmissionValidationError(`${label} 缺少有效日期`);
   }
@@ -771,7 +768,7 @@ const normalizeSubmissionLineupSlots = (
         weekIndex: eventDay.weekIndex,
         dayIndexInWeek: eventDay.dayIndexInWeek,
         overallDayIndex: eventDay.overallDayIndex,
-        localDate: eventDay.date,
+        localDate: eventDateOnlyToStorageDate(eventDay.date, scheduleContext.timeZone),
         djId: effectiveDjId,
         memberDjIds,
         djName: djName || 'Unknown DJ',
@@ -823,8 +820,8 @@ export const buildSubmittedEventScheduleContextFromEvent = (event: {
       ? event.weeks.map((week) => ({
           weekIndex: week.weekIndex,
           label: week.label ?? null,
-          startDate: week.startDate,
-          endDate: week.endDate,
+          startDate: storageDateToEventDate(week.startDate, event.timeZone ?? DEFAULT_EVENT_TIME_ZONE),
+          endDate: storageDateToEventDate(week.endDate, event.timeZone ?? DEFAULT_EVENT_TIME_ZONE),
           sortOrder: week.sortOrder ?? week.weekIndex,
         }))
       : [],
@@ -836,7 +833,7 @@ export const buildSubmittedEventScheduleContextFromEvent = (event: {
           overallDayIndex: day.overallDayIndex,
           label: day.label ?? null,
           weekday: day.weekday ?? null,
-          date: day.date,
+          date: storageDateToEventDate(day.date, event.timeZone ?? DEFAULT_EVENT_TIME_ZONE),
           sortOrder: day.sortOrder ?? day.overallDayIndex,
         }))
       : [],
@@ -1312,18 +1309,22 @@ const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: s
   return candidate;
 };
 
-const buildEventWeeksCreateInput = (weeks: SubmittedEventWeek[]): Prisma.EventWeekCreateManyEventInput[] =>
+const buildEventWeeksCreateInput = (
+  weeks: SubmittedEventWeek[],
+  timeZone: string
+): Prisma.EventWeekCreateManyEventInput[] =>
   weeks.map((week) => ({
     weekIndex: week.weekIndex,
     label: week.label,
-    startDate: week.startDate,
-    endDate: week.endDate,
+    startDate: eventDateOnlyToStorageDate(week.startDate, timeZone),
+    endDate: eventDateOnlyToStorageDate(week.endDate, timeZone),
     sortOrder: week.sortOrder,
   }));
 
 const buildEventDaysCreateInput = (
   weeks: SubmittedEventWeek[],
-  eventDays: SubmittedEventDay[]
+  eventDays: SubmittedEventDay[],
+  timeZone: string
 ): Prisma.EventDayCreateManyEventInput[] => {
   const weekByIndex = new Map(weeks.map((week) => [week.weekIndex, week]));
   return eventDays.map((day) => {
@@ -1339,7 +1340,7 @@ const buildEventDaysCreateInput = (
       overallDayIndex: day.overallDayIndex,
       label: day.label,
       weekday: day.weekday,
-      date: day.date,
+      date: eventDateOnlyToStorageDate(day.date, timeZone),
       sortOrder: day.sortOrder,
     };
   });
@@ -1355,7 +1356,7 @@ const syncStructuredEventSchedule = async (
 
   if (scheduleContext.weeks.length > 0) {
     await tx.eventWeek.createMany({
-      data: buildEventWeeksCreateInput(scheduleContext.weeks).map((week) => ({
+      data: buildEventWeeksCreateInput(scheduleContext.weeks, scheduleContext.timeZone).map((week) => ({
         eventId,
         ...week,
       })),
@@ -1364,7 +1365,7 @@ const syncStructuredEventSchedule = async (
 
   if (scheduleContext.eventDays.length > 0) {
     await tx.eventDay.createMany({
-      data: buildEventDaysCreateInput(scheduleContext.weeks, scheduleContext.eventDays).map((day) => ({
+      data: buildEventDaysCreateInput(scheduleContext.weeks, scheduleContext.eventDays, scheduleContext.timeZone).map((day) => ({
         eventId,
         ...day,
       })),

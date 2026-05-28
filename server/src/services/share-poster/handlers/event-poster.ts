@@ -2,6 +2,7 @@ import QRCode from 'qrcode';
 import { PNG } from 'pngjs';
 import { buildPosterQrText, renderStructuredPosterSvg } from '../svg-utils';
 import { resolveEventPosterBackgroundImageUrl } from '../event-images';
+import { DEFAULT_EVENT_TIME_ZONE, normalizeEventTimeZone, storageDateToEventDate } from '../../../utils/event-timezone';
 import {
   pickLocalizedText,
   posterText,
@@ -249,17 +250,29 @@ const loadEventPosterSnapshot = async (
   const localizedTitle = pickLocalizedText(event.nameI18n, locale, event.name);
   const localizedOrganizer = pickLocalizedText(event.wikiFestival?.nameI18n, locale, event.wikiFestival?.name);
   const venue = posterText(resolvePosterVenueText(event, locale), locale === 'zh' ? '待定' : 'Venue TBA');
+  const eventTimeZone = normalizeEventTimeZone(event.timeZone || DEFAULT_EVENT_TIME_ZONE);
   return {
     title: posterText(localizedTitle || shareLink.title, posterText(shareLink.title, `Event ${shareLink.code}`)),
     venue,
     organizer: localizedOrganizer,
     startDate: event.startDate ?? null,
     endDate: event.endDate ?? null,
-    timeZone: event.timeZone || 'UTC',
+    timeZone: eventTimeZone,
     artistCount: Math.max(0, Number(event._count?.canonicalArtists ?? 0)),
     imageUrl: resolveEventPosterBackgroundImageUrl(event) || shareLink.imageUrl || null,
-    weeks: Array.isArray(event.weeks) ? event.weeks : [],
-    eventDays: Array.isArray(event.eventDays) ? event.eventDays : [],
+    weeks: Array.isArray(event.weeks)
+      ? event.weeks.map((week: EventPosterWeek) => ({
+        ...week,
+        startDate: storageDateToEventDate(week.startDate, eventTimeZone),
+        endDate: storageDateToEventDate(week.endDate, eventTimeZone),
+      }))
+      : [],
+    eventDays: Array.isArray(event.eventDays)
+      ? event.eventDays.map((day: EventPosterDay) => ({
+        ...day,
+        date: storageDateToEventDate(day.date, eventTimeZone),
+      }))
+      : [],
   };
 };
 

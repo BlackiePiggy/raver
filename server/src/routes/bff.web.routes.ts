@@ -48,6 +48,7 @@ import {
   isValidEventTimeZone,
   normalizeEventTimeZone,
   startOfEventDay,
+  storageDateToEventDate,
 } from '../utils/event-timezone';
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
 import { contentCompliance } from '../utils/content-compliance';
@@ -6466,6 +6467,7 @@ const mapEventTimetableSlots = (performancesRaw: any): any[] => {
 };
 
 const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
+  const eventTimeZone = normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE);
   const latitude = toNumber(row.latitude);
   const longitude = toNumber(row.longitude);
   const locationFallback =
@@ -6523,7 +6525,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     endDate: row.endDate,
     schedule: {
       mode: row.scheduleMode ?? 'single_day',
-      timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE),
+      timeZone: eventTimeZone,
       dayRolloverHour: row.dayRolloverHour ?? 6,
     },
     weeks: Array.isArray(row.weeks)
@@ -6531,8 +6533,8 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
           id: week.id,
           weekIndex: week.weekIndex,
           label: week.label ?? null,
-          startDate: week.startDate,
-          endDate: week.endDate,
+          startDate: storageDateToEventDate(week.startDate, eventTimeZone),
+          endDate: storageDateToEventDate(week.endDate, eventTimeZone),
           sortOrder: week.sortOrder ?? week.weekIndex,
         }))
       : [],
@@ -6545,11 +6547,11 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
           overallDayIndex: day.overallDayIndex,
           label: day.label ?? null,
           weekday: day.weekday ?? null,
-          date: day.date,
+          date: storageDateToEventDate(day.date, eventTimeZone),
           sortOrder: day.sortOrder ?? day.overallDayIndex,
         }))
       : [],
-    timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE),
+    timeZone: eventTimeZone,
     startTime: normalizeEventClockTime(row.startTime, EVENT_DEFAULT_START_TIME),
     endTime: normalizeEventClockTime(row.endTime, EVENT_DEFAULT_END_TIME),
     dayRolloverHour: row.dayRolloverHour ?? 6,
@@ -6599,7 +6601,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       weekIndex: slot.weekIndex ?? null,
       dayIndexInWeek: slot.dayIndexInWeek ?? null,
       overallDayIndex: slot.overallDayIndex ?? null,
-      localDate: slot.localDate ?? null,
+      localDate: slot.localDate ? storageDateToEventDate(slot.localDate, eventTimeZone) : null,
       djId: slot.djId,
       memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
       djName: slot.djName,
@@ -6621,7 +6623,7 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
           weekIndex: slot.weekIndex ?? null,
           dayIndexInWeek: slot.dayIndexInWeek ?? null,
           overallDayIndex: slot.overallDayIndex ?? null,
-          localDate: slot.localDate ?? null,
+          localDate: slot.localDate ? storageDateToEventDate(slot.localDate, eventTimeZone) : null,
           djId: slot.djId,
           memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
           djs: Array.isArray(slot.djs)

@@ -198,6 +198,37 @@ export const parseEventDateInput = (
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+export const eventDateKey = (date: Date, timeZoneRaw: unknown): string => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const timeZone = normalizeEventTimeZone(timeZoneRaw);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+export const eventDateOnlyToStorageDate = (date: Date, timeZoneRaw: unknown): Date => {
+  const key = eventDateKey(date, timeZoneRaw);
+  const parsed = parseEventDateInput(key, 'UTC', 'start');
+  if (!parsed) {
+    return new Date(NaN);
+  }
+  return parsed;
+};
+
+export const storageDateToEventDate = (date: Date, timeZoneRaw: unknown): Date => {
+  const key = eventDateKey(date, 'UTC');
+  const parsed = parseEventDateInput(key, timeZoneRaw, 'start', '12:00:00');
+  if (!parsed) {
+    return new Date(NaN);
+  }
+  return parsed;
+};
+
 export const startOfEventDay = (date: Date, timeZoneRaw: unknown): Date => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return new Date(NaN);

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { eventDateOnlyToStorageDate } from '../utils/event-timezone';
 
 const prisma = new PrismaClient();
 
@@ -246,8 +247,8 @@ async function applyResolution(resolution: CandidateResolution): Promise<void> {
           eventId: resolution.eventId,
           weekIndex: week.weekIndex,
           label: week.label,
-          startDate: week.startDate,
-          endDate: week.endDate,
+          startDate: eventDateOnlyToStorageDate(week.startDate, 'UTC'),
+          endDate: eventDateOnlyToStorageDate(week.endDate, 'UTC'),
           sortOrder: week.weekIndex,
         },
       });
@@ -265,7 +266,7 @@ async function applyResolution(resolution: CandidateResolution): Promise<void> {
           overallDayIndex: day.overallDayIndex,
           label: day.label,
           weekday: day.weekday,
-          date: day.date,
+          date: eventDateOnlyToStorageDate(day.date, 'UTC'),
           sortOrder: day.overallDayIndex,
         },
       });
@@ -292,7 +293,7 @@ async function applyResolution(resolution: CandidateResolution): Promise<void> {
           weekIndex: day.weekIndex,
           dayIndexInWeek: day.dayIndexInWeek,
           overallDayIndex: day.overallDayIndex,
-          localDate: day.date,
+          localDate: eventDateOnlyToStorageDate(day.date, 'UTC'),
         },
       });
     }

@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import { resolveUserGenrePreferenceMap } from './user-genre-preference.service';
+import { DEFAULT_EVENT_TIME_ZONE, normalizeEventTimeZone, storageDateToEventDate } from '../utils/event-timezone';
 
 const prisma = new PrismaClient();
 
@@ -707,6 +708,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       organizerName: true,
       startDate: true,
       endDate: true,
+      timeZone: true,
       weeks: {
         orderBy: [{ sortOrder: 'asc' }, { weekIndex: 'asc' }],
         select: {
@@ -752,6 +754,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
 
   return sortItems(
     rows.map((row) => {
+      const eventTimeZone = normalizeEventTimeZone(row.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
       const title = pickLocalizedText(row.nameI18n, locale, row.name);
       const description = pickLocalizedText(row.descriptionI18n, locale, row.description);
       const city = pickLocalizedText(row.cityI18n, locale, row.city);
@@ -786,8 +789,15 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
           venueName: row.venueName,
           startDate: row.startDate,
           endDate: row.endDate,
-          weeks: row.weeks,
-          eventDays: row.eventDays,
+          weeks: row.weeks.map((week) => ({
+            ...week,
+            startDate: storageDateToEventDate(week.startDate, eventTimeZone),
+            endDate: storageDateToEventDate(week.endDate, eventTimeZone),
+          })),
+          eventDays: row.eventDays.map((day) => ({
+            ...day,
+            date: storageDateToEventDate(day.date, eventTimeZone),
+          })),
         }),
         summary: truncate(description || lineupNames.join(', ')),
         imageUrl: row.coverImageUrl,

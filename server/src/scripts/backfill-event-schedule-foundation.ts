@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import {
+  eventDateOnlyToStorageDate,
   normalizeEventTimeZone,
   parseEventDateInput,
 } from '../utils/event-timezone';
@@ -268,8 +269,8 @@ async function applyFoundation(event: FoundationCandidateRow): Promise<void> {
         eventId: event.id,
         weekIndex: 1,
         label: null,
-        startDate: firstDay.date,
-        endDate: lastDay.date,
+        startDate: eventDateOnlyToStorageDate(firstDay.date, event.timeZone),
+        endDate: eventDateOnlyToStorageDate(lastDay.date, event.timeZone),
         sortOrder: 1,
       },
     });
@@ -284,7 +285,7 @@ async function applyFoundation(event: FoundationCandidateRow): Promise<void> {
         overallDayIndex: day.overallDayIndex,
         label: null,
         weekday: day.weekday,
-        date: day.date,
+        date: eventDateOnlyToStorageDate(day.date, event.timeZone),
         sortOrder: day.overallDayIndex,
       })),
     });
@@ -306,7 +307,7 @@ async function applyFoundation(event: FoundationCandidateRow): Promise<void> {
           weekIndex: day.weekIndex,
           dayIndexInWeek: day.dayIndexInWeek,
           overallDayIndex: day.overallDayIndex,
-          localDate: day.date,
+          localDate: eventDateOnlyToStorageDate(day.date, event.timeZone),
         },
       });
     }
