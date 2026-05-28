@@ -249,6 +249,17 @@ async function applyFoundation(event: FoundationCandidateRow): Promise<void> {
   }
 
   await prisma.$transaction(async (tx) => {
+    await tx.eventPerformance.updateMany({
+      where: { eventId: event.id },
+      data: {
+        eventDayId: null,
+        weekIndex: null,
+        dayIndexInWeek: null,
+        overallDayIndex: null,
+        localDate: null,
+      },
+    });
+
     await tx.eventDay.deleteMany({ where: { eventId: event.id } });
     await tx.eventWeek.deleteMany({ where: { eventId: event.id } });
 
@@ -276,17 +287,6 @@ async function applyFoundation(event: FoundationCandidateRow): Promise<void> {
         date: day.date,
         sortOrder: day.overallDayIndex,
       })),
-    });
-
-    await tx.eventPerformance.updateMany({
-      where: { eventId: event.id },
-      data: {
-        eventDayId: null,
-        weekIndex: null,
-        dayIndexInWeek: null,
-        overallDayIndex: null,
-        localDate: null,
-      },
     });
 
     for (const day of foundationDays) {
