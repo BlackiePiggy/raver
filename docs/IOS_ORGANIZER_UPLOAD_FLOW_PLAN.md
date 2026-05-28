@@ -122,6 +122,8 @@
 - [x] `festival-viewer` brand 审核已补齐驳回 reason code 下拉、原因拼装与 `reviewNotes.reviewDecision` 回写
 - [x] 已校正 `festival-viewer` 审核端 `reviewNotes` 归一化逻辑，系统生成的 `brandScreening / i18n / compliance` 不再误入审核员字段备注
 - [x] 已校正 content submission 通知元数据的 `reasonCode` 写回逻辑，brand 驳回原因现可按真实 reason code 透传到用户侧消息载荷
+- [x] 已修复 `server/src/routes/bff.web.routes.ts` 将 `WikiFestival.imageAssets` 误当作 Prisma 表字段查询的构建错误，当前改为从 `media_assets(ownerType=wiki_brand)` 聚合回填主办方 `imageAssets`
+- [x] `pnpm --dir server build` 已再次通过，线上 `deploy-update.sh` 当前阻塞的 TypeScript 构建错误已解除
 
 ## 分阶段落地计划
 

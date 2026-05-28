@@ -7987,7 +7987,7 @@ private struct EventTimelineStageColumnView: View, Equatable {
     let model: EventTimelineStageColumnModel
     let selectedSlotIDs: Set<String>
     let selectable: Bool
-    let performerCardOpacity: Double = 1.0
+    let performerCardOpacity: Double
     let normalCardTextColor: Color
     let selectedCardFillColor: Color
     let columnFillColor: Color
@@ -11004,6 +11004,8 @@ private struct EventRoutePlannerView: View {
             event: event,
             logContext: "route-save"
         )
+        let performerCardOpacity = 0.92
+        let backgroundOverlayOpacity = 0.9
         let snapshotView = EventRoutePlannerShareSnapshotView(
             routeTitle: navigationTitleText,
             event: event,
@@ -11014,7 +11016,9 @@ private struct EventRoutePlannerView: View {
             posterHeight: posterHeight,
             qrCodeImage: nil,
             backgroundImage: backgroundImage,
-            routeOwnerAvatarImage: routeOwnerAvatarImage
+            routeOwnerAvatarImage: routeOwnerAvatarImage,
+            performerCardOpacity: performerCardOpacity,
+            backgroundOverlayOpacity: backgroundOverlayOpacity
         )
         .environment(\.colorScheme, colorScheme)
 

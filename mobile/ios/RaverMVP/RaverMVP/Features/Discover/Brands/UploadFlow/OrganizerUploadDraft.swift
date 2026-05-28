@@ -251,15 +251,15 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
 
         switch zone {
         case .proof:
-            return moveImage(id: id, in: &proofImages, offset: offset)
+            return Self.moveImage(id: id, in: &proofImages, offset: offset)
         case .other:
-            return moveImage(id: id, in: &otherImages, offset: offset)
+            return Self.moveImage(id: id, in: &otherImages, offset: offset)
         case .avatar, .background, .poster:
             return false
         }
     }
 
-    private mutating func moveImage(id: UUID, in images: inout [OrganizerUploadImageDraft], offset: Int) -> Bool {
+    private static func moveImage(id: UUID, in images: inout [OrganizerUploadImageDraft], offset: Int) -> Bool {
         guard let currentIndex = images.firstIndex(where: { $0.id == id }) else { return false }
         let targetIndex = currentIndex + offset
         guard images.indices.contains(targetIndex) else { return false }
@@ -344,7 +344,7 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         let reservedPublicURLs = Set(
             [draft.avatarImage?.remoteURL, draft.backgroundImage?.remoteURL]
                 .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .map(\.lowercased)
+                .map { $0.lowercased() }
                 .filter { !$0.isEmpty }
         )
         let imageAssets = brand.imageAssets ?? []

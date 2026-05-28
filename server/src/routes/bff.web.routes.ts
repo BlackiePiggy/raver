@@ -120,12 +120,164 @@ const learnFestivalListSelect = {
   tiktokUrl: true,
   avatarUrl: true,
   backgroundUrl: true,
-  imageAssets: true,
   links: true,
   revision: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.WikiFestivalSelect;
+
+const normalizeWikiBrandImageAssetType = (value: unknown): string => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  switch (normalized) {
+    case 'avatar':
+    case 'background':
+    case 'poster':
+    case 'proof':
+      return normalized;
+    default:
+      return 'other';
+  }
+};
+
+const wikiBrandImageAssetLabel = (type: string): string => {
+  switch (type) {
+    case 'avatar':
+      return 'Avatar';
+    case 'background':
+      return 'Background';
+    case 'poster':
+      return 'Poster';
+    case 'proof':
+      return 'Proof';
+    default:
+      return 'Other';
+  }
+};
+
+const wikiBrandImageAssetFileName = (
+  asset: {
+    url: string;
+    objectKey: string | null;
+    metadata: Prisma.JsonValue | null;
+  }
+): string => {
+  const metadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+    ? (asset.metadata as Record<string, unknown>)
+    : null;
+  const originalName = typeof metadata?.originalName === 'string' ? metadata.originalName.trim() : '';
+  if (originalName) return originalName;
+  const objectKey = typeof asset.objectKey === 'string' ? asset.objectKey.trim() : '';
+  if (objectKey) return path.basename(objectKey);
+  return path.basename(asset.url.split('?')[0] || asset.url);
+};
+
+const wikiBrandImageAssetSort = (
+  asset: {
+    metadata: Prisma.JsonValue | null;
+    createdAt?: Date | string | null;
+  },
+  fallbackSort: number
+): number => {
+  const metadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+    ? (asset.metadata as Record<string, unknown>)
+    : null;
+  const rawSort = metadata?.sort;
+  if (typeof rawSort === 'number' && Number.isFinite(rawSort)) {
+    return Math.max(0, Math.trunc(rawSort));
+  }
+  return fallbackSort;
+};
+
+const mapWikiBrandMediaAsset = (
+  asset: {
+    purpose: string;
+    url: string;
+    objectKey: string | null;
+    metadata: Prisma.JsonValue | null;
+    createdAt?: Date | string | null;
+  },
+  fallbackSort: number
+) => {
+  const type = normalizeWikiBrandImageAssetType(asset.purpose);
+  const sort = wikiBrandImageAssetSort(asset, fallbackSort);
+  const metadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+    ? (asset.metadata as Record<string, unknown>)
+    : null;
+  const source = typeof metadata?.source === 'string' && metadata.source.trim().length > 0
+    ? metadata.source.trim()
+    : 'media_asset';
+
+  return {
+    url: asset.url,
+    type,
+    label: wikiBrandImageAssetLabel(type),
+    sort,
+    order: sort + 1,
+    source,
+    fileName: wikiBrandImageAssetFileName(asset),
+  };
+};
+
+const loadWikiFestivalImageAssets = async (
+  brandIds: string[]
+): Promise<Map<string, ReturnType<typeof mapWikiBrandMediaAsset>[]>> => {
+  const uniqueIds = Array.from(new Set(brandIds.map((item) => item.trim()).filter(Boolean)));
+  if (!uniqueIds.length) return new Map();
+
+  const assets = await prisma.mediaAsset.findMany({
+    where: {
+      ownerType: 'wiki_brand',
+      ownerId: { in: uniqueIds },
+      status: 'active',
+    },
+    orderBy: [
+      { ownerId: 'asc' },
+      { createdAt: 'asc' },
+    ],
+    select: {
+      ownerId: true,
+      purpose: true,
+      url: true,
+      objectKey: true,
+      metadata: true,
+      createdAt: true,
+    },
+  });
+
+  const grouped = new Map<string, ReturnType<typeof mapWikiBrandMediaAsset>[]>();
+  const sortCounters = new Map<string, number>();
+
+  for (const asset of assets) {
+    const ownerId = typeof asset.ownerId === 'string' ? asset.ownerId.trim() : '';
+    if (!ownerId) continue;
+    const nextFallbackSort = sortCounters.get(ownerId) ?? 0;
+    const mapped = mapWikiBrandMediaAsset(asset, nextFallbackSort);
+    const bucket = grouped.get(ownerId) ?? [];
+    bucket.push(mapped);
+    grouped.set(ownerId, bucket);
+    sortCounters.set(ownerId, Math.max(nextFallbackSort + 1, mapped.sort + 1));
+  }
+
+  for (const [ownerId, rows] of grouped.entries()) {
+    grouped.set(ownerId, rows.sort((left, right) => {
+      const leftSort = typeof left.sort === 'number' ? left.sort : Number.MAX_SAFE_INTEGER;
+      const rightSort = typeof right.sort === 'number' ? right.sort : Number.MAX_SAFE_INTEGER;
+      if (leftSort !== rightSort) return leftSort - rightSort;
+      return left.url.localeCompare(right.url);
+    }));
+  }
+
+  return grouped;
+};
+
+const attachWikiFestivalImageAssets = <T extends { id: string }>(
+  rows: T[],
+  imageAssetsByBrandId: Map<string, ReturnType<typeof mapWikiBrandMediaAsset>[]>
+): Array<T & { brandImageAssets: ReturnType<typeof mapWikiBrandMediaAsset>[] | null }> =>
+  rows.map((row) => ({
+    ...row,
+    brandImageAssets: imageAssetsByBrandId.get(row.id) ?? null,
+  }));
 
 const refreshUserCheckinProjectionBestEffort = async (userId: string): Promise<void> => {
   try {
@@ -6010,7 +6162,11 @@ const mapWikiFestival = (
     tiktokUrl: row.tiktokUrl ?? null,
     avatarUrl: row.avatarUrl ?? null,
     backgroundUrl: row.backgroundUrl ?? null,
-    imageAssets: Array.isArray(row.imageAssets) ? row.imageAssets : null,
+    imageAssets: Array.isArray(row.brandImageAssets)
+      ? row.brandImageAssets
+      : Array.isArray(row.imageAssets)
+        ? row.imageAssets
+        : null,
     links,
     revision: typeof row.revision === 'number' ? row.revision : 1,
     contributors,
@@ -14359,8 +14515,9 @@ router.get('/onboarding/preferences/options', optionalAuth, async (req: Request,
       }),
     ]);
 
-    const brandOptions = shuffleArray(brandRows)
-      .slice(0, ONBOARDING_BRAND_OPTION_LIMIT)
+    const onboardingBrandRows = shuffleArray(brandRows).slice(0, ONBOARDING_BRAND_OPTION_LIMIT);
+    const onboardingBrandImageAssets = await loadWikiFestivalImageAssets(onboardingBrandRows.map((row) => row.id));
+    const brandOptions = attachWikiFestivalImageAssets(onboardingBrandRows, onboardingBrandImageAssets)
       .map((row) => mapWikiFestival({ ...row, contributors: [] }, viewerId, null));
     const djOptions = shuffleArray(djRows)
       .slice(0, ONBOARDING_DJ_OPTION_LIMIT)
@@ -14805,11 +14962,13 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
         : Promise.resolve(null),
     ]);
     const followedBrandIDs = new Set(followedBrandPreference?.watchedBrandIds ?? []);
+    const festivalImageAssets = await loadWikiFestivalImageAssets(rows.map((row) => row.id));
+    const rowsWithImageAssets = attachWikiFestivalImageAssets(rows, festivalImageAssets);
 
     ok(
       res,
       {
-        items: rows.map((row: Prisma.WikiFestivalGetPayload<{ select: typeof learnFestivalListSelect }>) =>
+        items: rowsWithImageAssets.map((row: Prisma.WikiFestivalGetPayload<{ select: typeof learnFestivalListSelect }> & { brandImageAssets: ReturnType<typeof mapWikiBrandMediaAsset>[] | null }) =>
           mapWikiFestival(
             {
               ...row,
@@ -14906,11 +15065,13 @@ router.get('/learn/festivals/:id', optionalAuth, async (req: Request, res: Respo
     }
 
     const isFollowing = Boolean(viewerId && followedBrandPreference?.watchedBrandIds.includes(row.id));
+    const detailImageAssets = await loadWikiFestivalImageAssets([row.id]);
     ok(
       res,
       mapWikiFestival(
         {
           ...row,
+          brandImageAssets: detailImageAssets.get(row.id) ?? null,
           followedByUserIds: isFollowing && viewerId ? [viewerId] : [],
         },
         viewerId,
@@ -15157,7 +15318,11 @@ router.patch('/learn/festivals/:id', optionalAuth, async (req: Request, res: Res
     const hasUpdateFields = Object.keys(updateData).length > 0;
 
     if (!hasUpdateFields) {
-      ok(res, mapWikiFestival(existing, userId, viewerRole));
+      const existingImageAssets = await loadWikiFestivalImageAssets([existing.id]);
+      ok(res, mapWikiFestival({
+        ...existing,
+        brandImageAssets: existingImageAssets.get(existing.id) ?? null,
+      }, userId, viewerRole));
       return;
     }
 
