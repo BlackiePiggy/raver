@@ -315,21 +315,7 @@ struct MyPublishesView: View {
                     Button {
                         appPush(.eventDetail(eventID: event.id))
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(event.name)
-                                .font(.headline)
-                            Text(event.startDate.appLocalizedYMDText(in: event.eventTimeZone))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-                            Text(addressText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : addressText)
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(event.createdAt.appLocalizedYMDHMText())
-                                .font(.caption2)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                        }
-                        .padding(.vertical, 4)
+                        publishedEventRow(event)
                     }
                     .swipeActions {
                         Button {
@@ -653,6 +639,28 @@ struct MyPublishesView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    private func publishedEventRow(_ event: MyPublishEvent) -> some View {
+        let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let locationText = addressText.isEmpty ? LT("地点待补充", "Location pending", "場所は未設定") : addressText
+        let dateText = event.discreteDateSummaryText
+
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(event.name)
+                .font(.headline)
+            Text(dateText)
+                .font(.caption)
+                .foregroundStyle(RaverTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(locationText)
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(event.createdAt.appLocalizedYMDHMText())
+                .font(.caption2)
+                .foregroundStyle(RaverTheme.secondaryText)
+        }
+        .padding(.vertical, 4)
+    }
+
     private func reviewSubmissionSection(entityType: String) -> some View {
         let items = viewModel.contentSubmissions.filter {
             $0.entityType == entityType && matchesReviewFilter($0.status)
@@ -869,10 +877,76 @@ private extension MyPublishEvent {
             city: event.city,
             country: event.country,
             startDate: event.startDate,
+            endDate: event.endDate,
+            schedule: event.schedule,
+            weeks: event.weeks,
+            eventDays: event.eventDays,
             timeZone: event.timeZone,
             createdAt: event.createdAt,
             lineupSlotCount: event.lineupSlots.count
         )
+    }
+
+    var discreteDateSummaryText: String {
+        let ranges = discreteDateRanges
+        let lines = ranges.map { range in
+            let prefix = ranges.count > 1
+                ? (range.label?.nilIfBlank ?? LT("第 \(range.weekIndex) 周", "Week \(range.weekIndex)", "第\(range.weekIndex)週"))
+                : nil
+            let body = range.startDate.appLocalizedDateRangeText(to: range.endDate, timeZone: eventTimeZone)
+            if let prefix {
+                return "\(prefix) · \(body)"
+            }
+            return body
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private var discreteDateRanges: [EventDiscreteDateRange] {
+        let sortedWeeks = weeks.sorted { lhs, rhs in
+            if lhs.weekIndex != rhs.weekIndex { return lhs.weekIndex < rhs.weekIndex }
+            if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+            return lhs.startDate < rhs.startDate
+        }
+        if !sortedWeeks.isEmpty {
+            return sortedWeeks.map {
+                EventDiscreteDateRange(
+                    id: $0.id,
+                    weekIndex: $0.weekIndex,
+                    label: $0.label,
+                    startDate: $0.startDate,
+                    endDate: $0.endDate
+                )
+            }
+        }
+
+        let groupedEventDays = Dictionary(grouping: eventDays) { $0.weekIndex }
+        if groupedEventDays.keys.count > 1 {
+            return groupedEventDays.keys.sorted().compactMap { weekIndex in
+                guard let days = groupedEventDays[weekIndex]?.sorted(by: { $0.date < $1.date }),
+                      let first = days.first,
+                      let last = days.last else {
+                    return nil
+                }
+                return EventDiscreteDateRange(
+                    id: "publish-week-\(weekIndex)",
+                    weekIndex: weekIndex,
+                    label: nil,
+                    startDate: first.date,
+                    endDate: last.date
+                )
+            }
+        }
+
+        return [
+            EventDiscreteDateRange(
+                id: "publish-range",
+                weekIndex: 1,
+                label: nil,
+                startDate: startDate,
+                endDate: endDate
+            )
+        ]
     }
 }
 

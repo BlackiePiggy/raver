@@ -12,6 +12,11 @@ export type CanonicalLineupArtistInput = {
 export type CanonicalLineupSlotInput = {
   id?: string;
   lineupArtistId?: string | null;
+  eventDayId?: string | null;
+  weekIndex?: number | null;
+  dayIndexInWeek?: number | null;
+  overallDayIndex?: number | null;
+  localDate?: Date | null;
   djId: string | null;
   memberDjIds: Array<string | null>;
   djName: string;
@@ -61,8 +66,13 @@ type CanonicalPerformanceRow = {
   eventId: string;
   eventArtistId: string;
   stageId: string | null;
+  eventDayId: string | null;
   displayNameSnapshot: string;
   festivalDayIndex: number | null;
+  weekIndex: number | null;
+  dayIndexInWeek: number | null;
+  overallDayIndex: number | null;
+  localDate: Date | null;
   startAt: Date;
   endAt: Date;
   sortOrder: number;
@@ -128,14 +138,14 @@ const desiredMemberSignature = (members: CanonicalMemberRow[]): string =>
 const performanceSemanticKey = (row: {
   eventArtistId: string;
   stageId: string | null;
-  festivalDayIndex: number | null;
+  eventDayId?: string | null;
   startAt: Date | null;
   endAt: Date | null;
 }): string =>
   [
     row.eventArtistId,
     row.stageId || '',
-    row.festivalDayIndex ?? '',
+    row.eventDayId || '',
     dateTimeValue(row.startAt) ?? '',
     dateTimeValue(row.endAt) ?? '',
   ].join('|');
@@ -178,8 +188,13 @@ const bulkUpdateEventPerformances = async (
       data: {
         eventArtistId: performance.eventArtistId,
         stageId: performance.stageId,
+        eventDayId: performance.eventDayId,
         displayNameSnapshot: performance.displayNameSnapshot,
         festivalDayIndex: performance.festivalDayIndex,
+        weekIndex: performance.weekIndex,
+        dayIndexInWeek: performance.dayIndexInWeek,
+        overallDayIndex: performance.overallDayIndex,
+        localDate: performance.localDate,
         startAt: performance.startAt,
         endAt: performance.endAt,
         sortOrder: performance.sortOrder,
@@ -356,6 +371,11 @@ export const loadCanonicalEventLineupSnapshot = async (
     slots: performances.map((slot) => ({
       id: slot.id,
       lineupArtistId: slot.eventArtistId,
+      eventDayId: slot.eventDayId ?? null,
+      weekIndex: slot.weekIndex ?? null,
+      dayIndexInWeek: slot.dayIndexInWeek ?? null,
+      overallDayIndex: slot.overallDayIndex ?? null,
+      localDate: slot.localDate ?? null,
       djId: slot.eventArtist.primaryDjId,
       memberDjIds: slot.eventArtist.members.map((member) => {
         const id = String(member.djId || '').trim();
@@ -363,7 +383,7 @@ export const loadCanonicalEventLineupSnapshot = async (
       }),
       djName: slot.displayNameSnapshot || slot.eventArtist.displayName,
       stageName: slot.stageId ? stageNameById.get(slot.stageId) ?? null : null,
-      festivalDayIndex: slot.festivalDayIndex ?? null,
+      festivalDayIndex: null,
       startTime: slot.startAt ?? slot.createdAt,
       endTime: slot.endAt ?? slot.startAt ?? slot.createdAt,
       sortOrder: slot.sortOrder,
@@ -481,8 +501,13 @@ const buildCanonicalTargetRows = (
       eventId,
       eventArtistId,
       stageId,
+      eventDayId: slot.eventDayId ?? null,
       displayNameSnapshot: slotName,
-      festivalDayIndex: slot.festivalDayIndex ?? null,
+      festivalDayIndex: null,
+      weekIndex: slot.weekIndex ?? null,
+      dayIndexInWeek: slot.dayIndexInWeek ?? null,
+      overallDayIndex: slot.overallDayIndex ?? null,
+      localDate: slot.localDate ?? null,
       startAt: slot.startTime,
       endAt: slot.endTime,
       sortOrder: slot.sortOrder || index + 1,
@@ -575,7 +600,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
     performanceSemanticKey({
       eventArtistId: performance.eventArtistId,
       stageId: performance.stageId,
-      festivalDayIndex: performance.festivalDayIndex,
+      eventDayId: performance.eventDayId,
       startAt: performance.startAt,
       endAt: performance.endAt,
     }),
@@ -671,11 +696,15 @@ export const syncCanonicalEventLineupAndTimetable = async (
   for (const performance of target.performanceRows.filter((row) => existingPerformanceIds.has(row.id))) {
     const existing = existingPerformanceById.get(performance.id);
     if (!existing) continue;
-    if (
-      existing.eventArtistId !== performance.eventArtistId
-      || nullableString(existing.stageId) !== nullableString(performance.stageId)
-      || existing.displayNameSnapshot !== performance.displayNameSnapshot
-      || existing.festivalDayIndex !== performance.festivalDayIndex
+      if (
+        existing.eventArtistId !== performance.eventArtistId
+        || nullableString(existing.stageId) !== nullableString(performance.stageId)
+        || nullableString(existing.eventDayId) !== nullableString(performance.eventDayId)
+        || existing.displayNameSnapshot !== performance.displayNameSnapshot
+        || existing.weekIndex !== performance.weekIndex
+        || existing.dayIndexInWeek !== performance.dayIndexInWeek
+        || existing.overallDayIndex !== performance.overallDayIndex
+      || dateTimeValue(existing.localDate) !== dateTimeValue(performance.localDate)
       || dateTimeValue(existing.startAt) !== dateTimeValue(performance.startAt)
       || dateTimeValue(existing.endAt) !== dateTimeValue(performance.endAt)
       || existing.sortOrder !== performance.sortOrder

@@ -430,6 +430,11 @@ struct WebEventLineupArtistMember: Codable, Identifiable, Hashable {
 struct WebEventLineupSlot: Codable, Identifiable, Hashable {
     let id: String
     var eventId: String?
+    var eventDayId: String? = nil
+    var weekIndex: Int? = nil
+    var dayIndexInWeek: Int? = nil
+    var overallDayIndex: Int? = nil
+    var localDate: Date? = nil
     var djId: String?
     var memberDjIds: [String?]? = nil
     var memberNames: [String]? = nil
@@ -446,6 +451,11 @@ struct WebEventLineupSlot: Codable, Identifiable, Hashable {
 struct EventLineupSlotInput: Codable, Hashable {
     var id: String? = nil
     var lineupArtistId: String? = nil
+    var eventDayId: String? = nil
+    var weekIndex: Int? = nil
+    var dayIndexInWeek: Int? = nil
+    var overallDayIndex: Int? = nil
+    var localDate: Date? = nil
     var djId: String?
     var memberDjIds: [String?]? = nil
     var memberNames: [String]? = nil
@@ -627,6 +637,33 @@ struct WebEventFestivalLite: Codable, Identifiable, Hashable {
     var backgroundUrl: String?
 }
 
+struct WebEventSchedule: Codable, Hashable {
+    var mode: String
+    var timeZone: String
+    var dayRolloverHour: Int
+}
+
+struct WebEventWeek: Codable, Hashable, Identifiable {
+    var id: String
+    var weekIndex: Int
+    var label: String?
+    var startDate: Date
+    var endDate: Date
+    var sortOrder: Int
+}
+
+struct WebEventDay: Codable, Hashable, Identifiable {
+    var id: String
+    var eventDayId: String
+    var weekIndex: Int
+    var dayIndexInWeek: Int
+    var overallDayIndex: Int
+    var label: String?
+    var weekday: String?
+    var date: Date
+    var sortOrder: Int
+}
+
 struct WebEvent: Codable, Identifiable, Hashable {
     let id: String
     var name: String
@@ -653,6 +690,9 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var longitude: Double?
     var startDate: Date
     var endDate: Date
+    var schedule: WebEventSchedule? = nil
+    var weeks: [WebEventWeek] = []
+    var eventDays: [WebEventDay] = []
     var timeZone: String? = nil
     var startTime: String? = nil
     var endTime: String? = nil
@@ -749,6 +789,9 @@ struct CreateEventInput: Encodable {
     var officialWebsite: String? = nil
     var startDate: Date
     var endDate: Date
+    var schedule: WebEventSchedule? = nil
+    var weeks: [WebEventWeek]? = nil
+    var eventDays: [WebEventDay]? = nil
     var timeZone: String? = nil
     var timeZoneCity: String? = nil
     var timeZoneProvince: String? = nil
@@ -793,6 +836,9 @@ struct CreateEventInput: Encodable {
         case officialWebsite
         case startDate
         case endDate
+        case schedule
+        case weeks
+        case eventDays
         case timeZone
         case timeZoneCity
         case timeZoneProvince
@@ -840,6 +886,9 @@ struct CreateEventInput: Encodable {
         try container.encodeIfPresent(officialWebsite, forKey: .officialWebsite)
         try container.encode(startDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .startDate)
         try container.encode(endDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .endDate)
+        try container.encodeIfPresent(schedule, forKey: .schedule)
+        try container.encodeIfPresent(weeks, forKey: .weeks)
+        try container.encodeIfPresent(eventDays, forKey: .eventDays)
         try container.encodeIfPresent(timeZone, forKey: .timeZone)
         try container.encodeIfPresent(timeZoneCity, forKey: .timeZoneCity)
         try container.encodeIfPresent(timeZoneProvince, forKey: .timeZoneProvince)
@@ -1040,6 +1089,9 @@ struct UpdateEventInput: Encodable {
     var officialWebsite: String? = nil
     var startDate: Date?
     var endDate: Date?
+    var schedule: WebEventSchedule? = nil
+    var weeks: [WebEventWeek]? = nil
+    var eventDays: [WebEventDay]? = nil
     var timeZone: String? = nil
     var timeZoneCity: String? = nil
     var timeZoneProvince: String? = nil
@@ -1100,6 +1152,9 @@ struct UpdateEventInput: Encodable {
         case officialWebsite
         case startDate
         case endDate
+        case schedule
+        case weeks
+        case eventDays
         case timeZone
         case timeZoneCity
         case timeZoneProvince
@@ -1184,6 +1239,9 @@ struct UpdateEventInput: Encodable {
         if let endDate {
             try container.encode(endDate.eventArchiveDateText(in: resolvedTimeZone), forKey: .endDate)
         }
+        try container.encodeIfPresent(schedule, forKey: .schedule)
+        try container.encodeIfPresent(weeks, forKey: .weeks)
+        try container.encodeIfPresent(eventDays, forKey: .eventDays)
         try container.encodeIfPresent(timeZone, forKey: .timeZone)
         try container.encodeIfPresent(timeZoneCity, forKey: .timeZoneCity)
         try container.encodeIfPresent(timeZoneProvince, forKey: .timeZoneProvince)
@@ -1872,6 +1930,10 @@ struct MyPublishEvent: Codable, Identifiable, Hashable {
     var city: String?
     var country: String?
     var startDate: Date
+    var endDate: Date
+    var schedule: WebEventSchedule? = nil
+    var weeks: [WebEventWeek] = []
+    var eventDays: [WebEventDay] = []
     var timeZone: String? = nil
     var createdAt: Date
     var lineupSlotCount: Int
@@ -2019,18 +2081,12 @@ struct EventTimetableImageImportRequest: Encodable {
 }
 
 struct EventTimetableImageImportContext: Codable, Hashable {
-    var eventStartDate: String
-    var eventEndDate: String
     var eventTimeZone: String
+    var schedule: WebEventSchedule
+    var weeks: [WebEventWeek]
+    var eventDays: [WebEventDay]
     var dayRolloverHour: Int
-    var weekRanges: [EventTimetableImageImportWeekRange]
     var knownStageNames: [String]
-}
-
-struct EventTimetableImageImportWeekRange: Codable, Hashable {
-    var weekIndex: Int
-    var startDate: String
-    var endDate: String
 }
 
 struct EventTimetableImageImportResponse: Codable, Hashable {
@@ -2148,15 +2204,34 @@ struct EventTimetableAIResult: Codable, Hashable {
 struct EventTimetableAIWeek: Codable, Hashable, Identifiable {
     var id: Int { weekIndex }
     var weekIndex: Int
+    var weekLabel: String?
     var days: [EventTimetableAIDay]
 }
 
 struct EventTimetableAIDay: Codable, Hashable, Identifiable {
-    var id: Int { festivalDayIndex }
-    var festivalDayIndex: Int
+    var id: String {
+        if let eventDayId = eventDayRef?.eventDayId, !eventDayId.isEmpty {
+            return eventDayId
+        }
+        return "\(weekIndex ?? 0)-\(dayIndexInWeek)"
+    }
+    var weekIndex: Int? = nil
+    var dayIndexInWeek: Int
     var dayLabel: String?
+    var weekday: String?
     var dateText: String?
+    var eventDayRef: EventTimetableAIResolvedEventDay?
     var stages: [EventTimetableAIStage]
+}
+
+struct EventTimetableAIResolvedEventDay: Codable, Hashable {
+    var eventDayId: String?
+    var weekIndex: Int
+    var dayIndexInWeek: Int
+    var overallDayIndex: Int?
+    var date: String?
+    var resolutionReason: String
+    var confidence: Double?
 }
 
 struct EventTimetableAIStage: Codable, Hashable, Identifiable {

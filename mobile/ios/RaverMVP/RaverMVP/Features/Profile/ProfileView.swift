@@ -1904,6 +1904,7 @@ struct WidgetEventManagerView: View {
                     venueName: current.venueName,
                     startDate: current.startDate,
                     endDate: current.endDate,
+                    dateRanges: current.dateRanges,
                     preferredBackgroundURL: current.preferredBackgroundURL,
                     cachedBackgroundImageRelativePath: current.cachedBackgroundImageRelativePath,
                     addedAt: current.addedAt
@@ -1920,8 +1921,23 @@ struct WidgetEventManagerView: View {
         if event.customDisplayName != nil {
             parts.append(event.name)
         }
+        if let nextDate = widgetNextRelevantDateText(event) {
+            parts.append(nextDate)
+        }
         parts.append(contentsOf: [event.city, event.venueName].compactMap(widgetTrimmed))
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func widgetNextRelevantDateText(_ event: WidgetSelectableEvent) -> String? {
+        let today = Calendar.current.startOfDay(for: Date())
+        let selectedRange = event.normalizedDateRanges.first {
+            Calendar.current.startOfDay(for: max($0.endDate, $0.startDate)) >= today
+        } ?? event.normalizedDateRanges.last
+        guard let selectedRange else { return nil }
+        return selectedRange.startDate.appLocalizedDateRangeText(
+            to: selectedRange.endDate,
+            timeZone: .current
+        )
     }
 
     @ViewBuilder

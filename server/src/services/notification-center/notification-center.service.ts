@@ -107,6 +107,15 @@ const normalizePositiveWindowHours = (hours: number, fallback = 24, max = 24 * 3
   return Math.min(value, max);
 };
 
+const startOfUTCDate = (date: Date): Date =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+const endOfUTCDate = (date: Date): Date =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+
+const sortDatesAscending = (values: Date[]): Date[] =>
+  values.slice().sort((lhs, rhs) => lhs.getTime() - rhs.getTime());
+
 const toRate = (numerator: number, denominator: number): number => {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
     return 0;
@@ -2829,6 +2838,7 @@ export const notificationCenterService = {
       userId: string;
       eventId: string;
       eventName: string;
+      eventAnchorDate: Date;
       eventStartDate: Date;
     }>
   > {
@@ -2846,6 +2856,8 @@ export const notificationCenterService = {
     const maxDaysBeforeStart = normalizeDaysBeforeStart(input.maxDaysBeforeStart, 3);
     const now = new Date();
     const until = new Date(now.getTime() + (maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
+    const todayDate = startOfUTCDate(now);
+    const untilDate = endOfUTCDate(until);
     const rows = await prisma.$queryRaw<Array<{
       userId: string;
       eventId: string;
@@ -2864,17 +2876,61 @@ export const notificationCenterService = {
       WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
         AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
         AND uef.user_id IN (${Prisma.join(normalizedUserIds)})
-        AND e.start_date >= ${now}
-        AND e.start_date <= ${until}
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM event_days ed
+            WHERE ed.event_id = e.id
+              AND ed.date >= ${todayDate}
+              AND ed.date <= ${untilDate}
+          )
+          OR (
+            NOT EXISTS (
+              SELECT 1
+              FROM event_days ed_any
+              WHERE ed_any.event_id = e.id
+            )
+            AND e.start_date >= ${now}
+            AND e.start_date <= ${until}
+          )
+        )
       ORDER BY e.start_date ASC, uef.created_at DESC
     `;
 
-    const unique = new Map<string, { userId: string; eventId: string; eventName: string; eventStartDate: Date }>();
+    const eventIds = Array.from(new Set(rows.map((row) => row.eventId?.trim()).filter(Boolean)));
+    const eventDayRows = eventIds.length > 0
+      ? await prisma.eventDay.findMany({
+          where: {
+            eventId: {
+              in: eventIds,
+            },
+            date: {
+              gte: todayDate,
+              lte: untilDate,
+            },
+          },
+          select: {
+            eventId: true,
+            date: true,
+          },
+          orderBy: [{ date: 'asc' }, { overallDayIndex: 'asc' }],
+        })
+      : [];
+    const eventDayMap = new Map<string, Date[]>();
+    for (const row of eventDayRows) {
+      const current = eventDayMap.get(row.eventId) ?? [];
+      current.push(row.date);
+      eventDayMap.set(row.eventId, current);
+    }
+
+    const unique = new Map<string, { userId: string; eventId: string; eventName: string; eventAnchorDate: Date; eventStartDate: Date }>();
     for (const row of rows) {
       const eventId = row.eventId?.trim();
       if (!eventId) {
         continue;
       }
+      const eventDayDates = sortDatesAscending(eventDayMap.get(eventId) ?? []);
+      const eventAnchorDate = eventDayDates[0] ?? row.eventStartDate;
       const key = `${row.userId}:${eventId}`;
       if (unique.has(key)) {
         continue;
@@ -2883,6 +2939,7 @@ export const notificationCenterService = {
         userId: row.userId,
         eventId,
         eventName: row.eventName,
+        eventAnchorDate,
         eventStartDate: row.eventStartDate,
       });
     }
@@ -3040,6 +3097,7 @@ export const notificationCenterService = {
       eventName: string;
       eventStartDate: Date;
       eventEndDate: Date;
+      eventDayDates: Date[];
     }>
   > {
     const normalizedUserIds = Array.from(
@@ -3058,6 +3116,8 @@ export const notificationCenterService = {
     const now = new Date();
     const until = new Date(now.getTime() + (maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
     const since = new Date(now.getTime() - maxDaysAfterEnd * 24 * 60 * 60 * 1000);
+    const sinceDate = startOfUTCDate(since);
+    const untilDate = endOfUTCDate(until);
     const rows = await prisma.$queryRaw<Array<{
       userId: string;
       eventId: string;
@@ -3078,14 +3138,56 @@ export const notificationCenterService = {
       WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
         AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
         AND uef.user_id IN (${Prisma.join(normalizedUserIds)})
-        AND e.start_date <= ${until}
-        AND e.end_date >= ${since}
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM event_days ed
+            WHERE ed.event_id = e.id
+              AND ed.date >= ${sinceDate}
+              AND ed.date <= ${untilDate}
+          )
+          OR (
+            NOT EXISTS (
+              SELECT 1
+              FROM event_days ed_any
+              WHERE ed_any.event_id = e.id
+            )
+            AND e.start_date <= ${until}
+            AND e.end_date >= ${since}
+          )
+        )
       ORDER BY e.start_date ASC, uef.created_at DESC
     `;
 
+    const eventIds = Array.from(new Set(rows.map((row) => row.eventId?.trim()).filter(Boolean)));
+    const eventDayRows = eventIds.length > 0
+      ? await prisma.eventDay.findMany({
+          where: {
+            eventId: {
+              in: eventIds,
+            },
+            date: {
+              gte: sinceDate,
+              lte: untilDate,
+            },
+          },
+          select: {
+            eventId: true,
+            date: true,
+          },
+          orderBy: [{ date: 'asc' }, { overallDayIndex: 'asc' }],
+        })
+      : [];
+    const eventDayMap = new Map<string, Date[]>();
+    for (const row of eventDayRows) {
+      const current = eventDayMap.get(row.eventId) ?? [];
+      current.push(row.date);
+      eventDayMap.set(row.eventId, current);
+    }
+
     const unique = new Map<
       string,
-      { userId: string; eventId: string; eventName: string; eventStartDate: Date; eventEndDate: Date }
+      { userId: string; eventId: string; eventName: string; eventStartDate: Date; eventEndDate: Date; eventDayDates: Date[] }
     >();
     for (const row of rows) {
       const eventId = row.eventId?.trim();
@@ -3102,6 +3204,7 @@ export const notificationCenterService = {
         eventName: row.eventName,
         eventStartDate: row.eventStartDate,
         eventEndDate: row.eventEndDate,
+        eventDayDates: sortDatesAscending(eventDayMap.get(eventId) ?? []),
       });
     }
 

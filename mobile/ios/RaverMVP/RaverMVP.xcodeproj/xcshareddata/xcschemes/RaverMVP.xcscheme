@@ -41,6 +41,16 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "E10000000000000000000031"
+               BuildableName = "RaverMVPTests.xctest"
+               BlueprintName = "RaverMVPTests"
+               ReferencedContainer = "container:RaverMVP.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "04BBDDA62D906013E8909A71"
                BuildableName = "RaverMVPUITests.xctest"
                BlueprintName = "RaverMVPUITests"

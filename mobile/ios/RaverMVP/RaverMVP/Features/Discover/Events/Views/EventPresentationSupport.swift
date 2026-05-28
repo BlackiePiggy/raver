@@ -1,5 +1,85 @@
 import SwiftUI
 
+struct EventDiscreteDateRange: Hashable, Identifiable {
+    let id: String
+    let weekIndex: Int
+    let label: String?
+    let startDate: Date
+    let endDate: Date
+}
+
+private func localizedEventWeekTitle(_ weekIndex: Int) -> String {
+    LT("第 \(weekIndex) 周", "Week \(weekIndex)", "第\(weekIndex)週")
+}
+
+private func inferredEventWeekTitle(from rawLabel: String?) -> String? {
+    guard let rawLabel = rawLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !rawLabel.isEmpty else {
+        return nil
+    }
+
+    let patterns = [
+        #"(?i)\bweekend\s*\d+\b"#,
+        #"(?i)\bweek\s*\d+\b"#,
+        #"第\s*\d+\s*[周週]"#
+    ]
+
+    for pattern in patterns {
+        if let range = rawLabel.range(of: pattern, options: .regularExpression) {
+            return String(rawLabel[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    return nil
+}
+
+private func localizedEventDateSummary(
+    startDate: Date,
+    endDate: Date,
+    timeZone: TimeZone
+) -> String {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timeZone
+    let startDay = calendar.startOfDay(for: startDate)
+    let endDay = calendar.startOfDay(for: endDate)
+
+    guard endDay >= startDay else {
+        return startDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone)
+    }
+
+    if calendar.isDate(startDay, inSameDayAs: endDay) {
+        return startDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone)
+    }
+
+    return "\(startDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone)) - \(endDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone))"
+}
+
+private func eventDiscreteDateLines(
+    ranges: [EventDiscreteDateRange],
+    fallbackStartDate: Date,
+    fallbackEndDate: Date,
+    timeZone: TimeZone,
+    includeTimeZonePerLine: Bool
+) -> [String] {
+    guard !ranges.isEmpty else {
+        if includeTimeZonePerLine {
+            return [fallbackStartDate.appLocalizedDateRangeText(to: fallbackEndDate, timeZone: timeZone)]
+        }
+        return [localizedEventDateSummary(startDate: fallbackStartDate, endDate: fallbackEndDate, timeZone: timeZone)]
+    }
+
+    return ranges.map { range in
+        let prefix = ranges.count > 1 ? (range.label?.nilIfBlank ?? localizedEventWeekTitle(range.weekIndex)) : nil
+        let summary = includeTimeZonePerLine
+            ? range.startDate.appLocalizedDateRangeText(to: range.endDate, timeZone: timeZone)
+            : localizedEventDateSummary(startDate: range.startDate, endDate: range.endDate, timeZone: timeZone)
+        if let prefix {
+            return "\(prefix) · \(summary)"
+        }
+        return summary
+    }
+}
+
 enum EventVisualStatus: String {
     case upcoming
     case ongoing
@@ -133,6 +213,23 @@ struct OngoingStatusBars: View {
     }
 }
 
+extension Date {
+    fileprivate func appLocalizedYMDTextRawForEventPresentation(in timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = timeZone
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh, .system:
+            formatter.dateFormat = "yyyy年M月d日"
+        case .en:
+            formatter.dateFormat = "MMM d, yyyy"
+        case .ja:
+            formatter.dateFormat = "yyyy年M月d日"
+        }
+        return formatter.string(from: self)
+    }
+}
+
 extension WebEvent {
     private var normalizedImageAssets: [WebEventImageAsset] {
         let assets = imageAssets ?? []
@@ -227,6 +324,88 @@ extension WebEvent {
         return posterAssetURLs.first ?? lineupAssetURLs.first
     }
 
+    var discreteDateRanges: [EventDiscreteDateRange] {
+        let sortedWeeks = weeks.sorted { lhs, rhs in
+            if lhs.weekIndex != rhs.weekIndex { return lhs.weekIndex < rhs.weekIndex }
+            if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+            return lhs.startDate < rhs.startDate
+        }
+        if !sortedWeeks.isEmpty {
+            return sortedWeeks.map { week in
+                EventDiscreteDateRange(
+                    id: week.id,
+                    weekIndex: week.weekIndex,
+                    label: week.label,
+                    startDate: week.startDate,
+                    endDate: week.endDate
+                )
+            }
+        }
+
+        let groupedEventDays = Dictionary(grouping: eventDays) { $0.weekIndex }
+        let sortedWeekIndexes = groupedEventDays.keys.sorted()
+        if sortedWeekIndexes.count > 1 {
+            return sortedWeekIndexes.compactMap { weekIndex in
+                guard let days = groupedEventDays[weekIndex]?.sorted(by: { $0.date < $1.date }),
+                      let first = days.first,
+                      let last = days.last else {
+                    return nil
+                }
+                let label = days.compactMap { inferredEventWeekTitle(from: $0.label) }.first
+                    ?? localizedEventWeekTitle(weekIndex)
+                return EventDiscreteDateRange(
+                    id: "event-days-week-\(weekIndex)",
+                    weekIndex: weekIndex,
+                    label: label,
+                    startDate: first.date,
+                    endDate: last.date
+                )
+            }
+        }
+
+        return [
+            EventDiscreteDateRange(
+                id: "event-range",
+                weekIndex: 1,
+                label: nil,
+                startDate: startDate,
+                endDate: endDate
+            )
+        ]
+    }
+
+    var primaryDisplayDate: Date {
+        discreteDateRanges.first?.startDate ?? startDate
+    }
+
+    func discreteDateSummaryLines(
+        in timeZone: TimeZone? = nil,
+        includeTimeZonePerLine: Bool = false
+    ) -> [String] {
+        let resolvedTimeZone = timeZone ?? eventTimeZone
+        return eventDiscreteDateLines(
+            ranges: discreteDateRanges,
+            fallbackStartDate: startDate,
+            fallbackEndDate: endDate,
+            timeZone: resolvedTimeZone,
+            includeTimeZonePerLine: includeTimeZonePerLine
+        )
+    }
+
+    func discreteDateSummaryText(
+        in timeZone: TimeZone? = nil,
+        includeTimeZone: Bool = true,
+        separator: String = "\n"
+    ) -> String {
+        let resolvedTimeZone = timeZone ?? eventTimeZone
+        let lines = discreteDateSummaryLines(in: resolvedTimeZone, includeTimeZonePerLine: false)
+        let body = lines.joined(separator: separator)
+        guard includeTimeZone else { return body }
+        let suffix = Date.appLocalizedTimeZoneLabel(resolvedTimeZone)
+        guard !suffix.isEmpty else { return body }
+        return "\(body) · \(suffix)"
+    }
+
 }
 
 struct EventRow: View {
@@ -271,9 +450,15 @@ struct EventRow: View {
                                 .fill(RaverTheme.accent.opacity(0.15))
                         )
 
-                    Label(eventDateRangeText, systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
+                    Label {
+                        Text(eventDateRangeText)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    } icon: {
+                        Image(systemName: "calendar")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
 
                     let addressText = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !addressText.isEmpty {
@@ -336,11 +521,12 @@ struct EventRow: View {
 #endif
 
     private var eventDateBadge: some View {
-        VStack(spacing: 0) {
-            Text(event.startDate.appLocalizedMonthBadgeText(in: event.eventTimeZone))
+        let badgeDate = event.primaryDisplayDate
+        return VStack(spacing: 0) {
+            Text(badgeDate.appLocalizedMonthBadgeText(in: event.eventTimeZone))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(eventDateBadgeTextColor)
-            Text("\(Calendar.eventCalendar(timeZone: event.eventTimeZone).component(.day, from: event.startDate))")
+            Text("\(Calendar.eventCalendar(timeZone: event.eventTimeZone).component(.day, from: badgeDate))")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(eventDateBadgeTextColor)
         }
@@ -354,7 +540,7 @@ struct EventRow: View {
     }
 
     private var eventDateRangeText: String {
-        event.startDate.appLocalizedDateRangeText(to: event.endDate, timeZone: event.eventTimeZone)
+        event.discreteDateSummaryText()
     }
 
     @ViewBuilder

@@ -2,12 +2,10 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
-  getEventHour,
-  isValidEventTimeZone,
   normalizeEventTimeZone,
   parseEventDateInput,
-  setEventDayAndKeepTime,
   startOfEventDay,
+  zonedTimeToUtc,
 } from '../utils/event-timezone';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 import {
@@ -25,6 +23,35 @@ const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 30_000;
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 const EVENT_LINEUP_SYNC_MODES = ['incremental_fill', 'exact_align'] as const;
 type EventLineupSyncMode = typeof EVENT_LINEUP_SYNC_MODES[number];
+
+export type SubmittedEventWeek = {
+  weekIndex: number;
+  label: string | null;
+  startDate: Date;
+  endDate: Date;
+  sortOrder: number;
+};
+
+export type SubmittedEventDay = {
+  eventDayId: string;
+  weekIndex: number;
+  dayIndexInWeek: number;
+  overallDayIndex: number;
+  label: string | null;
+  weekday: string | null;
+  date: Date;
+  sortOrder: number;
+};
+
+export type SubmittedEventScheduleContext = {
+  scheduleMode: 'single_day' | 'multi_day' | 'multi_week';
+  timeZone: string;
+  dayRolloverHour: number;
+  weeks: SubmittedEventWeek[];
+  eventDays: SubmittedEventDay[];
+  startDate: Date;
+  endDate: Date;
+};
 
 const cleanText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -111,6 +138,234 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 
 const jsonObjectOrNull = (value: unknown): Prisma.JsonObject | null =>
   isPlainObject(value) ? value as Prisma.JsonObject : null;
+
+export class EventSubmissionValidationError extends Error {
+  readonly code = 'EVENT_SUBMISSION_INVALID_PAYLOAD';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventSubmissionValidationError';
+  }
+}
+
+const normalizeScheduleMode = (value: unknown): 'single_day' | 'multi_day' | 'multi_week' => {
+  const normalized = cleanText(value)?.toLowerCase().replace(/-/g, '_');
+  switch (normalized) {
+    case 'single_day':
+    case 'multi_day':
+    case 'multi_week':
+      return normalized;
+    default:
+      throw new EventSubmissionValidationError('schedule.mode 必须是 single_day、multi_day 或 multi_week');
+  }
+};
+
+const eventDateKey = (date: Date, timeZone: string): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const parseEventDateOnlyOrThrow = (
+  value: unknown,
+  label: string,
+  timeZone: string
+): Date => {
+  const text = cleanText(value);
+  const parsed = text ? parseEventDateInput(text, timeZone, 'start') : null;
+  if (!parsed) {
+    throw new EventSubmissionValidationError(`${label} 缺少有效日期`);
+  }
+  const normalized = startOfEventDay(parsed, timeZone);
+  if (Number.isNaN(normalized.getTime())) {
+    throw new EventSubmissionValidationError(`${label} 日期无效`);
+  }
+  return normalized;
+};
+
+const parsePositiveIntOrThrow = (value: unknown, label: string): number => {
+  const parsed = integerOrNull(value);
+  if (parsed === null || parsed < 1) {
+    throw new EventSubmissionValidationError(`${label} 必须是大于 0 的整数`);
+  }
+  return parsed;
+};
+
+const normalizeNullableText = (value: unknown): string | null => cleanText(value) || null;
+
+const parseSubmittedEventWeeks = (
+  value: unknown,
+  timeZone: string
+): SubmittedEventWeek[] => {
+  if (!Array.isArray(value)) {
+    throw new EventSubmissionValidationError('weeks 必须是数组');
+  }
+  const weeks = value.map((item, index) => {
+    if (!isPlainObject(item)) {
+      throw new EventSubmissionValidationError(`weeks[${index}] 必须是对象`);
+    }
+    const weekIndex = parsePositiveIntOrThrow(item.weekIndex, `weeks[${index}].weekIndex`);
+    const startDate = parseEventDateOnlyOrThrow(item.startDate, `weeks[${index}].startDate`, timeZone);
+    const endDate = parseEventDateOnlyOrThrow(item.endDate, `weeks[${index}].endDate`, timeZone);
+    if (endDate.getTime() < startDate.getTime()) {
+      throw new EventSubmissionValidationError(`weeks[${index}] 的 endDate 不能早于 startDate`);
+    }
+    return {
+      weekIndex,
+      label: normalizeNullableText(item.label),
+      startDate,
+      endDate,
+      sortOrder: parsePositiveIntOrThrow(item.sortOrder ?? weekIndex, `weeks[${index}].sortOrder`),
+    } satisfies SubmittedEventWeek;
+  });
+
+  if (weeks.length === 0) {
+    throw new EventSubmissionValidationError('weeks 不能为空');
+  }
+
+  const seenWeekIndexes = new Set<number>();
+  for (const week of weeks) {
+    if (seenWeekIndexes.has(week.weekIndex)) {
+      throw new EventSubmissionValidationError(`weeks 中存在重复的 weekIndex=${week.weekIndex}`);
+    }
+    seenWeekIndexes.add(week.weekIndex);
+  }
+
+  return weeks.slice().sort((a, b) => a.weekIndex - b.weekIndex || a.sortOrder - b.sortOrder);
+};
+
+const parseSubmittedEventDays = (
+  value: unknown,
+  timeZone: string
+): SubmittedEventDay[] => {
+  if (!Array.isArray(value)) {
+    throw new EventSubmissionValidationError('eventDays 必须是数组');
+  }
+  const days = value.map((item, index) => {
+    if (!isPlainObject(item)) {
+      throw new EventSubmissionValidationError(`eventDays[${index}] 必须是对象`);
+    }
+    const eventDayId = cleanText(item.eventDayId);
+    if (!eventDayId) {
+      throw new EventSubmissionValidationError(`eventDays[${index}].eventDayId 不能为空`);
+    }
+    return {
+      eventDayId,
+      weekIndex: parsePositiveIntOrThrow(item.weekIndex, `eventDays[${index}].weekIndex`),
+      dayIndexInWeek: parsePositiveIntOrThrow(item.dayIndexInWeek, `eventDays[${index}].dayIndexInWeek`),
+      overallDayIndex: parsePositiveIntOrThrow(item.overallDayIndex, `eventDays[${index}].overallDayIndex`),
+      label: normalizeNullableText(item.label),
+      weekday: normalizeNullableText(item.weekday)?.toLowerCase() ?? null,
+      date: parseEventDateOnlyOrThrow(item.date, `eventDays[${index}].date`, timeZone),
+      sortOrder: parsePositiveIntOrThrow(item.sortOrder ?? item.overallDayIndex, `eventDays[${index}].sortOrder`),
+    } satisfies SubmittedEventDay;
+  });
+
+  if (days.length === 0) {
+    throw new EventSubmissionValidationError('eventDays 不能为空');
+  }
+
+  const seenEventDayIds = new Set<string>();
+  const seenOverallIndexes = new Set<number>();
+  const seenWeekDayKeys = new Set<string>();
+  for (const day of days) {
+    if (seenEventDayIds.has(day.eventDayId)) {
+      throw new EventSubmissionValidationError(`eventDays 中存在重复的 eventDayId=${day.eventDayId}`);
+    }
+    if (seenOverallIndexes.has(day.overallDayIndex)) {
+      throw new EventSubmissionValidationError(`eventDays 中存在重复的 overallDayIndex=${day.overallDayIndex}`);
+    }
+    const weekDayKey = `${day.weekIndex}:${day.dayIndexInWeek}`;
+    if (seenWeekDayKeys.has(weekDayKey)) {
+      throw new EventSubmissionValidationError(`eventDays 中存在重复的 week/day=${weekDayKey}`);
+    }
+    seenEventDayIds.add(day.eventDayId);
+    seenOverallIndexes.add(day.overallDayIndex);
+    seenWeekDayKeys.add(weekDayKey);
+  }
+
+  return days.slice().sort((a, b) => a.overallDayIndex - b.overallDayIndex || a.sortOrder - b.sortOrder);
+};
+
+const assertWeeksAndDaysConsistency = (
+  scheduleMode: 'single_day' | 'multi_day' | 'multi_week',
+  weeks: SubmittedEventWeek[],
+  eventDays: SubmittedEventDay[],
+  timeZone: string
+): void => {
+  if (scheduleMode === 'multi_week' && weeks.length < 2) {
+    throw new EventSubmissionValidationError('multi_week 活动至少需要 2 个 weeks');
+  }
+  if (scheduleMode !== 'multi_week' && weeks.length !== 1) {
+    throw new EventSubmissionValidationError(`${scheduleMode} 活动必须且只能有 1 个 week`);
+  }
+  if (scheduleMode === 'single_day' && eventDays.length !== 1) {
+    throw new EventSubmissionValidationError('single_day 活动必须且只能有 1 个 eventDay');
+  }
+  if (scheduleMode === 'multi_day' && eventDays.length < 2) {
+    throw new EventSubmissionValidationError('multi_day 活动至少需要 2 个 eventDays');
+  }
+
+  const weekByIndex = new Map(weeks.map((week) => [week.weekIndex, week]));
+  for (const day of eventDays) {
+    const week = weekByIndex.get(day.weekIndex);
+    if (!week) {
+      throw new EventSubmissionValidationError(`eventDay ${day.eventDayId} 引用了不存在的 weekIndex=${day.weekIndex}`);
+    }
+    const dayDate = day.date.getTime();
+    if (dayDate < week.startDate.getTime() || dayDate > week.endDate.getTime()) {
+      throw new EventSubmissionValidationError(`eventDay ${day.eventDayId} 的日期不在所属 week 范围内`);
+    }
+  }
+
+  const orderedDays = eventDays.slice().sort((a, b) => a.overallDayIndex - b.overallDayIndex);
+  for (const [index, day] of orderedDays.entries()) {
+    if (day.overallDayIndex !== index + 1) {
+      throw new EventSubmissionValidationError('eventDays.overallDayIndex 必须从 1 开始连续递增');
+    }
+  }
+
+  const startDateKey = eventDateKey(orderedDays[0].date, timeZone);
+  const endDateKey = eventDateKey(orderedDays[orderedDays.length - 1].date, timeZone);
+  const firstWeekKey = eventDateKey(weeks[0].startDate, timeZone);
+  const lastWeekKey = eventDateKey(weeks[weeks.length - 1].endDate, timeZone);
+  if (startDateKey !== firstWeekKey || endDateKey !== lastWeekKey) {
+    throw new EventSubmissionValidationError('weeks 与 eventDays 的整体起止日期不一致');
+  }
+};
+
+export const normalizeSubmittedEventScheduleContext = (
+  payload: Prisma.JsonObject | Prisma.InputJsonObject | Record<string, unknown>
+): SubmittedEventScheduleContext => {
+  const input = payload as Record<string, unknown>;
+  const scheduleInput = isPlainObject(input.schedule) ? input.schedule : {};
+  const timeZone = normalizeEventTimeZone(
+    scheduleInput.timeZone ?? input.timeZone ?? input.timezone ?? input.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE
+  );
+  const dayRolloverHour = normalizeDayRolloverHour(
+    scheduleInput.dayRolloverHour ?? input.dayRolloverHour,
+    6
+  );
+  const scheduleMode = normalizeScheduleMode(scheduleInput.mode ?? input.scheduleMode ?? input.schedule_mode);
+  const weeks = parseSubmittedEventWeeks(input.weeks, timeZone);
+  const eventDays = parseSubmittedEventDays(input.eventDays, timeZone);
+  assertWeeksAndDaysConsistency(scheduleMode, weeks, eventDays, timeZone);
+
+  return {
+    scheduleMode,
+    timeZone,
+    dayRolloverHour,
+    weeks,
+    eventDays,
+    startDate: eventDays[0].date,
+    endDate: new Date(eventDays[eventDays.length - 1].date.getTime() + 86_400_000 - 1000),
+  };
+};
 
 export const getEventEditTargetIdFromPayload = (payload: Prisma.JsonObject | Prisma.InputJsonObject): string | null =>
   cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId) || null;
@@ -346,37 +601,88 @@ const normalizeEventStageOrder = (value: unknown): string[] => {
 
 const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
 
-const inferFestivalDayIndex = (
-  startTime: Date,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): number | null => {
-  if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
-    return null;
-  }
-  let dayOffset = diffEventDays(eventStartDate, startTime, timeZone);
-  if (dayOffset > 0 && getEventHour(startTime, timeZone) < dayRolloverHour) {
-    dayOffset -= 1;
-  }
-  return Math.max(1, dayOffset + 1);
+const getLocalDateTimeParts = (
+  instant: Date,
+  timeZone: string
+): { year: number; month: number; day: number; hour: number; minute: number; second: number; millisecond: number } => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+    millisecond: instant.getUTCMilliseconds(),
+  };
 };
 
-const applyFestivalDayIndexToDate = (
-  timeSource: Date,
-  eventStartDate: Date,
-  festivalDayIndex: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
+const cloneEventDayByOffset = (eventDayDate: Date, offsetDays: number): Date =>
+  new Date(eventDayDate.getTime() + Math.max(0, offsetDays) * 86_400_000);
 
-const explicitFestivalDayCarryOffset = (
-  timeSource: Date,
-  eventStartDate: Date,
-  festivalDayIndex: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): number => {
-  const logicalDay = applyFestivalDayIndexToDate(timeSource, eventStartDate, festivalDayIndex, timeZone);
-  return Math.max(0, diffEventDays(logicalDay, timeSource, timeZone));
+const buildSlotInstantFromEventDay = (
+  sourceInstant: Date,
+  eventDayDate: Date,
+  timeZone: string
+): Date => {
+  const carryOffset = Math.max(0, diffEventDays(eventDayDate, sourceInstant, timeZone));
+  const targetBaseDate = cloneEventDayByOffset(eventDayDate, carryOffset);
+  const dateParts = getLocalDateTimeParts(targetBaseDate, timeZone);
+  const timeParts = getLocalDateTimeParts(sourceInstant, timeZone);
+  return zonedTimeToUtc({
+    year: dateParts.year,
+    month: dateParts.month,
+    day: dateParts.day,
+    hour: timeParts.hour,
+    minute: timeParts.minute,
+    second: timeParts.second,
+    millisecond: timeParts.millisecond,
+  }, timeZone);
+};
+
+const normalizeLocalDateInput = (value: unknown, timeZone: string): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return startOfEventDay(value, timeZone);
+  }
+  const parsed = cleanText(value) ? parseEventDateInput(value, timeZone, 'start') : null;
+  return parsed ? startOfEventDay(parsed, timeZone) : null;
+};
+
+const assertSlotMatchesEventDay = (
+  slot: Record<string, unknown>,
+  eventDay: SubmittedEventDay,
+  timeZone: string
+): void => {
+  const inputWeekIndex = integerOrNull(slot.weekIndex);
+  if (inputWeekIndex !== null && inputWeekIndex !== eventDay.weekIndex) {
+    throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 weekIndex 与 eventDays 定义不一致`);
+  }
+  const inputDayIndexInWeek = integerOrNull(slot.dayIndexInWeek);
+  if (inputDayIndexInWeek !== null && inputDayIndexInWeek !== eventDay.dayIndexInWeek) {
+    throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 dayIndexInWeek 与 eventDays 定义不一致`);
+  }
+  const inputOverallDayIndex = integerOrNull(slot.overallDayIndex);
+  if (inputOverallDayIndex !== null && inputOverallDayIndex !== eventDay.overallDayIndex) {
+    throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 overallDayIndex 与 eventDays 定义不一致`);
+  }
+  const inputFestivalDayIndex = integerOrNull(slot.festivalDayIndex);
+  if (inputFestivalDayIndex !== null && inputFestivalDayIndex !== eventDay.overallDayIndex) {
+    throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 festivalDayIndex 与 eventDays 定义不一致`);
+  }
+  const localDate = normalizeLocalDateInput(slot.localDate, timeZone);
+  if (localDate && eventDateKey(localDate, timeZone) !== eventDateKey(eventDay.date, timeZone)) {
+    throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 localDate 与 eventDays 定义不一致`);
+  }
 };
 
 const splitCollaborativeLineupName = (value: string): string[] => {
@@ -410,41 +716,35 @@ const normalizeLineupMemberDjIdsInput = (row: Record<string, unknown>, djId: str
 
 const normalizeSubmissionLineupSlots = (
   slots: unknown,
-  eventStartDate: Date,
-  dayRolloverHourRaw: unknown = 6,
-  timeZoneRaw: unknown = DEFAULT_EVENT_TIME_ZONE
+  scheduleContext: SubmittedEventScheduleContext
 ): CanonicalLineupSlotInput[] => {
   if (!Array.isArray(slots)) return [];
 
-  const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
-  const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
+  const { eventDays, timeZone } = scheduleContext;
+  const eventDayById = new Map(eventDays.map((day) => [day.eventDayId, day]));
 
   return slots
     .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
     .map((slot, index) => {
+      const eventDayId = cleanText(slot.eventDayId);
+      if (!eventDayId) {
+        throw new EventSubmissionValidationError('所有 timetable slot 都必须携带 eventDayId');
+      }
+      const eventDay = eventDayById.get(eventDayId);
+      if (!eventDay) {
+        throw new EventSubmissionValidationError(`slot.eventDayId=${eventDayId} 不存在于 eventDays 中`);
+      }
+      assertSlotMatchesEventDay(slot, eventDay, timeZone);
+
       const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
       const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
-      const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
-      const explicitFestivalDayIndex =
-        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
-          ? Math.max(1, Math.floor(slot.festivalDayIndex))
-          : null;
-
-      let startTime = parsedStart ?? fallbackBase;
-      let endTime = parsedEnd ?? new Date(startTime.getTime() + 3_600_000);
-      if (endTime < startTime) {
-        endTime = new Date(startTime.getTime() + 3_600_000);
+      if (!parsedStart || !parsedEnd) {
+        throw new EventSubmissionValidationError(`slot.eventDayId=${eventDayId} 缺少有效的 startTime / endTime`);
       }
-
-      if (explicitFestivalDayIndex) {
-        const startCarryOffset = explicitFestivalDayCarryOffset(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        const endCarryOffset = explicitFestivalDayCarryOffset(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex + startCarryOffset, timeZone);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex + endCarryOffset, timeZone);
-        if (endTime < startTime) {
-          endTime = new Date(endTime.getTime() + 86_400_000);
-        }
+      let startTime = buildSlotInstantFromEventDay(parsedStart, eventDay.date, timeZone);
+      let endTime = buildSlotInstantFromEventDay(parsedEnd, eventDay.date, timeZone);
+      while (endTime < startTime) {
+        endTime = new Date(endTime.getTime() + 86_400_000);
       }
 
       const djName = typeof slot.djName === 'string' ? slot.djName.trim() : '';
@@ -458,9 +758,6 @@ const normalizeSubmissionLineupSlots = (
       const normalizedRawDjId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : '';
       const firstBoundDjId = cleanedMemberDjIds.find((id) => !!id) || '';
       const effectiveDjId = normalizedRawDjId || firstBoundDjId || null;
-      const festivalDayIndex =
-        explicitFestivalDayIndex
-        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour, timeZone);
       const memberDjIds = cleanedMemberDjIds.length ? cleanedMemberDjIds : (effectiveDjId ? [effectiveDjId] : []);
       const hasIdentity = djName.length > 0 || !!effectiveDjId || memberDjIds.some(Boolean);
       if (!hasIdentity) return null;
@@ -470,11 +767,16 @@ const normalizeSubmissionLineupSlots = (
       const normalizedSlot: CanonicalLineupSlotInput = {
         ...(slotId ? { id: slotId } : {}),
         ...(lineupArtistId ? { lineupArtistId } : {}),
+        eventDayId: eventDay.eventDayId,
+        weekIndex: eventDay.weekIndex,
+        dayIndexInWeek: eventDay.dayIndexInWeek,
+        overallDayIndex: eventDay.overallDayIndex,
+        localDate: eventDay.date,
         djId: effectiveDjId,
         memberDjIds,
         djName: djName || 'Unknown DJ',
         stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
-        festivalDayIndex,
+        festivalDayIndex: null,
         startTime,
         endTime,
         sortOrder: typeof slot.sortOrder === 'number' && Number.isFinite(slot.sortOrder) ? slot.sortOrder : index + 1,
@@ -482,6 +784,64 @@ const normalizeSubmissionLineupSlots = (
       return normalizedSlot;
     })
     .filter((slot): slot is CanonicalLineupSlotInput => slot !== null);
+};
+
+export const normalizeSubmittedTimetableSlots = (
+  slots: unknown,
+  scheduleContext: SubmittedEventScheduleContext
+): CanonicalLineupSlotInput[] => normalizeSubmissionLineupSlots(slots, scheduleContext);
+
+export const buildSubmittedEventScheduleContextFromEvent = (event: {
+  scheduleMode?: string | null;
+  timeZone?: string | null;
+  dayRolloverHour?: number | null;
+  weeks?: Array<{
+    weekIndex: number;
+    label?: string | null;
+    startDate: Date;
+    endDate: Date;
+    sortOrder?: number | null;
+  }> | null;
+  eventDays?: Array<{
+    eventDayId: string;
+    weekIndex: number;
+    dayIndexInWeek: number;
+    overallDayIndex: number;
+    label?: string | null;
+    weekday?: string | null;
+    date: Date;
+    sortOrder?: number | null;
+  }> | null;
+}): SubmittedEventScheduleContext => {
+  const payload: Record<string, unknown> = {
+    schedule: {
+      mode: event.scheduleMode ?? 'single_day',
+      timeZone: event.timeZone ?? DEFAULT_EVENT_TIME_ZONE,
+      dayRolloverHour: event.dayRolloverHour ?? 6,
+    },
+    weeks: Array.isArray(event.weeks)
+      ? event.weeks.map((week) => ({
+          weekIndex: week.weekIndex,
+          label: week.label ?? null,
+          startDate: week.startDate,
+          endDate: week.endDate,
+          sortOrder: week.sortOrder ?? week.weekIndex,
+        }))
+      : [],
+    eventDays: Array.isArray(event.eventDays)
+      ? event.eventDays.map((day) => ({
+          eventDayId: day.eventDayId,
+          weekIndex: day.weekIndex,
+          dayIndexInWeek: day.dayIndexInWeek,
+          overallDayIndex: day.overallDayIndex,
+          label: day.label ?? null,
+          weekday: day.weekday ?? null,
+          date: day.date,
+          sortOrder: day.sortOrder ?? day.overallDayIndex,
+        }))
+      : [],
+  };
+  return normalizeSubmittedEventScheduleContext(payload);
 };
 
 const normalizeSubmissionLineupArtists = (
@@ -631,11 +991,9 @@ const cloneArtistInput = (artist: CanonicalLineupArtistInput): CanonicalLineupAr
 
 export const buildAlignedLineupArtistsFromTimetablePayload = (
   payload: Prisma.JsonObject,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone: string
+  scheduleContext: SubmittedEventScheduleContext
 ): CanonicalLineupArtistInput[] => {
-  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
   const currentArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
   const timetableArtists = normalizeCanonicalLineupArtists([], slots);
   return mergeAlignedLineupArtists(currentArtists, timetableArtists);
@@ -643,17 +1001,13 @@ export const buildAlignedLineupArtistsFromTimetablePayload = (
 
 export const autoAlignEventLineupToTimetablePayload = (
   payload: Prisma.JsonObject,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone: string
+  scheduleContext: SubmittedEventScheduleContext
 ): Prisma.JsonObject => {
-  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
   if (slots.length === 0) return payload;
   const alignedArtists = buildAlignedLineupArtistsFromTimetablePayload(
     payload,
-    eventStartDate,
-    dayRolloverHour,
-    timeZone
+    scheduleContext
   );
   return {
     ...payload,
@@ -664,11 +1018,9 @@ export const autoAlignEventLineupToTimetablePayload = (
 
 export const incrementallyFillEventLineupFromTimetablePayload = (
   payload: Prisma.JsonObject,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone: string
+  scheduleContext: SubmittedEventScheduleContext
 ): Prisma.JsonObject => {
-  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
   if (slots.length === 0) return payload;
   const currentArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
   const timetableArtists = normalizeCanonicalLineupArtists([], slots);
@@ -682,11 +1034,9 @@ export const incrementallyFillEventLineupFromTimetablePayload = (
 
 export const validateEventLineupTimetableAlignment = (
   payload: Prisma.JsonObject,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone: string
+  scheduleContext: SubmittedEventScheduleContext
 ): EventLineupTimetableAlignmentIssue | null => {
-  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
   if (slots.length === 0) return null;
 
   const artists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
@@ -744,9 +1094,7 @@ const applySubmissionLineupPatch = async (
   tx: Prisma.TransactionClient,
   eventId: string,
   payload: Prisma.JsonObject,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone: string
+  scheduleContext: SubmittedEventScheduleContext
 ): Promise<{
   artists: CanonicalLineupArtistInput[];
   slots: CanonicalLineupSlotInput[];
@@ -814,7 +1162,7 @@ const applySubmissionLineupPatch = async (
     const op = cleanText(rawChange.op);
     if (op === 'add') {
       const slotPayload = jsonObjectOrNull(rawChange.slot);
-      const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], eventStartDate, dayRolloverHour, timeZone);
+      const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], scheduleContext);
       if (normalized.length === 0) throw new Error('新增 time slot 缺少艺人或时间信息');
       slots.push({
         ...normalized[0],
@@ -835,7 +1183,7 @@ const applySubmissionLineupPatch = async (
     if (op === 'update') {
       const patch = jsonObjectOrNull(rawChange.patch);
       if (!patch) throw new Error('time slot 更新缺少 patch 内容');
-      const normalized = normalizeSubmissionLineupSlots([{ ...existing, ...patch, id: slotId }], eventStartDate, dayRolloverHour, timeZone);
+      const normalized = normalizeSubmissionLineupSlots([{ ...existing, ...patch, id: slotId }], scheduleContext);
       if (normalized.length === 0) throw new Error(`time slot 更新内容无效：${slotId}`);
       slots = slots.map((slot) => slot.id === slotId ? { ...normalized[0], id: slotId } : slot);
       continue;
@@ -920,17 +1268,15 @@ const syncSubmissionEventLineupAndTimetable = async (
   tx: Prisma.TransactionClient,
   eventId: string,
   payload: Prisma.JsonObject,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone: string
+  scheduleContext: SubmittedEventScheduleContext
 ): Promise<void> => {
   if (cleanText(payload.editMode) === 'patch') {
-    const patched = await applySubmissionLineupPatch(tx, eventId, payload, eventStartDate, dayRolloverHour, timeZone);
+    const patched = await applySubmissionLineupPatch(tx, eventId, payload, scheduleContext);
     await syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
     return;
   }
 
-  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, eventStartDate, dayRolloverHour, timeZone);
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
   const submittedArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
   const normalizedArtists = normalizeCanonicalLineupArtists(submittedArtists, []);
   const timetableArtists = normalizeCanonicalLineupArtists([], slots);
@@ -966,6 +1312,84 @@ const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: s
   return candidate;
 };
 
+const buildEventWeeksCreateInput = (weeks: SubmittedEventWeek[]): Prisma.EventWeekCreateManyEventInput[] =>
+  weeks.map((week) => ({
+    weekIndex: week.weekIndex,
+    label: week.label,
+    startDate: week.startDate,
+    endDate: week.endDate,
+    sortOrder: week.sortOrder,
+  }));
+
+const buildEventDaysCreateInput = (
+  weeks: SubmittedEventWeek[],
+  eventDays: SubmittedEventDay[]
+): Prisma.EventDayCreateManyEventInput[] => {
+  const weekByIndex = new Map(weeks.map((week) => [week.weekIndex, week]));
+  return eventDays.map((day) => {
+    const week = weekByIndex.get(day.weekIndex);
+    if (!week) {
+      throw new EventSubmissionValidationError(`eventDay ${day.eventDayId} 引用了不存在的 weekIndex=${day.weekIndex}`);
+    }
+    return {
+      eventWeekId: null,
+      eventDayId: day.eventDayId,
+      weekIndex: day.weekIndex,
+      dayIndexInWeek: day.dayIndexInWeek,
+      overallDayIndex: day.overallDayIndex,
+      label: day.label,
+      weekday: day.weekday,
+      date: day.date,
+      sortOrder: day.sortOrder,
+    };
+  });
+};
+
+const syncStructuredEventSchedule = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  scheduleContext: SubmittedEventScheduleContext
+): Promise<void> => {
+  await tx.eventWeek.deleteMany({ where: { eventId } });
+  await tx.eventDay.deleteMany({ where: { eventId } });
+
+  if (scheduleContext.weeks.length > 0) {
+    await tx.eventWeek.createMany({
+      data: buildEventWeeksCreateInput(scheduleContext.weeks).map((week) => ({
+        eventId,
+        ...week,
+      })),
+    });
+  }
+
+  if (scheduleContext.eventDays.length > 0) {
+    await tx.eventDay.createMany({
+      data: buildEventDaysCreateInput(scheduleContext.weeks, scheduleContext.eventDays).map((day) => ({
+        eventId,
+        ...day,
+      })),
+    });
+  }
+
+  const createdWeeks = await tx.eventWeek.findMany({
+    where: { eventId },
+    select: { id: true, weekIndex: true },
+  });
+  const weekIdByIndex = new Map(createdWeeks.map((week) => [week.weekIndex, week.id]));
+  for (const day of scheduleContext.eventDays) {
+    const eventWeekId = weekIdByIndex.get(day.weekIndex) ?? null;
+    await tx.eventDay.updateMany({
+      where: {
+        eventId,
+        eventDayId: day.eventDayId,
+      },
+      data: {
+        eventWeekId,
+      },
+    });
+  }
+};
+
 export async function createOrUpdateEventFromSubmission(
   db: PrismaClient,
   payload: Prisma.JsonObject,
@@ -983,17 +1407,9 @@ export async function createOrUpdateEventFromSubmission(
     });
     targetEventId = cleanText(existingSubmission?.createdEntityId) || null;
   }
-  const rawTimeZone = payload.timeZone ?? payload.timezone ?? payload.eventTimeZone;
-  if (!isValidEventTimeZone(rawTimeZone)) {
-    throw new Error('活动时区不能为空或格式不正确');
-  }
-  const timeZone = normalizeEventTimeZone(rawTimeZone);
-  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
-  const endDateRaw = parseEventDateInput(payload.endDate, timeZone, 'end', payload.endTime);
-  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
-  const endDate = endDateRaw ? new Date(startOfEventDay(endDateRaw, timeZone).getTime() + 86_400_000 - 1000) : null;
-  if (!name || !startDate || !endDate) {
-    throw new Error('活动名称、开始日期和结束日期不能为空');
+  const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
+  if (!name) {
+    throw new Error('活动名称不能为空');
   }
 
   const imageAssets = eventImageAssetsFromPayload(payload.imageAssets);
@@ -1052,12 +1468,13 @@ export async function createOrUpdateEventFromSubmission(
     locationPoint,
     latitude,
     longitude,
-    startDate,
-    endDate,
-    timeZone,
+    startDate: scheduleContext.startDate,
+    endDate: scheduleContext.endDate,
+    scheduleMode: scheduleContext.scheduleMode,
+    timeZone: scheduleContext.timeZone,
     startTime: cleanText(payload.startTime) || undefined,
     endTime: cleanText(payload.endTime) || undefined,
-    dayRolloverHour: integerOrNull(payload.dayRolloverHour) ?? undefined,
+    dayRolloverHour: scheduleContext.dayRolloverHour,
     ticketUrl,
     ticketPriceMin: decimalOrNull(payload.ticketPriceMin),
     ticketPriceMax: decimalOrNull(payload.ticketPriceMax),
@@ -1093,13 +1510,12 @@ export async function createOrUpdateEventFromSubmission(
           },
         },
       });
+      await syncStructuredEventSchedule(tx, targetEventId, scheduleContext);
       await syncSubmissionEventLineupAndTimetable(
         tx,
         targetEventId,
         payload,
-        startDate,
-        integerOrNull(payload.dayRolloverHour) ?? 6,
-        timeZone
+        scheduleContext
       );
       if (options.submissionId) {
         await cancelSupersededActiveEventEditSubmissions(tx, targetEventId, options.submissionId);
@@ -1125,6 +1541,7 @@ export async function createOrUpdateEventFromSubmission(
           : undefined,
       } as any,
     });
+    await syncStructuredEventSchedule(tx, created.id, scheduleContext);
     if (options.submissionId) {
       await tx.contentSubmission.update({
         where: { id: options.submissionId },
@@ -1137,9 +1554,7 @@ export async function createOrUpdateEventFromSubmission(
       tx,
       created.id,
       payload,
-      startDate,
-      integerOrNull(payload.dayRolloverHour) ?? 6,
-      timeZone
+      scheduleContext
     );
     return created;
   });

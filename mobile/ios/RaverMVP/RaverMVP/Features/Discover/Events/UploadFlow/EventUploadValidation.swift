@@ -10,8 +10,9 @@ enum EventUploadValidation {
     private static func timetableSlotContext(
         for slot: EventUploadLineupSlotDraft,
         at index: Int,
-        in slots: [EventUploadLineupSlotDraft]
-    ) -> (stageName: String, stageOrder: Int, displayName: String) {
+        in slots: [EventUploadLineupSlotDraft],
+        draft: EventUploadDraft
+    ) -> (stageName: String, stageOrder: Int, displayName: String, dayLabel: String) {
         let normalizedStageName = slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? LT("未命名舞台", "Unnamed Stage", "名称未設定ステージ")
             : slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -26,7 +27,44 @@ enum EventUploadValidation {
         let displayName = performerNames.isEmpty
             ? LT("未填写 DJ", "Unnamed DJ", "未入力のDJ")
             : EventLineupActCodec.composeName(type: slot.actType, performerNames: performerNames)
-        return (normalizedStageName, stageOrder, displayName)
+        let dayLabel = timetableSlotDayLabel(for: slot, draft: draft)
+        return (normalizedStageName, stageOrder, displayName, dayLabel)
+    }
+
+    private static func timetableSlotDayLabel(for slot: EventUploadLineupSlotDraft, draft: EventUploadDraft) -> String {
+        if let eventDay = draft.eventDay(forID: slot.eventDayId) {
+            let trimmed = eventDay.label?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let trimmed, !trimmed.isEmpty {
+                return trimmed
+            }
+            return formattedEventDayDate(eventDay.date)
+        }
+        if let eventDay = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
+            let trimmed = eventDay.label?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let trimmed, !trimmed.isEmpty {
+                return trimmed
+            }
+            return formattedEventDayDate(eventDay.date)
+        }
+        if let localDate = slot.localDate {
+            return formattedEventDayDate(localDate)
+        }
+        if draft.isMultiWeekSchedule {
+            return LT(
+                "Week \(slot.weekIndex) · Date unavailable",
+                "Week \(slot.weekIndex) · Date unavailable",
+                "Week \(slot.weekIndex) · 日付未確定"
+            )
+        }
+        return LT("Date unavailable", "Date unavailable", "日付未確定")
+    }
+
+    private static func formattedEventDayDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     static func issues(for draft: EventUploadDraft) -> [EventUploadValidationIssue] {
@@ -55,17 +93,27 @@ enum EventUploadValidation {
             issues.append(.init(step: .basic, message: LT("请搜索城市并确认活动时区。", "Search a city and confirm the event timezone.", "都市を検索してイベントのタイムゾーンを確認してください。")))
         }
         for (index, slot) in draft.timetableSlots.enumerated() {
-            let context = timetableSlotContext(for: slot, at: index, in: draft.timetableSlots)
+            let context = timetableSlotContext(for: slot, at: index, in: draft.timetableSlots, draft: draft)
             let names = slot.performerNames
                 .prefix(slot.actType.performerCount)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if draft.eventDay(forID: slot.eventDayId) == nil {
+                issues.append(.init(
+                    step: .timetable,
+                    message: LT(
+                        "「\(context.stageName)」第 \(context.stageOrder) 个 DJ 条目没有绑定到有效活动日，请重新选择日期。当前条目：\(context.displayName)。",
+                        "\"\(context.stageName)\" DJ item #\(context.stageOrder) is not bound to a valid event day. Re-select the date. Current item: \(context.displayName).",
+                        "「\(context.stageName)」のDJ項目 \(context.stageOrder) 番が有効なイベント日付に紐付いていません。日付を選び直してください。現在の項目: \(context.displayName)。"
+                    )
+                ))
+            }
             if names.count != slot.actType.performerCount || names.contains(where: { $0.isEmpty }) {
                 issues.append(.init(
                     step: .timetable,
                     message: LT(
-                        "Day \(slot.dayIndex) 的「\(context.stageName)」第 \(context.stageOrder) 个 DJ 条目有未填写的艺人名称，请补全或删除。当前条目：\(context.displayName)。",
-                        "Day \(slot.dayIndex) \"\(context.stageName)\" DJ item #\(context.stageOrder) has empty artist names. Complete or remove it. Current item: \(context.displayName).",
-                        "Day \(slot.dayIndex)「\(context.stageName)」のDJ項目 \(context.stageOrder) 番に未入力のアーティスト名があります。入力するか削除してください。現在の項目: \(context.displayName)。"
+                        "「\(context.dayLabel)」的「\(context.stageName)」第 \(context.stageOrder) 个 DJ 条目有未填写的艺人名称，请补全或删除。当前条目：\(context.displayName)。",
+                        "\"\(context.dayLabel)\" \"\(context.stageName)\" DJ item #\(context.stageOrder) has empty artist names. Complete or remove it. Current item: \(context.displayName).",
+                        "「\(context.dayLabel)」の「\(context.stageName)」DJ項目 \(context.stageOrder) 番に未入力のアーティスト名があります。入力するか削除してください。現在の項目: \(context.displayName)。"
                     )
                 ))
             }
@@ -73,9 +121,9 @@ enum EventUploadValidation {
                 issues.append(.init(
                     step: .timetable,
                     message: LT(
-                        "Day \(slot.dayIndex) 的「\(context.stageName)」第 \(context.stageOrder) 个 DJ「\(context.displayName)」必须填写开始和结束时间。",
-                        "Start and end time are required for Day \(slot.dayIndex) \"\(context.stageName)\" DJ item #\(context.stageOrder) (\(context.displayName)).",
-                        "Day \(slot.dayIndex)「\(context.stageName)」のDJ項目 \(context.stageOrder) 番「\(context.displayName)」には開始時間と終了時間が必要です。"
+                        "「\(context.dayLabel)」的「\(context.stageName)」第 \(context.stageOrder) 个 DJ「\(context.displayName)」必须填写开始和结束时间。",
+                        "Start and end time are required for \"\(context.dayLabel)\" \"\(context.stageName)\" DJ item #\(context.stageOrder) (\(context.displayName)).",
+                        "「\(context.dayLabel)」の「\(context.stageName)」DJ項目 \(context.stageOrder) 番「\(context.displayName)」には開始時間と終了時間が必要です。"
                     )
                 ))
             }

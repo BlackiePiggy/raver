@@ -98,7 +98,7 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
     const event = await assertEventAccess(eventId, userId, role);
     if (!event) { res.status(404).json({ error: 'Event not found or access denied' }); return; }
 
-    const { djId, memberDjIds, memberNames, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
+    const { djId, memberDjIds, memberNames, djName, lineupArtistId, stageName, startTime, endTime, sortOrder } = req.body;
     const parsedStart = parseOptionalDate(startTime, event.timeZone);
     const parsedEnd = parseOptionalDate(endTime, event.timeZone);
     if (!parsedStart || !parsedEnd) {
@@ -157,7 +157,7 @@ export const addTimetableSlot = async (req: AuthRequest, res: Response): Promise
           memberDjIds: resolvedMemberDjIds,
           djName: nameStr,
           stageName: typeof stageName === 'string' && stageName.trim() ? stageName.trim() : null,
-          festivalDayIndex: typeof festivalDayIndex === 'number' ? festivalDayIndex : null,
+          festivalDayIndex: null,
           startTime: parsedStart,
           endTime: normalizedEnd,
           sortOrder: typeof sortOrder === 'number' ? sortOrder : snapshot.slots.length + 1,
@@ -221,7 +221,7 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
     const event = await assertEventAccess(eventId, userId, role);
     if (!event) { res.status(404).json({ error: 'Event not found or access denied' }); return; }
 
-    const { djId, memberDjIds, memberNames, djName, lineupArtistId, stageName, festivalDayIndex, startTime, endTime, sortOrder } = req.body;
+    const { djId, memberDjIds, memberNames, djName, lineupArtistId, stageName, startTime, endTime, sortOrder } = req.body;
     const normalizedDjId = String(djId || '').trim() || null;
     const parsedStart = startTime ? parseOptionalDate(startTime, event.timeZone) : null;
     const parsedEnd = endTime ? parseOptionalDate(endTime, event.timeZone) : null;
@@ -255,7 +255,7 @@ export const updateTimetableSlot = async (req: AuthRequest, res: Response): Prom
               memberNames: memberNames !== undefined ? normalizeMemberNames(memberNames, djName ? String(djName).trim() : slot.djName) : [],
               lineupArtistId: lineupArtistId !== undefined ? (String(lineupArtistId || '').trim() || null) : slot.lineupArtistId,
               stageName: stageName !== undefined ? (typeof stageName === 'string' && stageName.trim() ? stageName.trim() : null) : slot.stageName,
-              festivalDayIndex: festivalDayIndex !== undefined ? (typeof festivalDayIndex === 'number' ? festivalDayIndex : null) : slot.festivalDayIndex,
+              festivalDayIndex: null,
               startTime: nextStart,
               endTime: nextEnd,
               sortOrder: typeof sortOrder === 'number' ? sortOrder : slot.sortOrder,

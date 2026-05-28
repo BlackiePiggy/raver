@@ -3405,16 +3405,9 @@ struct EventDetailView: View {
                     }
                 }
 
-                eventInfoDateRow(
+                eventInfoScheduleRow(
                     icon: "calendar",
-                    title: LT("开始时间", "Start Time", "開始時間"),
-                    date: event.startDate,
-                    event: event
-                )
-                eventInfoDateRow(
-                    icon: "clock",
-                    title: LT("结束时间", "End Time", "終了時間"),
-                    date: event.endDate,
+                    title: LT("活动时间", "Schedule", "開催日程"),
                     event: event
                 )
                 if !unifiedAddress.isEmpty {
@@ -3441,7 +3434,7 @@ struct EventDetailView: View {
         }
         .frame(width: cardWidth, alignment: .leading)
 
-        let displayDescription = EventWeekScheduleMode.stripMarker(from: event.description)
+        let displayDescription = event.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !displayDescription.isEmpty {
             GlassCard {
                 VStack(alignment: .leading, spacing: 8) {
@@ -3856,11 +3849,12 @@ struct EventDetailView: View {
             "schedule list body event=\(event.id) scheduledSlots=\(scheduledSlots.count) selectedDay=\(selectedScheduleDayID ?? "nil") selectedStage=\(selectedScheduleStageKey ?? "nil")"
         }
 #endif
-        let usesWeekMode = EventWeekScheduleMode.isEnabled(in: event.description)
+        let usesWeekMode = event.usesStructuredWeekMode
         let days = EventScheduleDay.build(
             from: scheduledSlots,
             anchorDate: event.startDate,
             useWeekMode: usesWeekMode,
+            eventDays: event.eventDays,
             dayRolloverHour: event.dayRolloverHour,
             timeZone: event.eventTimeZone
         )
@@ -4156,7 +4150,8 @@ struct EventDetailView: View {
         let days = EventScheduleDay.build(
             from: scheduledSlots,
             anchorDate: event.startDate,
-            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+            useWeekMode: event.usesStructuredWeekMode,
+            eventDays: event.eventDays,
             dayRolloverHour: event.dayRolloverHour,
             timeZone: event.eventTimeZone
         )
@@ -5902,6 +5897,33 @@ struct EventDetailView: View {
         }
     }
 
+    private func eventInfoScheduleRow(icon: String, title: String, event: WebEvent) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(RaverTheme.card)
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText.opacity(0.88))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(eventInfoScheduleTexts(event), id: \.self) { value in
+                        eventInfoDateLine(value)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
     private func eventInfoDateLine(_ value: String) -> some View {
         Text(value)
             .font(.subheadline)
@@ -6001,6 +6023,26 @@ struct EventDetailView: View {
             eventText,
             eventInfoDateText(date, timeZone: deviceTimeZone)
         ]
+    }
+
+    private func eventInfoScheduleTexts(_ event: WebEvent) -> [String] {
+        let deviceTimeZone = TimeZone.current
+        let eventTimeZone = EventTimeZoneDisplay.eventTimeZone(for: event) ?? event.eventTimeZone
+        let eventLines = event.discreteDateSummaryLines(in: eventTimeZone).map {
+            "\($0) · \(Date.appLocalizedTimeZoneLabel(eventTimeZone))"
+        }
+
+        guard event.discreteDateRanges.count > 1 else {
+            return eventInfoDateTexts(event.startDate, event: event)
+        }
+
+        guard deviceTimeZone.secondsFromGMT(for: event.primaryDisplayDate) != eventTimeZone.secondsFromGMT(for: event.primaryDisplayDate) else {
+            return eventLines
+        }
+
+        return eventLines + event.discreteDateSummaryLines(in: deviceTimeZone).map {
+            "\($0) · \(Date.appLocalizedTimeZoneLabel(deviceTimeZone))"
+        }
     }
 
     private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
@@ -6694,43 +6736,42 @@ struct EventDetailView: View {
 
     private func eventCheckinDayOptions(for event: WebEvent) -> [EventCheckinDayOption] {
         let calendar = Calendar.eventCalendar(timeZone: event.eventTimeZone)
-        let usesWeekMode = EventWeekScheduleMode.isEnabled(in: event.description)
-        let dayIndexes: [Int] = {
-            let lineupDayIndexes = Array(
-                Set(event.lineupSlots.map { slot in
-                    EventLogicalDayResolver.dayIndex(
-                        for: slot,
-                        eventStartDate: event.startDate,
-                        dayRolloverHour: event.dayRolloverHour,
-                        timeZone: event.eventTimeZone
-                    )
-                })
-            ).sorted()
-            if !lineupDayIndexes.isEmpty {
-                return lineupDayIndexes
+        let days = EventScheduleDay.build(
+            from: event.lineupSlots,
+            anchorDate: event.startDate,
+            useWeekMode: event.usesStructuredWeekMode,
+            eventDays: event.eventDays,
+            dayRolloverHour: event.dayRolloverHour,
+            timeZone: event.eventTimeZone
+        )
+
+        if !days.isEmpty {
+            return days.map { day in
+                let fallback = calendar.date(bySettingHour: 20, minute: 0, second: 0, of: day.date) ?? day.date
+                let baseAttendedAt = day.slots.map(\.startTime).min() ?? (day.index == 1 ? event.startDate : fallback)
+                let attendedAt = min(baseAttendedAt, Date())
+                return EventCheckinDayOption(
+                    id: Self.eventCheckinDayKey(for: day.date, timeZone: event.eventTimeZone),
+                    dayIndex: day.index,
+                    dayDate: day.date,
+                    attendedAt: attendedAt,
+                    weekIndex: day.weekIndex,
+                    dayInWeek: day.dayInWeek
+                )
             }
+        }
 
-            let startDay = calendar.startOfDay(for: event.startDate)
-            let normalizedEnd = max(event.endDate, event.startDate)
-            let endDay = calendar.startOfDay(for: normalizedEnd)
-            let span = max((calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0) + 1, 1)
-            return Array(1...span)
-        }()
+        let startDay = calendar.startOfDay(for: event.startDate)
+        let normalizedEnd = max(event.endDate, event.startDate)
+        let endDay = calendar.startOfDay(for: normalizedEnd)
+        let span = max((calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0) + 1, 1)
 
-        return dayIndexes.map { dayIndex in
+        return Array(1...span).map { dayIndex in
             let dayDate = EventLogicalDayResolver.dayDate(for: dayIndex, anchorDate: event.startDate, timeZone: event.eventTimeZone)
-            let slotsOnDay = event.lineupSlots.filter { slot in
-                EventLogicalDayResolver.dayIndex(
-                    for: slot,
-                    eventStartDate: event.startDate,
-                    dayRolloverHour: event.dayRolloverHour,
-                    timeZone: event.eventTimeZone
-                ) == dayIndex
-            }
             let fallback = calendar.date(bySettingHour: 20, minute: 0, second: 0, of: dayDate) ?? dayDate
-            let baseAttendedAt = slotsOnDay.map(\.startTime).min() ?? (dayIndex == 1 ? event.startDate : fallback)
+            let baseAttendedAt = dayIndex == 1 ? event.startDate : fallback
             let attendedAt = min(baseAttendedAt, Date())
-            let weekDay = usesWeekMode ? EventWeekScheduleMode.weekDayIndex(for: dayDate, anchorDate: event.startDate) : nil
+            let weekDay = event.usesStructuredWeekMode ? EventWeekScheduleMode.weekDayIndex(for: dayDate, anchorDate: event.startDate) : nil
 
             return EventCheckinDayOption(
                 id: Self.eventCheckinDayKey(for: dayDate, timeZone: event.eventTimeZone),
@@ -7192,8 +7233,12 @@ private struct EventScheduleDay: Identifiable, Hashable {
     let date: Date
     let timeZone: TimeZone
     let slots: [WebEventLineupSlot]
+    let label: String?
 
     var title: String {
+        if let label, !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return label
+        }
         if let weekIndex, let dayInWeek {
             return EventWeekScheduleMode.weekDayTitle(week: weekIndex, day: dayInWeek)
         }
@@ -7223,11 +7268,93 @@ private struct EventScheduleDay: Identifiable, Hashable {
         from slots: [WebEventLineupSlot],
         anchorDate: Date,
         useWeekMode: Bool,
+        eventDays: [WebEventDay] = [],
         dayRolloverHour: Int? = nil,
         timeZone: TimeZone = .current
     ) -> [EventScheduleDay] {
         guard !slots.isEmpty else { return [] }
 
+        let sortedEventDays = eventDays.sorted { lhs, rhs in
+            if lhs.sortOrder != rhs.sortOrder {
+                return lhs.sortOrder < rhs.sortOrder
+            }
+            return lhs.overallDayIndex < rhs.overallDayIndex
+        }
+        let eventDaysByID = Dictionary(uniqueKeysWithValues: sortedEventDays.map { ($0.eventDayId, $0) })
+        let eventDaysByOverallDayIndex = Dictionary(uniqueKeysWithValues: sortedEventDays.map { ($0.overallDayIndex, $0) })
+        let eventDaysByWeekDay = Dictionary(uniqueKeysWithValues: sortedEventDays.map { ("\($0.weekIndex)-\($0.dayIndexInWeek)", $0) })
+
+        if !sortedEventDays.isEmpty {
+            var groupedByEventDayID: [String: [WebEventLineupSlot]] = [:]
+            var unmatchedSlots: [WebEventLineupSlot] = []
+
+            for slot in slots {
+                if let eventDay = resolveEventDay(
+                    for: slot,
+                    anchorDate: anchorDate,
+                    useWeekMode: useWeekMode,
+                    eventDaysByID: eventDaysByID,
+                    eventDaysByOverallDayIndex: eventDaysByOverallDayIndex,
+                    eventDaysByWeekDay: eventDaysByWeekDay,
+                    dayRolloverHour: dayRolloverHour,
+                    timeZone: timeZone
+                ) {
+                    groupedByEventDayID[eventDay.eventDayId, default: []].append(slot)
+                } else {
+                    unmatchedSlots.append(slot)
+                }
+            }
+
+            var structuredDays = sortedEventDays.compactMap { eventDay -> EventScheduleDay? in
+                guard let groupedSlots = groupedByEventDayID[eventDay.eventDayId], !groupedSlots.isEmpty else {
+                    return nil
+                }
+                return EventScheduleDay(
+                    id: eventDay.eventDayId,
+                    index: eventDay.overallDayIndex,
+                    weekIndex: useWeekMode ? eventDay.weekIndex : nil,
+                    dayInWeek: useWeekMode ? eventDay.dayIndexInWeek : nil,
+                    date: eventDay.date,
+                    timeZone: timeZone,
+                    slots: sortedSlots(groupedSlots),
+                    label: eventDay.label
+                )
+            }
+
+            if !unmatchedSlots.isEmpty {
+                structuredDays.append(
+                    contentsOf: buildFallbackDays(
+                        from: unmatchedSlots,
+                        anchorDate: anchorDate,
+                        useWeekMode: useWeekMode,
+                        dayRolloverHour: dayRolloverHour,
+                        timeZone: timeZone
+                    )
+                )
+            }
+
+            return structuredDays.sorted {
+                if $0.index != $1.index { return $0.index < $1.index }
+                return $0.date < $1.date
+            }
+        }
+
+        return buildFallbackDays(
+            from: slots,
+            anchorDate: anchorDate,
+            useWeekMode: useWeekMode,
+            dayRolloverHour: dayRolloverHour,
+            timeZone: timeZone
+        )
+    }
+
+    private static func buildFallbackDays(
+        from slots: [WebEventLineupSlot],
+        anchorDate: Date,
+        useWeekMode: Bool,
+        dayRolloverHour: Int? = nil,
+        timeZone: TimeZone = .current
+    ) -> [EventScheduleDay] {
         var grouped: [Int: [WebEventLineupSlot]] = [:]
         for slot in slots {
             let dayIndex = EventLogicalDayResolver.dayIndex(
@@ -7261,9 +7388,68 @@ private struct EventScheduleDay: Identifiable, Hashable {
                     dayInWeek: weekDay?.day,
                     date: dayDate,
                     timeZone: timeZone,
-                    slots: items
+                    slots: items,
+                    label: nil
                 )
             }
+    }
+
+    private static func resolveEventDay(
+        for slot: WebEventLineupSlot,
+        anchorDate: Date,
+        useWeekMode: Bool,
+        eventDaysByID: [String: WebEventDay],
+        eventDaysByOverallDayIndex: [Int: WebEventDay],
+        eventDaysByWeekDay: [String: WebEventDay],
+        dayRolloverHour: Int?,
+        timeZone: TimeZone
+    ) -> WebEventDay? {
+        if let eventDayID = slot.eventDayId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let eventDay = eventDaysByID[eventDayID] {
+            return eventDay
+        }
+        if useWeekMode,
+           let weekIndex = slot.weekIndex,
+           let dayIndexInWeek = slot.dayIndexInWeek,
+           let eventDay = eventDaysByWeekDay["\(weekIndex)-\(dayIndexInWeek)"] {
+            return eventDay
+        }
+        if let overallDayIndex = slot.overallDayIndex,
+           let eventDay = eventDaysByOverallDayIndex[overallDayIndex] {
+            return eventDay
+        }
+        if let festivalDayIndex = slot.festivalDayIndex,
+           let eventDay = eventDaysByOverallDayIndex[festivalDayIndex] {
+            return eventDay
+        }
+        if let localDate = slot.localDate,
+           let eventDay = eventDaysByID.values.first(where: { isSameDay($0.date, localDate, timeZone: timeZone) }) {
+            return eventDay
+        }
+        if let eventDay = eventDaysByID.values.first(where: { isSameDay($0.date, slot.startTime, timeZone: timeZone) }) {
+            return eventDay
+        }
+        let fallbackDayIndex = EventLogicalDayResolver.dayIndex(
+            for: slot,
+            eventStartDate: anchorDate,
+            dayRolloverHour: dayRolloverHour,
+            timeZone: timeZone
+        )
+        return eventDaysByOverallDayIndex[fallbackDayIndex]
+    }
+
+    private static func isSameDay(_ lhs: Date, _ rhs: Date, timeZone: TimeZone) -> Bool {
+        let calendar = Calendar.eventCalendar(timeZone: timeZone)
+        return calendar.isDate(lhs, inSameDayAs: rhs)
+    }
+
+    private static func sortedSlots(_ slots: [WebEventLineupSlot]) -> [WebEventLineupSlot] {
+        slots.sorted {
+            if $0.startTime == $1.startTime {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.startTime < $1.startTime
+        }
     }
 
     private static func dayKey(for date: Date, timeZone: TimeZone) -> String {
@@ -8399,7 +8585,7 @@ private enum EventRoutePosterRenderer {
         return image.scaledDownIfNeeded(maxHeight: 4000)
     }
 
-    private static func timetablePosterCanvasLayout(
+    static func timetablePosterCanvasLayout(
         contentWidth: CGFloat,
         posterHeight: CGFloat,
         targetAspectRatio: CGFloat?
@@ -8997,7 +9183,8 @@ struct EventRoutePlannerLoaderView: View {
                         days: EventScheduleDay.build(
                             from: event.lineupSlots,
                             anchorDate: event.startDate,
-                            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+                            useWeekMode: event.usesStructuredWeekMode,
+                            eventDays: event.eventDays,
                             dayRolloverHour: event.dayRolloverHour,
                             timeZone: event.eventTimeZone
                         ),
@@ -9122,7 +9309,8 @@ struct EventRouteShareDetailLoaderView: View {
                         days: EventScheduleDay.build(
                             from: event.lineupSlots,
                             anchorDate: event.startDate,
-                            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+                            useWeekMode: event.usesStructuredWeekMode,
+                            eventDays: event.eventDays,
                             dayRolloverHour: event.dayRolloverHour,
                             timeZone: event.eventTimeZone
                         ),
@@ -11255,7 +11443,8 @@ private struct EventRoutineView: View {
         EventScheduleDay.build(
             from: scheduledSlots,
             anchorDate: event.startDate,
-            useWeekMode: EventWeekScheduleMode.isEnabled(in: event.description),
+            useWeekMode: event.usesStructuredWeekMode,
+            eventDays: event.eventDays,
             dayRolloverHour: event.dayRolloverHour,
             timeZone: event.eventTimeZone
         )

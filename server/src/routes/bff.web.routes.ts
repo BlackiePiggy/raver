@@ -45,12 +45,8 @@ import {
 } from '../utils/i18n';
 import {
   DEFAULT_EVENT_TIME_ZONE,
-  diffEventDays,
-  getEventHour,
   isValidEventTimeZone,
   normalizeEventTimeZone,
-  parseEventDateInput,
-  setEventDayAndKeepTime,
   startOfEventDay,
 } from '../utils/event-timezone';
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
@@ -81,10 +77,14 @@ import {
   assertNoActiveEventEditSubmission,
   assertEventSubmissionBaseRevision,
   autoAlignEventLineupToTimetablePayload,
+  buildSubmittedEventScheduleContextFromEvent,
   buildAlignedLineupArtistsFromTimetablePayload,
+  EventSubmissionValidationError,
   EventSubmissionConflictError,
   formatEventLineupTimetableAlignmentError,
   incrementallyFillEventLineupFromTimetablePayload,
+  normalizeSubmittedEventScheduleContext,
+  normalizeSubmittedTimetableSlots,
   validateEventLineupTimetableAlignment,
 } from '../services/content-submission-event.service';
 
@@ -795,43 +795,20 @@ const brandPayloadForValidation = (
 };
 
 const normalizeSubmittedEventLineupToTimetable = (payload: Record<string, unknown>): Record<string, unknown> => {
-  if (typeof payload.targetEventId === 'string' && payload.targetEventId.trim()) {
-    return payload;
-  }
-  const { startDate, dayRolloverHour, timeZone } = resolveSubmittedEventTimelineContext(payload);
-  if (!startDate) return payload;
+  const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
   const lineupSyncMode = typeof payload.lineupSyncMode === 'string'
     ? payload.lineupSyncMode.trim().toLowerCase()
     : 'incremental_fill';
   const normalizedPayload = lineupSyncMode === 'exact_align'
     ? autoAlignEventLineupToTimetablePayload(
       payload as unknown as Prisma.JsonObject,
-      startDate,
-      dayRolloverHour,
-      timeZone
+      scheduleContext
     )
     : incrementallyFillEventLineupFromTimetablePayload(
     payload as unknown as Prisma.JsonObject,
-    startDate,
-    dayRolloverHour,
-    timeZone
+    scheduleContext
     );
   return normalizedPayload as unknown as Record<string, unknown>;
-};
-
-const resolveSubmittedEventTimelineContext = (payload: Record<string, unknown>): {
-  startDate: Date | null;
-  dayRolloverHour: number;
-  timeZone: string;
-} => {
-  const timeZone = normalizeEventTimeZone(
-    payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE
-  );
-  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
-  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
-  const dayRolloverHourRaw = Number(payload.dayRolloverHour);
-  const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
-  return { startDate, dayRolloverHour, timeZone };
 };
 
 const mapAlignedLineupArtistForPayload = (artist: {
@@ -1569,14 +1546,6 @@ const resolveEventTypeFilterValues = (rawValue: string): string[] => {
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
 
-const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
-  const numeric = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  const hour = Math.floor(numeric);
-  if (hour < 0 || hour > 23) return fallback;
-  return hour;
-};
-
 const normalizeEventStageOrder = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -1590,158 +1559,6 @@ const normalizeEventStageOrder = (value: unknown): string[] => {
     result.push(text);
   }
   return result;
-};
-
-const inferFestivalDayIndex = (
-  startTime: Date,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): number | null => {
-  if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
-    return null;
-  }
-  let dayOffset = diffEventDays(eventStartDate, startTime, timeZone);
-  if (dayOffset > 0 && getEventHour(startTime, timeZone) < dayRolloverHour) {
-    dayOffset -= 1;
-  }
-  return Math.max(1, dayOffset + 1);
-};
-
-const applyFestivalDayIndexToDate = (
-  timeSource: Date,
-  eventStartDate: Date,
-  festivalDayIndex: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
-
-const explicitFestivalDayCarryOffset = (
-  timeSource: Date,
-  eventStartDate: Date,
-  festivalDayIndex: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): number => {
-  const logicalDay = applyFestivalDayIndexToDate(timeSource, eventStartDate, festivalDayIndex, timeZone);
-  return Math.max(0, diffEventDays(logicalDay, timeSource, timeZone));
-};
-
-type ExistingLineupSlotForRebase = {
-  id: string;
-  festivalDayIndex: number | null;
-  startTime: Date;
-  endTime: Date;
-};
-
-const rebaseExistingLineupSlotsToEventStart = (
-  slots: ExistingLineupSlotForRebase[],
-  previousEventStartDate: Date,
-  nextEventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
-  slots.map((slot) => {
-    const festivalDayIndex =
-      slot.festivalDayIndex
-      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour, timeZone)
-      ?? 1;
-    const endDayOffset = Math.max(0, diffEventDays(slot.startTime, slot.endTime, timeZone));
-    const startTime = applyFestivalDayIndexToDate(slot.startTime, nextEventStartDate, festivalDayIndex, timeZone);
-    let endTime = applyFestivalDayIndexToDate(slot.endTime, nextEventStartDate, festivalDayIndex + endDayOffset, timeZone);
-
-    while (endTime < startTime) {
-      endTime = new Date(endTime.getTime() + 86_400_000);
-    }
-
-    return {
-      id: slot.id,
-      festivalDayIndex,
-      startTime,
-      endTime,
-    };
-  });
-
-const normalizeLineupSlots = (
-  slots: unknown,
-  eventStartDate: Date,
-  dayRolloverHourRaw: unknown = 6,
-  timeZoneRaw: unknown = DEFAULT_EVENT_TIME_ZONE
-): NormalizedLineupSlot[] => {
-  if (!Array.isArray(slots)) {
-    return [];
-  }
-
-  const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
-  const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
-  return slots
-    .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
-    .map((slot, index) => {
-      const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
-      const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
-      const fallbackBase = new Date(safeEventStart.getTime() + index * 60_000);
-      const explicitFestivalDayIndex =
-        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
-          ? Math.max(1, Math.floor(slot.festivalDayIndex))
-          : null;
-
-      let startTime = fallbackBase;
-      let endTime = fallbackBase;
-
-      if (parsedStart && parsedEnd) {
-        startTime = parsedStart;
-        endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedStart.getTime() + 3_600_000);
-      } else if (parsedStart) {
-        startTime = parsedStart;
-        endTime = new Date(parsedStart.getTime() + 3_600_000);
-      } else if (parsedEnd) {
-        endTime = parsedEnd;
-        startTime = new Date(parsedEnd.getTime() - 3_600_000);
-      }
-
-      if (explicitFestivalDayIndex) {
-        const startCarryOffset = explicitFestivalDayCarryOffset(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        const endCarryOffset = explicitFestivalDayCarryOffset(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex + startCarryOffset, timeZone);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex + endCarryOffset, timeZone);
-        if (endTime < startTime) {
-          endTime = new Date(endTime.getTime() + 86_400_000);
-        }
-      }
-
-      const djName = typeof slot.djName === 'string' ? slot.djName.trim() : '';
-      const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
-      const rawMemberDjIds = Array.isArray(slot.memberDjIds) ? slot.memberDjIds : [];
-      const cleanedMemberDjIds = rawMemberDjIds.map((id) => {
-        const normalized = typeof id === 'string' ? id.trim() : '';
-        return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
-      });
-      const normalizedRawDjId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : '';
-      const firstBoundDjId = cleanedMemberDjIds.find((id) => !!id) || '';
-      const effectiveDjId = normalizedRawDjId || firstBoundDjId || null;
-      const festivalDayIndex =
-        explicitFestivalDayIndex
-        // When the editor submits Day1/Day2 explicitly, that becomes the source of truth.
-        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour, timeZone);
-      const memberDjIds = cleanedMemberDjIds.length
-        ? cleanedMemberDjIds
-        : (effectiveDjId ? [effectiveDjId] : []);
-      const hasIdentity = djName.length > 0 || !!effectiveDjId || memberDjIds.some(Boolean);
-      if (!hasIdentity) {
-        return null;
-      }
-
-      return {
-        djId: effectiveDjId,
-        memberDjIds,
-        festivalDayIndex,
-        djName: djName || 'Unknown DJ',
-        stageName: typeof slot.stageName === 'string' && slot.stageName.trim() ? slot.stageName.trim() : null,
-        sortOrder: typeof slot.sortOrder === 'number' && Number.isFinite(slot.sortOrder) ? slot.sortOrder : index + 1,
-        startTime,
-        endTime,
-      };
-    })
-    .filter((slot): slot is NormalizedLineupSlot => slot !== null);
 };
 
 const buildLineupArtistsFromSlots = (slots: NormalizedLineupSlot[]): NormalizedLineupArtistInput[] => {
@@ -1866,6 +1683,12 @@ const includeEventForWeb = {
   ticketTiers: {
     orderBy: { sortOrder: 'asc' as const },
   },
+  weeks: {
+    orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+  },
+  eventDays: {
+    orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+  },
   canonicalArtists: {
     orderBy: { billingOrder: 'asc' as const },
     include: {
@@ -1889,6 +1712,16 @@ const includeEventForWeb = {
     orderBy: [{ startAt: 'asc' as const }, { sortOrder: 'asc' as const }],
     include: {
       stage: true,
+      eventDay: {
+        select: {
+          id: true,
+          eventDayId: true,
+          weekIndex: true,
+          dayIndexInWeek: true,
+          overallDayIndex: true,
+          date: true,
+        },
+      },
       eventArtist: {
         include: {
           primaryDj: {
@@ -1957,6 +1790,7 @@ const selectEventDetailForWeb = {
   longitude: true,
   startDate: true,
   endDate: true,
+  scheduleMode: true,
   timeZone: true,
   startTime: true,
   endTime: true,
@@ -1974,6 +1808,31 @@ const selectEventDetailForWeb = {
   updatedAt: true,
   ticketTiers: {
     orderBy: { sortOrder: 'asc' as const },
+  },
+  weeks: {
+    orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+    select: {
+      id: true,
+      weekIndex: true,
+      label: true,
+      startDate: true,
+      endDate: true,
+      sortOrder: true,
+    },
+  },
+  eventDays: {
+    orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+    select: {
+      id: true,
+      eventDayId: true,
+      weekIndex: true,
+      dayIndexInWeek: true,
+      overallDayIndex: true,
+      label: true,
+      weekday: true,
+      date: true,
+      sortOrder: true,
+    },
   },
   stages: {
     orderBy: { sortOrder: 'asc' as const },
@@ -2025,6 +1884,16 @@ const selectEventTimetableForWeb = {
       stage: {
         select: { name: true },
       },
+      eventDay: {
+        select: {
+          id: true,
+          eventDayId: true,
+          weekIndex: true,
+          dayIndexInWeek: true,
+          overallDayIndex: true,
+          date: true,
+        },
+      },
       eventArtist: {
         include: {
           primaryDj: {
@@ -2069,6 +1938,7 @@ const selectEventRecommendationCardForWeb = {
   longitude: true,
   startDate: true,
   endDate: true,
+  scheduleMode: true,
   timeZone: true,
   startTime: true,
   endTime: true,
@@ -2099,6 +1969,31 @@ const selectEventRecommendationCardForWeb = {
       cityI18n: true,
       avatarUrl: true,
       backgroundUrl: true,
+    },
+  },
+  weeks: {
+    orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+    select: {
+      id: true,
+      weekIndex: true,
+      label: true,
+      startDate: true,
+      endDate: true,
+      sortOrder: true,
+    },
+  },
+  eventDays: {
+    orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+    select: {
+      id: true,
+      eventDayId: true,
+      weekIndex: true,
+      dayIndexInWeek: true,
+      overallDayIndex: true,
+      label: true,
+      weekday: true,
+      date: true,
+      sortOrder: true,
     },
   },
   _count: {
@@ -2136,6 +2031,7 @@ const selectEventListCardForWeb = {
   longitude: true,
   startDate: true,
   endDate: true,
+  scheduleMode: true,
   timeZone: true,
   startTime: true,
   endTime: true,
@@ -2166,6 +2062,31 @@ const selectEventListCardForWeb = {
       cityI18n: true,
       avatarUrl: true,
       backgroundUrl: true,
+    },
+  },
+  weeks: {
+    orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+    select: {
+      id: true,
+      weekIndex: true,
+      label: true,
+      startDate: true,
+      endDate: true,
+      sortOrder: true,
+    },
+  },
+  eventDays: {
+    orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+    select: {
+      id: true,
+      eventDayId: true,
+      weekIndex: true,
+      dayIndexInWeek: true,
+      overallDayIndex: true,
+      label: true,
+      weekday: true,
+      date: true,
+      sortOrder: true,
     },
   },
   _count: {
@@ -4673,15 +4594,30 @@ type ImportedLineupItem = {
 };
 
 type TimetableRecognitionContext = {
-  eventStartDate?: string;
-  eventEndDate?: string;
   eventTimeZone?: string;
-  dayRolloverHour?: number;
-  weekRanges?: Array<{
+  schedule?: {
+    mode?: string;
+    timeZone?: string;
+    dayRolloverHour?: number;
+  };
+  weeks?: Array<{
     weekIndex?: number;
+    label?: string;
     startDate?: string;
     endDate?: string;
+    sortOrder?: number;
   }>;
+  eventDays?: Array<{
+    eventDayId?: string;
+    weekIndex?: number;
+    dayIndexInWeek?: number;
+    overallDayIndex?: number;
+    label?: string;
+    weekday?: string;
+    date?: string;
+    sortOrder?: number;
+  }>;
+  dayRolloverHour?: number;
   knownStageNames?: string[];
 };
 
@@ -5694,7 +5630,7 @@ const extractTimetableRawJson = (value: unknown): unknown => {
     seen.add(node);
 
     const record = node as Record<string, unknown>;
-    if (record.schemaVersion === 'raver_timetable_ai_v2' || record.imageType === 'timetable') {
+    if (record.schemaVersion === 'raver_timetable_ai_v3' || record.imageType === 'timetable') {
       return record;
     }
     if (record.raw_json !== undefined) {
@@ -5721,11 +5657,9 @@ const sanitizeTimetableRecognitionContext = (value: unknown): TimetableRecogniti
   const input = value as Record<string, unknown>;
   const out: TimetableRecognitionContext = {};
 
-  for (const key of ['eventStartDate', 'eventEndDate', 'eventTimeZone'] as const) {
-    const raw = input[key];
-    if (typeof raw === 'string' && raw.trim()) {
-      out[key] = raw.trim();
-    }
+  const eventTimeZone = sanitizeOptionalText(input.eventTimeZone);
+  if (eventTimeZone) {
+    out.eventTimeZone = eventTimeZone;
   }
 
   const rollover = Number(input.dayRolloverHour);
@@ -5733,8 +5667,19 @@ const sanitizeTimetableRecognitionContext = (value: unknown): TimetableRecogniti
     out.dayRolloverHour = Math.max(0, Math.min(12, Math.floor(rollover)));
   }
 
-  if (Array.isArray(input.weekRanges)) {
-    out.weekRanges = input.weekRanges
+  if (input.schedule && typeof input.schedule === 'object') {
+    const scheduleInput = input.schedule as Record<string, unknown>;
+    out.schedule = {
+      mode: sanitizeOptionalText(scheduleInput.mode) ?? undefined,
+      timeZone: sanitizeOptionalText(scheduleInput.timeZone) ?? undefined,
+      dayRolloverHour: Number.isFinite(Number(scheduleInput.dayRolloverHour))
+        ? Math.max(0, Math.min(12, Math.floor(Number(scheduleInput.dayRolloverHour))))
+        : undefined,
+    };
+  }
+
+  if (Array.isArray(input.weeks)) {
+    out.weeks = input.weeks
       .map((item, index) => {
         if (!item || typeof item !== 'object') return null;
         const record = item as Record<string, unknown>;
@@ -5743,8 +5688,39 @@ const sanitizeTimetableRecognitionContext = (value: unknown): TimetableRecogniti
         const endDate = typeof record.endDate === 'string' ? record.endDate.trim() : '';
         return {
           weekIndex: Number.isFinite(weekIndex) ? Math.max(1, Math.floor(weekIndex)) : index + 1,
+          label: sanitizeOptionalText(record.label) ?? undefined,
           startDate: startDate || undefined,
           endDate: endDate || undefined,
+          sortOrder: Number.isFinite(Number(record.sortOrder))
+            ? Math.max(1, Math.floor(Number(record.sortOrder)))
+            : index + 1,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }
+
+  if (Array.isArray(input.eventDays)) {
+    out.eventDays = input.eventDays
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+        const eventDayId = sanitizeOptionalText(record.eventDayId);
+        const weekIndex = Number(record.weekIndex);
+        const dayIndexInWeek = Number(record.dayIndexInWeek);
+        const overallDayIndex = Number(record.overallDayIndex);
+        const date = typeof record.date === 'string' ? record.date.trim() : '';
+        if (!eventDayId || !date) return null;
+        return {
+          eventDayId,
+          weekIndex: Number.isFinite(weekIndex) ? Math.max(1, Math.floor(weekIndex)) : undefined,
+          dayIndexInWeek: Number.isFinite(dayIndexInWeek) ? Math.max(1, Math.floor(dayIndexInWeek)) : undefined,
+          overallDayIndex: Number.isFinite(overallDayIndex) ? Math.max(1, Math.floor(overallDayIndex)) : undefined,
+          label: sanitizeOptionalText(record.label) ?? undefined,
+          weekday: sanitizeOptionalText(record.weekday)?.toLowerCase() ?? undefined,
+          date,
+          sortOrder: Number.isFinite(Number(record.sortOrder))
+            ? Math.max(1, Math.floor(Number(record.sortOrder)))
+            : undefined,
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -5758,6 +5734,224 @@ const sanitizeTimetableRecognitionContext = (value: unknown): TimetableRecogniti
   }
 
   return out;
+};
+
+const normalizeTimetableAIResult = (
+  value: unknown,
+  context: TimetableRecognitionContext
+): unknown => {
+  const stringArray = (raw: unknown): string[] => Array.isArray(raw)
+    ? raw.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : [];
+  const clampConfidence = (raw: unknown): number => {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0;
+  };
+  const normalizeWeekday = (raw: unknown): string | null => {
+    const text = sanitizeOptionalText(raw)?.toLowerCase() ?? '';
+    if (!text) return null;
+    const mappings: Array<[string, string]> = [
+      ['monday', 'monday'],
+      ['mon', 'monday'],
+      ['tuesday', 'tuesday'],
+      ['tue', 'tuesday'],
+      ['tues', 'tuesday'],
+      ['wednesday', 'wednesday'],
+      ['wed', 'wednesday'],
+      ['thursday', 'thursday'],
+      ['thu', 'thursday'],
+      ['thur', 'thursday'],
+      ['thurs', 'thursday'],
+      ['friday', 'friday'],
+      ['fri', 'friday'],
+      ['saturday', 'saturday'],
+      ['sat', 'saturday'],
+      ['sunday', 'sunday'],
+      ['sun', 'sunday'],
+    ];
+    for (const [token, normalized] of mappings) {
+      if (text === token || text.includes(token)) return normalized;
+    }
+    return null;
+  };
+  const warnings = new Set<string>(stringArray((value as Record<string, unknown> | null)?.warnings));
+  const contextEventDays = Array.isArray(context.eventDays) ? context.eventDays : [];
+  const contextEventDayById = new Map(
+    contextEventDays
+      .filter((item): item is NonNullable<typeof item> => Boolean(item?.eventDayId))
+      .map((item) => [item.eventDayId as string, item])
+  );
+  const eventDayCandidates = (
+    hints: {
+      eventDayId?: string | null;
+      weekIndex?: number | null;
+      dayIndexInWeek?: number | null;
+      weekday?: string | null;
+      date?: string | null;
+      dayLabel?: string | null;
+    }
+  ) => {
+    const explicitId = sanitizeOptionalText(hints.eventDayId);
+    if (explicitId && contextEventDayById.has(explicitId)) {
+      return [contextEventDayById.get(explicitId)!];
+    }
+
+    let candidates = contextEventDays.slice();
+    const dateHint = sanitizeOptionalText(hints.date);
+    if (dateHint) {
+      candidates = candidates.filter((item) => item.date === dateHint);
+    }
+    const weekIndexHint = Number.isFinite(Number(hints.weekIndex)) ? Math.max(1, Math.floor(Number(hints.weekIndex))) : null;
+    if (weekIndexHint !== null) {
+      candidates = candidates.filter((item) => item.weekIndex === weekIndexHint);
+    }
+    const dayIndexHint = Number.isFinite(Number(hints.dayIndexInWeek)) ? Math.max(1, Math.floor(Number(hints.dayIndexInWeek))) : null;
+    if (dayIndexHint !== null) {
+      candidates = candidates.filter((item) => item.dayIndexInWeek === dayIndexHint);
+    }
+    const weekdayHint = normalizeWeekday(hints.weekday) ?? normalizeWeekday(hints.dayLabel);
+    if (weekdayHint) {
+      candidates = candidates.filter((item) => normalizeWeekday(item.weekday) === weekdayHint);
+    }
+    return candidates;
+  };
+  const normalizeResolvedEventDay = (
+    raw: unknown,
+    fallback: {
+      weekIndex?: number | null;
+      dayIndexInWeek?: number | null;
+      weekday?: string | null;
+      date?: string | null;
+      dayLabel?: string | null;
+    }
+  ) => {
+    const input = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+    const candidates = eventDayCandidates({
+      eventDayId: sanitizeOptionalText(input.eventDayId),
+      weekIndex: Number(input.weekIndex),
+      dayIndexInWeek: Number(input.dayIndexInWeek),
+      weekday: sanitizeOptionalText(fallback.weekday),
+      date: sanitizeOptionalText(input.date) ?? sanitizeOptionalText(fallback.date),
+      dayLabel: sanitizeOptionalText(fallback.dayLabel),
+    });
+    const matched = candidates.length === 1 ? candidates[0] : null;
+    if (!matched && candidates.length > 1) {
+      const ambiguityText = sanitizeOptionalText(fallback.dayLabel)
+        ?? sanitizeOptionalText(fallback.weekday)
+        ?? sanitizeOptionalText(fallback.date)
+        ?? `week ${fallback.weekIndex ?? '?'} day ${fallback.dayIndexInWeek ?? '?'}`;
+      warnings.add(`Ambiguous event day mapping for "${ambiguityText}" across multiple provided eventDays`);
+    }
+    if (!matched && contextEventDays.length > 0) {
+      warnings.add(
+        `Unresolved event day mapping for "${sanitizeOptionalText(fallback.dayLabel) ?? sanitizeOptionalText(fallback.date) ?? `week ${fallback.weekIndex ?? '?'} day ${fallback.dayIndexInWeek ?? '?'}`}". Manual confirmation required.`
+      );
+    }
+    const resolved = matched ?? null;
+    return {
+      eventDayId: resolved?.eventDayId ?? null,
+      weekIndex: resolved?.weekIndex ?? (
+        Number.isFinite(Number(input.weekIndex))
+          ? Math.max(1, Math.floor(Number(input.weekIndex)))
+          : (Number.isFinite(Number(fallback.weekIndex)) ? Math.max(1, Math.floor(Number(fallback.weekIndex))) : 1)
+      ),
+      dayIndexInWeek: resolved?.dayIndexInWeek ?? (
+        Number.isFinite(Number(input.dayIndexInWeek))
+          ? Math.max(1, Math.floor(Number(input.dayIndexInWeek)))
+          : (Number.isFinite(Number(fallback.dayIndexInWeek)) ? Math.max(1, Math.floor(Number(fallback.dayIndexInWeek))) : 1)
+      ),
+      overallDayIndex: resolved?.overallDayIndex ?? (
+        Number.isFinite(Number(input.overallDayIndex)) ? Math.max(1, Math.floor(Number(input.overallDayIndex))) : null
+      ),
+      date: resolved?.date ?? sanitizeOptionalText(input.date) ?? sanitizeOptionalText(fallback.date),
+      resolutionReason: sanitizeOptionalText(input.resolutionReason)
+        ?? (resolved
+          ? 'Matched against provided eventDays context'
+          : 'No unique eventDay could be resolved from visible text and provided eventDays'),
+      confidence: clampConfidence(input.confidence),
+    };
+  };
+
+  if (!value || typeof value !== 'object') {
+    return {
+      schemaVersion: 'raver_timetable_ai_v3',
+      imageType: 'timetable',
+      weeks: [],
+      unparsedTexts: [],
+      warnings: Array.from(warnings),
+    };
+  }
+
+  const input = value as Record<string, unknown>;
+  const rawWeeks = Array.isArray(input.weeks) ? input.weeks : [];
+  const weeks = rawWeeks.map((weekItem, weekOffset) => {
+    const weekRecord = weekItem && typeof weekItem === 'object' ? weekItem as Record<string, unknown> : {};
+    const normalizedWeekIndex = Number.isFinite(Number(weekRecord.weekIndex))
+      ? Math.max(1, Math.floor(Number(weekRecord.weekIndex)))
+      : weekOffset + 1;
+    const rawDays = Array.isArray(weekRecord.days) ? weekRecord.days : [];
+    return {
+      weekIndex: normalizedWeekIndex,
+      weekLabel: sanitizeOptionalText(weekRecord.weekLabel) ?? null,
+      days: rawDays.map((dayItem, dayOffset) => {
+        const dayRecord = dayItem && typeof dayItem === 'object' ? dayItem as Record<string, unknown> : {};
+        const normalizedDayIndexInWeek = Number.isFinite(Number(dayRecord.dayIndexInWeek))
+          ? Math.max(1, Math.floor(Number(dayRecord.dayIndexInWeek)))
+          : dayOffset + 1;
+        const normalizedWeekday = normalizeWeekday(dayRecord.weekday ?? dayRecord.dayLabel);
+        return {
+          dayIndexInWeek: normalizedDayIndexInWeek,
+          dayLabel: sanitizeOptionalText(dayRecord.dayLabel),
+          weekday: normalizedWeekday,
+          dateText: sanitizeOptionalText(dayRecord.dateText),
+          eventDayRef: normalizeResolvedEventDay(dayRecord.eventDayRef, {
+            weekIndex: Number(dayRecord.weekIndex) || normalizedWeekIndex,
+            dayIndexInWeek: normalizedDayIndexInWeek,
+            weekday: normalizedWeekday,
+            date: sanitizeOptionalText(dayRecord.dateText),
+            dayLabel: sanitizeOptionalText(dayRecord.dayLabel),
+          }),
+          stages: Array.isArray(dayRecord.stages)
+            ? dayRecord.stages.map((stageItem, stageOffset) => {
+                const stageRecord = stageItem && typeof stageItem === 'object' ? stageItem as Record<string, unknown> : {};
+                return {
+                  stageName: sanitizeOptionalText(stageRecord.stageName) ?? '',
+                  order: Number.isFinite(Number(stageRecord.order)) ? Math.max(1, Math.floor(Number(stageRecord.order))) : stageOffset + 1,
+                  slots: Array.isArray(stageRecord.slots)
+                    ? stageRecord.slots.map((slotItem, slotOffset) => {
+                        const slotRecord = slotItem && typeof slotItem === 'object' ? slotItem as Record<string, unknown> : {};
+                        return {
+                          orderInStage: Number.isFinite(Number(slotRecord.orderInStage))
+                            ? Math.max(1, Math.floor(Number(slotRecord.orderInStage)))
+                            : slotOffset + 1,
+                          performerType: sanitizeOptionalText(slotRecord.performerType) ?? 'solo',
+                          performerNames: stringArray(slotRecord.performerNames),
+                          displayName: sanitizeOptionalText(slotRecord.displayName) ?? '',
+                          rawTimeText: sanitizeOptionalText(slotRecord.rawTimeText),
+                          startTimeText: sanitizeOptionalText(slotRecord.startTimeText),
+                          endTimeText: sanitizeOptionalText(slotRecord.endTimeText),
+                          normalizedStartTime: sanitizeOptionalText(slotRecord.normalizedStartTime),
+                          normalizedEndTime: sanitizeOptionalText(slotRecord.normalizedEndTime),
+                          confidence: clampConfidence(slotRecord.confidence),
+                          notes: stringArray(slotRecord.notes),
+                        };
+                      })
+                    : [],
+                };
+              })
+            : [],
+        };
+      }),
+    };
+  });
+
+  return {
+    schemaVersion: 'raver_timetable_ai_v3',
+    imageType: sanitizeOptionalText(input.imageType) ?? 'timetable',
+    weeks,
+    unparsedTexts: stringArray(input.unparsedTexts),
+    warnings: Array.from(warnings),
+  };
 };
 
 const runCozeTimetableWorker = async (
@@ -5835,7 +6029,7 @@ const runCozeTimetableWorker = async (
   }
 
   return {
-    rawJson: extractTimetableRawJson(parsed),
+    rawJson: normalizeTimetableAIResult(extractTimetableRawJson(parsed), context),
     rawResponse: parsed,
   };
 };
@@ -6244,6 +6438,11 @@ const mapEventTimetableSlots = (performancesRaw: any): any[] => {
       eventId: performance.eventId,
       lineupArtistId: performance.eventArtistId,
       eventArtistId: performance.eventArtistId,
+      eventDayId: performance.eventDay?.eventDayId ?? null,
+      weekIndex: typeof performance.weekIndex === 'number' ? performance.weekIndex : null,
+      dayIndexInWeek: typeof performance.dayIndexInWeek === 'number' ? performance.dayIndexInWeek : null,
+      overallDayIndex: typeof performance.overallDayIndex === 'number' ? performance.overallDayIndex : null,
+      localDate: performance.localDate ?? performance.eventDay?.date ?? null,
       djId: artist.primaryDjId ?? primaryDj?.id ?? null,
       memberDjIds: uniqueMembers.map((member: any) => member.djId || null),
       djName: performance.displayNameSnapshot,
@@ -6322,6 +6521,34 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     longitude,
     startDate: row.startDate,
     endDate: row.endDate,
+    schedule: {
+      mode: row.scheduleMode ?? 'single_day',
+      timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE),
+      dayRolloverHour: row.dayRolloverHour ?? 6,
+    },
+    weeks: Array.isArray(row.weeks)
+      ? row.weeks.map((week: any) => ({
+          id: week.id,
+          weekIndex: week.weekIndex,
+          label: week.label ?? null,
+          startDate: week.startDate,
+          endDate: week.endDate,
+          sortOrder: week.sortOrder ?? week.weekIndex,
+        }))
+      : [],
+    eventDays: Array.isArray(row.eventDays)
+      ? row.eventDays.map((day: any) => ({
+          id: day.id,
+          eventDayId: day.eventDayId,
+          weekIndex: day.weekIndex,
+          dayIndexInWeek: day.dayIndexInWeek,
+          overallDayIndex: day.overallDayIndex,
+          label: day.label ?? null,
+          weekday: day.weekday ?? null,
+          date: day.date,
+          sortOrder: day.sortOrder ?? day.overallDayIndex,
+        }))
+      : [],
     timeZone: normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE),
     startTime: normalizeEventClockTime(row.startTime, EVENT_DEFAULT_START_TIME),
     endTime: normalizeEventClockTime(row.endTime, EVENT_DEFAULT_END_TIME),
@@ -6368,6 +6595,11 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
       id: slot.id,
       eventId: slot.eventId,
       lineupArtistId: slot.lineupArtistId ?? null,
+      eventDayId: slot.eventDayId ?? null,
+      weekIndex: slot.weekIndex ?? null,
+      dayIndexInWeek: slot.dayIndexInWeek ?? null,
+      overallDayIndex: slot.overallDayIndex ?? null,
+      localDate: slot.localDate ?? null,
       djId: slot.djId,
       memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
       djName: slot.djName,
@@ -6385,6 +6617,11 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
           id: slot.id,
           eventId: slot.eventId,
           lineupArtistId: slot.lineupArtistId ?? null,
+          eventDayId: slot.eventDayId ?? null,
+          weekIndex: slot.weekIndex ?? null,
+          dayIndexInWeek: slot.dayIndexInWeek ?? null,
+          overallDayIndex: slot.overallDayIndex ?? null,
+          localDate: slot.localDate ?? null,
           djId: slot.djId,
           memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
           djs: Array.isArray(slot.djs)
@@ -8438,7 +8675,36 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
     const eventId = req.params.id as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true, timeZone: true },
+      select: {
+        id: true,
+        organizerId: true,
+        scheduleMode: true,
+        dayRolloverHour: true,
+        timeZone: true,
+        weeks: {
+          orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+          select: {
+            weekIndex: true,
+            label: true,
+            startDate: true,
+            endDate: true,
+            sortOrder: true,
+          },
+        },
+        eventDays: {
+          orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+          select: {
+            eventDayId: true,
+            weekIndex: true,
+            dayIndexInWeek: true,
+            overallDayIndex: true,
+            label: true,
+            weekday: true,
+            date: true,
+            sortOrder: true,
+          },
+        },
+      },
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
@@ -8449,7 +8715,8 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
-    const [slot] = normalizeLineupSlots([req.body || {}], event.startDate, event.dayRolloverHour ?? 6, event.timeZone);
+    const scheduleContext = buildSubmittedEventScheduleContextFromEvent(event);
+    const [slot] = normalizeSubmittedTimetableSlots([req.body || {}], scheduleContext);
     if (!slot) {
       res.status(400).json({ error: 'Valid timetable slot is required' });
       return;
@@ -8477,6 +8744,11 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
         {
           id: createdSlotId,
           lineupArtistId,
+          eventDayId: slot.eventDayId ?? null,
+          weekIndex: slot.weekIndex ?? null,
+          dayIndexInWeek: slot.dayIndexInWeek ?? null,
+          overallDayIndex: slot.overallDayIndex ?? null,
+          localDate: slot.localDate ?? null,
           djId: slot.djId,
           memberDjIds: slot.memberDjIds,
           djName: slot.djName,
@@ -8494,6 +8766,10 @@ router.post('/events/:id/timetable', optionalAuth, async (req: Request, res: Res
     });
     ok(res, { item: mapEvent(created).timetableSlots.find((item: any) => item.id === createdSlotId) || null });
   } catch (error) {
+    if (error instanceof EventSubmissionValidationError) {
+      res.status(400).json({ error: error.message, code: error.code });
+      return;
+    }
     console.error('BFF web add timetable slot error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -8508,7 +8784,36 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
     const slotId = req.params.slotId as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, organizerId: true, startDate: true, dayRolloverHour: true, timeZone: true },
+      select: {
+        id: true,
+        organizerId: true,
+        scheduleMode: true,
+        dayRolloverHour: true,
+        timeZone: true,
+        weeks: {
+          orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+          select: {
+            weekIndex: true,
+            label: true,
+            startDate: true,
+            endDate: true,
+            sortOrder: true,
+          },
+        },
+        eventDays: {
+          orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+          select: {
+            eventDayId: true,
+            weekIndex: true,
+            dayIndexInWeek: true,
+            overallDayIndex: true,
+            label: true,
+            weekday: true,
+            date: true,
+            sortOrder: true,
+          },
+        },
+      },
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
@@ -8529,6 +8834,11 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
       djId: existing.djId,
       memberDjIds: existing.memberDjIds,
       djName: existing.djName,
+      eventDayId: existing.eventDayId,
+      weekIndex: existing.weekIndex,
+      dayIndexInWeek: existing.dayIndexInWeek,
+      overallDayIndex: existing.overallDayIndex,
+      localDate: existing.localDate,
       stageName: existing.stageName,
       festivalDayIndex: existing.festivalDayIndex,
       startTime: existing.startTime,
@@ -8536,7 +8846,8 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
       sortOrder: existing.sortOrder,
       ...(req.body || {}),
     };
-    const [slot] = normalizeLineupSlots([merged], event.startDate, event.dayRolloverHour ?? 6, event.timeZone);
+    const scheduleContext = buildSubmittedEventScheduleContextFromEvent(event);
+    const [slot] = normalizeSubmittedTimetableSlots([merged], scheduleContext);
     if (!slot) {
       res.status(400).json({ error: 'Valid timetable slot is required' });
       return;
@@ -8566,6 +8877,11 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
             ? {
                 ...item,
                 lineupArtistId,
+                eventDayId: slot.eventDayId ?? null,
+                weekIndex: slot.weekIndex ?? null,
+                dayIndexInWeek: slot.dayIndexInWeek ?? null,
+                overallDayIndex: slot.overallDayIndex ?? null,
+                localDate: slot.localDate ?? null,
                 djId: slot.djId,
                 memberDjIds: slot.memberDjIds,
                 djName: slot.djName,
@@ -8586,6 +8902,10 @@ router.patch('/events/:id/timetable/:slotId', optionalAuth, async (req: Request,
     });
     ok(res, { item: mapEvent(updated).timetableSlots.find((item: any) => item.id === slotId) || null });
   } catch (error) {
+    if (error instanceof EventSubmissionValidationError) {
+      res.status(400).json({ error: error.message, code: error.code });
+      return;
+    }
     console.error('BFF web update timetable slot error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -8702,7 +9022,6 @@ void [
   normalizeEventStartDate,
   normalizeEventEndDate,
   normalizeEventStageOrder,
-  rebaseExistingLineupSlotsToEventStart,
   syncEventLineupAndTimetable,
   deleteSingleEventOssObjectIfOwned,
   normalizeEventWikiFestivalId,
@@ -8715,23 +9034,15 @@ router.post('/events/lineup-timetable-alignment/preview', optionalAuth, async (r
     if (!userId) return;
 
     const body = req.body as Record<string, unknown>;
-    const { startDate, dayRolloverHour, timeZone } = resolveSubmittedEventTimelineContext(body);
-    if (!startDate) {
-      res.status(400).json({ error: 'Valid event startDate is required' });
-      return;
-    }
+    const scheduleContext = normalizeSubmittedEventScheduleContext(body);
 
     const issue = validateEventLineupTimetableAlignment(
       body as unknown as Prisma.JsonObject,
-      startDate,
-      dayRolloverHour,
-      timeZone
+      scheduleContext
     );
     const alignedLineupArtists = buildAlignedLineupArtistsFromTimetablePayload(
       body as unknown as Prisma.JsonObject,
-      startDate,
-      dayRolloverHour,
-      timeZone
+      scheduleContext
     );
 
     ok(res, {
@@ -8741,6 +9052,10 @@ router.post('/events/lineup-timetable-alignment/preview', optionalAuth, async (r
       lineupArtists: alignedLineupArtists.map(mapAlignedLineupArtistForPayload),
     });
   } catch (error) {
+    if (error instanceof EventSubmissionValidationError) {
+      res.status(400).json({ error: error.message, code: error.code });
+      return;
+    }
     console.error('BFF web lineup timetable alignment preview error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -8753,19 +9068,11 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     if (!userId) return;
     const body = req.body as Record<string, unknown>;
     const name = String(body.name || '').trim();
-    const startDate = String(body.startDate || '').trim();
-    const endDate = String(body.endDate || '').trim();
-
-    if (!name || !startDate || !endDate) {
-      res.status(400).json({ error: 'name, startDate and endDate are required' });
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
       return;
     }
-
-    const rawTimeZone = body.timeZone ?? body.timezone ?? body.eventTimeZone;
-    if (!isValidEventTimeZone(rawTimeZone)) {
-      res.status(400).json({ error: 'Valid event timeZone is required' });
-      return;
-    }
+    normalizeSubmittedEventScheduleContext(body);
 
     const submittedImageAssets = parseEventImageAssets(body.imageAssets);
     if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
@@ -8785,6 +9092,13 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     acceptedSubmission(res, submission, '活动任务已提交，当前正在处理中，后续状态会通过通知更新');
     return;
   } catch (error) {
+    if (error instanceof EventSubmissionValidationError) {
+      res.status(400).json({
+        error: error.message,
+        code: error.code,
+      });
+      return;
+    }
     if (error instanceof ActiveEventEditSubmissionError) {
       res.status(409).json({
         error: error.message,
@@ -8846,12 +9160,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       res.status(400).json({ error: 'Event name is required' });
       return;
     }
-
-    const rawTimeZone = body.timeZone ?? body.timezone ?? body.eventTimeZone;
-    if (!isValidEventTimeZone(rawTimeZone)) {
-      res.status(400).json({ error: 'Valid event timeZone is required' });
-      return;
-    }
+    normalizeSubmittedEventScheduleContext(body);
 
     const submittedImageAssets = parseEventImageAssets(body.imageAssets);
     if (!hasRequiredEventPrimaryImageAsset(submittedImageAssets)) {
@@ -8877,6 +9186,13 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     });
     acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
+    if (error instanceof EventSubmissionValidationError) {
+      res.status(400).json({
+        error: error.message,
+        code: error.code,
+      });
+      return;
+    }
     if (error instanceof ActiveEventEditSubmissionError) {
       res.status(409).json({
         error: error.message,

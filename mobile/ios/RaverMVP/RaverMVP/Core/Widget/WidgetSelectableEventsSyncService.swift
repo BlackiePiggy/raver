@@ -46,6 +46,7 @@ final class WidgetSelectableEventsSyncService {
             venueName: widgetTrimmed(event.summaryLocation),
             startDate: event.startDate,
             endDate: event.endDate,
+            dateRanges: widgetDateRanges(for: event),
             preferredBackgroundURL: preferredBackgroundURL(for: event),
             cachedBackgroundImageRelativePath: imagePath ?? existing?.cachedBackgroundImageRelativePath,
             addedAt: existing?.addedAt ?? Date()
@@ -101,6 +102,7 @@ final class WidgetSelectableEventsSyncService {
                 venueName: event.venueName,
                 startDate: event.startDate,
                 endDate: event.endDate,
+                dateRanges: event.dateRanges,
                 preferredBackgroundURL: event.preferredBackgroundURL,
                 cachedBackgroundImageRelativePath: event.cachedBackgroundImageRelativePath,
                 addedAt: event.addedAt
@@ -137,6 +139,18 @@ final class WidgetSelectableEventsSyncService {
             return lineup
         }
         return nil
+    }
+
+    private func widgetDateRanges(for event: WebEvent) -> [WidgetCountdownDateRange] {
+        event.discreteDateRanges.map {
+            WidgetCountdownDateRange(
+                id: $0.id,
+                weekIndex: $0.weekIndex,
+                label: $0.label,
+                startDate: $0.startDate,
+                endDate: $0.endDate
+            )
+        }
     }
 
     private func reloadWidgetTimelines() {

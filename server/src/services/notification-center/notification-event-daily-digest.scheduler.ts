@@ -251,14 +251,32 @@ export const runEventDailyDigestJob = async (): Promise<EventDailyDigestJobRepor
   const now = executedAt;
   const until = new Date(now.getTime() + (SCHEDULER_CONFIG.maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
   const since = new Date(now.getTime() - SCHEDULER_CONFIG.maxDaysAfterEnd * 24 * 60 * 60 * 1000);
+  const sinceDate = new Date(Date.UTC(since.getUTCFullYear(), since.getUTCMonth(), since.getUTCDate()));
+  const untilDate = new Date(Date.UTC(until.getUTCFullYear(), until.getUTCMonth(), until.getUTCDate(), 23, 59, 59, 999));
   const userRows = await prisma.$queryRaw<Array<{ userId: string }>>`
     SELECT DISTINCT uef.user_id AS "userId"
     FROM user_entity_follows uef
     INNER JOIN events e ON e.id = uef.target_id
     WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
       AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
-      AND e.start_date <= ${until}
-      AND e.end_date >= ${since}
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM event_days ed
+          WHERE ed.event_id = e.id
+            AND ed.date >= ${sinceDate}
+            AND ed.date <= ${untilDate}
+        )
+        OR (
+          NOT EXISTS (
+            SELECT 1
+            FROM event_days ed_any
+            WHERE ed_any.event_id = e.id
+          )
+          AND e.start_date <= ${until}
+          AND e.end_date >= ${since}
+        )
+      )
   `;
   const candidateUserIds = userRows.map((item) => item.userId.trim()).filter(Boolean);
   if (candidateUserIds.length === 0) {
@@ -331,19 +349,24 @@ export const runEventDailyDigestJob = async (): Promise<EventDailyDigestJobRepor
     }
 
     const nowDayIndex = getDayIndex(nowParts);
+    const todayKey = formatLocalDateKey(nowParts);
     for (const item of userEvents) {
       const newsCount = preference.includeNews ? newsCountMap.get(item.eventId) ?? 0 : 0;
       const ratingCount = preference.includeRatings ? ratingCountMap.get(item.eventId) ?? 0 : 0;
+      const hasStructuredEventDays = item.eventDayDates.length > 0;
+      const hasEventDayToday = item.eventDayDates.some((eventDayDate) => {
+        const eventDayParts = getLocalDateParts(eventDayDate, preference.timezone);
+        return formatLocalDateKey(eventDayParts) === todayKey;
+      });
       const startParts = getLocalDateParts(item.eventStartDate, preference.timezone);
       const endParts = getLocalDateParts(item.eventEndDate, preference.timezone);
       const eventStarted = nowDayIndex >= getDayIndex(startParts);
       const eventNotEnded = nowDayIndex <= getDayIndex(endParts);
-      const inEventWindow = eventStarted && eventNotEnded;
+      const inEventWindow = hasStructuredEventDays ? hasEventDayToday : (eventStarted && eventNotEnded);
       let needCheckinReminder = false;
       if (preference.includeCheckinReminder && inEventWindow) {
         const attendanceKey = `${userId}:${item.eventId}`;
         const attendedRows = attendanceMap.get(attendanceKey) ?? [];
-        const todayKey = formatLocalDateKey(nowParts);
         const hasCheckedInToday = attendedRows.some((attendedAt) => {
           const attendedParts = getLocalDateParts(attendedAt, preference.timezone);
           return formatLocalDateKey(attendedParts) === todayKey;
@@ -382,6 +405,7 @@ export const runEventDailyDigestJob = async (): Promise<EventDailyDigestJobRepor
               eventName: item.eventName,
               eventStartDate: item.eventStartDate.toISOString(),
               eventEndDate: item.eventEndDate.toISOString(),
+              eventDayDates: item.eventDayDates.map((date) => date.toISOString()),
               newsCount,
               ratingCount,
               needCheckinReminder,

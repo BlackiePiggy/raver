@@ -956,9 +956,19 @@ actor MockWebFeatureService: WebFeatureService {
                         weekIndex: 1,
                         days: [
                             EventTimetableAIDay(
-                                festivalDayIndex: 1,
+                                weekIndex: 1,
+                                dayIndexInWeek: 1,
                                 dayLabel: "DAY 1",
                                 dateText: nil,
+                                eventDayRef: EventTimetableAIResolvedEventDay(
+                                    eventDayId: "d1",
+                                    weekIndex: 1,
+                                    dayIndexInWeek: 1,
+                                    overallDayIndex: 1,
+                                    date: "2026-01-01",
+                                    resolutionReason: "mock",
+                                    confidence: 1
+                                ),
                                 stages: [
                                     EventTimetableAIStage(
                                         stageName: "Main Stage",
@@ -1136,13 +1146,36 @@ actor MockWebFeatureService: WebFeatureService {
                 imageUrl: "/mock/timetable.jpg",
                 fileType: "image/jpeg",
                 context: EventTimetableImageImportContext(
-                    eventStartDate: "2026-01-01",
-                    eventEndDate: "2026-01-01",
                     eventTimeZone: "Asia/Shanghai",
-                    dayRolloverHour: 6,
-                    weekRanges: [
-                        EventTimetableImageImportWeekRange(weekIndex: 1, startDate: "2026-01-01", endDate: "2026-01-01")
+                    schedule: WebEventSchedule(
+                        mode: "single_day",
+                        timeZone: "Asia/Shanghai",
+                        dayRolloverHour: 6
+                    ),
+                    weeks: [
+                        WebEventWeek(
+                            id: "mock-week-1",
+                            weekIndex: 1,
+                            label: nil,
+                            startDate: Date.eventArchiveDate(from: "2026-01-01", timeZone: TimeZone(identifier: "Asia/Shanghai") ?? .current) ?? Date(),
+                            endDate: Date.eventArchiveDate(from: "2026-01-01", timeZone: TimeZone(identifier: "Asia/Shanghai") ?? .current) ?? Date(),
+                            sortOrder: 1
+                        )
                     ],
+                    eventDays: [
+                        WebEventDay(
+                            id: "mock-day-1",
+                            eventDayId: "d1",
+                            weekIndex: 1,
+                            dayIndexInWeek: 1,
+                            overallDayIndex: 1,
+                            label: "Day 1",
+                            weekday: "thursday",
+                            date: Date.eventArchiveDate(from: "2026-01-01", timeZone: TimeZone(identifier: "Asia/Shanghai") ?? .current) ?? Date(),
+                            sortOrder: 1
+                        )
+                    ],
+                    dayRolloverHour: 6,
                     knownStageNames: []
                 )
             )
@@ -3709,6 +3742,10 @@ actor MockWebFeatureService: WebFeatureService {
                     city: $0.city,
                     country: $0.country,
                     startDate: $0.startDate,
+                    endDate: $0.endDate,
+                    schedule: $0.schedule,
+                    weeks: $0.weeks,
+                    eventDays: $0.eventDays,
                     timeZone: $0.timeZone,
                     createdAt: $0.createdAt,
                     lineupSlotCount: $0.lineupSlots.count
@@ -4159,7 +4196,7 @@ actor MockWebFeatureService: WebFeatureService {
 
     private static func mockGlobalSearchItems(for query: String) -> [GlobalSearchItem] {
         [
-            mockGlobalSearchItem(.event, "event-ultra-2026", query, "Ultra Shanghai 2026", LT("上海 · Expo Park · 2026.09.12", "Shanghai · Expo Park · Sep 12, 2026", "上海 · Expo Park · 2026.09.12"), LT("包含主舞台、Afterlife 舞台和多位 Techno / Trance DJ。", "Includes main stage, Afterlife stage, and Techno / Trance artists.", "メインステージ、Afterlifeステージ、複数のTechno / Trance DJを含みます。"), "2026", 0.98),
+            mockGlobalSearchItem(.event, "event-ultra-2026", query, "Ultra Shanghai 2026", LT("上海 · Expo Park · 第 1 周 2026/9/12 · 第 2 周 2026/9/19", "Shanghai · Expo Park · Week 1 Sep 12, 2026 · Week 2 Sep 19, 2026", "上海 · Expo Park · 第1週 2026/9/12 · 第2週 2026/9/19"), LT("包含主舞台、Afterlife 舞台和多位 Techno / Trance DJ。", "Includes main stage, Afterlife stage, and Techno / Trance artists.", "メインステージ、Afterlifeステージ、複数のTechno / Trance DJを含みます。"), "2026", 0.98),
             mockGlobalSearchItem(.dj, "dj-charlotte-de-witte", query, "Charlotte de Witte", LT("Techno · KNTXT", "Techno · KNTXT", "Techno · KNTXT"), LT("相关活动、Sets 和打分单位都在 RaveHub 内有内容。", "Related events, sets, and rating units are available in RaveHub.", "関連イベント、Sets、評価ユニットはRaveHub内で確認できます。"), "DJ", 0.94),
             mockGlobalSearchItem(.news, "news-ultra-lineup", query, LT("Ultra 公布首批阵容", "Ultra announces first lineup wave", "Ultraが第1弾ラインナップを発表"), LT("RaveHub News · 2 小时前", "RaveHub News · 2h ago", "RaveHub News · 2時間前"), LT("官方公布首批出演名单，更多舞台信息将在下周更新。", "The first wave is announced, with more stage details next week.", "第1弾出演者が発表され、追加ステージ情報は来週更新予定です。"), LT("资讯", "News", "ニュース"), 0.88),
             mockGlobalSearchItem(.set, "set-afterlife-2025", query, "Afterlife Shanghai Closing Set", LT("Tale Of Us · 92 min", "Tale Of Us · 92 min", "Tale Of Us · 92分"), LT("旋律 Techno 现场录音，收藏热度持续上升。", "A melodic techno live recording with rising saves.", "メロディックTechnoのライブ録音で、保存数が伸びています。"), "Set", 0.84),

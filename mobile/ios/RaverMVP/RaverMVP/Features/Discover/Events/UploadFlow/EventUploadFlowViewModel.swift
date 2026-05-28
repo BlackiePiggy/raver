@@ -770,50 +770,52 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func updateScheduleMode(_ mode: EventUploadScheduleMode) {
-        draft.scheduleMode = mode
+        draft.applyScheduleMode(mode)
         normalizeWeekRanges(for: mode)
+        draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_schedule_mode_changed", properties: ["mode": mode.rawValue])
     }
 
     func updateDate(_ keyPath: WritableKeyPath<EventUploadDraft, Date>, value: Date) {
-        draft[keyPath: keyPath] = normalizedEventDate(value)
+        let normalized = normalizedEventDate(value)
+        if keyPath == \EventUploadDraft.startDate {
+            draft.applyDateBounds(startDate: normalized)
+        } else {
+            draft.applyDateBounds(endDate: normalized)
+        }
         syncWeekRangesWithEventDates()
+        draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
     }
 
     func addWeekRange() {
-        let anchor = draft.weekRanges.last?.endDate ?? draft.endDate
+        let anchor = draft.editableWeekRanges.last?.endDate ?? draft.endDate
         let nextStart = normalizedEventDate(addingDays: 1, to: anchor) ?? anchor
         let nextEnd = normalizedEventDate(addingDays: 1, to: nextStart) ?? nextStart
-        draft.weekRanges.append(EventUploadWeekRangeDraft(startDate: nextStart, endDate: nextEnd))
-        recalculateEventDateBoundsFromWeeks()
+        draft.appendWeekRange(startDate: nextStart, endDate: nextEnd)
+        draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
     }
 
     func removeWeekRange(id: UUID) {
-        guard draft.weekRanges.count > 1 else { return }
-        draft.weekRanges.removeAll { $0.id == id }
-        recalculateEventDateBoundsFromWeeks()
+        guard draft.editableWeekRanges.count > 1 else { return }
+        draft.removeWeekRange(id: id)
+        draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
     }
 
     func updateWeekRange(id: UUID, startDate: Date? = nil, endDate: Date? = nil) {
-        guard let index = draft.weekRanges.firstIndex(where: { $0.id == id }) else { return }
-        if let startDate {
-            draft.weekRanges[index].startDate = normalizedEventDate(startDate)
-        }
-        if let endDate {
-            draft.weekRanges[index].endDate = normalizedEventDate(endDate)
-        }
-        if draft.weekRanges[index].endDate < draft.weekRanges[index].startDate {
-            draft.weekRanges[index].endDate = draft.weekRanges[index].startDate
-        }
-        recalculateEventDateBoundsFromWeeks()
+        draft.updateWeekRange(
+            id: id,
+            startDate: startDate.map(normalizedEventDate),
+            endDate: endDate.map(normalizedEventDate)
+        )
+        draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
     }
@@ -1032,7 +1034,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         if let timeZoneIdentifier = result.timeZoneIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines), !timeZoneIdentifier.isEmpty {
             draft.timeZoneIdentifier = timeZoneIdentifier
         }
-        draft.scheduleMode = result.scheduleMode
+        draft.applyScheduleMode(result.scheduleMode)
         if let startDate = result.startDate {
             draft.startDate = startDate
         }
@@ -1040,10 +1042,11 @@ final class EventUploadFlowViewModel: ObservableObject {
             draft.endDate = endDate
         }
         if !result.weekRanges.isEmpty {
-            draft.weekRanges = result.weekRanges
+            draft.applyWeekRanges(result.weekRanges)
         } else {
-            draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+            draft.applyWeekRanges([EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)])
         }
+        draft.rebuildStructuredScheduleBindings()
         draft.ticket.ticketURL = result.ticketURL
         if !result.ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             draft.ticket.currency = result.ticketCurrency
@@ -1148,11 +1151,26 @@ final class EventUploadFlowViewModel: ObservableObject {
             slot.stageName = imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? LT("主舞台", "Main Stage", "メインステージ")
                 : imported.stageName.trimmingCharacters(in: .whitespacesAndNewlines)
-            slot.dayIndex = max(1, imported.dayIndex)
+            slot.eventDayId = imported.eventDayId
+            slot.weekIndex = imported.weekIndex
+            slot.dayIndexInWeek = imported.dayIndexInWeek
+            slot.overallDayIndex = max(1, imported.overallDayIndex)
+            slot.dayIndex = slot.overallDayIndex
+            slot.localDate = imported.localDate.flatMap { Date.eventArchiveDate(from: $0, timeZone: eventTimeZone) }
             slot.startDayOffset = imported.startDayOffset
             slot.endDayOffset = imported.endDayOffset
-            slot.startTime = timetableAIClockDate(imported.startTimeText, dayIndex: slot.dayIndex, dayOffset: imported.startDayOffset)
-            slot.endTime = timetableAIClockDate(imported.endTimeText, dayIndex: slot.dayIndex, dayOffset: imported.endDayOffset)
+            slot.startTime = timetableAIClockDate(
+                imported.startTimeText,
+                eventDay: draft.eventDay(forID: slot.eventDayId),
+                fallbackOverallDayIndex: slot.dayIndex,
+                dayOffset: imported.startDayOffset
+            )
+            slot.endTime = timetableAIClockDate(
+                imported.endTimeText,
+                eventDay: draft.eventDay(forID: slot.eventDayId),
+                fallbackOverallDayIndex: slot.dayIndex,
+                dayOffset: imported.endDayOffset
+            )
             slot.normalizePerformers()
             draft.timetableSlots.append(slot)
         }
@@ -1465,7 +1483,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     var reviewDateRange: String {
-        draft.startDate.appLocalizedDateRangeText(to: draft.endDate, timeZone: eventTimeZone)
+        draft.discreteDateSummaryText(in: eventTimeZone)
     }
 
     func tapLocationPickerPlaceholder() {
@@ -1638,11 +1656,20 @@ final class EventUploadFlowViewModel: ObservableObject {
     func addTimetableSlot() -> UUID {
         ensureDefaultStageExistsIfNeeded()
         var slot = EventUploadLineupSlotDraft()
+        if let eventDay = draft.structuredEventDays.first {
+            slot.eventDayId = eventDay.eventDayId
+            slot.weekIndex = eventDay.weekIndex
+            slot.dayIndexInWeek = eventDay.dayIndexInWeek
+            slot.overallDayIndex = eventDay.overallDayIndex
+            slot.dayIndex = eventDay.overallDayIndex
+            slot.localDate = eventDay.date
+        }
         slot.stageName = normalizedStageName(at: 0)
         slot.startDayOffset = .sameDay
         slot.endDayOffset = .sameDay
-        slot.startTime = defaultLineupStartTime(dayIndex: 1)
-        slot.endTime = defaultLineupEndTime(dayIndex: 1)
+        let resolvedEventDay = resolvedEventDay(for: slot)
+        slot.startTime = defaultLineupStartTime(eventDay: resolvedEventDay, dayIndex: slot.dayIndex)
+        slot.endTime = defaultLineupEndTime(eventDay: resolvedEventDay, dayIndex: slot.dayIndex)
         draft.timetableSlots.append(slot)
         draft.dirty = true
         saveDraft()
@@ -1656,11 +1683,21 @@ final class EventUploadFlowViewModel: ObservableObject {
         var slot = EventUploadLineupSlotDraft()
         let trimmedStage = stageName.trimmingCharacters(in: .whitespacesAndNewlines)
         slot.stageName = trimmedStage.isEmpty ? normalizedStageName(at: 0) : trimmedStage
-        slot.dayIndex = max(dayIndex, 1)
+        if let eventDay = draft.eventDay(forOverallDayIndex: max(dayIndex, 1)) ?? draft.structuredEventDays.first {
+            slot.eventDayId = eventDay.eventDayId
+            slot.weekIndex = eventDay.weekIndex
+            slot.dayIndexInWeek = eventDay.dayIndexInWeek
+            slot.overallDayIndex = eventDay.overallDayIndex
+            slot.dayIndex = eventDay.overallDayIndex
+            slot.localDate = eventDay.date
+        } else {
+            slot.dayIndex = max(dayIndex, 1)
+        }
         slot.startDayOffset = .sameDay
         slot.endDayOffset = .sameDay
-        slot.startTime = defaultLineupStartTime(dayIndex: slot.dayIndex)
-        slot.endTime = defaultLineupEndTime(dayIndex: slot.dayIndex)
+        let resolvedEventDay = resolvedEventDay(for: slot)
+        slot.startTime = defaultLineupStartTime(eventDay: resolvedEventDay, dayIndex: slot.dayIndex)
+        slot.endTime = defaultLineupEndTime(eventDay: resolvedEventDay, dayIndex: slot.dayIndex)
         draft.timetableSlots.append(slot)
         draft.dirty = true
         saveDraft()
@@ -1690,6 +1727,14 @@ final class EventUploadFlowViewModel: ObservableObject {
     func updateTimetableSlot(id: UUID, mutate: (inout EventUploadLineupSlotDraft) -> Void) {
         guard let index = draft.timetableSlots.firstIndex(where: { $0.id == id }) else { return }
         mutate(&draft.timetableSlots[index])
+        if let resolvedEventDay = resolvedEventDay(for: draft.timetableSlots[index]) {
+            draft.timetableSlots[index].eventDayId = resolvedEventDay.eventDayId
+            draft.timetableSlots[index].weekIndex = resolvedEventDay.weekIndex
+            draft.timetableSlots[index].dayIndexInWeek = resolvedEventDay.dayIndexInWeek
+            draft.timetableSlots[index].overallDayIndex = resolvedEventDay.overallDayIndex
+            draft.timetableSlots[index].dayIndex = resolvedEventDay.overallDayIndex
+            draft.timetableSlots[index].localDate = resolvedEventDay.date
+        }
         draft.timetableSlots[index].normalizePerformers()
         draft.dirty = true
         saveDraft()
@@ -1698,8 +1743,9 @@ final class EventUploadFlowViewModel: ObservableObject {
     func setTimetableSlotTimed(id: UUID, isTimed: Bool) {
         updateTimetableSlot(id: id) { slot in
             if isTimed {
-                slot.startTime = defaultLineupStartTime(dayIndex: slot.dayIndex)
-                slot.endTime = defaultLineupEndTime(dayIndex: slot.dayIndex)
+                let eventDay = resolvedEventDay(for: slot)
+                slot.startTime = defaultLineupStartTime(eventDay: eventDay, dayIndex: slot.dayIndex)
+                slot.endTime = defaultLineupEndTime(eventDay: eventDay, dayIndex: slot.dayIndex)
                 slot.startDayOffset = .sameDay
                 slot.endDayOffset = .sameDay
             } else {
@@ -2054,13 +2100,12 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private func timetableAIContext() -> EventTimetableImageImportContext {
-        let timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
         return EventTimetableImageImportContext(
-            eventStartDate: eventUploadDateString(draft.startDate, timeZone: timeZone),
-            eventEndDate: eventUploadDateString(draft.endDate, timeZone: timeZone),
             eventTimeZone: draft.timeZoneIdentifier,
+            schedule: draft.structuredSchedule,
+            weeks: draft.structuredWeeks,
+            eventDays: draft.structuredEventDays,
             dayRolloverHour: draft.dayRolloverHour,
-            weekRanges: timetableAIWeekRanges(timeZone: timeZone),
             knownStageNames: draft.stageEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
@@ -2085,19 +2130,6 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    private func timetableAIWeekRanges(timeZone: TimeZone) -> [EventTimetableImageImportWeekRange] {
-        let ranges: [EventUploadWeekRangeDraft] = draft.scheduleMode == .multiWeek
-            ? draft.weekRanges
-            : [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
-        return ranges.enumerated().map { index, range in
-            EventTimetableImageImportWeekRange(
-                weekIndex: index + 1,
-                startDate: eventUploadDateString(range.startDate, timeZone: timeZone),
-                endDate: eventUploadDateString(range.endDate, timeZone: timeZone)
-            )
-        }
-    }
-
     private func eventUploadDateString(_ date: Date, timeZone: TimeZone) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -2110,18 +2142,39 @@ final class EventUploadFlowViewModel: ObservableObject {
     private func editableTimetableImportResult(from raw: EventTimetableAIResult) -> EventUploadTimetableAIImportResult {
         var slots: [EventUploadTimetableAIEditableSlot] = []
         for week in raw.weeks.sorted(by: { $0.weekIndex < $1.weekIndex }) {
-            for day in week.days.sorted(by: { $0.festivalDayIndex < $1.festivalDayIndex }) {
+            for day in week.days.sorted(by: { $0.dayIndexInWeek < $1.dayIndexInWeek }) {
                 for stage in day.stages.sorted(by: { $0.order < $1.order }) {
                     for slot in stage.slots.sorted(by: { ($0.orderInStage ?? 0) < ($1.orderInStage ?? 0) }) {
                         let names = slot.performerNames
                             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                             .filter { !$0.isEmpty }
                         let type = EventLineupActType(rawValue: slot.performerType) ?? normalizedActType(.solo, performerCount: names.count)
+                        let resolvedOverallDayIndex =
+                            max(
+                                1,
+                                day.eventDayRef?.overallDayIndex
+                                ?? draft.eventDay(forID: day.eventDayRef?.eventDayId)?.overallDayIndex
+                                ?? day.dayIndexInWeek
+                            )
+                        let resolvedDayLabel = (
+                            nonEmptyTrimmed(day.dayLabel)
+                            ?? nonEmptyTrimmed(draft.eventDay(forID: day.eventDayRef?.eventDayId)?.label)
+                            ?? nonEmptyTrimmed(day.eventDayRef?.date)
+                            ?? nonEmptyTrimmed(day.dateText)
+                            ?? LT(
+                                "Week \(week.weekIndex) · Date \(max(1, day.dayIndexInWeek))",
+                                "Week \(week.weekIndex) · Date \(max(1, day.dayIndexInWeek))",
+                                "Week \(week.weekIndex) · 日付 \(max(1, day.dayIndexInWeek))"
+                            )
+                        )
                         slots.append(
                             EventUploadTimetableAIEditableSlot(
+                                eventDayId: day.eventDayRef?.eventDayId,
                                 weekIndex: week.weekIndex,
-                                dayIndex: max(1, day.festivalDayIndex),
-                                dayLabel: "Day \(max(1, day.festivalDayIndex))",
+                                dayIndexInWeek: max(1, day.dayIndexInWeek),
+                                overallDayIndex: resolvedOverallDayIndex,
+                                localDate: day.eventDayRef?.date ?? day.dateText,
+                                dayLabel: resolvedDayLabel,
                                 stageName: stage.stageName,
                                 actType: normalizedActType(type, performerCount: names.count),
                                 performerNamesText: names.joined(separator: ", "),
@@ -2144,6 +2197,13 @@ final class EventUploadFlowViewModel: ObservableObject {
             warnings: raw.warnings ?? [],
             unparsedTexts: raw.unparsedTexts ?? []
         )
+    }
+
+    private func nonEmptyTrimmed(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     private func editableLineupImportResult(from raw: EventLineupAIResult) -> EventUploadLineupAIImportResult {
@@ -2334,7 +2394,12 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
-    private func timetableAIClockDate(_ timeText: String, dayIndex: Int, dayOffset: EventUploadSlotDayOffset) -> Date? {
+    private func timetableAIClockDate(
+        _ timeText: String,
+        eventDay: WebEventDay?,
+        fallbackOverallDayIndex: Int,
+        dayOffset: EventUploadSlotDayOffset
+    ) -> Date? {
         let trimmed = timeText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
@@ -2348,9 +2413,12 @@ final class EventUploadFlowViewModel: ObservableObject {
 
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
-        let dayOffsetValue = max(dayIndex - 1, 0) + dayOffset.rawValue + rawHour / 24
+        let logicalDate = eventDay?.date
+            ?? draft.eventDay(forOverallDayIndex: max(fallbackOverallDayIndex, 1))?.date
+            ?? draft.startDate
+        let dayOffsetValue = dayOffset.rawValue + rawHour / 24
         let hour = rawHour % 24
-        let baseDay = calendar.date(byAdding: .day, value: dayOffsetValue, to: calendar.startOfDay(for: draft.startDate)) ?? draft.startDate
+        let baseDay = calendar.date(byAdding: .day, value: dayOffsetValue, to: calendar.startOfDay(for: logicalDate)) ?? logicalDate
         return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDay)
     }
 
@@ -2580,63 +2648,79 @@ final class EventUploadFlowViewModel: ObservableObject {
     private func normalizeWeekRanges(for mode: EventUploadScheduleMode) {
         switch mode {
         case .singleDay, .multiDay:
-            draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+            draft.applyWeekRanges([EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)])
         case .multiWeek:
-            if draft.weekRanges.isEmpty {
-                draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+            if draft.editableWeekRanges.isEmpty {
+                draft.applyWeekRanges([EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)])
             }
             recalculateEventDateBoundsFromWeeks()
         }
     }
 
     private func syncWeekRangesWithEventDates() {
-        if draft.scheduleMode == .multiWeek {
-            if draft.weekRanges.isEmpty {
-                draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+        if draft.isMultiWeekSchedule {
+            var ranges = draft.editableWeekRanges
+            if ranges.isEmpty {
+                ranges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
             } else {
-                draft.weekRanges[0].startDate = draft.startDate
-                if let lastIndex = draft.weekRanges.indices.last {
-                    draft.weekRanges[lastIndex].endDate = max(draft.weekRanges[lastIndex].endDate, draft.endDate)
+                ranges[0].startDate = draft.startDate
+                if let lastIndex = ranges.indices.last {
+                    ranges[lastIndex].endDate = max(ranges[lastIndex].endDate, draft.endDate)
                 }
-                recalculateEventDateBoundsFromWeeks()
             }
+            draft.applyWeekRanges(ranges)
+            recalculateEventDateBoundsFromWeeks()
         } else {
-            draft.weekRanges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+            draft.applyWeekRanges([EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)])
         }
     }
 
     private func recalculateEventDateBoundsFromWeeks() {
-        guard !draft.weekRanges.isEmpty else { return }
-        let normalized = draft.weekRanges.map { range in
+        let currentRanges = draft.editableWeekRanges
+        guard !currentRanges.isEmpty else { return }
+        let normalized = currentRanges.map { range in
             EventUploadWeekRangeDraft(
                 id: range.id,
                 startDate: normalizedEventDate(min(range.startDate, range.endDate)),
                 endDate: normalizedEventDate(max(range.startDate, range.endDate))
             )
         }
-        draft.weekRanges = normalized.sorted { $0.startDate < $1.startDate }
-        if let first = draft.weekRanges.first {
+        let sorted = normalized.sorted { $0.startDate < $1.startDate }
+        draft.applyWeekRanges(sorted)
+        if let first = sorted.first {
             draft.startDate = first.startDate
         }
-        if let last = draft.weekRanges.last {
+        if let last = sorted.last {
             draft.endDate = last.endDate
         }
     }
 
-    private func defaultLineupStartTime(dayIndex: Int) -> Date {
-        lineupDate(dayIndex: dayIndex, hour: 20, minute: 0)
+    private func defaultLineupStartTime(eventDay: WebEventDay?, dayIndex: Int) -> Date {
+        lineupDate(eventDay: eventDay, dayIndex: dayIndex, hour: 20, minute: 0)
     }
 
-    private func defaultLineupEndTime(dayIndex: Int) -> Date {
-        lineupDate(dayIndex: dayIndex, hour: 21, minute: 0)
+    private func defaultLineupEndTime(eventDay: WebEventDay?, dayIndex: Int) -> Date {
+        lineupDate(eventDay: eventDay, dayIndex: dayIndex, hour: 21, minute: 0)
     }
 
-    private func lineupDate(dayIndex: Int, hour: Int, minute: Int) -> Date {
-        var calendar = Calendar.current
+    private func lineupDate(eventDay: WebEventDay?, dayIndex: Int, hour: Int, minute: Int) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current
-        let startDay = calendar.startOfDay(for: draft.startDate)
-        let day = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0), to: startDay) ?? startDay
+        let anchorDate = eventDay?.date
+            ?? draft.eventDay(forOverallDayIndex: max(dayIndex, 1))?.date
+            ?? draft.startDate
+        let day = calendar.startOfDay(for: anchorDate)
         return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+    }
+
+    private func resolvedEventDay(for slot: EventUploadLineupSlotDraft) -> WebEventDay? {
+        if let byOverallDayIndex = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
+            return byOverallDayIndex
+        }
+        if let byEventDayID = draft.eventDay(forID: slot.eventDayId) {
+            return byEventDayID
+        }
+        return draft.structuredEventDays.first
     }
 
     private var eventTimeZone: TimeZone {
@@ -2661,7 +2745,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         let endText = draft.endDate.eventArchiveDateText(in: previousTimeZone)
         draft.startDate = Date.eventArchiveDate(from: startText, timeZone: nextTimeZone) ?? draft.startDate.normalizedEventArchiveDate(in: nextTimeZone)
         draft.endDate = Date.eventArchiveDate(from: endText, timeZone: nextTimeZone) ?? draft.endDate.normalizedEventArchiveDate(in: nextTimeZone)
-        draft.weekRanges = draft.weekRanges.map { range in
+        draft.applyWeekRanges(draft.editableWeekRanges.map { range in
             let start = range.startDate.eventArchiveDateText(in: previousTimeZone)
             let end = range.endDate.eventArchiveDateText(in: previousTimeZone)
             return EventUploadWeekRangeDraft(
@@ -2669,7 +2753,7 @@ final class EventUploadFlowViewModel: ObservableObject {
                 startDate: Date.eventArchiveDate(from: start, timeZone: nextTimeZone) ?? range.startDate.normalizedEventArchiveDate(in: nextTimeZone),
                 endDate: Date.eventArchiveDate(from: end, timeZone: nextTimeZone) ?? range.endDate.normalizedEventArchiveDate(in: nextTimeZone)
             )
-        }
+        })
     }
 }
 

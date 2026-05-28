@@ -277,6 +277,115 @@ const compact = (values: Array<string | null | undefined>, separator = ' · '): 
   return result.length > 0 ? result : null;
 };
 
+type EventSearchDateRange = {
+  weekIndex: number;
+  label?: string | null;
+  startDate: Date;
+  endDate: Date;
+};
+
+const localizedWeekTitle = (locale: GlobalSearchLocale, weekIndex: number): string => {
+  switch (locale) {
+    case 'zh':
+      return `第 ${weekIndex} 周`;
+    case 'ja':
+      return `第${weekIndex}週`;
+    case 'en':
+      return `Week ${weekIndex}`;
+  }
+};
+
+const formatSearchEventDate = (date: Date, locale: GlobalSearchLocale): string => {
+  const formatter = new Intl.DateTimeFormat(
+    locale === 'zh' ? 'zh-CN' : locale === 'ja' ? 'ja-JP' : 'en-US',
+    locale === 'en'
+      ? { month: 'short', day: 'numeric', year: 'numeric' }
+      : { year: 'numeric', month: 'numeric', day: 'numeric' }
+  );
+  return formatter.format(date);
+};
+
+const formatSearchEventDateRange = (
+  startDate: Date,
+  endDate: Date,
+  locale: GlobalSearchLocale
+): string => {
+  if (startDate.getTime() === endDate.getTime()) {
+    return formatSearchEventDate(startDate, locale);
+  }
+  return `${formatSearchEventDate(startDate, locale)} - ${formatSearchEventDate(endDate, locale)}`;
+};
+
+const buildSearchEventDateRanges = (input: {
+  startDate: Date;
+  endDate: Date;
+  weeks?: Array<{ weekIndex: number; label?: string | null; startDate: Date; endDate: Date }>;
+  eventDays?: Array<{ weekIndex: number; label?: string | null; date: Date }>;
+}): EventSearchDateRange[] => {
+  const normalizedWeeks = (input.weeks ?? [])
+    .map((week) => ({
+      weekIndex: week.weekIndex,
+      label: week.label,
+      startDate: week.startDate,
+      endDate: week.endDate,
+    }))
+    .sort((lhs, rhs) => lhs.weekIndex - rhs.weekIndex || lhs.startDate.getTime() - rhs.startDate.getTime());
+  if (normalizedWeeks.length > 0) {
+    return normalizedWeeks;
+  }
+
+  const groupedEventDays = new Map<number, Array<{ label?: string | null; date: Date }>>();
+  for (const day of input.eventDays ?? []) {
+    const current = groupedEventDays.get(day.weekIndex) ?? [];
+    current.push({ label: day.label, date: day.date });
+    groupedEventDays.set(day.weekIndex, current);
+  }
+  if (groupedEventDays.size > 1) {
+    return Array.from(groupedEventDays.entries())
+      .sort((lhs, rhs) => lhs[0] - rhs[0])
+      .map(([weekIndex, days]) => {
+        const sortedDays = days.slice().sort((lhs, rhs) => lhs.date.getTime() - rhs.date.getTime());
+        return {
+          weekIndex,
+          label: sortedDays.find((item) => String(item.label || '').trim().length > 0)?.label ?? null,
+          startDate: sortedDays[0].date,
+          endDate: sortedDays[sortedDays.length - 1].date,
+        };
+      });
+  }
+
+  return [{
+    weekIndex: 1,
+    label: null,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  }];
+};
+
+const buildEventSearchSubtitle = (input: {
+  locale: GlobalSearchLocale;
+  city?: string | null;
+  country?: string | null;
+  venueName?: string | null;
+  startDate: Date;
+  endDate: Date;
+  weeks?: Array<{ weekIndex: number; label?: string | null; startDate: Date; endDate: Date }>;
+  eventDays?: Array<{ weekIndex: number; label?: string | null; date: Date }>;
+}): string | null => {
+  const locationText = compact([compact([input.city, input.country], ', '), input.venueName]);
+  const ranges = buildSearchEventDateRanges(input);
+  const dateText = ranges
+    .map((range) => {
+      const prefix = ranges.length > 1
+        ? String(range.label || '').trim() || localizedWeekTitle(input.locale, range.weekIndex)
+        : null;
+      const body = formatSearchEventDateRange(range.startDate, range.endDate, input.locale);
+      return prefix ? `${prefix} ${body}` : body;
+    })
+    .join(' · ');
+  return compact([locationText, dateText]);
+};
+
 const truncate = (value: string | null | undefined, maxLength = 120): string | null => {
   const singleLine = String(value || '').replace(/\s+/g, ' ').trim();
   if (!singleLine) return null;
@@ -598,6 +707,23 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       organizerName: true,
       startDate: true,
       endDate: true,
+      weeks: {
+        orderBy: [{ sortOrder: 'asc' }, { weekIndex: 'asc' }],
+        select: {
+          weekIndex: true,
+          label: true,
+          startDate: true,
+          endDate: true,
+        },
+      },
+      eventDays: {
+        orderBy: [{ sortOrder: 'asc' }, { overallDayIndex: 'asc' }],
+        select: {
+          weekIndex: true,
+          label: true,
+          date: true,
+        },
+      },
       status: true,
       isVerified: true,
       updatedAt: true,
@@ -653,7 +779,16 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         type: 'event',
         entityID: row.id,
         title,
-        subtitle: compact([compact([city, country], ', '), row.venueName, row.startDate.toISOString().slice(0, 10)]),
+        subtitle: buildEventSearchSubtitle({
+          locale,
+          city,
+          country,
+          venueName: row.venueName,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          weeks: row.weeks,
+          eventDays: row.eventDays,
+        }),
         summary: truncate(description || lineupNames.join(', ')),
         imageUrl: row.coverImageUrl,
         badgeText: row.status,

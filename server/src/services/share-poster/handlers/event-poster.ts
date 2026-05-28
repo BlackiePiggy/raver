@@ -1,13 +1,10 @@
 import QRCode from 'qrcode';
-import { Resvg } from '@resvg/resvg-js';
 import { PNG } from 'pngjs';
-import { buildShareShortUrl } from '../../share-link.service';
+import { buildPosterQrText, renderStructuredPosterSvg } from '../svg-utils';
 import { resolveEventPosterBackgroundImageUrl } from '../event-images';
 import {
   pickLocalizedText,
   posterText,
-  formatPosterVenueText,
-  normalizeText,
   resolvePosterVenueText,
 } from '../localization';
 import {
@@ -22,19 +19,27 @@ import {
   overlayPngCover,
   wrapAsciiText,
 } from '../raster-utils';
-import {
-  formatPosterDate,
-  formatPosterDuration,
-  formatPosterDurationLabel,
-  getSharePosterAppIconDataUri,
-  renderPosterTextBlock,
-  renderZhDateText,
-  renderZhNumberUnitText,
-  svgEscape,
-  toImageDataUri,
-  wrapPosterMixedText,
-} from '../svg-utils';
-import { SharePosterHandler, SharePosterLocale } from '../types';
+import { SharePosterHandler, SharePosterLocale, SharePosterSectionRow } from '../types';
+
+type EventPosterWeek = {
+  weekIndex: number;
+  label: string | null;
+  startDate: Date;
+  endDate: Date;
+};
+
+type EventPosterDay = {
+  weekIndex: number;
+  label: string | null;
+  date: Date;
+};
+
+type EventPosterDateRange = {
+  weekIndex: number;
+  label: string | null;
+  startDate: Date;
+  endDate: Date;
+};
 
 type EventPosterSnapshot = {
   title: string;
@@ -45,30 +50,147 @@ type EventPosterSnapshot = {
   timeZone: string;
   artistCount: number;
   imageUrl: string | null;
+  weeks: EventPosterWeek[];
+  eventDays: EventPosterDay[];
 };
 
-const posterCopy = (locale: SharePosterLocale) =>
-  locale === 'zh'
-    ? {
-        start: '开始',
-        end: '结束',
-        duration: '时长',
-        lineup: '阵容',
-        venue: '地点',
-        presentedBy: '主办方',
-        titleFont: "'站酷高端黑', 'ZCOOL_GDH', 'zcool-gdh', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
-        bodyFont: "'站酷高端黑', 'ZCOOL_GDH', 'zcool-gdh', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
-      }
-    : {
-        start: 'START',
-        end: 'END',
-        duration: 'DURATION',
-        lineup: 'LINEUP',
-        venue: 'VENUE',
-        presentedBy: 'PRESENTED BY',
-        titleFont: "'站酷高端黑', 'ZCOOL_GDH', 'zcool-gdh', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
-        bodyFont: "'站酷高端黑', 'ZCOOL_GDH', 'zcool-gdh', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', sans-serif",
-      };
+const formatPosterEventDate = (date: Date, locale: SharePosterLocale, timeZone: string): string => {
+  try {
+    if (locale === 'zh') {
+      return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        timeZone,
+      }).format(date);
+    }
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone,
+    }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+};
+
+const formatPosterEventDateRange = (
+  startDate: Date,
+  endDate: Date,
+  locale: SharePosterLocale,
+  timeZone: string
+): string => {
+  const startText = formatPosterEventDate(startDate, locale, timeZone);
+  const endText = formatPosterEventDate(endDate, locale, timeZone);
+  return startText === endText ? startText : `${startText} - ${endText}`;
+};
+
+const localizedWeekTitle = (locale: SharePosterLocale, weekIndex: number): string =>
+  locale === 'zh' ? `第 ${weekIndex} 周` : `Week ${weekIndex}`;
+
+const buildPosterDateRanges = (snapshot: EventPosterSnapshot): EventPosterDateRange[] => {
+  const weeks = snapshot.weeks
+    .slice()
+    .sort((lhs, rhs) => lhs.weekIndex - rhs.weekIndex || lhs.startDate.getTime() - rhs.startDate.getTime());
+  if (weeks.length > 0) {
+    return weeks.map((week) => ({
+      weekIndex: week.weekIndex,
+      label: week.label,
+      startDate: week.startDate,
+      endDate: week.endDate,
+    }));
+  }
+
+  const groupedEventDays = new Map<number, EventPosterDay[]>();
+  for (const eventDay of snapshot.eventDays) {
+    const current = groupedEventDays.get(eventDay.weekIndex) ?? [];
+    current.push(eventDay);
+    groupedEventDays.set(eventDay.weekIndex, current);
+  }
+  if (groupedEventDays.size > 0) {
+    return Array.from(groupedEventDays.entries())
+      .sort((lhs, rhs) => lhs[0] - rhs[0])
+      .map(([weekIndex, days]) => {
+        const sortedDays = days.slice().sort((lhs, rhs) => lhs.date.getTime() - rhs.date.getTime());
+        return {
+          weekIndex,
+          label: sortedDays.find((item) => String(item.label || '').trim())?.label ?? null,
+          startDate: sortedDays[0].date,
+          endDate: sortedDays[sortedDays.length - 1].date,
+        };
+      });
+  }
+
+  if (snapshot.startDate && snapshot.endDate) {
+    return [{
+      weekIndex: 1,
+      label: null,
+      startDate: snapshot.startDate,
+      endDate: snapshot.endDate,
+    }];
+  }
+
+  return [];
+};
+
+const buildPosterDateSummary = (snapshot: EventPosterSnapshot, locale: SharePosterLocale): string => {
+  const ranges = buildPosterDateRanges(snapshot);
+  if (ranges.length === 0) {
+    return locale === 'zh' ? '待定' : 'TBA';
+  }
+  return ranges
+    .map((range) => {
+      const prefix = ranges.length > 1
+        ? (String(range.label || '').trim() || localizedWeekTitle(locale, range.weekIndex))
+        : null;
+      const body = formatPosterEventDateRange(range.startDate, range.endDate, locale, snapshot.timeZone);
+      return prefix ? `${prefix} ${body}` : body;
+    })
+    .join(' · ');
+};
+
+const buildPosterRows = (snapshot: EventPosterSnapshot, locale: SharePosterLocale): SharePosterSectionRow[] => {
+  const rows: SharePosterSectionRow[] = [
+    {
+      kind: 'full',
+      cell: {
+        label: locale === 'zh' ? '时间' : 'DATES',
+        value: buildPosterDateSummary(snapshot, locale),
+      },
+    },
+    {
+      kind: 'pair',
+      left: {
+        label: locale === 'zh' ? '阵容' : 'LINEUP',
+        value: locale === 'zh' ? `${Math.max(0, snapshot.artistCount)} 组艺人` : `${Math.max(0, snapshot.artistCount)} Artists`,
+      },
+      right: {
+        label: locale === 'zh' ? '时区' : 'TIME ZONE',
+        value: snapshot.timeZone || 'UTC',
+      },
+    },
+    {
+      kind: 'full',
+      cell: {
+        label: locale === 'zh' ? '地点' : 'VENUE',
+        value: snapshot.venue,
+      },
+    },
+  ];
+
+  if (snapshot.organizer?.trim()) {
+    rows.push({
+      kind: 'full',
+      cell: {
+        label: locale === 'zh' ? '主办方' : 'PRESENTED BY',
+        value: snapshot.organizer.trim(),
+      },
+    });
+  }
+
+  return rows;
+};
 
 const loadEventPosterSnapshot = async (
   prisma: any,
@@ -93,6 +215,23 @@ const loadEventPosterSnapshot = async (
       coverImageUrl: true,
       lineupImageUrl: true,
       imageAssets: true,
+      weeks: {
+        orderBy: [{ sortOrder: 'asc' }, { weekIndex: 'asc' }],
+        select: {
+          weekIndex: true,
+          label: true,
+          startDate: true,
+          endDate: true,
+        },
+      },
+      eventDays: {
+        orderBy: [{ sortOrder: 'asc' }, { overallDayIndex: 'asc' }],
+        select: {
+          weekIndex: true,
+          label: true,
+          date: true,
+        },
+      },
       wikiFestival: {
         select: {
           name: true,
@@ -119,149 +258,9 @@ const loadEventPosterSnapshot = async (
     timeZone: event.timeZone || 'UTC',
     artistCount: Math.max(0, Number(event._count?.canonicalArtists ?? 0)),
     imageUrl: resolveEventPosterBackgroundImageUrl(event) || shareLink.imageUrl || null,
+    weeks: Array.isArray(event.weeks) ? event.weeks : [],
+    eventDays: Array.isArray(event.eventDays) ? event.eventDays : [],
   };
-};
-
-const renderEventPosterSvg = async (
-  shareLink: any,
-  event: EventPosterSnapshot,
-  locale: SharePosterLocale
-): Promise<Buffer | null> => {
-  const copy = posterCopy(locale);
-  const qrDataUrl = await QRCode.toDataURL(buildShareShortUrl(shareLink.code), {
-    errorCorrectionLevel: 'H',
-    margin: 0,
-    width: 240,
-    color: {
-      dark: '#050505',
-      light: '#FFFFFFFF',
-    },
-  });
-  const heroImageDataUrl = await toImageDataUri(event.imageUrl, {
-    debugLabel: `event-access code=${shareLink.code}`,
-  });
-  const appIconDataUrl = getSharePosterAppIconDataUri();
-  const safeStart = svgEscape(formatPosterDate(event.startDate, event.timeZone, locale));
-  const safeEnd = svgEscape(formatPosterDate(event.endDate, event.timeZone, locale));
-  const safeDuration = svgEscape(formatPosterDurationLabel(event.startDate, event.endDate, event.timeZone, locale));
-  const safeLineup = svgEscape(locale === 'zh' ? `${Math.max(0, event.artistCount)} 组艺人` : `${Math.max(0, event.artistCount)} Artists`);
-  const safeVenueRaw = event.venue || (locale === 'zh' ? '待定' : 'Venue TBA');
-  const titleSource = locale === 'zh' ? (event.title || shareLink.title || '') : (event.title || shareLink.title || '').toUpperCase();
-  const titleFontSize = 28;
-  const titleMaxWidth = 278;
-  const titleLines = wrapPosterMixedText(titleSource, titleMaxWidth, titleFontSize, 3);
-  const titleLineHeight = 30;
-  const titleBottomY = 350;
-  const titleStartY = titleBottomY - (Math.max(titleLines.length, 1) - 1) * titleLineHeight;
-  const titleBlock = titleLines
-    .map((line, index) => {
-      const y = titleStartY + index * titleLineHeight;
-      return `<text x="25" y="${y}" font-family="${copy.titleFont}" font-weight="900" font-size="${titleFontSize}" letter-spacing="${locale === 'zh' ? '1.2' : '0.8'}" fill="#fff">${svgEscape(line)}</text>`;
-    })
-    .join('');
-  const durationMatch = safeDuration.match(/^(\d+)\s*(.*)$/);
-  const durationNumber = durationMatch?.[1] || safeDuration;
-  const durationUnit = durationMatch?.[2] || '';
-  const lineupMatch = safeLineup.match(/^(\d+)\s*(.*)$/);
-  const lineupNumber = lineupMatch?.[1] || safeLineup;
-  const lineupUnit = lineupMatch?.[2] || '';
-  const venueLines = wrapPosterMixedText(formatPosterVenueText(safeVenueRaw), 302, 16, 3);
-  const venueValueY = 492;
-  const venueLineHeight = 22;
-  const venueBottomY = venueValueY + (venueLines.length - 1) * venueLineHeight;
-  const organizerRaw = normalizeText(event.organizer);
-  const organizerLines = organizerRaw ? wrapPosterMixedText(organizerRaw, 338, 18, 3) : [];
-  const organizerLabelY = venueBottomY + 34;
-  const organizerValueY = organizerLabelY + 20;
-  const organizerLineHeight = 24;
-  const organizerBottomY = organizerLines.length > 0
-    ? organizerValueY + (organizerLines.length - 1) * organizerLineHeight
-    : venueBottomY;
-  const dividerY = (organizerLines.length > 0 ? organizerBottomY : venueBottomY) + 28;
-  const footerLine1Y = dividerY + 27;
-  const footerLine2Y = footerLine1Y + 19;
-  const qrSize = 72;
-  const qrX = 280;
-  const qrY = footerLine2Y - 14;
-  const qrIconBoxSize = 20;
-  const qrIconSize = 16;
-  const qrIconBoxX = qrX + (qrSize - qrIconBoxSize) / 2;
-  const qrIconBoxY = qrY + (qrSize - qrIconBoxSize) / 2;
-  const qrIconX = qrX + (qrSize - qrIconSize) / 2;
-  const qrIconY = qrY + (qrSize - qrIconSize) / 2;
-  const moreInfoLine1 = locale === 'zh' ? '更多活动与艺人信息请扫码查看' : 'SCAN FOR MORE EVENTS &';
-  const moreInfoLine2 = locale === 'zh' ? 'RaveHub App' : 'LINEUP INFO ON RAVEHUB APP';
-
-  const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="390" height="700" viewBox="0 0 390 700">
-  <defs>
-    <clipPath id="heroClip">
-      <rect x="0" y="60" width="390" height="300" />
-    </clipPath>
-    <linearGradient id="titleMask" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="52%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.82"/>
-    </linearGradient>
-  </defs>
-  <rect width="390" height="700" rx="30" fill="#0f0f11" stroke="#27272a" stroke-width="1"/>
-  <rect x="0" y="0" width="390" height="60" fill="rgba(255,255,255,0.03)"/>
-  <line x1="0" y1="60" x2="390" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-  <text x="25" y="38" font-family="${copy.titleFont}" font-size="16" fill="#d4d4d8" letter-spacing="4.3">RAVEHUB ACCESS</text>
-  <rect x="0" y="60" width="390" height="300" fill="#18181b"/>
-  ${heroImageDataUrl ? `<image href="${heroImageDataUrl}" x="0" y="60" width="390" height="300" preserveAspectRatio="xMidYMid slice" clip-path="url(#heroClip)" />` : ''}
-  <rect x="0" y="60" width="390" height="300" fill="url(#titleMask)"/>
-  <g>${titleBlock}</g>
-
-  <g font-family="${copy.bodyFont}">
-    <text x="25" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.start)}</text>
-    ${locale === 'zh'
-      ? renderZhDateText(event.startDate, event.timeZone, 25, 392, copy.bodyFont)
-      : `<text x="25" y="392" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeStart}</text>`}
-    <text x="200" y="372" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.end)}</text>
-    ${locale === 'zh'
-      ? renderZhDateText(event.endDate, event.timeZone, 200, 392, copy.bodyFont)
-      : `<text x="200" y="392" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeEnd}</text>`}
-    <text x="25" y="422" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.duration)}</text>
-    ${locale === 'zh'
-      ? renderZhNumberUnitText(durationNumber, durationUnit, 25, 442, copy.bodyFont)
-      : `<text x="25" y="442" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeDuration}</text>`}
-    <text x="200" y="422" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.lineup)}</text>
-    ${locale === 'zh'
-      ? renderZhNumberUnitText(lineupNumber, lineupUnit, 200, 442, copy.bodyFont)
-      : `<text x="200" y="442" font-size="18" fill="#e4e4e7" letter-spacing="1.08">${safeLineup}</text>`}
-    <text x="25" y="472" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.venue)}</text>
-    ${renderPosterTextBlock(venueLines, 25, venueValueY, copy.bodyFont, 16, venueLineHeight, '#e4e4e7', 0)}
-    ${organizerLines.length > 0 ? `
-    <text x="25" y="${organizerLabelY}" font-size="12" fill="#71717a" letter-spacing="${locale === 'zh' ? '1.2' : '3'}">${svgEscape(copy.presentedBy)}</text>
-    ${renderPosterTextBlock(organizerLines, 25, organizerValueY, copy.bodyFont, 18, organizerLineHeight, '#e4e4e7', 0)}` : ''}
-  </g>
-  <line x1="25" y1="${dividerY}" x2="365" y2="${dividerY}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-  <g font-family="${copy.bodyFont}">
-    <text x="25" y="${footerLine1Y}" font-weight="${locale === 'zh' ? '700' : '400'}" font-size="13" fill="#a1a1aa" letter-spacing="${locale === 'zh' ? '0.2' : '1.04'}">${svgEscape(moreInfoLine1)}</text>
-    <text x="25" y="${footerLine2Y}" font-family="${copy.titleFont}" font-size="14" fill="#a1a1aa" letter-spacing="0.72">${svgEscape(moreInfoLine2)}</text>
-  </g>
-  <rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" fill="#ffffff"/>
-  <image href="${qrDataUrl}" x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="none" />
-  ${
-    appIconDataUrl
-      ? `
-  <rect x="${qrIconBoxX}" y="${qrIconBoxY}" width="${qrIconBoxSize}" height="${qrIconBoxSize}" rx="4" fill="#ffffff"/>
-  <image href="${appIconDataUrl}" x="${qrIconX}" y="${qrIconY}" width="${qrIconSize}" height="${qrIconSize}" preserveAspectRatio="xMidYMid meet" />`
-      : ''
-  }
-</svg>`;
-  try {
-    const resvg = new Resvg(svg, {
-      fitTo: {
-        mode: 'width',
-        value: 780,
-      },
-    });
-    return Buffer.from(resvg.render().asPng());
-  } catch {
-    return null;
-  }
 };
 
 const drawEventAccessPassPoster = async (
@@ -306,7 +305,6 @@ const drawEventAccessPassPoster = async (
   const contentTop = heroBottom + 56;
   const leftColX = cardX + 40;
   const rightColX = cardX + 420;
-  const rowGap = 126;
   const drawLabelValue = (label: string, value: string, x: number, y: number, maxChars = 18, maxLines = 2): void => {
     drawText(png, label, x, y, 3, zinc500);
     wrapAsciiText(clampText(asciiText(value, 'TBA'), maxChars), maxChars, maxLines).forEach((line, index) => {
@@ -314,19 +312,29 @@ const drawEventAccessPassPoster = async (
     });
   };
 
-  drawLabelValue('START', formatPosterDate(event.startDate, event.timeZone, 'en'), leftColX, contentTop);
-  drawLabelValue('END', formatPosterDate(event.endDate, event.timeZone, 'en'), rightColX, contentTop);
-  drawLabelValue('DURATION', formatPosterDuration(event.startDate, event.endDate, event.timeZone), leftColX, contentTop + rowGap);
-  drawLabelValue('LINEUP', `${Math.max(0, event.artistCount)} ARTISTS`, rightColX, contentTop + rowGap);
-  drawLabelValue('VENUE', event.venue || 'VENUE TBA', leftColX, contentTop + rowGap * 2, 34, 3);
-  drawLabelValue('PRESENTED BY', event.organizer || 'RAVER', leftColX, contentTop + rowGap * 3, 34, 2);
+  const drawFullRow = (label: string, value: string, y: number, maxChars = 38, maxLines = 3): number => {
+    drawText(png, label, leftColX, y, 3, zinc500);
+    const lines = wrapAsciiText(clampText(asciiText(value, 'TBA'), maxChars), maxChars, maxLines);
+    lines.forEach((line, index) => {
+      drawText(png, line, leftColX, y + 42 + index * 32, 4, white);
+    });
+    return y + 42 + Math.max(0, lines.length - 1) * 32;
+  };
+
+  let cursorY = contentTop;
+  cursorY = drawFullRow('DATES', buildPosterDateSummary(event, 'en'), cursorY, 44, 3) + 54;
+  drawLabelValue('LINEUP', `${Math.max(0, event.artistCount)} ARTISTS`, leftColX, cursorY);
+  drawLabelValue('TIME ZONE', event.timeZone || 'UTC', rightColX, cursorY);
+  cursorY += 126;
+  cursorY = drawFullRow('VENUE', event.venue || 'VENUE TBA', cursorY, 34, 3) + 54;
+  cursorY = drawFullRow('PRESENTED BY', event.organizer || 'RAVER', cursorY, 34, 2) + 54;
 
   drawHorizontalLine(png, cardX + 40, cardY + cardHeight - 190, cardWidth - 80, 1, white, 24);
   drawText(png, 'RAVEHUB ACCESS', cardX + 40, cardY + cardHeight - 144, 3, zinc500);
   drawText(png, 'SCAN', cardX + 500, cardY + cardHeight - 144, 4, white);
   drawText(png, 'RAVEHUB APP', cardX + 500, cardY + cardHeight - 100, 3, zinc500);
 
-  const qr = await QRCode.create(buildShareShortUrl(shareLink.code), { errorCorrectionLevel: 'M' });
+  const qr = await QRCode.create(buildPosterQrText(shareLink.code), { errorCorrectionLevel: 'M' });
   const modules = qr.modules.size;
   const qrSize = 132;
   const cell = Math.max(2, Math.floor(qrSize / modules));
@@ -355,7 +363,20 @@ export const eventPosterHandler: SharePosterHandler = {
     console.info(
       `[share-poster] code=${context.shareLink.code} targetType=${context.shareLink.targetType} eventSnapshot loaded title="${snapshot.title}" imageUrl=${snapshot.imageUrl || 'none'}`
     );
-    const renderedPoster = await renderEventPosterSvg(context.shareLink, snapshot, context.locale);
+    const renderedPoster = await renderStructuredPosterSvg({
+      locale: context.locale,
+      title: snapshot.title,
+      imageUrl: snapshot.imageUrl,
+      debugLabel: `event-access code=${context.shareLink.code}`,
+      rows: buildPosterRows(snapshot, context.locale),
+      footerLine1:
+        context.locale === 'zh'
+          ? '扫码打开 RaveHub 查看活动时间、阵容与更多现场信息'
+          : 'SCAN TO OPEN RAVEHUB FOR EVENT DATES, LINEUP & MORE',
+      footerLine2: 'RaveHub App',
+      qrText: buildPosterQrText(context.shareLink.code),
+      mode: 'event_svg',
+    });
     if (renderedPoster) {
       console.info(
         `[share-poster] code=${context.shareLink.code} targetType=${context.shareLink.targetType} svg-render success bytes=${renderedPoster.length} imageUrl=${snapshot.imageUrl || 'none'}`

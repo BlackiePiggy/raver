@@ -15,6 +15,7 @@ import {
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
   incrementallyFillEventLineupFromTimetablePayload,
+  normalizeSubmittedEventScheduleContext,
 } from '../services/content-submission-event.service';
 import { createOrUpdateDJFromSubmission } from '../services/content-submission-dj.service';
 import {
@@ -31,12 +32,6 @@ import {
   attachContentSubmissionChangeSummary,
   changeSummaryTextFromPayload,
 } from '../services/content-submission-change-summary.service';
-import {
-  DEFAULT_EVENT_TIME_ZONE,
-  normalizeEventTimeZone,
-  parseEventDateInput,
-  startOfEventDay,
-} from '../utils/event-timezone';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -259,25 +254,16 @@ const normalizeEventSubmissionPayload = (payload: Prisma.InputJsonObject): Prism
   if (cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId)) {
     return payload;
   }
-  const timeZone = normalizeEventTimeZone(payload.timeZone ?? payload.timezone ?? payload.eventTimeZone ?? DEFAULT_EVENT_TIME_ZONE);
-  const startDateRaw = parseEventDateInput(payload.startDate, timeZone, 'start', payload.startTime);
-  const startDate = startDateRaw ? startOfEventDay(startDateRaw, timeZone) : null;
-  if (!startDate) return payload;
-  const dayRolloverHourRaw = Number(payload.dayRolloverHour);
-  const dayRolloverHour = Number.isFinite(dayRolloverHourRaw) ? Math.trunc(dayRolloverHourRaw) : 6;
+  const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
   const lineupSyncMode = cleanText(payload.lineupSyncMode)?.toLowerCase() || 'incremental_fill';
   const normalizedPayload = lineupSyncMode === 'exact_align'
     ? autoAlignEventLineupToTimetablePayload(
       payload as unknown as Prisma.JsonObject,
-      startDate,
-      dayRolloverHour,
-      timeZone
+      scheduleContext
     )
     : incrementallyFillEventLineupFromTimetablePayload(
     payload as unknown as Prisma.JsonObject,
-    startDate,
-    dayRolloverHour,
-    timeZone
+    scheduleContext
     );
   return normalizedPayload as unknown as Prisma.InputJsonObject;
 };

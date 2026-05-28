@@ -133,14 +133,32 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
 
   const now = executedAt;
   const until = new Date(now.getTime() + (SCHEDULER_CONFIG.maxDaysBeforeStart + 1) * 24 * 60 * 60 * 1000);
+  const todayDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const untilDate = new Date(Date.UTC(until.getUTCFullYear(), until.getUTCMonth(), until.getUTCDate(), 23, 59, 59, 999));
   const userRows = await prisma.$queryRaw<Array<{ userId: string }>>`
     SELECT DISTINCT uef.user_id AS "userId"
     FROM user_entity_follows uef
     INNER JOIN events e ON e.id = uef.target_id
     WHERE uef.relation_type = ${USER_ENTITY_RELATION_FAVORITE}
       AND uef.target_type = ${USER_ENTITY_TARGET_EVENT}
-      AND e.start_date >= ${now}
-      AND e.start_date <= ${until}
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM event_days ed
+          WHERE ed.event_id = e.id
+            AND ed.date >= ${todayDate}
+            AND ed.date <= ${untilDate}
+        )
+        OR (
+          NOT EXISTS (
+            SELECT 1
+            FROM event_days ed_any
+            WHERE ed_any.event_id = e.id
+          )
+          AND e.start_date >= ${now}
+          AND e.start_date <= ${until}
+        )
+      )
   `;
   const candidateUserIds = userRows.map((item) => item.userId.trim()).filter(Boolean);
   if (candidateUserIds.length === 0) {
@@ -203,7 +221,7 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
 
     const userEvents = eventsByUser.get(userId) ?? [];
     for (const item of userEvents) {
-      const eventParts = getLocalDateParts(item.eventStartDate, preference.timezone);
+      const eventParts = getLocalDateParts(item.eventAnchorDate, preference.timezone);
       const daysLeft = getDayIndex(eventParts) - getDayIndex(nowParts);
       if (daysLeft < 0 || daysLeft > preference.daysBeforeStart) {
         skippedByCountdownWindow += 1;
@@ -214,7 +232,7 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
       const dedupeKey = `event_countdown:${userId}:${item.eventId}:${formatLocalDateKey(nowParts)}:${toTwoDigits(nowParts.hour)}`;
       const message = buildEventCountdownMessage({
         eventName: item.eventName,
-        eventStartDate: item.eventStartDate,
+        eventStartDate: item.eventAnchorDate,
         daysLeft,
         timezone: preference.timezone,
       });
@@ -232,6 +250,7 @@ export const runEventCountdownJob = async (): Promise<EventCountdownJobReport> =
             metadata: {
               eventId: item.eventId,
               eventName: item.eventName,
+              eventAnchorDate: item.eventAnchorDate.toISOString(),
               eventStartDate: item.eventStartDate.toISOString(),
               daysLeft,
               timezone: preference.timezone,

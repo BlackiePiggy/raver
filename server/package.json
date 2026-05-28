@@ -69,6 +69,7 @@
     "auth:env:lint": "ts-node src/scripts/auth-env-lint.ts",
     "phase5:canonical:regression": "ts-node src/scripts/phase5-canonical-regression.ts",
     "events:incremental-sync:regression": "ts-node src/scripts/event-incremental-sync-regression.ts",
+    "events:multi-week:eventday:guardrails": "ts-node src/scripts/event-multi-week-eventday-guardrails.ts",
     "djs:edit-submission:regression": "ts-node src/scripts/dj-edit-submission-regression.ts",
     "events:timetable-timezone:guardrails": "ts-node src/scripts/event-timetable-timezone-guardrails.ts",
     "phase5:query-plan-check": "ts-node src/scripts/phase5-query-plan-check.ts",

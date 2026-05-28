@@ -110,6 +110,10 @@
 		5198523BA938BE9A9A46F62D /* EventCalendarSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB9FDAB6A078D8DA5D4D4CA /* EventCalendarSupport.swift */; };
 		52C774537586654443FC053E /* WidgetSelectableEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463A12852FFF3990B4365EF3 /* WidgetSelectableEvent.swift */; };
 		54EABF0CA767B2078DB9C57E /* AuthSessionPersistenceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03EA4F5C1D737CDBD1765A8E /* AuthSessionPersistenceUITests.swift */; };
+		E10000000000000000000001 /* AuthenticatedRequestRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000011 /* AuthenticatedRequestRunnerTests.swift */; };
+		E10000000000000000000002 /* EventUploadMultiWeekModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000012 /* EventUploadMultiWeekModelTests.swift */; };
+		E10000000000000000000003 /* EventTimetableAIParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000014 /* EventTimetableAIParsingTests.swift */; };
+		E10000000000000000000004 /* EventMultiWeekDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000015 /* EventMultiWeekDisplayTests.swift */; };
 		565B0214E22C5749C21D9CFD /* DemoAlignedMessageActionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BD18A9B470F76904EAF6C7 /* DemoAlignedMessageActionCoordinator.swift */; };
 		574145A62A35EB2914B40B2F /* ScreenStatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0EB5E9CFF5CEA0F744C752 /* ScreenStatusBanner.swift */; };
 		594F598F2069B4C7FD3F4D27 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC80DEFB4FDFD2BCD1A33280 /* NotificationService.swift */; };
@@ -353,6 +357,10 @@
 		029F1F7A11F8D9328FC2637E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		02D93C1E9013AE51657CE508 /* MessagesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesHomeView.swift; sourceTree = "<group>"; };
 		03EA4F5C1D737CDBD1765A8E /* AuthSessionPersistenceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionPersistenceUITests.swift; sourceTree = "<group>"; };
+		E10000000000000000000011 /* AuthenticatedRequestRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedRequestRunnerTests.swift; sourceTree = "<group>"; };
+		E10000000000000000000012 /* EventUploadMultiWeekModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventUploadMultiWeekModelTests.swift; sourceTree = "<group>"; };
+		E10000000000000000000014 /* EventTimetableAIParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTimetableAIParsingTests.swift; sourceTree = "<group>"; };
+		E10000000000000000000015 /* EventMultiWeekDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventMultiWeekDisplayTests.swift; sourceTree = "<group>"; };
 		0455E7D49C4AE2156B071CA3 /* EventUploadValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventUploadValidation.swift; sourceTree = "<group>"; };
 		07D4EBEBADD9F1E279111DD4 /* RaverCountdownWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaverCountdownWidgetsBundle.swift; sourceTree = "<group>"; };
 		090609342528238FF0997BE8 /* giphy-ios-sdk */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "giphy-ios-sdk"; path = "../../../thirdparty/giphy-ios-sdk"; sourceTree = SOURCE_ROOT; };
@@ -499,6 +507,7 @@
 		7E13ABD9EE466C03068DACF1 /* CountdownEventIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountdownEventIntent.swift; sourceTree = "<group>"; };
 		7EB503129A9F0EC63082A268 /* DemoAlignedKeyboardLifecycleCoordinatorFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAlignedKeyboardLifecycleCoordinatorFactory.swift; sourceTree = "<group>"; };
 		7EE330E87B3415432AE414B2 /* RaverMVPUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RaverMVPUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E10000000000000000000013 /* RaverMVPTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RaverMVPTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		811754DF6FF08109699FCD1A /* DiscoverNewsCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverNewsCodec.swift; sourceTree = "<group>"; };
 		8197B67B29199AA1D1225ECC /* SetsModuleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetsModuleView.swift; sourceTree = "<group>"; };
 		827E08CDDD4A425AA82C6C72 /* Pods-RaverMVP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RaverMVP.release.xcconfig"; path = "Target Support Files/Pods-RaverMVP/Pods-RaverMVP.release.xcconfig"; sourceTree = "<group>"; };
@@ -740,6 +749,7 @@
 			children = (
 				12681E3DE969D5F5A96950EC /* RaverCountdownWidgets.appex */,
 				AF5B0FC75B939A24178606E6 /* RaverMVP.app */,
+				E10000000000000000000013 /* RaverMVPTests.xctest */,
 				7EE330E87B3415432AE414B2 /* RaverMVPUITests.xctest */,
 				37D09674854B1606E2D0363F /* RaverNotificationService.appex */,
 			);
@@ -1317,6 +1327,7 @@
 				DF50F6082BF409D8463E9EBA /* Packages */,
 				DE83C05093F2297C1AEA2A37 /* RaverCountdownWidgets */,
 				CAB2EA925828AE23AE9BD5C9 /* RaverMVP */,
+				E10000000000000000000021 /* RaverMVPTests */,
 				CC2FB6E17A30543424A4247A /* RaverMVPUITests */,
 				12FD107ABE094DB46F15705F /* RaverNotificationService */,
 				BC52FFFB3B7AC4DFF4F08D76 /* Widget */,
@@ -1518,6 +1529,17 @@
 			path = RaverMVPUITests;
 			sourceTree = "<group>";
 		};
+		E10000000000000000000021 /* RaverMVPTests */ = {
+			isa = PBXGroup;
+			children = (
+				E10000000000000000000011 /* AuthenticatedRequestRunnerTests.swift */,
+				E10000000000000000000012 /* EventUploadMultiWeekModelTests.swift */,
+				E10000000000000000000014 /* EventTimetableAIParsingTests.swift */,
+				E10000000000000000000015 /* EventMultiWeekDisplayTests.swift */,
+			);
+			path = RaverMVPTests;
+			sourceTree = "<group>";
+		};
 		CFBEA19379170D5BCD34C561 /* RatingEditors */ = {
 			isa = PBXGroup;
 			children = (
@@ -1700,6 +1722,22 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		E10000000000000000000031 /* RaverMVPTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E10000000000000000000071 /* Build configuration list for PBXNativeTarget "RaverMVPTests" */;
+			buildPhases = (
+				E10000000000000000000041 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E10000000000000000000051 /* PBXTargetDependency */,
+			);
+			name = RaverMVPTests;
+			productName = RaverMVPTests;
+			productReference = E10000000000000000000013 /* RaverMVPTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		04BBDDA62D906013E8909A71 /* RaverMVPUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1CF647BB636A5ED3D650976E /* Build configuration list for PBXNativeTarget "RaverMVPUITests" */;
@@ -1820,6 +1858,7 @@
 			targets = (
 				B0803E54265F78B2A57966B9 /* RaverCountdownWidgets */,
 				56189630DAD342F274176A46 /* RaverMVP */,
+				E10000000000000000000031 /* RaverMVPTests */,
 				04BBDDA62D906013E8909A71 /* RaverMVPUITests */,
 				58B794C77D0045A08B377FA6 /* RaverNotificationService */,
 			);
@@ -1935,6 +1974,17 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		E10000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E10000000000000000000001 /* AuthenticatedRequestRunnerTests.swift in Sources */,
+				E10000000000000000000002 /* EventUploadMultiWeekModelTests.swift in Sources */,
+				E10000000000000000000003 /* EventTimetableAIParsingTests.swift in Sources */,
+				E10000000000000000000004 /* EventMultiWeekDisplayTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1C79F5A9FF20FE586ED68150 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2265,6 +2315,11 @@
 			target = 56189630DAD342F274176A46 /* RaverMVP */;
 			targetProxy = 6EE735A8DABFBDE699462D3D /* PBXContainerItemProxy */;
 		};
+		E10000000000000000000051 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 56189630DAD342F274176A46 /* RaverMVP */;
+			targetProxy = 6EE735A8DABFBDE699462D3D /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -2527,6 +2582,44 @@
 			};
 			name = Release;
 		};
+		E10000000000000000000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.raver.mvp.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RaverMVP.app/RaverMVP";
+				TEST_TARGET_NAME = RaverMVP;
+			};
+			name = Debug;
+		};
+		E10000000000000000000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.raver.mvp.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RaverMVP.app/RaverMVP";
+				TEST_TARGET_NAME = RaverMVP;
+			};
+			name = Release;
+		};
 		F4DF6D0A9CC7090873F18628 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2562,6 +2655,15 @@
 			buildConfigurations = (
 				CF674CFDF99741795CFA4A27 /* Debug */,
 				6B969124B8643A5CDEA473AB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E10000000000000000000071 /* Build configuration list for PBXNativeTarget "RaverMVPTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E10000000000000000000061 /* Debug */,
+				E10000000000000000000062 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

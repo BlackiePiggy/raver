@@ -97,6 +97,22 @@ function reviewFormatDate(value) {
   return date.toLocaleString();
 }
 
+function reviewFormatDateOnly(value) {
+  const text = reviewText(value);
+  if (!text) return '';
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch (_error) {
+    return text;
+  }
+}
+
 function reviewFormatDateInZone(date, timeZone) {
   try {
     return new Intl.DateTimeFormat('zh-CN', {
@@ -112,6 +128,72 @@ function reviewFormatDateInZone(date, timeZone) {
   } catch (_error) {
     return '';
   }
+}
+
+function reviewEventDateRanges(payload) {
+  const rawWeeks = Array.isArray(payload?.weeks) ? payload.weeks : [];
+  const rawEventDays = Array.isArray(payload?.eventDays) ? payload.eventDays : [];
+  const weeks = rawWeeks
+    .map((item) => ({
+      weekIndex: Number(item?.weekIndex),
+      label: reviewText(item?.label),
+      startDate: reviewText(item?.startDate),
+      endDate: reviewText(item?.endDate),
+    }))
+    .filter((item) => Number.isFinite(item.weekIndex) && item.startDate && item.endDate)
+    .sort((left, right) => left.weekIndex - right.weekIndex || left.startDate.localeCompare(right.startDate));
+  if (weeks.length) {
+    return weeks.map((item) => ({
+      weekIndex: item.weekIndex,
+      label: item.label,
+      startDate: item.startDate,
+      endDate: item.endDate,
+    }));
+  }
+
+  const groupedDays = new Map();
+  rawEventDays.forEach((item) => {
+    const weekIndex = Number(item?.weekIndex);
+    const date = reviewText(item?.date);
+    if (!Number.isFinite(weekIndex) || !date) return;
+    const current = groupedDays.get(weekIndex) || [];
+    current.push({
+      label: reviewText(item?.label),
+      date,
+    });
+    groupedDays.set(weekIndex, current);
+  });
+  if (!groupedDays.size) return [];
+  return Array.from(groupedDays.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([weekIndex, rows]) => {
+      const sortedRows = rows.slice().sort((left, right) => left.date.localeCompare(right.date));
+      return {
+        weekIndex,
+        label: sortedRows.find((item) => item.label)?.label || '',
+        startDate: sortedRows[0]?.date || '',
+        endDate: sortedRows[sortedRows.length - 1]?.date || '',
+      };
+    })
+    .filter((item) => item.startDate && item.endDate);
+}
+
+function reviewEventDateSummary(payload) {
+  const ranges = reviewEventDateRanges(payload);
+  if (ranges.length) {
+    return ranges.map((item) => {
+      const prefix = ranges.length > 1
+        ? (item.label || `第 ${item.weekIndex} 周`)
+        : '';
+      const bodyStart = reviewFormatDateOnly(item.startDate);
+      const bodyEnd = reviewFormatDateOnly(item.endDate);
+      const body = bodyStart && bodyEnd && bodyStart !== bodyEnd
+        ? `${bodyStart} - ${bodyEnd}`
+        : (bodyStart || bodyEnd);
+      return [prefix, body].filter(Boolean).join(' ');
+    }).filter(Boolean).join(' · ');
+  }
+  return reviewText(payload?.startDate || payload?.displayPublishedAt || '');
 }
 
 function reviewIsDateField(fieldKey) {
@@ -763,10 +845,11 @@ function renderReviewPreview(submission) {
     || reviewArray(payload.images)[0]
     || '';
   const title = reviewText(submission?.title) || reviewText(payload.name) || reviewText(payload.title) || '未命名内容';
+  const eventDateSummary = entityType === 'event' ? reviewEventDateSummary(payload) : '';
   const subtitle = [
     REVIEW_ENTITY_LABELS[entityType] || entityType,
     reviewText(payload.city || payload.country || payload.source || payload.category),
-    reviewText(payload.startDate || payload.displayPublishedAt),
+    eventDateSummary || reviewText(payload.startDate || payload.displayPublishedAt),
   ].filter(Boolean).join(' · ');
   return `
     <article class="review-rendered-card review-rendered-${escapeHtml(entityType)}">
@@ -901,7 +984,12 @@ function renderReviewList() {
       <button class="review-list-item" type="button" onclick="selectReviewSubmission('${escapeHtml(item.id)}')">
         <span class="review-list-type">${escapeHtml(REVIEW_ENTITY_LABELS[item.entityType || 'dj_enrichment'] || item.entityType || 'dj_enrichment')}</span>
         <strong>${escapeHtml(item.title || item.inputName || '未命名内容')}</strong>
-        <span>${escapeHtml(item.submitter?.displayName || item.submitter?.username || item.submitterId || item.job?.requestedById || '—')}</span>
+        <span>${escapeHtml([
+          item.submitter?.displayName || item.submitter?.username || item.submitterId || item.job?.requestedById || '—',
+          item.entityType === 'event'
+            ? reviewEventDateSummary(item?.payload && typeof item.payload === 'object' ? item.payload : {})
+            : '',
+        ].filter(Boolean).join(' · '))}</span>
         <small>
           ${reviewPageState.sourceFilter === 'dj_enrichment' ? `<b>${escapeHtml(REVIEW_PROCESSING_STATUS_LABELS[item.processingStatus || item.status] || item.processingStatus || item.status || '—')}</b> · ` : ''}
           ${escapeHtml(reviewFormatDate(item.createdAt))}

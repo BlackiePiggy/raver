@@ -4,7 +4,7 @@ enum RaverWidgetConstants {
     static let appGroupIdentifier = "group.com.raver.mvp"
     static let countdownDirectoryName = "WidgetCountdown"
     static let countdownSnapshotFilename = "events.json"
-    static let countdownSchemaVersion = 1
+    static let countdownSchemaVersion = 2
     static let eventDeeplinkScheme = "raver"
 }
 
@@ -24,6 +24,14 @@ enum WidgetCountdownLayoutStyle: String, Codable, CaseIterable, Hashable, Identi
     }
 }
 
+struct WidgetCountdownDateRange: Codable, Hashable, Identifiable {
+    let id: String
+    let weekIndex: Int
+    let label: String?
+    let startDate: Date
+    let endDate: Date
+}
+
 struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
     let id: String
     let name: String
@@ -32,6 +40,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
     let venueName: String?
     let startDate: Date
     let endDate: Date
+    let dateRanges: [WidgetCountdownDateRange]
     let preferredBackgroundURL: String?
     let cachedBackgroundImageRelativePath: String?
     let addedAt: Date
@@ -44,6 +53,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
         venueName: String?,
         startDate: Date,
         endDate: Date,
+        dateRanges: [WidgetCountdownDateRange] = [],
         preferredBackgroundURL: String?,
         cachedBackgroundImageRelativePath: String?,
         addedAt: Date
@@ -55,6 +65,15 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
         self.venueName = venueName
         self.startDate = startDate
         self.endDate = endDate < startDate ? startDate : endDate
+        self.dateRanges = dateRanges.isEmpty ? [
+            WidgetCountdownDateRange(
+                id: "\(id)-default-range",
+                weekIndex: 1,
+                label: nil,
+                startDate: startDate,
+                endDate: endDate < startDate ? startDate : endDate
+            )
+        ] : dateRanges
         self.preferredBackgroundURL = preferredBackgroundURL
         self.cachedBackgroundImageRelativePath = cachedBackgroundImageRelativePath
         self.addedAt = addedAt
@@ -68,6 +87,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
         case venueName
         case startDate
         case endDate
+        case dateRanges
         case preferredBackgroundURL
         case cachedBackgroundImageRelativePath
         case addedAt
@@ -88,6 +108,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
             venueName: try container.decodeIfPresent(String.self, forKey: .venueName),
             startDate: startDate,
             endDate: decodedEndDate,
+            dateRanges: try container.decodeIfPresent([WidgetCountdownDateRange].self, forKey: .dateRanges) ?? [],
             preferredBackgroundURL: try container.decodeIfPresent(String.self, forKey: .preferredBackgroundURL),
             cachedBackgroundImageRelativePath: try container.decodeIfPresent(String.self, forKey: .cachedBackgroundImageRelativePath),
             addedAt: try container.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
@@ -98,6 +119,22 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
 extension WidgetCountdownEvent {
     var displayName: String {
         customDisplayName ?? name
+    }
+
+    var normalizedDateRanges: [WidgetCountdownDateRange] {
+        let fallbackRange = WidgetCountdownDateRange(
+            id: "\(id)-fallback-range",
+            weekIndex: 1,
+            label: nil,
+            startDate: startDate,
+            endDate: endDate < startDate ? startDate : endDate
+        )
+        let ranges = dateRanges.isEmpty ? [fallbackRange] : dateRanges
+        return ranges.sorted {
+            if $0.startDate != $1.startDate { return $0.startDate < $1.startDate }
+            if $0.weekIndex != $1.weekIndex { return $0.weekIndex < $1.weekIndex }
+            return $0.id < $1.id
+        }
     }
 }
 

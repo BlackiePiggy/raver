@@ -175,6 +175,11 @@ enum EventUploadSlotDayOffset: Int, CaseIterable, Identifiable, Codable {
 struct EventUploadLineupSlotDraft: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
     var canonicalSlotId: String? = nil
+    var eventDayId: String? = nil
+    var weekIndex: Int = 1
+    var dayIndexInWeek: Int = 1
+    var overallDayIndex: Int = 1
+    var localDate: Date? = nil
     var actType: EventLineupActType = .solo
     var performerNames: [String] = [""]
     var performerDJIDs: [String?] = [nil]
@@ -242,8 +247,11 @@ struct EventUploadLineupOnlySlotDraft: Identifiable, Hashable, Codable {
 
 struct EventUploadTimetableAIEditableSlot: Identifiable, Hashable {
     var id: UUID = UUID()
+    var eventDayId: String?
     var weekIndex: Int
-    var dayIndex: Int
+    var dayIndexInWeek: Int
+    var overallDayIndex: Int
+    var localDate: String?
     var dayLabel: String
     var stageName: String
     var actType: EventLineupActType
@@ -344,6 +352,8 @@ struct EventUploadDraft: Hashable, Codable {
     var detailAddress = EventUploadLocalizedFields()
     var startDate = Date()
     var endDate = Date()
+    var canonicalSchedule: WebEventSchedule? = nil
+    var canonicalWeeks: [WebEventWeek]? = nil
     var weekRanges: [EventUploadWeekRangeDraft] = [
         EventUploadWeekRangeDraft(startDate: Date(), endDate: Date())
     ]
@@ -367,7 +377,9 @@ struct EventUploadDraft: Hashable, Codable {
     var updatedAt: Date? = Date()
 
     static func create() -> EventUploadDraft {
-        EventUploadDraft()
+        var draft = EventUploadDraft()
+        draft.rebuildStructuredScheduleBindings()
+        return draft
     }
 
     static func edit(event: WebEvent) -> EventUploadDraft {
@@ -378,7 +390,7 @@ struct EventUploadDraft: Hashable, Codable {
             ja: event.nameI18n?.ja ?? ""
         )
         draft.abbreviation = event.abbreviation ?? ""
-        draft.description = EventWeekScheduleMode.stripMarker(from: event.description)
+        draft.description = event.description ?? ""
         draft.eventType = event.eventType ?? ""
         draft.organizerFestivalID = event.wikiFestivalId ?? event.wikiFestival?.id
         draft.organizerName = event.wikiFestival?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
@@ -411,13 +423,48 @@ struct EventUploadDraft: Hashable, Codable {
         let normalizedEndDate = event.endDate.normalizedEventArchiveDate(in: eventTimeZone)
         draft.startDate = normalizedStartDate
         draft.endDate = normalizedEndDate
-        draft.weekRanges = [EventUploadWeekRangeDraft(startDate: normalizedStartDate, endDate: normalizedEndDate)]
         var eventCalendar = Calendar(identifier: .gregorian)
         eventCalendar.timeZone = eventTimeZone
-        if EventWeekScheduleMode.isEnabled(in: event.description) {
-            draft.scheduleMode = .multiWeek
-        } else {
-            draft.scheduleMode = eventCalendar.isDate(normalizedStartDate, inSameDayAs: normalizedEndDate) ? .singleDay : .multiDay
+        let normalizedWeeks = event.weeks
+            .sorted { $0.weekIndex < $1.weekIndex }
+            .map {
+                EventUploadWeekRangeDraft(
+                    startDate: $0.startDate.normalizedEventArchiveDate(in: eventTimeZone),
+                    endDate: $0.endDate.normalizedEventArchiveDate(in: eventTimeZone)
+                )
+            }
+        let inferredScheduleMode: EventUploadScheduleMode
+        switch event.schedule?.mode {
+        case "multi_week":
+            inferredScheduleMode = .multiWeek
+        case "multi_day":
+            inferredScheduleMode = .multiDay
+        case "single_day":
+            inferredScheduleMode = .singleDay
+        default:
+            if event.weeks.count > 1 {
+                inferredScheduleMode = .multiWeek
+            } else {
+                inferredScheduleMode = eventCalendar.isDate(normalizedStartDate, inSameDayAs: normalizedEndDate) ? .singleDay : .multiDay
+            }
+        }
+        draft.canonicalSchedule = WebEventSchedule(
+            mode: inferredScheduleMode.structuredModeRawValue,
+            timeZone: draft.timeZoneIdentifier,
+            dayRolloverHour: draft.dayRolloverHour
+        )
+        draft.canonicalWeeks = (normalizedWeeks.isEmpty
+            ? [EventUploadWeekRangeDraft(startDate: normalizedStartDate, endDate: normalizedEndDate)]
+            : normalizedWeeks
+        ).enumerated().map { index, range in
+            WebEventWeek(
+                id: event.weeks.indices.contains(index) ? event.weeks[index].id : "draft-week-\(index + 1)",
+                weekIndex: index + 1,
+                label: inferredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                startDate: range.startDate,
+                endDate: range.endDate,
+                sortOrder: index + 1
+            )
         }
         if let eventTimeZoneID = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines), !eventTimeZoneID.isEmpty {
             let localizedCityEn = event.cityI18n?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -453,6 +500,7 @@ struct EventUploadDraft: Hashable, Codable {
             )
         }
         draft.dayRolloverHour = event.dayRolloverHour ?? 6
+        draft.canonicalSchedule?.dayRolloverHour = draft.dayRolloverHour
         draft.latitude = event.latitude ?? event.locationPoint?.location?.lat
         draft.longitude = event.longitude ?? event.locationPoint?.location?.lng
         draft.pickedMapAddress = event.locationPoint?.formattedAddressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
@@ -482,6 +530,8 @@ struct EventUploadDraft: Hashable, Codable {
             tiers: fallbackTicketTiers
         )
         draft.ticketNotes = event.ticketNotes ?? ""
+        draft.syncCanonicalScheduleStorage()
+        draft.rebuildStructuredScheduleBindings()
         draft.hydrateTimetableSlots(from: event)
         draft.hydrateLineupOnlySlots(from: event)
         draft.incrementalBaseline = IncrementalBaseline(
@@ -550,18 +600,40 @@ struct EventUploadDraft: Hashable, Codable {
             return lhs.startTime < rhs.startTime
         }
         let eventTimeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        let resolution = structuredEventDayResolution()
         timetableSlots = parsedSlots.map { slot in
             let act = EventLineupActCodec.parse(slot: slot)
+            let resolvedEventDay = resolveStructuredEventDay(
+                eventDayId: slot.eventDayId,
+                weekIndex: slot.weekIndex,
+                dayIndexInWeek: slot.dayIndexInWeek,
+                overallDayIndex: slot.overallDayIndex,
+                localDate: slot.localDate,
+                resolution: resolution
+            )
             var draftSlot = EventUploadLineupSlotDraft(
                 canonicalSlotId: slot.id,
+                eventDayId: resolvedEventDay?.eventDayId ?? slot.eventDayId,
+                weekIndex: resolvedEventDay?.weekIndex ?? slot.weekIndex ?? 1,
+                dayIndexInWeek: resolvedEventDay?.dayIndexInWeek ?? slot.dayIndexInWeek ?? 1,
+                overallDayIndex: resolvedEventDay?.overallDayIndex ?? slot.overallDayIndex ?? 1,
+                localDate: resolvedEventDay?.date ?? slot.localDate,
                 actType: act.type,
                 performerNames: act.performers.map(\.name),
                 performerDJIDs: act.performers.map(\.djID),
                 performerAvatarURLs: act.performers.map(\.avatarUrl),
                 stageName: slot.stageName ?? "",
-                dayIndex: slot.festivalDayIndex ?? 1,
-                startDayOffset: EventUploadDraft.slotDayOffset(for: slot.startTime, dayIndex: slot.festivalDayIndex ?? 1, eventStartDate: startDate, timeZone: eventTimeZone),
-                endDayOffset: EventUploadDraft.slotDayOffset(for: slot.endTime, dayIndex: slot.festivalDayIndex ?? 1, eventStartDate: startDate, timeZone: eventTimeZone),
+                dayIndex: resolvedEventDay?.overallDayIndex ?? slot.overallDayIndex ?? 1,
+                startDayOffset: EventUploadDraft.slotDayOffset(
+                    for: slot.startTime,
+                    logicalDate: resolvedEventDay?.date ?? slot.localDate ?? startDate,
+                    timeZone: eventTimeZone
+                ),
+                endDayOffset: EventUploadDraft.slotDayOffset(
+                    for: slot.endTime,
+                    logicalDate: resolvedEventDay?.date ?? slot.localDate ?? startDate,
+                    timeZone: eventTimeZone
+                ),
                 startTime: slot.startTime,
                 endTime: slot.endTime
             )
@@ -582,10 +654,10 @@ struct EventUploadDraft: Hashable, Codable {
         }
     }
 
-    private static func slotDayOffset(for date: Date, dayIndex: Int, eventStartDate: Date, timeZone: TimeZone) -> EventUploadSlotDayOffset {
+    private static func slotDayOffset(for date: Date, logicalDate: Date, timeZone: TimeZone) -> EventUploadSlotDayOffset {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let logicalDay = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0), to: calendar.startOfDay(for: eventStartDate)) ?? eventStartDate
+        let logicalDay = calendar.startOfDay(for: logicalDate)
         let offset = calendar.dateComponents([.day], from: calendar.startOfDay(for: logicalDay), to: calendar.startOfDay(for: date)).day ?? 0
         return offset > 0 ? .nextDay : .sameDay
     }
@@ -653,10 +725,15 @@ struct EventUploadDraft: Hashable, Codable {
                         memberDjIds: slot.memberDjIds,
                         memberNames: slot.memberNames
                     )] ?? nil,
+                    eventDayId: slot.eventDayId,
+                    weekIndex: slot.weekIndex,
+                    dayIndexInWeek: slot.dayIndexInWeek,
+                    overallDayIndex: slot.overallDayIndex,
+                    localDate: slot.localDate,
                     djId: slot.djId,
                     memberDjIds: slot.memberDjIds,
                     memberNames: slot.memberNames,
-                    festivalDayIndex: slot.festivalDayIndex,
+                    festivalDayIndex: nil,
                     djName: slot.djName,
                     stageName: slot.stageName,
                     sortOrder: slot.sortOrder,
@@ -692,6 +769,458 @@ struct EventUploadDraft: Hashable, Codable {
         }
         return "name:\(djName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
+
+    var structuredSchedule: WebEventSchedule {
+        canonicalSchedule ?? WebEventSchedule(
+            mode: structuredScheduleMode.rawValue,
+            timeZone: timeZoneIdentifier,
+            dayRolloverHour: dayRolloverHour
+        )
+    }
+
+    var structuredWeeks: [WebEventWeek] {
+        if let canonicalWeeks = normalizedCanonicalWeeks(), !canonicalWeeks.isEmpty {
+            return canonicalWeeks
+        }
+        let normalizedRanges = normalizedWeekRanges()
+        return normalizedRanges.enumerated().map { index, range in
+            WebEventWeek(
+                id: "draft-week-\(index + 1)",
+                weekIndex: index + 1,
+                label: structuredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                startDate: range.startDate,
+                endDate: range.endDate,
+                sortOrder: index + 1
+            )
+        }
+    }
+
+    var structuredEventDays: [WebEventDay] {
+        let calendar = Calendar.eventCalendar(timeZone: TimeZone(identifier: timeZoneIdentifier) ?? .current)
+        var days: [WebEventDay] = []
+        var overallDayIndex = 1
+        for week in structuredWeeks {
+            var cursor = calendar.startOfDay(for: week.startDate)
+            let end = calendar.startOfDay(for: week.endDate)
+            var dayIndexInWeek = 1
+            while cursor <= end {
+                let weekday = Self.weekdayKey(for: cursor, timeZone: TimeZone(identifier: timeZoneIdentifier) ?? .current)
+                let label: String?
+                if structuredScheduleMode == .multiWeek {
+                    label = "Weekend \(week.weekIndex) \(Self.weekdayDisplayName(for: weekday))"
+                } else {
+                    label = Self.weekdayDisplayName(for: weekday)
+                }
+                days.append(
+                    WebEventDay(
+                        id: "draft-\(Self.eventDayIdentifier(weekIndex: week.weekIndex, dayIndexInWeek: dayIndexInWeek, overallDayIndex: overallDayIndex, mode: structuredScheduleMode))",
+                        eventDayId: Self.eventDayIdentifier(weekIndex: week.weekIndex, dayIndexInWeek: dayIndexInWeek, overallDayIndex: overallDayIndex, mode: structuredScheduleMode),
+                        weekIndex: week.weekIndex,
+                        dayIndexInWeek: dayIndexInWeek,
+                        overallDayIndex: overallDayIndex,
+                        label: label,
+                        weekday: weekday,
+                        date: cursor,
+                        sortOrder: overallDayIndex
+                    )
+                )
+                overallDayIndex += 1
+                dayIndexInWeek += 1
+                cursor = calendar.date(byAdding: .day, value: 1, to: cursor) ?? cursor.addingTimeInterval(86_400)
+            }
+        }
+        return days
+    }
+
+    mutating func rebuildStructuredScheduleBindings() {
+        syncCanonicalScheduleStorage()
+        let eventDays = structuredEventDays
+        if let first = eventDays.first {
+            startDate = first.date.normalizedEventArchiveDate(in: TimeZone(identifier: timeZoneIdentifier) ?? .current)
+        }
+        if let last = eventDays.last {
+            endDate = last.date.normalizedEventArchiveDate(in: TimeZone(identifier: timeZoneIdentifier) ?? .current)
+        }
+        let resolution = structuredEventDayResolution(eventDays: eventDays)
+        timetableSlots = timetableSlots.map { slot in
+            var next = slot
+            let resolved = resolveStructuredEventDay(
+                eventDayId: slot.eventDayId,
+                weekIndex: slot.weekIndex,
+                dayIndexInWeek: slot.dayIndexInWeek,
+                overallDayIndex: max(slot.overallDayIndex, slot.dayIndex),
+                localDate: slot.localDate,
+                resolution: resolution
+            ) ?? eventDays.first
+            if let resolved {
+                next.eventDayId = resolved.eventDayId
+                next.weekIndex = resolved.weekIndex
+                next.dayIndexInWeek = resolved.dayIndexInWeek
+                next.overallDayIndex = resolved.overallDayIndex
+                next.dayIndex = resolved.overallDayIndex
+                next.localDate = resolved.date
+            }
+            return next
+        }
+        syncLegacyScheduleViewsFromStructured()
+    }
+
+    func eventDay(forOverallDayIndex overallDayIndex: Int) -> WebEventDay? {
+        structuredEventDays.first(where: { $0.overallDayIndex == overallDayIndex })
+    }
+
+    func eventDay(forID eventDayId: String?) -> WebEventDay? {
+        guard let eventDayId else { return nil }
+        return structuredEventDays.first(where: { $0.eventDayId == eventDayId })
+    }
+
+    mutating func applyScheduleMode(_ mode: EventUploadScheduleMode) {
+        canonicalSchedule = WebEventSchedule(
+            mode: mode.structuredModeRawValue,
+            timeZone: timeZoneIdentifier,
+            dayRolloverHour: dayRolloverHour
+        )
+        syncCanonicalScheduleStorage()
+        syncLegacyScheduleViewsFromStructured()
+    }
+
+    mutating func applyDateBounds(startDate: Date? = nil, endDate: Date? = nil) {
+        if let startDate {
+            self.startDate = startDate
+        }
+        if let endDate {
+            self.endDate = endDate
+        }
+        syncCanonicalScheduleStorage()
+        syncLegacyScheduleViewsFromStructured()
+    }
+
+    mutating func applyWeekRanges(_ ranges: [EventUploadWeekRangeDraft]) {
+        let previousCanonicalWeeks = normalizedCanonicalWeeks() ?? []
+        canonicalWeeks = normalizedRanges(ranges).enumerated().map { index, range in
+            WebEventWeek(
+                id: previousCanonicalWeeks.indices.contains(index) ? previousCanonicalWeeks[index].id : "draft-week-\(index + 1)",
+                weekIndex: index + 1,
+                label: structuredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                startDate: range.startDate,
+                endDate: range.endDate,
+                sortOrder: index + 1
+            )
+        }
+        syncCanonicalScheduleStorage()
+        syncLegacyScheduleViewsFromStructured()
+    }
+
+    mutating func appendWeekRange(startDate: Date, endDate: Date) {
+        var next = editableWeekRanges
+        next.append(EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate))
+        applyWeekRanges(next)
+    }
+
+    mutating func removeWeekRange(id: UUID) {
+        let next = editableWeekRanges.filter { $0.id != id }
+        guard !next.isEmpty else { return }
+        applyWeekRanges(next)
+    }
+
+    mutating func updateWeekRange(id: UUID, startDate: Date? = nil, endDate: Date? = nil) {
+        let next = editableWeekRanges.map { range -> EventUploadWeekRangeDraft in
+            guard range.id == id else { return range }
+            return EventUploadWeekRangeDraft(
+                id: range.id,
+                startDate: startDate ?? range.startDate,
+                endDate: endDate ?? range.endDate
+            )
+        }
+        applyWeekRanges(next)
+    }
+
+    var editableWeekRanges: [EventUploadWeekRangeDraft] {
+        let weeks = structuredWeeks
+        if weeks.isEmpty {
+            return [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
+        }
+        return weeks.map { week in
+            EventUploadWeekRangeDraft(startDate: week.startDate, endDate: week.endDate)
+        }
+    }
+
+    var effectiveScheduleMode: EventUploadScheduleMode {
+        EventUploadScheduleMode(structuredModeRawValue: structuredSchedule.mode) ?? .singleDay
+    }
+
+    var isSingleDaySchedule: Bool {
+        effectiveScheduleMode == .singleDay
+    }
+
+    var isMultiWeekSchedule: Bool {
+        effectiveScheduleMode == .multiWeek
+    }
+
+    private func structuredEventDayResolution(eventDays: [WebEventDay]? = nil) -> (
+        byID: [String: WebEventDay],
+        byWeekDay: [String: WebEventDay],
+        byOverallDayIndex: [Int: WebEventDay],
+        byLocalDate: [String: WebEventDay]
+    ) {
+        let days = eventDays ?? structuredEventDays
+        let formatter = Self.eventDayResolutionFormatter
+        return (
+            byID: Dictionary(uniqueKeysWithValues: days.map { ($0.eventDayId, $0) }),
+            byWeekDay: Dictionary(uniqueKeysWithValues: days.map { ("\($0.weekIndex)-\($0.dayIndexInWeek)", $0) }),
+            byOverallDayIndex: Dictionary(uniqueKeysWithValues: days.map { ($0.overallDayIndex, $0) }),
+            byLocalDate: Dictionary(uniqueKeysWithValues: days.map { (formatter.string(from: $0.date), $0) })
+        )
+    }
+
+    private func resolveStructuredEventDay(
+        eventDayId: String?,
+        weekIndex: Int?,
+        dayIndexInWeek: Int?,
+        overallDayIndex: Int?,
+        localDate: Date?,
+        resolution: (
+            byID: [String: WebEventDay],
+            byWeekDay: [String: WebEventDay],
+            byOverallDayIndex: [Int: WebEventDay],
+            byLocalDate: [String: WebEventDay]
+        )
+    ) -> WebEventDay? {
+        if let eventDayId, let day = resolution.byID[eventDayId] {
+            return day
+        }
+        if let localDate {
+            let key = Self.eventDayResolutionFormatter.string(from: localDate)
+            if let day = resolution.byLocalDate[key] {
+                return day
+            }
+        }
+        if let weekIndex, let dayIndexInWeek, let day = resolution.byWeekDay["\(weekIndex)-\(dayIndexInWeek)"] {
+            return day
+        }
+        if let overallDayIndex, let day = resolution.byOverallDayIndex[overallDayIndex] {
+            return day
+        }
+        return nil
+    }
+
+    func discreteDateSummaryLines(in timeZone: TimeZone) -> [String] {
+        let weeks = structuredWeeks
+        guard !weeks.isEmpty else {
+            return [startDate.appLocalizedDateRangeText(to: endDate, timeZone: timeZone)]
+        }
+
+        return weeks.map { week in
+            let prefix = weeks.count > 1
+                ? (week.label?.eventUploadNilIfBlank ?? LT("第 \(week.weekIndex) 周", "Week \(week.weekIndex)", "第\(week.weekIndex)週"))
+                : nil
+            let summary = week.startDate.eventUploadLocalizedDateSummary(to: week.endDate, timeZone: timeZone)
+            if let prefix {
+                return "\(prefix) · \(summary)"
+            }
+            return summary
+        }
+    }
+
+    func discreteDateSummaryText(in timeZone: TimeZone, includeTimeZone: Bool = true, separator: String = "\n") -> String {
+        let body = discreteDateSummaryLines(in: timeZone).joined(separator: separator)
+        guard includeTimeZone else { return body }
+        return "\(body) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
+    }
+
+    private func normalizedWeekRanges() -> [EventUploadWeekRangeDraft] {
+        if let canonicalWeeks = normalizedCanonicalWeeks(), !canonicalWeeks.isEmpty {
+            return canonicalWeeks.map {
+                EventUploadWeekRangeDraft(
+                    id: UUID(),
+                    startDate: $0.startDate,
+                    endDate: $0.endDate
+                )
+            }
+        }
+        return normalizedRanges(
+            structuredScheduleMode == .multiWeek
+                ? weekRanges
+                : [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
+        )
+    }
+
+    private func normalizedRanges(_ ranges: [EventUploadWeekRangeDraft]) -> [EventUploadWeekRangeDraft] {
+        let baseRanges = ranges.isEmpty
+            ? [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
+            : ranges
+        return baseRanges
+            .map {
+                EventUploadWeekRangeDraft(
+                    id: $0.id,
+                    startDate: min($0.startDate, $0.endDate),
+                    endDate: max($0.startDate, $0.endDate)
+                )
+            }
+            .sorted { $0.startDate < $1.startDate }
+    }
+
+    private mutating func syncCanonicalScheduleStorage() {
+        canonicalSchedule = WebEventSchedule(
+            mode: structuredScheduleMode.rawValue,
+            timeZone: timeZoneIdentifier,
+            dayRolloverHour: dayRolloverHour
+        )
+        let previousCanonicalWeeks = normalizedCanonicalWeeks() ?? []
+        let sourceRanges: [EventUploadWeekRangeDraft]
+        let baseRanges: [EventUploadWeekRangeDraft]
+        switch structuredScheduleMode {
+        case .singleDay, .multiDay:
+            sourceRanges = [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
+        case .multiWeek:
+            sourceRanges = previousCanonicalWeeks.isEmpty
+                ? weekRanges
+                : previousCanonicalWeeks.map {
+                    EventUploadWeekRangeDraft(startDate: $0.startDate, endDate: $0.endDate)
+                }
+        }
+        baseRanges = normalizedRanges(sourceRanges)
+        canonicalWeeks = baseRanges.enumerated().map { index, range in
+            WebEventWeek(
+                id: previousCanonicalWeeks.indices.contains(index) ? previousCanonicalWeeks[index].id : "draft-week-\(index + 1)",
+                weekIndex: index + 1,
+                label: structuredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                startDate: range.startDate,
+                endDate: range.endDate,
+                sortOrder: index + 1
+            )
+        }
+    }
+
+    private func normalizedCanonicalWeeks() -> [WebEventWeek]? {
+        guard let canonicalWeeks, !canonicalWeeks.isEmpty else { return nil }
+        return canonicalWeeks
+            .map { week in
+                WebEventWeek(
+                    id: week.id,
+                    weekIndex: week.weekIndex,
+                    label: week.label,
+                    startDate: min(week.startDate, week.endDate),
+                    endDate: max(week.startDate, week.endDate),
+                    sortOrder: week.sortOrder
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.weekIndex != rhs.weekIndex { return lhs.weekIndex < rhs.weekIndex }
+                return lhs.startDate < rhs.startDate
+            }
+    }
+
+    private mutating func syncLegacyScheduleViewsFromStructured() {
+        scheduleMode = EventUploadScheduleMode(structuredModeRawValue: structuredSchedule.mode) ?? scheduleMode
+        weekRanges = structuredWeeks.map {
+            EventUploadWeekRangeDraft(startDate: $0.startDate, endDate: $0.endDate)
+        }
+        if let first = structuredWeeks.first {
+            startDate = first.startDate
+        }
+        if let last = structuredWeeks.last {
+            endDate = last.endDate
+        }
+    }
+
+    private var structuredScheduleMode: StructuredScheduleMode {
+        if let mode = canonicalSchedule?.mode,
+           let structuredMode = StructuredScheduleMode(rawValue: mode) {
+            return structuredMode
+        }
+        switch scheduleMode {
+        case .singleDay:
+            return .singleDay
+        case .multiDay:
+            return .multiDay
+        case .multiWeek:
+            return .multiWeek
+        }
+    }
+
+    private enum StructuredScheduleMode: String {
+        case singleDay = "single_day"
+        case multiDay = "multi_day"
+        case multiWeek = "multi_week"
+    }
+
+    private static func eventDayIdentifier(
+        weekIndex: Int,
+        dayIndexInWeek: Int,
+        overallDayIndex: Int,
+        mode: StructuredScheduleMode
+    ) -> String {
+        switch mode {
+        case .multiWeek:
+            return "w\(weekIndex)d\(dayIndexInWeek)"
+        case .singleDay, .multiDay:
+            return "d\(overallDayIndex)"
+        }
+    }
+
+    private static func weekdayKey(for date: Date, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date).lowercased()
+    }
+
+    private static var eventDayResolutionFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }
+
+    private static func weekdayDisplayName(for weekday: String) -> String {
+        switch weekday {
+        case "monday": return "Monday"
+        case "tuesday": return "Tuesday"
+        case "wednesday": return "Wednesday"
+        case "thursday": return "Thursday"
+        case "friday": return "Friday"
+        case "saturday": return "Saturday"
+        case "sunday": return "Sunday"
+        default: return weekday.capitalized
+        }
+    }
+}
+
+private extension Date {
+    func eventUploadLocalizedDateSummary(to endDate: Date, timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let startDay = calendar.startOfDay(for: self)
+        let endDay = calendar.startOfDay(for: endDate)
+
+        guard endDay >= startDay else {
+            return eventUploadLocalizedYMDTextRaw(in: timeZone)
+        }
+
+        if calendar.isDate(startDay, inSameDayAs: endDay) {
+            return eventUploadLocalizedYMDTextRaw(in: timeZone)
+        }
+
+        return "\(startDay.eventUploadLocalizedYMDTextRaw(in: timeZone)) - \(endDay.eventUploadLocalizedYMDTextRaw(in: timeZone))"
+    }
+
+    func eventUploadLocalizedYMDTextRaw(in timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
+        formatter.timeZone = timeZone
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh, .system:
+            formatter.dateFormat = "yyyy年M月d日"
+        case .en:
+            formatter.dateFormat = "MMM d, yyyy"
+        case .ja:
+            formatter.dateFormat = "yyyy年M月d日"
+        }
+        return formatter.string(from: self)
+    }
 }
 
 enum EventUploadMode: Hashable, Codable {
@@ -716,6 +1245,32 @@ private extension EventUploadImageZone {
         if normalizedLabel.contains("POSTER") { return .poster }
         if normalizedLabel.contains("MAP") { return .map }
         return .other
+    }
+}
+
+private extension EventUploadScheduleMode {
+    var structuredModeRawValue: String {
+        switch self {
+        case .singleDay:
+            return "single_day"
+        case .multiDay:
+            return "multi_day"
+        case .multiWeek:
+            return "multi_week"
+        }
+    }
+
+    init?(structuredModeRawValue: String) {
+        switch structuredModeRawValue {
+        case "single_day":
+            self = .singleDay
+        case "multi_day":
+            self = .multiDay
+        case "multi_week":
+            self = .multiWeek
+        default:
+            return nil
+        }
     }
 }
 

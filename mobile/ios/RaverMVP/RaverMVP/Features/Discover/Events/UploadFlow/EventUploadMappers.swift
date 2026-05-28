@@ -34,10 +34,7 @@ enum EventUploadMappers {
     ) -> CreateEventInput {
         let language = draft.preferredLanguage
         let name = draft.name.primaryValue(preferredLanguage: language).trimmed
-        let description = EventWeekScheduleMode.embedMarker(
-            into: draft.description,
-            enabled: draft.scheduleMode == .multiWeek
-        )
+        let description = draft.description.trimmed.eventUploadMapperNilIfBlank
         let city = draft.city.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let country = draft.country.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let cityI18n = localizedText(from: draft.city, language: language)
@@ -84,6 +81,9 @@ enum EventUploadMappers {
             officialWebsite: draft.officialWebsite.trimmed.eventUploadMapperNilIfBlank,
             startDate: draft.startDate,
             endDate: draft.endDate,
+            schedule: draft.structuredSchedule,
+            weeks: draft.structuredWeeks,
+            eventDays: draft.structuredEventDays,
             timeZone: timeZone,
             timeZoneCity: draft.selectedTimeZoneLookup?.city,
             timeZoneProvince: draft.selectedTimeZoneLookup?.exactProvince.eventUploadMapperNilIfBlank ?? draft.selectedTimeZoneLookup?.province.eventUploadMapperNilIfBlank,
@@ -422,10 +422,15 @@ enum EventUploadMappers {
             let baseInput = EventLineupSlotInput(
                 id: slot.canonicalSlotId,
                 lineupArtistId: nil,
+                eventDayId: slot.eventDayId,
+                weekIndex: slot.weekIndex,
+                dayIndexInWeek: slot.dayIndexInWeek,
+                overallDayIndex: slot.overallDayIndex,
+                localDate: slot.localDate,
                 djId: primaryDJID,
                 memberDjIds: memberDJIDs.contains(where: { $0 != nil }) ? memberDJIDs : nil,
                 memberNames: performerNames,
-                festivalDayIndex: max(slot.dayIndex, 1),
+                festivalDayIndex: nil,
                 djName: name,
                 stageName: slot.stageName.trimmed.eventUploadMapperNilIfBlank ?? defaultStageName(at: 0),
                 sortOrder: index + 1,
@@ -557,10 +562,15 @@ enum EventUploadMappers {
         EventLineupSlotInput(
             id: slot.id,
             lineupArtistId: slot.lineupArtistId,
+            eventDayId: slot.eventDayId,
+            weekIndex: slot.weekIndex,
+            dayIndexInWeek: slot.dayIndexInWeek,
+            overallDayIndex: slot.overallDayIndex,
+            localDate: slot.localDate,
             djId: slot.djId?.trimmed.eventUploadMapperNilIfBlank,
             memberDjIds: slot.memberDjIds,
             memberNames: slot.memberNames?.map { $0.trimmed }.filter { !$0.isEmpty },
-            festivalDayIndex: slot.festivalDayIndex,
+            festivalDayIndex: nil,
             djName: slot.djName.trimmed,
             stageName: slot.stageName?.trimmed.eventUploadMapperNilIfBlank,
             sortOrder: nil,

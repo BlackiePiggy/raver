@@ -10,11 +10,9 @@ import { mediaAssetService } from '../services/media-asset.service';
 import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
-  getEventHour,
   isValidEventTimeZone,
   normalizeEventTimeZone,
   parseEventDateInput,
-  setEventDayAndKeepTime,
   startOfEventDay,
   zonedTimeToUtc,
 } from '../utils/event-timezone';
@@ -49,7 +47,7 @@ type LineupSlotInput = {
   djId?: string;
   memberDjIds?: Array<string | null>;
   memberNames?: string[];
-  festivalDayIndex?: number;
+  festivalDayIndex?: number | null;
   djName?: string;
   stageName?: string;
   sortOrder?: number;
@@ -407,39 +405,6 @@ const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
   return hour;
 };
 
-const inferFestivalDayIndex = (
-  startTime: Date,
-  eventStartDate: Date,
-  dayRolloverHour: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): number | null => {
-  if (Number.isNaN(startTime.getTime()) || Number.isNaN(eventStartDate.getTime())) {
-    return null;
-  }
-  let dayOffset = diffEventDays(eventStartDate, startTime, timeZone);
-  if (dayOffset > 0 && getEventHour(startTime, timeZone) < dayRolloverHour) {
-    dayOffset -= 1;
-  }
-  return Math.max(1, dayOffset + 1);
-};
-
-const applyFestivalDayIndexToDate = (
-  timeSource: Date,
-  eventStartDate: Date,
-  festivalDayIndex: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): Date => setEventDayAndKeepTime(timeSource, eventStartDate, festivalDayIndex, timeZone);
-
-const explicitFestivalDayCarryOffset = (
-  timeSource: Date,
-  eventStartDate: Date,
-  festivalDayIndex: number,
-  timeZone = DEFAULT_EVENT_TIME_ZONE
-): number => {
-  const logicalDay = applyFestivalDayIndexToDate(timeSource, eventStartDate, festivalDayIndex, timeZone);
-  return Math.max(0, diffEventDays(logicalDay, timeSource, timeZone));
-};
-
 const datePartsInTimeZone = (date: Date, timeZone: string): { year: number; month: number; day: number } => {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -472,10 +437,10 @@ const timePartsInTimeZone = (date: Date, timeZone: string): { hour: number; minu
   };
 };
 
-const applyFestivalDayIndexPreservingSourceWallTime = (
+const applyDayOffsetPreservingSourceWallTime = (
   timeSource: Date,
   eventStartDate: Date,
-  festivalDayIndex: number,
+  dayOffset: number,
   sourceTimeZoneRaw: unknown,
   targetTimeZoneRaw: unknown
 ): Date => {
@@ -485,7 +450,7 @@ const applyFestivalDayIndexPreservingSourceWallTime = (
   const timeParts = timePartsInTimeZone(timeSource, sourceTimeZone);
   return zonedTimeToUtc({
     ...dateParts,
-    day: dateParts.day + Math.max(0, festivalDayIndex - 1),
+    day: dateParts.day + Math.max(0, dayOffset),
     ...timeParts,
   }, targetTimeZone);
 };
@@ -501,38 +466,34 @@ const rebaseExistingLineupSlotsToEventStart = (
   slots: ExistingLineupSlotForRebase[],
   previousEventStartDate: Date,
   nextEventStartDate: Date,
-  dayRolloverHour: number,
+  _dayRolloverHour: number,
   previousTimeZone = DEFAULT_EVENT_TIME_ZONE,
   nextTimeZone = DEFAULT_EVENT_TIME_ZONE
-): Array<{ id: string; festivalDayIndex: number; startTime: Date; endTime: Date }> =>
+): Array<{ id: string; festivalDayIndex: number | null; startTime: Date; endTime: Date }> =>
   slots.map((slot) => {
-    const festivalDayIndex =
-      slot.festivalDayIndex
-      ?? inferFestivalDayIndex(slot.startTime, previousEventStartDate, dayRolloverHour, previousTimeZone)
-      ?? 1;
-    const endDayOffset = Math.max(0, diffEventDays(slot.startTime, slot.endTime, previousTimeZone));
-    const startTime = applyFestivalDayIndexPreservingSourceWallTime(
+    const startDayOffset = Math.max(0, diffEventDays(previousEventStartDate, slot.startTime, previousTimeZone));
+    const endDayOffset = Math.max(0, diffEventDays(previousEventStartDate, slot.endTime, previousTimeZone));
+    const startTime = applyDayOffsetPreservingSourceWallTime(
       slot.startTime,
       nextEventStartDate,
-      festivalDayIndex,
+      startDayOffset,
       previousTimeZone,
       nextTimeZone
     );
-    let endTime = applyFestivalDayIndexPreservingSourceWallTime(
+    let endTime = applyDayOffsetPreservingSourceWallTime(
       slot.endTime,
       nextEventStartDate,
-      festivalDayIndex + endDayOffset,
+      endDayOffset,
       previousTimeZone,
       nextTimeZone
     );
-
     while (endTime < startTime) {
       endTime = new Date(endTime.getTime() + 86_400_000);
     }
 
     return {
       id: slot.id,
-      festivalDayIndex,
+      festivalDayIndex: slot.festivalDayIndex ?? null,
       startTime,
       endTime,
     };
@@ -540,17 +501,15 @@ const rebaseExistingLineupSlotsToEventStart = (
 
 const normalizeLineupSlots = (
   slots: unknown,
-  eventStartDate: Date,
-  dayRolloverHourRaw: unknown = 6,
+  _eventStartDate: Date,
+  _dayRolloverHourRaw: unknown = 6,
   timeZoneRaw: unknown = DEFAULT_EVENT_TIME_ZONE
 ): LineupSlotInput[] => {
   if (!Array.isArray(slots)) {
     return [];
   }
 
-  const dayRolloverHour = normalizeDayRolloverHour(dayRolloverHourRaw, 6);
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const safeEventStart = Number.isNaN(eventStartDate.getTime()) ? new Date() : eventStartDate;
   return slots
     .filter((slot) => slot && typeof slot === 'object')
     .map((slot) => slot as RawLineupSlotInput)
@@ -566,23 +525,8 @@ const normalizeLineupSlots = (
       if (parsedStart.getTime() === parsedEnd.getTime()) {
         throw new EventInputValidationError(`lineupSlots[${index}] startTime and endTime cannot be the same`);
       }
-      const explicitFestivalDayIndex =
-        typeof slot.festivalDayIndex === 'number' && Number.isFinite(slot.festivalDayIndex)
-          ? Math.max(1, Math.floor(slot.festivalDayIndex))
-          : null;
-
       let startTime = parsedStart;
       let endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedEnd.getTime() + 86_400_000);
-
-      if (explicitFestivalDayIndex) {
-        const startCarryOffset = explicitFestivalDayCarryOffset(startTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        const endCarryOffset = explicitFestivalDayCarryOffset(endTime, safeEventStart, explicitFestivalDayIndex, timeZone);
-        startTime = applyFestivalDayIndexToDate(startTime, safeEventStart, explicitFestivalDayIndex + startCarryOffset, timeZone);
-        endTime = applyFestivalDayIndexToDate(endTime, safeEventStart, explicitFestivalDayIndex + endCarryOffset, timeZone);
-        if (endTime < startTime) {
-          endTime = new Date(endTime.getTime() + 86_400_000);
-        }
-      }
 
       const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
       const memberDjIds = Array.isArray(slot.memberDjIds)
@@ -600,15 +544,12 @@ const normalizeLineupSlots = (
         ? memberDjIds
         : (djId ? [djId] : []);
       const effectiveDjId = djId || firstBoundDjId;
-      const festivalDayIndex =
-        explicitFestivalDayIndex
-        ?? inferFestivalDayIndex(startTime, safeEventStart, dayRolloverHour, timeZone);
 
       return {
         djId: effectiveDjId,
         memberDjIds: mergedMemberDjIds,
         memberNames,
-        festivalDayIndex: festivalDayIndex ?? undefined,
+        festivalDayIndex: null,
         djName: slot.djName,
         stageName: slot.stageName,
         sortOrder: slot.sortOrder,
@@ -1158,7 +1099,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           djName: slot.djName || 'Unknown DJ',
           sortOrder: slot.sortOrder || 0,
           stageName: slot.stageName ?? null,
-          festivalDayIndex: slot.festivalDayIndex ?? null,
+          festivalDayIndex: null,
           startTime: new Date(slot.startTime),
           endTime: new Date(slot.endTime),
         })),
@@ -1373,7 +1314,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             djName: slot.djName || 'Unknown DJ',
             sortOrder: slot.sortOrder || 0,
             stageName: slot.stageName ?? null,
-            festivalDayIndex: slot.festivalDayIndex ?? null,
+            festivalDayIndex: null,
             startTime: new Date(slot.startTime),
             endTime: new Date(slot.endTime),
           })),
@@ -1404,7 +1345,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           snapshot.slots.map((slot) => {
             const rebased = rebasedSlots.find((item) => item.id === slot.id);
             return rebased
-              ? { ...slot, festivalDayIndex: rebased.festivalDayIndex, startTime: rebased.startTime, endTime: rebased.endTime }
+              ? { ...slot, festivalDayIndex: null, startTime: rebased.startTime, endTime: rebased.endTime }
               : slot;
           }),
           snapshot.artists

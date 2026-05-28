@@ -588,7 +588,7 @@ struct EventUploadFlowView: View {
                 }
             }
 
-            if viewModel.draft.scheduleMode == .singleDay {
+            if viewModel.draft.isSingleDaySchedule {
                 centeredDateSection {
                     scheduleDateCard(
                         title: LT("活动日期", "Event Date", "開催日"),
@@ -610,19 +610,19 @@ struct EventUploadFlowView: View {
 
             eventTimeZoneContextCard
 
-            if viewModel.draft.scheduleMode == .multiWeek {
+            if viewModel.draft.isMultiWeekSchedule {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text(LT("每周的日期", "Weekly ranges", "週ごとの日付"))
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(RaverTheme.primaryText)
                         Spacer()
-                        Text(LT("\(viewModel.draft.weekRanges.count) 个 Week", "\(viewModel.draft.weekRanges.count) weeks", "\(viewModel.draft.weekRanges.count)個のWeek"))
+                        Text(LT("\(viewModel.draft.editableWeekRanges.count) 个 Week", "\(viewModel.draft.editableWeekRanges.count) weeks", "\(viewModel.draft.editableWeekRanges.count)個のWeek"))
                             .font(.caption)
                             .foregroundStyle(RaverTheme.secondaryText)
                     }
 
-                    ForEach(Array(viewModel.draft.weekRanges.enumerated()), id: \.element.id) { index, week in
+                    ForEach(Array(viewModel.draft.editableWeekRanges.enumerated()), id: \.element.id) { index, week in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -634,7 +634,7 @@ struct EventUploadFlowView: View {
                                         .foregroundStyle(RaverTheme.secondaryText)
                                 }
                                 Spacer()
-                                if viewModel.draft.weekRanges.count > 1 {
+                                if viewModel.draft.editableWeekRanges.count > 1 {
                                     Button {
                                         viewModel.removeWeekRange(id: week.id)
                                     } label: {
@@ -1088,7 +1088,7 @@ struct EventUploadFlowView: View {
             reviewCard(
                 title: LT("时间", "Time", "時間"),
                 rows: [
-                    viewModel.draft.scheduleMode.title,
+                    viewModel.draft.effectiveScheduleMode.title,
                     viewModel.reviewDateRange,
                     viewModel.draft.timeZoneIdentifier,
                     LT("跨天切日：\(viewModel.draft.dayRolloverHour):00", "Rollover: \(viewModel.draft.dayRolloverHour):00", "日付切替：\(viewModel.draft.dayRolloverHour):00"),
@@ -1504,7 +1504,7 @@ struct EventUploadFlowView: View {
     }
 
     private func scheduleModeCard(_ mode: EventUploadScheduleMode) -> some View {
-        let isSelected = viewModel.draft.scheduleMode == mode
+        let isSelected = viewModel.draft.effectiveScheduleMode == mode
         return Button {
             viewModel.updateScheduleMode(mode)
         } label: {
@@ -2240,6 +2240,7 @@ struct EventUploadFlowView: View {
                 Text(formattedDateRange(timeZone: TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(RaverTheme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(LT("当前设备", "Current Device", "現在の端末"))
                     .font(.caption.weight(.semibold))
@@ -2248,6 +2249,7 @@ struct EventUploadFlowView: View {
                 Text(formattedDateRange(timeZone: .current))
                     .font(.caption)
                     .foregroundStyle(RaverTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
@@ -2256,12 +2258,7 @@ struct EventUploadFlowView: View {
     }
 
     private func formattedDateRange(timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.timeZone = timeZone
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return "\(formatter.string(from: viewModel.draft.startDate)) - \(formatter.string(from: viewModel.draft.endDate)) · \(timeZone.identifier)"
+        viewModel.draft.discreteDateSummaryText(in: timeZone)
     }
 
     private func uploadTextField(
@@ -2773,7 +2770,7 @@ struct EventUploadFlowView: View {
 
     private func weekDateBinding(target: WeekDatePickerTarget) -> Binding<Date> {
         Binding {
-            guard let week = viewModel.draft.weekRanges.first(where: { $0.id == target.weekID }) else {
+            guard let week = viewModel.draft.editableWeekRanges.first(where: { $0.id == target.weekID }) else {
                 return Date()
             }
             return target.field == .start ? week.startDate : week.endDate
@@ -2950,28 +2947,32 @@ struct EventUploadFlowView: View {
     }
 
     private var lineupDayOptions: [EventUploadDayOption] {
-        var calendar = Calendar.current
-        calendar.timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
-        let startDay = calendar.startOfDay(for: viewModel.draft.startDate)
-        let endDay = max(viewModel.draft.endDate, viewModel.draft.startDate)
-        let dayCount = min(max((calendar.dateComponents([.day], from: startDay, to: calendar.startOfDay(for: endDay)).day ?? 0) + 1, 1), 60)
-        return (0..<dayCount).map { offset in
-            let date = calendar.date(byAdding: .day, value: offset, to: startDay) ?? startDay
-            let title: String
-            if viewModel.draft.scheduleMode == .multiWeek {
-                title = LT("Week \(offset / 7 + 1) · Day \(offset % 7 + 1)", "Week \(offset / 7 + 1) · Day \(offset % 7 + 1)", "Week \(offset / 7 + 1) · Day \(offset % 7 + 1)")
-            } else {
-                title = LT("Day \(offset + 1)", "Day \(offset + 1)", "Day \(offset + 1)")
+        let structuredDays = viewModel.draft.structuredEventDays
+        if !structuredDays.isEmpty {
+            return structuredDays.map { day in
+                EventUploadDayOption(
+                    dayIndex: day.overallDayIndex,
+                    title: eventDayOptionTitle(day),
+                    date: day.date
+                )
             }
-            return EventUploadDayOption(dayIndex: offset + 1, title: title, date: date)
         }
+        return [
+            EventUploadDayOption(
+                dayIndex: 1,
+                title: LT("Selected date", "Selected date", "選択日"),
+                date: viewModel.draft.startDate
+            )
+        ]
     }
 
     private func alignLineupClock(_ value: Date, toDayIndex dayIndex: Int, dayOffset: EventUploadSlotDayOffset = .sameDay) -> Date {
-        var calendar = Calendar.current
+        var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
         let components = calendar.dateComponents([.hour, .minute], from: value)
-        let baseDay = calendar.date(byAdding: .day, value: max(dayIndex - 1, 0) + dayOffset.rawValue, to: calendar.startOfDay(for: viewModel.draft.startDate)) ?? viewModel.draft.startDate
+        let logicalDate = lineupDayOptions.first(where: { $0.dayIndex == dayIndex })?.date ?? viewModel.draft.startDate
+        let logicalStart = calendar.startOfDay(for: logicalDate)
+        let baseDay = calendar.date(byAdding: .day, value: dayOffset.rawValue, to: logicalStart) ?? logicalStart
         return calendar.date(bySettingHour: components.hour ?? 0, minute: components.minute ?? 0, second: 0, of: baseDay) ?? value
     }
 
@@ -2981,8 +2982,8 @@ struct EventUploadFlowView: View {
     }
 
     private var displayWeekRanges: [EventUploadWeekRangeDraft] {
-        if viewModel.draft.scheduleMode == .multiWeek {
-            return viewModel.draft.weekRanges
+        if viewModel.draft.isMultiWeekSchedule {
+            return viewModel.draft.editableWeekRanges
         }
         return [EventUploadWeekRangeDraft(startDate: viewModel.draft.startDate, endDate: viewModel.draft.endDate)]
     }
@@ -3002,6 +3003,21 @@ struct EventUploadFlowView: View {
 
     private func weekRangeSummary(_ week: EventUploadWeekRangeDraft) -> String {
         return "\(shortDateString(week.startDate, in: eventTimeZone)) - \(shortDateString(week.endDate, in: eventTimeZone))"
+    }
+
+    private func eventDayOptionTitle(_ day: WebEventDay) -> String {
+        if let label = day.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+            return label
+        }
+        let dateText = shortDateString(day.date, in: eventTimeZone)
+        if viewModel.draft.isMultiWeekSchedule {
+            return LT(
+                "Week \(day.weekIndex) · \(dateText)",
+                "Week \(day.weekIndex) · \(dateText)",
+                "Week \(day.weekIndex) · \(dateText)"
+            )
+        }
+        return dateText
     }
 
     private func weekTimetableSummary(for weekIndex: Int, week: EventUploadWeekRangeDraft) -> String {
@@ -5195,7 +5211,7 @@ private struct EventUploadTimetableAIImportSheet: View {
     @State private var warnings: [String] = []
     @State private var unparsedTexts: [String] = []
     @State private var selectedWeekIndex: Int?
-    @State private var selectedDayIndex: Int?
+    @State private var selectedEventDayIdentity: String?
     @State private var selectedStageName: String?
     @State private var expandedSlotIDs: Set<UUID> = []
     @State private var isAutoMatching = false
@@ -5270,7 +5286,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                             viewModel.applyTimetableAIImportSlots(resultSlots)
                             dismiss()
                         }
-                        .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty)
+                        .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty || hasUnresolvedEventDayResults)
                     }
                 }
             }
@@ -5294,8 +5310,8 @@ private struct EventUploadTimetableAIImportSheet: View {
                 isPresented: $moveResultDayDialogPresented,
                 titleVisibility: .visible
             ) {
-                ForEach(availableDays, id: \.dayIndex) { day in
-                    Button(dayLabel(for: day)) {
+                ForEach(availableMoveDays, id: \.self) { day in
+                    Button(dayFilterLabel(for: day)) {
                         moveSelectedResultSlots(to: day)
                     }
                 }
@@ -5418,6 +5434,17 @@ private struct EventUploadTimetableAIImportSheet: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(statusIsError ? Color.red : RaverTheme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if hasUnresolvedEventDayResults {
+                Text(
+                    LT(
+                        "有 \(unresolvedEventDayResultCount) 条结果的日期仍有歧义。请先用“更换日期”或结果卡片里的日期信息确认到具体 event day，再执行确认添加。",
+                        "\(unresolvedEventDayResultCount) results still have ambiguous dates. Confirm each one against a concrete event day before applying.",
+                        "\(unresolvedEventDayResultCount)件の結果で日付がまだ曖昧です。適用前に具体的な event day へ確認してください。"
+                    )
+                )
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.orange)
+            }
             ForEach(warnings, id: \.self) { warning in
                 Text(warning)
                     .font(.caption2)
@@ -5829,14 +5856,14 @@ private struct EventUploadTimetableAIImportSheet: View {
                 title: LT("Day", "Day", "Day"),
                 values: availableDays,
                 selectedValue: Binding(
-                    get: { selectedDayIndex },
+                    get: { selectedEventDayIdentity },
                     set: { value in
-                        selectedDayIndex = value
+                        selectedEventDayIdentity = value
                         syncAIResultScope()
                     }
                 ),
-                label: { dayLabel(for: $0) },
-                value: { $0.dayIndex }
+                label: { dayFilterLabel(for: $0) },
+                value: { eventDayIdentity(for: $0) }
             )
 
             filterRow(
@@ -5907,16 +5934,42 @@ private struct EventUploadTimetableAIImportSheet: View {
 
     private var availableDays: [EventUploadTimetableAIEditableSlot] {
         filteredByWeek
-            .reduce(into: [Int: EventUploadTimetableAIEditableSlot]()) { dict, slot in
-                if dict[slot.dayIndex] == nil {
-                    dict[slot.dayIndex] = slot
+            .reduce(into: [String: EventUploadTimetableAIEditableSlot]()) { dict, slot in
+                let identity = eventDayIdentity(for: slot)
+                if dict[identity] == nil {
+                    dict[identity] = slot
                 }
             }
             .values
             .sorted {
-                if $0.dayIndex != $1.dayIndex { return $0.dayIndex < $1.dayIndex }
-                return $0.dayLabel < $1.dayLabel
+                if $0.overallDayIndex != $1.overallDayIndex { return $0.overallDayIndex < $1.overallDayIndex }
+                return dayFilterLabel(for: $0) < dayFilterLabel(for: $1)
             }
+    }
+
+    private var availableMoveDays: [EventUploadTimetableAIEditableSlot] {
+        let timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
+        let baseDays = viewModel.draft.structuredEventDays
+            .filter { selectedWeekIndex == nil || $0.weekIndex == selectedWeekIndex }
+            .map { eventDay in
+                EventUploadTimetableAIEditableSlot(
+                    eventDayId: eventDay.eventDayId,
+                    weekIndex: eventDay.weekIndex,
+                    dayIndexInWeek: eventDay.dayIndexInWeek,
+                    overallDayIndex: eventDay.overallDayIndex,
+                    localDate: eventDay.date.eventArchiveDateText(in: timeZone),
+                    dayLabel: eventDay.label?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                        ? (eventDay.label ?? "")
+                        : eventDay.date.eventArchiveDateText(in: timeZone),
+                    stageName: "",
+                    actType: .solo,
+                    performerNamesText: "",
+                    startTimeText: "",
+                    endTimeText: "",
+                    notes: []
+                )
+            }
+        return baseDays.isEmpty ? availableDays : baseDays
     }
 
     private var availableStages: [String] {
@@ -5935,7 +5988,7 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private var filteredByWeekAndDay: [EventUploadTimetableAIEditableSlot] {
-        filteredByWeek.filter { selectedDayIndex == nil || $0.dayIndex == selectedDayIndex }
+        filteredByWeek.filter { selectedEventDayIdentity == nil || eventDayIdentity(for: $0) == selectedEventDayIdentity }
     }
 
     private var visibleSlots: [EventUploadTimetableAIEditableSlot] {
@@ -5943,6 +5996,18 @@ private struct EventUploadTimetableAIImportSheet: View {
             guard let selectedStageName else { return true }
             return slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines) == selectedStageName
         }
+    }
+
+    private var unresolvedEventDayResultCount: Int {
+        resultSlots.filter { slot in
+            let eventDayId = slot.eventDayId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !eventDayId.isEmpty else { return true }
+            return viewModel.draft.eventDay(forID: eventDayId) == nil
+        }.count
+    }
+
+    private var hasUnresolvedEventDayResults: Bool {
+        unresolvedEventDayResultCount > 0
     }
 
     private func configureResultFilters() {
@@ -5954,8 +6019,8 @@ private struct EventUploadTimetableAIImportSheet: View {
             selectedWeekIndex = availableWeeks.first
         }
         syncAIResultScope()
-        if !preserveSelection || selectedDayIndex == nil {
-            selectedDayIndex = availableDays.first?.dayIndex
+        if !preserveSelection || selectedEventDayIdentity == nil {
+            selectedEventDayIdentity = availableDays.first.map(eventDayIdentity(for:))
         }
         syncAIResultScope()
         if !preserveSelection || selectedStageName == nil {
@@ -5969,8 +6034,9 @@ private struct EventUploadTimetableAIImportSheet: View {
         if let selectedWeekIndex, !availableWeeks.contains(selectedWeekIndex) {
             self.selectedWeekIndex = availableWeeks.first
         }
-        if let selectedDayIndex, !availableDays.contains(where: { $0.dayIndex == selectedDayIndex }) {
-            self.selectedDayIndex = availableDays.first?.dayIndex
+        if let selectedEventDayIdentity,
+           !availableDays.contains(where: { eventDayIdentity(for: $0) == selectedEventDayIdentity }) {
+            self.selectedEventDayIdentity = availableDays.first.map(eventDayIdentity(for:))
         }
         if let selectedStageName, !availableStages.contains(selectedStageName) {
             self.selectedStageName = availableStages.first
@@ -5983,7 +6049,43 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private func dayLabel(for slot: EventUploadTimetableAIEditableSlot) -> String {
-        "Day \(slot.dayIndex)"
+        let trimmed = slot.dayLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        if let localDate = normalizedLocalDateText(for: slot), !localDate.isEmpty {
+            return LT(
+                "Week \(slot.weekIndex) · \(localDate)",
+                "Week \(slot.weekIndex) · \(localDate)",
+                "Week \(slot.weekIndex) · \(localDate)"
+            )
+        }
+        return LT(
+            "Week \(slot.weekIndex) · Date \(slot.dayIndexInWeek)",
+            "Week \(slot.weekIndex) · Date \(slot.dayIndexInWeek)",
+            "Week \(slot.weekIndex) · 日付 \(slot.dayIndexInWeek)"
+        )
+    }
+
+    private func eventDayIdentity(for slot: EventUploadTimetableAIEditableSlot) -> String {
+        let eventDayId = slot.eventDayId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !eventDayId.isEmpty {
+            return eventDayId
+        }
+        return "\(slot.weekIndex)-\(slot.dayIndexInWeek)-\(normalizedLocalDateText(for: slot) ?? "")"
+    }
+
+    private func normalizedLocalDateText(for slot: EventUploadTimetableAIEditableSlot) -> String? {
+        let trimmed = slot.localDate?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private func dayFilterLabel(for slot: EventUploadTimetableAIEditableSlot) -> String {
+        let base = dayLabel(for: slot)
+        guard let localDate = normalizedLocalDateText(for: slot), !base.contains(localDate) else {
+            return base
+        }
+        return "\(base) · \(localDate)"
     }
 
     private func filterRow<Item: Hashable, Selection: Hashable>(
@@ -6240,7 +6342,7 @@ private struct EventUploadTimetableAIImportSheet: View {
                 }
 
                 HStack {
-                    Text("Week \(slot.weekIndex) · \(slot.dayLabel)")
+                    Text(dayFilterLabel(for: slot))
                     Spacer()
                     if let confidence = slot.confidence {
                         Text("\(Int(confidence * 100))%")
@@ -6297,10 +6399,14 @@ private struct EventUploadTimetableAIImportSheet: View {
     private func moveSelectedResultSlots(to day: EventUploadTimetableAIEditableSlot) {
         guard !selectedResultSlotIDs.isEmpty else { return }
         for index in resultSlots.indices where selectedResultSlotIDs.contains(resultSlots[index].id) {
-            resultSlots[index].dayIndex = day.dayIndex
+            resultSlots[index].eventDayId = day.eventDayId
+            resultSlots[index].weekIndex = day.weekIndex
+            resultSlots[index].dayIndexInWeek = day.dayIndexInWeek
+            resultSlots[index].overallDayIndex = day.overallDayIndex
+            resultSlots[index].localDate = day.localDate
             resultSlots[index].dayLabel = day.dayLabel
         }
-        selectedDayIndex = day.dayIndex
+        selectedEventDayIdentity = eventDayIdentity(for: day)
         selectedResultSlotIDs.removeAll()
         isResultSelectionMode = false
         refreshResultFilters(preserveSelection: true)

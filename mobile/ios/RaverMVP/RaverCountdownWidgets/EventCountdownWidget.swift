@@ -94,20 +94,29 @@ struct EventCountdownTimelineProvider: AppIntentTimelineProvider {
 enum WidgetCountdownDateCalculator {
     static func state(for event: WidgetCountdownEvent, at date: Date, calendar: Calendar = .current) -> WidgetCountdownTimeState {
         let today = calendar.startOfDay(for: date)
-        let startDay = calendar.startOfDay(for: event.startDate)
-        let normalizedEnd = event.endDate < event.startDate ? event.startDate : event.endDate
-        let endDay = calendar.startOfDay(for: normalizedEnd)
+        let ranges = event.normalizedDateRanges.map {
+            (
+                start: calendar.startOfDay(for: $0.startDate),
+                end: calendar.startOfDay(for: max($0.endDate, $0.startDate))
+            )
+        }
 
-        if today < startDay {
+        guard !ranges.isEmpty else {
+            let startDay = calendar.startOfDay(for: event.startDate)
             return .upcoming(days: max(0, calendar.dateComponents([.day], from: today, to: startDay).day ?? 0))
         }
 
-        if today <= endDay {
-            let day = (calendar.dateComponents([.day], from: startDay, to: today).day ?? 0) + 1
+        if let activeRange = ranges.first(where: { $0.start <= today && today <= $0.end }) {
+            let day = (calendar.dateComponents([.day], from: activeRange.start, to: today).day ?? 0) + 1
             return .ongoing(day: max(1, day))
         }
 
-        return .ended(days: max(0, calendar.dateComponents([.day], from: endDay, to: today).day ?? 0))
+        if let nextRange = ranges.first(where: { today < $0.start }) {
+            return .upcoming(days: max(0, calendar.dateComponents([.day], from: today, to: nextRange.start).day ?? 0))
+        }
+
+        let lastEndDay = ranges.last?.end ?? calendar.startOfDay(for: event.endDate)
+        return .ended(days: max(0, calendar.dateComponents([.day], from: lastEndDay, to: today).day ?? 0))
     }
 }
 

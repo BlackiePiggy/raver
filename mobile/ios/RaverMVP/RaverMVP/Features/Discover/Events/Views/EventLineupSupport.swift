@@ -445,30 +445,7 @@ func fetchExactDJMatches(
 }
 
 enum EventWeekScheduleMode {
-    static let marker = "[[raver_schedule_mode:week]]"
     static let editorDaysPerWeek = 4
-
-    static func isEnabled(in rawDescription: String?) -> Bool {
-        guard let rawDescription else { return false }
-        return rawDescription.contains(marker)
-    }
-
-    static func stripMarker(from rawDescription: String?) -> String {
-        guard let rawDescription else { return "" }
-        return rawDescription
-            .replacingOccurrences(of: marker, with: "")
-            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    static func embedMarker(into userDescription: String, enabled: Bool) -> String? {
-        let cleaned = stripMarker(from: userDescription)
-        guard enabled else { return cleaned.nilIfEmpty }
-        if cleaned.isEmpty {
-            return marker
-        }
-        return "\(cleaned)\n\n\(marker)"
-    }
 
     static func weekDayIndex(for date: Date, anchorDate: Date) -> (week: Int, day: Int)? {
         let calendar = Calendar.current
@@ -481,6 +458,18 @@ enum EventWeekScheduleMode {
 
     static func weekDayTitle(week: Int, day: Int) -> String {
         "Week\(week)·Day\(day)"
+    }
+}
+
+extension WebEvent {
+    var usesStructuredWeekMode: Bool {
+        if schedule?.mode == "multi_week" {
+            return true
+        }
+        if weeks.count > 1 {
+            return true
+        }
+        return Set(eventDays.map(\.weekIndex)).count > 1
     }
 }
 

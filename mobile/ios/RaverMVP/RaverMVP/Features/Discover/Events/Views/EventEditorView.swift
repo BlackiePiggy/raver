@@ -2050,6 +2050,132 @@ struct EventEditorView: View {
         return dates.isEmpty ? [startDay] : dates
     }
 
+    private var editorStructuredSchedule: WebEventSchedule {
+        WebEventSchedule(
+            mode: isWeekScheduleEnabled ? "multi_week" : (eventCalendar.isDate(startDate, inSameDayAs: endDate) ? "single_day" : "multi_day"),
+            timeZone: eventTimeZoneIdentifier,
+            dayRolloverHour: 6
+        )
+    }
+
+    private var editorStructuredWeeks: [WebEventWeek] {
+        if !isWeekScheduleEnabled {
+            return [
+                WebEventWeek(
+                    id: "editor-week-1",
+                    weekIndex: 1,
+                    label: nil,
+                    startDate: normalizedEventStartDate,
+                    endDate: normalizedEventEndDate,
+                    sortOrder: 1
+                )
+            ]
+        }
+
+        let grouped = Dictionary(grouping: dayOptions) { option in
+            option.weekIndex ?? 1
+        }
+
+        return grouped.keys.sorted().compactMap { weekIndex in
+            let options = (grouped[weekIndex] ?? []).sorted { $0.date < $1.date }
+            guard let first = options.first, let last = options.last else { return nil }
+            return WebEventWeek(
+                id: "editor-week-\(weekIndex)",
+                weekIndex: weekIndex,
+                label: "Weekend \(weekIndex)",
+                startDate: first.date,
+                endDate: last.date,
+                sortOrder: weekIndex
+            )
+        }
+    }
+
+    private var editorStructuredEventDays: [WebEventDay] {
+        dayOptions.enumerated().map { index, option in
+            let weekIndex = option.weekIndex ?? 1
+            let dayIndexInWeek = option.dayInWeek ?? (index + 1)
+            let overallDayIndex = option.dayIndex
+            let weekday = editorWeekdayKey(for: option.date)
+            let label: String? = {
+                if isWeekScheduleEnabled {
+                    return "Weekend \(weekIndex) \(editorWeekdayDisplayName(for: option.date))"
+                }
+                return editorWeekdayDisplayName(for: option.date)
+            }()
+            return WebEventDay(
+                id: "editor-\(option.id)",
+                eventDayId: option.id,
+                weekIndex: weekIndex,
+                dayIndexInWeek: dayIndexInWeek,
+                overallDayIndex: overallDayIndex,
+                label: label,
+                weekday: weekday,
+                date: option.date,
+                sortOrder: overallDayIndex
+            )
+        }
+    }
+
+    private func hydratedEditorDayID(for slot: WebEventLineupSlot, event: WebEvent) -> String {
+        let timeZone = TimeZone(identifier: eventTimeZoneIdentifier) ?? .current
+        let structuredEventDays = event.eventDays.sorted { lhs, rhs in
+            if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+            return lhs.overallDayIndex < rhs.overallDayIndex
+        }
+        if let eventDayId = slot.eventDayId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           structuredEventDays.contains(where: { $0.eventDayId == eventDayId }) {
+            return eventDayId
+        }
+        if let localDate = slot.localDate,
+           let eventDay = structuredEventDays.first(where: { eventCalendar.isDate($0.date, inSameDayAs: localDate) }) {
+            return eventDay.eventDayId
+        }
+        if let weekIndex = slot.weekIndex,
+           let dayIndexInWeek = slot.dayIndexInWeek,
+           let eventDay = structuredEventDays.first(where: { $0.weekIndex == weekIndex && $0.dayIndexInWeek == dayIndexInWeek }) {
+            return eventDay.eventDayId
+        }
+        if let overallDayIndex = slot.overallDayIndex,
+           let eventDay = structuredEventDays.first(where: { $0.overallDayIndex == overallDayIndex }) {
+            return eventDay.eventDayId
+        }
+        if let festivalDayIndex = slot.festivalDayIndex,
+           let eventDay = structuredEventDays.first(where: { $0.overallDayIndex == festivalDayIndex }) {
+            return eventDay.eventDayId
+        }
+        if let eventDay = structuredEventDays.first(where: { eventCalendar.isDate($0.date, inSameDayAs: slot.startTime) }) {
+            return eventDay.eventDayId
+        }
+        let fallbackDate = slot.localDate
+            ?? eventCalendar.startOfDay(for: slot.startTime)
+            ?? startDate
+        if let normalized = eventCalendar.date(bySettingHour: 12, minute: 0, second: 0, of: fallbackDate) {
+            return editorDayKey(for: normalized, timeZoneID: timeZone.identifier)
+        }
+        return editorDayKey(for: fallbackDate, timeZoneID: timeZone.identifier)
+    }
+
+    private func editorWeekdayKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = eventCalendar.timeZone
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date).lowercased()
+    }
+
+    private func editorWeekdayDisplayName(for date: Date) -> String {
+        switch editorWeekdayKey(for: date) {
+        case "monday": return "Monday"
+        case "tuesday": return "Tuesday"
+        case "wednesday": return "Wednesday"
+        case "thursday": return "Thursday"
+        case "friday": return "Friday"
+        case "saturday": return "Saturday"
+        case "sunday": return "Sunday"
+        default: return editorWeekdayKey(for: date).capitalized
+        }
+    }
+
     private var groupedLineupSlotGroups: [StageLineupGroup] {
         makeGroupedLineupSlotGroups(for: lineupEntries)
     }
@@ -2902,6 +3028,13 @@ struct EventEditorView: View {
         dayOptions.first(where: { $0.id == dayID })?.date
     }
 
+    private func structuredEventDay(for dayID: String?) -> WebEventDay? {
+        let normalizedDayID = dayID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalizedDayID.isEmpty else { return nil }
+        return editorStructuredEventDays.first(where: { $0.eventDayId == normalizedDayID })
+            ?? editorStructuredEventDays.first(where: { editorDayKey(for: $0.date) == normalizedDayID })
+    }
+
     private func festivalDayIndex(for dayID: String?) -> Int? {
         let normalizedDayID = dayID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !normalizedDayID.isEmpty else { return nil }
@@ -2959,8 +3092,8 @@ struct EventEditorView: View {
 
     private func applyPrefill(from event: WebEvent) {
         name = event.name
-        description = EventWeekScheduleMode.stripMarker(from: event.description)
-        isWeekScheduleEnabled = EventWeekScheduleMode.isEnabled(in: event.description)
+        description = event.description ?? ""
+        isWeekScheduleEnabled = event.usesStructuredWeekMode
         if let rawType = event.eventType?.trimmingCharacters(in: .whitespacesAndNewlines), !rawType.isEmpty {
             let normalizedKey = EventTypeOption.key(for: rawType)
             eventType = EventTypeOption(rawValue: normalizedKey) == nil ? EventTypeOption.other.rawValue : normalizedKey
@@ -3093,17 +3226,7 @@ struct EventEditorView: View {
                     actType: act.type,
                     performers: editablePerformers,
                     stageName: slot.stageName ?? "",
-                    dayID: {
-                        if let dayIndex = slot.festivalDayIndex, dayIndex > 0 {
-                            let logicalDay = eventCalendar.date(
-                                byAdding: .day,
-                                value: dayIndex - 1,
-                                to: Self.normalizedStartOfDay(event.startDate, timeZoneID: eventTimeZoneIdentifier)
-                            ) ?? slot.startTime
-                            return editorDayKey(for: logicalDay)
-                        }
-                        return editorDayKey(for: slot.startTime)
-                    }(),
+                    dayID: hydratedEditorDayID(for: slot, event: event),
                     startTime: shouldTreatAsUnscheduled ? nil : slot.startTime,
                     endTime: shouldTreatAsUnscheduled ? nil : slot.endTime,
                     isEditing: false
@@ -3270,7 +3393,12 @@ struct EventEditorView: View {
         let resolvedOfficialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedTicketCurrency = ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedTicketNotes = ticketNotes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let encodedDescription = EventWeekScheduleMode.embedMarker(into: description, enabled: isWeekScheduleEnabled)
+        let cleanedDescription = description
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let structuredSchedule = editorStructuredSchedule
+        let structuredWeeks = editorStructuredWeeks
+        let structuredEventDays = editorStructuredEventDays
         let resolvedManualLocation = buildManualLocationPayload(
             detailAddressZh: resolvedDetailAddressZh,
             detailAddressEn: resolvedDetailAddressEn,
@@ -3324,7 +3452,7 @@ struct EventEditorView: View {
                 let createResult = try await eventCommandRepository.createEvent(
                     input: CreateEventInput(
                         name: trimmedName,
-                        description: encodedDescription,
+                        description: cleanedDescription,
                         eventType: resolvedEventType,
                         city: resolvedCityPrimary,
                         cityI18n: resolvedCityI18n,
@@ -3340,6 +3468,9 @@ struct EventEditorView: View {
                         officialWebsite: resolvedOfficialWebsite,
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
+                        schedule: structuredSchedule,
+                        weeks: structuredWeeks,
+                        eventDays: structuredEventDays,
                         timeZone: eventTimeZoneIdentifier,
                         timeZoneCity: selectedTimeZoneLookup?.city,
                         timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
@@ -3347,6 +3478,7 @@ struct EventEditorView: View {
                         timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
                         timeZoneLat: selectedTimeZoneLookup?.lat,
                         timeZoneLng: selectedTimeZoneLookup?.lng,
+                        dayRolloverHour: 6,
                         stageOrder: normalizedStageEntries,
                         coverImageUrl: nil,
                         lineupImageUrl: nil,
@@ -3433,7 +3565,7 @@ struct EventEditorView: View {
                     id: event.id,
                         input: UpdateEventInput(
                             name: trimmedName,
-                            description: encodedDescription,
+                            description: cleanedDescription,
                             eventType: resolvedEventType,
                             city: resolvedCityPrimary,
                             cityI18n: resolvedCityI18n,
@@ -3449,6 +3581,9 @@ struct EventEditorView: View {
                         officialWebsite: resolvedOfficialWebsite ?? "",
                         startDate: normalizedStartDate,
                         endDate: normalizedEndDate,
+                        schedule: structuredSchedule,
+                        weeks: structuredWeeks,
+                        eventDays: structuredEventDays,
                         timeZone: eventTimeZoneIdentifier,
                         timeZoneCity: selectedTimeZoneLookup?.city,
                         timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
@@ -3456,6 +3591,7 @@ struct EventEditorView: View {
                         timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
                         timeZoneLat: selectedTimeZoneLookup?.lat,
                         timeZoneLng: selectedTimeZoneLookup?.lng,
+                        dayRolloverHour: 6,
                         stageOrder: normalizedStageEntries,
                         coverImageUrl: finalCover.nilIfEmpty ?? "",
                         lineupImageUrl: finalLineup.nilIfEmpty ?? "",
@@ -4592,12 +4728,18 @@ struct EventEditorView: View {
                 return candidate.isEmpty ? nil : candidate
             }()
             let resolvedDayID = resolveDayID(for: item)
-            let resolvedFestivalDayIndex = festivalDayIndex(for: resolvedDayID)
+            let resolvedEventDay = structuredEventDay(for: resolvedDayID)
+            let resolvedLocalDate = resolvedEventDay?.date ?? resolvedDayID.flatMap { dayDate(for: $0) }
 
             result.append(
                 EventLineupSlotInput(
+                    eventDayId: resolvedEventDay?.eventDayId ?? resolvedDayID,
+                    weekIndex: resolvedEventDay?.weekIndex,
+                    dayIndexInWeek: resolvedEventDay?.dayIndexInWeek,
+                    overallDayIndex: resolvedEventDay?.overallDayIndex,
+                    localDate: resolvedLocalDate,
                     djId: primaryDJID,
-                    festivalDayIndex: resolvedFestivalDayIndex,
+                    festivalDayIndex: nil,
                     djName: composedName,
                     stageName: normalizedStage.nilIfEmpty,
                     sortOrder: index + 1,
