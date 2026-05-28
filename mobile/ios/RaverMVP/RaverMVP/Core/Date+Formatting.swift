@@ -1,5 +1,98 @@
 import Foundation
 
+struct EventDiscreteDateRange: Hashable, Identifiable {
+    let id: String
+    let weekIndex: Int
+    let label: String?
+    let startDate: Date
+    let endDate: Date
+}
+
+func localizedEventWeekTitle(_ weekIndex: Int) -> String {
+    LT("第 \(weekIndex) 周", "Week \(weekIndex)", "第\(weekIndex)週")
+}
+
+func localizedEventDayCountText(dayCount: Int) -> String {
+    let count = max(dayCount, 1)
+    return LT("共\(count)日", "\(count) days total", "全\(count)日")
+}
+
+func eventDiscreteDateSummaryDateLines(
+    ranges: [EventDiscreteDateRange],
+    fallbackStartDate: Date,
+    fallbackEndDate: Date,
+    timeZone: TimeZone
+) -> [String] {
+    guard !ranges.isEmpty else {
+        return [
+            Date.appLocalizedCompactDateRangeText(
+                startDate: fallbackStartDate,
+                endDate: fallbackEndDate,
+                timeZone: timeZone,
+                includeTimeZone: false
+            )
+        ]
+    }
+
+    return ranges.map { range in
+        let prefix = ranges.count > 1 ? (range.label?.nilIfBlank ?? localizedEventWeekTitle(range.weekIndex)) : nil
+        let summary = Date.appLocalizedCompactDateRangeText(
+            startDate: range.startDate,
+            endDate: range.endDate,
+            timeZone: timeZone,
+            includeTimeZone: false
+        )
+        if let prefix {
+            return "\(prefix) · \(summary)"
+        }
+        return summary
+    }
+}
+
+func eventDiscreteDateSummaryDisplayLines(
+    dateLines: [String],
+    dayCountText: String,
+    timeZoneLabel: String? = nil
+) -> [String] {
+    let trimmedTimeZoneLabel = timeZoneLabel?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let normalizedDateLines = dateLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    guard let first = normalizedDateLines.first else {
+        return dayCountText.isEmpty ? [] : [dayCountText]
+    }
+
+    if normalizedDateLines.count == 1 {
+        var segments = [first]
+        if !dayCountText.isEmpty {
+            segments.append(dayCountText)
+        }
+        if !trimmedTimeZoneLabel.isEmpty {
+            segments.append(trimmedTimeZoneLabel)
+        }
+        return [segments.joined(separator: " · ")]
+    }
+
+    let decoratedDateLines = normalizedDateLines.map { line in
+        guard !trimmedTimeZoneLabel.isEmpty else { return line }
+        return "\(line) · \(trimmedTimeZoneLabel)"
+    }
+
+    return dayCountText.isEmpty ? decoratedDateLines : decoratedDateLines + [dayCountText]
+}
+
+func eventDiscreteDateSummaryDisplayText(
+    dateLines: [String],
+    dayCountText: String,
+    timeZone: TimeZone? = nil,
+    separator: String = "\n"
+) -> String {
+    eventDiscreteDateSummaryDisplayLines(
+        dateLines: dateLines,
+        dayCountText: dayCountText,
+        timeZoneLabel: timeZone.map(Date.appLocalizedTimeZoneLabel)
+    ).joined(separator: separator)
+}
+
 private enum AppFormattingLocale {
     static var current: Locale {
         Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
@@ -133,6 +226,77 @@ extension Date {
         }
 
         return "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endYear)年\(endMonth)月\(endDayOfMonth)日\(suffix)"
+    }
+
+    static func appLocalizedCompactDateRangeText(
+        startDate: Date,
+        endDate: Date,
+        timeZone: TimeZone,
+        includeTimeZone: Bool = false
+    ) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let startDay = calendar.startOfDay(for: startDate)
+        let endDay = calendar.startOfDay(for: endDate)
+
+        let suffix = includeTimeZone ? " · \(Self.appTimeZoneLabel(timeZone))" : ""
+
+        guard endDay >= startDay else {
+            return startDay.appLocalizedYMDTextRaw(in: timeZone) + suffix
+        }
+
+        if calendar.isDate(startDay, inSameDayAs: endDay) {
+            return startDay.appLocalizedYMDTextRaw(in: timeZone) + suffix
+        }
+
+        let startYear = calendar.component(.year, from: startDay)
+        let startMonth = calendar.component(.month, from: startDay)
+        let startDayOfMonth = calendar.component(.day, from: startDay)
+        let endYear = calendar.component(.year, from: endDay)
+        let endMonth = calendar.component(.month, from: endDay)
+        let endDayOfMonth = calendar.component(.day, from: endDay)
+
+        switch appDateLanguage {
+        case .zh, .system, .ja:
+            let compact: String
+            if startYear != endYear {
+                compact = "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endYear)年\(endMonth)月\(endDayOfMonth)日"
+            } else if startMonth != endMonth {
+                compact = "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endMonth)月\(endDayOfMonth)日"
+            } else {
+                compact = "\(startYear)年\(startMonth)月\(startDayOfMonth)日-\(endDayOfMonth)日"
+            }
+            return compact + suffix
+        case .en:
+            let startFormatter = Self.appDateFormatter(
+                zhFormat: "yyyy年M月d日",
+                enFormat: "MMM d, yyyy",
+                jaFormat: "yyyy年M月d日",
+                timeZone: timeZone
+            )
+            let sameYearFormatter = Self.appDateFormatter(
+                zhFormat: "M月d日",
+                enFormat: "MMM d",
+                jaFormat: "M月d日",
+                timeZone: timeZone
+            )
+            let sameMonthFormatter = Self.appDateFormatter(
+                zhFormat: "d日",
+                enFormat: "d",
+                jaFormat: "d日",
+                timeZone: timeZone
+            )
+
+            let compact: String
+            if startYear != endYear {
+                compact = "\(startFormatter.string(from: startDay)) - \(startFormatter.string(from: endDay))"
+            } else if startMonth != endMonth {
+                compact = "\(startFormatter.string(from: startDay)) - \(sameYearFormatter.string(from: endDay))"
+            } else {
+                compact = "\(startFormatter.string(from: startDay)) - \(sameMonthFormatter.string(from: endDay))"
+            }
+            return compact + suffix
+        }
     }
 
     func appLocalizedYMDHMText() -> String {

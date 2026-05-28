@@ -2082,7 +2082,7 @@ struct EventEditorView: View {
             return WebEventWeek(
                 id: "editor-week-\(weekIndex)",
                 weekIndex: weekIndex,
-                label: "Weekend \(weekIndex)",
+                label: localizedEventWeekTitle(weekIndex),
                 startDate: first.date,
                 endDate: last.date,
                 sortOrder: weekIndex
@@ -2098,7 +2098,7 @@ struct EventEditorView: View {
             let weekday = editorWeekdayKey(for: option.date)
             let label: String? = {
                 if isWeekScheduleEnabled {
-                    return "Weekend \(weekIndex) \(editorWeekdayDisplayName(for: option.date))"
+                    return EventWeekScheduleMode.weekDayTitle(week: weekIndex, day: dayIndexInWeek)
                 }
                 return editorWeekdayDisplayName(for: option.date)
             }()
@@ -2654,7 +2654,7 @@ struct EventEditorView: View {
     private func dayMenuTitle(for slot: EditableLineupSlot) -> String {
         guard let dayID = resolveDayID(for: slot),
               let option = dayOptions.first(where: { $0.id == dayID }) else {
-            return isWeekScheduleEnabled ? LT("Week1·Day1", "Week1·Day1", "Week1·Day1") : LT("Day1", "Day1", "Day1")
+            return isWeekScheduleEnabled ? EventWeekScheduleMode.weekDayTitle(week: 1, day: 1) : LT("Day 1", "Day 1", "Day 1")
         }
         return dayDisplayTitle(for: option)
     }

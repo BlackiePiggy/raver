@@ -457,7 +457,7 @@ enum EventWeekScheduleMode {
     }
 
     static func weekDayTitle(week: Int, day: Int) -> String {
-        "Week\(week)·Day\(day)"
+        LT("Week \(week) · Day \(day)", "Week \(week) · Day \(day)", "Week \(week) · Day \(day)")
     }
 }
 

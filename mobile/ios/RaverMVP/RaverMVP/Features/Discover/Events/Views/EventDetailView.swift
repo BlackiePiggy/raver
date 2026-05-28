@@ -6028,17 +6028,21 @@ struct EventDetailView: View {
     private func eventInfoScheduleTexts(_ event: WebEvent) -> [String] {
         let deviceTimeZone = TimeZone.current
         let eventTimeZone = EventTimeZoneDisplay.eventTimeZone(for: event) ?? event.eventTimeZone
-        let eventLines = event.discreteDateSummaryLines(in: eventTimeZone).map {
-            "\($0) · \(Date.appLocalizedTimeZoneLabel(eventTimeZone))"
-        }
+        let eventLines = eventDiscreteDateSummaryDisplayLines(
+            dateLines: event.discreteDateSummaryDateLines(in: eventTimeZone),
+            dayCountText: event.displayDayCountText,
+            timeZoneLabel: Date.appLocalizedTimeZoneLabel(eventTimeZone)
+        )
 
         guard deviceTimeZone.secondsFromGMT(for: event.primaryDisplayDate) != eventTimeZone.secondsFromGMT(for: event.primaryDisplayDate) else {
             return eventLines
         }
 
-        return eventLines + event.discreteDateSummaryLines(in: deviceTimeZone).map {
-            "\($0) · \(Date.appLocalizedTimeZoneLabel(deviceTimeZone))"
-        }
+        return eventLines + eventDiscreteDateSummaryDisplayLines(
+            dateLines: event.discreteDateSummaryDateLines(in: deviceTimeZone),
+            dayCountText: event.displayDayCountText,
+            timeZoneLabel: Date.appLocalizedTimeZoneLabel(deviceTimeZone)
+        )
     }
 
     private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {

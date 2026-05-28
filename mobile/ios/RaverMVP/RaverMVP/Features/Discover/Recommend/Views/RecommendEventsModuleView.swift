@@ -445,7 +445,7 @@ struct RecommendEventsModuleView: View {
     }
 
     private func recommendationDateText(for event: WebEvent) -> String {
-        event.startDate.appLocalizedDateRangeText(to: event.endDate, timeZone: event.eventTimeZone)
+        event.discreteDateSummaryText()
     }
 
     private func notifyHorizontalDragging(_ isDragging: Bool) {

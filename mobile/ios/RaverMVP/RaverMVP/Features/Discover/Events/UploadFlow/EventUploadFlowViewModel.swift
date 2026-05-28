@@ -2162,9 +2162,9 @@ final class EventUploadFlowViewModel: ObservableObject {
                             ?? nonEmptyTrimmed(day.eventDayRef?.date)
                             ?? nonEmptyTrimmed(day.dateText)
                             ?? LT(
-                                "Week \(week.weekIndex) · Date \(max(1, day.dayIndexInWeek))",
-                                "Week \(week.weekIndex) · Date \(max(1, day.dayIndexInWeek))",
-                                "Week \(week.weekIndex) · 日付 \(max(1, day.dayIndexInWeek))"
+                                "Week \(week.weekIndex) · Day \(max(1, day.dayIndexInWeek))",
+                                "Week \(week.weekIndex) · Day \(max(1, day.dayIndexInWeek))",
+                                "Week \(week.weekIndex) · Day \(max(1, day.dayIndexInWeek))"
                             )
                         )
                         slots.append(

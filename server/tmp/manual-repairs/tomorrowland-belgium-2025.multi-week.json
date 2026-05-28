@@ -1,0 +1,135 @@
+{
+  "eventId": "32b234ea-90e4-4bd6-ab88-86e17cec4f2b",
+  "schedule": {
+    "timeZone": "Europe/Brussels",
+    "dayRolloverHour": 6
+  },
+  "weeks": [
+    {
+      "weekIndex": 1,
+      "label": "Week 1",
+      "startDate": "2025-07-16",
+      "endDate": "2025-07-20",
+      "sortOrder": 1
+    },
+    {
+      "weekIndex": 2,
+      "label": "Week 2",
+      "startDate": "2025-07-23",
+      "endDate": "2025-07-27",
+      "sortOrder": 2
+    }
+  ],
+  "eventDays": [
+    {
+      "eventDayId": "w1d1",
+      "weekIndex": 1,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 1,
+      "legacyFestivalDayIndex": 1,
+      "label": "Week 1 Wednesday",
+      "weekday": "wednesday",
+      "date": "2025-07-16",
+      "sortOrder": 1
+    },
+    {
+      "eventDayId": "w1d2",
+      "weekIndex": 1,
+      "dayIndexInWeek": 2,
+      "overallDayIndex": 2,
+      "legacyFestivalDayIndex": 2,
+      "label": "Week 1 Thursday",
+      "weekday": "thursday",
+      "date": "2025-07-17",
+      "sortOrder": 2
+    },
+    {
+      "eventDayId": "w1d3",
+      "weekIndex": 1,
+      "dayIndexInWeek": 3,
+      "overallDayIndex": 3,
+      "legacyFestivalDayIndex": 3,
+      "label": "Week 1 Friday",
+      "weekday": "friday",
+      "date": "2025-07-18",
+      "sortOrder": 3
+    },
+    {
+      "eventDayId": "w1d4",
+      "weekIndex": 1,
+      "dayIndexInWeek": 4,
+      "overallDayIndex": 4,
+      "legacyFestivalDayIndex": 4,
+      "label": "Week 1 Saturday",
+      "weekday": "saturday",
+      "date": "2025-07-19",
+      "sortOrder": 4
+    },
+    {
+      "eventDayId": "w1d5",
+      "weekIndex": 1,
+      "dayIndexInWeek": 5,
+      "overallDayIndex": 5,
+      "legacyFestivalDayIndex": 5,
+      "label": "Week 1 Sunday",
+      "weekday": "sunday",
+      "date": "2025-07-20",
+      "sortOrder": 5
+    },
+    {
+      "eventDayId": "w2d1",
+      "weekIndex": 2,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 6,
+      "legacyFestivalDayIndex": 8,
+      "label": "Week 2 Wednesday",
+      "weekday": "wednesday",
+      "date": "2025-07-23",
+      "sortOrder": 6
+    },
+    {
+      "eventDayId": "w2d2",
+      "weekIndex": 2,
+      "dayIndexInWeek": 2,
+      "overallDayIndex": 7,
+      "legacyFestivalDayIndex": 9,
+      "label": "Week 2 Thursday",
+      "weekday": "thursday",
+      "date": "2025-07-24",
+      "sortOrder": 7
+    },
+    {
+      "eventDayId": "w2d3",
+      "weekIndex": 2,
+      "dayIndexInWeek": 3,
+      "overallDayIndex": 8,
+      "legacyFestivalDayIndex": 10,
+      "label": "Week 2 Friday",
+      "weekday": "friday",
+      "date": "2025-07-25",
+      "sortOrder": 8
+    },
+    {
+      "eventDayId": "w2d4",
+      "weekIndex": 2,
+      "dayIndexInWeek": 4,
+      "overallDayIndex": 9,
+      "legacyFestivalDayIndex": 11,
+      "label": "Week 2 Saturday",
+      "weekday": "saturday",
+      "date": "2025-07-26",
+      "sortOrder": 9
+    },
+    {
+      "eventDayId": "w2d5",
+      "weekIndex": 2,
+      "dayIndexInWeek": 5,
+      "overallDayIndex": 10,
+      "legacyFestivalDayIndex": 12,
+      "label": "Week 2 Sunday",
+      "weekday": "sunday",
+      "date": "2025-07-27",
+      "sortOrder": 10
+    }
+  ]
+}

@@ -1,17 +1,5 @@
 import SwiftUI
 
-struct EventDiscreteDateRange: Hashable, Identifiable {
-    let id: String
-    let weekIndex: Int
-    let label: String?
-    let startDate: Date
-    let endDate: Date
-}
-
-private func localizedEventWeekTitle(_ weekIndex: Int) -> String {
-    LT("第 \(weekIndex) 周", "Week \(weekIndex)", "第\(weekIndex)週")
-}
-
 private func inferredEventWeekTitle(from rawLabel: String?) -> String? {
     guard let rawLabel = rawLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
           !rawLabel.isEmpty else {
@@ -31,53 +19,6 @@ private func inferredEventWeekTitle(from rawLabel: String?) -> String? {
     }
 
     return nil
-}
-
-private func localizedEventDateSummary(
-    startDate: Date,
-    endDate: Date,
-    timeZone: TimeZone
-) -> String {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = timeZone
-    let startDay = calendar.startOfDay(for: startDate)
-    let endDay = calendar.startOfDay(for: endDate)
-
-    guard endDay >= startDay else {
-        return startDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone)
-    }
-
-    if calendar.isDate(startDay, inSameDayAs: endDay) {
-        return startDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone)
-    }
-
-    return "\(startDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone)) - \(endDay.appLocalizedYMDTextRawForEventPresentation(in: timeZone))"
-}
-
-private func eventDiscreteDateLines(
-    ranges: [EventDiscreteDateRange],
-    fallbackStartDate: Date,
-    fallbackEndDate: Date,
-    timeZone: TimeZone,
-    includeTimeZonePerLine: Bool
-) -> [String] {
-    guard !ranges.isEmpty else {
-        if includeTimeZonePerLine {
-            return [fallbackStartDate.appLocalizedDateRangeText(to: fallbackEndDate, timeZone: timeZone)]
-        }
-        return [localizedEventDateSummary(startDate: fallbackStartDate, endDate: fallbackEndDate, timeZone: timeZone)]
-    }
-
-    return ranges.map { range in
-        let prefix = ranges.count > 1 ? (range.label?.nilIfBlank ?? localizedEventWeekTitle(range.weekIndex)) : nil
-        let summary = includeTimeZonePerLine
-            ? range.startDate.appLocalizedDateRangeText(to: range.endDate, timeZone: timeZone)
-            : localizedEventDateSummary(startDate: range.startDate, endDate: range.endDate, timeZone: timeZone)
-        if let prefix {
-            return "\(prefix) · \(summary)"
-        }
-        return summary
-    }
 }
 
 enum EventVisualStatus: String {
@@ -378,17 +319,57 @@ extension WebEvent {
         discreteDateRanges.first?.startDate ?? startDate
     }
 
-    func discreteDateSummaryLines(
+    var totalDisplayDayCount: Int {
+        if !eventDays.isEmpty {
+            return eventDays.count
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = eventTimeZone
+        let startDay = calendar.startOfDay(for: startDate)
+        let endDay = calendar.startOfDay(for: endDate)
+        let span = (calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0) + 1
+        return max(span, 1)
+    }
+
+    var displayDayCountText: String {
+        localizedEventDayCountText(dayCount: totalDisplayDayCount)
+    }
+
+    func discreteDateSummaryDateLines(
         in timeZone: TimeZone? = nil,
         includeTimeZonePerLine: Bool = false
     ) -> [String] {
         let resolvedTimeZone = timeZone ?? eventTimeZone
-        return eventDiscreteDateLines(
+        let baseDateLines = eventDiscreteDateSummaryDateLines(
             ranges: discreteDateRanges,
             fallbackStartDate: startDate,
             fallbackEndDate: endDate,
-            timeZone: resolvedTimeZone,
+            timeZone: resolvedTimeZone
+        )
+        guard includeTimeZonePerLine else {
+            return baseDateLines
+        }
+        let timeZoneLabel = Date.appLocalizedTimeZoneLabel(resolvedTimeZone)
+        guard !timeZoneLabel.isEmpty else {
+            return baseDateLines
+        }
+        return baseDateLines.map { "\($0) · \(timeZoneLabel)" }
+    }
+
+    func discreteDateSummaryLines(
+        in timeZone: TimeZone? = nil,
+        includeTimeZonePerLine: Bool = false
+    ) -> [String] {
+        let dateLines = discreteDateSummaryDateLines(
+            in: timeZone,
             includeTimeZonePerLine: includeTimeZonePerLine
+        )
+        if includeTimeZonePerLine {
+            return dateLines + [displayDayCountText]
+        }
+        return eventDiscreteDateSummaryDisplayLines(
+            dateLines: dateLines,
+            dayCountText: displayDayCountText
         )
     }
 
@@ -398,12 +379,21 @@ extension WebEvent {
         separator: String = "\n"
     ) -> String {
         let resolvedTimeZone = timeZone ?? eventTimeZone
-        let lines = discreteDateSummaryLines(in: resolvedTimeZone, includeTimeZonePerLine: false)
-        let body = lines.joined(separator: separator)
-        guard includeTimeZone else { return body }
-        let suffix = Date.appLocalizedTimeZoneLabel(resolvedTimeZone)
-        guard !suffix.isEmpty else { return body }
-        return "\(body) · \(suffix)"
+        let dateLines = discreteDateSummaryDateLines(in: resolvedTimeZone, includeTimeZonePerLine: false)
+        if includeTimeZone {
+            return eventDiscreteDateSummaryDisplayText(
+                dateLines: dateLines,
+                dayCountText: displayDayCountText,
+                timeZone: resolvedTimeZone,
+                separator: separator
+            )
+        }
+        return eventDiscreteDateSummaryDisplayText(
+            dateLines: dateLines,
+            dayCountText: displayDayCountText,
+            timeZone: nil,
+            separator: separator
+        )
     }
 
 }

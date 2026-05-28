@@ -2055,7 +2055,12 @@ final class LiveWebFeatureService: WebFeatureService {
             if let apiError = try? JSONDecoder.raver.decode(BFFErrorResponse.self, from: data),
                let error = apiError.error,
                !error.isEmpty {
-                throw ServiceError.message(error)
+                throw ServiceError.message(
+                    EventSubmissionErrorMapper.userFacingMessage(
+                        code: apiError.code,
+                        rawMessage: error
+                    )
+                )
             }
             let message = String(data: data, encoding: .utf8) ?? "请求失败"
             throw ServiceError.message(message)

@@ -3009,15 +3009,11 @@ struct EventUploadFlowView: View {
         if let label = day.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
             return label
         }
-        let dateText = shortDateString(day.date, in: eventTimeZone)
         if viewModel.draft.isMultiWeekSchedule {
-            return LT(
-                "Week \(day.weekIndex) · \(dateText)",
-                "Week \(day.weekIndex) · \(dateText)",
-                "Week \(day.weekIndex) · \(dateText)"
-            )
+            return EventWeekScheduleMode.weekDayTitle(week: day.weekIndex, day: day.dayIndexInWeek)
         }
-        return dateText
+        let dateText = shortDateString(day.date, in: eventTimeZone)
+        return LT("Day \(day.overallDayIndex) · \(dateText)", "Day \(day.overallDayIndex) · \(dateText)", "Day \(day.overallDayIndex) · \(dateText)")
     }
 
     private func weekTimetableSummary(for weekIndex: Int, week: EventUploadWeekRangeDraft) -> String {
@@ -6053,18 +6049,7 @@ private struct EventUploadTimetableAIImportSheet: View {
         if !trimmed.isEmpty {
             return trimmed
         }
-        if let localDate = normalizedLocalDateText(for: slot), !localDate.isEmpty {
-            return LT(
-                "Week \(slot.weekIndex) · \(localDate)",
-                "Week \(slot.weekIndex) · \(localDate)",
-                "Week \(slot.weekIndex) · \(localDate)"
-            )
-        }
-        return LT(
-            "Week \(slot.weekIndex) · Date \(slot.dayIndexInWeek)",
-            "Week \(slot.weekIndex) · Date \(slot.dayIndexInWeek)",
-            "Week \(slot.weekIndex) · 日付 \(slot.dayIndexInWeek)"
-        )
+        return EventWeekScheduleMode.weekDayTitle(week: slot.weekIndex, day: slot.dayIndexInWeek)
     }
 
     private func eventDayIdentity(for slot: EventUploadTimetableAIEditableSlot) -> String {

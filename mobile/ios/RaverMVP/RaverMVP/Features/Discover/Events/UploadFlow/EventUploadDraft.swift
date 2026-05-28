@@ -460,7 +460,7 @@ struct EventUploadDraft: Hashable, Codable {
             WebEventWeek(
                 id: event.weeks.indices.contains(index) ? event.weeks[index].id : "draft-week-\(index + 1)",
                 weekIndex: index + 1,
-                label: inferredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                label: inferredScheduleMode == .multiWeek ? localizedEventWeekTitle(index + 1) : nil,
                 startDate: range.startDate,
                 endDate: range.endDate,
                 sortOrder: index + 1
@@ -787,7 +787,7 @@ struct EventUploadDraft: Hashable, Codable {
             WebEventWeek(
                 id: "draft-week-\(index + 1)",
                 weekIndex: index + 1,
-                label: structuredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                label: structuredScheduleMode == .multiWeek ? localizedEventWeekTitle(index + 1) : nil,
                 startDate: range.startDate,
                 endDate: range.endDate,
                 sortOrder: index + 1
@@ -807,7 +807,7 @@ struct EventUploadDraft: Hashable, Codable {
                 let weekday = Self.weekdayKey(for: cursor, timeZone: TimeZone(identifier: timeZoneIdentifier) ?? .current)
                 let label: String?
                 if structuredScheduleMode == .multiWeek {
-                    label = "Weekend \(week.weekIndex) \(Self.weekdayDisplayName(for: weekday))"
+                    label = EventWeekScheduleMode.weekDayTitle(week: week.weekIndex, day: dayIndexInWeek)
                 } else {
                     label = Self.weekdayDisplayName(for: weekday)
                 }
@@ -901,7 +901,7 @@ struct EventUploadDraft: Hashable, Codable {
             WebEventWeek(
                 id: previousCanonicalWeeks.indices.contains(index) ? previousCanonicalWeeks[index].id : "draft-week-\(index + 1)",
                 weekIndex: index + 1,
-                label: structuredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                label: structuredScheduleMode == .multiWeek ? localizedEventWeekTitle(index + 1) : nil,
                 startDate: range.startDate,
                 endDate: range.endDate,
                 sortOrder: index + 1
@@ -1005,27 +1005,41 @@ struct EventUploadDraft: Hashable, Codable {
     }
 
     func discreteDateSummaryLines(in timeZone: TimeZone) -> [String] {
-        let weeks = structuredWeeks
-        guard !weeks.isEmpty else {
-            return [startDate.appLocalizedDateRangeText(to: endDate, timeZone: timeZone)]
-        }
-
-        return weeks.map { week in
-            let prefix = weeks.count > 1
-                ? (week.label?.eventUploadNilIfBlank ?? LT("第 \(week.weekIndex) 周", "Week \(week.weekIndex)", "第\(week.weekIndex)週"))
-                : nil
-            let summary = week.startDate.eventUploadLocalizedDateSummary(to: week.endDate, timeZone: timeZone)
-            if let prefix {
-                return "\(prefix) · \(summary)"
-            }
-            return summary
-        }
+        eventDiscreteDateSummaryDisplayLines(
+            dateLines: discreteDateSummaryDateLines(in: timeZone),
+            dayCountText: displayDayCountText
+        )
     }
 
     func discreteDateSummaryText(in timeZone: TimeZone, includeTimeZone: Bool = true, separator: String = "\n") -> String {
-        let body = discreteDateSummaryLines(in: timeZone).joined(separator: separator)
-        guard includeTimeZone else { return body }
-        return "\(body) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
+        eventDiscreteDateSummaryDisplayText(
+            dateLines: discreteDateSummaryDateLines(in: timeZone),
+            dayCountText: displayDayCountText,
+            timeZone: includeTimeZone ? timeZone : nil,
+            separator: separator
+        )
+    }
+
+    func discreteDateSummaryDateLines(in timeZone: TimeZone) -> [String] {
+        let ranges = structuredWeeks.enumerated().map { index, week in
+            EventDiscreteDateRange(
+                id: week.id,
+                weekIndex: week.weekIndex,
+                label: structuredScheduleMode == .multiWeek ? (week.label?.eventUploadNilIfBlank ?? localizedEventWeekTitle(week.weekIndex)) : nil,
+                startDate: week.startDate,
+                endDate: week.endDate
+            )
+        }
+        return eventDiscreteDateSummaryDateLines(
+            ranges: ranges,
+            fallbackStartDate: startDate,
+            fallbackEndDate: endDate,
+            timeZone: timeZone
+        )
+    }
+
+    var displayDayCountText: String {
+        localizedEventDayCountText(dayCount: max(structuredEventDays.count, 1))
     }
 
     private func normalizedWeekRanges() -> [EventUploadWeekRangeDraft] {
@@ -1084,7 +1098,7 @@ struct EventUploadDraft: Hashable, Codable {
             WebEventWeek(
                 id: previousCanonicalWeeks.indices.contains(index) ? previousCanonicalWeeks[index].id : "draft-week-\(index + 1)",
                 weekIndex: index + 1,
-                label: structuredScheduleMode == .multiWeek ? "Weekend \(index + 1)" : nil,
+                label: structuredScheduleMode == .multiWeek ? localizedEventWeekTitle(index + 1) : nil,
                 startDate: range.startDate,
                 endDate: range.endDate,
                 sortOrder: index + 1
