@@ -124,6 +124,12 @@
 - [x] 已校正 content submission 通知元数据的 `reasonCode` 写回逻辑，brand 驳回原因现可按真实 reason code 透传到用户侧消息载荷
 - [x] 已修复 `server/src/routes/bff.web.routes.ts` 将 `WikiFestival.imageAssets` 误当作 Prisma 表字段查询的构建错误，当前改为从 `media_assets(ownerType=wiki_brand)` 聚合回填主办方 `imageAssets`
 - [x] `pnpm --dir server build` 已再次通过，线上 `deploy-update.sh` 当前阻塞的 TypeScript 构建错误已解除
+- [x] 已修复 iOS 主办方上传页头像选择后无反应的问题，`OrganizerUploadFlow` 现不再依赖 `PhotosPickerItem.itemIdentifier` 变化，而是由 picker selection 自身稳定驱动 cropper / 上传链路
+- [x] 服务端 brand 入库已补齐 `boundEventIDs -> Event.wikiFestivalId` 实际写回，主办方 upload flow 里绑定的活动在审核通过后会落到 event 实体
+- [x] iOS `OrganizerUploadFlow` 已移除“主办方介绍至少 30 字”的硬校验，介绍字段恢复为真正可选
+- [x] iOS `OrganizerUploadFlow` 键盘收起手势已对齐 event upload flow，当前改为仅在滚动空白区域点击时收起，不再用更激进的全局 simultaneous tap
+- [x] iOS `OrganizerUploadFlow` Step 2 当前仅保留“主办方名称必填”门槛，其余基础信息字段不再作为前进阻断项
+- [x] iOS `OrganizerUploadFlow` Step 3 多语言介绍已改为默认折叠，点击“多语言”后才展开编辑区
 
 ## 分阶段落地计划
 

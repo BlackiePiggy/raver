@@ -16,10 +16,16 @@ struct OrganizerUploadFlowView: View {
     @State private var isShowingPosterPicker = false
     @State private var isShowingProofPicker = false
     @State private var isShowingOtherPicker = false
+    @State private var avatarSelectionChangeID = 0
+    @State private var backgroundSelectionChangeID = 0
+    @State private var posterSelectionChangeID = 0
+    @State private var proofSelectionChangeID = 0
+    @State private var otherSelectionChangeID = 0
     @State private var previewPresentation: OrganizerUploadImagePreviewPresentation?
     @State private var pendingCropSession: OrganizerUploadCropSession?
     @State private var showExitConfirmation = false
     @State private var showSubmitConfirmation = false
+    @State private var isProfileLocalizationExpanded = false
 
     init(
         mode: OrganizerUploadMode = .create,
@@ -110,11 +116,11 @@ struct OrganizerUploadFlowView: View {
                 )
                 .ignoresSafeArea()
             }
-            .photosPicker(isPresented: $isShowingAvatarPicker, selection: $avatarItem, matching: .images)
-            .photosPicker(isPresented: $isShowingBackgroundPicker, selection: $backgroundItem, matching: .images)
-            .photosPicker(isPresented: $isShowingPosterPicker, selection: $posterItem, matching: .images)
-            .photosPicker(isPresented: $isShowingProofPicker, selection: $proofItems, maxSelectionCount: 10, matching: .images)
-            .photosPicker(isPresented: $isShowingOtherPicker, selection: $otherItems, maxSelectionCount: 10, matching: .images)
+            .photosPicker(isPresented: $isShowingAvatarPicker, selection: avatarPickerSelection, matching: .images)
+            .photosPicker(isPresented: $isShowingBackgroundPicker, selection: backgroundPickerSelection, matching: .images)
+            .photosPicker(isPresented: $isShowingPosterPicker, selection: posterPickerSelection, matching: .images)
+            .photosPicker(isPresented: $isShowingProofPicker, selection: proofPickerSelection, maxSelectionCount: 10, matching: .images)
+            .photosPicker(isPresented: $isShowingOtherPicker, selection: otherPickerSelection, maxSelectionCount: 10, matching: .images)
     }
 
     private var lifecycleContent: some View {
@@ -130,23 +136,76 @@ struct OrganizerUploadFlowView: View {
             .onDisappear {
                 viewModel.handleDisappear()
             }
-            .onChange(of: avatarItem?.itemIdentifier) { _, _ in
-                Task { await prepareAvatarPhotoForCropping(avatarItem) }
+            .onChange(of: avatarSelectionChangeID) { _, _ in
+                let item = avatarItem
+                Task { await prepareAvatarPhotoForCropping(item) }
             }
-            .onChange(of: backgroundItem?.itemIdentifier) { _, _ in
-                Task { await loadSinglePhoto(backgroundItem, zone: .background) }
+            .onChange(of: backgroundSelectionChangeID) { _, _ in
+                let item = backgroundItem
+                Task { await loadSinglePhoto(item, zone: .background) }
             }
-            .onChange(of: posterItem?.itemIdentifier) { _, _ in
-                Task { await loadSinglePhoto(posterItem, zone: .poster) }
+            .onChange(of: posterSelectionChangeID) { _, _ in
+                let item = posterItem
+                Task { await loadSinglePhoto(item, zone: .poster) }
             }
-            .onChange(of: proofItems.compactMap(\.itemIdentifier)) { _, _ in
+            .onChange(of: proofSelectionChangeID) { _, _ in
                 let items = proofItems
                 Task { await loadMultiplePhotos(items, zone: .proof) }
             }
-            .onChange(of: otherItems.compactMap(\.itemIdentifier)) { _, _ in
+            .onChange(of: otherSelectionChangeID) { _, _ in
                 let items = otherItems
                 Task { await loadMultiplePhotos(items, zone: .other) }
             }
+    }
+
+    private var avatarPickerSelection: Binding<PhotosPickerItem?> {
+        Binding(
+            get: { avatarItem },
+            set: { newValue in
+                avatarItem = newValue
+                avatarSelectionChangeID += 1
+            }
+        )
+    }
+
+    private var backgroundPickerSelection: Binding<PhotosPickerItem?> {
+        Binding(
+            get: { backgroundItem },
+            set: { newValue in
+                backgroundItem = newValue
+                backgroundSelectionChangeID += 1
+            }
+        )
+    }
+
+    private var posterPickerSelection: Binding<PhotosPickerItem?> {
+        Binding(
+            get: { posterItem },
+            set: { newValue in
+                posterItem = newValue
+                posterSelectionChangeID += 1
+            }
+        )
+    }
+
+    private var proofPickerSelection: Binding<[PhotosPickerItem]> {
+        Binding(
+            get: { proofItems },
+            set: { newValue in
+                proofItems = newValue
+                proofSelectionChangeID += 1
+            }
+        )
+    }
+
+    private var otherPickerSelection: Binding<[PhotosPickerItem]> {
+        Binding(
+            get: { otherItems },
+            set: { newValue in
+                otherItems = newValue
+                otherSelectionChangeID += 1
+            }
+        )
     }
 
     private var navigationWrappedContent: some View {
@@ -197,9 +256,10 @@ struct OrganizerUploadFlowView: View {
                 .padding(.bottom, 84)
             }
             .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(TapGesture().onEnded {
+            .contentShape(Rectangle())
+            .onTapGesture {
                 hideKeyboard()
-            })
+            }
             OrganizerUploadBottomBar(
                 canGoBack: viewModel.draft.currentStep.previous != nil,
                 isFinalStep: viewModel.draft.currentStep == .review,
@@ -417,26 +477,26 @@ struct OrganizerUploadFlowView: View {
                         text: localizedIntroductionBinding(viewModel.draft.preferredLanguage),
                         minHeight: 150
                     )
-                    Text(LT("多语言简介", "Localized Introductions", "多言語紹介"))
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    labeledTextArea("ZH", text: localizedIntroductionBinding(.zh), minHeight: 96)
-                    labeledTextArea("EN", text: localizedIntroductionBinding(.en), minHeight: 96)
-                    labeledTextArea("JA", text: localizedIntroductionBinding(.ja), minHeight: 96)
+
+                    OrganizerLocalizedExpandableFieldSection(
+                        title: LT("多语言简介", "Localized Introductions", "多言語紹介"),
+                        expanded: $isProfileLocalizationExpanded,
+                        zhBinding: localizedIntroductionBinding(.zh),
+                        enBinding: localizedIntroductionBinding(.en),
+                        jaBinding: localizedIntroductionBinding(.ja),
+                        extraCount: viewModel.draft.descriptionI18n.secondaryValueCount(excluding: viewModel.draft.preferredLanguage)
+                    )
+
                     let introductionLength = viewModel.draft.primaryIntroduction.count
                     Text(
                         LT(
-                            "当前长度 \(introductionLength) 字，建议至少 \(OrganizerUploadValidation.minimumIntroductionLength) 字",
-                            "Current length: \(introductionLength), recommended minimum \(OrganizerUploadValidation.minimumIntroductionLength)",
-                            "現在の文字数 \(introductionLength) 字、推奨最小文字数 \(OrganizerUploadValidation.minimumIntroductionLength) 字"
+                            "当前长度 \(introductionLength) 字，可选填写，用于补充主办方介绍。",
+                            "Current length: \(introductionLength). This field is optional and can be used to add organizer context.",
+                            "現在の文字数は \(introductionLength) 字です。この項目は任意で、主催者紹介の補足に使えます。"
                         )
                     )
                     .font(.caption)
-                    .foregroundStyle(
-                        introductionLength == 0 || introductionLength >= OrganizerUploadValidation.minimumIntroductionLength
-                            ? RaverTheme.secondaryText
-                            : .orange
-                    )
+                    .foregroundStyle(RaverTheme.secondaryText)
                 }
             }
         }
@@ -1592,6 +1652,85 @@ struct OrganizerUploadFlowView: View {
 
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+private struct OrganizerLocalizedExpandableFieldSection: View {
+    let title: String
+    @Binding var expanded: Bool
+    let zhBinding: Binding<String>
+    let enBinding: Binding<String>
+    let jaBinding: Binding<String>
+    let extraCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer(minLength: 8)
+                Button {
+                    expanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(expanded ? LT("收起", "Collapse", "閉じる") : LT("多语言", "Languages", "多言語"))
+                            .font(.caption.weight(.semibold))
+                        if extraCount > 0 {
+                            Text("\(extraCount)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(RaverTheme.accent, in: Capsule())
+                        }
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(extraCount > 0 ? RaverTheme.accent : RaverTheme.secondaryText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(RaverTheme.background, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(extraCount > 0 ? RaverTheme.accent.opacity(0.28) : RaverTheme.cardBorder, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            if expanded {
+                VStack(spacing: 10) {
+                    organizerLanguageTextArea(title: "ZH", binding: zhBinding)
+                    organizerLanguageTextArea(title: "EN", binding: enBinding)
+                    organizerLanguageTextArea(title: "JA", binding: jaBinding)
+                }
+                .padding(12)
+                .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private func organizerLanguageTextArea(title: String, binding: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            TextField(title, text: binding, axis: .vertical)
+                .lineLimit(4...8)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .frame(minHeight: 96, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(RaverTheme.card)
+                )
+                .foregroundStyle(RaverTheme.primaryText)
+        }
     }
 }
 

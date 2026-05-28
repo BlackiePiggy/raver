@@ -149,6 +149,36 @@ const ensureBrandContributor = async (
   `);
 };
 
+const boundEventIdsFromPayload = (payload: Prisma.JsonObject): string[] =>
+  Array.from(
+    new Set(
+      [
+        ...stringArray(payload.boundEventIDs),
+        ...stringArray(payload.boundEventIds),
+      ]
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+
+const bindBrandToEvents = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  brandId: string,
+  payload: Prisma.JsonObject
+): Promise<void> => {
+  const boundEventIds = boundEventIdsFromPayload(payload);
+  if (!boundEventIds.length) return;
+
+  await db.event.updateMany({
+    where: {
+      id: { in: boundEventIds },
+    },
+    data: {
+      wikiFestivalId: brandId,
+    },
+  });
+};
+
 const resolvePrimaryName = (payload: Prisma.JsonObject, fallback?: string | null): string => {
   const name =
     cleanText(payload.name) ||
@@ -782,6 +812,7 @@ export const createOrUpdateBrandFromSubmission = async (
     if (options.submissionId) {
       await rebindBrandSubmissionMediaToBrand(db, payload, options.submissionId, updated.id);
     }
+    await bindBrandToEvents(db, updated.id, payload);
     return updated;
   }
 
@@ -858,5 +889,6 @@ export const createOrUpdateBrandFromSubmission = async (
   if (options.submissionId) {
     await rebindBrandSubmissionMediaToBrand(db, payload, options.submissionId, created.id);
   }
+  await bindBrandToEvents(db, created.id, payload);
   return created;
 };

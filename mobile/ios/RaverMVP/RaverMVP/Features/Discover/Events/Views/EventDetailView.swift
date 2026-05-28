@@ -8273,6 +8273,15 @@ private struct EventRouteSharePreviewCard: View {
 }
 
 private enum EventRoutePosterRenderer {
+    struct TimetablePosterCanvasLayout {
+        let innerContentWidth: CGFloat
+        let innerPosterHeight: CGFloat
+        let outerWidth: CGFloat
+        let outerHeight: CGFloat
+        let horizontalInset: CGFloat
+        let verticalInset: CGFloat
+    }
+
     struct TimetablePosterBackgroundCandidate: Identifiable, Hashable {
         let id: String
         let urlString: String
@@ -8299,6 +8308,7 @@ private enum EventRoutePosterRenderer {
         useNoBackgroundImage: Bool = false,
         performerCardOpacity: Double = 0.92,
         backgroundOverlayOpacity: Double = 0.9,
+        targetAspectRatio: CGFloat? = nil,
         selectedBackgroundURLString: String? = nil,
         selectedBackgroundUIImage: UIImage? = nil
     ) async -> UIImage? {
@@ -8324,8 +8334,13 @@ private enum EventRoutePosterRenderer {
             eventID: event.id,
             logContext: "share-preview"
         )
-        let posterHeight =
+        let basePosterHeight =
             EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 232
+        let canvasLayout = timetablePosterCanvasLayout(
+            contentWidth: snapshotContentWidth,
+            posterHeight: basePosterHeight,
+            targetAspectRatio: targetAspectRatio
+        )
         let backgroundSelection: TimetablePosterBackgroundSelection
         if useNoBackgroundImage {
             backgroundSelection = TimetablePosterBackgroundSelection(
@@ -8356,30 +8371,87 @@ private enum EventRoutePosterRenderer {
             days: days,
             selectedDayID: selectedDay.id,
             selectedSlotIDs: selectedSlotIDs,
-            contentWidth: snapshotContentWidth,
-            posterHeight: posterHeight,
+            contentWidth: canvasLayout.innerContentWidth,
+            posterHeight: canvasLayout.innerPosterHeight,
             qrCodeImage: qrCodeImage,
             backgroundImage: backgroundImage,
             routeOwnerAvatarImage: routeOwnerAvatarImage,
             performerCardOpacity: performerCardOpacity,
-            backgroundOverlayOpacity: backgroundOverlayOpacity
+            backgroundOverlayOpacity: backgroundOverlayOpacity,
+            canvasLayout: canvasLayout
         )
         .environment(\.colorScheme, colorScheme)
 
         let renderer = ImageRenderer(content: snapshotView)
         renderer.scale = 3
         renderer.proposedSize = ProposedViewSize(
-            width: snapshotContentWidth + 20,
-            height: posterHeight
+            width: canvasLayout.outerWidth,
+            height: canvasLayout.outerHeight
         )
 
         guard let image = renderer.uiImage else { return nil }
         print(
             "[EventRoutePoster] eventId=\(event.id) context=share-preview render-success " +
             "backgroundApplied=\(backgroundImage == nil ? "no" : "yes") " +
-            "posterHeight=\(Int(posterHeight))"
+            "posterHeight=\(Int(canvasLayout.outerHeight)) " +
+            "aspectRatio=\(targetAspectRatio.map { String(format: "%.4f", $0) } ?? "original")"
         )
         return image.scaledDownIfNeeded(maxHeight: 4000)
+    }
+
+    private static func timetablePosterCanvasLayout(
+        contentWidth: CGFloat,
+        posterHeight: CGFloat,
+        targetAspectRatio: CGFloat?
+    ) -> TimetablePosterCanvasLayout {
+        let innerWidth = contentWidth + 20
+        let innerHeight = posterHeight
+        guard let targetAspectRatio, targetAspectRatio > 0 else {
+            return TimetablePosterCanvasLayout(
+                innerContentWidth: contentWidth,
+                innerPosterHeight: posterHeight,
+                outerWidth: innerWidth,
+                outerHeight: innerHeight,
+                horizontalInset: 0,
+                verticalInset: 0
+            )
+        }
+
+        let currentAspectRatio = innerWidth / innerHeight
+        if abs(currentAspectRatio - targetAspectRatio) < 0.0001 {
+            return TimetablePosterCanvasLayout(
+                innerContentWidth: contentWidth,
+                innerPosterHeight: posterHeight,
+                outerWidth: innerWidth,
+                outerHeight: innerHeight,
+                horizontalInset: 0,
+                verticalInset: 0
+            )
+        }
+
+        if targetAspectRatio > currentAspectRatio {
+            let outerWidth = innerHeight * targetAspectRatio
+            let horizontalInset = max(0, (outerWidth - innerWidth) / 2)
+            return TimetablePosterCanvasLayout(
+                innerContentWidth: contentWidth,
+                innerPosterHeight: posterHeight,
+                outerWidth: outerWidth,
+                outerHeight: innerHeight,
+                horizontalInset: horizontalInset,
+                verticalInset: 0
+            )
+        }
+
+        let outerHeight = innerWidth / targetAspectRatio
+        let verticalInset = max(0, (outerHeight - innerHeight) / 2)
+        return TimetablePosterCanvasLayout(
+            innerContentWidth: contentWidth,
+            innerPosterHeight: posterHeight,
+            outerWidth: innerWidth,
+            outerHeight: outerHeight,
+            horizontalInset: 0,
+            verticalInset: verticalInset
+        )
     }
 
     static func timetablePosterBackgroundCandidates(for event: WebEvent) -> [TimetablePosterBackgroundCandidate] {
@@ -9376,6 +9448,46 @@ private struct EventRoutePosterCustomBackgroundPickerCard: View {
     }
 }
 
+private enum EventRoutePosterAspectRatioOption: String, CaseIterable, Identifiable {
+    case original
+    case ratio9x16
+    case ratio2x3
+    case ratio3x4
+    case ratio4x5
+
+    var id: String { rawValue }
+
+    var displayTitle: String {
+        switch self {
+        case .original:
+            return LT("默认", "Default", "デフォルト")
+        case .ratio9x16:
+            return "9:16"
+        case .ratio2x3:
+            return "2:3"
+        case .ratio3x4:
+            return "3:4"
+        case .ratio4x5:
+            return "4:5"
+        }
+    }
+
+    var aspectRatio: CGFloat? {
+        switch self {
+        case .original:
+            return nil
+        case .ratio9x16:
+            return 9.0 / 16.0
+        case .ratio2x3:
+            return 2.0 / 3.0
+        case .ratio3x4:
+            return 3.0 / 4.0
+        case .ratio4x5:
+            return 4.0 / 5.0
+        }
+    }
+}
+
 private struct EventRouteShareDetailView: View {
     let navigationTitle: String
     let title: String
@@ -9399,6 +9511,7 @@ private struct EventRouteShareDetailView: View {
     @State private var selectedCustomBackgroundPhoto: PhotosPickerItem?
     @State private var selectedCustomBackgroundImage: UIImage?
     @State private var isAdvancedOptionsExpanded = false
+    @State private var selectedAspectRatioOption: EventRoutePosterAspectRatioOption = .original
     @State private var performerCardOpacity: Double = 0.92
     @State private var backgroundOverlayOpacity: Double = 0.9
 
@@ -9432,8 +9545,8 @@ private struct EventRouteShareDetailView: View {
             VStack(spacing: 20) {
                 shareSubjectCard
                 previewCard
-                advancedOptionsCard
                 backgroundPickerCard
+                advancedOptionsCard
                 hintCard
             }
             .padding(16)
@@ -9623,6 +9736,49 @@ private struct EventRouteShareDetailView: View {
                 if isAdvancedOptionsExpanded {
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 10) {
+                            Text(LT("海报比例", "Poster Aspect Ratio", "ポスター比率"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+
+                            Text(LT("保持时间表主体比例不变，通过调整四周留白来适配不同海报尺寸。", "Keep the timetable body unchanged and fit different poster sizes by adjusting the outer padding.", "タイムテーブル本体の比率は変えず、外側の余白で各ポスター比率に合わせます。"))
+                                .font(.footnote)
+                                .foregroundStyle(RaverTheme.secondaryText)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(EventRoutePosterAspectRatioOption.allCases) { option in
+                                        let isSelected = selectedAspectRatioOption == option
+                                        Button {
+                                            selectedAspectRatioOption = option
+                                        } label: {
+                                            Text(option.displayTitle)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(isSelected ? Color.white : RaverTheme.primaryText)
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 9)
+                                                .background(
+                                                    Capsule()
+                                                        .fill(isSelected ? RaverTheme.accent : RaverTheme.card)
+                                                        .overlay(
+                                                            Capsule()
+                                                                .stroke(
+                                                                    isSelected ? RaverTheme.accent : RaverTheme.primaryText.opacity(0.08),
+                                                                    lineWidth: 1
+                                                                )
+                                                        )
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 1)
+                            }
+                        }
+
+                        Divider()
+                            .overlay(RaverTheme.cardBorder.opacity(0.45))
+
+                        VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(LT("演出卡片透明度", "Performer Card Opacity", "出演カードの透明度"))
                                     .font(.subheadline.weight(.semibold))
@@ -9639,7 +9795,7 @@ private struct EventRouteShareDetailView: View {
                                 .font(.footnote)
                                 .foregroundStyle(RaverTheme.secondaryText)
 
-                            Slider(value: $performerCardOpacity, in: 0.45...1.0, step: 0.05)
+                            Slider(value: $performerCardOpacity, in: 0.2...1.0, step: 0.05)
                                 .tint(RaverTheme.accent)
                         }
 
@@ -9663,7 +9819,7 @@ private struct EventRouteShareDetailView: View {
                                 .font(.footnote)
                                 .foregroundStyle(RaverTheme.secondaryText)
 
-                            Slider(value: $backgroundOverlayOpacity, in: 0.35...1.0, step: 0.05)
+                            Slider(value: $backgroundOverlayOpacity, in: 0.0...1.6, step: 0.05)
                                 .tint(RaverTheme.accent)
                         }
                     }
@@ -9792,6 +9948,7 @@ private struct EventRouteShareDetailView: View {
             useNoBackgroundImage: isNoBackgroundSelected,
             performerCardOpacity: performerCardOpacity,
             backgroundOverlayOpacity: backgroundOverlayOpacity,
+            targetAspectRatio: selectedAspectRatioOption.aspectRatio,
             selectedBackgroundURLString: selectedBackgroundURLString,
             selectedBackgroundUIImage: selectedBackgroundUIImage
         ) else {
@@ -9882,6 +10039,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
     let routeOwnerAvatarImage: UIImage?
     let performerCardOpacity: Double
     let backgroundOverlayOpacity: Double
+    let canvasLayout: EventRoutePosterRenderer.TimetablePosterCanvasLayout
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
@@ -9953,7 +10111,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
     }
 
     private var routeHeadlineRow: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .bottom, spacing: 10) {
             routeOwnerAvatarView
 
             if let routeHeadlineText {
@@ -9971,7 +10129,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             plannerBackgroundLayer
 
             VStack(alignment: .leading, spacing: 14) {
@@ -9995,8 +10153,9 @@ private struct EventRoutePlannerShareSnapshotView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
             .frame(width: contentWidth + 20, alignment: .leading)
+            .offset(x: canvasLayout.horizontalInset, y: canvasLayout.verticalInset)
         }
-        .frame(width: contentWidth + 20, height: posterHeight)
+        .frame(width: canvasLayout.outerWidth, height: canvasLayout.outerHeight)
     }
 
     @ViewBuilder
@@ -10012,7 +10171,7 @@ private struct EventRoutePlannerShareSnapshotView: View {
             Image(uiImage: backgroundImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: contentWidth + 20, height: posterHeight)
+                .frame(width: canvasLayout.outerWidth, height: canvasLayout.outerHeight)
                 .clipped()
                 .ignoresSafeArea()
 
@@ -10022,38 +10181,22 @@ private struct EventRoutePlannerShareSnapshotView: View {
     }
 
     private var timetableThemeOverlay: some View {
-        ZStack {
-            LinearGradient(
-                colors: colorScheme == .dark
-                    ? [
-                        Color.black.opacity(0.66 * backgroundOverlayOpacity),
-                        Color.black.opacity(0.58 * backgroundOverlayOpacity),
-                        Color.black.opacity(0.78 * backgroundOverlayOpacity)
-                    ]
-                    : [
-                        Color.white.opacity(0.56 * backgroundOverlayOpacity),
-                        Color.white.opacity(0.46 * backgroundOverlayOpacity),
-                        Color.white.opacity(0.64 * backgroundOverlayOpacity)
-                    ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            VStack(spacing: 44) {
-                ForEach(0..<7, id: \.self) { _ in
-                    Rectangle()
-                        .fill(
-                            colorScheme == .dark
-                                ? Color.white.opacity(0.14)
-                                : Color.black.opacity(0.12)
-                        )
-                        .frame(height: 1)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 88)
-        }
-        .frame(width: contentWidth + 20, height: posterHeight)
+        LinearGradient(
+            colors: colorScheme == .dark
+                ? [
+                    Color.black.opacity(0.66 * backgroundOverlayOpacity),
+                    Color.black.opacity(0.58 * backgroundOverlayOpacity),
+                    Color.black.opacity(0.78 * backgroundOverlayOpacity)
+                ]
+                : [
+                    Color.white.opacity(0.56 * backgroundOverlayOpacity),
+                    Color.white.opacity(0.46 * backgroundOverlayOpacity),
+                    Color.white.opacity(0.64 * backgroundOverlayOpacity)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .frame(width: canvasLayout.outerWidth, height: canvasLayout.outerHeight)
     }
 
     private var headerSection: some View {
@@ -10989,8 +11132,13 @@ private struct EventRoutePlannerView: View {
             EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth
         )
         let snapshotContentWidth = max(fullBoardWidth, viewportContentWidth)
-        let posterHeight =
+        let basePosterHeight =
             EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 96
+        let canvasLayout = EventRoutePosterRenderer.timetablePosterCanvasLayout(
+            contentWidth: snapshotContentWidth,
+            posterHeight: basePosterHeight,
+            targetAspectRatio: nil
+        )
         let routeOwnerAvatarImage = await EventRoutePosterRenderer.loadPosterAvatarImage(
             avatarURLString: appState.session?.user.avatarURL,
             userID: currentUserID,
@@ -11012,21 +11160,22 @@ private struct EventRoutePlannerView: View {
             days: days,
             selectedDayID: selectedDay.id,
             selectedSlotIDs: selectedSlotIDs,
-            contentWidth: snapshotContentWidth,
-            posterHeight: posterHeight,
+            contentWidth: canvasLayout.innerContentWidth,
+            posterHeight: canvasLayout.innerPosterHeight,
             qrCodeImage: nil,
             backgroundImage: backgroundImage,
             routeOwnerAvatarImage: routeOwnerAvatarImage,
             performerCardOpacity: performerCardOpacity,
-            backgroundOverlayOpacity: backgroundOverlayOpacity
+            backgroundOverlayOpacity: backgroundOverlayOpacity,
+            canvasLayout: canvasLayout
         )
         .environment(\.colorScheme, colorScheme)
 
         let renderer = ImageRenderer(content: snapshotView)
         renderer.scale = 3
         renderer.proposedSize = ProposedViewSize(
-            width: snapshotContentWidth + 20,
-            height: posterHeight
+            width: canvasLayout.outerWidth,
+            height: canvasLayout.outerHeight
         )
 
         guard let image = renderer.uiImage else {
@@ -11036,7 +11185,7 @@ private struct EventRoutePlannerView: View {
         print(
             "[EventRoutePoster] eventId=\(event.id) context=route-save render-success " +
             "backgroundApplied=\(backgroundImage == nil ? "no" : "yes") " +
-            "posterHeight=\(Int(posterHeight))"
+            "posterHeight=\(Int(canvasLayout.outerHeight))"
         )
         return image.scaledDownIfNeeded(maxHeight: 4000)
     }

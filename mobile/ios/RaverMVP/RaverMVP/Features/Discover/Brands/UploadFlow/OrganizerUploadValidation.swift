@@ -7,11 +7,8 @@ struct OrganizerUploadValidationIssue: Identifiable, Hashable {
 }
 
 enum OrganizerUploadValidation {
-    static let minimumIntroductionLength = 30
-
     static func issues(for draft: OrganizerUploadDraft) -> [OrganizerUploadValidationIssue] {
         var issues: [OrganizerUploadValidationIssue] = []
-        let trimmedIntroduction = draft.primaryIntroduction
 
         if draft.avatarImage == nil {
             issues.append(OrganizerUploadValidationIssue(
@@ -23,21 +20,6 @@ enum OrganizerUploadValidation {
             issues.append(OrganizerUploadValidationIssue(
                 step: .basic,
                 message: LT("请填写主办方名称", "Enter the organizer name", "主催者名を入力してください")
-            ))
-        }
-        if trimmedIntroduction.isEmpty {
-            issues.append(OrganizerUploadValidationIssue(
-                step: .profile,
-                message: LT("请填写主办方介绍", "Enter the organizer profile", "主催者紹介を入力してください")
-            ))
-        } else if trimmedIntroduction.count < minimumIntroductionLength {
-            issues.append(OrganizerUploadValidationIssue(
-                step: .profile,
-                message: LT(
-                    "主办方介绍至少需要 \(minimumIntroductionLength) 个字",
-                    "The organizer profile must be at least \(minimumIntroductionLength) characters",
-                    "主催者紹介は最低 \(minimumIntroductionLength) 文字必要です"
-                )
             ))
         }
         if !draft.hasAnyLink && draft.proofImages.isEmpty {

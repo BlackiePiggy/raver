@@ -32,6 +32,31 @@ const cleanText = (value: unknown): string | undefined => {
   return trimmed || undefined;
 };
 
+const hasOwn = (value: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
+const resolveOptionalNullableTextField = (
+  payload: Prisma.JsonObject,
+  key: string
+): string | null | undefined => {
+  if (!hasOwn(payload, key)) return undefined;
+  return cleanText(payload[key]) || null;
+};
+
+const resolveOptionalTriTextField = (
+  payload: Prisma.JsonObject,
+  key: string,
+  fallback: string,
+  options: {
+    includeWhen?: boolean;
+  } = {}
+): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined => {
+  if (options.includeWhen === false) return undefined;
+  if (!hasOwn(payload, key) && options.includeWhen === undefined) return undefined;
+  const normalized = normalizeTriTextPayload(payload[key], fallback);
+  return normalized ? triTextToJson(normalized) : Prisma.DbNull;
+};
+
 const resolveEventLineupSyncMode = (
   payload: Prisma.JsonObject | Prisma.InputJsonObject | Record<string, unknown>
 ): EventLineupSyncMode => {
@@ -976,38 +1001,69 @@ export async function createOrUpdateEventFromSubmission(
     throw new Error('至少需要上传一张海报、阵容图或封面图');
   }
 
-  const ticketCurrency = cleanText(payload.ticketCurrency) || null;
+  const description = resolveOptionalNullableTextField(payload, 'description');
+  const sourceEventUrl = resolveOptionalNullableTextField(payload, 'sourceEventUrl');
+  const coverImageUrl = resolveOptionalNullableTextField(payload, 'coverImageUrl');
+  const lineupImageUrl = resolveOptionalNullableTextField(payload, 'lineupImageUrl');
+  const eventType = resolveOptionalNullableTextField(payload, 'eventType');
+  const organizerName = resolveOptionalNullableTextField(payload, 'organizerName');
+  const city = resolveOptionalNullableTextField(payload, 'city');
+  const country = resolveOptionalNullableTextField(payload, 'country');
+  const manualLocation = hasOwn(payload, 'manualLocation')
+    ? ((payload.manualLocation as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+    : undefined;
+  const locationPoint = hasOwn(payload, 'locationPoint')
+    ? ((payload.locationPoint as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+    : undefined;
+  const latitude = hasOwn(payload, 'latitude') ? decimalOrNull(payload.latitude) : undefined;
+  const longitude = hasOwn(payload, 'longitude') ? decimalOrNull(payload.longitude) : undefined;
+  const ticketUrl = resolveOptionalNullableTextField(payload, 'ticketUrl');
+  const ticketCurrency = resolveOptionalNullableTextField(payload, 'ticketCurrency');
+  const ticketNotes = resolveOptionalNullableTextField(payload, 'ticketNotes');
+  const officialWebsite = resolveOptionalNullableTextField(payload, 'officialWebsite');
   const ticketTiers = eventTicketTiersFromPayload(payload.ticketTiers, ticketCurrency || undefined);
+  const wikiFestivalId = resolveOptionalNullableTextField(payload, 'wikiFestivalId');
+  const descriptionI18n = resolveOptionalTriTextField(payload, 'descriptionI18n', description || '', {
+    includeWhen: hasOwn(payload, 'description') || hasOwn(payload, 'descriptionI18n'),
+  });
+  const cityI18n = resolveOptionalTriTextField(payload, 'cityI18n', city || '', {
+    includeWhen: hasOwn(payload, 'city') || hasOwn(payload, 'cityI18n'),
+  });
+  const countryI18n = resolveOptionalTriTextField(payload, 'countryI18n', country || '', {
+    includeWhen: hasOwn(payload, 'country') || hasOwn(payload, 'countryI18n'),
+  });
   const eventData = {
     name,
     nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
-    description: cleanText(payload.description) || null,
-    descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.description) || '')),
-    coverImageUrl: cleanText(payload.coverImageUrl) || null,
-    lineupImageUrl: cleanText(payload.lineupImageUrl) || null,
+    wikiFestivalId,
+    description,
+    descriptionI18n,
+    coverImageUrl,
+    lineupImageUrl,
     imageAssets: imageAssets.length ? imageAssets : Prisma.JsonNull,
-    eventType: cleanText(payload.eventType) || null,
-    organizerName: cleanText(payload.organizerName) || null,
-    city: cleanText(payload.city) || null,
-    country: cleanText(payload.country) || null,
-    cityI18n: triTextToJson(normalizeTriTextPayload(payload.cityI18n, cleanText(payload.city) || '')),
-    countryI18n: triTextToJson(normalizeTriTextPayload(payload.countryI18n, cleanText(payload.country) || '')),
-    manualLocation: (payload.manualLocation as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
-    locationPoint: (payload.locationPoint as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
-    latitude: decimalOrNull(payload.latitude),
-    longitude: decimalOrNull(payload.longitude),
+    eventType,
+    organizerName,
+    sourceEventUrl,
+    city,
+    country,
+    cityI18n,
+    countryI18n,
+    manualLocation,
+    locationPoint,
+    latitude,
+    longitude,
     startDate,
     endDate,
     timeZone,
     startTime: cleanText(payload.startTime) || undefined,
     endTime: cleanText(payload.endTime) || undefined,
     dayRolloverHour: integerOrNull(payload.dayRolloverHour) ?? undefined,
-    ticketUrl: cleanText(payload.ticketUrl) || null,
+    ticketUrl,
     ticketPriceMin: decimalOrNull(payload.ticketPriceMin),
     ticketPriceMax: decimalOrNull(payload.ticketPriceMax),
     ticketCurrency,
-    ticketNotes: cleanText(payload.ticketNotes) || null,
-    officialWebsite: cleanText(payload.officialWebsite) || null,
+    ticketNotes,
+    officialWebsite,
     status: cleanText(payload.status) || 'upcoming',
     isVerified: true,
   } as any;

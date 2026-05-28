@@ -34,6 +34,10 @@ enum EventUploadMappers {
     ) -> CreateEventInput {
         let language = draft.preferredLanguage
         let name = draft.name.primaryValue(preferredLanguage: language).trimmed
+        let description = EventWeekScheduleMode.embedMarker(
+            into: draft.description,
+            enabled: draft.scheduleMode == .multiWeek
+        )
         let city = draft.city.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let country = draft.country.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let cityI18n = localizedText(from: draft.city, language: language)
@@ -48,7 +52,7 @@ enum EventUploadMappers {
             nameI18n: localizedText(from: draft.name, language: language),
             wikiFestivalId: draft.organizerFestivalID?.trimmed.eventUploadMapperNilIfBlank,
             abbreviation: draft.abbreviation.trimmed.eventUploadMapperNilIfBlank,
-            description: nil,
+            description: description,
             eventType: EventTypeOption.submissionValue(for: draft.eventType),
             organizerName: draft.organizerName.trimmed.eventUploadMapperNilIfBlank,
             sourceEventUrl: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
@@ -76,7 +80,8 @@ enum EventUploadMappers {
             longitude: draft.longitude,
             ticketUrl: draft.ticket.ticketURL.trimmed.eventUploadMapperNilIfBlank,
             ticketCurrency: draft.ticket.currency.trimmed.uppercased().eventUploadMapperNilIfBlank,
-            officialWebsite: nil,
+            ticketNotes: draft.ticketNotes.trimmed.eventUploadMapperNilIfBlank,
+            officialWebsite: draft.officialWebsite.trimmed.eventUploadMapperNilIfBlank,
             startDate: draft.startDate,
             endDate: draft.endDate,
             timeZone: timeZone,
@@ -124,8 +129,8 @@ enum EventUploadMappers {
             longitude: create.longitude,
             ticketUrl: create.ticketUrl ?? "",
             ticketCurrency: create.ticketCurrency ?? "",
-            ticketNotes: "",
-            officialWebsite: nil,
+            ticketNotes: create.ticketNotes ?? "",
+            officialWebsite: create.officialWebsite ?? "",
             startDate: create.startDate,
             endDate: create.endDate,
             timeZone: create.timeZone,

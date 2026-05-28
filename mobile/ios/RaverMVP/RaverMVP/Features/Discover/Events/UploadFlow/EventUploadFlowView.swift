@@ -428,6 +428,12 @@ struct EventUploadFlowView: View {
                 text: abbreviationBinding
             )
 
+            uploadTextField(
+                title: LT("活动简介", "Event Description", "イベント紹介"),
+                text: descriptionBinding,
+                axis: .vertical
+            )
+
             VStack(alignment: .leading, spacing: 8) {
                 fieldTitle(LT("活动类型", "Event Type", "イベント種別"), isRequired: false)
                 Picker(EventTypeOption.pickerPrompt, selection: eventTypeBinding) {
@@ -556,6 +562,11 @@ struct EventUploadFlowView: View {
             uploadTextField(
                 title: LT("原文链接", "Source URL", "原文リンク"),
                 text: sourceURLBinding
+            )
+
+            uploadTextField(
+                title: LT("官网链接", "Official Website", "公式サイト"),
+                text: officialWebsiteBinding
             )
 
         }
@@ -956,6 +967,12 @@ struct EventUploadFlowView: View {
                 ticketFieldCard(title: LT("购票链接", "Ticket URL", "チケットURL"), text: ticketBinding(\.ticketURL))
             }
 
+            uploadTextField(
+                title: LT("票务备注", "Ticket Notes", "チケット備考"),
+                text: ticketNotesBinding,
+                axis: .vertical
+            )
+
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(LT("票档", "Ticket Tiers", "券種"))
@@ -1061,7 +1078,10 @@ struct EventUploadFlowView: View {
                 rows: [
                     viewModel.draft.name.primaryValue(preferredLanguage: viewModel.draft.preferredLanguage),
                     EventTypeOption.displayText(for: viewModel.draft.eventType, fallbackWhenEmpty: false),
+                    viewModel.draft.description.trimmingCharacters(in: .whitespacesAndNewlines),
                     viewModel.locationSummary,
+                    viewModel.draft.sourceURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                    viewModel.draft.officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines),
                 ].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             )
 
@@ -1764,6 +1784,10 @@ struct EventUploadFlowView: View {
         if !url.isEmpty {
             rows.append(url)
         }
+        let notes = viewModel.draft.ticketNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !notes.isEmpty {
+            rows.append(notes)
+        }
         rows.append(contentsOf: viewModel.draft.ticket.tiers.enumerated().compactMap { index, tier in
             let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !price.isEmpty else { return nil }
@@ -2341,6 +2365,14 @@ struct EventUploadFlowView: View {
         }
     }
 
+    private var descriptionBinding: Binding<String> {
+        Binding {
+            viewModel.draft.description
+        } set: { value in
+            viewModel.updateDescription(value)
+        }
+    }
+
     private var eventTypeBinding: Binding<String> {
         Binding {
             viewModel.draft.eventType
@@ -2508,6 +2540,22 @@ struct EventUploadFlowView: View {
             viewModel.draft.sourceURL
         } set: { value in
             viewModel.updateSourceURL(value)
+        }
+    }
+
+    private var officialWebsiteBinding: Binding<String> {
+        Binding {
+            viewModel.draft.officialWebsite
+        } set: { value in
+            viewModel.updateOfficialWebsite(value)
+        }
+    }
+
+    private var ticketNotesBinding: Binding<String> {
+        Binding {
+            viewModel.draft.ticketNotes
+        } set: { value in
+            viewModel.updateTicketNotes(value)
         }
     }
 

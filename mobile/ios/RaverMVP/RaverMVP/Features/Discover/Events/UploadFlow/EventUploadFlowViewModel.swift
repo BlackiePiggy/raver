@@ -669,6 +669,12 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
+    func updateDescription(_ value: String) {
+        draft.description = value
+        draft.dirty = true
+        saveDraft()
+    }
+
     func updateOrganizerName(_ value: String) {
         guard draft.organizerFestivalID == nil else { return }
         draft.organizerName = value
@@ -747,6 +753,18 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func updateSourceURL(_ value: String) {
         draft.sourceURL = value
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateOfficialWebsite(_ value: String) {
+        draft.officialWebsite = value
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateTicketNotes(_ value: String) {
+        draft.ticketNotes = value
         draft.dirty = true
         saveDraft()
     }

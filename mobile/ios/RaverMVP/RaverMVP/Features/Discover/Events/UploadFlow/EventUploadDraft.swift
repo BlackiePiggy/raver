@@ -333,10 +333,12 @@ struct EventUploadDraft: Hashable, Codable {
     var imageZones: [EventUploadImageZone: [EventUploadImageDraft]] = EventUploadDraft.emptyImageZones()
     var name = EventUploadLocalizedFields()
     var abbreviation = ""
+    var description = ""
     var eventType = ""
     var organizerFestivalID: String?
     var organizerName = ""
     var sourceURL = ""
+    var officialWebsite = ""
     var city = EventUploadLocalizedFields()
     var country = EventUploadLocalizedFields()
     var detailAddress = EventUploadLocalizedFields()
@@ -360,6 +362,7 @@ struct EventUploadDraft: Hashable, Codable {
     var incrementalBaseline: IncrementalBaseline? = nil
     var pendingSubmissionIdempotencyKey: String? = nil
     var ticket = EventUploadTicketDraft()
+    var ticketNotes = ""
     var dirty = false
     var updatedAt: Date? = Date()
 
@@ -375,13 +378,15 @@ struct EventUploadDraft: Hashable, Codable {
             ja: event.nameI18n?.ja ?? ""
         )
         draft.abbreviation = event.abbreviation ?? ""
+        draft.description = EventWeekScheduleMode.stripMarker(from: event.description)
         draft.eventType = event.eventType ?? ""
         draft.organizerFestivalID = event.wikiFestivalId ?? event.wikiFestival?.id
         draft.organizerName = event.wikiFestival?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
             ?? event.wikiFestival?.name
             ?? event.organizerName
             ?? ""
-        draft.sourceURL = event.sourceEventUrl ?? event.officialWebsite ?? ""
+        draft.sourceURL = event.sourceEventUrl ?? ""
+        draft.officialWebsite = event.officialWebsite ?? ""
         draft.city = EventUploadLocalizedFields(
             zh: event.cityI18n?.zh ?? "",
             en: event.cityI18n?.en ?? event.city ?? "",
@@ -409,7 +414,11 @@ struct EventUploadDraft: Hashable, Codable {
         draft.weekRanges = [EventUploadWeekRangeDraft(startDate: normalizedStartDate, endDate: normalizedEndDate)]
         var eventCalendar = Calendar(identifier: .gregorian)
         eventCalendar.timeZone = eventTimeZone
-        draft.scheduleMode = eventCalendar.isDate(normalizedStartDate, inSameDayAs: normalizedEndDate) ? .singleDay : .multiDay
+        if EventWeekScheduleMode.isEnabled(in: event.description) {
+            draft.scheduleMode = .multiWeek
+        } else {
+            draft.scheduleMode = eventCalendar.isDate(normalizedStartDate, inSameDayAs: normalizedEndDate) ? .singleDay : .multiDay
+        }
         if let eventTimeZoneID = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines), !eventTimeZoneID.isEmpty {
             let localizedCityEn = event.cityI18n?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let rawCity = event.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -472,6 +481,7 @@ struct EventUploadDraft: Hashable, Codable {
             ticketURL: event.ticketUrl ?? "",
             tiers: fallbackTicketTiers
         )
+        draft.ticketNotes = event.ticketNotes ?? ""
         draft.hydrateTimetableSlots(from: event)
         draft.hydrateLineupOnlySlots(from: event)
         draft.incrementalBaseline = IncrementalBaseline(
