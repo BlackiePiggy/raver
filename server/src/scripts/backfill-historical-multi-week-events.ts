@@ -65,6 +65,9 @@ const diffDaysInclusive = (start: Date, end: Date): number =>
 const addUtcDays = (value: Date, days: number): Date =>
   new Date(startOfUtcDay(value).getTime() + days * dayMs);
 
+const weekdayShort = (value: Date): string =>
+  value.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toLowerCase();
+
 const lowerWeekday = (value: Date): string =>
   value.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase();
 
@@ -75,33 +78,47 @@ const inferTwoWeekendPattern = (startDate: Date, endDate: Date): CandidateResolu
   const normalizedStart = startOfUtcDay(startDate);
   const normalizedEnd = startOfUtcDay(endDate);
   const totalInclusiveDays = diffDaysInclusive(normalizedStart, normalizedEnd);
-  if (totalInclusiveDays < 6) return null;
+  if (totalInclusiveDays !== 10 && totalInclusiveDays !== 11) return null;
 
-  const firstWeekEnd = addUtcDays(normalizedStart, 2);
-  if (firstWeekEnd.getTime() > normalizedEnd.getTime()) return null;
+  let firstWeekStart: Date | null = null;
+  for (let offset = 0; offset <= 2; offset += 1) {
+    const candidate = addUtcDays(normalizedStart, offset);
+    if (weekdayShort(candidate) === 'fri') {
+      firstWeekStart = candidate;
+      break;
+    }
+  }
+  if (!firstWeekStart) return null;
+  const firstWeekEnd = addUtcDays(firstWeekStart, 2);
+  if (weekdayShort(firstWeekEnd) !== 'sun' || firstWeekEnd.getTime() > normalizedEnd.getTime()) return null;
 
-  const secondWeekStart = addUtcDays(normalizedEnd, -2);
-  if (secondWeekStart.getTime() <= firstWeekEnd.getTime()) return null;
+  let secondWeekEnd: Date | null = null;
+  for (let offset = 0; offset <= 2; offset += 1) {
+    const candidate = addUtcDays(normalizedEnd, -offset);
+    if (weekdayShort(candidate) === 'sun') {
+      secondWeekEnd = candidate;
+      break;
+    }
+  }
+  if (!secondWeekEnd) return null;
+  const secondWeekStart = addUtcDays(secondWeekEnd, -2);
+  if (weekdayShort(secondWeekStart) !== 'fri' || secondWeekStart.getTime() <= firstWeekEnd.getTime()) return null;
 
   const gapDays = Math.round((secondWeekStart.getTime() - firstWeekEnd.getTime()) / dayMs) - 1;
-  if (gapDays < 3) return null;
-
-  const firstSpan = diffDaysInclusive(normalizedStart, firstWeekEnd);
-  const secondSpan = diffDaysInclusive(secondWeekStart, normalizedEnd);
-  if (firstSpan !== 3 || secondSpan !== 3) return null;
+  if (gapDays !== 4 && gapDays !== 5) return null;
 
   return [
     {
       weekIndex: 1,
       label: 'Weekend 1',
-      startDate: normalizedStart,
+      startDate: firstWeekStart,
       endDate: firstWeekEnd,
     },
     {
       weekIndex: 2,
       label: 'Weekend 2',
       startDate: secondWeekStart,
-      endDate: normalizedEnd,
+      endDate: secondWeekEnd,
     },
   ];
 };
@@ -283,6 +300,11 @@ async function applyResolution(resolution: CandidateResolution): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (!dryRun && !targetEventId) {
+    throw new Error(
+      'historical multi-week apply 已被限制为单活动模式；请先设置 EVENT_MULTI_WEEK_BACKFILL_EVENT_ID，再执行 apply'
+    );
+  }
   logStep('scan start', { dryRun, targetEventId });
   const candidates = await listCandidateEvents();
   const resolved = candidates

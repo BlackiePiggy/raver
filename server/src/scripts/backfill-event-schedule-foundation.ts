@@ -5,6 +5,8 @@ const prisma = new PrismaClient();
 
 const dryRun = process.env.EVENT_SCHEDULE_FOUNDATION_BACKFILL_APPLY !== '1';
 const targetEventId = process.env.EVENT_SCHEDULE_FOUNDATION_EVENT_ID?.trim() || null;
+const startAfterEventId = process.env.EVENT_SCHEDULE_FOUNDATION_START_AFTER_EVENT_ID?.trim() || null;
+const transactionTimeoutMs = Number(process.env.EVENT_SCHEDULE_FOUNDATION_TX_TIMEOUT_MS || 60_000);
 
 type FoundationCandidateRow = {
   id: string;
@@ -90,6 +92,7 @@ async function listCandidates(): Promise<FoundationCandidateRow[]> {
     LEFT JOIN performance_stats ps
       ON ps."event_id" = e."id"
     WHERE (${targetEventId}::text IS NULL OR e."id" = ${targetEventId})
+      AND (${startAfterEventId}::text IS NULL OR e."id" > ${startAfterEventId})
       AND (
         COALESCE(ws.week_count, 0) = 0
         OR COALESCE(ds.event_day_count, 0) = 0
@@ -185,11 +188,13 @@ async function applyFoundation(event: FoundationCandidateRow): Promise<void> {
         },
       });
     }
+  }, {
+    timeout: transactionTimeoutMs,
   });
 }
 
 async function main(): Promise<void> {
-  logStep('scan start', { dryRun, targetEventId });
+  logStep('scan start', { dryRun, targetEventId, startAfterEventId, transactionTimeoutMs });
   const candidates = await listCandidates();
 
   logStep('scan done', {
