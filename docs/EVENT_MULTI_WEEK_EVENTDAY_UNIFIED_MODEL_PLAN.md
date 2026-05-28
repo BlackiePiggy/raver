@@ -25,6 +25,7 @@
 - [x] 为 `event_performances` 增加 `event_day_id`
 - [x] 为 `event_performances` 增加 `week_index / day_index_in_week / overall_day_index / local_date`
 - [x] 完成数据库 migration 与 schema 对齐
+- [x] 补充历史活动 multi-week 结构化回填脚本入口
 
 ### 3. 服务端事件接口改造
 
@@ -110,6 +111,9 @@
 
 - [x] 已新增 Prisma schema 结构：`Event.scheduleMode`、`EventWeek`、`EventDay`、`EventPerformance.eventDayId/week/day/localDate`
 - [x] 已新增数据库 migration：`20260528120000_add_event_weeks_and_event_days_unified_model`
+- [x] 已将 `20260528120000_add_event_weeks_and_event_days_unified_model` 收口为 schema-only migration，避免线上 deploy 时因全量历史回填触发 statement timeout
+- [x] 已补充历史双周末活动修复脚本：`server/src/scripts/backfill-historical-multi-week-events.ts`
+- [x] 已补充基础历史 schedule 回填脚本：`server/src/scripts/backfill-event-schedule-foundation.ts`
 - [x] 已扩展 server canonical timetable 类型，允许 slot/performance 携带 `eventDayId`
 - [x] 已扩展 BFF 事件查询选择器与 `mapEvent` 输出，开始返回 `schedule / weeks / eventDays`
 - [x] 已扩展 iOS 共享 `WebEvent` / `CreateEventInput` / `UpdateEventInput` / Timetable AI v3 基础模型
@@ -148,6 +152,8 @@
 - [x] 已将 server legacy event/timetable controller 的正式 slot 写入收口为 `eventDayId/week/day/localDate` 主链，`festivalDayIndex` 仅保留兼容读字段，不再作为新写入值回灌
 - [x] 已补充 `server/src/scripts/event-multi-week-eventday-guardrails.ts`，覆盖 multi-week `schedule/weeks/eventDays` 契约、`eventDayId` 必填、legacy `festivalDayIndex` 禁止作为正式写入三类 guardrail
 - [x] 已执行 `pnpm -C server events:multi-week:eventday:guardrails`
+- [x] 已提供 `pnpm -C server events:multi-week:backfill-historical` / `events:multi-week:backfill-historical:apply` 作为历史 multi-week 数据 dry-run / apply 修复入口
+- [x] 已提供 `pnpm -C server events:schedule:foundation:backfill` / `events:schedule:foundation:backfill:apply` 作为历史连续日期基础回填 dry-run / apply 入口
 - [x] 已再次执行 `pnpm -C server build`
 - [x] 已补充 `RaverMVPTests` unit test target，并将 `AuthenticatedRequestRunnerTests` 与 `EventUploadMultiWeekModelTests` 正式接入 shared scheme
 - [x] 已新增并跑通 iOS 多 week 纯模型测试，覆盖 `EventUploadDraft` 结构化 eventDays 重绑、`EventUploadMappers.createInput` 输出 `schedule / weeks / eventDays + eventDayId`、`EventUploadValidation` 缺失 eventDay 绑定拦截
@@ -166,6 +172,34 @@
 - `Week 1 / Day 1` 与 `Week 2 / Day 1` 在上传、回填、展示、识别链路中发生混淆
 - Timetable AI 识别虽然能读出 `weekIndex`，但应用到事件草稿时被丢失
 - 活动详情、活动卡片、审核后台、上传页对多周活动的时间展示仍沿用连续多日逻辑
+
+### 历史数据补充说明
+
+`20260528120000_add_event_weeks_and_event_days_unified_model` 这条 migration 已经为历史活动做了基础回填：
+
+- 为旧活动生成默认 `weekIndex = 1` 的 `event_weeks`
+- 按连续 `startDate ~ endDate` 展开 `event_days`
+- 依赖 legacy `festivalDayIndex` 把旧 `event_performances` 绑定到 `eventDayId`
+
+这能保证单日、连续多日、以及大部分普通旧活动不会在新展示层直接失效。
+
+但它不能把“历史上真实是双周末 / 多周断档”的活动自动恢复成正确的离散 `weeks + eventDays` 结构。  
+例如 Tomorrowland 这类旧数据，如果过去只存了一段连续 `startDate ~ endDate`，migration 只会把它展开成连续 9 天，而不是两个独立周末。
+
+因此本方案额外补充了历史修复脚本：
+
+- 基础结构回填 dry-run：`pnpm -C server events:schedule:foundation:backfill`
+- 基础结构回填 apply：`pnpm -C server events:schedule:foundation:backfill:apply`
+- dry-run：`pnpm -C server events:multi-week:backfill-historical`
+- apply：`pnpm -C server events:multi-week:backfill-historical:apply`
+
+当前脚本策略：
+
+- 先用基础结构回填脚本为旧活动补齐最小可展示的 `event_weeks + event_days + performance.eventDayId`
+- 只自动修复高置信的“连续大区间但实际符合双周末形态”的历史活动
+- 会把旧连续区间重建为结构化 `event_weeks + event_days`
+- 会把 legacy `festivalDayIndex` 重新绑定到新的 `eventDayId / weekIndex / localDate`
+- 无法高置信判断的活动只输出 review 清单，不做盲目改写
 
 本次方案要求一步到位，只保留一种数据模型，不保留旧链路兼容语义，不允许继续依赖：
 
