@@ -658,6 +658,7 @@ const publishSubmissionStatusNotification = async (input: {
   title: string;
   submissionId: string;
   reason?: string | null;
+  reasonCode?: string | null;
   createdEntityId?: string | null;
   payload?: Prisma.InputJsonObject | Prisma.JsonObject;
 }) => {
@@ -743,7 +744,7 @@ const publishSubmissionStatusNotification = async (input: {
         entityType: input.entityType,
         status: input.status,
         reason: input.reason || null,
-        reasonCode: input.reason || null,
+        reasonCode: input.reasonCode || null,
         createdEntityId: input.createdEntityId || null,
         typeLabel,
         statusLabel: statusLabels.zh,
@@ -1162,6 +1163,10 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
       res.status(409).json({ error: '该提交已审核，不能重复处理' });
       return;
     }
+    const reviewDecision = reviewNotes && typeof reviewNotes.reviewDecision === 'object' && !Array.isArray(reviewNotes.reviewDecision)
+      ? reviewNotes.reviewDecision as Record<string, unknown>
+      : null;
+    const reasonCode = cleanText(reviewDecision?.reasonCode);
 
     let createdEntityId: string | null = null;
     if (decision === 'approved') {
@@ -1229,6 +1234,7 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
       title: current.title,
       submissionId: current.id,
       reason: reason || null,
+      reasonCode: reasonCode || null,
       createdEntityId,
     });
 

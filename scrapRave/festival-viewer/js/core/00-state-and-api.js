@@ -253,6 +253,7 @@ let reviewPageState = {
   reviewNotes: {},
   expandedNoteFields: new Set(),
   reason: '',
+  reasonCode: '',
   bindingCandidateIds: new Set(),
   bindingActionBusy: false,
 };

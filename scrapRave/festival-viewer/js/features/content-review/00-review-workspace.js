@@ -32,6 +32,24 @@ const REVIEW_PROCESSING_STATUS_LABELS = {
 };
 
 const REVIEW_ENTITY_ORDER = ['event', 'dj', 'news', 'set', 'brand', 'label', 'id', 'rating'];
+const REVIEW_SYSTEM_NOTE_KEYS = new Set([
+  'source',
+  'submittedAt',
+  'reviewDecision',
+  'brandScreening',
+  'i18n',
+  'compliance',
+]);
+const BRAND_REJECT_REASON_CODES = [
+  { code: 'identity_unverified', label: '主体真实性不足' },
+  { code: 'missing_official_link', label: '缺少可核验的官方链接' },
+  { code: 'missing_proof', label: '缺少有效证明材料' },
+  { code: 'copyright_risk', label: '图片或资料存在版权风险' },
+  { code: 'duplicate_brand', label: '疑似重复主办方' },
+  { code: 'event_conflict', label: '与现有活动命名或归属冲突' },
+  { code: 'incomplete_profile', label: '资料不完整，无法独立审核' },
+  { code: 'other', label: '其他原因' },
+];
 
 function reviewText(value) {
   if (value === null || value === undefined) return '';
@@ -138,13 +156,268 @@ async function reviewApiPost(path, body) {
 
 function reviewNormalizeNotes(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const fields = raw.fields && typeof raw.fields === 'object' && !Array.isArray(raw.fields) ? raw.fields : raw;
+  const fields = raw.fields && typeof raw.fields === 'object' && !Array.isArray(raw.fields) ? raw.fields : null;
+  const source = fields || raw;
   const out = {};
-  for (const [key, value] of Object.entries(fields)) {
+  for (const [key, value] of Object.entries(source)) {
+    if (!fields && REVIEW_SYSTEM_NOTE_KEYS.has(String(key || '').trim())) continue;
+    if (!fields && value && typeof value === 'object') continue;
     const note = reviewText(value);
     if (note) out[key] = note;
   }
   return out;
+}
+
+function reviewDecisionMeta(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const value = raw.reviewDecision;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value;
+}
+
+function reviewReasonCodeOptions(entityType) {
+  if (String(entityType || '').trim() === 'brand') {
+    return BRAND_REJECT_REASON_CODES.slice();
+  }
+  return [];
+}
+
+function reviewReasonCodeLabel(entityType, code) {
+  const normalized = String(code || '').trim();
+  if (!normalized) return '';
+  const matched = reviewReasonCodeOptions(entityType).find((item) => item.code === normalized);
+  return matched ? matched.label : normalized;
+}
+
+function reviewSelectedReasonCode() {
+  return String(reviewPageState.reasonCode || '').trim();
+}
+
+function setReviewReasonCode(value) {
+  reviewPageState.reasonCode = String(value || '').trim();
+  const current = document.getElementById('review-current-reason-code');
+  if (!current) return;
+  const submission = reviewPageState.selectedDetail || reviewPageState.items.find((item) => item.id === reviewPageState.selectedId);
+  const entityType = String(submission?.entityType || '').trim();
+  const code = reviewSelectedReasonCode();
+  if (!code) {
+    current.style.display = 'none';
+    current.textContent = '';
+    return;
+  }
+  current.style.display = '';
+  current.textContent = `当前 reason code：${reviewReasonCodeLabel(entityType, code) || code} (${code})`;
+}
+
+function reviewBuildDecisionReason(decision, submission, rawReasonText) {
+  const normalizedDecision = decision === 'approved' ? 'approved' : 'rejected';
+  const entityType = String(submission?.entityType || '').trim();
+  const reasonText = String(rawReasonText || '').trim();
+  if (normalizedDecision !== 'rejected') {
+    return reasonText;
+  }
+
+  const reasonCode = reviewSelectedReasonCode();
+  const codeLabel = reviewReasonCodeLabel(entityType, reasonCode);
+  const codeText = reasonCode ? `[${reasonCode}] ${codeLabel || reasonCode}` : '';
+  const notesSummary = buildReviewNotesSummary();
+  const pieces = [codeText, reasonText, notesSummary].filter((item) => String(item || '').trim());
+  return pieces.join('\n\n').trim();
+}
+
+function reviewSubmissionImageAssets(payload) {
+  const rawAssets = Array.isArray(payload?.imageAssets) ? payload.imageAssets : [];
+  const assets = rawAssets
+    .map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const url = reviewText(item.url);
+      if (!/^https?:\/\//i.test(url)) return null;
+      const type = reviewText(item.type || 'other').toLowerCase() || 'other';
+      return {
+        url,
+        type,
+        label: reviewText(item.label) || type.toUpperCase(),
+        visibility: reviewText(item.visibility) || (type === 'proof' ? 'review_only' : 'public'),
+        fileName: reviewText(item.fileName),
+        mimeType: reviewText(item.mimeType),
+        sort: Number.isFinite(Number(item.sort)) ? Number(item.sort) : index,
+      };
+    })
+    .filter(Boolean);
+
+  const seededSingles = [
+    { type: 'avatar', url: reviewText(payload?.avatarUrl), label: 'Avatar', visibility: 'public' },
+    { type: 'background', url: reviewText(payload?.backgroundUrl), label: 'Background', visibility: 'public' },
+    { type: 'proof', url: reviewText(payload?.proofImageUrl), label: 'Proof', visibility: 'review_only' },
+  ].filter((item) => /^https?:\/\//i.test(item.url));
+
+  const deduped = new Map();
+  [...assets, ...seededSingles].forEach((item, index) => {
+    const key = String(item.url || '').trim().toLowerCase();
+    if (!key || deduped.has(key)) return;
+    deduped.set(key, {
+      ...item,
+      sort: Number.isFinite(Number(item.sort)) ? Number(item.sort) : index,
+    });
+  });
+  return Array.from(deduped.values()).sort((left, right) => left.sort - right.sort);
+}
+
+function reviewSubmissionMediaGroups(submission) {
+  const payload = submission?.payload && typeof submission.payload === 'object' ? submission.payload : {};
+  const imageAssets = reviewSubmissionImageAssets(payload);
+  const proof = imageAssets.filter((item) => item.type === 'proof' || item.visibility === 'review_only');
+  const publicAssets = imageAssets.filter((item) => !proof.includes(item));
+  return { imageAssets, proof, publicAssets };
+}
+
+function renderReviewMediaGallery(items, groupName, emptyText = '暂无图片') {
+  if (!Array.isArray(items) || !items.length) {
+    return `<div class="review-empty">${escapeHtml(emptyText)}</div>`;
+  }
+  return `
+    <div class="review-media-grid">
+      ${items.map((item, index) => `
+        <button class="review-media-card" type="button" onclick="openReviewMediaLightbox('${escapeHtml(groupName)}', ${index})">
+          <img class="review-media-image" src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || item.type || 'image')}">
+          <div class="review-media-meta">
+            <strong>${escapeHtml(item.label || item.type || 'IMAGE')}</strong>
+            <span>${escapeHtml(item.visibility === 'review_only' ? '仅审核可见' : '公开素材')}</span>
+          </div>
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function openReviewMediaLightbox(groupName, startIdx) {
+  const submission = reviewPageState.selectedDetail || reviewPageState.items.find((item) => item.id === reviewPageState.selectedId);
+  if (!submission || typeof openLightboxItems !== 'function') return;
+  const mediaGroups = reviewSubmissionMediaGroups(submission);
+  const key = String(groupName || '').trim() === 'proof' ? 'proof' : 'publicAssets';
+  const items = Array.isArray(mediaGroups[key]) ? mediaGroups[key] : [];
+  if (!items.length) return;
+  openLightboxItems(
+    items.map((item) => ({
+      url: item.url,
+      label: item.label || item.type || 'IMAGE',
+      type: item.type || 'other',
+      downloadUrl: item.url,
+      downloadName: item.fileName || '',
+    })),
+    startIdx,
+    key === 'proof' ? 'BRAND PROOF PREVIEW' : 'BRAND MEDIA PREVIEW'
+  );
+}
+
+function reviewChangeSummaryText(submission) {
+  const payload = submission?.payload && typeof submission.payload === 'object' ? submission.payload : {};
+  const summary = payload.changeSummary;
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    return '';
+  }
+  return reviewText(summary.zh || summary.en || summary.ja || '');
+}
+
+function renderBrandScreeningCard(submission) {
+  const reviewNotes = submission?.reviewNotes && typeof submission.reviewNotes === 'object' ? submission.reviewNotes : {};
+  const screening = reviewNotes.brandScreening && typeof reviewNotes.brandScreening === 'object' && !Array.isArray(reviewNotes.brandScreening)
+    ? reviewNotes.brandScreening
+    : null;
+  if (!screening) return '';
+
+  const duplicateBrands = Array.isArray(screening.duplicateBrands) ? screening.duplicateBrands : [];
+  const similarEvents = Array.isArray(screening.similarEvents) ? screening.similarEvents : [];
+  const duplicateWarning = Boolean(screening.duplicateBrandWarning);
+  const eventConflictWarning = Boolean(screening.eventNameConflictWarning);
+  if (!duplicateWarning && !eventConflictWarning && !duplicateBrands.length && !similarEvents.length) {
+    return '';
+  }
+
+  return `
+    <section class="review-group-card review-group-warning">
+      <div class="review-group-head">
+        <div class="review-group-title">Brand Screening</div>
+        <div class="review-group-sub">重复品牌与活动命名冲突预警</div>
+      </div>
+      ${duplicateWarning ? `
+        <div class="review-warning-block">
+          <div class="review-warning-title">疑似重复主办方</div>
+          ${duplicateBrands.length ? `
+            <div class="review-warning-list">
+              ${duplicateBrands.map((item) => `
+                <div class="review-warning-item">
+                  <strong>${escapeHtml(reviewText(item.name) || reviewText(item.id) || '未命名品牌')}</strong>
+                  <span>${escapeHtml([reviewText(item.city), reviewText(item.country), item.revision !== undefined && item.revision !== null ? `rev ${reviewText(item.revision)}` : ''].filter(Boolean).join(' · '))}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div class="review-empty">系统检测到重复风险，但当前没有返回候选列表。</div>'}
+        </div>
+      ` : ''}
+      ${eventConflictWarning ? `
+        <div class="review-warning-block">
+          <div class="review-warning-title">活动命名 / 主办方冲突预警</div>
+          ${similarEvents.length ? `
+            <div class="review-warning-list">
+              ${similarEvents.map((item) => `
+                <div class="review-warning-item">
+                  <strong>${escapeHtml(reviewText(item.name) || reviewText(item.id) || '未命名活动')}</strong>
+                  <span>${escapeHtml([reviewText(item.city), reviewText(item.country), reviewFormatDate(reviewText(item.startDate))].filter(Boolean).join(' · '))}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div class="review-empty">系统检测到活动冲突风险，但当前没有返回候选活动。</div>'}
+        </div>
+      ` : ''}
+    </section>
+  `;
+}
+
+function renderBrandReviewInsights(submission, payload) {
+  const mediaGroups = reviewSubmissionMediaGroups(submission);
+  const changeSummary = reviewChangeSummaryText(submission);
+  const links = Array.isArray(payload?.links) ? payload.links : [];
+  return `
+    <div class="review-group-stack review-group-stack-brand">
+      ${changeSummary ? `
+        <section class="review-group-card review-group-highlight">
+          <div class="review-group-head">
+            <div class="review-group-title">Change Summary</div>
+            <div class="review-group-sub">提交时生成的变更摘要</div>
+          </div>
+          <div class="review-value-text">${escapeHtml(changeSummary)}</div>
+        </section>
+      ` : ''}
+      ${renderBrandScreeningCard(submission)}
+      <section class="review-group-card review-group-proof">
+        <div class="review-group-head">
+          <div class="review-group-title">Review Proof</div>
+          <div class="review-group-sub">proof 图片仅在审核端可见</div>
+        </div>
+        ${renderReviewMediaGallery(mediaGroups.proof, 'proof', '当前没有 proof 图片')}
+      </section>
+      <section class="review-group-card review-group-media">
+        <div class="review-group-head">
+          <div class="review-group-title">Public Media</div>
+          <div class="review-group-sub">头像 / 背景 / 海报 / 公开补充图</div>
+        </div>
+        ${renderReviewMediaGallery(mediaGroups.publicAssets, 'public', '当前没有公开素材')}
+      </section>
+      <section class="review-group-card review-group-links">
+        <div class="review-group-head">
+          <div class="review-group-title">Official Links Snapshot</div>
+          <div class="review-group-sub">帮助审核员快速核验来源</div>
+        </div>
+        <div class="review-field-grid review-field-grid-single">
+          ${renderReviewField('officialWebsite', '官网', payload?.officialWebsite)}
+          ${renderReviewField('links', '补充链接', links)}
+          ${renderReviewField('rightsConfirmed', '版权声明确认', payload?.rightsConfirmed)}
+          ${renderReviewField('identityConfirmed', '主体声明确认', payload?.identityConfirmed)}
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 function setReviewPendingCount(count, countsByType = {}) {
@@ -507,6 +780,7 @@ function renderReviewPreview(submission) {
           <span>状态：${escapeHtml(REVIEW_STATUS_LABELS[submission?.status] || submission?.status || '—')}</span>
         </div>
       </div>
+      ${entityType === 'brand' ? renderBrandReviewInsights(submission, payload) : ''}
       <div class="review-field-grid">
         ${fields.map(([field, label]) => renderReviewField(field, label, payload[field])).join('')}
       </div>
@@ -741,6 +1015,10 @@ function renderReviewDetail() {
     ? submission.applyStatus === 'pending_review'
     : isContentSubmissionReviewableStatus(submission.status);
   const canApprove = canApproveReviewItem(submission);
+  const entityType = String(submission?.entityType || '').trim();
+  const reasonCodeOptions = reviewReasonCodeOptions(entityType);
+  const existingDecisionMeta = reviewDecisionMeta(submission?.reviewNotes);
+  const selectedReasonCode = reviewSelectedReasonCode() || reviewText(existingDecisionMeta.reasonCode);
   wrap.innerHTML = `
     ${renderReviewPreview(submission)}
     <section class="review-decision-panel">
@@ -751,6 +1029,22 @@ function renderReviewDetail() {
         </div>
         <button class="review-tool-btn" type="button" onclick="copyReviewNotesToReason()">汇总字段意见</button>
       </div>
+      ${reasonCodeOptions.length ? `
+        <label class="review-decision-select-wrap">
+          <span class="review-decision-select-label">驳回 Reason Code</span>
+          <select
+            class="review-select review-decision-select"
+            id="review-reason-code-select"
+            onchange="setReviewReasonCode(this.value)"
+            ${isPending ? '' : 'disabled'}
+          >
+            <option value="">请选择 reason code</option>
+            ${reasonCodeOptions.map((item) => `
+              <option value="${escapeHtml(item.code)}" ${selectedReasonCode === item.code ? 'selected' : ''}>${escapeHtml(item.label)} (${escapeHtml(item.code)})</option>
+            `).join('')}
+          </select>
+        </label>
+      ` : ''}
       <textarea
         class="review-reason-input"
         id="review-reason-input"
@@ -762,6 +1056,9 @@ function renderReviewDetail() {
         <button class="review-reject-btn" type="button" ${isPending ? '' : 'disabled'} onclick="submitReviewDecision('rejected')">审核不通过</button>
       </div>
       ${submission.createdEntityId ? `<div class="review-created-id">正式内容 ID：${escapeHtml(submission.createdEntityId)}</div>` : ''}
+      <div class="review-created-id" id="review-current-reason-code" ${selectedReasonCode ? '' : 'style="display:none"'}>
+        ${selectedReasonCode ? `当前 reason code：${escapeHtml(reviewReasonCodeLabel(entityType, selectedReasonCode) || selectedReasonCode)} (${escapeHtml(selectedReasonCode)})` : ''}
+      </div>
       ${!isPending ? `<div class="review-final-reason">最终原因：${escapeHtml(submission.reviewReason || '未填写')}</div>` : ''}
     </section>
   `;
@@ -850,6 +1147,7 @@ function onReviewSourceChanged() {
   reviewPageState.page = 1;
   reviewPageState.selectedId = '';
   reviewPageState.selectedDetail = null;
+  reviewPageState.reasonCode = '';
   resetReviewSelection();
   void refreshReviewPage(true);
 }
@@ -867,6 +1165,7 @@ function setReviewSourceFilter(source) {
   reviewPageState.page = 1;
   reviewPageState.selectedId = '';
   reviewPageState.selectedDetail = null;
+  reviewPageState.reasonCode = '';
   resetReviewSelection();
   if (currentAppPage !== 'review') {
     switchAppPage('review');
@@ -1002,6 +1301,7 @@ async function refreshReviewPage(force = false) {
     reviewPageState.reviewNotes = {};
     reviewPageState.expandedNoteFields = new Set();
     reviewPageState.reason = '';
+    reviewPageState.reasonCode = '';
     resetReviewSelection();
     setReviewStatus(reviewPageState.items.length ? '审核列表已刷新。' : '当前筛选下暂无提交。', 'ok');
     renderReviewPage();
@@ -1023,6 +1323,7 @@ async function selectReviewSubmission(id) {
   reviewPageState.reviewNotes = reviewNormalizeNotes(reviewPageState.selectedDetail?.reviewNotes);
   reviewPageState.expandedNoteFields = new Set(Object.keys(reviewPageState.reviewNotes));
   reviewPageState.reason = reviewPageState.selectedDetail?.reviewReason || '';
+  reviewPageState.reasonCode = reviewText(reviewDecisionMeta(reviewPageState.selectedDetail?.reviewNotes).reasonCode);
   renderReviewPage();
   try {
     if (reviewPageState.sourceFilter === 'dj_binding_review' && typeof fetchDjBindingReviewJobDetail === 'function') {
@@ -1038,6 +1339,7 @@ async function selectReviewSubmission(id) {
       reviewPageState.reviewNotes = reviewNormalizeNotes(reviewPageState.selectedDetail?.reviewNotes);
       reviewPageState.expandedNoteFields = new Set(Object.keys(reviewPageState.reviewNotes));
       reviewPageState.reason = reviewPageState.selectedDetail?.reviewReason || '';
+      reviewPageState.reasonCode = reviewText(reviewDecisionMeta(reviewPageState.selectedDetail?.reviewNotes).reasonCode);
     }
     renderReviewPage();
   } catch (error) {
@@ -1132,16 +1434,25 @@ async function fetchAllMatchingDjEnrichmentResultIds(mode = '') {
 
 function syncReviewReasonFromNotes() {
   const text = buildReviewNotesSummary();
-  reviewPageState.reason = text;
   const el = document.getElementById('review-reason-input');
+  const current = String(el?.value || reviewPageState.reason || '').trim();
+  if (current || !text) return;
+  reviewPageState.reason = text;
   if (el) el.value = text;
 }
 
 function copyReviewNotesToReason() {
   const text = buildReviewNotesSummary();
-  reviewPageState.reason = text;
+  if (!text) return;
   const el = document.getElementById('review-reason-input');
-  if (el) el.value = text;
+  const current = String(el?.value || reviewPageState.reason || '').trim();
+  const next = !current
+    ? text
+    : current.includes(text)
+      ? current
+      : `${current}\n\n${text}`;
+  reviewPageState.reason = next;
+  if (el) el.value = next;
 }
 
 async function submitReviewDecision(decision) {
@@ -1149,18 +1460,33 @@ async function submitReviewDecision(decision) {
   if (!submission || reviewPageState.saving) return;
   const normalizedDecision = decision === 'approved' ? 'approved' : 'rejected';
   const reasonEl = document.getElementById('review-reason-input');
-  const reason = String(reasonEl?.value || reviewPageState.reason || '').trim();
-  if (normalizedDecision === 'rejected' && !reason && Object.keys(reviewPageState.reviewNotes).length === 0) {
+  const rawReason = String(reasonEl?.value || reviewPageState.reason || '').trim();
+  const reason = reviewBuildDecisionReason(normalizedDecision, submission, rawReason);
+  const reasonCode = normalizedDecision === 'rejected' ? reviewSelectedReasonCode() : '';
+  if (normalizedDecision === 'rejected' && !reason) {
     setReviewStatus('审核不通过时请填写原因或字段意见。', 'error');
+    return;
+  }
+  if (normalizedDecision === 'rejected' && reviewReasonCodeOptions(submission?.entityType).length && !reasonCode) {
+    setReviewStatus('品牌审核不通过时请选择一个 reason code。', 'error');
     return;
   }
   reviewPageState.saving = true;
   setReviewStatus('正在提交审核结论...');
   try {
+    const existingReviewNotes = submission?.reviewNotes && typeof submission.reviewNotes === 'object' && !Array.isArray(submission.reviewNotes)
+      ? submission.reviewNotes
+      : {};
     const reviewNotes = {
+      ...existingReviewNotes,
       fields: { ...reviewPageState.reviewNotes },
       source: 'festival_viewer',
       submittedAt: new Date().toISOString(),
+      reviewDecision: {
+        decision: normalizedDecision,
+        reasonCode: reasonCode || null,
+        reasonCodeLabel: reasonCode ? (reviewReasonCodeLabel(submission?.entityType, reasonCode) || reasonCode) : null,
+      },
     };
     const path = reviewPageState.sourceFilter === 'dj_enrichment'
       ? `/api/admin/v1/dj-enrichment/results/${encodeURIComponent(submission.id)}/review`

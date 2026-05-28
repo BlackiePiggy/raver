@@ -4491,6 +4491,12 @@ struct LearnFestivalDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .discoverOrganizerDidSave)) { notification in
             let savedFestivalID = notification.object as? String
             guard savedFestivalID == nil || savedFestivalID == currentFestival.id else { return }
+            if let brand = notification.userInfo?["brand"] as? WebLearnFestival,
+               brand.id == currentFestival.id {
+                let hydrated = LearnFestival(web: brand)
+                currentFestival = hydrated
+                onFestivalUpdated?(hydrated)
+            }
             Task { await refreshCurrentFestivalAfterSave() }
         }
         .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(

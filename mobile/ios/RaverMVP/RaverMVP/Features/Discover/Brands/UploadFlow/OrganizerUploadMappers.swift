@@ -1,6 +1,10 @@
 import Foundation
 
 enum OrganizerUploadMappers {
+    static func imageAssetsSnapshot(from draft: OrganizerUploadDraft) -> [WebEventImageAsset] {
+        imageAssets(from: draft)
+    }
+
     static func createInput(from draft: OrganizerUploadDraft) -> CreateLearnFestivalInput {
         CreateLearnFestivalInput(
             name: draft.primaryName,
@@ -23,11 +27,11 @@ enum OrganizerUploadMappers {
             avatarUrl: normalizedRemoteURL(draft.avatarImage),
             backgroundUrl: normalizedRemoteURL(draft.backgroundImage),
             proofImageUrl: normalizedRemoteURL(draft.proofImages.first),
-            imageAssets: imageAssets(from: draft).nilIfEmpty,
+            imageAssets: imageAssetsSnapshot(from: draft).nilIfEmpty,
             boundEventIDs: normalizedList(draft.boundEventIDs),
             rightsConfirmed: draft.rightsConfirmed,
             identityConfirmed: draft.identityConfirmed,
-            links: nil
+            links: normalizedLinks(from: draft).nilIfEmpty
         )
     }
 
@@ -55,11 +59,11 @@ enum OrganizerUploadMappers {
             avatarUrl: draft.avatarImage?.remoteURL ?? "",
             backgroundUrl: draft.backgroundImage?.remoteURL ?? "",
             proofImageUrl: draft.proofImages.first?.remoteURL ?? "",
-            imageAssets: imageAssets(from: draft),
+            imageAssets: imageAssetsSnapshot(from: draft),
             boundEventIDs: normalizedList(draft.boundEventIDs) ?? [],
             rightsConfirmed: draft.rightsConfirmed,
             identityConfirmed: draft.identityConfirmed,
-            links: nil
+            links: normalizedLinks(from: draft)
         )
     }
 
@@ -84,7 +88,7 @@ enum OrganizerUploadMappers {
         OrganizerUploadImageZone.allCases.flatMap { zone in
             draft.images(for: zone).enumerated().reduce(into: [WebEventImageAsset]()) { result, item in
                 let (index, image) = item
-                let url = image.remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                let url = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 guard !url.isEmpty else { return }
                 result.append(WebEventImageAsset(
                     url: url,
@@ -104,6 +108,19 @@ enum OrganizerUploadMappers {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return items.isEmpty ? nil : items
+    }
+
+    private static func normalizedLinks(from draft: OrganizerUploadDraft) -> [LearnFestivalLinkPayload] {
+        draft.extraLinks.compactMap { item in
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let url = item.url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !url.isEmpty else { return nil }
+            return LearnFestivalLinkPayload(
+                title: title.isEmpty ? inferredLinkTitle(from: url) : title,
+                icon: item.icon.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? "link",
+                url: url
+            )
+        }
     }
 
     private static func normalizedString(_ value: String) -> String? {
@@ -128,6 +145,20 @@ enum OrganizerUploadMappers {
             ja: fields.ja.nilIfBlank,
             enFull: fields.enFull.nilIfBlank
         )
+    }
+
+    private static func inferredLinkTitle(from rawURL: String) -> String {
+        guard let host = URL(string: rawURL)?.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty else {
+            return "Link"
+        }
+        let normalized = host
+            .replacingOccurrences(of: "www.", with: "")
+            .split(separator: ".")
+            .first
+            .map(String.init)?
+            .capitalized
+        return normalized?.nilIfBlank ?? "Link"
     }
 }
 

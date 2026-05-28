@@ -53,14 +53,16 @@ enum OrganizerUploadValidation {
             ))
         }
 
-        for value in [
+        let linkValues = [
             draft.officialWebsite,
             draft.instagram,
             draft.facebook,
             draft.twitter,
             draft.youtube,
             draft.tiktok,
-        ] where !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        ] + draft.extraLinks.map(\.url)
+
+        for value in linkValues where !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)) == nil {
                 issues.append(OrganizerUploadValidationIssue(
                     step: .links,

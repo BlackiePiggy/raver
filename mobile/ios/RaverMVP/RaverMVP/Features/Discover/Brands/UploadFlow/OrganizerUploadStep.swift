@@ -50,6 +50,7 @@ enum OrganizerUploadStep: String, CaseIterable, Identifiable, Codable {
 enum OrganizerUploadImageZone: String, CaseIterable, Identifiable, Codable {
     case avatar
     case background
+    case poster
     case proof
     case other
 
@@ -59,6 +60,7 @@ enum OrganizerUploadImageZone: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .avatar: return LT("头像", "Avatar", "アバター")
         case .background: return LT("背景图", "Background", "背景")
+        case .poster: return LT("海报 / 主 KV", "Poster / Key Visual", "ポスター / キービジュアル")
         case .proof: return LT("证明图", "Proof", "証明")
         case .other: return LT("补充图", "Other", "その他")
         }

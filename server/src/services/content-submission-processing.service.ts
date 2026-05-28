@@ -156,6 +156,7 @@ export async function publishContentSubmissionTaskNotification(input: {
   title: string;
   submissionId: string;
   reason?: string | null;
+  reasonCode?: string | null;
   createdEntityId?: string | null;
   titleOverride?: string;
   bodyOverride?: string;
@@ -232,7 +233,7 @@ export async function publishContentSubmissionTaskNotification(input: {
         entityType: input.entityType,
         status: input.status,
         reason: input.reason || null,
-        reasonCode: input.reason || null,
+        reasonCode: input.reasonCode || null,
         createdEntityId: input.createdEntityId || null,
         typeLabel,
         statusLabel: input.statusLabelOverride || statusLabels.zh,

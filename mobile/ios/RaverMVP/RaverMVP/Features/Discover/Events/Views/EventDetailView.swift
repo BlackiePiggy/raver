@@ -7987,6 +7987,7 @@ private struct EventTimelineStageColumnView: View, Equatable {
     let model: EventTimelineStageColumnModel
     let selectedSlotIDs: Set<String>
     let selectable: Bool
+    let performerCardOpacity: Double = 1.0
     let normalCardTextColor: Color
     let selectedCardFillColor: Color
     let columnFillColor: Color
@@ -8001,6 +8002,7 @@ private struct EventTimelineStageColumnView: View, Equatable {
         lhs.model == rhs.model
             && lhs.selectedSlotIDs == rhs.selectedSlotIDs
             && lhs.selectable == rhs.selectable
+            && lhs.performerCardOpacity == rhs.performerCardOpacity
             && lhs.normalCardTextColor == rhs.normalCardTextColor
             && lhs.selectedCardFillColor == rhs.selectedCardFillColor
             && lhs.columnFillColor == rhs.columnFillColor
@@ -8063,6 +8065,7 @@ private struct EventTimelineStageColumnView: View, Equatable {
 
         let content = RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(cardFillStyle)
+            .opacity(performerCardOpacity)
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
@@ -8150,6 +8153,7 @@ private struct EventTimelineStageColumnsView: View, Equatable {
     let spacing: CGFloat
     let selectedSlotIDs: Set<String>
     let selectable: Bool
+    let performerCardOpacity: Double = 1.0
     let normalCardTextColor: Color
     let selectedCardFillColor: Color
     let columnFillColor: Color
@@ -8165,6 +8169,7 @@ private struct EventTimelineStageColumnsView: View, Equatable {
             && lhs.spacing == rhs.spacing
             && lhs.selectedSlotIDs == rhs.selectedSlotIDs
             && lhs.selectable == rhs.selectable
+            && lhs.performerCardOpacity == rhs.performerCardOpacity
             && lhs.normalCardTextColor == rhs.normalCardTextColor
             && lhs.selectedCardFillColor == rhs.selectedCardFillColor
             && lhs.columnFillColor == rhs.columnFillColor
@@ -8181,6 +8186,7 @@ private struct EventTimelineStageColumnsView: View, Equatable {
                     model: model,
                     selectedSlotIDs: selectedSlotIDs,
                     selectable: selectable,
+                    performerCardOpacity: performerCardOpacity,
                     normalCardTextColor: normalCardTextColor,
                     selectedCardFillColor: selectedCardFillColor,
                     columnFillColor: columnFillColor,
@@ -8290,6 +8296,9 @@ private enum EventRoutePosterRenderer {
         selectedDayID: String?,
         selectedSlotIDs: Set<String>,
         colorScheme: ColorScheme,
+        useNoBackgroundImage: Bool = false,
+        performerCardOpacity: Double = 0.92,
+        backgroundOverlayOpacity: Double = 0.9,
         selectedBackgroundURLString: String? = nil,
         selectedBackgroundUIImage: UIImage? = nil
     ) async -> UIImage? {
@@ -8318,7 +8327,12 @@ private enum EventRoutePosterRenderer {
         let posterHeight =
             EventTimelineLayout.estimatedHeight(for: selectedDay.slots, timeZone: event.eventTimeZone) + 232
         let backgroundSelection: TimetablePosterBackgroundSelection
-        if selectedBackgroundUIImage != nil {
+        if useNoBackgroundImage {
+            backgroundSelection = TimetablePosterBackgroundSelection(
+                source: "manual_none",
+                urlString: nil
+            )
+        } else if selectedBackgroundUIImage != nil {
             backgroundSelection = TimetablePosterBackgroundSelection(
                 source: "manual_upload",
                 urlString: "local-photo"
@@ -8346,7 +8360,9 @@ private enum EventRoutePosterRenderer {
             posterHeight: posterHeight,
             qrCodeImage: qrCodeImage,
             backgroundImage: backgroundImage,
-            routeOwnerAvatarImage: routeOwnerAvatarImage
+            routeOwnerAvatarImage: routeOwnerAvatarImage,
+            performerCardOpacity: performerCardOpacity,
+            backgroundOverlayOpacity: backgroundOverlayOpacity
         )
         .environment(\.colorScheme, colorScheme)
 
@@ -9172,6 +9188,73 @@ private struct EventRoutePosterBackgroundPickerCard: View {
     }
 }
 
+private struct EventRoutePosterNoBackgroundPickerCard: View {
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ZStack {
+                        shape
+                            .fill(RaverTheme.card)
+
+                        VStack(spacing: 10) {
+                            Image(systemName: "rectangle.slash")
+                                .font(.system(size: 30, weight: .semibold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+
+                            Text(LT("不使用背景图", "No Background", "背景画像なし"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, 14)
+                    }
+                    .frame(width: 132, height: 156)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(LT("无背景", "No Background", "背景なし"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .lineLimit(1)
+
+                        Text(LT("仅保留蒙版与排版", "Overlay Only", "オーバーレイのみ"))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                }
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isSelected ? RaverTheme.accent : RaverTheme.secondaryText.opacity(0.72))
+                    .padding(10)
+            }
+            .frame(width: 132)
+            .background(
+                shape
+                    .fill(RaverTheme.card)
+            )
+            .overlay(
+                shape
+                    .stroke(
+                        isSelected ? RaverTheme.accent : RaverTheme.primaryText.opacity(0.08),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct EventRoutePosterCustomBackgroundPickerCard: View {
     @Binding var selectedPhotoItem: PhotosPickerItem?
 
@@ -9315,7 +9398,11 @@ private struct EventRouteShareDetailView: View {
     @State private var selectedBackgroundCandidateID: String?
     @State private var selectedCustomBackgroundPhoto: PhotosPickerItem?
     @State private var selectedCustomBackgroundImage: UIImage?
+    @State private var isAdvancedOptionsExpanded = false
+    @State private var performerCardOpacity: Double = 0.92
+    @State private var backgroundOverlayOpacity: Double = 0.9
 
+    private static let noBackgroundSelectionID = "__event_route_no_background__"
     private static let customBackgroundSelectionID = "__event_route_custom_background__"
 
     private var backgroundCandidates: [EventRoutePosterRenderer.TimetablePosterBackgroundCandidate] {
@@ -9324,10 +9411,15 @@ private struct EventRouteShareDetailView: View {
 
     private var selectedBackgroundURLString: String? {
         guard let selectedBackgroundCandidateID,
+              selectedBackgroundCandidateID != Self.noBackgroundSelectionID,
               selectedBackgroundCandidateID != Self.customBackgroundSelectionID else {
             return nil
         }
         return backgroundCandidates.first(where: { $0.id == selectedBackgroundCandidateID })?.urlString
+    }
+
+    private var isNoBackgroundSelected: Bool {
+        selectedBackgroundCandidateID == Self.noBackgroundSelectionID
     }
 
     private var selectedBackgroundUIImage: UIImage? {
@@ -9340,6 +9432,7 @@ private struct EventRouteShareDetailView: View {
             VStack(spacing: 20) {
                 shareSubjectCard
                 previewCard
+                advancedOptionsCard
                 backgroundPickerCard
                 hintCard
             }
@@ -9376,40 +9469,44 @@ private struct EventRouteShareDetailView: View {
 
     @ViewBuilder
     private var backgroundPickerCard: some View {
-        if !backgroundCandidates.isEmpty {
-            GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(LT("海报背景图片", "Poster Background", "ポスター背景"))
-                        .font(.headline)
-                        .foregroundStyle(RaverTheme.primaryText)
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(LT("海报背景图片", "Poster Background", "ポスター背景"))
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
 
-                    Text(LT("选择一张图片后重新生成海报，即可切换时间表海报背景。", "Select an image and regenerate to switch the timetable poster background.", "画像を選んで再生成すると、タイムテーブル海報の背景を切り替えられます。"))
-                        .font(.footnote)
-                        .foregroundStyle(RaverTheme.secondaryText)
+                Text(LT("选择一张图片后重新生成海报，即可切换时间表海报背景。", "Select an image and regenerate to switch the timetable poster background.", "画像を選んで再生成すると、タイムテーブル海報の背景を切り替えられます。"))
+                    .font(.footnote)
+                    .foregroundStyle(RaverTheme.secondaryText)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(backgroundCandidates) { candidate in
-                                EventRoutePosterBackgroundPickerCard(
-                                    candidate: candidate,
-                                    isSelected: selectedBackgroundCandidateID == candidate.id
-                                ) {
-                                    selectedBackgroundCandidateID = candidate.id
-                                }
-                            }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        EventRoutePosterNoBackgroundPickerCard(
+                            isSelected: isNoBackgroundSelected
+                        ) {
+                            selectedBackgroundCandidateID = Self.noBackgroundSelectionID
+                        }
 
-                            EventRoutePosterCustomBackgroundPickerCard(
-                                selectedPhotoItem: $selectedCustomBackgroundPhoto,
-                                image: selectedCustomBackgroundImage,
-                                isSelected: selectedBackgroundCandidateID == Self.customBackgroundSelectionID
+                        ForEach(backgroundCandidates) { candidate in
+                            EventRoutePosterBackgroundPickerCard(
+                                candidate: candidate,
+                                isSelected: selectedBackgroundCandidateID == candidate.id
                             ) {
-                                if selectedCustomBackgroundImage != nil {
-                                    selectedBackgroundCandidateID = Self.customBackgroundSelectionID
-                                }
+                                selectedBackgroundCandidateID = candidate.id
                             }
                         }
-                        .padding(.horizontal, 1)
+
+                        EventRoutePosterCustomBackgroundPickerCard(
+                            selectedPhotoItem: $selectedCustomBackgroundPhoto,
+                            image: selectedCustomBackgroundImage,
+                            isSelected: selectedBackgroundCandidateID == Self.customBackgroundSelectionID
+                        ) {
+                            if selectedCustomBackgroundImage != nil {
+                                selectedBackgroundCandidateID = Self.customBackgroundSelectionID
+                            }
+                        }
                     }
+                    .padding(.horizontal, 1)
                 }
             }
         }
@@ -9490,6 +9587,89 @@ private struct EventRouteShareDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var advancedOptionsCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isAdvancedOptionsExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(LT("高级选项", "Advanced Options", "詳細オプション"))
+                                .font(.headline)
+                                .foregroundStyle(RaverTheme.primaryText)
+
+                            Text(LT("调节演出卡片和背景遮罩的视觉强度。", "Adjust the visual strength of performer cards and the background overlay.", "出演カードと背景オーバーレイの見え方を調整できます。"))
+                                .font(.footnote)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .multilineTextAlignment(.leading)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Image(systemName: isAdvancedOptionsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isAdvancedOptionsExpanded {
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(LT("演出卡片透明度", "Performer Card Opacity", "出演カードの透明度"))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+
+                                Spacer(minLength: 12)
+
+                                Text("\(Int((performerCardOpacity * 100).rounded()))%")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+
+                            Text(LT("调低后可以让背景图更明显，调高后卡片信息会更清晰。", "Lower it to reveal more background, or raise it to make the cards easier to read.", "下げると背景が見えやすくなり、上げるとカード情報が読みやすくなります。"))
+                                .font(.footnote)
+                                .foregroundStyle(RaverTheme.secondaryText)
+
+                            Slider(value: $performerCardOpacity, in: 0.45...1.0, step: 0.05)
+                                .tint(RaverTheme.accent)
+                        }
+
+                        Divider()
+                            .overlay(RaverTheme.cardBorder.opacity(0.45))
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(LT("阴影遮罩强度", "Overlay Opacity", "オーバーレイの濃さ"))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+
+                                Spacer(minLength: 12)
+
+                                Text("\(Int((backgroundOverlayOpacity * 100).rounded()))%")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+
+                            Text(LT("调高后背景图会被更强地压暗或压亮，能更突出前景文字。", "Raise it to darken or lighten the background more strongly so foreground text stands out.", "上げると背景の明暗補正が強くなり、前景テキストがより目立ちます。"))
+                                .font(.footnote)
+                                .foregroundStyle(RaverTheme.secondaryText)
+
+                            Slider(value: $backgroundOverlayOpacity, in: 0.35...1.0, step: 0.05)
+                                .tint(RaverTheme.accent)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
         }
     }
 
@@ -9609,6 +9789,9 @@ private struct EventRouteShareDetailView: View {
             selectedDayID: selectedDayID,
             selectedSlotIDs: selectedSlotIDs,
             colorScheme: colorScheme,
+            useNoBackgroundImage: isNoBackgroundSelected,
+            performerCardOpacity: performerCardOpacity,
+            backgroundOverlayOpacity: backgroundOverlayOpacity,
             selectedBackgroundURLString: selectedBackgroundURLString,
             selectedBackgroundUIImage: selectedBackgroundUIImage
         ) else {
@@ -9633,6 +9816,10 @@ private struct EventRouteShareDetailView: View {
 
         if selectedBackgroundCandidateID == Self.customBackgroundSelectionID,
            selectedCustomBackgroundImage != nil {
+            return
+        }
+
+        if selectedBackgroundCandidateID == Self.noBackgroundSelectionID {
             return
         }
 
@@ -9693,6 +9880,8 @@ private struct EventRoutePlannerShareSnapshotView: View {
     let qrCodeImage: UIImage?
     let backgroundImage: UIImage?
     let routeOwnerAvatarImage: UIImage?
+    let performerCardOpacity: Double
+    let backgroundOverlayOpacity: Double
 
     private var selectedDay: EventScheduleDay? {
         days.first(where: { $0.id == selectedDayID }) ?? days.first
@@ -9793,7 +9982,8 @@ private struct EventRoutePlannerShareSnapshotView: View {
                         event: event,
                         day: selectedDay,
                         selectedSlotIDs: selectedSlotIDs,
-                        availableWidth: contentWidth
+                        availableWidth: contentWidth,
+                        performerCardOpacity: performerCardOpacity
                     )
                     .frame(width: contentWidth, height: boardHeight, alignment: .topLeading)
                 } else {
@@ -9836,14 +10026,14 @@ private struct EventRoutePlannerShareSnapshotView: View {
             LinearGradient(
                 colors: colorScheme == .dark
                     ? [
-                        Color.black.opacity(0.66),
-                        Color.black.opacity(0.58),
-                        Color.black.opacity(0.78)
+                        Color.black.opacity(0.66 * backgroundOverlayOpacity),
+                        Color.black.opacity(0.58 * backgroundOverlayOpacity),
+                        Color.black.opacity(0.78 * backgroundOverlayOpacity)
                     ]
                     : [
-                        Color.white.opacity(0.56),
-                        Color.white.opacity(0.46),
-                        Color.white.opacity(0.64)
+                        Color.white.opacity(0.56 * backgroundOverlayOpacity),
+                        Color.white.opacity(0.46 * backgroundOverlayOpacity),
+                        Color.white.opacity(0.64 * backgroundOverlayOpacity)
                     ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -9982,6 +10172,7 @@ private struct EventTimelinePosterBoardView: View {
     let day: EventScheduleDay
     let selectedSlotIDs: Set<String>
     let availableWidth: CGFloat
+    let performerCardOpacity: Double
 
     private var layout: EventTimelineLayout {
         EventTimelineLayout(
@@ -10078,6 +10269,7 @@ private struct EventTimelinePosterBoardView: View {
                     model: model,
                     selectedSlotIDs: selectedSlotIDs,
                     selectable: false,
+                    performerCardOpacity: performerCardOpacity,
                     normalCardTextColor: normalCardTextColor,
                     selectedCardFillColor: selectedCardFillColor,
                     columnFillColor: .clear,

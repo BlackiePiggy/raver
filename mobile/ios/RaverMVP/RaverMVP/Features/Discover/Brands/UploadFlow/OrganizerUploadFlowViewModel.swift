@@ -35,6 +35,13 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
     @Published var isSearchingEvents = false
     @Published var eventSearchFeedback: InlineSearchFeedback = .idle
     @Published var boundEventNameByID: [String: String] = [:]
+    @Published var similarBrandResults: [WebLearnFestival] = []
+    @Published var isSearchingSimilarBrands = false
+    @Published var similarBrandFeedback: InlineSearchFeedback = .idle
+
+    var validationIssues: [OrganizerUploadValidationIssue] {
+        OrganizerUploadValidation.issues(for: draft)
+    }
 
     private let wikiRepository: DiscoverWikiRepository
     private let webService: WebFeatureService
@@ -45,6 +52,7 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
     private var onDismiss: () -> Void = {}
     private var didDiscardDraft = false
     private var draftSaveTask: Task<Void, Never>?
+    private var similarBrandSearchTask: Task<Void, Never>?
 
     init(
         mode: OrganizerUploadMode,
@@ -108,6 +116,14 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         draft.dirty = true
     }
 
+    func updatePrimaryName(_ value: String) {
+        draft.name = value
+        draft.nameI18n.setValue(value, for: draft.preferredLanguage)
+        draft.dirty = true
+        saveDraft(immediate: false)
+        scheduleSimilarBrandSearch(for: value)
+    }
+
     func saveDraft(immediate: Bool = true) {
         guard !didDiscardDraft else { return }
         draftSaveTask?.cancel()
@@ -141,45 +157,41 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
 
     func uploadImage(_ imageData: Data, zone: OrganizerUploadImageZone) async {
         let previousSingle = draft.image(for: zone)
-        failedUploadZones.remove(zone)
-        uploadingZones.insert(zone)
-        defer { uploadingZones.remove(zone) }
 
         do {
-            try await webService.prepareAuthenticatedRequestForUserAction(source: "organizer-upload-image")
             let jpegData = Self.jpegData(from: imageData)
-            let response = try await wikiRepository.uploadWikiBrandImage(
-                imageData: jpegData,
-                fileName: "organizer-\(zone.rawValue)-\(UUID().uuidString).jpg",
-                mimeType: "image/jpeg",
-                brandID: nil,
-                draftID: draft.id.uuidString,
-                usage: zone.backendUsage
-            )
-            let uploaded = OrganizerUploadImageDraft(
+            let fileName = "organizer-\(zone.rawValue)-\(UUID().uuidString).jpg"
+            let localURL = try store.saveImageData(
+                jpegData,
+                draftID: draft.id,
                 zone: zone,
-                remoteURL: response.originalUrl ?? response.url,
-                fileName: response.fileName,
-                mimeType: response.mimeType,
-                isPersisted: false
+                fileExtension: "jpg"
             )
-            switch zone {
-            case .avatar, .background:
-                draft.setSingleImage(uploaded, for: zone)
-            case .proof, .other:
-                draft.appendImage(uploaded, to: zone)
-            }
-            failedUploadZones.remove(zone)
-            draft.dirty = true
-            saveDraft()
 
-            if let previousSingle, !previousSingle.isPersisted {
-                try? await wikiRepository.deleteWikiBrandUploadedImages(
-                    brandID: nil,
-                    draftID: draft.id.uuidString,
-                    urls: [previousSingle.remoteURL]
-                )
+            let draftImage = OrganizerUploadImageDraft(
+                zone: zone,
+                localFileURL: localURL,
+                remoteURL: nil,
+                fileName: fileName,
+                mimeType: "image/jpeg",
+                ownership: .pendingLocal
+            )
+
+            switch zone {
+            case .avatar, .background, .poster:
+                draft.setSingleImage(draftImage, for: zone)
+            case .proof, .other:
+                draft.appendImage(draftImage, to: zone)
             }
+            draft.dirty = true
+            failedUploadZones.remove(zone)
+            saveDraft(immediate: true)
+
+            if let previousSingle, matchesSingleImageZone(zone) {
+                await cleanupRemovedImage(previousSingle)
+            }
+
+            try await uploadStoredImage(imageID: draftImage.id, zone: zone)
         } catch {
             failedUploadZones.insert(zone)
             statusMessage = error.userFacingMessage ?? LT("图片上传失败", "Image upload failed", "画像のアップロードに失敗しました")
@@ -189,7 +201,7 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
     func removeImage(zone: OrganizerUploadImageZone, imageID: UUID? = nil) async {
         let removed: OrganizerUploadImageDraft?
         switch zone {
-        case .avatar, .background:
+        case .avatar, .background, .poster:
             removed = draft.image(for: zone)
             draft.setSingleImage(nil, for: zone)
         case .proof, .other:
@@ -198,13 +210,32 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         }
         guard let removed else { return }
         draft.dirty = true
-        saveDraft()
-        if !removed.isPersisted {
-            try? await wikiRepository.deleteWikiBrandUploadedImages(
-                brandID: nil,
-                draftID: draft.id.uuidString,
-                urls: [removed.remoteURL]
-            )
+        saveDraft(immediate: true)
+        reconcileUploadFailureState(for: zone)
+        await cleanupRemovedImage(removed)
+    }
+
+    func moveImage(id: UUID, in zone: OrganizerUploadImageZone, offset: Int) {
+        guard draft.moveImage(id: id, in: zone, offset: offset) else { return }
+        draft.dirty = true
+        saveDraft(immediate: true)
+    }
+
+    func retryImageUpload(zone: OrganizerUploadImageZone, imageID: UUID? = nil) async {
+        let resolvedImageID: UUID?
+        switch zone {
+        case .avatar, .background, .poster:
+            resolvedImageID = draft.image(for: zone)?.id
+        case .proof, .other:
+            resolvedImageID = imageID
+        }
+        guard let resolvedImageID else { return }
+
+        do {
+            try await uploadStoredImage(imageID: resolvedImageID, zone: zone)
+        } catch {
+            failedUploadZones.insert(zone)
+            statusMessage = error.userFacingMessage ?? LT("图片上传失败，请重试。", "Image upload failed. Please retry.", "画像のアップロードに失敗しました。再試行してください。")
         }
     }
 
@@ -241,7 +272,31 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         saveDraft(immediate: true)
     }
 
+    func jump(to step: OrganizerUploadStep) {
+        guard step != draft.currentStep else { return }
+        guard canNavigate(to: step) else {
+            if let blockingIssue = firstBlockingIssue(before: step) {
+                draft.currentStep = blockingIssue.step
+                statusMessage = blockingIssue.message
+                saveDraft(immediate: true)
+            }
+            return
+        }
+        draft.currentStep = step
+        saveDraft(immediate: true)
+    }
+
     func prepareSubmitConfirmation() -> Bool {
+        if !uploadingZones.isEmpty {
+            draft.currentStep = .media
+            statusMessage = LT("仍有图片上传中，请等待上传完成后再提交。", "Some images are still uploading. Wait for them to finish before submitting.", "まだアップロード中の画像があります。完了してから送信してください。")
+            return false
+        }
+        if hasPendingUploadFailure {
+            draft.currentStep = .media
+            statusMessage = LT("仍有图片上传失败，请先重试后再提交。", "Some images failed to upload. Retry them before submitting.", "アップロードに失敗した画像があります。再試行してから送信してください。")
+            return false
+        }
         let issues = OrganizerUploadValidation.issues(for: draft)
         guard issues.isEmpty else {
             if let firstIssue = issues.first {
@@ -256,6 +311,35 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
 
     func submitAfterConfirmation() {
         Task { await submit() }
+    }
+
+    func validationIssues(for step: OrganizerUploadStep) -> [OrganizerUploadValidationIssue] {
+        validationIssues.filter { $0.step == step }
+    }
+
+    func hasIssue(for step: OrganizerUploadStep) -> Bool {
+        !validationIssues(for: step).isEmpty
+    }
+
+    func isStepCompleted(_ step: OrganizerUploadStep) -> Bool {
+        let currentIndex = stepIndex(for: draft.currentStep)
+        let targetIndex = stepIndex(for: step)
+        guard targetIndex < currentIndex else { return false }
+        return !hasIssue(for: step)
+    }
+
+    func canNavigate(to step: OrganizerUploadStep) -> Bool {
+        let currentIndex = stepIndex(for: draft.currentStep)
+        let targetIndex = stepIndex(for: step)
+        guard targetIndex > currentIndex else { return true }
+
+        for index in 0..<targetIndex {
+            let candidate = OrganizerUploadStep.allCases[index]
+            if hasIssue(for: candidate) {
+                return false
+            }
+        }
+        return true
     }
 
     func updateEventSearchQuery(_ value: String) {
@@ -325,6 +409,24 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         saveDraft(immediate: true)
     }
 
+    func scheduleSimilarBrandSearch(for rawValue: String) {
+        let keyword = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        similarBrandSearchTask?.cancel()
+
+        guard keyword.count >= 2 else {
+            similarBrandResults = []
+            similarBrandFeedback = .idle
+            isSearchingSimilarBrands = false
+            return
+        }
+
+        similarBrandSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.searchSimilarBrands(keyword: keyword)
+        }
+    }
+
     private func submit() async {
         guard prepareSubmitConfirmation() else { return }
 
@@ -332,6 +434,12 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
+            do {
+                try await uploadPendingImagesIfNeeded()
+            } catch {
+                statusMessage = error.userFacingMessage ?? LT("仍有图片上传失败，请先重试后再提交。", "Some images still failed to upload. Retry them before submitting.", "まだアップロードに失敗している画像があります。再試行してから送信してください。")
+                return
+            }
             try await webService.prepareAuthenticatedRequestForUserAction(source: "organizer-upload-submit")
             let result: CreateContentResult<WebLearnFestival>
             switch draft.mode {
@@ -346,13 +454,15 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
                 )
             }
 
+            let successSnapshot = organizerSuccessSnapshot(from: result)
             finalizeDraftCleanupAfterSubmit()
-            let createdBrand = extractCreatedBrand(from: result)
+            let createdBrand = successSnapshot
 
             if let createdBrand {
                 NotificationCenter.default.post(
                     name: .discoverOrganizerDidSave,
-                    object: createdBrand.id
+                    object: createdBrand.id,
+                    userInfo: ["brand": createdBrand]
                 )
                 NotificationCenter.default.post(
                     name: .discoverOrganizerDidCreate,
@@ -371,36 +481,36 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方任务已提交", "Organizer Task Submitted", "主催者タスクを送信しました"),
                     message: LT(
-                        "当前正在处理中，返回上一页后可继续原来的流程；后续会通过通知更新为审核中或已入库。",
-                        "The task is processing now. After you go back, you can continue the flow you came from, and later updates will arrive through notifications.",
-                        "現在処理中です。前の画面に戻って元のフローを続けられ、以降の更新は通知で確認できます。"
+                        "当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。",
+                        "The task is now processing. Later updates will arrive through notifications and My Posts.",
+                        "現在処理中です。以降の更新は通知とマイ投稿で確認できます。"
                     )
                 )
             case (.create, .created(_)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方已发布", "Organizer Published", "主催者を公開しました"),
                     message: LT(
-                        "主办方资料已经生效，返回上一页后可以继续你刚才的流程。",
-                        "The organizer profile is now live. After you go back, you can continue the flow you were in.",
-                        "主催者プロフィールは公開されました。前の画面に戻って、さきほどのフローを続けられます。"
+                        "主办方资料已经生效，也可以在我的发布里继续管理。",
+                        "The organizer profile is now live, and you can keep managing it from My Posts.",
+                        "主催者プロフィールは公開されました。マイ投稿からも管理できます。"
                     )
                 )
             case (.edit(_), .submittedForReview(_)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方编辑已提交", "Organizer Edit Submitted", "主催者編集を送信しました"),
                     message: LT(
-                        "当前正在处理中，返回上一页后可继续原来的流程；后续会通过通知更新为审核中或已入库。",
-                        "The edit task is processing now. After you go back, you can continue the flow you came from, and later updates will arrive through notifications.",
-                        "編集タスクは現在処理中です。前の画面に戻って元のフローを続けられ、以降の更新は通知で確認できます。"
+                        "当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。",
+                        "The edit task is now processing. Later updates will arrive through notifications and My Posts.",
+                        "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。"
                     )
                 )
             case (.edit(_), .created(_)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方已更新", "Organizer Updated", "主催者を更新しました"),
                     message: LT(
-                        "更新已保存，返回上一页后可以继续你刚才的流程。",
-                        "Your changes are saved. After you go back, you can continue the flow you were in.",
-                        "更新を保存しました。前の画面に戻って、さきほどのフローを続けられます。"
+                        "更新已保存。你可以返回主办方页面查看最新内容，也可以在我的发布里继续管理。",
+                        "Your changes are saved. Return to the organizer page to view the latest content, or manage it from My Posts.",
+                        "更新を保存しました。主催者ページで最新内容を確認するか、マイ投稿から管理できます。"
                     )
                 )
             }
@@ -410,9 +520,13 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
     }
 
     private func deleteDraftImages(in draft: OrganizerUploadDraft) async {
-        let urls = draft.allImages
-            .filter { !$0.isPersisted }
-            .map(\.remoteURL)
+        for image in draft.allImages {
+            store.deleteImageFileIfNeeded(image.localFileURL)
+        }
+        let urls = draft.allImages.compactMap { image -> String? in
+            guard image.ownership != .persistedBrand else { return nil }
+            return image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        }
         guard !urls.isEmpty else { return }
         try? await wikiRepository.deleteWikiBrandUploadedImages(
             brandID: nil,
@@ -425,8 +539,41 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         store.save(draft, userID: userID)
     }
 
+    private func searchSimilarBrands(keyword: String) async {
+        isSearchingSimilarBrands = true
+        defer { isSearchingSimilarBrands = false }
+
+        do {
+            let items = try await webService.fetchLearnFestivals(search: keyword)
+            guard !Task.isCancelled else { return }
+            let currentEditID: String?
+            if case .edit(let id) = draft.mode {
+                currentEditID = id
+            } else {
+                currentEditID = nil
+            }
+            similarBrandResults = items
+                .filter { item in
+                    guard item.id != currentEditID else { return false }
+                    return true
+                }
+                .prefix(5)
+                .map { $0 }
+            similarBrandFeedback = similarBrandResults.isEmpty
+                ? .empty(message: LT("暂未发现已存在的相似主办方。", "No similar organizers found yet.", "類似する既存主催者はまだ見つかっていません。"))
+                : .idle
+        } catch {
+            guard !Task.isCancelled else { return }
+            similarBrandResults = []
+            similarBrandFeedback = .failure(
+                message: error.userFacingMessage ?? LT("相似主办方搜索失败，请稍后重试。", "Failed to search similar organizers. Please try again.", "類似主催者の検索に失敗しました。もう一度お試しください。")
+            )
+        }
+    }
+
     private func finalizeDraftCleanupAfterSubmit() {
         draftSaveTask?.cancel()
+        similarBrandSearchTask?.cancel()
         store.clear(mode: draft.mode, userID: userID)
         draft.dirty = false
         draft.lastSavedAt = nil
@@ -436,12 +583,29 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         eventSearchResults = []
         eventSearchFeedback = .idle
         boundEventNameByID = [:]
+        similarBrandResults = []
+        similarBrandFeedback = .idle
         uploadingZones = []
         failedUploadZones = []
     }
 
     private func extractCreatedBrand(from result: CreateContentResult<WebLearnFestival>) -> WebLearnFestival? {
         guard case .created(let brand) = result else { return nil }
+        return brand
+    }
+
+    private func organizerSuccessSnapshot(from result: CreateContentResult<WebLearnFestival>) -> WebLearnFestival? {
+        guard var brand = extractCreatedBrand(from: result) else { return nil }
+
+        let imageAssets = OrganizerUploadMappers.imageAssetsSnapshot(from: draft)
+        if let avatar = draft.avatarImage?.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank {
+            brand.avatarUrl = avatar
+        }
+        if let background = draft.backgroundImage?.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank {
+            brand.backgroundUrl = background
+        }
+        brand.imageAssets = imageAssets.isEmpty ? brand.imageAssets : imageAssets
+        brand.links = OrganizerUploadMappers.updateInput(from: draft).links ?? brand.links
         return brand
     }
 
@@ -467,6 +631,152 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
             return data
         }
         return encoded
+    }
+
+    private func uploadPendingImagesIfNeeded() async throws {
+        for zone in OrganizerUploadImageZone.allCases {
+            for image in draft.images(for: zone) where image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank == nil {
+                try await uploadStoredImage(imageID: image.id, zone: zone)
+            }
+        }
+    }
+
+    private func uploadStoredImage(imageID: UUID, zone: OrganizerUploadImageZone) async throws {
+        guard let image = imageDraft(for: imageID, in: zone),
+              let localFileURL = image.localFileURL else { return }
+
+        failedUploadZones.remove(zone)
+        uploadingZones.insert(zone)
+        defer { uploadingZones.remove(zone) }
+
+        try await webService.prepareAuthenticatedRequestForUserAction(source: "organizer-upload-image")
+        let data = try Data(contentsOf: localFileURL)
+        let response = try await wikiRepository.uploadWikiBrandImage(
+            imageData: data,
+            fileName: image.fileName,
+            mimeType: image.mimeType,
+            brandID: nil,
+            draftID: draft.id.uuidString,
+            usage: zone.backendUsage
+        )
+
+        guard let latest = imageDraft(for: imageID, in: zone) else {
+            let cleanupURL = response.originalUrl ?? response.url
+            try? await wikiRepository.deleteWikiBrandUploadedImages(
+                brandID: nil,
+                draftID: draft.id.uuidString,
+                urls: [cleanupURL]
+            )
+            return
+        }
+
+        updateUploadedImage(
+            latest.id,
+            zone: zone,
+            remoteURL: response.originalUrl ?? response.url,
+            fileName: response.fileName,
+            mimeType: response.mimeType,
+            ownership: uploadedOwnership
+        )
+        reconcileUploadFailureState(for: zone)
+    }
+
+    private func cleanupRemovedImage(_ image: OrganizerUploadImageDraft) async {
+        store.deleteImageFileIfNeeded(image.localFileURL)
+        guard image.ownership != .persistedBrand,
+              let remoteURL = image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank else {
+            return
+        }
+        try? await wikiRepository.deleteWikiBrandUploadedImages(
+            brandID: nil,
+            draftID: draft.id.uuidString,
+            urls: [remoteURL]
+        )
+    }
+
+    private func imageDraft(for imageID: UUID, in zone: OrganizerUploadImageZone) -> OrganizerUploadImageDraft? {
+        draft.images(for: zone).first(where: { $0.id == imageID })
+    }
+
+    private func updateUploadedImage(
+        _ imageID: UUID,
+        zone: OrganizerUploadImageZone,
+        remoteURL: String,
+        fileName: String,
+        mimeType: String,
+        ownership: OrganizerUploadImageDraft.Ownership
+    ) {
+        switch zone {
+        case .avatar, .background, .poster:
+            guard var image = draft.image(for: zone), image.id == imageID else { return }
+            image.remoteURL = remoteURL
+            image.fileName = fileName
+            image.mimeType = mimeType
+            image.ownership = ownership
+            draft.setSingleImage(image, for: zone)
+        case .proof, .other:
+            var images = draft.images(for: zone)
+            guard let index = images.firstIndex(where: { $0.id == imageID }) else { return }
+            images[index].remoteURL = remoteURL
+            images[index].fileName = fileName
+            images[index].mimeType = mimeType
+            images[index].ownership = ownership
+            draft.setImages(images, for: zone)
+        }
+        draft.dirty = true
+        saveDraft(immediate: true)
+    }
+
+    private var uploadedOwnership: OrganizerUploadImageDraft.Ownership {
+        switch draft.mode {
+        case .create:
+            return .createDraftUploaded
+        case .edit:
+            return .editDraftUploaded
+        }
+    }
+
+    private var hasPendingUploadFailure: Bool {
+        OrganizerUploadImageZone.allCases.contains { zone in
+            draft.images(for: zone).contains { image in
+                image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank == nil
+            }
+        }
+    }
+
+    private func reconcileUploadFailureState(for zone: OrganizerUploadImageZone) {
+        let hasUnuploadedImage = draft.images(for: zone).contains { image in
+            image.remoteURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank == nil
+        }
+        if hasUnuploadedImage {
+            failedUploadZones.insert(zone)
+        } else {
+            failedUploadZones.remove(zone)
+        }
+    }
+
+    private func matchesSingleImageZone(_ zone: OrganizerUploadImageZone) -> Bool {
+        switch zone {
+        case .avatar, .background, .poster:
+            return true
+        case .proof, .other:
+            return false
+        }
+    }
+
+    private func firstBlockingIssue(before step: OrganizerUploadStep) -> OrganizerUploadValidationIssue? {
+        let targetIndex = stepIndex(for: step)
+        for index in 0..<targetIndex {
+            let candidate = OrganizerUploadStep.allCases[index]
+            if let issue = validationIssues(for: candidate).first {
+                return issue
+            }
+        }
+        return nil
+    }
+
+    private func stepIndex(for step: OrganizerUploadStep) -> Int {
+        OrganizerUploadStep.allCases.firstIndex(of: step) ?? 0
     }
 }
 

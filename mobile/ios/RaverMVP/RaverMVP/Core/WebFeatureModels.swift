@@ -278,6 +278,7 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
     var tiktokUrl: String? = nil
     var avatarUrl: String?
     var backgroundUrl: String?
+    var imageAssets: [WebEventImageAsset]? = nil
     var links: [LearnFestivalLinkPayload]
     var contributors: [WebUserLite]
     var isFollowing: Bool? = nil

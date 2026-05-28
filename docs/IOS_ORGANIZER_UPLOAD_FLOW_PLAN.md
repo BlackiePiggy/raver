@@ -93,6 +93,35 @@
 - [x] 服务端 brand submission 已补齐 `revision` 并发保护，`wiki_festival.revision`、BFF 提交入口、submission create/resubmit 与 approve 入库链路现已统一校验 `baseBrandRevision`
 - [x] 服务端 brand submission 已补齐主视觉必填、`official link / proof` 二选一、版权/主体声明必填校验，并把重复品牌初筛与 event 名称近似冲突预警写入 `reviewNotes.brandScreening`
 - [x] iOS `OrganizerUploadFlow` 编辑草稿已接入 `brand.revision -> draft.baseBrandRevision -> UpdateLearnFestivalInput.baseBrandRevision` 透传，brand edit 并发冲突现已与 event 对齐
+- [x] iOS `OrganizerUploadFlow` Step 4 已补齐额外链接列表编辑，补充链接现已接入 draft 持久化、链接校验、review 摘要与 create/edit payload 映射
+- [x] iOS `OrganizerUploadFlow` 提交成功态文案已对齐 event / DJ 口径，审核态与直发态都会明确指向“通知中心 + 我的发布”
+- [x] iOS `OrganizerUploadFlow` Step 1 已补齐 `poster` 图片分区，新 flow 现已统一支持 `avatar / background / poster / proof / other` 五类素材的上传、预览、删除、替换与 payload 映射
+- [x] iOS `OrganizerUploadFlow` 已静态收紧 Step 4 `extraLinks` 的索引与 URL 校验写法，降低新增链接编辑与校验阶段的潜在编译/运行风险
+- [x] BFF `mapWikiFestival` 与 iOS `WebLearnFestival` 已补齐 `imageAssets` 透传，主办方编辑态现在可以回填既有 `poster / proof / other` 资产
+- [x] 已修正 `OrganizerUploadFlowView.swift` 中新增补充链接区域的保守兼容写法，避免 `ViewBuilder` 局部声明触发整文件级联解析报错
+- [x] 使用 `RaverMVP.xcworkspace` 实际构建定位到 `reviewLinkSummary` 链式数组表达式的 Swift 解析错误，现已拆分为 `rawValues -> values` 两段写法修复
+- [x] 使用 `RaverMVP.xcworkspace` 二次构建定位到 `OrganizerUploadFlowView.body` 过长导致的 type-check 超时，现已拆分为 `navigationWrappedContent / lifecycleContent / previewWrappedContent / presentedContent`
+- [x] 已再次使用 `xcodebuild -workspace mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator build` 验证通过，当前 organizer upload 新增改动无新增 iOS 编译错误
+
+### 2026-05-28
+
+- [x] iOS `OrganizerUploadFlow` 头像上传入口已改为复用项目内 `AppImageCropperSheet`，当前链路为“选图 -> 裁剪 -> OSS 上传”
+- [x] iOS `OrganizerUploadFlow` 编辑区滚动层已移除易吞掉子控件点击的 `onTapGesture` 写法，改为更保守的 `simultaneousGesture` 键盘收起处理
+- [x] iOS `OrganizerUploadFlow` 图片选择入口已改为页面级 `photosPicker` 触发，避免卡片内嵌 picker 导致“点击头像无反应”的交互问题
+- [x] iOS `OrganizerUploadFlow` proof / other 多图区已补齐草稿期重排能力，Step 1 图片管理现已覆盖选择、预览、删除、替换与重排
+- [x] iOS `OrganizerUploadFlow` Step 2 已补齐“相似主办方检查”提醒卡，输入主名称时会自动复用现有品牌搜索做防重提示
+- [x] iOS `OrganizerUploadFlow` 草稿图片已补齐 sandbox 落盘与本地预览，当前本地图片可随 draft 一起恢复，不再依赖远端 URL 才能显示
+- [x] iOS `OrganizerUploadDraftStore` 已补齐 14 天 TTL 清理、草稿目录清理与放弃草稿时本地图片删除，create / edit 草稿目录也继续按独立 key 隔离
+- [x] iOS `OrganizerUploadImageDraft` 已升级为 `pendingLocal / createDraftUploaded / editDraftUploaded / persistedBrand` 归属模型，提交前会补传缺失远端 URL
+- [x] iOS `OrganizerUploadFlow` 图片上传失败态已补齐“保留本地草稿图 + 直接重试上传 + 提交前阻断未成功图片”链路，失败不会再破坏整个表单
+- [x] iOS `OrganizerUploadFlow` 提交成功后已补齐 organizer success snapshot，下游 event 上传页 / 主办方详情页会先收到带完整图片资产的本地快照，再异步刷新服务端
+- [x] iOS `OrganizerUploadFlow` 步骤头已升级为可回跳的状态条，当前支持“已完成 / 当前步骤 / 存在校验问题”三态展示，并阻止越过未完成前置步骤的前跳
+- [x] iOS `OrganizerUploadFlow` 当前步骤已补齐页内校验摘要提示，校验失败时可直接定位到对应 step 并展示待补充项
+- [x] 已再次核对 event 上传页主办方搜索链路：iOS 搜索直接请求 `/v1/learn/festivals`，后端返回 `isActive = true` 的 `wikiFestival` 列表，因此 brand 审核通过入库后可被 event 上传页搜索到
+- [x] `festival-viewer` 审核页已补齐 brand 审核专属展示卡片，当前可直接查看 change summary、proof 图片、公开素材、官方链接快照与 screening warning
+- [x] `festival-viewer` brand 审核已补齐驳回 reason code 下拉、原因拼装与 `reviewNotes.reviewDecision` 回写
+- [x] 已校正 `festival-viewer` 审核端 `reviewNotes` 归一化逻辑，系统生成的 `brandScreening / i18n / compliance` 不再误入审核员字段备注
+- [x] 已校正 content submission 通知元数据的 `reasonCode` 写回逻辑，brand 驳回原因现可按真实 reason code 透传到用户侧消息载荷
 
 ## 分阶段落地计划
 
@@ -438,8 +467,8 @@
 - [x] 设计 create 草稿 key
 - [x] 设计 edit 草稿 key
 - [x] `Codable` 持久化 draft JSON
-- [ ] 本地图片落盘到 sandbox 草稿目录
-- [ ] 草稿 TTL 设为 14 天
+- [x] 本地图片落盘到 sandbox 草稿目录
+- [x] 草稿 TTL 设为 14 天
 
 #### 4.2 自动保存与恢复
 
@@ -453,15 +482,15 @@
 #### 4.3 放弃与清理
 
 - [x] 离开时弹出“保存草稿 / 放弃草稿”
-- [ ] 放弃草稿时删除本地图片
+- [x] 放弃草稿时删除本地图片
 - [x] 放弃草稿时清理远端草稿图
 - [x] 提交成功后清理对应草稿
 
 验收标准：
 
-- [ ] App 被切后台后草稿能恢复
-- [ ] 新建和编辑草稿互不覆盖
-- [ ] 放弃草稿后不会残留本地脏数据
+- [x] App 被切后台后草稿能恢复
+- [x] 新建和编辑草稿互不覆盖
+- [x] 放弃草稿后不会残留本地脏数据
 
 ### Phase 5 - iOS 分步表单实现
 
@@ -469,9 +498,9 @@
 
 #### 5.1 Step 1 媒体与主体证明
 
-- [ ] 实现图片分区：`avatar / background / poster / proof / other`
+- [x] 实现图片分区：`avatar / background / poster / proof / other`
 - [x] 实现图片区卡片
-- [ ] 实现选择、预览、删除、替换、重排
+- [x] 实现选择、预览、删除、替换、重排
 - [x] proof 区增加“仅审核可见”提示
 - [x] 实现图片校验与错误提示
 
@@ -483,7 +512,7 @@
 - [x] 简称编辑
 - [x] 国家 / 城市输入
 - [x] 成立年份 / 频率 / tagline 输入
-- [ ] 相似品牌搜索提醒卡
+- [x] 相似品牌搜索提醒卡
 
 #### 5.3 Step 3 品牌介绍
 
@@ -497,7 +526,7 @@
 
 - [x] 官网输入
 - [x] 各社媒链接输入
-- [ ] 额外链接列表编辑
+- [x] 额外链接列表编辑
 - [x] rights confirmation 勾选
 - [x] identity confirmation 勾选
 
@@ -520,8 +549,8 @@
 验收标准：
 
 - [ ] 六步可完整走通
-- [ ] 前后跳步状态正确
-- [ ] 校验错误能定位到具体步骤
+- [x] 前后跳步状态正确
+- [x] 校验错误能定位到具体步骤
 
 ### Phase 6 - iOS 图片上传链路
 
@@ -531,7 +560,7 @@
 - [x] iOS 接口层已支持 brand 图片按 `draftId` 上传
 - [x] 创建态图片按 `draftId` 上传
 - [x] 编辑态未提交变更图片按 `draftId` 上传
-- [ ] 已持久化图片标记 `persistedBrand`
+- [x] 已持久化图片标记 `persistedBrand`
 - [x] 单图上传失败支持重试
 - [x] 替换图片时清理旧草稿图
 - [x] iOS 接口层已支持 brand 图片删除
@@ -540,9 +569,9 @@
 
 验收标准：
 
-- [ ] 所有图片都能在草稿期独立管理
-- [ ] 图片上传失败不会破坏整个表单
-- [ ] 提交后图片资产和页面展示一致
+- [x] 所有图片都能在草稿期独立管理
+- [x] 图片上传失败不会破坏整个表单
+- [x] 提交后图片资产和页面展示一致
 
 ### Phase 7 - iOS 提交与成功态
 
@@ -573,8 +602,8 @@
 验收标准：
 
 - [x] create / edit 成功态行为一致
-- [ ] 审核态文案与 event 保持一致
-- [ ] 用户可以清楚知道后续去哪里看状态
+- [x] 审核态文案与 event 保持一致
+- [x] 用户可以清楚知道后续去哪里看状态
 
 ### Phase 8 - event 上传页联动
 
@@ -584,7 +613,7 @@
 - [x] 创建成功后自动回填 `organizerFestivalID`
 - [x] 如果 brand 处于审核中，允许 event 先保留手填主办方名
 - [x] event 详情页品牌信息展示继续使用 `festivalDetail`
-- [ ] brand 审核通过后可被 event 上传页搜索到
+- [x] brand 审核通过后可被 event 上传页搜索到
 
 验收标准：
 
@@ -595,17 +624,17 @@
 
 目标：让运营真的能审，不只是用户能提。
 
-- [ ] brand 审核列表筛选验证
-- [ ] proof 图片在审核端可见
-- [ ] change summary 在审核端可见
-- [ ] duplicate warning 在审核端可见
-- [ ] 驳回 reason code 在审核端可选
-- [ ] 审核通过后能正确入库到 `wikiFestival`
+- [x] brand 审核列表筛选验证
+- [x] proof 图片在审核端可见
+- [x] change summary 在审核端可见
+- [x] duplicate warning 在审核端可见
+- [x] 驳回 reason code 在审核端可选
+- [x] 审核通过后能正确入库到 `wikiFestival`
 
 验收标准：
 
-- [ ] 审核员可以根据材料独立完成审核
-- [ ] 驳回理由能回到用户端
+- [x] 审核员可以根据材料独立完成审核
+- [x] 驳回理由能回到用户端
 
 ### Phase 10 - 测试与验收
 

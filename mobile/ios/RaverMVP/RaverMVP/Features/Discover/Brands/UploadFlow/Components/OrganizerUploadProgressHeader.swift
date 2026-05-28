@@ -2,6 +2,10 @@ import SwiftUI
 
 struct OrganizerUploadProgressHeader: View {
     let currentStep: OrganizerUploadStep
+    let hasIssue: (OrganizerUploadStep) -> Bool
+    let isCompleted: (OrganizerUploadStep) -> Bool
+    let canNavigate: (OrganizerUploadStep) -> Bool
+    let onSelect: (OrganizerUploadStep) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -10,9 +14,22 @@ struct OrganizerUploadProgressHeader: View {
                 .foregroundStyle(RaverTheme.secondaryText)
             HStack(spacing: 6) {
                 ForEach(OrganizerUploadStep.allCases) { step in
-                    Capsule()
-                        .fill(fillColor(for: step))
-                        .frame(height: 6)
+                    Button {
+                        onSelect(step)
+                    } label: {
+                        VStack(spacing: 8) {
+                            Capsule()
+                                .fill(fillColor(for: step))
+                                .frame(height: 6)
+                            Text(step.title)
+                                .font(.caption2.weight(step == currentStep ? .bold : .semibold))
+                                .foregroundStyle(labelColor(for: step))
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(step == currentStep || !canNavigate(step))
+                    .opacity(step == currentStep || canNavigate(step) ? 1 : 0.72)
                 }
             }
         }
@@ -27,7 +44,25 @@ struct OrganizerUploadProgressHeader: View {
     }
 
     private func fillColor(for step: OrganizerUploadStep) -> Color {
-        let index = OrganizerUploadStep.allCases.firstIndex(of: step) ?? 0
-        return index <= currentIndex ? RaverTheme.accent : RaverTheme.cardBorder
+        if hasIssue(step) {
+            return .orange
+        }
+        if step == currentStep || isCompleted(step) {
+            return RaverTheme.accent
+        }
+        return RaverTheme.cardBorder
+    }
+
+    private func labelColor(for step: OrganizerUploadStep) -> Color {
+        if hasIssue(step) {
+            return .orange
+        }
+        if step == currentStep {
+            return RaverTheme.primaryText
+        }
+        if isCompleted(step) {
+            return RaverTheme.accent
+        }
+        return RaverTheme.secondaryText
     }
 }
