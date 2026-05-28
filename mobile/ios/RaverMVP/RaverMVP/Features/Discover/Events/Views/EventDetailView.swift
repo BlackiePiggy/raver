@@ -6032,10 +6032,6 @@ struct EventDetailView: View {
             "\($0) · \(Date.appLocalizedTimeZoneLabel(eventTimeZone))"
         }
 
-        guard event.discreteDateRanges.count > 1 else {
-            return eventInfoDateTexts(event.startDate, event: event)
-        }
-
         guard deviceTimeZone.secondsFromGMT(for: event.primaryDisplayDate) != eventTimeZone.secondsFromGMT(for: event.primaryDisplayDate) else {
             return eventLines
         }
