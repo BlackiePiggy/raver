@@ -467,9 +467,6 @@ export async function processContentSubmission(
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Event timetable processing failed';
-      if (!markFailedOnError) {
-        throw error;
-      }
       await recordApprovedSubmissionPhaseBFailure(db, submissionId, message);
       return {
         status: 'failed',
