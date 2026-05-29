@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { eventDateOnlyToStorageDate, storageDateToEventDate } from '../utils/event-timezone';
 
@@ -178,6 +179,23 @@ const performanceSemanticKey = (row: {
     dateTimeValue(row.endAt) ?? '',
   ].join('|');
 
+const performanceSemanticIdentitySeed = (row: {
+  eventId?: string;
+  eventArtistId: string;
+  stageId: string | null;
+  eventDayId?: string | null;
+  startAt: Date | null;
+  endAt: Date | null;
+}): string =>
+  [
+    row.eventId || '',
+    row.eventArtistId,
+    row.stageId || '',
+    row.eventDayId || '',
+    dateTimeValue(row.startAt) ?? '',
+    dateTimeValue(row.endAt) ?? '',
+  ].join('|');
+
 const deterministicUuidFromKey = (key: string): string => {
   const normalized = key.trim().toLowerCase();
   let hash = 0x811c9dc5;
@@ -217,14 +235,17 @@ const canonicalPerformanceIdentityKey = (row: {
   eventDayId: string | null;
   startAt: Date;
   endAt: Date;
-}): string => performanceSemanticKey({
-  eventId: row.eventId,
-  eventArtistId: row.eventArtistId,
-  stageId: row.stageId,
-  eventDayId: row.eventDayId,
-  startAt: row.startAt,
-  endAt: row.endAt,
-});
+}): string => crypto
+  .createHash('md5')
+  .update(performanceSemanticIdentitySeed({
+    eventId: row.eventId,
+    eventArtistId: row.eventArtistId,
+    stageId: row.stageId,
+    eventDayId: row.eventDayId,
+    startAt: row.startAt,
+    endAt: row.endAt,
+  }))
+  .digest('hex');
 
 const BULK_PERFORMANCE_UPDATE_BATCH_SIZE = 50;
 const BULK_ARTIST_UPDATE_BATCH_SIZE = 50;
@@ -784,6 +805,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
     eventId: performance.eventId,
     identityKey: deriveExistingPerformanceIdentityKey({
       eventId: performance.eventId,
+      identityKey: (performance as { identityKey?: string | null }).identityKey ?? null,
       eventArtistId: performance.eventArtistId,
       stageId: performance.stageId,
       eventDayId: performance.eventDayId,
