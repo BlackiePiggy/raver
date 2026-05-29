@@ -42,6 +42,14 @@ type BenchmarkMetrics = {
     totalMs: number;
     canonicalSync?: Record<string, number | null> | null;
   } | null;
+  phaseBTimings: {
+    reviewingTransitionMs: number;
+    applyMs: number;
+    timetableQueuedMs?: number;
+    approvalFinalizeMs: number;
+    totalMs: number;
+    canonicalSync?: Record<string, number | null> | null;
+  } | null;
   finalSlotCount: number;
   finalArtistCount: number;
 };
@@ -365,6 +373,7 @@ const processSubmissionWithTimetable = async (submissionId: string): Promise<{
       phaseAWallMs,
       phaseBWallMs,
       phaseATimings: phaseAResult.timings ?? null,
+      phaseBTimings: phaseBResult.timings ?? null,
       finalSlotCount: snapshot.slots.length,
       finalArtistCount: snapshot.artists.length,
     },
@@ -402,7 +411,7 @@ const printSummary = (
   const phaseAApplyStats = summarize(metrics.map((item) => item.phaseATimings?.applyMs ?? 0));
   const phaseATotalStats = summarize(metrics.map((item) => item.phaseATimings?.totalMs ?? 0));
   const canonicalSyncMetrics = metrics
-    .map((item) => item.phaseATimings?.canonicalSync)
+    .map((item) => item.phaseBTimings?.canonicalSync)
     .filter((value): value is Record<string, number | null> => Boolean(value));
   console.log(`[benchmark-event-submission] summary ${label}`);
   console.log(`  phaseA.wall ${JSON.stringify(formatStats(phaseAStats))}`);
