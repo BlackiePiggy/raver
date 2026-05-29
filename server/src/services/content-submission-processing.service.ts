@@ -69,6 +69,7 @@ export type ContentSubmissionProcessingQueueStatus = {
   status: 'healthy' | 'degraded' | 'critical';
   alertReasons: string[];
   totals: Record<string, number>;
+  jobTypeTotals: Record<string, Record<string, number>>;
   queuedCount: number;
   retryingCount: number;
   runningCount: number;
@@ -92,6 +93,15 @@ export type ContentSubmissionProcessingQueueStatus = {
     updatedAt: Date;
     lastError: string | null;
     metadata: Prisma.JsonValue | null;
+    entityType: string | null;
+    submissionTitle: string | null;
+    submissionStatus: string | null;
+    createdEntityId: string | null;
+    phaseBFailure: Prisma.JsonValue | null;
+    phaseTimings: Prisma.JsonValue | null;
+    retryScheduledAt: string | null;
+    lastDurationMs: number | null;
+    lastResult: string | null;
   }>;
 };
 
@@ -160,6 +170,15 @@ const mergeSubmissionReviewNotes = (
   ...asJsonObject(current),
   ...withDefinedJsonFields(patch),
 });
+
+const asNullableJsonObject = (
+  value: Prisma.JsonValue | null | undefined
+): Prisma.JsonObject | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Prisma.JsonObject;
+};
 
 export async function publishContentSubmissionTaskNotification(input: {
   userId: string;
@@ -1056,7 +1075,7 @@ export async function getContentSubmissionProcessingQueueStatus(
 
   const [grouped, oldestQueued, staleRunningCount, latestJobs] = await Promise.all([
     db.contentSubmissionProcessingJob.groupBy({
-      by: ['status'],
+      by: ['jobType', 'status'],
       _count: {
         _all: true,
       },
@@ -1103,12 +1122,28 @@ export async function getContentSubmissionProcessingQueueStatus(
         updatedAt: true,
         lastError: true,
         metadata: true,
+        submission: {
+          select: {
+            entityType: true,
+            title: true,
+            status: true,
+            createdEntityId: true,
+            reviewNotes: true,
+          },
+        },
       },
     }),
   ]);
 
   const totals = grouped.reduce<Record<string, number>>((acc, row) => {
     acc[row.status] = row._count._all;
+    return acc;
+  }, {});
+  const jobTypeTotals = grouped.reduce<Record<string, Record<string, number>>>((acc, row) => {
+    const jobType = row.jobType;
+    const bucket = acc[jobType] || {};
+    bucket[row.status] = row._count._all;
+    acc[jobType] = bucket;
     return acc;
   }, {});
   const oldestQueuedAt = oldestQueued?.availableAt ?? null;
@@ -1147,7 +1182,37 @@ export async function getContentSubmissionProcessingQueueStatus(
     oldestQueuedAgeSeconds,
     staleRunningCount,
     staleLockThresholdSeconds: Math.floor(staleLockMs / 1000),
-    latestJobs,
+    jobTypeTotals,
+    latestJobs: latestJobs.map((job) => {
+      const metadata = asNullableJsonObject(job.metadata);
+      const phaseTimings = asNullableJsonObject(metadata?.phaseTimings as Prisma.JsonValue | null | undefined);
+      const phaseBFailure = asNullableJsonObject(job.submission.reviewNotes)?.phaseBFailure ?? null;
+      return {
+        id: job.id,
+        submissionId: job.submissionId,
+        jobType: job.jobType,
+        status: job.status,
+        attempts: job.attempts,
+        maxAttempts: job.maxAttempts,
+        lockedBy: job.lockedBy,
+        availableAt: job.availableAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        failedAt: job.failedAt,
+        updatedAt: job.updatedAt,
+        lastError: job.lastError,
+        metadata: job.metadata,
+        entityType: job.submission.entityType,
+        submissionTitle: job.submission.title,
+        submissionStatus: job.submission.status,
+        createdEntityId: job.submission.createdEntityId,
+        phaseBFailure,
+        phaseTimings,
+        retryScheduledAt: typeof metadata?.retryScheduledAt === 'string' ? metadata.retryScheduledAt : null,
+        lastDurationMs: typeof metadata?.lastDurationMs === 'number' ? metadata.lastDurationMs : null,
+        lastResult: typeof metadata?.lastResult === 'string' ? metadata.lastResult : null,
+      };
+    }),
   };
 }
 

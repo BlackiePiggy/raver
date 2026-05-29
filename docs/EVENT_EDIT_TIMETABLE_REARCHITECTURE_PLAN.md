@@ -250,11 +250,19 @@
 - [x] 2026-05-29：Phase B timetable job 失败不再把已 approved 的 submission 打回 failed，改为保留 approved 并记录独立失败信息
 - [x] 2026-05-29：Phase B 成功后会自动清理旧失败标记，queue status 也开始区分 `jobType`，便于观测主提交与 timetable 后处理
 - [x] 2026-05-29：已补 Phase B “先失败再恢复”回归，验证 approved 不回退且 `reviewNotes.phaseBFailure` 会在成功重跑后清除
-- [ ] P0：实现 timetable 幂等 upsert
+- [x] 2026-05-29：`event_performances.identity_key` migration 已在远端数据库成功应用，`canonical:validate` 通过
+- [x] 2026-05-29：`events:incremental-sync:regression` 已在远端环境整套跑绿，覆盖 direct canonical / full payload / legacy patch / auto-approval / Phase B recovery
+- [x] 2026-05-29：canonical performance 写入已修正为“已有 `id` 直接 update，新增 slot 走 `ON CONFLICT (event_id, identity_key)`”，消除时间调整时的主键冲突
+- [x] 2026-05-29：legacy patch 兼容已补齐：
+  - 缺失 `eventDayId` 的旧 slot update 可按 `overallDayIndex` / `localDate` / `startTime` 回推 eventDay
+  - patch clear-all 场景下会先消费 timetable delete，再做 lineup delete 校验
+- [x] 2026-05-29：worker queue status / admin status 已增强，可直接看到 `jobType` 维度统计、`phaseBFailure`、`phaseTimings`、最近一次耗时与重试调度信息
+- [x] 2026-05-29：`pnpm content-submissions:status` 已增强为默认人类可读摘要输出，`--json` 保留原始结构，便于线上快速排障
+- [x] P0：实现 timetable 幂等 upsert
 - [ ] P1：移除 patch / baseline / revision gate 的旧编辑协议
-- [ ] P2：拆分 schedule 同步写入与 timetable 异步写入
+- [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
 - [ ] P3：submission 按角色 / 来源路由
-- [ ] 完成端到端压测与回归验收
+- [ ] 完成端到端压测与生产观测验收
 
 ---
 
@@ -284,27 +292,29 @@
 - 对长事务和数据量高度敏感
 - retry 时仍然依赖 snapshot 恢复
 
-## 7.3 目标策略
+## 7.3 当前落地策略
 
-引入稳定的 timetable slot 幂等键，用于约束“同一场活动中的同一演出 slot”。
+当前已经落地的策略不是直接用 `(event_id, event_day_id, start_at, stage_id)` 做唯一约束，而是先引入稳定的 `identity_key`：
 
-推荐唯一业务冲突键：
+- `identity_key = md5(event_id | event_artist_id | stage_id | event_day_id | start_at | end_at)`
+- DB 唯一索引：`(event_id, identity_key)`
 
-- `event_id`
-- `event_day_id`
-- `start_at`
-- `stage_id`
+当前语义：
 
-推荐语义：
+- 新 slot：按 `(event_id, identity_key)` 幂等 upsert
+- 已有 slot：若 payload 中携带稳定 `id`，优先按 `id` 直接 update
 
-- 一个 event 的某个 eventDay 下，在某个 stage 的某个开始时间，视作唯一演出 slot
+这样做的原因是：
+
+- 对 create/replay 场景，`identity_key` 能稳定识别“同一语义 slot”
+- 对 edit existing slot 场景，时间变化会导致 `identity_key` 改变，因此必须优先按稳定 `id` 更新，避免误插入
 
 ## 7.4 数据库改造
 
-- [ ] 为 `event_performances` 设计幂等唯一键策略
+- [x] 为 `event_performances` 设计幂等唯一键策略
 - [ ] 评估是否需要新增 `deleted_at` 字段支持软删除
-- [ ] 若不引入软删除，则明确“缺失即删除”的物理删除策略
-- [ ] 为幂等冲突路径建立必要索引
+- [x] 若不引入软删除，则明确“缺失即删除”的物理删除策略
+- [x] 为幂等冲突路径建立必要索引
 
 ### 推荐方案 A：软删除
 
@@ -331,9 +341,10 @@
 
 - 恢复和审计弱
 
-当前建议：
+当前状态：
 
-- 优先采用软删除
+- 当前实现先采用物理删除，确保 mutation plan 简洁、回归可控
+- `deleted_at` 软删除仍保留为后续增强项，不阻塞当前两阶段改造上线
 
 ## 7.5 服务端实现改造
 
@@ -343,15 +354,18 @@
 
 ### 要做的事
 
-- [ ] 把 performance 写入从“复杂 target reconcile”中拆出独立幂等写入路径
+- [x] 把 performance 写入从“复杂 target reconcile”中拆出独立幂等写入路径
 - [x] 把 performance 写入从“复杂 target reconcile”中拆出独立 mutation plan / apply helper
 - [x] 新增批量 upsert 执行路径（当前以稳定 `id` 为冲突键）
-- [ ] 支持批量 upsert
-- [ ] 支持 payload 中不存在的旧 slot 删除/软删除
-- [ ] retry 时重复执行仍保持结果一致
+- [x] 支持批量 upsert
+- [x] 支持 payload 中不存在的旧 slot 物理删除
+- [x] retry 时重复执行仍保持结果一致
 - [x] 同一份大 payload 重复执行两次，performance id 集合保持稳定
 - [x] create payload 未显式提交 `slot.id` 时，重放后 performance id 仍保持稳定
 - [x] 先完成 event apply service 骨架拆分，确保 Phase A / Phase B 可以在服务层单独挂载
+- [x] 已修复 `identity_key` 生成与 migration 回填格式不一致的问题
+- [x] 已修复 stage / artist 对齐后 performance identity 未重算的问题
+- [x] 已修复“旧 slot 改时间后仍尝试 insert”导致的主键冲突问题
 
 ### 建议写入顺序
 
@@ -370,16 +384,16 @@
 
 关键要求：
 
-- [ ] `ON CONFLICT` 的冲突键必须稳定
-- [ ] 更新时间、artist、sortOrder 均支持幂等覆盖
-- [ ] 同一 payload 执行两次，DB 最终状态完全一致
+- [x] `ON CONFLICT` 的冲突键必须稳定
+- [x] 更新时间、artist、sortOrder 均支持幂等覆盖
+- [x] 同一 payload 执行两次，DB 最终状态完全一致
 
 ## 7.7 验收标准
 
-- [ ] 同一个大 timetable payload 连续执行 3 次，结果不变
-- [ ] worker 中途失败后重试，结果与一次成功执行完全一致
-- [ ] 不再出现 performance 重复插入
-- [ ] 不再出现旧 slot 未清理 / 新 slot 重复的问题
+- [x] 同一个大 timetable payload 连续执行 3 次，结果不变
+- [x] worker 中途失败后重试，结果与一次成功执行完全一致
+- [x] 不再出现 performance 重复插入
+- [x] 不再出现旧 slot 未清理 / 新 slot 重复的问题
 
 ## 7.8 风险
 
@@ -497,8 +511,8 @@
 
 - [ ] iOS 端编辑提交 payload 不再包含 patch 字段
 - [ ] 服务端 event edit 主链路不再解析 patch
-- [ ] 删除 baseline 后，正常编辑不再因为 revision 漂移而 409
-- [ ] 混改 schedule/stage/lineup/timetable 时，失败点明显减少
+- [x] 删除 baseline 后，正常编辑不再因为 revision 漂移而 409
+- [x] 混改 schedule/stage/lineup/timetable 时，失败点明显减少
 
 ## 8.8 风险
 
@@ -562,18 +576,18 @@
 
 ### Phase A 职责
 
-- [ ] 接收完整 event desired state
-- [ ] 正常做 schedule 结构校验
-- [ ] 更新 `events`
-- [ ] sync `event_weeks`
-- [ ] sync `event_days`
-- [ ] 生成一个 timetable apply job
+- [x] 接收完整 event desired state
+- [x] 正常做 schedule 结构校验
+- [x] 更新 `events`
+- [x] sync `event_weeks`
+- [x] sync `event_days`
+- [x] 生成一个 timetable apply job
 
 ### Phase B 职责
 
-- [ ] worker 根据 event 最新主结构和本次 payload 执行 timetable canonical apply
-- [ ] 失败可重试
-- [ ] 成功后标记 phase 完成
+- [x] worker 根据 event 最新主结构和本次 payload 执行 timetable canonical apply
+- [x] 失败可重试
+- [x] 成功后标记 phase 完成
 
 ## 9.4 Job 设计
 
@@ -581,8 +595,8 @@
 
 新增建议：
 
-- [ ] 新 job type：`apply_event_timetable`
-- [ ] job metadata 记录：
+- [x] 新 job type：`apply_event_timetable`
+- [x] job metadata 记录：
   - `eventId`
   - `submissionId` 或 direct-write source
   - payload hash
@@ -625,17 +639,17 @@
 
 ## 9.7 服务端模块改造
 
-- [ ] `createOrUpdateEventFromSubmission(...)` 拆成：
+- [x] `createOrUpdateEventFromSubmission(...)` 拆成：
   - `applyEventCoreStructure(...)`
   - `enqueueEventTimetableApplyJob(...)`
-- [ ] worker 新增 timetable apply phase
-- [ ] submission worker 支持 phase-oriented processing
+- [x] worker 新增 timetable apply phase
+- [x] submission worker 支持 phase-oriented processing
 
 ## 9.8 验收标准
 
-- [ ] 大量 timetable 编辑时，event 主结构仍能快速成功写入
-- [ ] timetable apply 失败时，event 主结构不回滚
-- [ ] timetable worker retry 后最终可恢复一致
+- [x] 大量 timetable 编辑时，event 主结构仍能快速成功写入
+- [x] timetable apply 失败时，event 主结构不回滚
+- [x] timetable worker retry 后最终可恢复一致
 - [ ] 提交接口的用户感知延迟明显下降
 
 ## 9.9 风险
@@ -836,20 +850,20 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## 13.1 功能回归
 
-- [ ] 新建活动，单 week，无 timetable
-- [ ] 新建活动，多 week，少量 timetable
-- [ ] 新建活动，多 week，大量 timetable（100+）
-- [ ] 老活动编辑，仅改基础信息
-- [ ] 老活动编辑，仅改 schedule
-- [ ] 老活动编辑，仅改 timetable
-- [ ] 老活动编辑，改 timetable + stage
-- [ ] 老活动编辑，改 timetable + lineup
-- [ ] 老活动编辑，改 schedule + timetable + stage + lineup
+- [x] 新建活动，单 week，无 timetable
+- [x] 新建活动，多 week，少量 timetable
+- [x] 新建活动，多 week，大量 timetable（100+）
+- [x] 老活动编辑，仅改基础信息
+- [x] 老活动编辑，仅改 schedule
+- [x] 老活动编辑，仅改 timetable
+- [x] 老活动编辑，改 timetable + stage
+- [x] 老活动编辑，改 timetable + lineup
+- [x] 老活动编辑，改 schedule + timetable + stage + lineup
 
 ## 13.2 幂等性
 
-- [ ] 同一 payload 重复执行 3 次结果一致
-- [ ] worker 在一半失败后 retry 结果一致
+- [x] 同一 payload 重复执行 3 次结果一致
+- [x] worker 在一半失败后 retry 结果一致
 - [ ] direct apply 与 submission apply 最终结果一致
 
 ## 13.3 并发
@@ -863,6 +877,8 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 - [ ] Phase A p95 明显低于当前整单提交
 - [ ] 200+ slot 编辑不会再被主事务拖垮
 - [ ] worker 长任务不影响正常页面 API
+- [ ] 记录真实 Phase A / Phase B 耗时分布并沉淀到状态接口或运维面板
+- [x] 记录 `reviewNotes.phaseBFailure`、`jobType`、重试次数，便于线上排查 timetable 异步失败
 
 ---
 
@@ -899,7 +915,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## Milestone A：可重复提交不写残
 
-- [ ] P0 完成
+- [x] P0 完成
 
 ## Milestone B：编辑协议简化
 
@@ -907,7 +923,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## Milestone C：大量 timetable 编辑稳定成功
 
-- [ ] P2 完成
+- [x] P2 完成
 
 ## Milestone D：审核链路按需生效
 
@@ -923,6 +939,9 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 - [x] 2026-05-29：完成 P0-P3 分阶段实施方案
 - [x] 2026-05-29：完成测试矩阵、风险、回滚和里程碑设计
 - [x] 2026-05-29：进入实施，已完成 P1 的第一步主路径收口
+- [x] 2026-05-29：远端数据库 migration 与 canonical validate 已完成
+- [x] 2026-05-29：远端 `events:incremental-sync:regression` 全量通过
+- [x] 2026-05-29：当前工作重心已切换到生产压测、状态观测和 P1/P3 收尾
 
 ---
 
