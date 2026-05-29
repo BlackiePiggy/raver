@@ -790,15 +790,41 @@ const normalizeSubmissionLineupSlots = (
 
   const { eventDays, timeZone } = scheduleContext;
   const eventDayById = new Map(eventDays.map((day) => [day.eventDayId, day]));
+  const resolveEventDayForLegacySlot = (slot: Record<string, unknown>): SubmittedEventDay | null => {
+    const overallDayIndex = integerOrNull(slot.overallDayIndex);
+    if (overallDayIndex !== null) {
+      const matched = eventDays.find((day) => day.overallDayIndex === overallDayIndex);
+      if (matched) return matched;
+    }
+
+    const localDate = normalizeLocalDateInput(slot.localDate, timeZone);
+    if (localDate) {
+      const localDateKey = eventDateKey(localDate, timeZone);
+      const matched = eventDays.find((day) => eventDateKey(day.date, timeZone) === localDateKey);
+      if (matched) return matched;
+    }
+
+    const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
+    if (parsedStart) {
+      const startDay = startOfEventDay(parsedStart, timeZone);
+      const startDayKey = eventDateKey(startDay, timeZone);
+      const matched = eventDays.find((day) => eventDateKey(day.date, timeZone) === startDayKey);
+      if (matched) return matched;
+    }
+
+    return null;
+  };
 
   return slots
     .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
     .map((slot, index) => {
-      const eventDayId = cleanText(slot.eventDayId);
+      const explicitEventDayId = cleanText(slot.eventDayId);
+      const inferredEventDay = explicitEventDayId ? null : resolveEventDayForLegacySlot(slot);
+      const eventDayId = explicitEventDayId || inferredEventDay?.eventDayId;
       if (!eventDayId) {
         throw new EventSubmissionValidationError('所有 timetable slot 都必须携带 eventDayId');
       }
-      const eventDay = eventDayById.get(eventDayId);
+      const eventDay = eventDayById.get(eventDayId) || inferredEventDay;
       if (!eventDay) {
         throw new EventSubmissionValidationError(`slot.eventDayId=${eventDayId} 不存在于 eventDays 中`);
       }
