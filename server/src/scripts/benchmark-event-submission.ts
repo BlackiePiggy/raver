@@ -410,6 +410,8 @@ const printSummary = (
   const phaseBStats = summarize(metrics.map((item) => item.phaseBWallMs));
   const phaseAApplyStats = summarize(metrics.map((item) => item.phaseATimings?.applyMs ?? 0));
   const phaseATotalStats = summarize(metrics.map((item) => item.phaseATimings?.totalMs ?? 0));
+  const phaseBApplyStats = summarize(metrics.map((item) => item.phaseBTimings?.applyMs ?? 0));
+  const phaseBTotalStats = summarize(metrics.map((item) => item.phaseBTimings?.totalMs ?? 0));
   const canonicalSyncMetrics = metrics
     .map((item) => item.phaseBTimings?.canonicalSync)
     .filter((value): value is Record<string, number | null> => Boolean(value));
@@ -418,8 +420,14 @@ const printSummary = (
   console.log(`  phaseA.apply ${JSON.stringify(formatStats(phaseAApplyStats))}`);
   console.log(`  phaseA.total ${JSON.stringify(formatStats(phaseATotalStats))}`);
   console.log(`  phaseB.wall ${JSON.stringify(formatStats(phaseBStats))}`);
+  console.log(`  phaseB.apply ${JSON.stringify(formatStats(phaseBApplyStats))}`);
+  console.log(`  phaseB.total ${JSON.stringify(formatStats(phaseBTotalStats))}`);
   if (canonicalSyncMetrics.length > 0) {
     const fields = [
+      'scheduleContextMs',
+      'transactionWallMs',
+      'transactionOverheadMs',
+      'outerTotalMs',
       'loadSnapshotMs',
       'normalizeInputMs',
       'alignArtistsMs',

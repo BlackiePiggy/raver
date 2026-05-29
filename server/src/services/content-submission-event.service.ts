@@ -1784,13 +1784,26 @@ export const applyEventTimetableFromSubmission = async (
   eventId: string,
   payload: Prisma.JsonObject
 ): Promise<CanonicalLineupSyncProfiling> => {
+  const startedAt = process.hrtime.bigint();
+  const scheduleContextStartedAt = process.hrtime.bigint();
   const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
-  return runEventSubmissionTransaction(db, async (tx) => applyEventCanonicalSubmissionState(
+  const scheduleContextMs = Number(process.hrtime.bigint() - scheduleContextStartedAt) / 1_000_000;
+  const transactionStartedAt = process.hrtime.bigint();
+  const canonicalSync = await runEventSubmissionTransaction(db, async (tx) => applyEventCanonicalSubmissionState(
     tx,
     eventId,
     payload,
     scheduleContext
   ));
+  const transactionWallMs = Number(process.hrtime.bigint() - transactionStartedAt) / 1_000_000;
+  const totalWallMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+  return {
+    ...canonicalSync,
+    scheduleContextMs,
+    transactionWallMs,
+    transactionOverheadMs: Math.max(0, totalWallMs - scheduleContextMs - canonicalSync.totalMs),
+    outerTotalMs: totalWallMs,
+  };
 };
 
 export async function createOrUpdateEventFromSubmission(

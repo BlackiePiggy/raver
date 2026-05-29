@@ -122,6 +122,10 @@ export type CanonicalLineupSyncProfiling = {
   performanceMutationMs: number;
   cleanupDeleteMs: number;
   totalMs: number;
+  scheduleContextMs?: number;
+  transactionWallMs?: number;
+  transactionOverheadMs?: number;
+  outerTotalMs?: number;
 };
 
 const uniqueIds = (values: Array<string | null | undefined>): string[] => {
