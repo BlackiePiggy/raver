@@ -152,7 +152,6 @@ enum EventUploadMappers {
             lineupArtists: create.lineupArtists,
             lineupSlots: create.lineupSlots,
             lineupSyncMode: create.lineupSyncMode,
-            baseEventRevision: draft.incrementalBaseline?.eventRevision,
             status: create.status,
             clearManualLocation: create.manualLocation == nil,
             clearWikiFestivalId: create.wikiFestivalId == nil,
@@ -162,17 +161,6 @@ enum EventUploadMappers {
             clearStageOrder: create.stageOrder == nil,
             clearLineupSlots: create.lineupSlots == nil
         )
-        if let patch = patchChanges(from: draft) {
-            input.editMode = "patch"
-            input.lineupArtists = nil
-            input.lineupSlots = nil
-            input.lineupChanges = patch.lineupChanges.isEmpty ? nil : patch.lineupChanges
-            input.timetableChanges = patch.timetableChanges.isEmpty ? nil : patch.timetableChanges
-            input.stageChanges = patch.stageChanges.isEmpty ? nil : patch.stageChanges
-            input.clearLineupSlots = false
-            input.clearTimetableChanges = patch.timetableChanges.isEmpty
-            input.clearStageChanges = patch.stageChanges.isEmpty
-        }
         return input
     }
 
@@ -445,141 +433,6 @@ enum EventUploadMappers {
             return input
         }
         return timetableSlots.isEmpty ? nil : timetableSlots
-    }
-
-    private struct PatchChanges {
-        var lineupChanges: [EventLineupArtistPatchChange]
-        var timetableChanges: [EventLineupSlotPatchChange]
-        var stageChanges: [EventStagePatchChange]
-    }
-
-    private static func patchChanges(from draft: EventUploadDraft) -> PatchChanges? {
-        guard let baseline = draft.incrementalBaseline else { return nil }
-        let currentArtists = lineupArtistInputs(from: draft) ?? []
-        let currentSlots = lineupSlotInputs(from: draft) ?? []
-        let currentStages = normalizedStages(from: draft) ?? []
-
-        let lineupChanges = diffLineupChanges(baseline: baseline.lineupArtists, current: currentArtists)
-        let timetableChanges = diffTimetableChanges(baseline: baseline.lineupSlots, current: currentSlots)
-        let stageChanges = diffStageChanges(baseline: baseline.stageOrder, current: currentStages)
-        if lineupChanges.isEmpty && timetableChanges.isEmpty && stageChanges.isEmpty {
-            return PatchChanges(lineupChanges: [], timetableChanges: [], stageChanges: [])
-        }
-        return PatchChanges(lineupChanges: lineupChanges, timetableChanges: timetableChanges, stageChanges: stageChanges)
-    }
-
-    private static func diffLineupChanges(
-        baseline: [EventLineupArtistInput],
-        current: [EventLineupArtistInput]
-    ) -> [EventLineupArtistPatchChange] {
-        let baselineByID = Dictionary(uniqueKeysWithValues: baseline.compactMap { artist -> (String, EventLineupArtistInput)? in
-            guard let id = artist.id?.trimmed.eventUploadMapperNilIfBlank else { return nil }
-            return (id, artist)
-        })
-        let currentByID = Dictionary(uniqueKeysWithValues: current.compactMap { artist -> (String, EventLineupArtistInput)? in
-            guard let id = artist.id?.trimmed.eventUploadMapperNilIfBlank else { return nil }
-            return (id, artist)
-        })
-        var changes: [EventLineupArtistPatchChange] = []
-
-        for artist in current where artist.id?.trimmed.eventUploadMapperNilIfBlank == nil {
-            changes.append(EventLineupArtistPatchChange(op: "add", artist: artist))
-        }
-        for (id, oldArtist) in baselineByID where currentByID[id] == nil {
-            changes.append(EventLineupArtistPatchChange(op: "delete", artistId: id, sortOrder: oldArtist.sortOrder))
-        }
-        for artist in current {
-            guard let id = artist.id?.trimmed.eventUploadMapperNilIfBlank, let oldArtist = baselineByID[id] else { continue }
-            if canonicalized(artist) != canonicalized(oldArtist) {
-                changes.append(EventLineupArtistPatchChange(op: "update", artistId: id, patch: artist))
-            } else if artist.sortOrder != oldArtist.sortOrder {
-                changes.append(EventLineupArtistPatchChange(op: "reorder", artistId: id, sortOrder: artist.sortOrder))
-            }
-        }
-        return changes
-    }
-
-    private static func diffTimetableChanges(
-        baseline: [EventLineupSlotInput],
-        current: [EventLineupSlotInput]
-    ) -> [EventLineupSlotPatchChange] {
-        let baselineByID = Dictionary(uniqueKeysWithValues: baseline.compactMap { slot -> (String, EventLineupSlotInput)? in
-            guard let id = slot.id?.trimmed.eventUploadMapperNilIfBlank else { return nil }
-            return (id, slot)
-        })
-        let currentByID = Dictionary(uniqueKeysWithValues: current.compactMap { slot -> (String, EventLineupSlotInput)? in
-            guard let id = slot.id?.trimmed.eventUploadMapperNilIfBlank else { return nil }
-            return (id, slot)
-        })
-        var changes: [EventLineupSlotPatchChange] = []
-
-        for slot in current where slot.id?.trimmed.eventUploadMapperNilIfBlank == nil {
-            changes.append(EventLineupSlotPatchChange(op: "add", slot: slot))
-        }
-        for (id, oldSlot) in baselineByID where currentByID[id] == nil {
-            changes.append(EventLineupSlotPatchChange(op: "delete", slotId: id, sortOrder: oldSlot.sortOrder))
-        }
-        for slot in current {
-            guard let id = slot.id?.trimmed.eventUploadMapperNilIfBlank, let oldSlot = baselineByID[id] else { continue }
-            if canonicalized(slot) != canonicalized(oldSlot) {
-                changes.append(EventLineupSlotPatchChange(op: "update", slotId: id, patch: slot))
-            } else if slot.sortOrder != oldSlot.sortOrder {
-                changes.append(EventLineupSlotPatchChange(op: "reorder", slotId: id, sortOrder: slot.sortOrder))
-            }
-        }
-        return changes
-    }
-
-    private static func diffStageChanges(
-        baseline: [String],
-        current: [String]
-    ) -> [EventStagePatchChange] {
-        let oldNames = baseline.map { $0.trimmed }.filter { !$0.isEmpty }
-        let newNames = current.map { $0.trimmed }.filter { !$0.isEmpty }
-        let newLower = Set(newNames.map { $0.lowercased() })
-        var changes: [EventStagePatchChange] = []
-        if oldNames.count == newNames.count {
-            for (oldName, newName) in zip(oldNames, newNames) where oldName.lowercased() != newName.lowercased() {
-                changes.append(EventStagePatchChange(op: "rename", name: oldName, nextName: newName))
-            }
-            return changes
-        }
-        for oldName in oldNames where !newLower.contains(oldName.lowercased()) {
-            changes.append(EventStagePatchChange(op: "delete", name: oldName, confirmDeleteLinkedPerformances: true))
-        }
-        return changes
-    }
-
-    private static func canonicalized(_ artist: EventLineupArtistInput) -> EventLineupArtistInput {
-        EventLineupArtistInput(
-            id: artist.id,
-            djId: artist.djId?.trimmed.eventUploadMapperNilIfBlank,
-            memberDjIds: artist.memberDjIds,
-            memberNames: artist.memberNames?.map { $0.trimmed }.filter { !$0.isEmpty },
-            djName: artist.djName.trimmed,
-            sortOrder: nil
-        )
-    }
-
-    private static func canonicalized(_ slot: EventLineupSlotInput) -> EventLineupSlotInput {
-        EventLineupSlotInput(
-            id: slot.id,
-            lineupArtistId: slot.lineupArtistId,
-            eventDayId: slot.eventDayId,
-            weekIndex: slot.weekIndex,
-            dayIndexInWeek: slot.dayIndexInWeek,
-            overallDayIndex: slot.overallDayIndex,
-            localDate: slot.localDate,
-            djId: slot.djId?.trimmed.eventUploadMapperNilIfBlank,
-            memberDjIds: slot.memberDjIds,
-            memberNames: slot.memberNames?.map { $0.trimmed }.filter { !$0.isEmpty },
-            festivalDayIndex: nil,
-            djName: slot.djName.trimmed,
-            stageName: slot.stageName?.trimmed.eventUploadMapperNilIfBlank,
-            sortOrder: nil,
-            startTime: slot.startTime,
-            endTime: slot.endTime
-        )
     }
 
     private static func artistIdentityKey(_ artist: EventLineupArtistInput) -> String {

@@ -11,7 +11,6 @@ import {
   ActiveEventEditSubmissionError,
   assertNoActiveEventEditSubmission,
   autoAlignEventLineupToTimetablePayload,
-  assertEventSubmissionBaseRevision,
   buildSubmittedEventScheduleContextFromEvent,
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
@@ -832,12 +831,6 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       : entityType === 'brand'
         ? normalizeBrandSubmissionPayload(rawPayload)
         : rawPayload;
-    if (entityType === 'event') {
-      await assertEventSubmissionBaseRevision(
-        prisma,
-        normalizedPayload as unknown as Prisma.JsonObject
-      );
-    }
     const payloadWithSummary = attachContentSubmissionChangeSummary(entityType, normalizedPayload);
     const validationError = ensureSubmissionPayload(entityType, payloadWithSummary);
     if (validationError) {

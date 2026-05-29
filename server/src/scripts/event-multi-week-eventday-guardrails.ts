@@ -3,6 +3,7 @@ import {
   normalizeSubmittedEventScheduleContext,
   normalizeSubmittedTimetableSlots,
 } from '../services/content-submission-event.service';
+import { eventDateKey } from '../utils/event-timezone';
 
 const assert = (condition: boolean, message: string): void => {
   if (!condition) throw new Error(message);
@@ -141,7 +142,8 @@ const main = (): void => {
   const weekend2Friday = scheduleContext.eventDays.find((day) => day.eventDayId === 'w2d1');
   assert(Boolean(weekend2Friday), 'w2d1 event day should exist in normalized schedule');
   assert(
-    Boolean(normalized[0].localDate) && normalized[0].localDate!.getTime() === weekend2Friday!.date.getTime(),
+    Boolean(normalized[0].localDate)
+      && eventDateKey(normalized[0].localDate!, 'UTC') === eventDateKey(weekend2Friday!.date, scheduleContext.timeZone),
     'normalized slot localDate should bind to event day date'
   );
   assert(

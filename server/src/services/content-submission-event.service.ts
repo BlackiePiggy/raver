@@ -512,6 +512,13 @@ const integerOrNull = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 };
 
+const dateTimeValue = (value: Date | string | null | undefined): number | null => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  const time = parsed.getTime();
+  return Number.isFinite(time) ? time : null;
+};
+
 const eventImageAssetsFromPayload = (value: unknown): Prisma.InputJsonValue[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -645,6 +652,70 @@ const buildSlotInstantFromEventDay = (
     second: timeParts.second,
     millisecond: timeParts.millisecond,
   }, timeZone);
+};
+
+const rebuildSlotInstantForMovedEventDay = (
+  sourceInstant: Date,
+  sourceEventDayDate: Date,
+  targetEventDayDate: Date,
+  timeZone: string
+): Date => {
+  const carryOffset = Math.max(0, diffEventDays(sourceEventDayDate, sourceInstant, timeZone));
+  const targetBaseDate = cloneEventDayByOffset(targetEventDayDate, carryOffset);
+  const dateParts = getLocalDateTimeParts(targetBaseDate, timeZone);
+  const timeParts = getLocalDateTimeParts(sourceInstant, timeZone);
+  return zonedTimeToUtc({
+    year: dateParts.year,
+    month: dateParts.month,
+    day: dateParts.day,
+    hour: timeParts.hour,
+    minute: timeParts.minute,
+    second: timeParts.second,
+    millisecond: timeParts.millisecond,
+  }, timeZone);
+};
+
+const alignExistingSlotToScheduleContext = (
+  slot: CanonicalLineupSlotInput,
+  scheduleContext: SubmittedEventScheduleContext
+): CanonicalLineupSlotInput => {
+  if (!slot.eventDayId) return slot;
+  const eventDay = scheduleContext.eventDays.find((day) => day.eventDayId === slot.eventDayId);
+  if (!eventDay) {
+    throw new EventSubmissionValidationError(`time slot ${slot.id || slot.djName} 引用的 eventDayId=${slot.eventDayId} 不存在于 eventDays 中`);
+  }
+
+  const sourceEventDayDate = slot.localDate
+    ? startOfEventDay(slot.localDate, scheduleContext.timeZone)
+    : startOfEventDay(slot.startTime, scheduleContext.timeZone);
+  let startTime = rebuildSlotInstantForMovedEventDay(
+    slot.startTime,
+    sourceEventDayDate,
+    eventDay.date,
+    scheduleContext.timeZone
+  );
+  let endTime = rebuildSlotInstantForMovedEventDay(
+    slot.endTime,
+    sourceEventDayDate,
+    eventDay.date,
+    scheduleContext.timeZone
+  );
+  if (Number.isNaN(startTime.getTime())) startTime = slot.startTime;
+  if (Number.isNaN(endTime.getTime())) endTime = slot.endTime;
+  while (endTime < startTime) {
+    endTime = new Date(endTime.getTime() + 86_400_000);
+  }
+
+  return {
+    ...slot,
+    eventDayId: eventDay.eventDayId,
+    weekIndex: eventDay.weekIndex,
+    dayIndexInWeek: eventDay.dayIndexInWeek,
+    overallDayIndex: eventDay.overallDayIndex,
+    localDate: eventDateOnlyToStorageDate(eventDay.date, scheduleContext.timeZone),
+    startTime,
+    endTime,
+  };
 };
 
 const normalizeLocalDateInput = (value: unknown, timeZone: string): Date | null => {
@@ -1242,7 +1313,10 @@ const applySubmissionLineupPatch = async (
   const normalizedSlots = slots
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((slot, index) => ({ ...slot, sortOrder: slot.sortOrder || index + 1 }));
+    .map((slot, index) => ({
+      ...alignExistingSlotToScheduleContext(slot, scheduleContext),
+      sortOrder: slot.sortOrder || index + 1,
+    }));
   const normalizedArtists = normalizeCanonicalLineupArtists(
     artists.slice().sort((a, b) => a.sortOrder - b.sortOrder),
     []
@@ -1293,6 +1367,14 @@ const runEventSubmissionTransaction = async <T>(
   timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
   maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
 });
+
+type NormalizedEventSubmissionWriteInput = {
+  targetEventId: string | null;
+  name: string;
+  scheduleContext: SubmittedEventScheduleContext;
+  eventData: Prisma.EventUncheckedUpdateInput;
+  ticketTiers: Prisma.EventTicketTierCreateWithoutEventInput[];
+};
 
 const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: string): Promise<string> => {
   const base = String(requestedSlug || name)
@@ -1351,35 +1433,89 @@ export const syncStructuredEventSchedule = async (
   eventId: string,
   scheduleContext: SubmittedEventScheduleContext
 ): Promise<void> => {
-  await tx.eventPerformance.updateMany({
-    where: { eventId },
-    data: {
-      eventDayId: null,
-      weekIndex: null,
-      dayIndexInWeek: null,
-      overallDayIndex: null,
-      localDate: null,
-    },
-  });
-  await tx.eventDay.deleteMany({ where: { eventId } });
-  await tx.eventWeek.deleteMany({ where: { eventId } });
+  const [existingWeeks, existingDays] = await Promise.all([
+    tx.eventWeek.findMany({
+      where: { eventId },
+      select: {
+        id: true,
+        weekIndex: true,
+        label: true,
+        startDate: true,
+        endDate: true,
+        sortOrder: true,
+      },
+    }),
+    tx.eventDay.findMany({
+      where: { eventId },
+      select: {
+        id: true,
+        eventWeekId: true,
+        eventDayId: true,
+        weekIndex: true,
+        dayIndexInWeek: true,
+        overallDayIndex: true,
+        label: true,
+        weekday: true,
+        date: true,
+        sortOrder: true,
+      },
+    }),
+  ]);
 
-  if (scheduleContext.weeks.length > 0) {
-    await tx.eventWeek.createMany({
-      data: buildEventWeeksCreateInput(scheduleContext.weeks, scheduleContext.timeZone).map((week) => ({
+  const desiredWeekRows = buildEventWeeksCreateInput(scheduleContext.weeks, scheduleContext.timeZone);
+  const desiredDayRows = buildEventDaysCreateInput(scheduleContext.weeks, scheduleContext.eventDays, scheduleContext.timeZone);
+  const desiredWeekIndexes = new Set(scheduleContext.weeks.map((week) => week.weekIndex));
+  const desiredEventDayIds = new Set(scheduleContext.eventDays.map((day) => day.eventDayId));
+  const existingWeekByIndex = new Map(existingWeeks.map((week) => [week.weekIndex, week]));
+  const existingDayByEventDayId = new Map(existingDays.map((day) => [day.eventDayId, day]));
+
+  const eventDayIdsToDelete = existingDays
+    .filter((day) => !desiredEventDayIds.has(day.eventDayId))
+    .map((day) => day.eventDayId);
+  if (eventDayIdsToDelete.length > 0) {
+    await tx.eventPerformance.updateMany({
+      where: {
         eventId,
-        ...week,
-      })),
+        eventDayId: { in: eventDayIdsToDelete },
+      },
+      data: {
+        eventDayId: null,
+        weekIndex: null,
+        dayIndexInWeek: null,
+        overallDayIndex: null,
+        localDate: null,
+      },
+    });
+    await tx.eventDay.deleteMany({
+      where: {
+        eventId,
+        eventDayId: { in: eventDayIdsToDelete },
+      },
     });
   }
 
-  if (scheduleContext.eventDays.length > 0) {
-    await tx.eventDay.createMany({
-      data: buildEventDaysCreateInput(scheduleContext.weeks, scheduleContext.eventDays, scheduleContext.timeZone).map((day) => ({
-        eventId,
-        ...day,
-      })),
-    });
+  for (const week of desiredWeekRows) {
+    const existing = existingWeekByIndex.get(week.weekIndex);
+    if (!existing) {
+      await tx.eventWeek.create({
+        data: {
+          eventId,
+          ...week,
+        },
+      });
+      continue;
+    }
+    if (
+      existing.label !== week.label
+      || dateTimeValue(existing.startDate) !== dateTimeValue(week.startDate)
+      || dateTimeValue(existing.endDate) !== dateTimeValue(week.endDate)
+      || existing.sortOrder !== week.sortOrder
+    ) {
+      await tx.eventWeek.update({
+        where: { id: existing.id },
+        data: week,
+      });
+    }
   }
 
   const createdWeeks = await tx.eventWeek.findMany({
@@ -1387,28 +1523,81 @@ export const syncStructuredEventSchedule = async (
     select: { id: true, weekIndex: true },
   });
   const weekIdByIndex = new Map(createdWeeks.map((week) => [week.weekIndex, week.id]));
-  for (const day of scheduleContext.eventDays) {
+
+  const daysNeedingTemporaryOverallIndex = desiredDayRows
+    .map((day) => existingDayByEventDayId.get(day.eventDayId))
+    .filter((day): day is NonNullable<typeof day> => Boolean(day))
+    .filter((day) => {
+      const desired = desiredDayRows.find((row) => row.eventDayId === day.eventDayId);
+      return Boolean(desired && desired.overallDayIndex !== day.overallDayIndex);
+    });
+  for (const [index, day] of daysNeedingTemporaryOverallIndex.entries()) {
+    await tx.eventDay.update({
+      where: { id: day.id },
+      data: { overallDayIndex: -(index + 1) },
+    });
+  }
+
+  for (const day of desiredDayRows) {
     const eventWeekId = weekIdByIndex.get(day.weekIndex) ?? null;
-    await tx.eventDay.updateMany({
+    const existing = existingDayByEventDayId.get(day.eventDayId);
+    const data = {
+      eventWeekId,
+      weekIndex: day.weekIndex,
+      dayIndexInWeek: day.dayIndexInWeek,
+      overallDayIndex: day.overallDayIndex,
+      label: day.label,
+      weekday: day.weekday,
+      date: day.date,
+      sortOrder: day.sortOrder,
+    };
+    if (!existing) {
+      await tx.eventDay.create({
+        data: {
+          eventId,
+          eventDayId: day.eventDayId,
+          ...data,
+        },
+      });
+      continue;
+    }
+    if (
+      existing.eventWeekId !== eventWeekId
+      || existing.weekIndex !== data.weekIndex
+      || existing.dayIndexInWeek !== data.dayIndexInWeek
+      || existing.overallDayIndex !== data.overallDayIndex
+      || existing.label !== data.label
+      || existing.weekday !== data.weekday
+      || dateTimeValue(existing.date) !== dateTimeValue(data.date)
+      || existing.sortOrder !== data.sortOrder
+    ) {
+      await tx.eventDay.update({
+        where: { id: existing.id },
+        data,
+      });
+    }
+  }
+
+  const weekIndexesToDelete = existingWeeks
+    .filter((week) => !desiredWeekIndexes.has(week.weekIndex))
+    .map((week) => week.weekIndex);
+  if (weekIndexesToDelete.length > 0) {
+    await tx.eventWeek.deleteMany({
       where: {
         eventId,
-        eventDayId: day.eventDayId,
-      },
-      data: {
-        eventWeekId,
+        weekIndex: { in: weekIndexesToDelete },
       },
     });
   }
 };
 
-export async function createOrUpdateEventFromSubmission(
+const normalizeEventSubmissionWriteInput = async (
   db: PrismaClient,
   payload: Prisma.JsonObject,
-  submitterId: string,
   options: {
     submissionId?: string;
   } = {}
-) {
+): Promise<NormalizedEventSubmissionWriteInput> => {
   const name = cleanText(payload.name);
   let targetEventId = getEventEditTargetIdFromPayload(payload);
   if (!targetEventId && options.submissionId) {
@@ -1459,100 +1648,157 @@ export async function createOrUpdateEventFromSubmission(
   const countryI18n = resolveOptionalTriTextField(payload, 'countryI18n', country || '', {
     includeWhen: hasOwn(payload, 'country') || hasOwn(payload, 'countryI18n'),
   });
-  const eventData = {
-    name,
-    nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
-    wikiFestivalId,
-    description,
-    descriptionI18n,
-    coverImageUrl,
-    lineupImageUrl,
-    imageAssets: imageAssets.length ? imageAssets : Prisma.JsonNull,
-    eventType,
-    organizerName,
-    sourceEventUrl,
-    city,
-    country,
-    cityI18n,
-    countryI18n,
-    manualLocation,
-    locationPoint,
-    latitude,
-    longitude,
-    startDate: scheduleContext.startDate,
-    endDate: scheduleContext.endDate,
-    scheduleMode: scheduleContext.scheduleMode,
-    timeZone: scheduleContext.timeZone,
-    startTime: cleanText(payload.startTime) || undefined,
-    endTime: cleanText(payload.endTime) || undefined,
-    dayRolloverHour: scheduleContext.dayRolloverHour,
-    ticketUrl,
-    ticketPriceMin: decimalOrNull(payload.ticketPriceMin),
-    ticketPriceMax: decimalOrNull(payload.ticketPriceMax),
-    ticketCurrency,
-    ticketNotes,
-    officialWebsite,
-    status: cleanText(payload.status) || 'upcoming',
-    isVerified: true,
-  } as any;
 
-  if (targetEventId) {
+  return {
+    targetEventId,
+    name,
+    scheduleContext,
+    ticketTiers,
+    eventData: {
+      name,
+      nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
+      wikiFestivalId,
+      description,
+      descriptionI18n,
+      coverImageUrl,
+      lineupImageUrl,
+      imageAssets: imageAssets.length ? imageAssets : Prisma.JsonNull,
+      eventType,
+      organizerName,
+      sourceEventUrl,
+      city,
+      country,
+      cityI18n,
+      countryI18n,
+      manualLocation,
+      locationPoint,
+      latitude,
+      longitude,
+      startDate: scheduleContext.startDate,
+      endDate: scheduleContext.endDate,
+      scheduleMode: scheduleContext.scheduleMode,
+      timeZone: scheduleContext.timeZone,
+      startTime: cleanText(payload.startTime) || undefined,
+      endTime: cleanText(payload.endTime) || undefined,
+      dayRolloverHour: scheduleContext.dayRolloverHour,
+      ticketUrl,
+      ticketPriceMin: decimalOrNull(payload.ticketPriceMin),
+      ticketPriceMax: decimalOrNull(payload.ticketPriceMax),
+      ticketCurrency,
+      ticketNotes,
+      officialWebsite,
+      status: cleanText(payload.status) || 'upcoming',
+      isVerified: true,
+    } satisfies Prisma.EventUncheckedUpdateInput,
+  };
+};
+
+const applyEventCoreUpdate = async (
+  tx: Prisma.TransactionClient,
+  targetEventId: string,
+  input: NormalizedEventSubmissionWriteInput
+): Promise<void> => {
+  await tx.event.update({
+    where: { id: targetEventId },
+    data: {
+      ...input.eventData,
+      revision: { increment: 1 },
+      ticketTiers: {
+        deleteMany: {},
+        create: input.ticketTiers,
+      },
+    },
+  });
+  await syncStructuredEventSchedule(tx, targetEventId, input.scheduleContext);
+};
+
+const applyEventCoreCreate = async (
+  tx: Prisma.TransactionClient,
+  submitterId: string,
+  slug: string,
+  input: NormalizedEventSubmissionWriteInput
+): Promise<{ id: string }> => {
+  const created = await tx.event.create({
+    data: {
+      organizerId: submitterId,
+      slug,
+      ...input.eventData,
+      ticketTiers: input.ticketTiers.length
+        ? {
+            create: input.ticketTiers,
+          }
+        : undefined,
+    } as any,
+  });
+  await syncStructuredEventSchedule(tx, created.id, input.scheduleContext);
+  return created;
+};
+
+export const applyEventCanonicalSubmissionState = async (
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  payload: Prisma.JsonObject,
+  scheduleContext: SubmittedEventScheduleContext
+): Promise<void> => {
+  await syncSubmissionEventLineupAndTimetable(
+    tx,
+    eventId,
+    payload,
+    scheduleContext
+  );
+};
+
+export const applyEventTimetableFromSubmission = async (
+  db: PrismaClient,
+  eventId: string,
+  payload: Prisma.JsonObject
+): Promise<void> => {
+  const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
+  await runEventSubmissionTransaction(db, async (tx) => {
+    await applyEventCanonicalSubmissionState(tx, eventId, payload, scheduleContext);
+  });
+};
+
+export async function createOrUpdateEventFromSubmission(
+  db: PrismaClient,
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  options: {
+    submissionId?: string;
+    skipCanonicalApply?: boolean;
+  } = {}
+) {
+  const input = await normalizeEventSubmissionWriteInput(db, payload, options);
+
+  if (input.targetEventId) {
     const existing = await db.event.findUnique({
-      where: { id: targetEventId },
+      where: { id: input.targetEventId },
       select: {
         id: true,
-        revision: true,
       },
     });
     if (!existing) {
       throw new Error('待更新的活动不存在');
     }
-    validateBaseEventRevision(payload, existing.revision);
 
     await runEventSubmissionTransaction(db, async (tx) => {
-      await tx.event.update({
-        where: { id: targetEventId },
-        data: {
-          ...eventData,
-          revision: { increment: 1 },
-          ticketTiers: {
-            deleteMany: {},
-            create: ticketTiers,
-          },
-        },
-      });
-      await syncStructuredEventSchedule(tx, targetEventId, scheduleContext);
-      await syncSubmissionEventLineupAndTimetable(
-        tx,
-        targetEventId,
-        payload,
-        scheduleContext
-      );
+      await applyEventCoreUpdate(tx, input.targetEventId as string, input);
+      if (!options.skipCanonicalApply) {
+        await applyEventCanonicalSubmissionState(tx, input.targetEventId as string, payload, input.scheduleContext);
+      }
       if (options.submissionId) {
-        await cancelSupersededActiveEventEditSubmissions(tx, targetEventId, options.submissionId);
+        await cancelSupersededActiveEventEditSubmissions(tx, input.targetEventId as string, options.submissionId);
       }
     });
 
     return db.event.findUniqueOrThrow({
-      where: { id: targetEventId },
+      where: { id: input.targetEventId },
     });
   }
 
-  const slug = await uniqueEventSlug(db, name, cleanText(payload.slug));
+  const slug = await uniqueEventSlug(db, input.name, cleanText(payload.slug));
   const created = await runEventSubmissionTransaction(db, async (tx) => {
-    const created = await tx.event.create({
-      data: {
-        organizerId: submitterId,
-        slug,
-        ...eventData,
-        ticketTiers: ticketTiers.length
-          ? {
-              create: ticketTiers,
-            }
-          : undefined,
-      } as any,
-    });
-    await syncStructuredEventSchedule(tx, created.id, scheduleContext);
+    const created = await applyEventCoreCreate(tx, submitterId, slug, input);
     if (options.submissionId) {
       await tx.contentSubmission.update({
         where: { id: options.submissionId },
@@ -1561,12 +1807,9 @@ export async function createOrUpdateEventFromSubmission(
         },
       });
     }
-    await syncSubmissionEventLineupAndTimetable(
-      tx,
-      created.id,
-      payload,
-      scheduleContext
-    );
+    if (!options.skipCanonicalApply) {
+      await applyEventCanonicalSubmissionState(tx, created.id, payload, input.scheduleContext);
+    }
     return created;
   });
 

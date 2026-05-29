@@ -65,6 +65,7 @@ type CanonicalStageRow = {
 type CanonicalPerformanceRow = {
   id: string;
   eventId: string;
+  identityKey: string;
   eventArtistId: string;
   stageId: string | null;
   eventDayId: string | null;
@@ -79,6 +80,30 @@ type CanonicalPerformanceRow = {
   sortOrder: number;
   status: string;
   sourceType: string;
+};
+
+type ExistingCanonicalPerformanceRow = {
+  id: string;
+  eventId: string;
+  identityKey: string;
+  eventArtistId: string;
+  stageId: string | null;
+  eventDayId: string | null;
+  displayNameSnapshot: string;
+  weekIndex: number | null;
+  dayIndexInWeek: number | null;
+  overallDayIndex: number | null;
+  localDate: Date | null;
+  startAt: Date | null;
+  endAt: Date | null;
+  sortOrder: number;
+  status: string;
+  sourceType: string;
+};
+
+type CanonicalPerformanceMutationPlan = {
+  rowsToUpsert: CanonicalPerformanceRow[];
+  idsToDelete: string[];
 };
 
 const uniqueIds = (values: Array<string | null | undefined>): string[] => {
@@ -137,6 +162,7 @@ const desiredMemberSignature = (members: CanonicalMemberRow[]): string =>
     .join('|');
 
 const performanceSemanticKey = (row: {
+  eventId?: string;
   eventArtistId: string;
   stageId: string | null;
   eventDayId?: string | null;
@@ -144,12 +170,61 @@ const performanceSemanticKey = (row: {
   endAt: Date | null;
 }): string =>
   [
+    row.eventId || '',
     row.eventArtistId,
     row.stageId || '',
     row.eventDayId || '',
     dateTimeValue(row.startAt) ?? '',
     dateTimeValue(row.endAt) ?? '',
   ].join('|');
+
+const deterministicUuidFromKey = (key: string): string => {
+  const normalized = key.trim().toLowerCase();
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  const segment = (seed: number): string => {
+    let value = seed >>> 0;
+    value ^= value << 13;
+    value ^= value >>> 17;
+    value ^= value << 5;
+    return (value >>> 0).toString(16).padStart(8, '0');
+  };
+
+  const hex = [
+    segment(hash),
+    segment(hash ^ 0x9e3779b9),
+    segment(hash ^ 0x85ebca6b),
+    segment(hash ^ 0xc2b2ae35),
+  ].join('');
+
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `4${hex.slice(13, 16)}`,
+    `${((parseInt(hex.slice(16, 17), 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join('-');
+};
+
+const canonicalPerformanceIdentityKey = (row: {
+  eventId: string;
+  eventArtistId: string;
+  stageId: string | null;
+  eventDayId: string | null;
+  startAt: Date;
+  endAt: Date;
+}): string => performanceSemanticKey({
+  eventId: row.eventId,
+  eventArtistId: row.eventArtistId,
+  stageId: row.stageId,
+  eventDayId: row.eventDayId,
+  startAt: row.startAt,
+  endAt: row.endAt,
+});
 
 const BULK_PERFORMANCE_UPDATE_BATCH_SIZE = 50;
 const BULK_ARTIST_UPDATE_BATCH_SIZE = 50;
@@ -177,32 +252,168 @@ const bulkUpdateEventArtists = async (
   }
 };
 
-const bulkUpdateEventPerformances = async (
+const bulkUpsertEventPerformances = async (
   tx: Prisma.TransactionClient,
   rows: CanonicalPerformanceRow[]
 ): Promise<void> => {
   if (rows.length === 0) return;
 
   for (const batch of chunk(rows, BULK_PERFORMANCE_UPDATE_BATCH_SIZE)) {
-    await Promise.all(batch.map((performance) => tx.eventPerformance.update({
-      where: { id: performance.id },
-      data: {
-        eventArtistId: performance.eventArtistId,
-        stageId: performance.stageId,
-        eventDayId: performance.eventDayId,
-        displayNameSnapshot: performance.displayNameSnapshot,
-        festivalDayIndex: performance.festivalDayIndex,
-        weekIndex: performance.weekIndex,
-        dayIndexInWeek: performance.dayIndexInWeek,
-        overallDayIndex: performance.overallDayIndex,
-        localDate: performance.localDate,
-        startAt: performance.startAt,
-        endAt: performance.endAt,
-        sortOrder: performance.sortOrder,
-        status: performance.status,
-        sourceType: performance.sourceType,
+    const values = Prisma.join(batch.map((performance) => Prisma.sql`(
+      ${performance.id},
+      ${performance.eventId},
+      ${performance.identityKey},
+      ${performance.eventArtistId},
+      ${performance.stageId},
+      ${performance.eventDayId},
+      ${performance.displayNameSnapshot},
+      ${performance.festivalDayIndex},
+      ${performance.weekIndex},
+      ${performance.dayIndexInWeek},
+      ${performance.overallDayIndex},
+      ${performance.localDate},
+      ${performance.startAt},
+      ${performance.endAt},
+      ${performance.sortOrder},
+      ${performance.status},
+      ${performance.sourceType}
+    )`));
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "event_performances" (
+        "id",
+        "event_id",
+        "identity_key",
+        "event_artist_id",
+        "stage_id",
+        "event_day_id",
+        "display_name_snapshot",
+        "festival_day_index",
+        "week_index",
+        "day_index_in_week",
+        "overall_day_index",
+        "local_date",
+        "start_at",
+        "end_at",
+        "sort_order",
+        "status",
+        "source_type"
+      )
+      VALUES ${values}
+      ON CONFLICT ("event_id", "identity_key")
+      DO UPDATE SET
+        "id" = EXCLUDED."id",
+        "event_artist_id" = EXCLUDED."event_artist_id",
+        "stage_id" = EXCLUDED."stage_id",
+        "event_day_id" = EXCLUDED."event_day_id",
+        "display_name_snapshot" = EXCLUDED."display_name_snapshot",
+        "festival_day_index" = EXCLUDED."festival_day_index",
+        "week_index" = EXCLUDED."week_index",
+        "day_index_in_week" = EXCLUDED."day_index_in_week",
+        "overall_day_index" = EXCLUDED."overall_day_index",
+        "local_date" = EXCLUDED."local_date",
+        "start_at" = EXCLUDED."start_at",
+        "end_at" = EXCLUDED."end_at",
+        "sort_order" = EXCLUDED."sort_order",
+        "status" = EXCLUDED."status",
+        "source_type" = EXCLUDED."source_type",
+        "updated_at" = CURRENT_TIMESTAMP
+    `);
+  }
+};
+
+const buildExistingPerformanceIndexes = (
+  existingPerformances: ExistingCanonicalPerformanceRow[]
+): {
+  byId: Map<string, ExistingCanonicalPerformanceRow>;
+  byIdentityKey: Map<string, ExistingCanonicalPerformanceRow>;
+  bySemanticKey: Map<string, ExistingCanonicalPerformanceRow>;
+} => ({
+  byId: new Map(existingPerformances.map((performance) => [performance.id, performance])),
+  byIdentityKey: new Map(existingPerformances.map((performance) => [
+    `${performance.eventId}|${performance.identityKey}`,
+    performance,
+  ])),
+  bySemanticKey: new Map(existingPerformances.map((performance) => [
+    performanceSemanticKey({
+      eventId: performance.eventId,
+      eventArtistId: performance.eventArtistId,
+      stageId: performance.stageId,
+      eventDayId: performance.eventDayId,
+      startAt: performance.startAt,
+      endAt: performance.endAt,
+    }),
+    performance,
+  ])),
+});
+
+const deriveExistingPerformanceIdentityKey = (
+  performance: {
+    eventId: string;
+    identityKey?: string | null;
+    eventArtistId: string;
+    stageId: string | null;
+    eventDayId: string | null;
+    startAt: Date | null;
+    endAt: Date | null;
+  }
+): string => performance.identityKey || performanceSemanticKey({
+  eventId: performance.eventId,
+  eventArtistId: performance.eventArtistId,
+  stageId: performance.stageId,
+  eventDayId: performance.eventDayId,
+  startAt: performance.startAt,
+  endAt: performance.endAt,
+});
+
+const alignTargetPerformanceRowIds = (
+  targetRows: CanonicalPerformanceRow[],
+  existingIndexes: {
+    byId: Map<string, ExistingCanonicalPerformanceRow>;
+    byIdentityKey: Map<string, ExistingCanonicalPerformanceRow>;
+    bySemanticKey: Map<string, ExistingCanonicalPerformanceRow>;
+  }
+): Set<string> => {
+  const targetIds = new Set(targetRows.map((performance) => performance.id));
+  for (const performance of targetRows) {
+    if (existingIndexes.byId.has(performance.id)) continue;
+    const matched = existingIndexes.byIdentityKey.get(`${performance.eventId}|${performance.identityKey}`)
+      || existingIndexes.bySemanticKey.get(performanceSemanticKey(performance));
+    if (!matched) continue;
+    performance.id = matched.id;
+    targetIds.add(matched.id);
+  }
+  return targetIds;
+};
+
+const buildCanonicalPerformanceMutationPlan = (
+  existingPerformances: ExistingCanonicalPerformanceRow[],
+  targetRows: CanonicalPerformanceRow[]
+): CanonicalPerformanceMutationPlan => {
+  const existingIndexes = buildExistingPerformanceIndexes(existingPerformances);
+  const targetPerformanceIds = alignTargetPerformanceRowIds(targetRows, existingIndexes);
+
+  const idsToDelete = existingPerformances
+    .filter((performance) => !targetPerformanceIds.has(performance.id))
+    .map((performance) => performance.id);
+
+  return {
+    rowsToUpsert: targetRows,
+    idsToDelete,
+  };
+};
+
+const applyCanonicalPerformanceMutationPlan = async (
+  tx: Prisma.TransactionClient,
+  plan: CanonicalPerformanceMutationPlan
+): Promise<void> => {
+  await bulkUpsertEventPerformances(tx, plan.rowsToUpsert);
+  if (plan.idsToDelete.length > 0) {
+    await tx.eventPerformance.deleteMany({
+      where: {
+        id: { in: plan.idsToDelete },
       },
-    })));
+    });
   }
 };
 
@@ -502,9 +713,26 @@ const buildCanonicalTargetRows = (
     }
 
     const stageId = slot.stageName ? stageIdsByName.get(normalizeCanonicalLineupName(slot.stageName)) ?? null : null;
-    performanceRows.push({
-      id: slot.id || crypto.randomUUID(),
+    const performanceId = slot.id || deterministicUuidFromKey(canonicalPerformanceIdentityKey({
       eventId,
+      eventArtistId,
+      stageId,
+      eventDayId: slot.eventDayId ?? null,
+      startAt: slot.startTime,
+      endAt: slot.endTime,
+    }));
+    const identityKey = canonicalPerformanceIdentityKey({
+      eventId,
+      eventArtistId,
+      stageId,
+      eventDayId: slot.eventDayId ?? null,
+      startAt: slot.startTime,
+      endAt: slot.endTime,
+    });
+    performanceRows.push({
+      id: performanceId,
+      eventId,
+      identityKey,
       eventArtistId,
       stageId,
       eventDayId: slot.eventDayId ?? null,
@@ -551,7 +779,31 @@ export const syncCanonicalEventLineupAndTimetable = async (
     },
   });
   const existingStages = await tx.eventStage.findMany({ where: { eventId } });
-  const existingPerformances = await tx.eventPerformance.findMany({ where: { eventId } });
+  const existingPerformances = (await tx.eventPerformance.findMany({ where: { eventId } })).map((performance) => ({
+    id: performance.id,
+    eventId: performance.eventId,
+    identityKey: deriveExistingPerformanceIdentityKey({
+      eventId: performance.eventId,
+      eventArtistId: performance.eventArtistId,
+      stageId: performance.stageId,
+      eventDayId: performance.eventDayId,
+      startAt: performance.startAt,
+      endAt: performance.endAt,
+    }),
+    eventArtistId: performance.eventArtistId,
+    stageId: performance.stageId,
+    eventDayId: performance.eventDayId,
+    displayNameSnapshot: performance.displayNameSnapshot,
+    weekIndex: performance.weekIndex,
+    dayIndexInWeek: performance.dayIndexInWeek,
+    overallDayIndex: performance.overallDayIndex,
+    localDate: performance.localDate,
+    startAt: performance.startAt,
+    endAt: performance.endAt,
+    sortOrder: performance.sortOrder,
+    status: performance.status,
+    sourceType: performance.sourceType,
+  })) satisfies ExistingCanonicalPerformanceRow[];
 
   const existingArtistById = new Map(existingArtists.map((artist) => [artist.id, artist]));
   const existingArtistByKey = new Map<string, string>();
@@ -608,33 +860,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
 
   const targetArtistIds = new Set(target.artistRows.map((artist) => artist.id));
   const targetStageIds = new Set(target.stageRows.map((stage) => stage.id));
-  const targetPerformanceIds = new Set(target.performanceRows.map((performance) => performance.id));
-
-  const existingPerformanceById = new Map(existingPerformances.map((performance) => [performance.id, performance]));
-  const existingPerformanceBySemanticKey = new Map(existingPerformances.map((performance) => [
-    performanceSemanticKey({
-      eventArtistId: performance.eventArtistId,
-      stageId: performance.stageId,
-      eventDayId: performance.eventDayId,
-      startAt: performance.startAt,
-      endAt: performance.endAt,
-    }),
-    performance,
-  ]));
-  for (const performance of target.performanceRows) {
-    if (existingPerformanceById.has(performance.id)) continue;
-    const matched = existingPerformanceBySemanticKey.get(performanceSemanticKey(performance));
-    if (!matched) continue;
-    performance.id = matched.id;
-    targetPerformanceIds.add(matched.id);
-  }
-
-  const performancesToDelete = existingPerformances
-    .filter((performance) => !targetPerformanceIds.has(performance.id))
-    .map((performance) => performance.id);
-  if (performancesToDelete.length > 0) {
-    await tx.eventPerformance.deleteMany({ where: { id: { in: performancesToDelete } } });
-  }
+  const performanceMutationPlan = buildCanonicalPerformanceMutationPlan(existingPerformances, target.performanceRows);
 
   const artistsToDelete = existingArtists
     .filter((artist) => !targetArtistIds.has(artist.id))
@@ -701,35 +927,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
     }
   }
   await bulkUpdateEventStages(tx, stageRowsToUpdate);
-
-  const existingPerformanceIds = new Set(existingPerformances.map((performance) => performance.id));
-  const performanceRowsToCreate = target.performanceRows.filter((performance) => !existingPerformanceIds.has(performance.id));
-  if (performanceRowsToCreate.length > 0) {
-    await tx.eventPerformance.createMany({ data: performanceRowsToCreate });
-  }
-  const performanceRowsToUpdate: CanonicalPerformanceRow[] = [];
-  for (const performance of target.performanceRows.filter((row) => existingPerformanceIds.has(row.id))) {
-    const existing = existingPerformanceById.get(performance.id);
-    if (!existing) continue;
-      if (
-        existing.eventArtistId !== performance.eventArtistId
-        || nullableString(existing.stageId) !== nullableString(performance.stageId)
-        || nullableString(existing.eventDayId) !== nullableString(performance.eventDayId)
-        || existing.displayNameSnapshot !== performance.displayNameSnapshot
-        || existing.weekIndex !== performance.weekIndex
-        || existing.dayIndexInWeek !== performance.dayIndexInWeek
-        || existing.overallDayIndex !== performance.overallDayIndex
-      || dateTimeValue(existing.localDate) !== dateTimeValue(performance.localDate)
-      || dateTimeValue(existing.startAt) !== dateTimeValue(performance.startAt)
-      || dateTimeValue(existing.endAt) !== dateTimeValue(performance.endAt)
-      || existing.sortOrder !== performance.sortOrder
-      || existing.status !== performance.status
-      || existing.sourceType !== performance.sourceType
-    ) {
-      performanceRowsToUpdate.push(performance);
-    }
-  }
-  await bulkUpdateEventPerformances(tx, performanceRowsToUpdate);
+  await applyCanonicalPerformanceMutationPlan(tx, performanceMutationPlan);
 
   if (artistsToDelete.length > 0) {
     await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistsToDelete } } });

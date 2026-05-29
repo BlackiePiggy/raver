@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { notificationCenterService } from '../modules/notifications';
 import { changeSummaryTextFromPayload } from './content-submission-change-summary.service';
 import {
+  applyEventTimetableFromSubmission,
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
 } from './content-submission-event.service';
@@ -11,6 +12,7 @@ import { createOrUpdateBrandFromSubmission } from './content-submission-brand.se
 const prisma = new PrismaClient();
 
 const CONTENT_SUBMISSION_PROCESSING_JOB_TYPE = 'process_submission';
+const CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE = 'apply_event_timetable';
 const DEFAULT_WORKER_BATCH_SIZE = 1;
 const DEFAULT_WORKER_STALE_LOCK_MS = 15 * 60 * 1000;
 
@@ -40,6 +42,7 @@ type ProcessSubmissionResult = {
   timings?: {
     reviewingTransitionMs: number;
     applyMs: number;
+    timetableQueuedMs?: number;
     approvalFinalizeMs: number;
     totalMs: number;
   };
@@ -77,6 +80,7 @@ export type ContentSubmissionProcessingQueueStatus = {
   latestJobs: Array<{
     id: string;
     submissionId: string;
+    jobType: string;
     status: string;
     attempts: number;
     maxAttempts: number;
@@ -142,6 +146,14 @@ const withDefinedJsonFields = (
 };
 
 const mergeJobMetadata = (
+  current: Prisma.JsonValue | null | undefined,
+  patch: Record<string, Prisma.InputJsonValue | Prisma.JsonValue | undefined>
+): Prisma.InputJsonObject => ({
+  ...asJsonObject(current),
+  ...withDefinedJsonFields(patch),
+});
+
+const mergeSubmissionReviewNotes = (
   current: Prisma.JsonValue | null | undefined,
   patch: Record<string, Prisma.InputJsonValue | Prisma.JsonValue | undefined>
 ): Prisma.InputJsonObject => ({
@@ -248,20 +260,22 @@ export async function enqueueContentSubmissionProcessingJob(
     db?: PrismaClient;
     priority?: number;
     metadata?: Prisma.InputJsonValue;
+    jobType?: string;
   } = {}
 ) {
   const db = input.db || prisma;
   const now = new Date();
+  const jobType = input.jobType || CONTENT_SUBMISSION_PROCESSING_JOB_TYPE;
   return db.contentSubmissionProcessingJob.upsert({
     where: {
       submissionId_jobType: {
         submissionId,
-        jobType: CONTENT_SUBMISSION_PROCESSING_JOB_TYPE,
+        jobType,
       },
     },
     create: {
       submissionId,
-      jobType: CONTENT_SUBMISSION_PROCESSING_JOB_TYPE,
+      jobType,
       status: 'queued',
       priority: input.priority ?? 0,
       availableAt: now,
@@ -312,18 +326,167 @@ const markContentSubmissionFailed = async (
   });
 };
 
+const recordApprovedSubmissionPhaseBFailure = async (
+  db: PrismaClient,
+  submissionId: string,
+  message: string
+): Promise<void> => {
+  const updated = await db.contentSubmission.update({
+    where: { id: submissionId },
+    data: {
+      reviewNotes: mergeSubmissionReviewNotes(
+        (await db.contentSubmission.findUnique({
+          where: { id: submissionId },
+          select: { reviewNotes: true },
+        }))?.reviewNotes,
+        {
+          phaseBFailure: {
+            failedAt: new Date().toISOString(),
+            message,
+            phase: CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE,
+          },
+        }
+      ),
+    },
+    select: {
+      id: true,
+      entityType: true,
+      title: true,
+      submitterId: true,
+      payload: true,
+      createdEntityId: true,
+    },
+  });
+
+  await publishContentSubmissionTaskNotification({
+    userId: updated.submitterId,
+    entityType: updated.entityType,
+    status: 'approved',
+    title: updated.title,
+    submissionId: updated.id,
+    createdEntityId: updated.createdEntityId,
+    reason: message,
+    statusLabelOverride: '主结构已入库，时间表同步失败',
+    bodyOverride: `你提交的「${updated.title}」主结构已成功入库，但时间表同步失败，系统会稍后重试。`,
+    payload: updated.payload as Prisma.JsonObject,
+  });
+};
+
+const clearApprovedSubmissionPhaseBFailure = async (
+  db: PrismaClient,
+  submissionId: string
+): Promise<void> => {
+  const current = await db.contentSubmission.findUnique({
+    where: { id: submissionId },
+    select: {
+      reviewNotes: true,
+    },
+  });
+  const notes = asJsonObject(current?.reviewNotes);
+  if (!Object.prototype.hasOwnProperty.call(notes, 'phaseBFailure')) {
+    return;
+  }
+  const { phaseBFailure: _removed, ...rest } = notes;
+  await db.contentSubmission.update({
+    where: { id: submissionId },
+    data: {
+      reviewNotes: Object.keys(rest).length > 0 ? rest : Prisma.JsonNull,
+    },
+  });
+};
+
+const applyEventTimetableForSubmission = async (
+  db: PrismaClient,
+  submissionId: string
+): Promise<ProcessSubmissionResult> => {
+  const submission = await db.contentSubmission.findUnique({
+    where: { id: submissionId },
+    select: {
+      id: true,
+      entityType: true,
+      payload: true,
+      submitterId: true,
+      createdEntityId: true,
+      status: true,
+    },
+  });
+
+  if (!submission) return { status: 'skipped', reason: 'Submission not found' };
+  if (submission.entityType !== 'event') return { status: 'skipped', reason: 'Not an event submission' };
+  if (!submission.createdEntityId) return { status: 'skipped', reason: 'Event core entity not created yet' };
+
+  await applyEventTimetableFromSubmission(
+    db,
+    submission.createdEntityId,
+    submission.payload as Prisma.JsonObject
+  );
+  await clearApprovedSubmissionPhaseBFailure(db, submission.id);
+
+  return {
+    status: 'succeeded',
+    submissionStatus: submission.status as ContentSubmissionTaskStatus,
+    createdEntityId: submission.createdEntityId,
+    phase: 'event_timetable_applied',
+    timings: {
+      reviewingTransitionMs: 0,
+      applyMs: 0,
+      timetableQueuedMs: 0,
+      approvalFinalizeMs: 0,
+      totalMs: 0,
+    },
+  };
+};
+
 export async function processContentSubmission(
   submissionId: string,
   input: {
     db?: PrismaClient;
     markFailedOnError?: boolean;
     jobId?: string;
+    jobType?: string;
   } = {}
 ): Promise<ProcessSubmissionResult> {
   const processStartedAt = Date.now();
   const db = input.db || prisma;
   const markFailedOnError = input.markFailedOnError ?? true;
   const jobId = input.jobId;
+  const jobType = input.jobType || CONTENT_SUBMISSION_PROCESSING_JOB_TYPE;
+
+  if (jobType === CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE) {
+    try {
+      const result = await applyEventTimetableForSubmission(db, submissionId);
+      return {
+        ...result,
+        timings: {
+          reviewingTransitionMs: 0,
+          applyMs: 0,
+          timetableQueuedMs: 0,
+          approvalFinalizeMs: 0,
+          totalMs: Date.now() - processStartedAt,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Event timetable processing failed';
+      if (!markFailedOnError) {
+        throw error;
+      }
+      await recordApprovedSubmissionPhaseBFailure(db, submissionId, message);
+      return {
+        status: 'failed',
+        reason: message,
+        submissionStatus: 'approved',
+        autoApproved: false,
+        phase: 'event_timetable_failed',
+        timings: {
+          reviewingTransitionMs: 0,
+          applyMs: 0,
+          timetableQueuedMs: 0,
+          approvalFinalizeMs: 0,
+          totalMs: Date.now() - processStartedAt,
+        },
+      };
+    }
+  }
   const submission = await db.contentSubmission.findUnique({
     where: { id: submissionId },
     select: {
@@ -360,6 +523,7 @@ export async function processContentSubmission(
       timings: {
         reviewingTransitionMs: 0,
         applyMs: 0,
+        timetableQueuedMs: 0,
         approvalFinalizeMs: 0,
         totalMs: Date.now() - processStartedAt,
       },
@@ -376,6 +540,7 @@ export async function processContentSubmission(
       timings: {
         reviewingTransitionMs: 0,
         applyMs: 0,
+        timetableQueuedMs: 0,
         approvalFinalizeMs: 0,
         totalMs: Date.now() - processStartedAt,
       },
@@ -477,7 +642,7 @@ export async function processContentSubmission(
             db,
             payload as any,
             submission.submitterId,
-            { submissionId: submission.id }
+            { submissionId: submission.id, skipCanonicalApply: true }
           )
         : submission.entityType === 'dj'
           ? await createOrUpdateDJFromSubmission(
@@ -492,8 +657,22 @@ export async function processContentSubmission(
               { submissionId: submission.id }
             );
       const applyMs = Date.now() - applyStartedAt;
+      let timetableQueuedMs = 0;
+      if (submission.entityType === 'event') {
+        const queuedStartedAt = Date.now();
+        await enqueueContentSubmissionProcessingJob(submission.id, {
+          db,
+          jobType: CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE,
+          metadata: {
+            source: 'event_auto_approval_phase_b',
+            createdEntityId: created.id,
+          },
+        });
+        timetableQueuedMs = Date.now() - queuedStartedAt;
+      }
       await checkpointPhase('canonical_applied', {
         applyMs,
+        timetableQueuedMs,
         createdEntityId: created.id,
       });
 
@@ -542,6 +721,7 @@ export async function processContentSubmission(
         timings: {
           reviewingTransitionMs,
           applyMs,
+          timetableQueuedMs,
           approvalFinalizeMs,
           totalMs: Date.now() - processStartedAt,
         },
@@ -557,6 +737,7 @@ export async function processContentSubmission(
       timings: {
         reviewingTransitionMs,
         applyMs: 0,
+        timetableQueuedMs: 0,
         approvalFinalizeMs: 0,
         totalMs: Date.now() - processStartedAt,
       },
@@ -576,6 +757,7 @@ export async function processContentSubmission(
       timings: {
         reviewingTransitionMs: 0,
         applyMs: 0,
+        timetableQueuedMs: 0,
         approvalFinalizeMs: 0,
         totalMs: Date.now() - processStartedAt,
       },
@@ -739,6 +921,7 @@ export async function runContentSubmissionProcessingWorkerOnce(
         db,
         markFailedOnError: false,
         jobId: job.id,
+        jobType: job.jobType,
       });
       const durationMs = Date.now() - startedAt;
       const metadata = withDefinedJsonFields({
@@ -762,6 +945,7 @@ export async function runContentSubmissionProcessingWorkerOnce(
           ? withDefinedJsonFields({
               reviewingTransitionMs: result.timings.reviewingTransitionMs,
               applyMs: result.timings.applyMs,
+              timetableQueuedMs: result.timings.timetableQueuedMs ?? null,
               approvalFinalizeMs: result.timings.approvalFinalizeMs,
               totalMs: result.timings.totalMs,
             })
@@ -910,6 +1094,7 @@ export async function getContentSubmissionProcessingQueueStatus(
       select: {
         id: true,
         submissionId: true,
+        jobType: true,
         status: true,
         attempts: true,
         maxAttempts: true,

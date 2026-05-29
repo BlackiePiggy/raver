@@ -76,12 +76,10 @@ import {
 import {
   ActiveEventEditSubmissionError,
   assertNoActiveEventEditSubmission,
-  assertEventSubmissionBaseRevision,
   autoAlignEventLineupToTimetablePayload,
   buildSubmittedEventScheduleContextFromEvent,
   buildAlignedLineupArtistsFromTimetablePayload,
   EventSubmissionValidationError,
-  EventSubmissionConflictError,
   formatEventLineupTimetableAlignmentError,
   incrementallyFillEventLineupFromTimetablePayload,
   normalizeSubmittedEventScheduleContext,
@@ -9177,7 +9175,6 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       }),
       targetEventId: eventId,
     };
-    await assertEventSubmissionBaseRevision(prisma, normalizedBody as Prisma.JsonObject);
 
     const submission = await createPendingContentSubmission({
       submitterId: userId,
@@ -9196,20 +9193,6 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       return;
     }
     if (error instanceof ActiveEventEditSubmissionError) {
-      res.status(409).json({
-        error: error.message,
-        code: error.code,
-        details: error.details,
-      });
-      return;
-    }
-    if (error instanceof EventSubmissionConflictError) {
-      console.warn('[bff.web][event-update] revision conflict', {
-        eventId: req.params.id,
-        userId: (req as BFFAuthRequest).user?.userId ?? null,
-        baseEventRevision: (req.body as Record<string, unknown> | undefined)?.baseEventRevision ?? null,
-        details: error.details,
-      });
       res.status(409).json({
         error: error.message,
         code: error.code,
