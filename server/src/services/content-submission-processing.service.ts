@@ -480,11 +480,12 @@ export async function processContentSubmission(
       return {
         ...result,
         timings: {
-          reviewingTransitionMs: 0,
-          applyMs: 0,
-          timetableQueuedMs: 0,
-          approvalFinalizeMs: 0,
+          reviewingTransitionMs: result.timings?.reviewingTransitionMs ?? 0,
+          applyMs: result.timings?.applyMs ?? 0,
+          timetableQueuedMs: result.timings?.timetableQueuedMs ?? 0,
+          approvalFinalizeMs: result.timings?.approvalFinalizeMs ?? 0,
           totalMs: Date.now() - processStartedAt,
+          canonicalSync: result.timings?.canonicalSync ?? null,
         },
       };
     } catch (error) {

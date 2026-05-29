@@ -260,6 +260,7 @@
 - [x] 2026-05-29：`pnpm content-submissions:status` 已增强为默认人类可读摘要输出，`--json` 保留原始结构，便于线上快速排障
 - [x] 2026-05-29：已新增 `pnpm benchmark:event-submission`，可对 `200+ slot` 的 create/edit 路径输出 Phase A / Phase B / 总耗时基准
 - [x] 2026-05-29：已完成远端 `240 slot x 3 rounds` benchmark，确认 Phase A 已压缩到约 `1.1s - 1.6s`，但 Phase B 仍需约 `40s - 43s`
+- [x] 2026-05-29：已定位 benchmark 未打印 `canonicalSync.*` 的原因是 `apply_event_timetable` worker 包装结果时丢失了 `timings.canonicalSync`，现已在服务层补齐透传，待远端复测确认细分耗时
 - [x] P0：实现 timetable 幂等 upsert
 - [ ] P1：移除 patch / baseline / revision gate 的旧编辑协议
 - [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
@@ -901,12 +902,12 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ### 下一阶段性能优化待办
 
-- [ ] 为 Phase B 加更细粒度耗时拆分：
+- [x] 为 Phase B 加更细粒度耗时拆分：
   - snapshot load
   - artist/stage 对齐
-  - performance update
-  - performance insert
-  - performance delete
+  - performance update / insert / delete 聚合 mutation
+  - cleanup delete
+- [ ] 在远端 benchmark 中确认 `canonicalSync.*` 统计已经透出，并据此锁定 Phase B 真正瓶颈
 - [ ] 对 `syncCanonicalEventLineupAndTimetable(...)` 跑 SQL/CPU 热点剖析
 - [ ] 判断当前 40s+ 是数据库写入慢，还是 JS 层 reconciliation 慢
 - [ ] 评估是否要把 Phase B 的 artist/stage/performance mutation 再拆批，避免单次大事务过长
