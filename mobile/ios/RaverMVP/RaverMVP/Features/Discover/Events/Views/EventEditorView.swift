@@ -1600,14 +1600,15 @@ struct EventEditorView: View {
                         }
                     }
 
-                    if lineupEntries.isEmpty {
-                        Text(LT("尚未添加 DJ，点击上方按钮新增。", "尚未添加 DJ，点击上方按钮新增。", "DJはまだ追加されていません。上のボタンから追加してください。"))
-                            .font(.subheadline)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    } else {
-                        ForEach(groupedLineupSlotGroups, id: \.stageName) { group in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(group.stageName)
+                if lineupEntries.isEmpty {
+                    Text(LT("尚未添加 DJ，点击上方按钮新增。", "尚未添加 DJ，点击上方按钮新增。", "DJはまだ追加されていません。上のボタンから追加してください。"))
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                } else {
+                    lineupIssueCenter
+                    ForEach(groupedLineupSlotGroups, id: \.stageName) { group in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(group.stageName)
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(Color.white)
                                     .frame(maxWidth: .infinity, alignment: .center)
@@ -1670,40 +1671,49 @@ struct EventEditorView: View {
             .onChange(of: selectedLineupImportPhoto) { _, newValue in
                 Task { await importLineupFromImage(newValue) }
             }
-            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(LT("确定", "OK", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
-            }
-            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-                get: { saveSuccessMessage != nil },
-                set: { if !$0 { saveSuccessMessage = nil } }
-            )) {
-                Button(LT("确定", "OK", "OK"), role: .cancel) {
-                    saveSuccessMessage = nil
-                    onSaved()
-                    dismiss()
-                }
-            } message: {
-                Text(saveSuccessMessage ?? "")
-            }
             .overlay(alignment: .top) {
-                if let importSuccessMessage {
-                    Text(importSuccessMessage)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(Color.green.opacity(0.9))
+                VStack(spacing: 8) {
+                    if let errorMessage {
+                        editorNoticeBanner(
+                            title: LT("提示", "Notice", "お知らせ"),
+                            message: errorMessage,
+                            tint: .orange,
+                            systemImage: "exclamationmark.triangle.fill",
+                            primaryTitle: nil,
+                            primaryAction: nil,
+                            dismissAction: { self.errorMessage = nil }
                         )
-                        .padding(.top, 10)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    if let saveSuccessMessage {
+                        editorNoticeBanner(
+                            title: LT("已保存", "Saved", "保存済み"),
+                            message: saveSuccessMessage,
+                            tint: .green,
+                            systemImage: "checkmark.seal.fill",
+                            primaryTitle: LT("完成", "Done", "完了"),
+                            primaryAction: {
+                                self.saveSuccessMessage = nil
+                                onSaved()
+                                dismiss()
+                            },
+                            dismissAction: { self.saveSuccessMessage = nil }
+                        )
+                    }
+                    if let importSuccessMessage {
+                        editorNoticeBanner(
+                            title: LT("导入完成", "Imported", "取り込み完了"),
+                            message: importSuccessMessage,
+                            tint: .green,
+                            systemImage: "checkmark.circle.fill",
+                            primaryTitle: nil,
+                            primaryAction: nil,
+                            dismissAction: { self.importSuccessMessage = nil }
+                        )
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
             .navigationDestination(isPresented: $showLineupImportEditor) {
                 lineupImportEditorSheet()
@@ -1764,6 +1774,61 @@ struct EventEditorView: View {
 
     private var selectedEventTimeZone: TimeZone {
         TimeZone(identifier: eventTimeZoneIdentifier) ?? .current
+    }
+
+    private func editorNoticeBanner(
+        title: String,
+        message: String,
+        tint: Color,
+        systemImage: String,
+        primaryTitle: String?,
+        primaryAction: (() -> Void)?,
+        dismissAction: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button(action: dismissAction) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .frame(width: 24, height: 24)
+                        .background(RaverTheme.background, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let primaryTitle, let primaryAction {
+                Button(action: primaryAction) {
+                    Text(primaryTitle)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(tint, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private var eventCalendar: Calendar {
@@ -2178,6 +2243,91 @@ struct EventEditorView: View {
 
     private var groupedLineupSlotGroups: [StageLineupGroup] {
         makeGroupedLineupSlotGroups(for: lineupEntries)
+    }
+
+    private var lineupBlockingIssues: [String] {
+        var issues: [String] = []
+        if pendingLineupEntry != nil {
+            issues.append(LT("上方还有一个新增 DJ 条目处于编辑态，请先确认或删除。", "A newly added DJ entry is still being edited. Confirm or delete it first.", "上部の新規DJ項目が編集中です。先に確定または削除してください。"))
+        }
+
+        for (index, slot) in lineupEntries.enumerated() {
+            let display = slotDisplayTitle(slot)
+            if slot.isEditing {
+                issues.append(LT("#\(index + 1)「\(display)」仍处于编辑态，请点对勾确认。", "#\(index + 1) \"\(display)\" is still being edited. Tap the checkmark to confirm.", "#\(index + 1)「\(display)」は編集中です。チェックを押して確定してください。"))
+            }
+
+            let expectedCount = slot.actType.performerCount
+            let names = slot.performers
+                .prefix(expectedCount)
+                .map { $0.djName.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if names.count != expectedCount || names.contains(where: { $0.isEmpty }) {
+                issues.append(LT("#\(index + 1)「\(display)」有未命名 DJ，请补全或删除。", "#\(index + 1) \"\(display)\" has unnamed DJs. Complete or delete it.", "#\(index + 1)「\(display)」に未入力のDJがあります。入力または削除してください。"))
+            }
+
+            if !normalizedStageEntries.isEmpty && slot.stageName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(LT("#\(index + 1)「\(display)」还没有选择舞台。", "#\(index + 1) \"\(display)\" has no stage selected.", "#\(index + 1)「\(display)」はステージ未選択です。"))
+            }
+
+            if (slot.startTime == nil) != (slot.endTime == nil) {
+                issues.append(LT("#\(index + 1)「\(display)」开始和结束时间需要同时填写。", "#\(index + 1) \"\(display)\" needs both start and end time.", "#\(index + 1)「\(display)」は開始と終了時刻の両方が必要です。"))
+            }
+            if let start = slot.startTime, let end = slot.endTime {
+                if end < start {
+                    issues.append(LT("#\(index + 1)「\(display)」结束时间不能早于开始时间。", "#\(index + 1) \"\(display)\" end time cannot be earlier than start time.", "#\(index + 1)「\(display)」の終了時刻は開始時刻より前にできません。"))
+                } else if start == end {
+                    issues.append(LT("#\(index + 1)「\(display)」开始和结束时间不能相同。", "#\(index + 1) \"\(display)\" start and end time cannot be the same.", "#\(index + 1)「\(display)」の開始と終了時刻は同じにできません。"))
+                }
+            }
+        }
+
+        return issues
+    }
+
+    @ViewBuilder
+    private var lineupIssueCenter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: lineupBlockingIssues.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(lineupBlockingIssues.isEmpty ? .green : .orange)
+                Text(LT("时间表待处理", "Timetable Needs Attention", "タイムテーブル要確認"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer(minLength: 0)
+                Text(lineupBlockingIssues.isEmpty ? LT("OK", "OK", "OK") : "\(lineupBlockingIssues.count)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(lineupBlockingIssues.isEmpty ? .green : .orange)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background((lineupBlockingIssues.isEmpty ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+            }
+
+            if lineupBlockingIssues.isEmpty {
+                Text(LT("当前没有会影响保存的 DJ 条目。", "No DJ entries are blocking save right now.", "保存を妨げるDJ項目はありません。"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            } else {
+                ForEach(Array(lineupBlockingIssues.prefix(6).enumerated()), id: \.offset) { _, issue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "smallcircle.filled.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .padding(.top, 2)
+                        Text(issue)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke((lineupBlockingIssues.isEmpty ? Color.green : Color.orange).opacity(0.32), lineWidth: 1)
+        )
     }
 
     private var groupedImportLineupSlotGroups: [StageLineupGroup] {
@@ -5145,13 +5295,38 @@ struct EventLocationPickerSheet: View {
             .onChange(of: query) { _, newValue in
                 searchModel.updateQuery(newValue)
             }
-            .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(LT("确定", "OK", "OK"), role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
+            .overlay(alignment: .top) {
+                if let errorMessage {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.orange)
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button {
+                            self.errorMessage = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .frame(width: 24, height: 24)
+                                .background(RaverTheme.background, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(12)
+                    .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
             .alert(LT("允许定位用于活动地点？", "Allow location for event places?", "イベント場所に位置情報を許可しますか？"), isPresented: $showLocationPermissionRationale) {
                 Button(LT("继续", "Continue", "続ける")) {

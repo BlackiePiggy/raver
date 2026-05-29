@@ -209,37 +209,6 @@ struct EventUploadFlowView: View {
                 timeZone: eventTimeZone
             )
         }
-        .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredDraft) {
-            Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
-                Task { await viewModel.restartCreateDraft() }
-            }
-            Button(LT("继续草稿", "Continue", "続ける"), role: .cancel) {
-                viewModel.continueRestoredDraft()
-            }
-        } message: {
-            Text(restoredDraftMessage)
-        }
-        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
-            get: { viewModel.statusMessage != nil },
-            set: { if !$0 { viewModel.statusMessage = nil } }
-        )) {
-            Button(LT("确定", "OK", "OK"), role: .cancel) {}
-        } message: {
-            Text(viewModel.statusMessage ?? "")
-        }
-        .alert(viewModel.lineupTimetableAlignmentPrompt?.title ?? LT("按时间表精确对齐阵容", "Align Lineup Exactly", "タイムテーブルに完全同期"), isPresented: Binding(
-            get: { viewModel.lineupTimetableAlignmentPrompt != nil },
-            set: { if !$0 { viewModel.dismissLineupTimetableAlignmentPrompt() } }
-        )) {
-            Button(LT("确认对齐", "Confirm Align", "同期する"), role: .destructive) {
-                viewModel.confirmExactLineupAlignment()
-            }
-            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {
-                viewModel.dismissLineupTimetableAlignmentPrompt()
-            }
-        } message: {
-            Text(viewModel.lineupTimetableAlignmentPrompt?.message ?? "")
-        }
         .confirmationDialog(
             LT("保留草稿？", "Keep Draft?", "下書きを残しますか？"),
             isPresented: $showExitConfirmation,
@@ -329,6 +298,7 @@ struct EventUploadFlowView: View {
     private var editorContent: some View {
         VStack(spacing: 0) {
             EventUploadProgressHeader(currentStep: viewModel.draft.currentStep)
+            inlineUploadNoticeStack
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     content
@@ -354,6 +324,60 @@ struct EventUploadFlowView: View {
                 onNext: viewModel.advance
             )
         }
+    }
+
+    @ViewBuilder
+    private var inlineUploadNoticeStack: some View {
+        VStack(spacing: 8) {
+            if viewModel.shouldConfirmRestoredDraft {
+                inlineActionNoticeCard(
+                    title: LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"),
+                    message: restoredDraftMessage,
+                    systemImage: "doc.badge.clock",
+                    tint: RaverTheme.accent,
+                    primaryTitle: LT("继续草稿", "Continue", "続ける"),
+                    primaryAction: {
+                        viewModel.continueRestoredDraft()
+                    },
+                    secondaryTitle: LT("重新开始", "Start Over", "最初から"),
+                    secondaryRole: .destructive,
+                    secondaryAction: {
+                        Task { await viewModel.restartCreateDraft() }
+                    }
+                )
+            }
+
+            if let message = viewModel.statusMessage {
+                inlineDismissibleNoticeCard(
+                    title: LT("提示", "Notice", "お知らせ"),
+                    message: message,
+                    systemImage: "info.circle.fill",
+                    tint: RaverTheme.accent
+                ) {
+                    viewModel.statusMessage = nil
+                }
+            }
+
+            if let prompt = viewModel.lineupTimetableAlignmentPrompt {
+                inlineActionNoticeCard(
+                    title: prompt.title,
+                    message: prompt.message,
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tint: .orange,
+                    primaryTitle: LT("确认对齐", "Confirm Align", "同期する"),
+                    primaryAction: {
+                        viewModel.confirmExactLineupAlignment()
+                    },
+                    secondaryTitle: LT("取消", "Cancel", "キャンセル"),
+                    secondaryRole: nil,
+                    secondaryAction: {
+                        viewModel.dismissLineupTimetableAlignmentPrompt()
+                    }
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
     }
 
     private var mediaStep: some View {
@@ -791,6 +815,12 @@ struct EventUploadFlowView: View {
                 LT("如果暂时没有时间表信息，可以直接跳过这一页。", "You can skip this page if you do not have timetable details yet.", "タイムテーブル情報がまだなければ、このページはそのままスキップできます。")
             )
 
+            timetableIssueCenter(
+                issues: timetableIssues,
+                title: LT("时间表待处理", "Timetable Needs Attention", "タイムテーブル要確認"),
+                emptyMessage: LT("当前没有会阻塞下一步的时间表问题。", "No timetable issues are blocking the next step.", "次へ進むのを妨げるタイムテーブル問題はありません。")
+            )
+
             Button {
                 viewModel.addStage()
             } label: {
@@ -942,6 +972,70 @@ struct EventUploadFlowView: View {
                 }
             }
         }
+    }
+
+    private var timetableIssues: [String] {
+        EventUploadValidation.issues(for: viewModel.draft)
+            .filter { $0.step == .timetable }
+            .map(\.message)
+    }
+
+    @ViewBuilder
+    private func timetableIssueCenter(
+        issues: [String],
+        title: String,
+        emptyMessage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: issues.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(issues.isEmpty ? .green : .orange)
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer(minLength: 0)
+                Text(issues.isEmpty ? LT("OK", "OK", "OK") : "\(issues.count)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(issues.isEmpty ? .green : .orange)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background((issues.isEmpty ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+            }
+
+            if issues.isEmpty {
+                Text(emptyMessage)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(issues.prefix(6).enumerated()), id: \.offset) { index, issue in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("\(index + 1)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 18, height: 18)
+                                .background(Color.orange, in: Circle())
+                            Text(issue)
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if issues.count > 6 {
+                        Text(LT("还有 \(issues.count - 6) 个问题，请继续检查下方条目。", "\(issues.count - 6) more issues. Continue reviewing the entries below.", "他に \(issues.count - 6) 件あります。下の項目を続けて確認してください。"))
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke((issues.isEmpty ? Color.green : Color.orange).opacity(0.32), lineWidth: 1)
+        )
     }
 
     private var ticketsStep: some View {
@@ -2043,6 +2137,104 @@ struct EventUploadFlowView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(RaverTheme.cardBorder, lineWidth: 1)
             )
+    }
+
+    private func inlineDismissibleNoticeCard(
+        title: String,
+        message: String,
+        systemImage: String,
+        tint: Color,
+        onDismiss: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(width: 24, height: 24)
+                    .background(RaverTheme.background, in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private func inlineActionNoticeCard(
+        title: String,
+        message: String,
+        systemImage: String,
+        tint: Color,
+        primaryTitle: String,
+        primaryAction: @escaping () -> Void,
+        secondaryTitle: String,
+        secondaryRole: ButtonRole?,
+        secondaryAction: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 8) {
+                Button(action: primaryAction) {
+                    Text(primaryTitle)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(tint, in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button(role: secondaryRole, action: secondaryAction) {
+                    Text(secondaryTitle)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(secondaryRole == .destructive ? .red : RaverTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(RaverTheme.background, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(tint.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private func successView(_ success: EventUploadSubmitSuccess) -> some View {
@@ -3225,6 +3417,54 @@ private func aiRecognitionCanPreview(_ image: EventUploadImageDraft) -> Bool {
     image.localFileURL != nil || image.remoteURL != nil
 }
 
+@ViewBuilder
+private func aiRecognitionThumbnailImage(_ image: EventUploadImageDraft) -> some View {
+    if let localFileURL = image.localFileURL,
+       let uiImage = UIImage(contentsOfFile: localFileURL.path) {
+        Image(uiImage: uiImage)
+            .resizable()
+            .scaledToFill()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+    } else if let remoteURL = image.remoteURL,
+              let url = URL(string: remoteURL) {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case .success(let loaded):
+                loaded
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+            default:
+                Image(systemName: "photo")
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+            }
+        }
+    } else {
+        Image(systemName: "photo")
+            .foregroundStyle(RaverTheme.secondaryText)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+    }
+}
+
+private func aiRecognitionThumbnail(_ image: EventUploadImageDraft, cornerRadius: CGFloat = 10) -> some View {
+    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    return ZStack {
+        shape
+            .fill(RaverTheme.background)
+            .allowsHitTesting(false)
+        aiRecognitionThumbnailImage(image)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .clipped()
+    .clipShape(shape)
+    .contentShape(shape)
+}
+
 private struct EventUploadPosterAIImportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: EventUploadFlowViewModel
@@ -3321,6 +3561,8 @@ private struct EventUploadPosterAIImportSheet: View {
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
                         VStack(alignment: .leading, spacing: 8) {
                             posterAIImagePreview(image)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 104)
                             Text(image.zone.title)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(RaverTheme.primaryText)
@@ -3494,42 +3736,7 @@ private struct EventUploadPosterAIImportSheet: View {
 
     @ViewBuilder
     private func posterAIImagePreview(_ image: EventUploadImageDraft) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        ZStack {
-            shape
-                .fill(RaverTheme.background)
-                .allowsHitTesting(false)
-            if let localFileURL = image.localFileURL,
-               let uiImage = UIImage(contentsOfFile: localFileURL.path) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .allowsHitTesting(false)
-            } else if let remoteURL = image.remoteURL,
-                      let url = URL(string: remoteURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let loaded):
-                        loaded
-                            .resizable()
-                            .scaledToFill()
-                            .allowsHitTesting(false)
-                    default:
-                        Image(systemName: "photo")
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .allowsHitTesting(false)
-                    }
-                }
-            } else {
-                Image(systemName: "photo")
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .allowsHitTesting(false)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104)
-        .clipped()
-        .clipShape(shape)
-        .contentShape(shape)
+        aiRecognitionThumbnail(image)
     }
 
     private func primaryText(_ fields: EventUploadLocalizedFields, fallback: String = "") -> String {
@@ -4211,6 +4418,8 @@ private struct EventUploadLineupAIImportSheet: View {
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
                         VStack(alignment: .leading, spacing: 8) {
                             imagePreview(image)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 104)
                             HStack(alignment: .top, spacing: 6) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(image.zone.title)
@@ -4560,42 +4769,7 @@ private struct EventUploadLineupAIImportSheet: View {
 
     @ViewBuilder
     private func imagePreview(_ image: EventUploadImageDraft) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        ZStack {
-            shape
-                .fill(RaverTheme.background)
-                .allowsHitTesting(false)
-            if let localFileURL = image.localFileURL,
-               let uiImage = UIImage(contentsOfFile: localFileURL.path) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .allowsHitTesting(false)
-            } else if let remoteURL = image.remoteURL,
-                      let url = URL(string: remoteURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let loaded):
-                        loaded
-                            .resizable()
-                            .scaledToFill()
-                            .allowsHitTesting(false)
-                    default:
-                        Image(systemName: "photo")
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .allowsHitTesting(false)
-                    }
-                }
-            } else {
-                Image(systemName: "photo")
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .allowsHitTesting(false)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104)
-        .clipped()
-        .clipShape(shape)
-        .contentShape(shape)
+        aiRecognitionThumbnail(image)
     }
 
     private func runRecognition() async {
@@ -5353,6 +5527,8 @@ private struct EventUploadTimetableAIImportSheet: View {
                         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
                         VStack(alignment: .leading, spacing: 8) {
                             timetableAIImagePreview(image)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 104)
                             HStack(alignment: .top, spacing: 6) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(image.zone.title)
@@ -5868,42 +6044,7 @@ private struct EventUploadTimetableAIImportSheet: View {
 
     @ViewBuilder
     private func timetableAIImagePreview(_ image: EventUploadImageDraft) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        ZStack {
-            shape
-                .fill(RaverTheme.background)
-                .allowsHitTesting(false)
-            if let localFileURL = image.localFileURL,
-               let uiImage = UIImage(contentsOfFile: localFileURL.path) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .allowsHitTesting(false)
-            } else if let remoteURL = image.remoteURL,
-                      let url = URL(string: remoteURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let loaded):
-                        loaded
-                            .resizable()
-                            .scaledToFill()
-                            .allowsHitTesting(false)
-                    default:
-                        Image(systemName: "photo")
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .allowsHitTesting(false)
-                    }
-                }
-            } else {
-                Image(systemName: "photo")
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .allowsHitTesting(false)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104)
-        .clipped()
-        .clipShape(shape)
-        .contentShape(shape)
+        aiRecognitionThumbnail(image)
     }
 
     private var availableWeeks: [Int] {
@@ -7163,6 +7304,8 @@ private struct EventUploadWeekTimetableEditorSheet: View {
                         }
                     }
 
+                    sheetIssueCenter
+
 	                    VStack(alignment: .leading, spacing: 8) {
 	                        HStack {
 	                            Text(LT("节目列表", "Set List", "セット一覧"))
@@ -7341,6 +7484,92 @@ private struct EventUploadWeekTimetableEditorSheet: View {
 
     private var selectedDayLabel: String {
         dayOptions.first(where: { $0.dayIndex == selectedDayIndex })?.title ?? LT("未选择日期", "No day selected", "日付未選択")
+    }
+
+    private var visibleSlotIssues: [String] {
+        filteredSlots.enumerated().flatMap { index, slot -> [String] in
+            var issues: [String] = []
+            let order = index + 1
+            let name = displayName(slot)
+            let names = slot.performerNames
+                .prefix(slot.actType.performerCount)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+            if names.count != slot.actType.performerCount || names.contains(where: { $0.isEmpty }) {
+                issues.append(
+                    LT(
+                        "#\(order)「\(name)」有未命名 DJ，请补全或删除。",
+                        "#\(order) \"\(name)\" has unnamed DJs. Complete or delete it.",
+                        "#\(order)「\(name)」に未入力のDJがあります。入力または削除してください。"
+                    )
+                )
+            }
+            if slot.startTime == nil || slot.endTime == nil {
+                issues.append(
+                    LT(
+                        "#\(order)「\(name)」缺少开始或结束时间。",
+                        "#\(order) \"\(name)\" is missing start or end time.",
+                        "#\(order)「\(name)」は開始または終了時刻が未入力です。"
+                    )
+                )
+            }
+            if dayOptions.first(where: { $0.dayIndex == slot.dayIndex }) == nil {
+                issues.append(
+                    LT(
+                        "#\(order)「\(name)」没有绑定到当前 Week 的有效日期。",
+                        "#\(order) \"\(name)\" is not bound to a valid day in this week.",
+                        "#\(order)「\(name)」はこのWeekの有効な日付に紐付いていません。"
+                    )
+                )
+            }
+            return issues
+        }
+    }
+
+    @ViewBuilder
+    private var sheetIssueCenter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: visibleSlotIssues.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(visibleSlotIssues.isEmpty ? .green : .orange)
+                Text(LT("当前筛选待处理", "Current View Issues", "現在表示中の要確認"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer(minLength: 0)
+                Text(visibleSlotIssues.isEmpty ? LT("OK", "OK", "OK") : "\(visibleSlotIssues.count)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(visibleSlotIssues.isEmpty ? .green : .orange)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background((visibleSlotIssues.isEmpty ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+            }
+
+            if visibleSlotIssues.isEmpty {
+                Text(LT("当前日期和舞台下没有会阻塞下一步的节目。", "No blocking set issues for this day and stage.", "現在の日付とステージには進行を妨げる出演問題はありません。"))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            } else {
+                ForEach(Array(visibleSlotIssues.prefix(5).enumerated()), id: \.offset) { _, issue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "smallcircle.filled.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .padding(.top, 2)
+                        Text(issue)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke((visibleSlotIssues.isEmpty ? Color.green : Color.orange).opacity(0.32), lineWidth: 1)
+        )
     }
 
     private func shortDate(_ date: Date) -> String {

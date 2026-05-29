@@ -6116,7 +6116,7 @@ struct EventDetailView: View {
                 if didLoadEventLineup {
                     loadedEvent.lineupArtists = existing.lineupArtists
                 }
-                if didLoadEventSchedule {
+                if didLoadEventSchedule, loadedEvent.lineupSlots.isEmpty {
                     loadedEvent.lineupSlots = existing.lineupSlots
                 }
             }
