@@ -23,9 +23,18 @@ import {
 
 const EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS = 120_000;
 const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 30_000;
-const EVENT_SUBMISSION_TRANSACTION_URL = typeof process.env.DIRECT_URL === 'string' && process.env.DIRECT_URL.trim()
-  ? process.env.DIRECT_URL.trim()
-  : null;
+const EVENT_SUBMISSION_TRANSACTION_URL = typeof process.env.EVENT_SUBMISSION_TRANSACTION_URL === 'string'
+  && process.env.EVENT_SUBMISSION_TRANSACTION_URL.trim()
+  ? process.env.EVENT_SUBMISSION_TRANSACTION_URL.trim()
+  : typeof process.env.DIRECT_URL === 'string' && process.env.DIRECT_URL.trim()
+    ? process.env.DIRECT_URL.trim()
+    : null;
+const EVENT_SUBMISSION_TRANSACTION_URL_SOURCE = typeof process.env.EVENT_SUBMISSION_TRANSACTION_URL === 'string'
+  && process.env.EVENT_SUBMISSION_TRANSACTION_URL.trim()
+  ? 'event_submission_transaction_url'
+  : typeof process.env.DIRECT_URL === 'string' && process.env.DIRECT_URL.trim()
+    ? 'direct_url'
+    : 'database_url';
 const EVENT_SUBMISSION_TRANSACTION_CLIENT = EVENT_SUBMISSION_TRANSACTION_URL
   && EVENT_SUBMISSION_TRANSACTION_URL !== process.env.DATABASE_URL
   ? new PrismaClient({
@@ -40,6 +49,30 @@ const EVENT_SUBMISSION_TRANSACTION_CLIENT = EVENT_SUBMISSION_TRANSACTION_URL
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 const EVENT_LINEUP_SYNC_MODES = ['incremental_fill', 'exact_align'] as const;
 type EventLineupSyncMode = typeof EVENT_LINEUP_SYNC_MODES[number];
+
+const classifyTransactionConnectionMode = (url: string | null): 'supabase_pooler_session' | 'supabase_pooler_transaction' | 'direct_postgres' | 'unknown' => {
+  if (!url) return 'unknown';
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const port = parsed.port || '5432';
+    if (host.includes('.pooler.supabase.com')) {
+      if (port === '6543') return 'supabase_pooler_transaction';
+      if (port === '5432') return 'supabase_pooler_session';
+    }
+    return 'direct_postgres';
+  } catch {
+    return 'unknown';
+  }
+};
+
+export const getEventSubmissionTransactionConnectionInfo = (): {
+  source: 'event_submission_transaction_url' | 'direct_url' | 'database_url';
+  mode: 'supabase_pooler_session' | 'supabase_pooler_transaction' | 'direct_postgres' | 'unknown';
+} => ({
+  source: EVENT_SUBMISSION_TRANSACTION_URL_SOURCE,
+  mode: classifyTransactionConnectionMode(EVENT_SUBMISSION_TRANSACTION_URL ?? process.env.DATABASE_URL ?? null),
+});
 
 export type SubmittedEventWeek = {
   weekIndex: number;

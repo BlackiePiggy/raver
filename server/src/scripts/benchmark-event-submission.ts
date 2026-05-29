@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { getEventSubmissionTransactionConnectionInfo } from '../services/content-submission-event.service';
 import { loadCanonicalEventLineupSnapshot, type CanonicalLineupArtistInput, type CanonicalLineupSlotInput } from '../services/event-lineup-canonical.service';
 import { processContentSubmission } from '../services/content-submission-processing.service';
 
@@ -454,10 +455,13 @@ async function main(): Promise<void> {
   const stageCount = Number(args.stages || process.env.EVENT_SUBMISSION_BENCHMARK_STAGES || 4);
   const keepArtifacts = args.keep === true;
   const schedule = buildBenchmarkSchedule(2, 3);
+  const transactionConnection = getEventSubmissionTransactionConnectionInfo();
 
   assert(Number.isFinite(slotCount) && slotCount >= 50, 'slots must be at least 50');
   assert(Number.isFinite(rounds) && rounds > 0, 'rounds must be a positive number');
   assert(Number.isFinite(stageCount) && stageCount > 0, 'stages must be a positive number');
+
+  log('transaction connection', transactionConnection);
 
   const createMetrics: BenchmarkMetrics[] = [];
   const editMetrics: BenchmarkMetrics[] = [];

@@ -262,6 +262,7 @@
 - [x] 2026-05-29：已完成远端 `240 slot x 3 rounds` benchmark，确认 Phase A 已压缩到约 `1.1s - 1.6s`，但 Phase B 仍需约 `40s - 43s`
 - [x] 2026-05-29：已定位 benchmark 未打印 `canonicalSync.*` 的原因是 `apply_event_timetable` worker 包装结果时丢失了 `timings.canonicalSync`，现已在服务层补齐透传，待远端复测确认细分耗时
 - [x] 2026-05-29：已确认 Phase B 慢点主要不在 canonical sync 本体，而在 Prisma interactive transaction 外层；当前 VM runtime 使用 `DATABASE_URL=Supabase pooler :6543 + pgbouncer=true`，event submission 事务已改为优先走 `DIRECT_URL`
+- [x] 2026-05-29：复测确认当前服务器上的 `DIRECT_URL` 仍然指向 `pooler.supabase.com:5432`，这只是 session pooler，不是真正的 Postgres 直连；后续需显式提供真实直连串，例如独立 `EVENT_SUBMISSION_TRANSACTION_URL`
 - [x] P0：实现 timetable 幂等 upsert
 - [ ] P1：移除 patch / baseline / revision gate 的旧编辑协议
 - [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
@@ -901,7 +902,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 - Phase B 的真实慢点已经进一步收敛到事务层本身，而不是 canonical reconciliation 本体
 - 在远端 `240 slot` 基准下，`canonicalSync.totalMs` 仅约 `5.0s - 8.0s`，但 `transactionWallMs` 约 `39s - 43s`
 - 这说明当前主要问题是 runtime 连接形态与 interactive transaction 不匹配，而不是 slot diff / upsert 本身过慢
-- 下一阶段优化重点从“继续压 canonical 逻辑”切换为“确认 DIRECT_URL runtime 接管后是否显著消除 30s+ transaction overhead”
+- 下一阶段优化重点从“继续压 canonical 逻辑”切换为“切到真实直连数据库连接后，确认是否显著消除 30s+ transaction overhead”
 
 ### 下一阶段性能优化待办
 
@@ -912,6 +913,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
   - cleanup delete
 - [ ] 在远端 benchmark 中确认 `canonicalSync.*` 统计已经透出，并据此锁定 Phase B 真正瓶颈
 - [ ] 在远端 benchmark 中确认切换到 `DIRECT_URL` 事务客户端后，`transactionWallMs / transactionOverheadMs` 明显下降
+- [ ] 在远端 benchmark 中确认切换到真实直连数据库连接后，`transactionWallMs / transactionOverheadMs` 明显下降
 - [ ] 对 `syncCanonicalEventLineupAndTimetable(...)` 跑 SQL/CPU 热点剖析
 - [ ] 判断当前 40s+ 是数据库写入慢，还是 JS 层 reconciliation 慢
 - [ ] 评估是否要把 Phase B 的 artist/stage/performance mutation 再拆批，避免单次大事务过长
