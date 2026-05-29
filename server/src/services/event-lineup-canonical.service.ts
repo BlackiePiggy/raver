@@ -280,7 +280,41 @@ const bulkUpsertEventPerformances = async (
   if (rows.length === 0) return;
 
   for (const batch of chunk(rows, BULK_PERFORMANCE_UPDATE_BATCH_SIZE)) {
-    const values = Prisma.join(batch.map((performance) => Prisma.sql`(
+    const existingIds = new Set(
+      (await tx.eventPerformance.findMany({
+        where: { id: { in: batch.map((performance) => performance.id) } },
+        select: { id: true },
+      })).map((performance) => performance.id)
+    );
+    const rowsToInsert = batch.filter((performance) => !existingIds.has(performance.id));
+    const rowsToUpdate = batch.filter((performance) => existingIds.has(performance.id));
+
+    if (rowsToUpdate.length > 0) {
+      await Promise.all(rowsToUpdate.map((performance) => tx.eventPerformance.update({
+        where: { id: performance.id },
+        data: {
+          identityKey: performance.identityKey,
+          eventArtistId: performance.eventArtistId,
+          stageId: performance.stageId,
+          eventDayId: performance.eventDayId,
+          displayNameSnapshot: performance.displayNameSnapshot,
+          festivalDayIndex: performance.festivalDayIndex,
+          weekIndex: performance.weekIndex,
+          dayIndexInWeek: performance.dayIndexInWeek,
+          overallDayIndex: performance.overallDayIndex,
+          localDate: performance.localDate,
+          startAt: performance.startAt,
+          endAt: performance.endAt,
+          sortOrder: performance.sortOrder,
+          status: performance.status,
+          sourceType: performance.sourceType,
+        },
+      })));
+    }
+
+    if (rowsToInsert.length === 0) continue;
+
+    const values = Prisma.join(rowsToInsert.map((performance) => Prisma.sql`(
       ${performance.id},
       ${performance.eventId},
       ${performance.identityKey},
@@ -323,7 +357,6 @@ const bulkUpsertEventPerformances = async (
       VALUES ${values}
       ON CONFLICT ("event_id", "identity_key")
       DO UPDATE SET
-        "id" = EXCLUDED."id",
         "event_artist_id" = EXCLUDED."event_artist_id",
         "stage_id" = EXCLUDED."stage_id",
         "event_day_id" = EXCLUDED."event_day_id",
