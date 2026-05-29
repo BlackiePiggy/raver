@@ -126,6 +126,11 @@ export type CanonicalLineupSyncProfiling = {
   transactionWallMs?: number;
   transactionOverheadMs?: number;
   outerTotalMs?: number;
+  submissionSlotsNormalizeMs?: number;
+  submissionArtistsNormalizeMs?: number;
+  submissionArtistMergeMs?: number;
+  submissionSlotRelinkMs?: number;
+  submissionStageOrderMs?: number;
 };
 
 const uniqueIds = (values: Array<string | null | undefined>): string[] => {

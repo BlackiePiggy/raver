@@ -16,6 +16,21 @@ const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const LOCAL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2})(?::(\d{1,2})(?::(\d{1,2})(?:\.(\d{1,3}))?)?)?)?$/;
 const EXPLICIT_ZONE_PATTERN = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
 
+const intlFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+const getCachedDateTimeFormatter = (
+  locale: string,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat => {
+  const key = `${locale}__${timeZone}__${JSON.stringify(options)}`;
+  const cached = intlFormatterCache.get(key);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone });
+  intlFormatterCache.set(key, formatter);
+  return formatter;
+};
+
 export const isValidEventTimeZone = (value: unknown): value is string => {
   if (typeof value !== 'string' || !value.trim()) return false;
   try {
@@ -85,8 +100,7 @@ const parseLocalDateTimeParts = (
 };
 
 const getTimeZoneOffsetMs = (timeZone: string, instant: Date): number => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const parts = getCachedDateTimeFormatter('en-US', timeZone, {
     hourCycle: 'h23',
     year: 'numeric',
     month: '2-digit',
@@ -108,10 +122,9 @@ const getTimeZoneOffsetMs = (timeZone: string, instant: Date): number => {
   return asUtc - instant.getTime();
 };
 
-const getLocalDateTimePartsForInstant = (instant: Date, timeZone: string): LocalDateTimeParts | null => {
+export const getLocalDateTimePartsForInstant = (instant: Date, timeZone: string): LocalDateTimeParts | null => {
   if (!(instant instanceof Date) || Number.isNaN(instant.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const parts = getCachedDateTimeFormatter('en-US', timeZone, {
     hourCycle: 'h23',
     year: 'numeric',
     month: '2-digit',
@@ -201,8 +214,7 @@ export const parseEventDateInput = (
 export const eventDateKey = (date: Date, timeZoneRaw: unknown): string => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+  const parts = getCachedDateTimeFormatter('en-CA', timeZone, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -234,8 +246,7 @@ export const startOfEventDay = (date: Date, timeZoneRaw: unknown): Date => {
     return new Date(NaN);
   }
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+  const parts = getCachedDateTimeFormatter('en-CA', timeZone, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -271,8 +282,7 @@ export const setEventDayAndKeepTime = (
   if (Number.isNaN(eventStartDay.getTime())) {
     return new Date(NaN);
   }
-  const timeParts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const timeParts = getCachedDateTimeFormatter('en-US', timeZone, {
     hourCycle: 'h23',
     hour: '2-digit',
     minute: '2-digit',
@@ -283,8 +293,7 @@ export const setEventDayAndKeepTime = (
   if (Number.isNaN(targetDay.getTime())) {
     return new Date(NaN);
   }
-  const dateParts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+  const dateParts = getCachedDateTimeFormatter('en-CA', timeZone, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -321,8 +330,7 @@ export const diffEventDays = (from: Date, to: Date, timeZoneRaw: unknown): numbe
 
 export const getEventHour = (date: Date, timeZoneRaw: unknown): number => {
   const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  const hour = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const hour = getCachedDateTimeFormatter('en-US', timeZone, {
     hourCycle: 'h23',
     hour: '2-digit',
   }).format(date);

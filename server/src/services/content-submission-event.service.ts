@@ -4,6 +4,7 @@ import {
   diffEventDays,
   eventDateKey,
   eventDateOnlyToStorageDate,
+  getLocalDateTimePartsForInstant,
   normalizeEventTimeZone,
   parseEventDateInput,
   startOfEventDay,
@@ -652,32 +653,6 @@ const normalizeEventStageOrder = (value: unknown): string[] => {
 
 const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
 
-const getLocalDateTimeParts = (
-  instant: Date,
-  timeZone: string
-): { year: number; month: number; day: number; hour: number; minute: number; second: number; millisecond: number } => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(instant);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return {
-    year: Number(values.year),
-    month: Number(values.month),
-    day: Number(values.day),
-    hour: Number(values.hour),
-    minute: Number(values.minute),
-    second: Number(values.second),
-    millisecond: instant.getUTCMilliseconds(),
-  };
-};
-
 const cloneEventDayByOffset = (eventDayDate: Date, offsetDays: number): Date =>
   new Date(eventDayDate.getTime() + Math.max(0, offsetDays) * 86_400_000);
 
@@ -688,8 +663,9 @@ const buildSlotInstantFromEventDay = (
 ): Date => {
   const carryOffset = Math.max(0, diffEventDays(eventDayDate, sourceInstant, timeZone));
   const targetBaseDate = cloneEventDayByOffset(eventDayDate, carryOffset);
-  const dateParts = getLocalDateTimeParts(targetBaseDate, timeZone);
-  const timeParts = getLocalDateTimeParts(sourceInstant, timeZone);
+  const dateParts = getLocalDateTimePartsForInstant(targetBaseDate, timeZone);
+  const timeParts = getLocalDateTimePartsForInstant(sourceInstant, timeZone);
+  if (!dateParts || !timeParts) return new Date(NaN);
   return zonedTimeToUtc({
     year: dateParts.year,
     month: dateParts.month,
@@ -709,8 +685,9 @@ const rebuildSlotInstantForMovedEventDay = (
 ): Date => {
   const carryOffset = Math.max(0, diffEventDays(sourceEventDayDate, sourceInstant, timeZone));
   const targetBaseDate = cloneEventDayByOffset(targetEventDayDate, carryOffset);
-  const dateParts = getLocalDateTimeParts(targetBaseDate, timeZone);
-  const timeParts = getLocalDateTimeParts(sourceInstant, timeZone);
+  const dateParts = getLocalDateTimePartsForInstant(targetBaseDate, timeZone);
+  const timeParts = getLocalDateTimePartsForInstant(sourceInstant, timeZone);
+  if (!dateParts || !timeParts) return new Date(NaN);
   return zonedTimeToUtc({
     year: dateParts.year,
     month: dateParts.month,
@@ -1426,17 +1403,35 @@ const syncSubmissionEventLineupAndTimetable = async (
     return syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
   }
 
+  const slotsStartedAt = process.hrtime.bigint();
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
+  const submissionSlotsNormalizeMs = Number(process.hrtime.bigint() - slotsStartedAt) / 1_000_000;
+  const artistsStartedAt = process.hrtime.bigint();
   const submittedArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
   const normalizedArtists = normalizeCanonicalLineupArtists(submittedArtists, []);
   const timetableArtists = normalizeCanonicalLineupArtists([], slots);
+  const submissionArtistsNormalizeMs = Number(process.hrtime.bigint() - artistsStartedAt) / 1_000_000;
+  const mergeStartedAt = process.hrtime.bigint();
   const lineupSyncMode = resolveEventLineupSyncMode(payload);
   const artists = lineupSyncMode === 'exact_align'
     ? mergeAlignedLineupArtists(normalizedArtists, timetableArtists)
     : mergeIncrementalLineupArtists(normalizedArtists, timetableArtists);
+  const submissionArtistMergeMs = Number(process.hrtime.bigint() - mergeStartedAt) / 1_000_000;
+  const relinkStartedAt = process.hrtime.bigint();
   const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
+  const submissionSlotRelinkMs = Number(process.hrtime.bigint() - relinkStartedAt) / 1_000_000;
+  const stageOrderStartedAt = process.hrtime.bigint();
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
-  return syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
+  const submissionStageOrderMs = Number(process.hrtime.bigint() - stageOrderStartedAt) / 1_000_000;
+  const canonicalSync = await syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
+  return {
+    ...canonicalSync,
+    submissionSlotsNormalizeMs,
+    submissionArtistsNormalizeMs,
+    submissionArtistMergeMs,
+    submissionSlotRelinkMs,
+    submissionStageOrderMs,
+  };
 };
 
 const runEventSubmissionTransaction = async <T>(
