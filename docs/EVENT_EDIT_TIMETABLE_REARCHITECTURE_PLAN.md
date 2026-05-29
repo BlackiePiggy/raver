@@ -258,6 +258,7 @@
   - patch clear-all 场景下会先消费 timetable delete，再做 lineup delete 校验
 - [x] 2026-05-29：worker queue status / admin status 已增强，可直接看到 `jobType` 维度统计、`phaseBFailure`、`phaseTimings`、最近一次耗时与重试调度信息
 - [x] 2026-05-29：`pnpm content-submissions:status` 已增强为默认人类可读摘要输出，`--json` 保留原始结构，便于线上快速排障
+- [x] 2026-05-29：已新增 `pnpm benchmark:event-submission`，可对 `200+ slot` 的 create/edit 路径输出 Phase A / Phase B / 总耗时基准
 - [x] P0：实现 timetable 幂等 upsert
 - [ ] P1：移除 patch / baseline / revision gate 的旧编辑协议
 - [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
