@@ -12,6 +12,7 @@ import {
   assertNoActiveEventEditSubmission,
   autoAlignEventLineupToTimetablePayload,
   assertEventSubmissionBaseRevision,
+  buildSubmittedEventScheduleContextFromEvent,
   createOrUpdateEventFromSubmission,
   EventSubmissionConflictError,
   incrementallyFillEventLineupFromTimetablePayload,
@@ -250,19 +251,93 @@ const ensureSubmissionPayload = (entityType: string, payload: Prisma.InputJsonOb
   return null;
 };
 
-const normalizeEventSubmissionPayload = (payload: Prisma.InputJsonObject): Prisma.InputJsonObject => {
+const normalizeEventSubmissionPayload = async (payload: Prisma.InputJsonObject): Promise<Prisma.InputJsonObject> => {
+  let normalizedBasePayload = payload;
+
   if (cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId)) {
-    return payload;
+    const hasScheduleObject =
+      !!payload.schedule
+      && typeof payload.schedule === 'object'
+      && !Array.isArray(payload.schedule);
+    const hasWeeks = Array.isArray(payload.weeks);
+    const hasEventDays = Array.isArray(payload.eventDays);
+
+    if (!hasScheduleObject || !hasWeeks || !hasEventDays) {
+      const targetEventId = cleanText(payload.targetEventId) || cleanText(payload.editTargetEventId);
+      if (targetEventId) {
+        const existing = await prisma.event.findUnique({
+          where: { id: targetEventId },
+          select: {
+            scheduleMode: true,
+            timeZone: true,
+            dayRolloverHour: true,
+            weeks: {
+              orderBy: [{ sortOrder: 'asc' }, { weekIndex: 'asc' }],
+              select: {
+                weekIndex: true,
+                label: true,
+                startDate: true,
+                endDate: true,
+                sortOrder: true,
+              },
+            },
+            eventDays: {
+              orderBy: [{ sortOrder: 'asc' }, { overallDayIndex: 'asc' }],
+              select: {
+                eventDayId: true,
+                weekIndex: true,
+                dayIndexInWeek: true,
+                overallDayIndex: true,
+                label: true,
+                weekday: true,
+                date: true,
+                sortOrder: true,
+              },
+            },
+          },
+        });
+
+        if (existing) {
+          const existingScheduleContext = buildSubmittedEventScheduleContextFromEvent(existing);
+          normalizedBasePayload = {
+            ...payload,
+            schedule: hasScheduleObject ? payload.schedule : {
+              mode: existingScheduleContext.scheduleMode,
+              timeZone: existingScheduleContext.timeZone,
+              dayRolloverHour: existingScheduleContext.dayRolloverHour,
+            },
+            weeks: hasWeeks ? payload.weeks : existingScheduleContext.weeks.map((week) => ({
+              weekIndex: week.weekIndex,
+              label: week.label ?? null,
+              startDate: week.startDate,
+              endDate: week.endDate,
+              sortOrder: week.sortOrder,
+            })),
+            eventDays: hasEventDays ? payload.eventDays : existingScheduleContext.eventDays.map((day) => ({
+              eventDayId: day.eventDayId,
+              weekIndex: day.weekIndex,
+              dayIndexInWeek: day.dayIndexInWeek,
+              overallDayIndex: day.overallDayIndex,
+              label: day.label ?? null,
+              weekday: day.weekday ?? null,
+              date: day.date,
+              sortOrder: day.sortOrder,
+            })),
+          };
+        }
+      }
+    }
   }
-  const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
-  const lineupSyncMode = cleanText(payload.lineupSyncMode)?.toLowerCase() || 'incremental_fill';
+
+  const scheduleContext = normalizeSubmittedEventScheduleContext(normalizedBasePayload);
+  const lineupSyncMode = cleanText(normalizedBasePayload.lineupSyncMode)?.toLowerCase() || 'incremental_fill';
   const normalizedPayload = lineupSyncMode === 'exact_align'
     ? autoAlignEventLineupToTimetablePayload(
-      payload as unknown as Prisma.JsonObject,
+      normalizedBasePayload as unknown as Prisma.JsonObject,
       scheduleContext
     )
     : incrementallyFillEventLineupFromTimetablePayload(
-    payload as unknown as Prisma.JsonObject,
+    normalizedBasePayload as unknown as Prisma.JsonObject,
     scheduleContext
     );
   return normalizedPayload as unknown as Prisma.InputJsonObject;
@@ -753,7 +828,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
     }
     const rawPayload = toJsonObject(req.body.payload);
     const normalizedPayload = entityType === 'event'
-      ? normalizeEventSubmissionPayload(rawPayload)
+      ? await normalizeEventSubmissionPayload(rawPayload)
       : entityType === 'brand'
         ? normalizeBrandSubmissionPayload(rawPayload)
         : rawPayload;
@@ -920,7 +995,7 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
     }
     const rawPayload = toJsonObject(req.body.payload);
     const normalizedPayload = current.entityType === 'event'
-      ? normalizeEventSubmissionPayload(rawPayload)
+      ? await normalizeEventSubmissionPayload(rawPayload)
       : current.entityType === 'brand'
         ? normalizeBrandSubmissionPayload(rawPayload)
         : rawPayload;

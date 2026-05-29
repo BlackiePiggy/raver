@@ -940,8 +940,17 @@ struct EventUploadDraft: Hashable, Codable {
         if weeks.isEmpty {
             return [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
         }
-        return weeks.map { week in
-            EventUploadWeekRangeDraft(startDate: week.startDate, endDate: week.endDate)
+        let sourceRanges = normalizedRanges(
+            structuredScheduleMode == .multiWeek
+                ? weekRanges
+                : [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
+        )
+        return weeks.enumerated().map { index, week in
+            EventUploadWeekRangeDraft(
+                id: sourceRanges.indices.contains(index) ? sourceRanges[index].id : UUID(),
+                startDate: week.startDate,
+                endDate: week.endDate
+            )
         }
     }
 
@@ -1043,15 +1052,6 @@ struct EventUploadDraft: Hashable, Codable {
     }
 
     private func normalizedWeekRanges() -> [EventUploadWeekRangeDraft] {
-        if let canonicalWeeks = normalizedCanonicalWeeks(), !canonicalWeeks.isEmpty {
-            return canonicalWeeks.map {
-                EventUploadWeekRangeDraft(
-                    id: UUID(),
-                    startDate: $0.startDate,
-                    endDate: $0.endDate
-                )
-            }
-        }
         return normalizedRanges(
             structuredScheduleMode == .multiWeek
                 ? weekRanges
@@ -1087,11 +1087,7 @@ struct EventUploadDraft: Hashable, Codable {
         case .singleDay, .multiDay:
             sourceRanges = [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
         case .multiWeek:
-            sourceRanges = previousCanonicalWeeks.isEmpty
-                ? weekRanges
-                : previousCanonicalWeeks.map {
-                    EventUploadWeekRangeDraft(startDate: $0.startDate, endDate: $0.endDate)
-                }
+            sourceRanges = weekRanges
         }
         baseRanges = normalizedRanges(sourceRanges)
         canonicalWeeks = baseRanges.enumerated().map { index, range in
@@ -1127,8 +1123,13 @@ struct EventUploadDraft: Hashable, Codable {
 
     private mutating func syncLegacyScheduleViewsFromStructured() {
         scheduleMode = EventUploadScheduleMode(structuredModeRawValue: structuredSchedule.mode) ?? scheduleMode
-        weekRanges = structuredWeeks.map {
-            EventUploadWeekRangeDraft(startDate: $0.startDate, endDate: $0.endDate)
+        let previousWeekRanges = weekRanges
+        weekRanges = structuredWeeks.enumerated().map { index, week in
+            EventUploadWeekRangeDraft(
+                id: previousWeekRanges.indices.contains(index) ? previousWeekRanges[index].id : UUID(),
+                startDate: week.startDate,
+                endDate: week.endDate
+            )
         }
         if let first = structuredWeeks.first {
             startDate = first.startDate

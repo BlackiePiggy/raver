@@ -1346,7 +1346,7 @@ const buildEventDaysCreateInput = (
   });
 };
 
-const syncStructuredEventSchedule = async (
+export const syncStructuredEventSchedule = async (
   tx: Prisma.TransactionClient,
   eventId: string,
   scheduleContext: SubmittedEventScheduleContext

@@ -93,6 +93,38 @@ func eventDiscreteDateSummaryDisplayText(
     ).joined(separator: separator)
 }
 
+func localizedTimeZoneDifferenceSuffix(
+    eventTimeZone: TimeZone,
+    deviceTimeZone: TimeZone = .current,
+    referenceDate: Date
+) -> String {
+    let eventOffsetSeconds = eventTimeZone.secondsFromGMT(for: referenceDate)
+    let deviceOffsetSeconds = deviceTimeZone.secondsFromGMT(for: referenceDate)
+    let deltaSeconds = eventOffsetSeconds - deviceOffsetSeconds
+    guard deltaSeconds != 0 else { return "" }
+
+    let absoluteHours = Double(abs(deltaSeconds)) / 3600.0
+    let hoursText: String = {
+        if absoluteHours.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(absoluteHours))
+        }
+        return String(format: "%.1f", absoluteHours)
+    }()
+
+    switch AppLanguagePreference.current.effectiveLanguage {
+    case .zh, .system:
+        let direction = deltaSeconds > 0 ? "比设备时间快" : "比设备时间慢"
+        return "（\(direction)\(hoursText)小时）"
+    case .en:
+        let direction = deltaSeconds > 0 ? "ahead of" : "behind"
+        let unit = absoluteHours == 1 ? "hour" : "hours"
+        return " (\(hoursText) \(unit) \(direction) device time)"
+    case .ja:
+        let direction = deltaSeconds > 0 ? "端末時間より\(hoursText)時間進んでいます" : "端末時間より\(hoursText)時間遅れています"
+        return "（\(direction)）"
+    }
+}
+
 private enum AppFormattingLocale {
     static var current: Locale {
         Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)

@@ -82,20 +82,6 @@ private enum EventUploadTimeDisplay {
 }
 
 struct EventUploadFlowView: View {
-    private struct WeekDatePickerTarget: Identifiable {
-        enum Field {
-            case start
-            case end
-        }
-
-        let weekID: UUID
-        let field: Field
-
-        var id: String {
-            "\(weekID.uuidString)-\(field == .start ? "start" : "end")"
-        }
-    }
-
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.scenePhase) private var scenePhase
@@ -110,7 +96,6 @@ struct EventUploadFlowView: View {
     @State private var expandedLineupOnlySlots: Set<UUID> = []
     @State private var expandedLocalizedFieldKeys: Set<String> = []
     @State private var showAdvancedRollover = false
-    @State private var activeWeekDatePicker: WeekDatePickerTarget?
     @State private var keyboardCandidateSpacing: CGFloat = 0
     @State private var stageIndexPendingDeletion: Int?
     @State private var showClearAllTimetableConfirmation = false
@@ -215,9 +200,6 @@ struct EventUploadFlowView: View {
         }
         .sheet(item: $selectedWeekForEditing) { selection in
             weekEditorSheet(for: selection)
-        }
-        .sheet(item: $activeWeekDatePicker) { target in
-            weekDatePickerSheet(target: target)
         }
         .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredDraft) {
             Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
@@ -647,24 +629,18 @@ struct EventUploadFlowView: View {
                             }
 
                             HStack(spacing: 10) {
-                                weekDateField(
+                                compactWeekDatePicker(
                                     title: LT("开始", "Start", "開始"),
-                                    value: shortDateString(week.startDate, in: eventTimeZone),
-                                    action: {
-                                        activeWeekDatePicker = WeekDatePickerTarget(weekID: week.id, field: .start)
-                                    }
+                                    selection: weekDateBinding(id: week.id, field: .start)
                                 )
 
                                 Image(systemName: "arrow.right")
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(RaverTheme.secondaryText)
 
-                                weekDateField(
+                                compactWeekDatePicker(
                                     title: LT("结束", "End", "終了"),
-                                    value: shortDateString(week.endDate, in: eventTimeZone),
-                                    action: {
-                                        activeWeekDatePicker = WeekDatePickerTarget(weekID: week.id, field: .end)
-                                    }
+                                    selection: weekDateBinding(id: week.id, field: .end)
                                 )
                             }
                         }
@@ -2727,60 +2703,50 @@ struct EventUploadFlowView: View {
         return formatter.string(from: date)
     }
 
-    @ViewBuilder
-    private func weekDatePickerSheet(target: WeekDatePickerTarget) -> some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                DatePicker(
-                    "",
-                    selection: weekDateBinding(target: target),
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.graphical)
-                .labelsHidden()
-                .tint(RaverTheme.accent)
-                .environment(\.timeZone, eventTimeZone)
+    private enum WeekDateField {
+        case start
+        case end
+    }
 
-                HStack {
-                    Text(LT("当前选择", "Selected", "選択中"))
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                    Spacer()
-                    Text(shortDateString(weekDateBinding(target: target).wrappedValue, in: eventTimeZone))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                }
-                .padding(.horizontal, 4)
-
-                Spacer()
+    private func weekDateBinding(id: UUID, field: WeekDateField) -> Binding<Date> {
+        Binding {
+            guard let week = viewModel.draft.editableWeekRanges.first(where: { $0.id == id }) else {
+                return viewModel.draft.startDate
             }
-            .padding(20)
-            .background(RaverTheme.background.ignoresSafeArea())
-            .navigationTitle(LT("选择日期", "Select Date", "日付を選択"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(LT("完成", "Done", "完了")) {
-                        activeWeekDatePicker = nil
-                    }
-                }
+            return field == .start ? week.startDate : week.endDate
+        } set: { value in
+            if field == .start {
+                viewModel.updateWeekRange(id: id, startDate: value)
+            } else {
+                viewModel.updateWeekRange(id: id, endDate: value)
             }
         }
     }
 
-    private func weekDateBinding(target: WeekDatePickerTarget) -> Binding<Date> {
-        Binding {
-            guard let week = viewModel.draft.editableWeekRanges.first(where: { $0.id == target.weekID }) else {
-                return Date()
-            }
-            return target.field == .start ? week.startDate : week.endDate
-        } set: { value in
-            if target.field == .start {
-                viewModel.updateWeekRange(id: target.weekID, startDate: value)
-            } else {
-                viewModel.updateWeekRange(id: target.weekID, endDate: value)
-            }
+    private func compactWeekDatePicker(title: String, selection: Binding<Date>) -> some View {
+        VStack(alignment: .center, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            DatePicker(
+                title,
+                selection: selection,
+                displayedComponents: [.date]
+            )
+            .labelsHidden()
+            .datePickerStyle(.compact)
+            .tint(RaverTheme.accent)
+            .environment(\.timeZone, eventTimeZone)
+            .scaleEffect(0.92)
         }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
     }
 
     private var singleDayDateBinding: Binding<Date> {

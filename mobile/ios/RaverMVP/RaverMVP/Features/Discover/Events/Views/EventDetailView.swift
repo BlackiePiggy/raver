@@ -5978,7 +5978,7 @@ struct EventDetailView: View {
         }
     }
 
-    private func eventInfoDateText(_ date: Date, timeZone: TimeZone) -> String {
+    private func eventInfoDateText(_ date: Date, timeZone: TimeZone, timeZoneSuffix: String = "") -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: AppLanguagePreference.current.effectiveLanguage.localeIdentifier)
         formatter.timeZone = timeZone
@@ -5990,7 +5990,7 @@ struct EventDetailView: View {
         case .ja:
             formatter.dateFormat = "yyyy年M月d日"
         }
-        return "\(formatter.string(from: date)) · \(Date.appLocalizedTimeZoneLabel(timeZone))"
+        return "\(formatter.string(from: date)) · \(Date.appLocalizedTimeZoneLabel(timeZone))\(timeZoneSuffix)"
     }
 
     private func eventInfoDateText(_ date: Date) -> String {
@@ -6008,40 +6008,29 @@ struct EventDetailView: View {
     }
 
     private func eventInfoDateTexts(_ date: Date, event: WebEvent) -> [String] {
-        let deviceTimeZone = TimeZone.current
         guard let eventTimeZone = EventTimeZoneDisplay.eventTimeZone(for: event) else {
             return [eventInfoDateText(date)]
         }
-
-        let eventText = eventInfoDateText(date, timeZone: eventTimeZone)
-
-        guard deviceTimeZone.secondsFromGMT(for: date) != eventTimeZone.secondsFromGMT(for: date) else {
-            return [eventText]
-        }
-
-        return [
-            eventText,
-            eventInfoDateText(date, timeZone: deviceTimeZone)
-        ]
+        let suffix = localizedTimeZoneDifferenceSuffix(
+            eventTimeZone: eventTimeZone,
+            deviceTimeZone: .current,
+            referenceDate: date
+        )
+        return [eventInfoDateText(date, timeZone: eventTimeZone, timeZoneSuffix: suffix)]
     }
 
     private func eventInfoScheduleTexts(_ event: WebEvent) -> [String] {
-        let deviceTimeZone = TimeZone.current
         let eventTimeZone = EventTimeZoneDisplay.eventTimeZone(for: event) ?? event.eventTimeZone
-        let eventLines = eventDiscreteDateSummaryDisplayLines(
+        let timeZoneLabel = Date.appLocalizedTimeZoneLabel(eventTimeZone)
+            + localizedTimeZoneDifferenceSuffix(
+                eventTimeZone: eventTimeZone,
+                deviceTimeZone: .current,
+                referenceDate: event.primaryDisplayDate
+            )
+        return eventDiscreteDateSummaryDisplayLines(
             dateLines: event.discreteDateSummaryDateLines(in: eventTimeZone),
             dayCountText: event.displayDayCountText,
-            timeZoneLabel: Date.appLocalizedTimeZoneLabel(eventTimeZone)
-        )
-
-        guard deviceTimeZone.secondsFromGMT(for: event.primaryDisplayDate) != eventTimeZone.secondsFromGMT(for: event.primaryDisplayDate) else {
-            return eventLines
-        }
-
-        return eventLines + eventDiscreteDateSummaryDisplayLines(
-            dateLines: event.discreteDateSummaryDateLines(in: deviceTimeZone),
-            dayCountText: event.displayDayCountText,
-            timeZoneLabel: Date.appLocalizedTimeZoneLabel(deviceTimeZone)
+            timeZoneLabel: timeZoneLabel
         )
     }
 

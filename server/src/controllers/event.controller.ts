@@ -21,6 +21,12 @@ import {
   normalizeCanonicalLineupArtists,
   syncCanonicalEventLineupAndTimetable,
 } from '../services/event-lineup-canonical.service';
+import {
+  EventSubmissionValidationError,
+  normalizeSubmittedEventScheduleContext,
+  normalizeSubmittedTimetableSlots,
+  syncStructuredEventSchedule,
+} from '../services/content-submission-event.service';
 
 const cityTimezones = require('city-timezones') as {
   lookupViaCity: (city: string) => unknown[];
@@ -30,18 +36,6 @@ const cityTimezones = require('city-timezones') as {
 const prisma = new PrismaClient();
 
 class EventInputValidationError extends Error {}
-
-type RawLineupSlotInput = {
-  djId?: string;
-  memberDjIds?: Array<string | null>;
-  memberNames?: string[];
-  festivalDayIndex?: number;
-  djName?: string;
-  stageName?: string;
-  sortOrder?: number;
-  startTime?: string;
-  endTime?: string;
-};
 
 type LineupSlotInput = {
   djId?: string;
@@ -498,67 +492,6 @@ const rebaseExistingLineupSlotsToEventStart = (
       endTime,
     };
   });
-
-const normalizeLineupSlots = (
-  slots: unknown,
-  _eventStartDate: Date,
-  _dayRolloverHourRaw: unknown = 6,
-  timeZoneRaw: unknown = DEFAULT_EVENT_TIME_ZONE
-): LineupSlotInput[] => {
-  if (!Array.isArray(slots)) {
-    return [];
-  }
-
-  const timeZone = normalizeEventTimeZone(timeZoneRaw);
-  return slots
-    .filter((slot) => slot && typeof slot === 'object')
-    .map((slot) => slot as RawLineupSlotInput)
-    .map((slot, index) => {
-      if (slot.startTime === undefined || slot.endTime === undefined) {
-        throw new EventInputValidationError(`lineupSlots[${index}] requires startTime and endTime`);
-      }
-      const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
-      const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
-      if (!parsedStart || !parsedEnd) {
-        throw new EventInputValidationError(`lineupSlots[${index}] has invalid startTime or endTime`);
-      }
-      if (parsedStart.getTime() === parsedEnd.getTime()) {
-        throw new EventInputValidationError(`lineupSlots[${index}] startTime and endTime cannot be the same`);
-      }
-      let startTime = parsedStart;
-      let endTime = parsedEnd >= parsedStart ? parsedEnd : new Date(parsedEnd.getTime() + 86_400_000);
-
-      const rawDjId = typeof slot.djId === 'string' && slot.djId.trim() ? slot.djId.trim() : '';
-      const memberDjIds = Array.isArray(slot.memberDjIds)
-        ? slot.memberDjIds.map((id) => {
-            const normalized = typeof id === 'string' ? id.trim() : '';
-            return normalized && !isLineupDjIdPlaceholder(normalized) ? normalized : null;
-          })
-        : [];
-      const memberNames = Array.isArray(slot.memberNames)
-        ? slot.memberNames.map((name) => String(name || '').trim()).filter(Boolean)
-        : [];
-      const djId = rawDjId && !isLineupDjIdPlaceholder(rawDjId) ? rawDjId : undefined;
-      const firstBoundDjId = memberDjIds.find((id) => !!id) || undefined;
-      const mergedMemberDjIds = memberDjIds.length
-        ? memberDjIds
-        : (djId ? [djId] : []);
-      const effectiveDjId = djId || firstBoundDjId;
-
-      return {
-        djId: effectiveDjId,
-        memberDjIds: mergedMemberDjIds,
-        memberNames,
-        festivalDayIndex: null,
-        djName: slot.djName,
-        stageName: slot.stageName,
-        sortOrder: slot.sortOrder,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-      };
-    })
-    .filter((slot) => String(slot.djName || '').trim() || String(slot.djId || '').trim() || (Array.isArray(slot.memberDjIds) && slot.memberDjIds.length > 0));
-};
 
 const buildLineupArtistsFromSlots = (slots: LineupSlotInput[]): LineupArtistInput[] => {
   const byKey = new Map<string, LineupArtistInput>();
@@ -1035,8 +968,22 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     const parsedStartDate = normalizeEventStartDate(parsedStartDateInput, normalizedTimeZone);
     const parsedEndDate = normalizeEventEndDate(parsedEndDateInput, normalizedTimeZone);
     const normalizedDayRolloverHour = normalizeDayRolloverHour(dayRolloverHour, 6);
-    const normalizedSlots = normalizeLineupSlots(lineupSlots, parsedStartDate, normalizedDayRolloverHour, normalizedTimeZone);
-    const normalizedLineupArtists = normalizeLineupArtists(req.body.lineupArtists, normalizedSlots);
+    const scheduleContext = normalizeSubmittedEventScheduleContext(req.body as Record<string, unknown>);
+    const normalizedSlots = normalizeSubmittedTimetableSlots(lineupSlots, scheduleContext);
+    const normalizedLineupArtists = normalizeLineupArtists(
+      req.body.lineupArtists,
+      normalizedSlots.map((slot) => ({
+        djId: slot.djId ?? undefined,
+        memberDjIds: slot.memberDjIds ?? [],
+        memberNames: [],
+        festivalDayIndex: null,
+        djName: slot.djName,
+        stageName: slot.stageName ?? undefined,
+        sortOrder: slot.sortOrder,
+        startTime: slot.startTime.toISOString(),
+        endTime: slot.endTime.toISOString(),
+      }))
+    );
     const normalizedNameI18n = normalizeOptionalTriTextJson(req.body.nameI18n);
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
@@ -1088,21 +1035,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           officialWebsite,
         },
       });
+      await syncStructuredEventSchedule(tx, created.id, scheduleContext);
       await syncCanonicalEventLineupAndTimetable(
         tx,
         created.id,
-        normalizedSlots.map((slot) => ({
-          ...slot,
-          djId: slot.djId ?? null,
-          memberDjIds: slot.memberDjIds ?? [],
-          memberNames: slot.memberNames ?? [],
-          djName: slot.djName || 'Unknown DJ',
-          sortOrder: slot.sortOrder || 0,
-          stageName: slot.stageName ?? null,
-          festivalDayIndex: null,
-          startTime: new Date(slot.startTime),
-          endTime: new Date(slot.endTime),
-        })),
+        normalizedSlots,
         normalizedLineupArtists
       );
       return tx.event.findUniqueOrThrow({
@@ -1125,7 +1062,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
 
     res.status(201).json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
-    if (error instanceof EventInputValidationError) {
+    if (error instanceof EventInputValidationError || error instanceof EventSubmissionValidationError) {
       res.status(400).json({ error: error.message });
       return;
     }
@@ -1237,8 +1174,63 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const nextDayRolloverHour = dayRolloverHour !== undefined
       ? normalizeDayRolloverHour(dayRolloverHour, existing.dayRolloverHour ?? 6)
       : (existing.dayRolloverHour ?? 6);
-    const normalizedSlots = normalizeLineupSlots(lineupSlots, nextStartDate ?? existing.startDate, nextDayRolloverHour, nextTimeZone);
-    const normalizedLineupArtists = normalizeLineupArtists(req.body.lineupArtists, normalizedSlots);
+    const requestBody = req.body as Record<string, unknown>;
+    const hasStructuredSchedulePayload =
+      !!requestBody.schedule
+      && typeof requestBody.schedule === 'object'
+      && !Array.isArray(requestBody.schedule)
+      && Array.isArray(requestBody.weeks)
+      && Array.isArray(requestBody.eventDays);
+    const structuredSchedulePayload: Record<string, unknown> = hasStructuredSchedulePayload
+      ? requestBody
+      : {
+          ...requestBody,
+          schedule: {
+            mode: requestBody.scheduleMode ?? (requestBody.schedule as Record<string, unknown> | undefined)?.mode ?? 'single_day',
+            timeZone: nextTimeZone,
+            dayRolloverHour: nextDayRolloverHour,
+          },
+          weeks: [
+            {
+              weekIndex: 1,
+              label: null,
+              startDate: effectiveStartDate,
+              endDate: effectiveEndDate,
+              sortOrder: 1,
+            },
+          ],
+          eventDays: Array.from({ length: Math.max(1, diffEventDays(effectiveStartDate, effectiveEndDate, nextTimeZone) + 1) }).map((_, index) => {
+            const date = new Date(effectiveStartDate.getTime() + index * 86_400_000);
+            return {
+              eventDayId: `d${index + 1}`,
+              weekIndex: 1,
+              dayIndexInWeek: index + 1,
+              overallDayIndex: index + 1,
+              label: null,
+              weekday: null,
+              date,
+              sortOrder: index + 1,
+            };
+          }),
+        };
+    const scheduleContext = normalizeSubmittedEventScheduleContext(structuredSchedulePayload);
+    const normalizedSlots = Array.isArray(lineupSlots)
+      ? normalizeSubmittedTimetableSlots(lineupSlots, scheduleContext)
+      : [];
+    const normalizedLineupArtists = normalizeLineupArtists(
+      req.body.lineupArtists,
+      normalizedSlots.map((slot) => ({
+        djId: slot.djId ?? undefined,
+        memberDjIds: slot.memberDjIds ?? [],
+        memberNames: [],
+        festivalDayIndex: null,
+        djName: slot.djName,
+        stageName: slot.stageName ?? undefined,
+        sortOrder: slot.sortOrder,
+        startTime: slot.startTime.toISOString(),
+        endTime: slot.endTime.toISOString(),
+      }))
+    );
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
     const shouldRebaseExistingLineupSlots =
       !Array.isArray(lineupSlots)
@@ -1302,22 +1294,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           revision: { increment: 1 },
         },
       });
+      await syncStructuredEventSchedule(tx, id as string, scheduleContext);
       if (shouldSyncLineupArtists) {
         await syncCanonicalEventLineupAndTimetable(
           tx,
           id as string,
-          normalizedSlots.map((slot) => ({
-            ...slot,
-            djId: slot.djId ?? null,
-            memberDjIds: slot.memberDjIds ?? [],
-            memberNames: slot.memberNames ?? [],
-            djName: slot.djName || 'Unknown DJ',
-            sortOrder: slot.sortOrder || 0,
-            stageName: slot.stageName ?? null,
-            festivalDayIndex: null,
-            startTime: new Date(slot.startTime),
-            endTime: new Date(slot.endTime),
-          })),
+          normalizedSlots,
           normalizedLineupArtists
         );
       }
@@ -1377,7 +1359,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
 
     res.json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
-    if (error instanceof EventInputValidationError) {
+    if (error instanceof EventInputValidationError || error instanceof EventSubmissionValidationError) {
       res.status(400).json({ error: error.message });
       return;
     }

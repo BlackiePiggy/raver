@@ -396,6 +396,21 @@ extension WebEvent {
         )
     }
 
+    func discreteDateSummaryTextWithoutDayCount(
+        in timeZone: TimeZone? = nil,
+        includeTimeZone: Bool = true,
+        separator: String = "\n"
+    ) -> String {
+        let resolvedTimeZone = timeZone ?? eventTimeZone
+        let dateLines = discreteDateSummaryDateLines(in: resolvedTimeZone, includeTimeZonePerLine: false)
+        return eventDiscreteDateSummaryDisplayText(
+            dateLines: dateLines,
+            dayCountText: "",
+            timeZone: includeTimeZone ? resolvedTimeZone : nil,
+            separator: separator
+        )
+    }
+
 }
 
 struct EventRow: View {
@@ -530,7 +545,7 @@ struct EventRow: View {
     }
 
     private var eventDateRangeText: String {
-        event.discreteDateSummaryText()
+        event.discreteDateSummaryTextWithoutDayCount()
     }
 
     @ViewBuilder

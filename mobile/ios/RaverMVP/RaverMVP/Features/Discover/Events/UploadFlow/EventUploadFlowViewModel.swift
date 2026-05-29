@@ -2665,7 +2665,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             } else {
                 ranges[0].startDate = draft.startDate
                 if let lastIndex = ranges.indices.last {
-                    ranges[lastIndex].endDate = max(ranges[lastIndex].endDate, draft.endDate)
+                    ranges[lastIndex].endDate = draft.endDate
                 }
             }
             draft.applyWeekRanges(ranges)
