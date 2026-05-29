@@ -1,5 +1,13 @@
 import Foundation
 
+private enum EventUploadScheduleDebug {
+    static func log(_ message: String) {
+        #if DEBUG
+        print("[EventUploadScheduleDebug] \(message)")
+        #endif
+    }
+}
+
 enum EventUploadImageZone: String, CaseIterable, Identifiable, Codable {
     case poster
     case lineup
@@ -328,10 +336,25 @@ struct EventUploadPosterAIEditableResult: Hashable {
 
 struct EventUploadDraft: Hashable, Codable {
     struct IncrementalBaseline: Hashable, Codable {
+        struct ScheduleFingerprint: Hashable, Codable {
+            struct WeekRange: Hashable, Codable {
+                var startDateText: String
+                var endDateText: String
+            }
+
+            var timeZoneIdentifier: String
+            var scheduleMode: String
+            var dayRolloverHour: Int
+            var startDateText: String
+            var endDateText: String
+            var weekRanges: [WeekRange]
+        }
+
         var eventRevision: Int? = nil
         var lineupArtists: [EventLineupArtistInput] = []
         var lineupSlots: [EventLineupSlotInput] = []
         var stageOrder: [String] = []
+        var scheduleFingerprint: ScheduleFingerprint? = nil
     }
 
     var id: UUID = UUID()
@@ -448,15 +471,17 @@ struct EventUploadDraft: Hashable, Codable {
                 inferredScheduleMode = eventCalendar.isDate(normalizedStartDate, inSameDayAs: normalizedEndDate) ? .singleDay : .multiDay
             }
         }
+        draft.scheduleMode = inferredScheduleMode
         draft.canonicalSchedule = WebEventSchedule(
             mode: inferredScheduleMode.structuredModeRawValue,
             timeZone: draft.timeZoneIdentifier,
             dayRolloverHour: draft.dayRolloverHour
         )
-        draft.canonicalWeeks = (normalizedWeeks.isEmpty
+        let hydratedWeekRanges = normalizedWeeks.isEmpty
             ? [EventUploadWeekRangeDraft(startDate: normalizedStartDate, endDate: normalizedEndDate)]
             : normalizedWeeks
-        ).enumerated().map { index, range in
+        draft.weekRanges = hydratedWeekRanges
+        draft.canonicalWeeks = hydratedWeekRanges.enumerated().map { index, range in
             WebEventWeek(
                 id: event.weeks.indices.contains(index) ? event.weeks[index].id : "draft-week-\(index + 1)",
                 weekIndex: index + 1,
@@ -466,6 +491,12 @@ struct EventUploadDraft: Hashable, Codable {
                 sortOrder: index + 1
             )
         }
+        let hydratedWeekSummary = hydratedWeekRanges
+            .map { "\($0.startDate.eventArchiveDateText(in: eventTimeZone))->\($0.endDate.eventArchiveDateText(in: eventTimeZone))" }
+            .joined(separator: ", ")
+        EventUploadScheduleDebug.log(
+            "hydrate edit event=\(event.id) mode=\(inferredScheduleMode.rawValue) eventStart=\(normalizedStartDate.eventArchiveDateText(in: eventTimeZone)) eventEnd=\(normalizedEndDate.eventArchiveDateText(in: eventTimeZone)) hydratedWeeks=\(hydratedWeekSummary)"
+        )
         if let eventTimeZoneID = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines), !eventTimeZoneID.isEmpty {
             let localizedCityEn = event.cityI18n?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let rawCity = event.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -538,7 +569,8 @@ struct EventUploadDraft: Hashable, Codable {
             eventRevision: event.revision,
             lineupArtists: EventUploadDraft.incrementalBaselineArtists(from: event),
             lineupSlots: EventUploadDraft.incrementalBaselineSlots(from: event),
-            stageOrder: event.stageOrder ?? []
+            stageOrder: event.stageOrder ?? [],
+            scheduleFingerprint: EventUploadDraft.incrementalBaselineScheduleFingerprint(from: event)
         )
         draft.hydrateRemoteImages(from: event)
         return draft
@@ -743,6 +775,51 @@ struct EventUploadDraft: Hashable, Codable {
             }
     }
 
+    private static func incrementalBaselineScheduleFingerprint(from event: WebEvent) -> IncrementalBaseline.ScheduleFingerprint {
+        let timeZone = TimeZone(identifier: event.timeZone ?? "") ?? .current
+        let sortedWeeks = event.weeks.sorted { lhs, rhs in
+            if lhs.weekIndex != rhs.weekIndex { return lhs.weekIndex < rhs.weekIndex }
+            return lhs.startDate < rhs.startDate
+        }
+        let weekRanges = (sortedWeeks.isEmpty
+            ? [WebEventWeek(
+                id: "baseline-week-1",
+                weekIndex: 1,
+                label: nil,
+                startDate: event.startDate,
+                endDate: event.endDate,
+                sortOrder: 1
+            )]
+            : sortedWeeks
+        ).map { week in
+            IncrementalBaseline.ScheduleFingerprint.WeekRange(
+                startDateText: week.startDate.eventArchiveDateText(in: timeZone),
+                endDateText: week.endDate.eventArchiveDateText(in: timeZone)
+            )
+        }
+
+        return IncrementalBaseline.ScheduleFingerprint(
+            timeZoneIdentifier: timeZone.identifier,
+            scheduleMode: event.schedule?.mode ?? inferredStructuredScheduleMode(for: event),
+            dayRolloverHour: event.dayRolloverHour ?? 6,
+            startDateText: event.startDate.eventArchiveDateText(in: timeZone),
+            endDateText: event.endDate.eventArchiveDateText(in: timeZone),
+            weekRanges: weekRanges
+        )
+    }
+
+    private static func inferredStructuredScheduleMode(for event: WebEvent) -> String {
+        if event.weeks.count > 1 {
+            return "multi_week"
+        }
+        let timeZone = TimeZone(identifier: event.timeZone ?? "") ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let normalizedStart = event.startDate.normalizedEventArchiveDate(in: timeZone)
+        let normalizedEnd = event.endDate.normalizedEventArchiveDate(in: timeZone)
+        return calendar.isDate(normalizedStart, inSameDayAs: normalizedEnd) ? "single_day" : "multi_day"
+    }
+
     private static func incrementalArtistIdentityKey(
         djName: String,
         djId: String?,
@@ -897,7 +974,14 @@ struct EventUploadDraft: Hashable, Codable {
 
     mutating func applyWeekRanges(_ ranges: [EventUploadWeekRangeDraft]) {
         let previousCanonicalWeeks = normalizedCanonicalWeeks() ?? []
-        canonicalWeeks = normalizedRanges(ranges).enumerated().map { index, range in
+        let nextRanges = normalizedRanges(ranges)
+        weekRanges = nextRanges
+        let debugTimeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        let rangeSummary = nextRanges
+            .map { "\($0.startDate.eventArchiveDateText(in: debugTimeZone))->\($0.endDate.eventArchiveDateText(in: debugTimeZone))" }
+            .joined(separator: ", ")
+        EventUploadScheduleDebug.log("applyWeekRanges ranges=\(rangeSummary)")
+        canonicalWeeks = nextRanges.enumerated().map { index, range in
             WebEventWeek(
                 id: previousCanonicalWeeks.indices.contains(index) ? previousCanonicalWeeks[index].id : "draft-week-\(index + 1)",
                 weekIndex: index + 1,
@@ -1090,6 +1174,13 @@ struct EventUploadDraft: Hashable, Codable {
             sourceRanges = weekRanges
         }
         baseRanges = normalizedRanges(sourceRanges)
+        let debugTimeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        let sourceWeekSummary = sourceRanges
+            .map { "\($0.startDate.eventArchiveDateText(in: debugTimeZone))->\($0.endDate.eventArchiveDateText(in: debugTimeZone))" }
+            .joined(separator: ", ")
+        EventUploadScheduleDebug.log(
+            "syncCanonicalScheduleStorage mode=\(structuredScheduleMode.rawValue) start=\(startDate.eventArchiveDateText(in: debugTimeZone)) end=\(endDate.eventArchiveDateText(in: debugTimeZone)) sourceWeekRanges=\(sourceWeekSummary)"
+        )
         canonicalWeeks = baseRanges.enumerated().map { index, range in
             WebEventWeek(
                 id: previousCanonicalWeeks.indices.contains(index) ? previousCanonicalWeeks[index].id : "draft-week-\(index + 1)",
@@ -1137,6 +1228,13 @@ struct EventUploadDraft: Hashable, Codable {
         if let last = structuredWeeks.last {
             endDate = last.endDate
         }
+        let debugTimeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
+        let weekSummary = weekRanges
+            .map { "\($0.startDate.eventArchiveDateText(in: debugTimeZone))->\($0.endDate.eventArchiveDateText(in: debugTimeZone))" }
+            .joined(separator: ", ")
+        EventUploadScheduleDebug.log(
+            "syncLegacyScheduleViewsFromStructured mode=\(scheduleMode.rawValue) start=\(startDate.eventArchiveDateText(in: debugTimeZone)) end=\(endDate.eventArchiveDateText(in: debugTimeZone)) weekRanges=\(weekSummary)"
+        )
     }
 
     private var structuredScheduleMode: StructuredScheduleMode {
@@ -1201,6 +1299,12 @@ struct EventUploadDraft: Hashable, Codable {
         case "sunday": return "Sunday"
         default: return weekday.capitalized
         }
+    }
+}
+
+extension EventUploadDraft.IncrementalBaseline.ScheduleFingerprint {
+    static func from(event: WebEvent) -> Self {
+        EventUploadDraft.incrementalBaselineScheduleFingerprint(from: event)
     }
 }
 

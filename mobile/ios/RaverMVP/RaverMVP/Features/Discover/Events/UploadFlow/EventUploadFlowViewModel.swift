@@ -144,7 +144,13 @@ final class EventUploadFlowViewModel: ObservableObject {
         let eventArtistIDs = (event.lineupArtists ?? []).compactMap {
             $0.id.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
         }
-        return baselineArtistIDs == eventArtistIDs
+        guard baselineArtistIDs == eventArtistIDs else { return false }
+
+        guard let baselineSchedule = baseline.scheduleFingerprint else {
+            return false
+        }
+
+        return baselineSchedule == EventUploadDraft.IncrementalBaseline.ScheduleFingerprint.from(event: event)
     }
 
     private static func normalizedRestoreStages(_ stages: [String], hasSlots: Bool) -> [String] {
@@ -334,6 +340,12 @@ final class EventUploadFlowViewModel: ObservableObject {
             case .edit(let eventID):
                 var input = EventUploadMappers.updateInput(from: draft)
                 input.idempotencyKey = idempotencyKey
+                let eventDaySummary = draft.structuredEventDays
+                    .map { "\($0.eventDayId):\(scheduleDebugDateText($0.date))" }
+                    .joined(separator: ", ")
+                logScheduleDebug(
+                    "submit edit event=\(eventID) start=\(scheduleDebugDateText(draft.startDate)) end=\(scheduleDebugDateText(draft.endDate)) weeks=\(scheduleDebugWeekRangesText(draft.editableWeekRanges)) structuredMode=\(draft.structuredSchedule.mode) eventDays=\(eventDaySummary)"
+                )
                 let result = try await webService.updateEvent(id: eventID, input: input)
                 draftStore.clear(mode: draft.mode, userID: userID)
                 switch result {
@@ -354,6 +366,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             EventUploadAnalytics.track("event_upload_v2_submit_succeeded", properties: ["mode": draft.mode.storageKeyPart])
         } catch {
             EventUploadAnalytics.track("event_upload_v2_submit_failed", properties: ["mode": draft.mode.storageKeyPart])
+            logScheduleDebug("submit failed error=\(String(describing: error))")
             statusMessage = error.userFacingMessage ?? LT("提交失败，请稍后重试。", "Submit failed. Please try again.", "送信に失敗しました。もう一度お試しください。")
         }
     }
@@ -780,15 +793,25 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func updateDate(_ keyPath: WritableKeyPath<EventUploadDraft, Date>, value: Date) {
         let normalized = normalizedEventDate(value)
-        if keyPath == \EventUploadDraft.startDate {
-            draft.applyDateBounds(startDate: normalized)
+        logScheduleDebug(
+            "updateDate field=\(keyPath == \EventUploadDraft.startDate ? "startDate" : "endDate") raw=\(value) normalized=\(scheduleDebugDateText(normalized)) beforeStart=\(scheduleDebugDateText(draft.startDate)) beforeEnd=\(scheduleDebugDateText(draft.endDate)) weeks=\(scheduleDebugWeekRangesText(draft.editableWeekRanges))"
+        )
+        if draft.isMultiWeekSchedule {
+            updateMultiWeekBoundaryDate(keyPath, value: normalized)
         } else {
-            draft.applyDateBounds(endDate: normalized)
+            if keyPath == \EventUploadDraft.startDate {
+                draft.applyDateBounds(startDate: normalized)
+            } else {
+                draft.applyDateBounds(endDate: normalized)
+            }
+            syncWeekRangesWithEventDates()
         }
-        syncWeekRangesWithEventDates()
         draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
+        logScheduleDebug(
+            "updateDate result start=\(scheduleDebugDateText(draft.startDate)) end=\(scheduleDebugDateText(draft.endDate)) weeks=\(scheduleDebugWeekRangesText(draft.editableWeekRanges))"
+        )
     }
 
     func addWeekRange() {
@@ -810,6 +833,9 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     func updateWeekRange(id: UUID, startDate: Date? = nil, endDate: Date? = nil) {
+        logScheduleDebug(
+            "updateWeekRange id=\(id) incomingStart=\(startDate.map(scheduleDebugDateText) ?? "nil") incomingEnd=\(endDate.map(scheduleDebugDateText) ?? "nil") before=\(scheduleDebugWeekRangesText(draft.editableWeekRanges))"
+        )
         draft.updateWeekRange(
             id: id,
             startDate: startDate.map(normalizedEventDate),
@@ -818,6 +844,9 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.rebuildStructuredScheduleBindings()
         draft.dirty = true
         saveDraft()
+        logScheduleDebug(
+            "updateWeekRange result start=\(scheduleDebugDateText(draft.startDate)) end=\(scheduleDebugDateText(draft.endDate)) weeks=\(scheduleDebugWeekRangesText(draft.editableWeekRanges))"
+        )
     }
 
     func updateTimeZoneIdentifier(_ value: String) {
@@ -2675,6 +2704,28 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
+    private func updateMultiWeekBoundaryDate(_ keyPath: WritableKeyPath<EventUploadDraft, Date>, value: Date) {
+        var ranges = draft.editableWeekRanges
+        if ranges.isEmpty {
+            ranges = [EventUploadWeekRangeDraft(startDate: draft.startDate, endDate: draft.endDate)]
+        }
+
+        if keyPath == \EventUploadDraft.startDate {
+            ranges[0].startDate = value
+            if ranges[0].endDate < value {
+                ranges[0].endDate = value
+            }
+        } else if let lastIndex = ranges.indices.last {
+            ranges[lastIndex].endDate = value
+            if ranges[lastIndex].startDate > value {
+                ranges[lastIndex].startDate = value
+            }
+        }
+
+        draft.applyWeekRanges(ranges)
+        recalculateEventDateBoundsFromWeeks()
+    }
+
     private func recalculateEventDateBoundsFromWeeks() {
         let currentRanges = draft.editableWeekRanges
         guard !currentRanges.isEmpty else { return }
@@ -2736,6 +2787,22 @@ final class EventUploadFlowViewModel: ObservableObject {
         calendar.timeZone = eventTimeZone
         guard let next = calendar.date(byAdding: .day, value: days, to: value) else { return nil }
         return next.normalizedEventArchiveDate(in: eventTimeZone)
+    }
+
+    private func scheduleDebugDateText(_ date: Date) -> String {
+        date.eventArchiveDateText(in: eventTimeZone)
+    }
+
+    private func scheduleDebugWeekRangesText(_ ranges: [EventUploadWeekRangeDraft]) -> String {
+        ranges
+            .map { "\(scheduleDebugDateText($0.startDate))->\(scheduleDebugDateText($0.endDate))" }
+            .joined(separator: ", ")
+    }
+
+    private func logScheduleDebug(_ message: String) {
+        #if DEBUG
+        print("[EventUploadScheduleDebug] \(message)")
+        #endif
     }
 
     private func rebaseDraftDatesPreservingWallDate(to nextTimeZoneIdentifier: String) {

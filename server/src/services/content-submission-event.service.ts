@@ -1351,8 +1351,18 @@ export const syncStructuredEventSchedule = async (
   eventId: string,
   scheduleContext: SubmittedEventScheduleContext
 ): Promise<void> => {
-  await tx.eventWeek.deleteMany({ where: { eventId } });
+  await tx.eventPerformance.updateMany({
+    where: { eventId },
+    data: {
+      eventDayId: null,
+      weekIndex: null,
+      dayIndexInWeek: null,
+      overallDayIndex: null,
+      localDate: null,
+    },
+  });
   await tx.eventDay.deleteMany({ where: { eventId } });
+  await tx.eventWeek.deleteMany({ where: { eventId } });
 
   if (scheduleContext.weeks.length > 0) {
     await tx.eventWeek.createMany({

@@ -100,6 +100,7 @@ struct EventUploadFlowView: View {
     @State private var stageIndexPendingDeletion: Int?
     @State private var showClearAllTimetableConfirmation = false
     @State private var organizerCreateContextID: String?
+    @State private var activeDatePicker: DatePickerPresentation?
 
     init(
         mode: EventUploadMode = .create,
@@ -200,6 +201,13 @@ struct EventUploadFlowView: View {
         }
         .sheet(item: $selectedWeekForEditing) { selection in
             weekEditorSheet(for: selection)
+        }
+        .sheet(item: $activeDatePicker) { presentation in
+            EventUploadDatePickerSheet(
+                title: presentation.title,
+                selection: presentation.selection,
+                timeZone: eventTimeZone
+            )
         }
         .alert(LT("继续上次草稿？", "Continue Draft?", "前回の下書きを続けますか？"), isPresented: $viewModel.shouldConfirmRestoredDraft) {
             Button(LT("重新开始", "Start Over", "最初から"), role: .destructive) {
@@ -628,20 +636,23 @@ struct EventUploadFlowView: View {
                                 }
                             }
 
-                            HStack(spacing: 10) {
+                            HStack(spacing: 6) {
                                 compactWeekDatePicker(
                                     title: LT("开始", "Start", "開始"),
                                     selection: weekDateBinding(id: week.id, field: .start)
                                 )
+                                .layoutPriority(1)
 
                                 Image(systemName: "arrow.right")
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(RaverTheme.secondaryText)
+                                    .frame(width: 12)
 
                                 compactWeekDatePicker(
                                     title: LT("结束", "End", "終了"),
                                     selection: weekDateBinding(id: week.id, field: .end)
                                 )
+                                .layoutPriority(1)
                             }
                         }
                         .padding(14)
@@ -655,13 +666,15 @@ struct EventUploadFlowView: View {
                     Button {
                         viewModel.addWeekRange()
                     } label: {
-                        HStack {
+                        HStack(spacing: 10) {
                             Label(LT("添加一周", "Add Week", "週を追加"), systemImage: "plus.circle.fill")
                                 .font(.subheadline.weight(.semibold))
                             Spacer()
                             Text(LT("继续拆分活动周期", "Split the schedule further", "さらに期間を分割"))
                                 .font(.caption)
                                 .foregroundStyle(RaverTheme.secondaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                         }
                         .foregroundStyle(RaverTheme.accent)
                         .padding(.horizontal, 14)
@@ -1523,15 +1536,7 @@ struct EventUploadFlowView: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.secondaryText)
-            DatePicker(
-                title,
-                selection: selection,
-                displayedComponents: [.date]
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-            .tint(RaverTheme.accent)
-            .environment(\.timeZone, eventTimeZone)
+            formattedCompactDatePicker(title: title, selection: selection)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(14)
@@ -2728,25 +2733,36 @@ struct EventUploadFlowView: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(RaverTheme.secondaryText)
-            DatePicker(
-                title,
-                selection: selection,
-                displayedComponents: [.date]
-            )
-            .labelsHidden()
-            .datePickerStyle(.compact)
-            .tint(RaverTheme.accent)
-            .environment(\.timeZone, eventTimeZone)
-            .scaleEffect(0.92)
+            formattedCompactDatePicker(title: title, selection: selection)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .padding(.vertical, 10)
         .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(RaverTheme.cardBorder, lineWidth: 1)
         )
+    }
+
+    private func formattedCompactDatePicker(title: String, selection: Binding<Date>) -> some View {
+        Button {
+            activeDatePicker = DatePickerPresentation(title: title, selection: selection)
+        } label: {
+            HStack(spacing: 6) {
+                Text(shortDateString(selection.wrappedValue, in: eventTimeZone))
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Image(systemName: "calendar")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.accent)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var singleDayDateBinding: Binding<Date> {
@@ -6957,6 +6973,50 @@ private struct EventUploadWeekSelection: Identifiable, Hashable {
     var id: UUID { week.id }
     let index: Int
     let week: EventUploadWeekRangeDraft
+}
+
+private struct DatePickerPresentation: Identifiable {
+    let id = UUID()
+    let title: String
+    let selection: Binding<Date>
+}
+
+private struct EventUploadDatePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let selection: Binding<Date>
+    let timeZone: TimeZone
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                DatePicker(
+                    title,
+                    selection: selection,
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.graphical)
+                .environment(\.timeZone, timeZone)
+                .tint(RaverTheme.accent)
+                .padding(.horizontal, 16)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 12)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(LT("完成", "Done", "完了")) {
+                        dismiss()
+                    }
+                    .font(.headline)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
 }
 
 private struct EventUploadWeekTimetableEditorSheet: View {
