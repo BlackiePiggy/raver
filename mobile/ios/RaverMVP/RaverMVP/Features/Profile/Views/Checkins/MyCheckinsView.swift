@@ -2415,6 +2415,7 @@ struct MyCheckinsView: View {
         for slot in event.lineupSlots.sorted(by: { $0.startTime < $1.startTime }) {
             let dayIndex = timelineLineupDayIndex(
                 for: slot,
+                in: event,
                 eventStartDate: event.startDate,
                 timeZone: event.eventTimeZone,
                 dayRolloverHour: event.dayRolloverHour
@@ -2602,12 +2603,52 @@ struct MyCheckinsView: View {
         return calendar.date(byAdding: .day, value: dayIndex - 1, to: anchorDay) ?? anchorDay
     }
 
+    private func timelineStructuredDayIndex(
+        for slot: WebEventLineupSlot,
+        in event: WebEvent
+    ) -> Int? {
+        let structuredDays = event.eventDays.sorted {
+            if $0.sortOrder != $1.sortOrder {
+                return $0.sortOrder < $1.sortOrder
+            }
+            return $0.overallDayIndex < $1.overallDayIndex
+        }
+        guard !structuredDays.isEmpty else { return nil }
+
+        if let eventDayID = slot.eventDayId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let eventDay = structuredDays.first(where: { $0.eventDayId == eventDayID }) {
+            return eventDay.overallDayIndex
+        }
+        if let weekIndex = slot.weekIndex,
+           let dayIndexInWeek = slot.dayIndexInWeek,
+           let eventDay = structuredDays.first(where: { $0.weekIndex == weekIndex && $0.dayIndexInWeek == dayIndexInWeek }) {
+            return eventDay.overallDayIndex
+        }
+        if let overallDayIndex = slot.overallDayIndex,
+           structuredDays.contains(where: { $0.overallDayIndex == overallDayIndex }) {
+            return overallDayIndex
+        }
+        if let localDate = slot.localDate {
+            var calendar = Calendar.current
+            calendar.timeZone = event.eventTimeZone
+            if let eventDay = structuredDays.first(where: { calendar.isDate($0.date, inSameDayAs: localDate) }) {
+                return eventDay.overallDayIndex
+            }
+        }
+        return nil
+    }
+
     private func timelineLineupDayIndex(
         for slot: WebEventLineupSlot,
+        in event: WebEvent,
         eventStartDate: Date,
         timeZone: TimeZone,
         dayRolloverHour: Int?
     ) -> Int {
+        if let structuredDayIndex = timelineStructuredDayIndex(for: slot, in: event),
+           structuredDayIndex > 0 {
+            return structuredDayIndex
+        }
         if let explicit = slot.festivalDayIndex, explicit > 0 {
             return explicit
         }

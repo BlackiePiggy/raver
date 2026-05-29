@@ -7393,6 +7393,9 @@ private struct EventScheduleDay: Identifiable, Hashable {
         dayRolloverHour: Int?,
         timeZone: TimeZone
     ) -> WebEventDay? {
+        // Preserve the curator/imported day assignment first. A set can belong to Day 1
+        // while its wall clock time renders as next-day 02:00 after rollover handling.
+        // In that case it must still stay on Day 1 instead of being regrouped by startTime.
         if let eventDayID = slot.eventDayId?.trimmingCharacters(in: .whitespacesAndNewlines),
            let eventDay = eventDaysByID[eventDayID] {
             return eventDay

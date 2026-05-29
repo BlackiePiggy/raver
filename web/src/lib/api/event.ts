@@ -37,6 +37,22 @@ export interface Event {
   isVerified: boolean;
   createdAt: string;
   updatedAt: string;
+  schedule?: {
+    mode?: string | null;
+    timeZone?: string | null;
+    dayRolloverHour?: number | null;
+  } | null;
+  eventDays?: Array<{
+    id?: string;
+    eventDayId: string;
+    weekIndex: number;
+    dayIndexInWeek: number;
+    overallDayIndex: number;
+    label?: string | null;
+    weekday?: string | null;
+    date: string;
+    sortOrder?: number;
+  }>;
   lineupSlots?: EventLineupSlot[];
   organizer?: {
     id: string;
@@ -49,6 +65,11 @@ export interface Event {
 export interface EventLineupSlot {
   id?: string;
   eventId?: string;
+  eventDayId?: string | null;
+  weekIndex?: number | null;
+  dayIndexInWeek?: number | null;
+  overallDayIndex?: number | null;
+  localDate?: string | null;
   djId?: string | null;
   festivalDayIndex?: number | null;
   djName: string;

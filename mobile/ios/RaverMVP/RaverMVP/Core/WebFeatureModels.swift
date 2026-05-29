@@ -695,8 +695,18 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var isFavorited: Bool? = nil
 
     var eventTimeZone: TimeZone {
-        guard let raw = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty,
+        let preferred = schedule?.timeZone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = timeZone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = {
+            if let preferred, !preferred.isEmpty {
+                return preferred
+            }
+            if let fallback, !fallback.isEmpty {
+                return fallback
+            }
+            return ""
+        }()
+        guard !raw.isEmpty,
               let timeZone = TimeZone(identifier: raw) else {
             return TimeZone(identifier: "Asia/Shanghai") ?? .current
         }

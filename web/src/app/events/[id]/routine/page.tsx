@@ -53,6 +53,12 @@ type SwitchPlan = {
   switchAt?: string;
 };
 
+const normalizeDateKey = (value: string | null | undefined) => {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 10);
+};
+
 const slotKey = (slot: EventLineupSlot) =>
   slot.id || `${slot.djName}-${slot.stageName || 'stage'}-${slot.startTime}-${slot.endTime}`;
 
@@ -122,11 +128,50 @@ export default function EventRoutinePage() {
   const dayGroups: DayGroup[] = useMemo(() => {
     if (!event?.lineupSlots || event.lineupSlots.length === 0) return [];
 
+    const sortedEventDays = [...(event.eventDays ?? [])].sort((a, b) => {
+      const leftSort = a.sortOrder ?? a.overallDayIndex;
+      const rightSort = b.sortOrder ?? b.overallDayIndex;
+      if (leftSort !== rightSort) return leftSort - rightSort;
+      return a.overallDayIndex - b.overallDayIndex;
+    });
+    const eventDaysById = new Map(sortedEventDays.map((day) => [day.eventDayId, day] as const));
+    const eventDaysByWeekDay = new Map(sortedEventDays.map((day) => [`${day.weekIndex}-${day.dayIndexInWeek}`, day] as const));
+    const eventDaysByOverall = new Map(sortedEventDays.map((day) => [day.overallDayIndex, day] as const));
+    const eventDaysByLocalDate = new Map(
+      sortedEventDays
+        .map((day) => [normalizeDateKey(day.date), day] as const)
+        .filter((entry): entry is [string, NonNullable<Event['eventDays']>[number]] => Boolean(entry[0]))
+    );
+
+    const resolveStructuredDay = (slot: EventLineupSlot) => {
+      const eventDayId = slot.eventDayId?.trim();
+      if (eventDayId) {
+        const matched = eventDaysById.get(eventDayId);
+        if (matched) return matched;
+      }
+      if (slot.weekIndex && slot.dayIndexInWeek) {
+        const matched = eventDaysByWeekDay.get(`${slot.weekIndex}-${slot.dayIndexInWeek}`);
+        if (matched) return matched;
+      }
+      if (slot.overallDayIndex) {
+        const matched = eventDaysByOverall.get(slot.overallDayIndex);
+        if (matched) return matched;
+      }
+      const localDateKey = normalizeDateKey(slot.localDate);
+      if (localDateKey) {
+        const matched = eventDaysByLocalDate.get(localDateKey);
+        if (matched) return matched;
+      }
+      return null;
+    };
+
     const sorted = [...event.lineupSlots].sort((a, b) => toMs(a.startTime) - toMs(b.startTime));
     const map = new Map<string, EventLineupSlot[]>();
     for (const slot of sorted) {
-      const key =
-        slot.festivalDayIndex && slot.festivalDayIndex > 0
+      const structuredDay = resolveStructuredDay(slot);
+      const key = structuredDay
+        ? `event-day-${structuredDay.eventDayId}`
+        : slot.festivalDayIndex && slot.festivalDayIndex > 0
           ? `day-${slot.festivalDayIndex}`
           : getFestivalDayKeyForInstant(slot.startTime, eventTimeZone, dayRolloverHour);
       if (!map.has(key)) map.set(key, []);
@@ -134,8 +179,12 @@ export default function EventRoutinePage() {
     }
 
     return Array.from(map.entries()).map(([key, slots], index) => {
-      const festivalDayIndex =
-        slots.find((slot) => slot.festivalDayIndex && slot.festivalDayIndex > 0)?.festivalDayIndex ?? index + 1;
+      const structuredDay = resolveStructuredDay(slots[0]);
+      const festivalDayIndex = structuredDay?.overallDayIndex
+        ?? slots.find((slot) => slot.overallDayIndex && slot.overallDayIndex > 0)?.overallDayIndex
+        ?? slots.find((slot) => slot.festivalDayIndex && slot.festivalDayIndex > 0)?.festivalDayIndex
+        ?? index + 1;
+      const labelDate = structuredDay?.date ?? slots[0].localDate ?? slots[0].startTime;
       const stageMap = new Map<string, EventLineupSlot[]>();
       for (const slot of slots) {
         const stageName = (slot.stageName || '未命名舞台').trim() || '未命名舞台';
@@ -144,7 +193,7 @@ export default function EventRoutinePage() {
       }
       return {
         key,
-        label: `Day ${festivalDayIndex} · ${formatDayLabel(slots[0].startTime, eventTimeZone)}`,
+        label: `Day ${festivalDayIndex} · ${formatDayLabel(labelDate, eventTimeZone)}`,
         slots,
         stages: Array.from(stageMap.entries()).map(([stageName, stageSlots]) => ({
           stageName,
