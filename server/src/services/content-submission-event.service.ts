@@ -23,6 +23,19 @@ import {
 
 const EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS = 120_000;
 const EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS = 30_000;
+const EVENT_SUBMISSION_TRANSACTION_URL = typeof process.env.DIRECT_URL === 'string' && process.env.DIRECT_URL.trim()
+  ? process.env.DIRECT_URL.trim()
+  : null;
+const EVENT_SUBMISSION_TRANSACTION_CLIENT = EVENT_SUBMISSION_TRANSACTION_URL
+  && EVENT_SUBMISSION_TRANSACTION_URL !== process.env.DATABASE_URL
+  ? new PrismaClient({
+      datasources: {
+        db: {
+          url: EVENT_SUBMISSION_TRANSACTION_URL,
+        },
+      },
+    })
+  : null;
 
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 const EVENT_LINEUP_SYNC_MODES = ['incremental_fill', 'exact_align'] as const;
@@ -1396,7 +1409,7 @@ const syncSubmissionEventLineupAndTimetable = async (
 const runEventSubmissionTransaction = async <T>(
   db: PrismaClient,
   callback: (tx: Prisma.TransactionClient) => Promise<T>
-): Promise<T> => db.$transaction(callback, {
+): Promise<T> => (EVENT_SUBMISSION_TRANSACTION_CLIENT ?? db).$transaction(callback, {
   timeout: EVENT_SUBMISSION_TRANSACTION_TIMEOUT_MS,
   maxWait: EVENT_SUBMISSION_TRANSACTION_MAX_WAIT_MS,
 });
