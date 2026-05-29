@@ -2035,10 +2035,29 @@ struct EventTimetableImageImportRequest: Encodable {
 struct EventTimetableImageImportContext: Codable, Hashable {
     var eventTimeZone: String
     var schedule: WebEventSchedule
-    var weeks: [WebEventWeek]
-    var eventDays: [WebEventDay]
+    var weeks: [EventTimetableImageImportWeek]
+    var eventDays: [EventTimetableImageImportDay]
     var dayRolloverHour: Int
     var knownStageNames: [String]
+}
+
+struct EventTimetableImageImportWeek: Codable, Hashable {
+    var weekIndex: Int
+    var label: String?
+    var startDate: String
+    var endDate: String
+    var sortOrder: Int
+}
+
+struct EventTimetableImageImportDay: Codable, Hashable {
+    var eventDayId: String
+    var weekIndex: Int
+    var dayIndexInWeek: Int
+    var overallDayIndex: Int
+    var label: String?
+    var weekday: String?
+    var date: String
+    var sortOrder: Int
 }
 
 struct EventTimetableImageImportResponse: Codable, Hashable {

@@ -60,7 +60,11 @@ import { mediaAssetService } from '../services/media-asset.service';
 import { notificationCenterService } from '../services/notification-center';
 import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { djEventBindingReviewService, type DJEventBindingTriggerSource } from '../services/dj-event-binding-review.service';
-import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
+import {
+  CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE,
+  enqueueContentSubmissionProcessingJob,
+  scheduleContentSubmissionProcessingBestEffort,
+} from '../services/content-submission-processing.service';
 import {
   attachContentSubmissionChangeSummary,
   changeSummaryTextFromPayload,
@@ -79,6 +83,7 @@ import {
   autoAlignEventLineupToTimetablePayload,
   buildSubmittedEventScheduleContextFromEvent,
   buildAlignedLineupArtistsFromTimetablePayload,
+  createOrUpdateEventFromSubmission,
   EventSubmissionValidationError,
   formatEventLineupTimetableAlignmentError,
   incrementallyFillEventLineupFromTimetablePayload,
@@ -966,6 +971,239 @@ const acceptedSubmission = (
       submission,
     },
   });
+};
+
+const featureFlagEnabled = (value: string | undefined, fallback: boolean): boolean => {
+  if (value === undefined) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(normalized);
+};
+
+const resolveEventMutationRoute = (role?: string | null): 'direct_apply' | 'submission' => {
+  if (
+    canBypassContentReview(role)
+    && featureFlagEnabled(process.env.EVENT_EDIT_DIRECT_APPLY_ENABLED, true)
+  ) {
+    return 'direct_apply';
+  }
+  return 'submission';
+};
+
+const loadEventDetailForWeb = async (
+  eventId: string,
+  viewerId?: string | null
+) => {
+  const row = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: selectEventDetailForWeb,
+  });
+  if (!row) return null;
+  const favoriteIdsByEventId = await resolveEventFavoriteIds(viewerId ?? undefined, [row.id]);
+  const rowWithFavorite = attachEventFavoriteState([row], favoriteIdsByEventId)[0];
+  const complianceUser = await resolveRegionalComplianceUser(viewerId);
+  return mapEvent(rowWithFavorite, complianceUser);
+};
+
+const auditEventDirectApplyBestEffort = async (input: {
+  actorId: string;
+  action: 'event.direct_create' | 'event.direct_update';
+  eventId: string;
+  submissionId: string;
+  title: string;
+}): Promise<void> => {
+  try {
+    await adminAuditService.createAction({
+      actorId: input.actorId,
+      action: input.action,
+      targetType: 'event',
+      targetId: input.eventId,
+      detail: {
+        submissionId: input.submissionId,
+        title: input.title,
+        route: 'direct_apply',
+      },
+    });
+  } catch (error) {
+    console.warn('BFF web event direct apply audit failed:', {
+      eventId: input.eventId,
+      submissionId: input.submissionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+const createDirectEventApplySubmission = async (input: {
+  submitterId: string;
+  title: string;
+  payload: Record<string, unknown>;
+  idempotencyKey?: string | null;
+}) => {
+  const payloadWithSummary = attachContentSubmissionChangeSummary(
+    'event',
+    input.payload as Prisma.InputJsonObject
+  );
+
+  return prisma.$transaction(async (tx) => {
+    if (input.idempotencyKey) {
+      const existing = await tx.contentSubmission.findFirst({
+        where: {
+          submitterId: input.submitterId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      });
+      if (existing) return { submission: existing, payload: payloadWithSummary, reused: true };
+    }
+
+    await assertNoActiveEventEditSubmission(tx, payloadWithSummary, {
+      lockTargetEvent: true,
+    });
+    const reviewNotes = await buildSubmissionReviewNotes(tx, 'event', payloadWithSummary);
+    const submission = await tx.contentSubmission.create({
+      data: {
+        submitterId: input.submitterId,
+        entityType: 'event',
+        title: input.title,
+        payload: payloadWithSummary,
+        idempotencyKey: input.idempotencyKey || null,
+        reviewNotes: {
+          ...reviewNotes,
+          route: 'direct_apply',
+          directApply: {
+            phase: 'core_processing',
+            startedAt: new Date().toISOString(),
+          },
+        },
+        status: 'processing',
+      },
+    });
+
+    await (tx as any).contentSubmissionVersion.create({
+      data: {
+        submissionId: submission.id,
+        version: 1,
+        title: input.title,
+        payload: payloadWithSummary,
+        submittedBy: input.submitterId,
+        changeNote: 'Direct apply submission',
+      },
+    });
+
+    return { submission, payload: payloadWithSummary, reused: false };
+  });
+};
+
+const applyEventDirectly = async (input: {
+  submitterId: string;
+  title: string;
+  payload: Record<string, unknown>;
+  idempotencyKey?: string | null;
+}) => {
+  const directSubmission = await createDirectEventApplySubmission(input);
+  const existingCreatedEntityId = cleanSubmittedBrandText(directSubmission.submission.createdEntityId);
+  if (directSubmission.reused) {
+    if (!existingCreatedEntityId) {
+      throw new ActiveEventEditSubmissionError({
+        targetEventId: cleanSubmittedBrandText(directSubmission.payload.targetEventId) || 'unknown',
+        activeSubmissionId: directSubmission.submission.id,
+        activeSubmissionStatus: directSubmission.submission.status,
+      });
+    }
+    const existingEvent = await loadEventDetailForWeb(existingCreatedEntityId, input.submitterId);
+    if (!existingEvent) throw new Error('Direct applied event not found');
+    return {
+      event: existingEvent,
+      submission: directSubmission.submission,
+      reused: true,
+    };
+  }
+
+  try {
+    const event = await createOrUpdateEventFromSubmission(
+      prisma,
+      directSubmission.payload as Prisma.JsonObject,
+      input.submitterId,
+      {
+        submissionId: directSubmission.submission.id,
+        skipCanonicalApply: true,
+      }
+    );
+
+    const updatedSubmission = await prisma.contentSubmission.update({
+      where: { id: directSubmission.submission.id },
+      data: {
+        status: 'approved',
+        reviewReason: null,
+        reviewedAt: new Date(),
+        reviewedBy: input.submitterId,
+        createdEntityId: event.id,
+        reviewNotes: {
+          ...(directSubmission.submission.reviewNotes && typeof directSubmission.submission.reviewNotes === 'object' && !Array.isArray(directSubmission.submission.reviewNotes)
+            ? directSubmission.submission.reviewNotes as Prisma.JsonObject
+            : {}),
+          route: 'direct_apply',
+          directApply: {
+            phase: 'core_applied',
+            eventId: event.id,
+            completedAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
+    await prisma.contentSubmissionProcessingJob.updateMany({
+      where: {
+        jobType: CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE,
+        status: { in: ['queued', 'retrying'] },
+        submissionId: { not: updatedSubmission.id },
+        submission: {
+          entityType: 'event',
+          createdEntityId: event.id,
+        },
+      },
+      data: {
+        status: 'cancelled',
+        lockedBy: null,
+        lockedAt: null,
+        completedAt: new Date(),
+        lastError: 'Superseded by a newer direct event apply',
+      },
+    });
+
+    await enqueueContentSubmissionProcessingJob(updatedSubmission.id, {
+      jobType: CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE,
+      metadata: {
+        source: 'event_direct_apply_phase_b',
+        route: 'direct_apply',
+        createdEntityId: event.id,
+      },
+    });
+
+    await auditEventDirectApplyBestEffort({
+      actorId: input.submitterId,
+      action: cleanSubmittedBrandText(directSubmission.payload.targetEventId) ? 'event.direct_update' : 'event.direct_create',
+      eventId: event.id,
+      submissionId: updatedSubmission.id,
+      title: input.title,
+    });
+
+    const mappedEvent = await loadEventDetailForWeb(event.id, input.submitterId);
+    if (!mappedEvent) throw new Error('Direct applied event not found');
+    return {
+      event: mappedEvent,
+      submission: updatedSubmission,
+      reused: false,
+    };
+  } catch (error) {
+    await prisma.contentSubmission.update({
+      where: { id: directSubmission.submission.id },
+      data: {
+        status: 'failed',
+        reviewReason: error instanceof Error ? error.message : 'Direct event apply failed',
+      },
+    }).catch(() => undefined);
+    throw error;
+  }
 };
 
 type BFFPagination = {
@@ -9080,13 +9318,25 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     }
 
     const normalizedBody = normalizeSubmittedEventLineupToTimetable(body);
+    const idempotencyKey = cleanIdempotencyKey(body.idempotencyKey) || cleanIdempotencyKey(req.get('Idempotency-Key'));
+
+    if (resolveEventMutationRoute(authReq.user?.role ?? null) === 'direct_apply') {
+      const applied = await applyEventDirectly({
+        submitterId: userId,
+        title: name,
+        payload: normalizedBody,
+        idempotencyKey,
+      });
+      ok(res, applied.event);
+      return;
+    }
 
     const submission = await createPendingContentSubmission({
       submitterId: userId,
       entityType: 'event',
       title: name,
       payload: normalizedBody,
-      idempotencyKey: cleanIdempotencyKey(body.idempotencyKey) || cleanIdempotencyKey(req.get('Idempotency-Key')),
+      idempotencyKey,
     });
     acceptedSubmission(res, submission, '活动任务已提交，当前正在处理中，后续状态会通过通知更新');
     return;
@@ -9174,13 +9424,25 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       }),
       targetEventId: eventId,
     };
+    const idempotencyKey = cleanIdempotencyKey(body.idempotencyKey) || cleanIdempotencyKey(req.get('Idempotency-Key'));
+
+    if (resolveEventMutationRoute(authReq.user?.role ?? null) === 'direct_apply') {
+      const applied = await applyEventDirectly({
+        submitterId: userId,
+        title: submittedName,
+        payload: normalizedBody,
+        idempotencyKey,
+      });
+      ok(res, applied.event);
+      return;
+    }
 
     const submission = await createPendingContentSubmission({
       submitterId: userId,
       entityType: 'event',
       title: submittedName,
       payload: normalizedBody,
-      idempotencyKey: cleanIdempotencyKey(body.idempotencyKey) || cleanIdempotencyKey(req.get('Idempotency-Key')),
+      idempotencyKey,
     });
     acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {

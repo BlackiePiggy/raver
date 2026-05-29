@@ -12,7 +12,7 @@ import type { CanonicalLineupSyncProfiling } from './event-lineup-canonical.serv
 const prisma = new PrismaClient();
 
 const CONTENT_SUBMISSION_PROCESSING_JOB_TYPE = 'process_submission';
-const CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE = 'apply_event_timetable';
+export const CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE = 'apply_event_timetable';
 const DEFAULT_WORKER_BATCH_SIZE = 1;
 const DEFAULT_WORKER_STALE_LOCK_MS = 15 * 60 * 1000;
 
@@ -428,12 +428,40 @@ const applyEventTimetableForSubmission = async (
       submitterId: true,
       createdEntityId: true,
       status: true,
+      createdAt: true,
     },
   });
 
   if (!submission) return { status: 'skipped', reason: 'Submission not found' };
   if (submission.entityType !== 'event') return { status: 'skipped', reason: 'Not an event submission' };
   if (!submission.createdEntityId) return { status: 'skipped', reason: 'Event core entity not created yet' };
+
+  const newerApprovedEventSubmission = await db.contentSubmission.findFirst({
+    where: {
+      entityType: 'event',
+      status: 'approved',
+      createdEntityId: submission.createdEntityId,
+      createdAt: { gt: submission.createdAt },
+    },
+    orderBy: [{ createdAt: 'desc' }],
+    select: { id: true },
+  });
+  if (newerApprovedEventSubmission) {
+    return {
+      status: 'skipped',
+      reason: `Superseded by newer event submission ${newerApprovedEventSubmission.id}`,
+      submissionStatus: submission.status as ContentSubmissionTaskStatus,
+      createdEntityId: submission.createdEntityId,
+      phase: 'event_timetable_superseded',
+      timings: {
+        reviewingTransitionMs: 0,
+        applyMs: 0,
+        timetableQueuedMs: 0,
+        approvalFinalizeMs: 0,
+        totalMs: 0,
+      },
+    };
+  }
 
   const canonicalSync = await applyEventTimetableFromSubmission(
     db,

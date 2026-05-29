@@ -6027,6 +6027,13 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private func dayLabel(for slot: EventUploadTimetableAIEditableSlot) -> String {
+        if let eventDay = resolvedDisplayEventDay(for: slot) {
+            let trimmed = eventDay.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+            return EventWeekScheduleMode.weekDayTitle(week: eventDay.weekIndex, day: eventDay.dayIndexInWeek)
+        }
         let trimmed = slot.dayLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             return trimmed
@@ -6043,6 +6050,10 @@ private struct EventUploadTimetableAIImportSheet: View {
     }
 
     private func normalizedLocalDateText(for slot: EventUploadTimetableAIEditableSlot) -> String? {
+        if let eventDay = resolvedDisplayEventDay(for: slot) {
+            let timeZone = TimeZone(identifier: viewModel.draft.timeZoneIdentifier) ?? .current
+            return eventDay.date.eventArchiveDateText(in: timeZone)
+        }
         let trimmed = slot.localDate?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
@@ -6053,6 +6064,13 @@ private struct EventUploadTimetableAIImportSheet: View {
             return base
         }
         return "\(base) · \(localDate)"
+    }
+
+    private func resolvedDisplayEventDay(for slot: EventUploadTimetableAIEditableSlot) -> WebEventDay? {
+        if let eventDay = viewModel.draft.eventDay(forID: slot.eventDayId) {
+            return eventDay
+        }
+        return viewModel.draft.eventDay(forOverallDayIndex: max(slot.overallDayIndex, 1))
     }
 
     private func filterRow<Item: Hashable, Selection: Hashable>(

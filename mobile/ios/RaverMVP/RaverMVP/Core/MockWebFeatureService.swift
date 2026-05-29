@@ -1153,25 +1153,23 @@ actor MockWebFeatureService: WebFeatureService {
                         dayRolloverHour: 6
                     ),
                     weeks: [
-                        WebEventWeek(
-                            id: "mock-week-1",
+                        EventTimetableImageImportWeek(
                             weekIndex: 1,
                             label: nil,
-                            startDate: Date.eventArchiveDate(from: "2026-01-01", timeZone: TimeZone(identifier: "Asia/Shanghai") ?? .current) ?? Date(),
-                            endDate: Date.eventArchiveDate(from: "2026-01-01", timeZone: TimeZone(identifier: "Asia/Shanghai") ?? .current) ?? Date(),
+                            startDate: "2026-01-01",
+                            endDate: "2026-01-01",
                             sortOrder: 1
                         )
                     ],
                     eventDays: [
-                        WebEventDay(
-                            id: "mock-day-1",
+                        EventTimetableImageImportDay(
                             eventDayId: "d1",
                             weekIndex: 1,
                             dayIndexInWeek: 1,
                             overallDayIndex: 1,
                             label: "Day 1",
                             weekday: "thursday",
-                            date: Date.eventArchiveDate(from: "2026-01-01", timeZone: TimeZone(identifier: "Asia/Shanghai") ?? .current) ?? Date(),
+                            date: "2026-01-01",
                             sortOrder: 1
                         )
                     ],

@@ -269,7 +269,7 @@
 - [x] P0：实现 timetable 幂等 upsert
 - [x] P1：移除 patch / baseline / revision gate 的旧编辑协议
 - [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
-- [ ] P3：submission 按角色 / 来源路由
+- [x] P3：submission 按角色 / 来源路由已接入 BFF event create/edit；admin/operator 走 direct apply，普通 UGC 继续走 submission
 - [ ] 完成端到端压测与生产观测验收
 
 ---
@@ -693,42 +693,48 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 新增按角色 / 来源路由：
 
-- [ ] `requiresReview = true`：走 submission
-- [ ] `requiresReview = false`：直写主结构，必要时异步 timetable job
+- [x] `requiresReview = true`：走 submission
+- [x] `requiresReview = false`：直写主结构，并异步 enqueue timetable job
 
 ## 10.4 实现建议
 
 ### BFF 层
 
-- [ ] 增加 `resolveEventMutationRoute(...)`
-- [ ] 根据 user role / source / feature flag 决定：
+- [x] 增加 `resolveEventMutationRoute(...)`
+- [x] 根据 user role / source / feature flag 决定：
   - submission path
   - direct apply path
 
 ### Direct apply path
 
-- [ ] 直接调用 `applyEventCoreStructure(...)`
-- [ ] enqueue `apply_event_timetable` job
-- [ ] 返回直接保存成功结果
+- [x] 直接调用 event core apply 主线（`createOrUpdateEventFromSubmission(..., skipCanonicalApply: true)`）
+- [x] enqueue `apply_event_timetable` job
+- [x] 返回直接保存成功结果
 
 ### Submission path
 
-- [ ] 仍保留审计
-- [ ] 审批通过后调用同一套 apply core + timetable job 流程
+- [x] 仍保留审计
+- [x] 审批通过后调用同一套 apply core + timetable job 流程
 
 ## 10.5 Feature Flag 设计
 
 建议增加：
 
-- [ ] `EVENT_EDIT_DIRECT_APPLY_ENABLED`
-- [ ] `EVENT_TIMETABLE_ASYNC_APPLY_ENABLED`
-- [ ] `EVENT_EDIT_PATCH_MODE_ENABLED`（默认未来关闭）
+- [x] `EVENT_EDIT_DIRECT_APPLY_ENABLED`
+- [x] `EVENT_TIMETABLE_ASYNC_APPLY_ENABLED` 当前由 Phase B job 主线承载
+- [x] `EVENT_EDIT_PATCH_MODE_ENABLED` 已不再需要，event patch mode 已删除
 
 ## 10.6 验收标准
 
-- [ ] admin/operator 编辑不再强制经过 submission 壳
-- [ ] UGC 编辑仍保留审核路径
-- [ ] 两条路径最终落同一套 apply core + async timetable 逻辑
+- [x] admin/operator 编辑不再强制经过 submission processing 审核壳
+- [x] UGC 编辑仍保留审核路径
+- [x] 两条路径最终落同一套 apply core + async timetable 逻辑
+
+实现备注：
+
+- direct apply 仍会创建一个 `approved` 的 `content_submissions` 记录，用作审计记录和 `apply_event_timetable` job 的锚点。
+- direct apply 不再进入 `process_submission` worker；Phase A 会立即写 event 主结构，Phase B 由 `apply_event_timetable` worker 异步补齐 timetable。
+- Phase B worker 已增加 supersede guard：如果旧 job 晚于新 event submission 执行，会跳过旧 payload，避免旧 timetable 覆盖新结构。
 
 ---
 
@@ -759,9 +765,9 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ### 要改什么
 
-- [ ] event create / edit 路由区分 direct apply 和 submission
+- [x] event create / edit 路由区分 direct apply 和 submission
 - [x] 不再强依赖 event patch fields
-- [ ] direct path 返回新的状态语义
+- [x] direct path 返回已保存的 event；submission path 继续返回 `submitted_for_review`
 
 ## 11.3 Submission Worker
 
@@ -771,9 +777,9 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ### 要改什么
 
-- [ ] worker phase 拆分
-- [ ] 审核与 timetable apply 解耦
-- [ ] 失败重试粒度按 timetable apply 处理
+- [x] worker phase 拆分
+- [x] 审核与 timetable apply 解耦
+- [x] 失败重试粒度按 timetable apply 处理
 
 ## 11.4 Event Apply Service
 
@@ -783,9 +789,9 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ### 要改什么
 
-- [ ] 拆出 `applyEventCoreStructure(...)`
+- [x] 拆出 event core apply 内部主线
 - [x] 删掉 patch apply 分支
-- [ ] 统一完整 desired-state 输入协议
+- [x] 统一完整 desired-state 输入协议
 
 ## 11.5 Canonical Timetable Service
 
@@ -833,16 +839,16 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## 12.3 第 3 周：P2
 
-- [ ] 拆 `applyEventCoreStructure`
-- [ ] 落地 `apply_event_timetable` job
-- [ ] worker 串联 phase A / phase B
+- [x] 拆 event core apply 主线
+- [x] 落地 `apply_event_timetable` job
+- [x] worker 串联 phase A / phase B
 - [ ] UI / 状态回传调通
 
 ## 12.4 第 4 周：P3
 
-- [ ] 引入 direct apply route
-- [ ] 按角色 / feature flag 路由
-- [ ] 保留 submission 审计但不强制使用
+- [x] 引入 direct apply route
+- [x] 按角色 / feature flag 路由
+- [x] 保留 submission 审计但不强制使用
 - [ ] 上线前压测与灰度
 
 ---
@@ -865,13 +871,13 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 - [x] 同一 payload 重复执行 3 次结果一致
 - [x] worker 在一半失败后 retry 结果一致
-- [ ] direct apply 与 submission apply 最终结果一致
+- [ ] direct apply 与 submission apply 最终结果一致（需远端 DB 回归验证）
 
 ## 13.3 并发
 
 - [ ] 同一 event 连续快速提交两次
-- [ ] schedule 已更新，旧 timetable job 到达时不会覆盖新结构
-- [ ] 新 timetable job 可以安全 supersede 旧 job
+- [x] schedule 已更新，旧 timetable job 到达时不会覆盖新结构
+- [x] 新 timetable job 可以安全 supersede 旧 job
 
 ## 13.4 性能
 
@@ -1012,7 +1018,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## Milestone B：编辑协议简化
 
-- [ ] P1 完成
+- [x] P1 完成
 
 ## Milestone C：大量 timetable 编辑稳定成功
 
@@ -1020,7 +1026,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## Milestone D：审核链路按需生效
 
-- [ ] P3 完成
+- [x] P3 完成
 
 ---
 

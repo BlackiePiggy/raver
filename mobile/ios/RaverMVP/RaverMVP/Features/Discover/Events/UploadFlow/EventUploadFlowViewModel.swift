@@ -2129,11 +2129,31 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private func timetableAIContext() -> EventTimetableImageImportContext {
+        let timeZone = eventTimeZone
         return EventTimetableImageImportContext(
             eventTimeZone: draft.timeZoneIdentifier,
             schedule: draft.structuredSchedule,
-            weeks: draft.structuredWeeks,
-            eventDays: draft.structuredEventDays,
+            weeks: draft.structuredWeeks.map { week in
+                EventTimetableImageImportWeek(
+                    weekIndex: week.weekIndex,
+                    label: week.label,
+                    startDate: week.startDate.eventArchiveDateText(in: timeZone),
+                    endDate: week.endDate.eventArchiveDateText(in: timeZone),
+                    sortOrder: week.sortOrder
+                )
+            },
+            eventDays: draft.structuredEventDays.map { day in
+                EventTimetableImageImportDay(
+                    eventDayId: day.eventDayId,
+                    weekIndex: day.weekIndex,
+                    dayIndexInWeek: day.dayIndexInWeek,
+                    overallDayIndex: day.overallDayIndex,
+                    label: day.label,
+                    weekday: day.weekday,
+                    date: day.date.eventArchiveDateText(in: timeZone),
+                    sortOrder: day.sortOrder
+                )
+            },
             dayRolloverHour: draft.dayRolloverHour,
             knownStageNames: draft.stageEntries
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
