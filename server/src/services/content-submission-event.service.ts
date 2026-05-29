@@ -1202,6 +1202,18 @@ const applySubmissionLineupPatch = async (
 
   const artistById = () => new Map(artists.map((artist) => [artist.id, artist]).filter((entry): entry is [string, CanonicalLineupArtistInput] => Boolean(entry[0])));
   const slotById = () => new Map(slots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
+  const timetableChanges = Array.isArray(payload.timetableChanges) ? payload.timetableChanges : [];
+
+  for (const rawChange of timetableChanges) {
+    if (!isPlainObject(rawChange)) continue;
+    const op = cleanText(rawChange.op);
+    if (op !== 'delete') continue;
+
+    const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
+    const existing = slotById().get(slotId);
+    if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
+    slots = slots.filter((slot) => slot.id !== slotId);
+  }
 
   const lineupChanges = Array.isArray(payload.lineupChanges) ? payload.lineupChanges : [];
   for (const rawChange of lineupChanges) {
@@ -1250,10 +1262,10 @@ const applySubmissionLineupPatch = async (
     throw new Error(`不支持的艺人增量操作：${op || 'unknown'}`);
   }
 
-  const timetableChanges = Array.isArray(payload.timetableChanges) ? payload.timetableChanges : [];
   for (const rawChange of timetableChanges) {
     if (!isPlainObject(rawChange)) continue;
     const op = cleanText(rawChange.op);
+    if (op === 'delete') continue;
     if (op === 'add') {
       const slotPayload = jsonObjectOrNull(rawChange.slot);
       const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], scheduleContext);
@@ -1268,11 +1280,6 @@ const applySubmissionLineupPatch = async (
     const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
     const existing = slotById().get(slotId);
     if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
-
-    if (op === 'delete') {
-      slots = slots.filter((slot) => slot.id !== slotId);
-      continue;
-    }
 
     if (op === 'update') {
       const patch = jsonObjectOrNull(rawChange.patch);
