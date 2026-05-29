@@ -63,6 +63,7 @@ import { djEventBindingReviewService, type DJEventBindingTriggerSource } from '.
 import {
   CONTENT_SUBMISSION_EVENT_TIMETABLE_JOB_TYPE,
   enqueueContentSubmissionProcessingJob,
+  publishContentSubmissionTaskNotification,
   scheduleContentSubmissionProcessingBestEffort,
 } from '../services/content-submission-processing.service';
 import {
@@ -1033,6 +1034,35 @@ const auditEventDirectApplyBestEffort = async (input: {
   }
 };
 
+const publishEventDirectApplyNotificationBestEffort = async (input: {
+  userId: string;
+  title: string;
+  submissionId: string;
+  eventId: string;
+  payload: Prisma.JsonObject;
+}): Promise<void> => {
+  try {
+    await publishContentSubmissionTaskNotification({
+      userId: input.userId,
+      entityType: 'event',
+      status: 'approved',
+      title: input.title,
+      submissionId: input.submissionId,
+      createdEntityId: input.eventId,
+      statusLabelOverride: '已入库',
+      notificationKey: 'event_core_applied',
+      bodyOverride: `你提交的「${input.title}」已成功入库，时间表会继续在后台同步。`,
+      payload: input.payload,
+    });
+  } catch (error) {
+    console.warn('BFF web event direct apply notification failed:', {
+      eventId: input.eventId,
+      submissionId: input.submissionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 const createDirectEventApplySubmission = async (input: {
   submitterId: string;
   title: string;
@@ -1185,6 +1215,13 @@ const applyEventDirectly = async (input: {
       eventId: event.id,
       submissionId: updatedSubmission.id,
       title: input.title,
+    });
+    await publishEventDirectApplyNotificationBestEffort({
+      userId: input.submitterId,
+      title: input.title,
+      submissionId: updatedSubmission.id,
+      eventId: event.id,
+      payload: directSubmission.payload as Prisma.JsonObject,
     });
 
     const mappedEvent = await loadEventDetailForWeb(event.id, input.submitterId);

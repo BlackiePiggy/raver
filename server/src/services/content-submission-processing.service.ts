@@ -193,6 +193,7 @@ export async function publishContentSubmissionTaskNotification(input: {
   titleOverride?: string;
   bodyOverride?: string;
   statusLabelOverride?: string;
+  notificationKey?: string;
   payload?: Prisma.InputJsonObject | Prisma.JsonObject;
   locale?: string;
 }) {
@@ -247,7 +248,7 @@ export async function publishContentSubmissionTaskNotification(input: {
     category: 'content_review',
     targets: [{ userId: input.userId }],
     channels: ['in_app', 'apns'],
-    dedupeKey: `content_submission:${input.submissionId}:${input.status}`,
+    dedupeKey: `content_submission:${input.submissionId}:${input.notificationKey || input.status}`,
     payload: {
       title: input.titleOverride || titleI18n.zh,
       body: localizedBody,
@@ -415,6 +416,37 @@ const clearApprovedSubmissionPhaseBFailure = async (
   });
 };
 
+const publishApprovedSubmissionPhaseBSuccess = async (
+  db: PrismaClient,
+  submissionId: string
+): Promise<void> => {
+  const submission = await db.contentSubmission.findUnique({
+    where: { id: submissionId },
+    select: {
+      id: true,
+      entityType: true,
+      title: true,
+      submitterId: true,
+      payload: true,
+      createdEntityId: true,
+    },
+  });
+  if (!submission || submission.entityType !== 'event') return;
+
+  await publishContentSubmissionTaskNotification({
+    userId: submission.submitterId,
+    entityType: submission.entityType,
+    status: 'approved',
+    title: submission.title,
+    submissionId: submission.id,
+    createdEntityId: submission.createdEntityId,
+    statusLabelOverride: '时间表已同步',
+    notificationKey: 'event_timetable_applied',
+    bodyOverride: `你提交的「${submission.title}」时间表已同步完成。`,
+    payload: submission.payload as Prisma.JsonObject,
+  });
+};
+
 const applyEventTimetableForSubmission = async (
   db: PrismaClient,
   submissionId: string
@@ -469,6 +501,7 @@ const applyEventTimetableForSubmission = async (
     submission.payload as Prisma.JsonObject
   );
   await clearApprovedSubmissionPhaseBFailure(db, submission.id);
+  await publishApprovedSubmissionPhaseBSuccess(db, submission.id);
 
   return {
     status: 'succeeded',
@@ -1005,6 +1038,31 @@ export async function runContentSubmissionProcessingWorkerOnce(
           error: result.reason || null,
           metadata,
         });
+      } else if (result.status === 'failed') {
+        const retryable = true;
+        const shouldRetry = retryable && job.attempts < job.maxAttempts;
+        const retryAt = shouldRetry ? new Date(Date.now() + retryDelayMs(job.attempts)) : undefined;
+        const failureMetadata = withDefinedJsonFields({
+          ...metadata,
+          lastResult: shouldRetry ? 'retrying' : 'failed',
+          phase: shouldRetry ? 'retrying' : (result.phase ?? 'failed'),
+          retryable,
+          retryScheduledAt: retryAt?.toISOString() ?? null,
+        });
+        if (shouldRetry) {
+          report.retryingJobs += 1;
+          await completeJob(db, job.id, 'retrying', {
+            error: result.reason || 'Submission processing failed',
+            availableAt: retryAt,
+            metadata: failureMetadata,
+          });
+        } else {
+          report.failedJobs += 1;
+          await completeJob(db, job.id, 'failed', {
+            error: result.reason || 'Submission processing failed',
+            metadata: failureMetadata,
+          });
+        }
       } else {
         report.succeededJobs += 1;
         await completeJob(db, job.id, 'succeeded', {
@@ -1017,6 +1075,7 @@ export async function runContentSubmissionProcessingWorkerOnce(
         submissionId: job.submissionId,
         result: result.status,
         submissionStatus: result.submissionStatus,
+        reason: result.reason,
         durationMs,
         phaseTimings: result.timings,
       });

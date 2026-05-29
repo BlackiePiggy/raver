@@ -354,7 +354,10 @@ const processSubmissionWithTimetable = async (submissionId: string): Promise<{
     markFailedOnError: false,
   });
   const phaseAWallMs = Number(process.hrtime.bigint() - phaseAStartedAt) / 1_000_000;
-  assert(phaseAResult.status === 'succeeded', `phase A failed for submission ${submissionId}`);
+  assert(
+    phaseAResult.status === 'succeeded',
+    `phase A failed for submission ${submissionId}: ${JSON.stringify(phaseAResult)}`
+  );
   assert(Boolean(phaseAResult.createdEntityId), `phase A did not create/update event for submission ${submissionId}`);
   const eventId = phaseAResult.createdEntityId as string;
 
@@ -365,7 +368,10 @@ const processSubmissionWithTimetable = async (submissionId: string): Promise<{
     jobType: 'apply_event_timetable',
   } as never);
   const phaseBWallMs = Number(process.hrtime.bigint() - phaseBStartedAt) / 1_000_000;
-  assert(phaseBResult.status === 'succeeded', `phase B failed for submission ${submissionId}`);
+  assert(
+    phaseBResult.status === 'succeeded',
+    `phase B failed for submission ${submissionId}: ${JSON.stringify(phaseBResult)}`
+  );
 
   const snapshot = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   return {

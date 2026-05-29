@@ -3253,6 +3253,14 @@ struct EventUploadFlowView: View {
             searchSection: { slot, index in
                 AnyView(timetableDJSearchSection(slot, performerIndex: index))
             },
+            onReplaceSlot: { slot in
+                viewModel.updateTimetableSlot(id: slot.id) { draftSlot in
+                    draftSlot.actType = slot.actType
+                    draftSlot.performerNames = slot.performerNames
+                    draftSlot.performerDJIDs = slot.performerDJIDs
+                    draftSlot.performerAvatarURLs = slot.performerAvatarURLs
+                }
+            },
             onDelete: deleteTimetableSlotFromWeekEditor
         )
         .presentationDetents([.large])
@@ -3453,16 +3461,19 @@ private func aiRecognitionThumbnailImage(_ image: EventUploadImageDraft) -> some
 
 private func aiRecognitionThumbnail(_ image: EventUploadImageDraft, cornerRadius: CGFloat = 10) -> some View {
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    return ZStack {
-        shape
-            .fill(RaverTheme.background)
-            .allowsHitTesting(false)
-        aiRecognitionThumbnailImage(image)
+    return GeometryReader { proxy in
+        ZStack {
+            shape
+                .fill(RaverTheme.background)
+                .allowsHitTesting(false)
+            aiRecognitionThumbnailImage(image)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
+        }
+        .frame(width: proxy.size.width, height: proxy.size.height)
+        .clipShape(shape)
+        .contentShape(shape)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .clipped()
-    .clipShape(shape)
-    .contentShape(shape)
 }
 
 private struct EventUploadPosterAIImportSheet: View {
@@ -5366,6 +5377,7 @@ private struct EventUploadTimetableAIImportSheet: View {
     @State private var selectedEventDayIdentity: String?
     @State private var selectedStageName: String?
     @State private var expandedSlotIDs: Set<UUID> = []
+    @State private var warningsExpanded = false
     @State private var isAutoMatching = false
     @State private var autoMatchStartedAt: Date?
     @State private var taskEntries: [RecognitionTaskEntry] = []
@@ -5599,15 +5611,8 @@ private struct EventUploadTimetableAIImportSheet: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.orange)
             }
-            ForEach(warnings, id: \.self) { warning in
-                Text(warning)
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
-            if !unparsedTexts.isEmpty {
-                Text(LT("未解析文本：", "Unparsed text:", "未解析テキスト：") + unparsedTexts.prefix(4).joined(separator: " / "))
-                    .font(.caption2)
-                    .foregroundStyle(RaverTheme.secondaryText)
+            if !warnings.isEmpty || !unparsedTexts.isEmpty {
+                recognitionNoticeSection
             }
         }
         .padding(12)
@@ -5616,6 +5621,62 @@ private struct EventUploadTimetableAIImportSheet: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(statusIsError ? Color.red.opacity(0.45) : RaverTheme.cardBorder, lineWidth: 1)
         )
+    }
+
+    private var recognitionNoticeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.bubble.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.orange)
+                Text(LT("识别提示", "Recognition Notes", "認識メモ"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Spacer()
+                if canExpandRecognitionNotices {
+                    Button {
+                        warningsExpanded.toggle()
+                    } label: {
+                        Text(
+                            warningsExpanded
+                                ? LT("收起", "Collapse", "折りたたむ")
+                                : LT("展开", "Expand", "展開")
+                        )
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(RaverTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            ForEach(displayedRecognitionWarnings, id: \.self) { warning in
+                Text(warning)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !displayedUnparsedTexts.isEmpty {
+                Text(LT("未解析文本：", "Unparsed text:", "未解析テキスト：") + displayedUnparsedTexts.joined(separator: " / "))
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(warningsExpanded ? nil : 2)
+            }
+
+            if !warningsExpanded && hiddenRecognitionNoticeCount > 0 {
+                Text(
+                    LT(
+                        "还有 \(hiddenRecognitionNoticeCount) 条内容，点击展开查看。",
+                        "\(hiddenRecognitionNoticeCount) more items. Tap expand to view.",
+                        "あと\(hiddenRecognitionNoticeCount)件あります。展開して確認してください。"
+                    )
+                )
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            }
+        }
+        .padding(10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var taskStatusSection: some View {
@@ -6129,6 +6190,33 @@ private struct EventUploadTimetableAIImportSheet: View {
         unresolvedEventDayResultCount > 0
     }
 
+    private var visibleResultCleanupCandidateCount: Int {
+        visibleSlots.reduce(into: 0) { count, slot in
+            let cleaned = cleanedAIImportSlot(slot)
+            if cleaned == nil || cleaned! != slot {
+                count += 1
+            }
+        }
+    }
+
+    private var displayedRecognitionWarnings: [String] {
+        warningsExpanded ? warnings : Array(warnings.prefix(3))
+    }
+
+    private var displayedUnparsedTexts: [String] {
+        warningsExpanded ? unparsedTexts : Array(unparsedTexts.prefix(2))
+    }
+
+    private var hiddenRecognitionNoticeCount: Int {
+        let hiddenWarnings = max(0, warnings.count - displayedRecognitionWarnings.count)
+        let hiddenUnparsed = max(0, unparsedTexts.count - displayedUnparsedTexts.count)
+        return hiddenWarnings + hiddenUnparsed
+    }
+
+    private var canExpandRecognitionNotices: Bool {
+        hiddenRecognitionNoticeCount > 0 || warningsExpanded
+    }
+
     private func configureResultFilters() {
         refreshResultFilters(preserveSelection: false)
     }
@@ -6304,25 +6392,44 @@ private struct EventUploadTimetableAIImportSheet: View {
                     .foregroundStyle(RaverTheme.secondaryText)
             }
 
-            Button {
-                Task { await autoMatchCurrentSlots() }
-            } label: {
-                Label(LT("一键匹配当前列表中的 DJ", "Auto match DJs in current list", "現在のリストのDJを一括紐付け"), systemImage: "wand.and.stars")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        LinearGradient(
-                            colors: [.cyan, .blue, .purple, .pink],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        in: Capsule()
-                    )
+            HStack(spacing: 10) {
+                Button {
+                    Task { await autoMatchCurrentSlots() }
+                } label: {
+                    Label(LT("一键匹配当前列表中的 DJ", "Auto match DJs in current list", "現在のリストのDJを一括紐付け"), systemImage: "wand.and.stars")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            LinearGradient(
+                                colors: [.cyan, .blue, .purple, .pink],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            in: Capsule()
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty)
+
+                if visibleResultCleanupCandidateCount > 0 {
+                    Button {
+                        cleanupVisibleResultSlots()
+                    } label: {
+                        Label(
+                            LT("一键清理空值", "Clean Empty Names", "空欄を一括整理"),
+                            systemImage: "sparkles"
+                        )
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(hasActiveRecognitionTasks || isAutoMatching || resultSlots.isEmpty)
 
             if visibleSlots.isEmpty {
                 Text(LT("当前筛选下没有结果。", "No results in the current filter.", "現在の絞り込み条件では結果がありません。"))
@@ -6638,6 +6745,12 @@ private struct EventUploadTimetableAIImportSheet: View {
             .filter { !$0.isEmpty }
     }
 
+    private func rawTimetableAIPerformerNames(for slot: EventUploadTimetableAIEditableSlot) -> [String] {
+        slot.performerNamesText
+            .split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
     private func aiImportPerformerName(for slot: EventUploadTimetableAIEditableSlot, performerIndex: Int) -> String {
         let names = timetableAIPerformerNames(for: slot)
         return names.indices.contains(performerIndex) ? names[performerIndex] : ""
@@ -6912,6 +7025,27 @@ private struct EventUploadTimetableAIImportSheet: View {
         autoMatchStartedAt = nil
     }
 
+    private func cleanupVisibleResultSlots() {
+        let visibleIDs = Set(visibleSlots.map(\.id))
+        guard !visibleIDs.isEmpty else { return }
+
+        var cleanedCount = 0
+        resultSlots = resultSlots.compactMap { slot in
+            guard visibleIDs.contains(slot.id) else { return slot }
+            let cleaned = cleanedAIImportSlot(slot)
+            if cleaned == nil || cleaned! != slot {
+                cleanedCount += 1
+            }
+            return cleaned
+        }
+
+        refreshResultFilters(preserveSelection: true)
+        statusIsError = false
+        statusMessage = cleanedCount > 0
+            ? LT("已清理 \(cleanedCount) 条空值/未命名结果，剩余条目已自动收敛为更合理的演出形式。", "Cleaned \(cleanedCount) empty or unnamed results and compacted the remaining acts automatically.", "\(cleanedCount)件の空欄・未命名結果を整理し、残りの出演形式も自動で整えました。")
+            : LT("当前筛选下没有需要清理的空值条目。", "There are no empty entries to clean in the current filter.", "現在の絞り込みには整理が必要な空欄項目はありません。")
+    }
+
     private func elapsedText(since start: Date?, now: Date) -> String {
         guard let start else { return "00:00" }
         let seconds = max(0, Int(now.timeIntervalSince(start)))
@@ -6925,6 +7059,71 @@ private struct EventUploadTimetableAIImportSheet: View {
             guard let index = resultSlots.firstIndex(where: { $0.id == slotID }) else { return }
             resultSlots[index][keyPath: keyPath] = newValue
         }
+    }
+
+    private func cleanedAIImportSlot(_ slot: EventUploadTimetableAIEditableSlot) -> EventUploadTimetableAIEditableSlot? {
+        let cleaned = cleanedPerformerState(
+            actType: slot.actType,
+            performerNames: rawTimetableAIPerformerNames(for: slot),
+            performerDJIDs: slot.performerDJIDs,
+            performerAvatarURLs: slot.performerAvatarURLs
+        )
+
+        guard !cleaned.names.isEmpty else { return nil }
+
+        var next = slot
+        next.actType = cleaned.actType
+        next.performerNamesText = cleaned.names.joined(separator: ", ")
+        next.performerDJIDs = cleaned.djIDs
+        next.performerAvatarURLs = cleaned.avatarURLs
+        return next
+    }
+}
+
+private func cleanedTimetableSlot(_ slot: EventUploadLineupSlotDraft) -> EventUploadLineupSlotDraft? {
+    let cleaned = cleanedPerformerState(
+        actType: slot.actType,
+        performerNames: slot.performerNames,
+        performerDJIDs: slot.performerDJIDs,
+        performerAvatarURLs: slot.performerAvatarURLs
+    )
+
+    guard !cleaned.names.isEmpty else { return nil }
+
+    var next = slot
+    next.actType = cleaned.actType
+    next.performerNames = cleaned.names
+    next.performerDJIDs = cleaned.djIDs
+    next.performerAvatarURLs = cleaned.avatarURLs
+    next.normalizePerformers()
+    return next
+}
+
+private func cleanedPerformerState(
+    actType: EventLineupActType,
+    performerNames: [String],
+    performerDJIDs: [String?],
+    performerAvatarURLs: [String?]
+) -> (actType: EventLineupActType, names: [String], djIDs: [String?], avatarURLs: [String?]) {
+    let entries = Array(0..<actType.performerCount).compactMap { index -> (String, String?, String?)? in
+        let rawName = performerNames.indices.contains(index) ? performerNames[index] : ""
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        let djID = performerDJIDs.indices.contains(index) ? performerDJIDs[index] : nil
+        let avatarURL = performerAvatarURLs.indices.contains(index) ? performerAvatarURLs[index] : nil
+        return (name, djID, avatarURL)
+    }
+
+    switch entries.count {
+    case 0:
+        return (.solo, [], [], [])
+    case 1:
+        return (.solo, [entries[0].0], [entries[0].1], [entries[0].2])
+    case 2:
+        return (.b2b, entries.map(\.0), entries.map(\.1), entries.map(\.2))
+    default:
+        let firstThree = Array(entries.prefix(3))
+        return (.b3b, firstThree.map(\.0), firstThree.map(\.1), firstThree.map(\.2))
     }
 }
 
@@ -7198,6 +7397,7 @@ private struct EventUploadWeekTimetableEditorSheet: View {
     let onSearchPerformer: (EventUploadLineupSlotDraft, Int) -> Void
     let onClearPerformer: (EventUploadLineupSlotDraft, Int) -> Void
     let searchSection: (EventUploadLineupSlotDraft, Int) -> AnyView
+    let onReplaceSlot: (EventUploadLineupSlotDraft) -> Void
     let onDelete: (UUID) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -7208,6 +7408,14 @@ private struct EventUploadWeekTimetableEditorSheet: View {
     @State private var selectedSlotIDs: Set<UUID> = []
     @State private var moveDayDialogPresented = false
     @State private var moveStageDialogPresented = false
+
+    private var autoCleanableFilteredSlotCount: Int {
+        filteredSlots.reduce(into: 0) { count, slot in
+            if cleanedTimetableSlot(slot) != slot {
+                count += 1
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -7562,6 +7770,27 @@ private struct EventUploadWeekTimetableEditorSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                if autoCleanableFilteredSlotCount > 0 {
+                    Button {
+                        cleanupCurrentFilteredSlots()
+                    } label: {
+                        Label(
+                            LT("一键清理空值 / 未命名 DJ", "Clean Empty / Unnamed DJs", "空欄・未命名DJを一括整理"),
+                            systemImage: "sparkles"
+                        )
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(Color.orange.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(LT("会删除全空条目，并把人数不足的 B2B / B3B 自动收敛成 Solo 或 B2B。", "This removes fully empty entries and compacts partial B2B / B3B acts automatically.", "空の項目を削除し、人数が不足したB2B / B3Bを自動でSoloまたはB2Bへ整理します。"))
+                        .font(.caption2)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
             }
         }
         .padding(14)
@@ -7765,6 +7994,19 @@ private struct EventUploadWeekTimetableEditorSheet: View {
         selectedStage = normalizedStage
         selectedSlotIDs.removeAll()
         isSelectionMode = false
+    }
+
+    private func cleanupCurrentFilteredSlots() {
+        for slot in filteredSlots {
+            guard let cleaned = cleanedTimetableSlot(slot) else {
+                onDelete(slot.id)
+                selectedSlotIDs.remove(slot.id)
+                continue
+            }
+            if cleaned != slot {
+                onReplaceSlot(cleaned)
+            }
+        }
     }
 
     private func dismissKeyboard() {
