@@ -8,6 +8,7 @@ import {
 } from './content-submission-event.service';
 import { createOrUpdateDJFromSubmission } from './content-submission-dj.service';
 import { createOrUpdateBrandFromSubmission } from './content-submission-brand.service';
+import type { CanonicalLineupSyncProfiling } from './event-lineup-canonical.service';
 
 const prisma = new PrismaClient();
 
@@ -45,6 +46,7 @@ type ProcessSubmissionResult = {
     timetableQueuedMs?: number;
     approvalFinalizeMs: number;
     totalMs: number;
+    canonicalSync?: CanonicalLineupSyncProfiling | null;
   };
 };
 
@@ -434,7 +436,7 @@ const applyEventTimetableForSubmission = async (
   if (submission.entityType !== 'event') return { status: 'skipped', reason: 'Not an event submission' };
   if (!submission.createdEntityId) return { status: 'skipped', reason: 'Event core entity not created yet' };
 
-  await applyEventTimetableFromSubmission(
+  const canonicalSync = await applyEventTimetableFromSubmission(
     db,
     submission.createdEntityId,
     submission.payload as Prisma.JsonObject
@@ -448,10 +450,11 @@ const applyEventTimetableForSubmission = async (
     phase: 'event_timetable_applied',
     timings: {
       reviewingTransitionMs: 0,
-      applyMs: 0,
+      applyMs: canonicalSync.totalMs,
       timetableQueuedMs: 0,
       approvalFinalizeMs: 0,
-      totalMs: 0,
+      totalMs: canonicalSync.totalMs,
+      canonicalSync,
     },
   };
 };

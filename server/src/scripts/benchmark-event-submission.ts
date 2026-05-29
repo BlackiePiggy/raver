@@ -40,6 +40,7 @@ type BenchmarkMetrics = {
     timetableQueuedMs?: number;
     approvalFinalizeMs: number;
     totalMs: number;
+    canonicalSync?: Record<string, number | null> | null;
   } | null;
   finalSlotCount: number;
   finalArtistCount: number;
@@ -400,11 +401,33 @@ const printSummary = (
   const phaseBStats = summarize(metrics.map((item) => item.phaseBWallMs));
   const phaseAApplyStats = summarize(metrics.map((item) => item.phaseATimings?.applyMs ?? 0));
   const phaseATotalStats = summarize(metrics.map((item) => item.phaseATimings?.totalMs ?? 0));
+  const canonicalSyncMetrics = metrics
+    .map((item) => item.phaseATimings?.canonicalSync)
+    .filter((value): value is Record<string, number | null> => Boolean(value));
   console.log(`[benchmark-event-submission] summary ${label}`);
   console.log(`  phaseA.wall ${JSON.stringify(formatStats(phaseAStats))}`);
   console.log(`  phaseA.apply ${JSON.stringify(formatStats(phaseAApplyStats))}`);
   console.log(`  phaseA.total ${JSON.stringify(formatStats(phaseATotalStats))}`);
   console.log(`  phaseB.wall ${JSON.stringify(formatStats(phaseBStats))}`);
+  if (canonicalSyncMetrics.length > 0) {
+    const fields = [
+      'loadSnapshotMs',
+      'normalizeInputMs',
+      'alignArtistsMs',
+      'alignStagesMs',
+      'buildMutationPlanMs',
+      'performanceMutationMs',
+      'cleanupDeleteMs',
+      'totalMs',
+    ];
+    for (const field of fields) {
+      const values = canonicalSyncMetrics
+        .map((item) => item[field])
+        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+      if (values.length === 0) continue;
+      console.log(`  canonicalSync.${field} ${JSON.stringify(formatStats(summarize(values)))}`);
+    }
+  }
 };
 
 async function main(): Promise<void> {

@@ -259,6 +259,7 @@
 - [x] 2026-05-29：worker queue status / admin status 已增强，可直接看到 `jobType` 维度统计、`phaseBFailure`、`phaseTimings`、最近一次耗时与重试调度信息
 - [x] 2026-05-29：`pnpm content-submissions:status` 已增强为默认人类可读摘要输出，`--json` 保留原始结构，便于线上快速排障
 - [x] 2026-05-29：已新增 `pnpm benchmark:event-submission`，可对 `200+ slot` 的 create/edit 路径输出 Phase A / Phase B / 总耗时基准
+- [x] 2026-05-29：已完成远端 `240 slot x 3 rounds` benchmark，确认 Phase A 已压缩到约 `1.1s - 1.6s`，但 Phase B 仍需约 `40s - 43s`
 - [x] P0：实现 timetable 幂等 upsert
 - [ ] P1：移除 patch / baseline / revision gate 的旧编辑协议
 - [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
@@ -875,11 +876,41 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## 13.4 性能
 
-- [ ] Phase A p95 明显低于当前整单提交
-- [ ] 200+ slot 编辑不会再被主事务拖垮
+- [x] Phase A p95 明显低于当前整单提交
+- [x] 200+ slot 编辑不会再被主事务拖垮
 - [ ] worker 长任务不影响正常页面 API
 - [ ] 记录真实 Phase A / Phase B 耗时分布并沉淀到状态接口或运维面板
 - [x] 记录 `reviewNotes.phaseBFailure`、`jobType`、重试次数，便于线上排查 timetable 异步失败
+
+### 当前基准结果（2026-05-29，远端环境，`240 slot`, `3 rounds`）
+
+- create:
+  - Phase A wall: `1.25s / 1.31s / 1.65s`，`avg 1.40s`，`p95 1.65s`
+  - Phase A apply: `0.73s / 0.83s / 0.99s`，`avg 0.85s`
+  - Phase B wall: `40.48s / 41.00s / 42.42s`，`avg 41.30s`
+- edit:
+  - Phase A wall: `1.06s / 1.19s / 1.19s`，`avg 1.15s`，`p95 1.19s`
+  - Phase A apply: `0.60s / 0.64s / 0.71s`，`avg 0.65s`
+  - Phase B wall: `42.33s / 42.56s / 43.15s`，`avg 42.68s`
+
+### 当前结论
+
+- Phase A 已达到两阶段改造的核心目标：主结构提交不再被大 timetable 拖慢
+- 真正的性能瓶颈已经明确收敛到 Phase B canonical timetable apply
+- 下一阶段优化重点不再是“是否拆事务”，而是“如何继续压缩 240 slot 的 Phase B 40s+ 耗时”
+
+### 下一阶段性能优化待办
+
+- [ ] 为 Phase B 加更细粒度耗时拆分：
+  - snapshot load
+  - artist/stage 对齐
+  - performance update
+  - performance insert
+  - performance delete
+- [ ] 对 `syncCanonicalEventLineupAndTimetable(...)` 跑 SQL/CPU 热点剖析
+- [ ] 判断当前 40s+ 是数据库写入慢，还是 JS 层 reconciliation 慢
+- [ ] 评估是否要把 Phase B 的 artist/stage/performance mutation 再拆批，避免单次大事务过长
+- [ ] 评估是否要为 `event_performances(event_id, identity_key)` 外再补覆盖索引或查询路径优化
 
 ---
 
@@ -942,6 +973,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 - [x] 2026-05-29：进入实施，已完成 P1 的第一步主路径收口
 - [x] 2026-05-29：远端数据库 migration 与 canonical validate 已完成
 - [x] 2026-05-29：远端 `events:incremental-sync:regression` 全量通过
+- [x] 2026-05-29：远端 `240 slot x 3 rounds` benchmark 已完成，Phase A 结果达标，Phase B 性能瓶颈已量化
 - [x] 2026-05-29：当前工作重心已切换到生产压测、状态观测和 P1/P3 收尾
 
 ---

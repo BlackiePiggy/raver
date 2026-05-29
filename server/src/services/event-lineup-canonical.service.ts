@@ -107,6 +107,23 @@ type CanonicalPerformanceMutationPlan = {
   idsToDelete: string[];
 };
 
+export type CanonicalLineupSyncProfiling = {
+  loadSnapshotMs: number;
+  normalizeInputMs: number;
+  alignArtistsMs: number;
+  alignStagesMs: number;
+  refreshIdentityMs: number;
+  buildMutationPlanMs: number;
+  artistCreateMs: number;
+  artistUpdateMs: number;
+  memberRewriteMs: number;
+  stageCreateMs: number;
+  stageUpdateMs: number;
+  performanceMutationMs: number;
+  cleanupDeleteMs: number;
+  totalMs: number;
+};
+
 const uniqueIds = (values: Array<string | null | undefined>): string[] => {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -833,7 +850,35 @@ export const syncCanonicalEventLineupAndTimetable = async (
   slots: CanonicalLineupSlotInput[],
   artists: CanonicalLineupArtistInput[],
   explicitStageOrder: string[] = []
-): Promise<void> => {
+): Promise<CanonicalLineupSyncProfiling> => {
+  const measure = <T>(fn: () => Promise<T> | T): { value: T; durationMs: number } => {
+    const startedAt = process.hrtime.bigint();
+    const value = fn();
+    if (value instanceof Promise) {
+      throw new Error('measure helper only supports synchronous work');
+    }
+    return {
+      value,
+      durationMs: Number(process.hrtime.bigint() - startedAt) / 1_000_000,
+    };
+  };
+  const startedAt = process.hrtime.bigint();
+  const profiling: CanonicalLineupSyncProfiling = {
+    loadSnapshotMs: 0,
+    normalizeInputMs: 0,
+    alignArtistsMs: 0,
+    alignStagesMs: 0,
+    refreshIdentityMs: 0,
+    buildMutationPlanMs: 0,
+    artistCreateMs: 0,
+    artistUpdateMs: 0,
+    memberRewriteMs: 0,
+    stageCreateMs: 0,
+    stageUpdateMs: 0,
+    performanceMutationMs: 0,
+    cleanupDeleteMs: 0,
+    totalMs: 0,
+  };
   const eventRow = await tx.event.findUnique({
     where: { id: eventId },
     select: { timeZone: true },
@@ -874,6 +919,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
     status: performance.status,
     sourceType: performance.sourceType,
   })) satisfies ExistingCanonicalPerformanceRow[];
+  profiling.loadSnapshotMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
 
   const existingArtistById = new Map(existingArtists.map((artist) => [artist.id, artist]));
   const existingArtistByKey = new Map<string, string>();
@@ -890,12 +936,18 @@ export const syncCanonicalEventLineupAndTimetable = async (
   const existingStageById = new Map(existingStages.map((stage) => [stage.id, stage]));
   const existingStageByName = new Map(existingStages.map((stage) => [stage.normalizedName, stage]));
 
-  const normalizedSlots = slots.map((slot) => ({
-    ...slot,
-    localDate: slot.localDate ? eventDateOnlyToStorageDate(slot.localDate, eventTimeZone) : null,
-  }));
-  const target = buildCanonicalTargetRows(eventId, normalizedSlots, artists, explicitStageOrder);
+  const normalizedPhase = measure(() => {
+    const normalizedSlots = slots.map((slot) => ({
+      ...slot,
+      localDate: slot.localDate ? eventDateOnlyToStorageDate(slot.localDate, eventTimeZone) : null,
+    }));
+    const target = buildCanonicalTargetRows(eventId, normalizedSlots, artists, explicitStageOrder);
+    return { normalizedSlots, target };
+  });
+  profiling.normalizeInputMs = normalizedPhase.durationMs;
+  const { target } = normalizedPhase.value;
 
+  const alignArtistsStartedAt = process.hrtime.bigint();
   for (const artist of target.artistRows) {
     if (existingArtistById.has(artist.id)) continue;
     let matchedId: string | undefined;
@@ -916,7 +968,9 @@ export const syncCanonicalEventLineupAndTimetable = async (
       if (performance.eventArtistId === oldId) performance.eventArtistId = matchedId;
     }
   }
+  profiling.alignArtistsMs = Number(process.hrtime.bigint() - alignArtistsStartedAt) / 1_000_000;
 
+  const alignStagesStartedAt = process.hrtime.bigint();
   for (const stage of target.stageRows) {
     if (existingStageById.has(stage.id)) continue;
     const matched = existingStageByName.get(stage.normalizedName);
@@ -927,12 +981,17 @@ export const syncCanonicalEventLineupAndTimetable = async (
       if (performance.stageId === oldId) performance.stageId = matched.id;
     }
   }
+  profiling.alignStagesMs = Number(process.hrtime.bigint() - alignStagesStartedAt) / 1_000_000;
 
+  const refreshIdentityStartedAt = process.hrtime.bigint();
   refreshCanonicalPerformanceIdentityKeys(target.performanceRows);
+  profiling.refreshIdentityMs = Number(process.hrtime.bigint() - refreshIdentityStartedAt) / 1_000_000;
 
   const targetArtistIds = new Set(target.artistRows.map((artist) => artist.id));
   const targetStageIds = new Set(target.stageRows.map((stage) => stage.id));
+  const buildMutationPlanStartedAt = process.hrtime.bigint();
   const performanceMutationPlan = buildCanonicalPerformanceMutationPlan(existingPerformances, target.performanceRows);
+  profiling.buildMutationPlanMs = Number(process.hrtime.bigint() - buildMutationPlanStartedAt) / 1_000_000;
 
   const artistsToDelete = existingArtists
     .filter((artist) => !targetArtistIds.has(artist.id))
@@ -943,9 +1002,11 @@ export const syncCanonicalEventLineupAndTimetable = async (
 
   const existingArtistIds = new Set(existingArtists.map((artist) => artist.id));
   const artistRowsToCreate = target.artistRows.filter((artist) => !existingArtistIds.has(artist.id));
+  const artistCreateStartedAt = process.hrtime.bigint();
   if (artistRowsToCreate.length > 0) {
     await tx.eventArtist.createMany({ data: artistRowsToCreate });
   }
+  profiling.artistCreateMs = Number(process.hrtime.bigint() - artistCreateStartedAt) / 1_000_000;
   const artistRowsToUpdate: CanonicalArtistRow[] = [];
   for (const artist of target.artistRows.filter((row) => existingArtistIds.has(row.id))) {
     const existing = existingArtistById.get(artist.id);
@@ -962,7 +1023,9 @@ export const syncCanonicalEventLineupAndTimetable = async (
       artistRowsToUpdate.push(artist);
     }
   }
+  const artistUpdateStartedAt = process.hrtime.bigint();
   await bulkUpdateEventArtists(tx, artistRowsToUpdate);
+  profiling.artistUpdateMs = Number(process.hrtime.bigint() - artistUpdateStartedAt) / 1_000_000;
 
   const memberRowsToRewrite: CanonicalMemberRow[] = [];
   const artistIdsWithChangedMembers: string[] = [];
@@ -974,18 +1037,22 @@ export const syncCanonicalEventLineupAndTimetable = async (
       memberRowsToRewrite.push(...desiredMembers);
     }
   }
+  const memberRewriteStartedAt = process.hrtime.bigint();
   if (artistIdsWithChangedMembers.length > 0) {
     await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistIdsWithChangedMembers } } });
     if (memberRowsToRewrite.length > 0) {
       await tx.eventArtistMember.createMany({ data: memberRowsToRewrite });
     }
   }
+  profiling.memberRewriteMs = Number(process.hrtime.bigint() - memberRewriteStartedAt) / 1_000_000;
 
   const existingStageIds = new Set(existingStages.map((stage) => stage.id));
   const stageRowsToCreate = target.stageRows.filter((stage) => !existingStageIds.has(stage.id));
+  const stageCreateStartedAt = process.hrtime.bigint();
   if (stageRowsToCreate.length > 0) {
     await tx.eventStage.createMany({ data: stageRowsToCreate });
   }
+  profiling.stageCreateMs = Number(process.hrtime.bigint() - stageCreateStartedAt) / 1_000_000;
   const stageRowsToUpdate: CanonicalStageRow[] = [];
   for (const stage of target.stageRows.filter((row) => existingStageIds.has(row.id))) {
     const existing = existingStageById.get(stage.id);
@@ -998,9 +1065,14 @@ export const syncCanonicalEventLineupAndTimetable = async (
       stageRowsToUpdate.push(stage);
     }
   }
+  const stageUpdateStartedAt = process.hrtime.bigint();
   await bulkUpdateEventStages(tx, stageRowsToUpdate);
+  profiling.stageUpdateMs = Number(process.hrtime.bigint() - stageUpdateStartedAt) / 1_000_000;
+  const performanceMutationStartedAt = process.hrtime.bigint();
   await applyCanonicalPerformanceMutationPlan(tx, performanceMutationPlan);
+  profiling.performanceMutationMs = Number(process.hrtime.bigint() - performanceMutationStartedAt) / 1_000_000;
 
+  const cleanupDeleteStartedAt = process.hrtime.bigint();
   if (artistsToDelete.length > 0) {
     await tx.eventArtistMember.deleteMany({ where: { eventArtistId: { in: artistsToDelete } } });
     await tx.eventArtist.deleteMany({ where: { id: { in: artistsToDelete } } });
@@ -1009,4 +1081,7 @@ export const syncCanonicalEventLineupAndTimetable = async (
   if (stagesToDelete.length > 0) {
     await tx.eventStage.deleteMany({ where: { id: { in: stagesToDelete } } });
   }
+  profiling.cleanupDeleteMs = Number(process.hrtime.bigint() - cleanupDeleteStartedAt) / 1_000_000;
+  profiling.totalMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+  return profiling;
 };

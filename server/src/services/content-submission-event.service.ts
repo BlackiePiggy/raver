@@ -12,6 +12,7 @@ import {
 } from '../utils/event-timezone';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 import {
+  type CanonicalLineupSyncProfiling,
   type CanonicalLineupSnapshot,
   type CanonicalLineupArtistInput,
   type CanonicalLineupSlotInput,
@@ -1373,11 +1374,10 @@ const syncSubmissionEventLineupAndTimetable = async (
   eventId: string,
   payload: Prisma.JsonObject,
   scheduleContext: SubmittedEventScheduleContext
-): Promise<void> => {
+): Promise<CanonicalLineupSyncProfiling> => {
   if (cleanText(payload.editMode) === 'patch') {
     const patched = await applySubmissionLineupPatch(tx, eventId, payload, scheduleContext);
-    await syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
-    return;
+    return syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
   }
 
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
@@ -1390,7 +1390,7 @@ const syncSubmissionEventLineupAndTimetable = async (
     : mergeIncrementalLineupArtists(normalizedArtists, timetableArtists);
   const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
   const stageOrder = normalizeEventStageOrder(payload.stageOrder);
-  await syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
+  return syncCanonicalEventLineupAndTimetable(tx, eventId, relinkedSlots, artists, stageOrder);
 };
 
 const runEventSubmissionTransaction = async <T>(
@@ -1772,24 +1772,25 @@ export const applyEventCanonicalSubmissionState = async (
   eventId: string,
   payload: Prisma.JsonObject,
   scheduleContext: SubmittedEventScheduleContext
-): Promise<void> => {
-  await syncSubmissionEventLineupAndTimetable(
-    tx,
-    eventId,
-    payload,
-    scheduleContext
-  );
-};
+): Promise<CanonicalLineupSyncProfiling> => syncSubmissionEventLineupAndTimetable(
+  tx,
+  eventId,
+  payload,
+  scheduleContext
+);
 
 export const applyEventTimetableFromSubmission = async (
   db: PrismaClient,
   eventId: string,
   payload: Prisma.JsonObject
-): Promise<void> => {
+): Promise<CanonicalLineupSyncProfiling> => {
   const scheduleContext = normalizeSubmittedEventScheduleContext(payload);
-  await runEventSubmissionTransaction(db, async (tx) => {
-    await applyEventCanonicalSubmissionState(tx, eventId, payload, scheduleContext);
-  });
+  return runEventSubmissionTransaction(db, async (tx) => applyEventCanonicalSubmissionState(
+    tx,
+    eventId,
+    payload,
+    scheduleContext
+  ));
 };
 
 export async function createOrUpdateEventFromSubmission(
