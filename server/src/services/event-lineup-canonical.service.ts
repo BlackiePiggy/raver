@@ -424,6 +424,21 @@ const buildCanonicalPerformanceMutationPlan = (
   };
 };
 
+const refreshCanonicalPerformanceIdentityKeys = (
+  rows: CanonicalPerformanceRow[]
+): void => {
+  for (const performance of rows) {
+    performance.identityKey = canonicalPerformanceIdentityKey({
+      eventId: performance.eventId,
+      eventArtistId: performance.eventArtistId,
+      stageId: performance.stageId,
+      eventDayId: performance.eventDayId,
+      startAt: performance.startAt,
+      endAt: performance.endAt,
+    });
+  }
+};
+
 const applyCanonicalPerformanceMutationPlan = async (
   tx: Prisma.TransactionClient,
   plan: CanonicalPerformanceMutationPlan
@@ -879,6 +894,8 @@ export const syncCanonicalEventLineupAndTimetable = async (
       if (performance.stageId === oldId) performance.stageId = matched.id;
     }
   }
+
+  refreshCanonicalPerformanceIdentityKeys(target.performanceRows);
 
   const targetArtistIds = new Set(target.artistRows.map((artist) => artist.id));
   const targetStageIds = new Set(target.stageRows.map((stage) => stage.id));
