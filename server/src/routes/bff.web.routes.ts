@@ -2224,8 +2224,6 @@ const parseCozeTimeoutMs = (value: unknown): number | null => {
 };
 const cozeTimetableWorkflowRunUrl = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_RUN_URL);
 const cozeTimetableWorkflowToken = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_TOKEN);
-const cozeTimetableWorkflowImageField =
-  cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_IMAGE_FIELD) || 'festival_image';
 const cozeTimetableWorkflowTimeoutMs =
   parseCozeTimeoutMs(process.env.COZE_TIMETABLE_WORKFLOW_TIMEOUT_MS) ?? 480_000;
 const cozeLineupWorkflowRunUrl = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_RUN_URL);
@@ -5966,11 +5964,11 @@ const runCozeTimetableWorker = async (
 
   const resolvedImageUrl = await ensureCozeAccessibleImageUrl(req, imageUrl, fileType, 'timetable');
   const payload = {
-    [cozeTimetableWorkflowImageField]: {
+    image: {
       url: resolvedImageUrl,
       file_type: resolveCozeFileType(fileType),
     },
-    context,
+    context_json: JSON.stringify(context ?? {}),
   };
 
   const startedAt = Date.now();
@@ -5980,6 +5978,7 @@ const runCozeTimetableWorker = async (
     fileType,
     timeoutMs: cozeTimetableWorkflowTimeoutMs,
     context,
+    contextJsonLength: payload.context_json.length,
   });
   const controller = new AbortController();
   if (signal) {
