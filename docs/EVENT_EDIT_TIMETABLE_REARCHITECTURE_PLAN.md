@@ -76,16 +76,14 @@
 ## 3.1 当前已经具备的能力
 
 - [x] `events / event_weeks / event_days / event_stages / event_artists / event_artist_members / event_performances` 已经是结构化关系模型，不是散乱 JSON。
-- [x] iOS 端已经能构建完整 `schedule + weeks + eventDays + lineupSlots + lineupArtists + stageOrder` 的全量 payload。
-- [x] iOS 端已经有编辑基线概念：`incrementalBaseline / eventRevision / stageOrder / lineupSlots / lineupArtists / scheduleFingerprint`。
+- [x] iOS 端已经统一构建 `schedule + weeks + eventDays + lineupSlots + lineupArtists + stageOrder` 的 full payload。
+- [x] `UpdateEventInput` 的 event patch 字段已经移除，event create/edit 主线只保留 full payload contract。
 - [x] BFF 已经有提交壳：`content_submissions`、`content_submission_versions`、`content_submission_processing_jobs`。
 - [x] worker 已经是 durable DB-backed job，不再依赖简单 `setImmediate`。
 - [x] backend 已经有 `normalizeSubmittedEventScheduleContext(...)`，能对 `weeks / eventDays` 做严格结构校验。
 - [x] backend 已经有 canonical lineup/timetable sync engine。
-- [x] 当前 event apply 已经有事务保护：失败时不会只写一半。
-- [x] 当前 edit 已经有并发保护：
-  - `baseEventRevision`
-  - active submission guard
+- [x] 当前 event apply 已拆成 Phase A / Phase B，两段都各自有事务保护。
+- [x] 当前 edit 已保留 active submission guard，避免同一 event 并发写入互相踩踏。
 
 ## 3.2 当前能力的边界
 
@@ -251,11 +249,9 @@
 - [x] 2026-05-29：Phase B 成功后会自动清理旧失败标记，queue status 也开始区分 `jobType`，便于观测主提交与 timetable 后处理
 - [x] 2026-05-29：已补 Phase B “先失败再恢复”回归，验证 approved 不回退且 `reviewNotes.phaseBFailure` 会在成功重跑后清除
 - [x] 2026-05-29：`event_performances.identity_key` migration 已在远端数据库成功应用，`canonical:validate` 通过
-- [x] 2026-05-29：`events:incremental-sync:regression` 已在远端环境整套跑绿，覆盖 direct canonical / full payload / legacy patch / auto-approval / Phase B recovery
+- [x] 2026-05-29：`events:incremental-sync:regression` 已在远端环境整套跑绿，覆盖 direct canonical / full payload / auto-approval / Phase B recovery
 - [x] 2026-05-29：canonical performance 写入已修正为“已有 `id` 直接 update，新增 slot 走 `ON CONFLICT (event_id, identity_key)`”，消除时间调整时的主键冲突
-- [x] 2026-05-29：legacy patch 兼容已补齐：
-  - 缺失 `eventDayId` 的旧 slot update 可按 `overallDayIndex` / `localDate` / `startTime` 回推 eventDay
-  - patch clear-all 场景下会先消费 timetable delete，再做 lineup delete 校验
+- [x] 2026-05-29：event patch / baseline / revision-gate 兼容协议已从服务端主链路与 iOS event request model 中移除，event submission 正式收敛为 full payload only
 - [x] 2026-05-29：worker queue status / admin status 已增强，可直接看到 `jobType` 维度统计、`phaseBFailure`、`phaseTimings`、最近一次耗时与重试调度信息
 - [x] 2026-05-29：`pnpm content-submissions:status` 已增强为默认人类可读摘要输出，`--json` 保留原始结构，便于线上快速排障
 - [x] 2026-05-29：已新增 `pnpm benchmark:event-submission`，可对 `200+ slot` 的 create/edit 路径输出 Phase A / Phase B / 总耗时基准
@@ -263,8 +259,15 @@
 - [x] 2026-05-29：已定位 benchmark 未打印 `canonicalSync.*` 的原因是 `apply_event_timetable` worker 包装结果时丢失了 `timings.canonicalSync`，现已在服务层补齐透传，待远端复测确认细分耗时
 - [x] 2026-05-29：已确认 Phase B 慢点主要不在 canonical sync 本体，而在 Prisma interactive transaction 外层；当前 VM runtime 使用 `DATABASE_URL=Supabase pooler :6543 + pgbouncer=true`，event submission 事务已改为优先走 `DIRECT_URL`
 - [x] 2026-05-29：复测确认当前服务器上的 `DIRECT_URL` 仍然指向 `pooler.supabase.com:5432`，这只是 session pooler，不是真正的 Postgres 直连；后续需显式提供真实直连串，例如独立 `EVENT_SUBMISSION_TRANSACTION_URL`
+- [x] 2026-05-29：已补 `EVENT_SUBMISSION_TRANSACTION_URL` 独立事务连接，并在 benchmark 中输出当前事务连接模式，避免把 session pooler 误判为 direct
+- [x] 2026-05-29：已确认真正直连 `db.<project-ref>.supabase.co:5432` 生效后，Phase B 的长事务连接等待不再是主瓶颈
+- [x] 2026-05-29：已为 `event-timezone.ts` 增加 `Intl.DateTimeFormat` 缓存，并为 submission normalize 链路补充分段 profiling
+- [x] 2026-05-29：已完成远端最终 benchmark，`240 slot` create/edit 的 Phase B 已从 `40s+` 压缩到约 `6.4s - 6.5s`
+- [x] 2026-05-29：远端最终 benchmark 明细
+  - create：Phase A `1.31s`，Phase B `6.46s`，其中 canonical apply `1.80s`
+  - edit：Phase A `0.70s`，Phase B `6.44s`，其中 canonical apply `1.62s`
 - [x] P0：实现 timetable 幂等 upsert
-- [ ] P1：移除 patch / baseline / revision gate 的旧编辑协议
+- [x] P1：移除 patch / baseline / revision gate 的旧编辑协议
 - [x] P2：拆分 schedule 同步写入与 timetable 异步写入主执行骨架，并完成 Phase B 失败恢复语义校正
 - [ ] P3：submission 按角色 / 来源路由
 - [ ] 完成端到端压测与生产观测验收
@@ -429,30 +432,23 @@
 
 ## 8.2 当前现状
 
-当前 iOS 编辑有两套语义同时存在：
+这一阶段已经完成收敛：
 
-### 全量语义
+- event create/edit 主线现在只提交完整 state：
+  - `schedule`
+  - `weeks`
+  - `eventDays`
+  - `lineupSlots`
+  - `lineupArtists`
+  - `stageOrder`
+- 旧的 event patch 协议字段已经从主线移除：
+  - `editMode`
+  - `lineupChanges`
+  - `timetableChanges`
+  - `stageChanges`
+  - `baseEventRevision`
 
-- `schedule`
-- `weeks`
-- `eventDays`
-- `lineupSlots`
-- `lineupArtists`
-- `stageOrder`
-
-### patch 语义
-
-- `editMode = patch`
-- `lineupChanges`
-- `timetableChanges`
-- `stageChanges`
-
-这导致：
-
-- 客户端要维护 baseline
-- 服务端要校验 revision
-- patch 和 schedule full payload 同时存在于一个请求里
-- 失败面非常大
+当前剩余的 `incrementalBaseline / eventRevision / scheduleFingerprint` 只用于 iOS 本地判断“恢复的编辑草稿是否已经过期”，不再参与 event submission 协议，也不会再影响入库成功与否。
 
 ## 8.3 目标策略
 
@@ -474,13 +470,13 @@
 - `EventUploadFlowViewModel`
 - `WebFeatureModels`
 
-### 需要删除的客户端状态
+### 已完成的客户端协议收敛
 
-- [ ] 删除 `incrementalBaseline`
-- [ ] 删除 `eventRevision` 依赖于编辑提交协议的部分
 - [x] 删除 `patchChanges(from:)`
 - [x] 删除 `editMode = "patch"` 生成逻辑
 - [x] 删除 `lineupChanges / timetableChanges / stageChanges` payload 生成逻辑
+- [x] `UpdateEventInput` 删除 event patch 字段编码
+- [x] event create/edit 主线统一为 full payload only
 
 ### 需要保留的客户端状态
 
@@ -495,27 +491,27 @@
 - `content-submission-event.service.ts`
 - `bff.web.routes.ts`
 
-### 需要删除的服务端路径
+### 已完成的服务端协议收敛
 
-- [ ] 删除 `applySubmissionLineupPatch(...)`
-- [ ] 删除 patch 模式分支
-- [ ] 删除 `assertEventSubmissionBaseRevision(...)`
-- [ ] 删除 `ActiveEventEditSubmissionError` 中与旧编辑协议强耦合的逻辑
+- [x] 删除 `applySubmissionLineupPatch(...)`
+- [x] 删除 patch 模式分支
+- [x] 删除 `assertEventSubmissionBaseRevision(...)`
+- [x] 删除 `EventSubmissionConflictError` / revision gate 相关分支
 
 ### 需要保留但改语义的能力
 
-- [ ] 保留“同一 event 同时只能有一个活跃写任务”这一并发保护，但改为 job 级别互斥，不再依赖 patch baseline
+- [x] 保留“同一 event 同时只能有一个活跃写任务”这一并发保护，当前主线已不再依赖 patch baseline
 
 ## 8.6 数据契约改造
 
-- [ ] `UpdateEventInput` 去掉 patch 字段
-- [ ] BFF 接口不再接收 patch-only payload
-- [ ] iOS / Web 统一成完整 state contract
+- [x] `UpdateEventInput` 去掉 event patch 字段
+- [x] event submission 服务端主链路不再接收 patch-only payload
+- [x] iOS / Web event 主线统一成完整 state contract
 
 ## 8.7 验收标准
 
-- [ ] iOS 端编辑提交 payload 不再包含 patch 字段
-- [ ] 服务端 event edit 主链路不再解析 patch
+- [x] iOS 端编辑提交 payload 不再包含 patch 字段
+- [x] 服务端 event edit 主链路不再解析 patch
 - [x] 删除 baseline 后，正常编辑不再因为 revision 漂移而 409
 - [x] 混改 schedule/stage/lineup/timetable 时，失败点明显减少
 
@@ -749,7 +745,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ### 要改什么
 
-- [ ] 删除 patch / baseline 编辑协议
+- [x] 删除 event patch 编辑协议
 - [ ] 始终生成完整 payload
 - [ ] 提交响应支持：
   - 主结构已保存
@@ -764,7 +760,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 ### 要改什么
 
 - [ ] event create / edit 路由区分 direct apply 和 submission
-- [ ] 不再强依赖 patch fields
+- [x] 不再强依赖 event patch fields
 - [ ] direct path 返回新的状态语义
 
 ## 11.3 Submission Worker
@@ -788,7 +784,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 ### 要改什么
 
 - [ ] 拆出 `applyEventCoreStructure(...)`
-- [ ] 删掉 patch apply 分支
+- [x] 删掉 patch apply 分支
 - [ ] 统一完整 desired-state 输入协议
 
 ## 11.5 Canonical Timetable Service
@@ -830,10 +826,10 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ## 12.2 第 2 周：P1
 
-- [ ] iOS 删除 patch payload 生成逻辑
-- [ ] backend 删除 patch apply 分支
-- [ ] 接口契约切换到 full payload only
-- [ ] 验证老活动混改基本链路
+- [x] iOS 删除 patch payload 生成逻辑
+- [x] backend 删除 patch apply 分支
+- [x] 接口契约切换到 full payload only
+- [x] 验证老活动混改基本链路
 
 ## 12.3 第 3 周：P2
 
@@ -885,7 +881,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 - [ ] 记录真实 Phase A / Phase B 耗时分布并沉淀到状态接口或运维面板
 - [x] 记录 `reviewNotes.phaseBFailure`、`jobType`、重试次数，便于线上排查 timetable 异步失败
 
-### 当前基准结果（2026-05-29，远端环境，`240 slot`, `3 rounds`）
+### 第一轮基准结果（2026-05-29，远端环境，`240 slot`, `3 rounds`）
 
 - create:
   - Phase A wall: `1.25s / 1.31s / 1.65s`，`avg 1.40s`，`p95 1.65s`
@@ -896,13 +892,35 @@ submission 仍保留，但不再作为所有编辑的强制入口。
   - Phase A apply: `0.60s / 0.64s / 0.71s`，`avg 0.65s`
   - Phase B wall: `42.33s / 42.56s / 43.15s`，`avg 42.68s`
 
+### 最终基准结果（2026-05-29，远端环境，`240 slot`, `1 round`，真实 `direct_postgres`）
+
+- create:
+  - Phase A wall: `1.31s`
+  - Phase A apply: `0.70s`
+  - Phase B wall: `6.46s`
+  - Phase B apply: `1.80s`
+  - `scheduleContextMs`: `44ms`
+  - `transactionWallMs`: `6.33s`
+  - `submissionSlotsNormalizeMs`: `4.51s`
+  - `canonicalSync.totalMs`: `1.80s`
+- edit:
+  - Phase A wall: `0.70s`
+  - Phase A apply: `0.22s`
+  - Phase B wall: `6.44s`
+  - Phase B apply: `1.62s`
+  - `scheduleContextMs`: `48ms`
+  - `transactionWallMs`: `6.32s`
+  - `submissionSlotsNormalizeMs`: `4.69s`
+  - `canonicalSync.totalMs`: `1.62s`
+
 ### 当前结论
 
 - Phase A 已达到两阶段改造的核心目标：主结构提交不再被大 timetable 拖慢
-- Phase B 的真实慢点已经进一步收敛到事务层本身，而不是 canonical reconciliation 本体
-- 在远端 `240 slot` 基准下，`canonicalSync.totalMs` 仅约 `5.0s - 8.0s`，但 `transactionWallMs` 约 `39s - 43s`
-- 这说明当前主要问题是 runtime 连接形态与 interactive transaction 不匹配，而不是 slot diff / upsert 本身过慢
-- 下一阶段优化重点从“继续压 canonical 逻辑”切换为“切到真实直连数据库连接后，确认是否显著消除 30s+ transaction overhead”
+- 真实直连数据库连接生效后，Phase B 已从 `40s+` 显著下降到约 `6.4s - 6.5s`
+- 连接层与 transaction wait 问题已经不再是主矛盾，当前主剩余热点明确收敛到 `submissionSlotsNormalizeMs`
+- `canonicalSync` 本体当前已压缩到约 `1.6s - 1.8s`，说明 canonical snapshot / mutation / cleanup 已进入可接受范围
+- 当前方案已经达到了“几百 timetable slot 的 create/edit 可以稳定跑通，且主结构不会再被 timetable 长事务拖垮”的阶段性目标
+- 如果后续还要继续压性能，最值得继续优化的是 `normalizeSubmissionLineupSlots(...)`；如果以当前用户体验为目标，这一版本已经可以接受
 
 ### 下一阶段性能优化待办
 
@@ -911,13 +929,49 @@ submission 仍保留，但不再作为所有编辑的强制入口。
   - artist/stage 对齐
   - performance update / insert / delete 聚合 mutation
   - cleanup delete
-- [ ] 在远端 benchmark 中确认 `canonicalSync.*` 统计已经透出，并据此锁定 Phase B 真正瓶颈
-- [ ] 在远端 benchmark 中确认切换到 `DIRECT_URL` 事务客户端后，`transactionWallMs / transactionOverheadMs` 明显下降
-- [ ] 在远端 benchmark 中确认切换到真实直连数据库连接后，`transactionWallMs / transactionOverheadMs` 明显下降
-- [ ] 对 `syncCanonicalEventLineupAndTimetable(...)` 跑 SQL/CPU 热点剖析
-- [ ] 判断当前 40s+ 是数据库写入慢，还是 JS 层 reconciliation 慢
+- [x] 在远端 benchmark 中确认 `canonicalSync.*` 统计已经透出，并据此锁定 Phase B 真正瓶颈
+- [x] 在远端 benchmark 中确认切换到真实直连数据库连接后，`transactionWallMs / transactionOverheadMs` 已显著下降
+- [x] 对 Phase B 热点完成一轮 SQL/CPU 方向剖析，确认主要剩余热点位于 submission slot normalize
+- [x] 判断先前 `40s+` 的主要问题不是 canonical DB mutation，而是连接形态和 submission normalize 链路
 - [ ] 评估是否要把 Phase B 的 artist/stage/performance mutation 再拆批，避免单次大事务过长
 - [ ] 评估是否要为 `event_performances(event_id, identity_key)` 外再补覆盖索引或查询路径优化
+- [ ] 若继续优化，进一步压缩 `submissionSlotsNormalizeMs`
+
+### 临时代码清理建议（2026-05-29 检查结论）
+
+建议暂时保留：
+
+- `EVENT_SUBMISSION_TRANSACTION_URL`
+  - 这是当前稳定性的关键运行时配置，不属于临时代码，应保留
+- `getEventSubmissionTransactionConnectionInfo()` 与 benchmark 中的 transaction connection 输出
+  - 仍建议保留到线上稳定观察结束，避免后续环境回退到 pooler 时难以及时识别
+- `CanonicalLineupSyncProfiling` 中新增的分段字段
+  - 当前仍然很有排障价值，建议至少保留到下一阶段 production 验收完成
+- `event-timezone.ts` 中的 `Intl.DateTimeFormat` 缓存
+  - 这是实际性能优化，不应删除
+
+可在后续统一清理的内容：
+
+- benchmark 专用的超细粒度字段输出
+  - 如果后续确认不再需要基准压测，可只保留少量核心字段，去掉极细的 benchmark-only 统计展示
+
+本次已确认并已删除的兼容代码：
+
+- event patch 兼容路径
+  - 已从 `content-submission-event.service.ts`、`content-submission.routes.ts`、`event-incremental-sync-regression.ts`、iOS `WebFeatureModels.swift` 移除
+- `baseEventRevision` event revision gate
+  - 已从 event submission 主链路与 regression 覆盖中移除
+
+当前不建议立即删除：
+
+- Phase B profiling 字段
+- queue status 中的 phase timing 信息
+- benchmark 脚本
+
+原因：
+
+- 这次问题的定位完全依赖这些观测能力
+- 当前刚完成大改造，立刻删掉会降低后续线上回归排障能力
 
 ---
 
@@ -928,7 +982,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 - [ ] 幂等键设计不当导致 slot 误合并
 - [ ] schedule 与 timetable 异步后出现短时中间态
 - [ ] direct apply 与 submission 路由同时存在时，状态语义容易混乱
-- [ ] 旧客户端仍发 patch payload 时的兼容问题
+- [x] 旧 event 客户端 patch payload 已不再兼容，主线已明确收敛为 full payload only
 
 ## 14.2 回滚策略
 
@@ -938,7 +992,7 @@ submission 仍保留，但不再作为所有编辑的强制入口。
 
 ### P1 回滚
 
-- [ ] 在服务端短期兼容 full payload 与旧 patch payload
+- [ ] 如必须回滚，只能通过回滚整版代码恢复旧协议，不再保留运行时双协议兼容
 
 ### P2 回滚
 

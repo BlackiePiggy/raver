@@ -14,10 +14,8 @@ import {
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 import {
   type CanonicalLineupSyncProfiling,
-  type CanonicalLineupSnapshot,
   type CanonicalLineupArtistInput,
   type CanonicalLineupSlotInput,
-  loadCanonicalEventLineupSnapshot,
   normalizeCanonicalLineupArtists,
   syncCanonicalEventLineupAndTimetable,
 } from './event-lineup-canonical.service';
@@ -144,25 +142,6 @@ const resolveEventLineupSyncMode = (
     : 'incremental_fill';
 };
 
-export class EventSubmissionConflictError extends Error {
-  readonly code = 'EVENT_SUBMISSION_STALE_EDIT';
-  readonly details?: {
-    targetEventId?: string;
-    baseEventRevision?: number | null;
-    currentEventRevision?: number | null;
-  };
-
-  constructor(message: string, details?: {
-    targetEventId?: string;
-    baseEventRevision?: number | null;
-    currentEventRevision?: number | null;
-  }) {
-    super(message);
-    this.name = 'EventSubmissionConflictError';
-    this.details = details;
-  }
-}
-
 export class ActiveEventEditSubmissionError extends Error {
   readonly code = 'ACTIVE_EVENT_EDIT_SUBMISSION_EXISTS';
   readonly details: {
@@ -186,9 +165,6 @@ const ACTIVE_EVENT_EDIT_SUBMISSION_STATUSES = ['pending', 'processing', 'reviewi
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
-
-const jsonObjectOrNull = (value: unknown): Prisma.JsonObject | null =>
-  isPlainObject(value) ? value as Prisma.JsonObject : null;
 
 export class EventSubmissionValidationError extends Error {
   readonly code = 'EVENT_SUBMISSION_INVALID_PAYLOAD';
@@ -506,48 +482,6 @@ const cancelSupersededActiveEventEditSubmissions = async (
   });
 };
 
-const validateBaseEventRevision = (
-  payload: Prisma.JsonObject,
-  currentRevision: number
-): void => {
-  const targetEventId = getEventEditTargetIdFromPayload(payload);
-  if (!targetEventId) return;
-  const baseEventRevision = integerOrNull(payload.baseEventRevision);
-  if (baseEventRevision === null) {
-    throw new EventSubmissionConflictError('编辑基线已失效，请重新打开活动后再提交', {
-      targetEventId,
-      baseEventRevision: null,
-      currentEventRevision: currentRevision,
-    });
-  }
-  if (baseEventRevision !== currentRevision) {
-    throw new EventSubmissionConflictError('活动在你编辑期间已被更新，请刷新最新内容后重新编辑提交', {
-      targetEventId,
-      baseEventRevision,
-      currentEventRevision: currentRevision,
-    });
-  }
-};
-
-export const assertEventSubmissionBaseRevision = async (
-  db: PrismaClient,
-  payload: Prisma.JsonObject
-): Promise<void> => {
-  const targetEventId = getEventEditTargetIdFromPayload(payload);
-  if (!targetEventId) return;
-  const existing = await db.event.findUnique({
-    where: { id: targetEventId },
-    select: {
-      id: true,
-      revision: true,
-    },
-  });
-  if (!existing) {
-    throw new Error('待更新的活动不存在');
-  }
-  validateBaseEventRevision(payload, existing.revision);
-};
-
 const decimalOrNull = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -677,71 +611,6 @@ const buildSlotInstantFromEventDay = (
   }, timeZone);
 };
 
-const rebuildSlotInstantForMovedEventDay = (
-  sourceInstant: Date,
-  sourceEventDayDate: Date,
-  targetEventDayDate: Date,
-  timeZone: string
-): Date => {
-  const carryOffset = Math.max(0, diffEventDays(sourceEventDayDate, sourceInstant, timeZone));
-  const targetBaseDate = cloneEventDayByOffset(targetEventDayDate, carryOffset);
-  const dateParts = getLocalDateTimePartsForInstant(targetBaseDate, timeZone);
-  const timeParts = getLocalDateTimePartsForInstant(sourceInstant, timeZone);
-  if (!dateParts || !timeParts) return new Date(NaN);
-  return zonedTimeToUtc({
-    year: dateParts.year,
-    month: dateParts.month,
-    day: dateParts.day,
-    hour: timeParts.hour,
-    minute: timeParts.minute,
-    second: timeParts.second,
-    millisecond: timeParts.millisecond,
-  }, timeZone);
-};
-
-const alignExistingSlotToScheduleContext = (
-  slot: CanonicalLineupSlotInput,
-  scheduleContext: SubmittedEventScheduleContext
-): CanonicalLineupSlotInput => {
-  if (!slot.eventDayId) return slot;
-  const eventDay = scheduleContext.eventDays.find((day) => day.eventDayId === slot.eventDayId);
-  if (!eventDay) {
-    throw new EventSubmissionValidationError(`time slot ${slot.id || slot.djName} 引用的 eventDayId=${slot.eventDayId} 不存在于 eventDays 中`);
-  }
-
-  const sourceEventDayDate = slot.localDate
-    ? startOfEventDay(slot.localDate, scheduleContext.timeZone)
-    : startOfEventDay(slot.startTime, scheduleContext.timeZone);
-  let startTime = rebuildSlotInstantForMovedEventDay(
-    slot.startTime,
-    sourceEventDayDate,
-    eventDay.date,
-    scheduleContext.timeZone
-  );
-  let endTime = rebuildSlotInstantForMovedEventDay(
-    slot.endTime,
-    sourceEventDayDate,
-    eventDay.date,
-    scheduleContext.timeZone
-  );
-  if (Number.isNaN(startTime.getTime())) startTime = slot.startTime;
-  if (Number.isNaN(endTime.getTime())) endTime = slot.endTime;
-  while (endTime < startTime) {
-    endTime = new Date(endTime.getTime() + 86_400_000);
-  }
-
-  return {
-    ...slot,
-    eventDayId: eventDay.eventDayId,
-    weekIndex: eventDay.weekIndex,
-    dayIndexInWeek: eventDay.dayIndexInWeek,
-    overallDayIndex: eventDay.overallDayIndex,
-    localDate: eventDateOnlyToStorageDate(eventDay.date, scheduleContext.timeZone),
-    startTime,
-    endTime,
-  };
-};
-
 const normalizeLocalDateInput = (value: unknown, timeZone: string): Date | null => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return startOfEventDay(value, timeZone);
@@ -753,7 +622,8 @@ const normalizeLocalDateInput = (value: unknown, timeZone: string): Date | null 
 const assertSlotMatchesEventDay = (
   slot: Record<string, unknown>,
   eventDay: SubmittedEventDay,
-  timeZone: string
+  timeZone: string,
+  eventDayDateKey?: string
 ): void => {
   const inputWeekIndex = integerOrNull(slot.weekIndex);
   if (inputWeekIndex !== null && inputWeekIndex !== eventDay.weekIndex) {
@@ -772,7 +642,8 @@ const assertSlotMatchesEventDay = (
     throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 festivalDayIndex 与 eventDays 定义不一致`);
   }
   const localDate = normalizeLocalDateInput(slot.localDate, timeZone);
-  if (localDate && eventDateKey(localDate, timeZone) !== eventDateKey(eventDay.date, timeZone)) {
+  const targetDateKey = eventDayDateKey ?? eventDateKey(eventDay.date, timeZone);
+  if (localDate && eventDateKey(localDate, timeZone) !== targetDateKey) {
     throw new EventSubmissionValidationError(`slot.eventDayId=${eventDay.eventDayId} 的 localDate 与 eventDays 定义不一致`);
   }
 };
@@ -813,18 +684,26 @@ const normalizeSubmissionLineupSlots = (
   if (!Array.isArray(slots)) return [];
 
   const { eventDays, timeZone } = scheduleContext;
+  const eventDayMeta = eventDays.map((day) => ({
+    day,
+    dateKey: eventDateKey(day.date, timeZone),
+    storageLocalDate: eventDateOnlyToStorageDate(day.date, timeZone),
+  }));
   const eventDayById = new Map(eventDays.map((day) => [day.eventDayId, day]));
+  const eventDayMetaById = new Map(eventDayMeta.map((meta) => [meta.day.eventDayId, meta]));
+  const eventDayByOverallDayIndex = new Map(eventDays.map((day) => [day.overallDayIndex, day]));
+  const eventDayByDateKey = new Map(eventDayMeta.map((meta) => [meta.dateKey, meta.day]));
   const resolveEventDayForLegacySlot = (slot: Record<string, unknown>): SubmittedEventDay | null => {
     const overallDayIndex = integerOrNull(slot.overallDayIndex);
     if (overallDayIndex !== null) {
-      const matched = eventDays.find((day) => day.overallDayIndex === overallDayIndex);
+      const matched = eventDayByOverallDayIndex.get(overallDayIndex);
       if (matched) return matched;
     }
 
     const localDate = normalizeLocalDateInput(slot.localDate, timeZone);
     if (localDate) {
       const localDateKey = eventDateKey(localDate, timeZone);
-      const matched = eventDays.find((day) => eventDateKey(day.date, timeZone) === localDateKey);
+      const matched = eventDayByDateKey.get(localDateKey);
       if (matched) return matched;
     }
 
@@ -832,7 +711,7 @@ const normalizeSubmissionLineupSlots = (
     if (parsedStart) {
       const startDay = startOfEventDay(parsedStart, timeZone);
       const startDayKey = eventDateKey(startDay, timeZone);
-      const matched = eventDays.find((day) => eventDateKey(day.date, timeZone) === startDayKey);
+      const matched = eventDayByDateKey.get(startDayKey);
       if (matched) return matched;
     }
 
@@ -852,15 +731,23 @@ const normalizeSubmissionLineupSlots = (
       if (!eventDay) {
         throw new EventSubmissionValidationError(`slot.eventDayId=${eventDayId} 不存在于 eventDays 中`);
       }
-      assertSlotMatchesEventDay(slot, eventDay, timeZone);
+      const eventDayResolvedMeta = eventDayMetaById.get(eventDay.eventDayId);
+      const eventDayDateKey = eventDayResolvedMeta?.dateKey ?? eventDateKey(eventDay.date, timeZone);
+      assertSlotMatchesEventDay(slot, eventDay, timeZone, eventDayDateKey);
 
       const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
       const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');
       if (!parsedStart || !parsedEnd) {
         throw new EventSubmissionValidationError(`slot.eventDayId=${eventDayId} 缺少有效的 startTime / endTime`);
       }
-      let startTime = buildSlotInstantFromEventDay(parsedStart, eventDay.date, timeZone);
-      let endTime = buildSlotInstantFromEventDay(parsedEnd, eventDay.date, timeZone);
+      const startCarryOffset = diffEventDays(eventDay.date, parsedStart, timeZone);
+      const endCarryOffset = diffEventDays(eventDay.date, parsedEnd, timeZone);
+      let startTime = startCarryOffset === 0
+        ? parsedStart
+        : buildSlotInstantFromEventDay(parsedStart, eventDay.date, timeZone);
+      let endTime = startCarryOffset === 0 && endCarryOffset >= 0
+        ? parsedEnd
+        : buildSlotInstantFromEventDay(parsedEnd, eventDay.date, timeZone);
       while (endTime < startTime) {
         endTime = new Date(endTime.getTime() + 86_400_000);
       }
@@ -889,7 +776,7 @@ const normalizeSubmissionLineupSlots = (
         weekIndex: eventDay.weekIndex,
         dayIndexInWeek: eventDay.dayIndexInWeek,
         overallDayIndex: eventDay.overallDayIndex,
-        localDate: eventDateOnlyToStorageDate(eventDay.date, scheduleContext.timeZone),
+        localDate: eventDayResolvedMeta?.storageLocalDate ?? eventDateOnlyToStorageDate(eventDay.date, scheduleContext.timeZone),
         djId: effectiveDjId,
         memberDjIds,
         djName: djName || 'Unknown DJ',
@@ -1197,212 +1084,12 @@ export const formatEventLineupTimetableAlignmentError = (
   return parts.join(' ');
 };
 
-const requirePatchId = (row: Record<string, unknown>, field: string, label: string): string => {
-  const id = cleanText(row[field]);
-  if (!id) {
-    throw new Error(`${label} 缺少稳定 ID，无法执行增量编辑`);
-  }
-  return id;
-};
-
-const normalizedStageText = (value: string | null | undefined): string =>
-  cleanText(value)?.toLocaleLowerCase() || '';
-
-const applySubmissionLineupPatch = async (
-  tx: Prisma.TransactionClient,
-  eventId: string,
-  payload: Prisma.JsonObject,
-  scheduleContext: SubmittedEventScheduleContext
-): Promise<{
-  artists: CanonicalLineupArtistInput[];
-  slots: CanonicalLineupSlotInput[];
-  stageOrder: string[];
-}> => {
-  const snapshot: CanonicalLineupSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
-  let artists = snapshot.artists.slice();
-  let slots = snapshot.slots.slice();
-  let stageOrder = normalizeEventStageOrder(payload.stageOrder);
-  if (stageOrder.length === 0) stageOrder = snapshot.stageOrder.slice();
-
-  const artistById = () => new Map(artists.map((artist) => [artist.id, artist]).filter((entry): entry is [string, CanonicalLineupArtistInput] => Boolean(entry[0])));
-  const slotById = () => new Map(slots.map((slot) => [slot.id, slot]).filter((entry): entry is [string, CanonicalLineupSlotInput] => Boolean(entry[0])));
-  const timetableChanges = Array.isArray(payload.timetableChanges) ? payload.timetableChanges : [];
-
-  for (const rawChange of timetableChanges) {
-    if (!isPlainObject(rawChange)) continue;
-    const op = cleanText(rawChange.op);
-    if (op !== 'delete') continue;
-
-    const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
-    const existing = slotById().get(slotId);
-    if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
-    slots = slots.filter((slot) => slot.id !== slotId);
-  }
-
-  const lineupChanges = Array.isArray(payload.lineupChanges) ? payload.lineupChanges : [];
-  for (const rawChange of lineupChanges) {
-    if (!isPlainObject(rawChange)) continue;
-    const op = cleanText(rawChange.op);
-    if (op === 'add') {
-      const artistPayload = jsonObjectOrNull(rawChange.artist);
-      const normalized = normalizeSubmissionLineupArtists(artistPayload ? [artistPayload] : [], []);
-      if (normalized.length === 0) throw new Error('新增艺人缺少名称或 DJ 信息');
-      artists.push({
-        ...normalized[0],
-        sortOrder: normalized[0].sortOrder || artists.length + 1,
-      });
-      continue;
-    }
-
-    const artistId = requirePatchId(rawChange, 'artistId', '艺人变更');
-    const existing = artistById().get(artistId);
-    if (!existing) throw new Error(`艺人不存在或已变化，无法执行增量编辑：${artistId}`);
-
-    if (op === 'delete') {
-      const linkedSlots = slots.filter((slot) => slot.lineupArtistId === artistId || (slot.id && slot.djName === existing.djName));
-      if (linkedSlots.length > 0) {
-        throw new Error(`艺人「${existing.djName}」仍被时间表引用，请先删除对应 time slot 后再删除艺人`);
-      }
-      artists = artists.filter((artist) => artist.id !== artistId);
-      continue;
-    }
-
-    if (op === 'update') {
-      const patch = jsonObjectOrNull(rawChange.patch);
-      if (!patch) throw new Error('艺人更新缺少 patch 内容');
-      const normalized = normalizeSubmissionLineupArtists([{ ...existing, ...patch, id: artistId }], []);
-      if (normalized.length === 0) throw new Error(`艺人更新内容无效：${artistId}`);
-      artists = artists.map((artist) => artist.id === artistId ? { ...normalized[0], id: artistId } : artist);
-      continue;
-    }
-
-    if (op === 'reorder') {
-      const sortOrder = integerOrNull(rawChange.sortOrder);
-      if (sortOrder === null) throw new Error('艺人排序变更缺少 sortOrder');
-      artists = artists.map((artist) => artist.id === artistId ? { ...artist, sortOrder } : artist);
-      continue;
-    }
-
-    throw new Error(`不支持的艺人增量操作：${op || 'unknown'}`);
-  }
-
-  for (const rawChange of timetableChanges) {
-    if (!isPlainObject(rawChange)) continue;
-    const op = cleanText(rawChange.op);
-    if (op === 'delete') continue;
-    if (op === 'add') {
-      const slotPayload = jsonObjectOrNull(rawChange.slot);
-      const normalized = normalizeSubmissionLineupSlots(slotPayload ? [slotPayload] : [], scheduleContext);
-      if (normalized.length === 0) throw new Error('新增 time slot 缺少艺人或时间信息');
-      slots.push({
-        ...normalized[0],
-        sortOrder: normalized[0].sortOrder || slots.length + 1,
-      });
-      continue;
-    }
-
-    const slotId = requirePatchId(rawChange, 'slotId', '时间表变更');
-    const existing = slotById().get(slotId);
-    if (!existing) throw new Error(`time slot 不存在或已变化，无法执行增量编辑：${slotId}`);
-
-    if (op === 'update') {
-      const patch = jsonObjectOrNull(rawChange.patch);
-      if (!patch) throw new Error('time slot 更新缺少 patch 内容');
-      const normalized = normalizeSubmissionLineupSlots([{ ...existing, ...patch, id: slotId }], scheduleContext);
-      if (normalized.length === 0) throw new Error(`time slot 更新内容无效：${slotId}`);
-      slots = slots.map((slot) => slot.id === slotId ? { ...normalized[0], id: slotId } : slot);
-      continue;
-    }
-
-    if (op === 'reorder') {
-      const sortOrder = integerOrNull(rawChange.sortOrder);
-      if (sortOrder === null) throw new Error('time slot 排序变更缺少 sortOrder');
-      slots = slots.map((slot) => slot.id === slotId ? { ...slot, sortOrder } : slot);
-      continue;
-    }
-
-    throw new Error(`不支持的时间表增量操作：${op || 'unknown'}`);
-  }
-
-  const stageChanges = Array.isArray(payload.stageChanges) ? payload.stageChanges : [];
-  for (const rawChange of stageChanges) {
-    if (!isPlainObject(rawChange)) continue;
-    const op = cleanText(rawChange.op);
-    const stageName = cleanText(rawChange.name);
-    if (!stageName) throw new Error('舞台变更缺少 stage name');
-    const normalizedStageName = normalizedStageText(stageName);
-
-    if (op === 'delete') {
-      if (rawChange.confirmDeleteLinkedPerformances !== true) {
-        throw new Error(`删除舞台「${stageName}」会删除该舞台下的全部演出，请确认后再提交`);
-      }
-      stageOrder = stageOrder.filter((name) => normalizedStageText(name) !== normalizedStageName);
-      slots = slots.filter((slot) => normalizedStageText(slot.stageName) !== normalizedStageName);
-      continue;
-    }
-
-    if (op === 'rename') {
-      const nextName = cleanText(rawChange.nextName);
-      if (!nextName) throw new Error('舞台重命名缺少新名称');
-      const hasExactStageMatch = stageOrder.some((name) => normalizedStageText(name) === normalizedStageName);
-      const canFallbackSingleStageRename = !hasExactStageMatch && stageOrder.length === 1;
-      if (!hasExactStageMatch && !canFallbackSingleStageRename) {
-        throw new Error(`舞台不存在或已变化，无法重命名：${stageName}`);
-      }
-      if (canFallbackSingleStageRename) {
-        const currentOnlyStageName = stageOrder[0] || '';
-        const normalizedCurrentOnlyStage = normalizedStageText(currentOnlyStageName);
-        stageOrder = [nextName];
-        slots = slots.map((slot) => normalizedStageText(slot.stageName) === normalizedCurrentOnlyStage
-          ? { ...slot, stageName: nextName }
-          : slot
-        );
-        continue;
-      }
-      stageOrder = stageOrder.map((name) => normalizedStageText(name) === normalizedStageName ? nextName : name);
-      slots = slots.map((slot) => normalizedStageText(slot.stageName) === normalizedStageName ? { ...slot, stageName: nextName } : slot);
-      continue;
-    }
-
-    throw new Error(`不支持的舞台增量操作：${op || 'unknown'}`);
-  }
-
-  const normalizedSlots = slots
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((slot, index) => ({
-      ...alignExistingSlotToScheduleContext(slot, scheduleContext),
-      sortOrder: slot.sortOrder || index + 1,
-    }));
-  const normalizedArtists = normalizeCanonicalLineupArtists(
-    artists.slice().sort((a, b) => a.sortOrder - b.sortOrder),
-    []
-  );
-  const timetableArtists = normalizeCanonicalLineupArtists([], normalizedSlots);
-  const lineupSyncMode = resolveEventLineupSyncMode(payload);
-  const finalArtists = lineupSyncMode === 'exact_align'
-    ? mergeAlignedLineupArtists(normalizedArtists, timetableArtists)
-    : mergeIncrementalLineupArtists(normalizedArtists, timetableArtists);
-  const finalSlots = relinkSlotsToAlignedArtists(normalizedSlots, finalArtists);
-
-  return {
-    artists: finalArtists,
-    slots: finalSlots,
-    stageOrder,
-  };
-};
-
 const syncSubmissionEventLineupAndTimetable = async (
   tx: Prisma.TransactionClient,
   eventId: string,
   payload: Prisma.JsonObject,
   scheduleContext: SubmittedEventScheduleContext
 ): Promise<CanonicalLineupSyncProfiling> => {
-  if (cleanText(payload.editMode) === 'patch') {
-    const patched = await applySubmissionLineupPatch(tx, eventId, payload, scheduleContext);
-    return syncCanonicalEventLineupAndTimetable(tx, eventId, patched.slots, patched.artists, patched.stageOrder);
-  }
-
   const slotsStartedAt = process.hrtime.bigint();
   const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
   const submissionSlotsNormalizeMs = Number(process.hrtime.bigint() - slotsStartedAt) / 1_000_000;

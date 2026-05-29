@@ -108,8 +108,6 @@ const main = async (): Promise<void> => {
       createdEntityId: submission.createdEntityId,
       reviewReason: submission.reviewReason,
       targetEventId: cleanText(payload.targetEventId) ?? cleanText(payload.editTargetEventId),
-      baseEventRevision: payload.baseEventRevision ?? null,
-      editMode: payload.editMode ?? null,
       changeSummary: readJsonObject(payload.changeSummary),
       versionCount: submission.versions.length,
       versionSubmittedAt: submission.versions.map((version) => ({
@@ -122,12 +120,6 @@ const main = async (): Promise<void> => {
     };
   });
 
-  const baseRevisionGroups = rows.reduce<Record<string, number>>((acc, row) => {
-    const key = String(row.baseEventRevision ?? 'none');
-    acc[key] = (acc[key] ?? 0) + 1;
-    return acc;
-  }, {});
-
   const activeRows = rows.filter((row) => ['pending', 'processing', 'reviewing'].includes(row.status));
   console.log(JSON.stringify({
     event: {
@@ -137,7 +129,6 @@ const main = async (): Promise<void> => {
     summary: {
       submissionCount: rows.length,
       activeSubmissionCount: activeRows.length,
-      baseRevisionGroups,
       firstSubmissionAt: rows[0]?.createdAt ?? null,
       lastSubmissionAt: rows[rows.length - 1]?.createdAt ?? null,
     },

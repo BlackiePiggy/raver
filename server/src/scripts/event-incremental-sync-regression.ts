@@ -409,354 +409,9 @@ const runDirectCanonicalRegression = async (eventId: string): Promise<void> => {
   await assertExistingRowsStable(eventId, seededArtistIds, seededPerformanceIds);
 };
 
-const runManualReviewPatchRegression = async (eventId: string, userId: string): Promise<void> => {
-  logStep('manual review patch apply path');
-  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  const schedule = buildAugustMultiDaySchedule();
-  const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
-  const beforePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
-  const artistName = 'Regression Manual Approval DJ';
-
-  await createOrUpdateEventFromSubmission(prisma, {
-    targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
-    editMode: 'patch',
-    name: `Event Incremental Regression Approved ${Date.now()}`,
-    ...schedule,
-    imageAssets: [
-      {
-        type: 'poster',
-        label: 'POSTER',
-        url: 'https://example.com/regression-poster.jpg',
-      },
-    ],
-    lineupChanges: [
-      {
-        op: 'add',
-        artist: {
-          djName: artistName,
-          memberNames: [artistName],
-          sortOrder: before.artists.length + 1,
-        },
-      },
-    ],
-    timetableChanges: [
-      {
-        op: 'add',
-        slot: {
-          eventDayId: schedule.eventDays[1].eventDayId,
-          weekIndex: schedule.eventDays[1].weekIndex,
-          dayIndexInWeek: schedule.eventDays[1].dayIndexInWeek,
-          overallDayIndex: schedule.eventDays[1].overallDayIndex,
-          localDate: schedule.eventDays[1].date,
-          djName: artistName,
-          memberNames: [artistName],
-          stageName: 'Main Stage',
-          festivalDayIndex: schedule.eventDays[1].overallDayIndex,
-          startTime: '2026-08-02T18:00:00+08:00',
-          endTime: '2026-08-02T19:00:00+08:00',
-          sortOrder: before.slots.length + 1,
-        },
-      },
-    ],
-    stageOrder: before.stageOrder,
-  }, userId);
-
-  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  assert(after.artists.length === before.artists.length + 1, 'manual review patch did not add exactly one artist');
-  assert(after.slots.length === before.slots.length + 1, 'manual review patch did not add exactly one timetable slot');
-  assert(after.artists.some((artist) => artist.djName === artistName), 'manual review patch artist missing');
-  assert(after.slots.some((slot) => slot.djName === artistName), 'manual review patch slot missing');
-  await assertExistingRowsStable(eventId, beforeArtistIds, beforePerformanceIds);
-};
-
-const runSingleStageLegacyRenameRegression = async (userId: string): Promise<void> => {
-  logStep('single stage legacy rename compatibility path');
-  const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
-  let eventId = '';
-  const schedule = buildSingleDaySchedule('2026-11-01');
-
-  try {
-    const event = await prisma.event.create({
-      data: {
-        organizerId: userId,
-        slug: `event-incremental-single-stage-${suffix}`,
-        name: `Event Incremental Single Stage ${suffix}`,
-        city: 'Shanghai',
-        country: 'China',
-        startDate: new Date('2026-11-01T00:00:00.000Z'),
-        endDate: new Date('2026-11-01T23:59:59.000Z'),
-        timeZone: 'Asia/Shanghai',
-        coverImageUrl: 'https://example.com/regression-cover.jpg',
-        lineupImageUrl: 'https://example.com/regression-lineup.jpg',
-        imageAssets: [
-          {
-            type: 'poster',
-            label: 'POSTER',
-            url: 'https://example.com/regression-poster.jpg',
-          },
-        ],
-        status: 'upcoming',
-        isVerified: true,
-      },
-      select: { id: true, revision: true },
-    });
-    eventId = event.id;
-
-    const artist = {
-      id: crypto.randomUUID(),
-      djId: null,
-      memberDjIds: [],
-      memberNames: ['Regression Legacy Rename DJ'],
-      djName: 'Regression Legacy Rename DJ',
-      sortOrder: 1,
-    } satisfies CanonicalLineupArtistInput;
-    const slot = {
-      id: crypto.randomUUID(),
-      lineupArtistId: artist.id,
-      djId: null,
-      memberDjIds: [],
-      djName: artist.djName,
-      stageName: 'Main Stage',
-      festivalDayIndex: 1,
-      startTime: new Date('2026-11-01T12:00:00.000Z'),
-      endTime: new Date('2026-11-01T13:00:00.000Z'),
-      sortOrder: 1,
-    } satisfies CanonicalLineupSlotInput;
-
-    await prisma.$transaction(async (tx) => {
-      await syncCanonicalEventLineupAndTimetable(tx, eventId, [slot], [artist], ['Main Stage']);
-    });
-
-    await createOrUpdateEventFromSubmission(prisma, {
-      targetEventId: eventId,
-      baseEventRevision: event.revision,
-      editMode: 'patch',
-      name: `Event Incremental Single Stage Rename ${suffix}`,
-      ...schedule,
-      imageAssets: [
-        {
-          type: 'poster',
-          label: 'POSTER',
-          url: 'https://example.com/regression-poster.jpg',
-        },
-      ],
-      stageChanges: [
-        {
-          op: 'rename',
-          name: '百威风暴电音节主舞台',
-          nextName: 'Single Stage From Legacy Rename',
-        },
-      ],
-      stageOrder: ['Main Stage'],
-    }, userId);
-
-    const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-    assert(after.stageOrder.length === 1, 'single stage legacy rename changed stage count');
-    assert(after.stageOrder[0] === 'Single Stage From Legacy Rename', 'single stage legacy rename did not update stage order');
-    assert(after.slots.every((candidate) => candidate.stageName === 'Single Stage From Legacy Rename'), 'single stage legacy rename did not relabel slot stages');
-  } finally {
-    if (eventId) {
-      await prisma.event.deleteMany({ where: { id: eventId } });
-    }
-  }
-};
-
-const runPatchClearAllTimetableRegression = async (eventId: string, userId: string): Promise<void> => {
-  logStep('patch clear all timetable path');
-  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  const schedule = buildAugustMultiDaySchedule();
-
-  assert(before.stageOrder.length > 0, 'patch clear all regression requires seeded stages');
-  assert(before.slots.length > 0, 'patch clear all regression requires seeded slots');
-
-  await createOrUpdateEventFromSubmission(prisma, {
-    targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
-    editMode: 'patch',
-    name: `Event Incremental Clear All ${Date.now()}`,
-    ...schedule,
-    imageAssets: [
-      {
-        type: 'poster',
-        label: 'POSTER',
-        url: 'https://example.com/regression-poster.jpg',
-      },
-    ],
-    lineupChanges: before.artists
-      .filter((artist) => Boolean(artist.id))
-      .map((artist) => ({
-        op: 'delete',
-        artistId: artist.id as string,
-      })),
-    timetableChanges: before.slots
-      .filter((slot) => Boolean(slot.id))
-      .map((slot) => ({
-        op: 'delete',
-        slotId: slot.id as string,
-      })),
-    stageChanges: before.stageOrder.map((stageName) => ({
-      op: 'delete',
-      name: stageName,
-      confirmDeleteLinkedPerformances: true,
-    })),
-    stageOrder: before.stageOrder,
-  }, userId);
-
-  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  assert(after.artists.length === 0, 'patch clear all regression did not remove artists');
-  assert(after.slots.length === 0, 'patch clear all regression did not remove slots');
-  assert(after.stageOrder.length === 0, 'patch clear all regression did not remove stage order');
-};
-
-const runTimetableIncrementalFillPatchRegression = async (eventId: string, userId: string): Promise<void> => {
-  logStep('timetable incremental fill patch path');
-  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  const schedule = buildAugustMultiDaySchedule();
-  const slotToRewrite = before.slots[1];
-  assert(Boolean(slotToRewrite?.id), 'timetable incremental fill slot missing stable id');
-  assert(Boolean(slotToRewrite?.lineupArtistId), 'timetable incremental fill slot missing linked lineup artist id');
-  const previousArtistName = slotToRewrite.djName;
-  const nextArtistName = 'Regression Timetable Incremental Fill DJ';
-  const unaffectedArtistIds = before.artists
-    .map((artist) => artist.id)
-    .filter((id): id is string => Boolean(id && id !== slotToRewrite.lineupArtistId));
-  const stablePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
-
-  await createOrUpdateEventFromSubmission(prisma, {
-    targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
-    editMode: 'patch',
-    name: `Event Incremental Timetable Source ${Date.now()}`,
-    ...schedule,
-    imageAssets: [
-      {
-        type: 'poster',
-        label: 'POSTER',
-        url: 'https://example.com/regression-poster.jpg',
-      },
-    ],
-    timetableChanges: [
-      {
-        op: 'update',
-        slotId: slotToRewrite.id,
-        patch: {
-          djName: nextArtistName,
-          memberNames: [nextArtistName],
-          memberDjIds: [],
-          djId: null,
-        },
-      },
-    ],
-    stageOrder: before.stageOrder,
-  }, userId);
-
-  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  assert(after.slots.length === before.slots.length, 'timetable incremental fill changed slot count');
-  assert(after.artists.length === before.artists.length + 1, 'timetable incremental fill should append one new lineup artist');
-  assert(after.slots.some((slot) => slot.id === slotToRewrite.id && slot.djName === nextArtistName), 'timetable incremental fill did not update slot artist');
-  assert(after.artists.some((artist) => artist.djName === nextArtistName), 'timetable incremental fill did not append the rewritten timetable artist');
-  assert(after.artists.some((artist) => artist.djName === previousArtistName), 'timetable incremental fill should preserve the previous lineup artist');
-  await assertExistingRowsStable(eventId, unaffectedArtistIds, stablePerformanceIds);
-};
-
-const runNormalReviewApprovalRegression = async (eventId: string, userId: string): Promise<void> => {
-  logStep('normal review approval path');
-  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  const schedule = buildAugustMultiDaySchedule();
-  const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
-  const beforePerformanceIds = before.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
-  const slotToUpdate = before.slots[0];
-  assert(Boolean(slotToUpdate?.id), 'normal review slot to update missing stable id');
-  const nextStart = minutesAfter(slotToUpdate.startTime, 5);
-  const nextEnd = minutesAfter(slotToUpdate.endTime, 5);
-  const payload = {
-    targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
-    editMode: 'patch',
-    name: `Event Incremental Normal Review ${Date.now()}`,
-    ...schedule,
-    imageAssets: [
-      {
-        type: 'poster',
-        label: 'POSTER',
-        url: 'https://example.com/regression-poster.jpg',
-      },
-    ],
-    timetableChanges: [
-      {
-        op: 'update',
-        slotId: slotToUpdate.id,
-        patch: {
-          startTime: nextStart.toISOString(),
-          endTime: nextEnd.toISOString(),
-        },
-      },
-    ],
-    stageOrder: before.stageOrder,
-  };
-
-  const submission = await prisma.contentSubmission.create({
-    data: {
-      submitterId: userId,
-      entityType: 'event',
-      status: 'reviewing',
-      title: payload.name,
-      payload,
-      reviewReason: null,
-    },
-    select: { id: true },
-  });
-
-  const created = await createOrUpdateEventFromSubmission(prisma, payload, userId);
-  await prisma.contentSubmission.update({
-    where: { id: submission.id },
-    data: {
-      status: 'approved',
-      reviewedAt: new Date(),
-      reviewedBy: userId,
-      createdEntityId: created.id,
-    },
-  });
-
-  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  assert(after.artists.length === before.artists.length, 'normal review approval changed artist count');
-  assert(after.slots.length === before.slots.length, 'normal review approval changed slot count');
-  await assertExistingRowsStable(eventId, beforeArtistIds, beforePerformanceIds);
-  const updatedSlot = after.slots.find((slot) => slot.id === slotToUpdate.id);
-  assert(updatedSlot?.startTime.getTime() === nextStart.getTime(), 'normal review approval did not apply slot update');
-
-  const approved = await prisma.contentSubmission.findUnique({
-    where: { id: submission.id },
-    select: { status: true, createdEntityId: true },
-  });
-  assert(approved?.status === 'approved', 'normal review submission was not marked approved');
-  assert(approved?.createdEntityId === eventId, 'normal review submission did not link approved event');
-};
-
 const runFullPayloadIncrementalFillRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('full payload incremental fill path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
   const schedule = buildAugustMultiDaySchedule();
   const slotToRewrite = before.slots[2];
   assert(Boolean(slotToRewrite?.id), 'full payload incremental fill slot missing stable id');
@@ -770,7 +425,6 @@ const runFullPayloadIncrementalFillRegression = async (eventId: string, userId: 
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
     name: `Event Incremental Full Payload ${Date.now()}`,
     ...schedule,
     imageAssets: [
@@ -821,10 +475,6 @@ const runFullPayloadIncrementalFillRegression = async (eventId: string, userId: 
 const runFullPayloadExactAlignRegression = async (eventId: string, userId: string): Promise<void> => {
   logStep('full payload exact align path');
   const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
   const schedule = buildAugustMultiDaySchedule();
   const slotToRewrite = before.slots[0];
   assert(Boolean(slotToRewrite?.id), 'full payload exact align slot missing stable id');
@@ -833,7 +483,6 @@ const runFullPayloadExactAlignRegression = async (eventId: string, userId: strin
 
   await createOrUpdateEventFromSubmission(prisma, {
     targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
     lineupSyncMode: 'exact_align',
     name: `Event Incremental Full Payload Exact Align ${Date.now()}`,
     ...schedule,
@@ -975,49 +624,6 @@ const runFullPayloadLargeMixedRegression = async (eventId: string, userId: strin
   assert(replayPerformanceIds.join('|') === firstPerformanceIds.join('|'), 'large mixed replay should preserve stable performance ids');
 };
 
-const runPatchDeleteTimetableKeepsLineupRegression = async (eventId: string, userId: string): Promise<void> => {
-  logStep('patch delete timetable keeps lineup path');
-  const before = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  const schedule = buildAugustMultiDaySchedule();
-  const slotToDelete = before.slots[0];
-  assert(Boolean(slotToDelete?.id), 'patch delete timetable keeps lineup requires a stable slot id');
-  const deletedArtistName = slotToDelete.djName;
-  const beforeArtistIds = before.artists.map((artist) => artist.id).filter((id): id is string => Boolean(id));
-
-  await createOrUpdateEventFromSubmission(prisma, {
-    targetEventId: eventId,
-    baseEventRevision: eventBefore.revision,
-    editMode: 'patch',
-    name: `Event Incremental Delete Slot ${Date.now()}`,
-    ...schedule,
-    imageAssets: [
-      {
-        type: 'poster',
-        label: 'POSTER',
-        url: 'https://example.com/regression-poster.jpg',
-      },
-    ],
-    timetableChanges: [
-      {
-        op: 'delete',
-        slotId: slotToDelete.id,
-      },
-    ],
-    stageOrder: before.stageOrder,
-  }, userId);
-
-  const after = await loadCanonicalEventLineupSnapshot(prisma, eventId);
-  assert(after.slots.length === before.slots.length - 1, 'patch delete timetable should remove exactly one slot');
-  assert(after.artists.length === before.artists.length, 'patch delete timetable should keep lineup artist count unchanged');
-  assert(!after.slots.some((slot) => slot.id === slotToDelete.id), 'patch delete timetable did not remove the target slot');
-  assert(after.artists.some((artist) => artist.djName === deletedArtistName), 'patch delete timetable should preserve the removed slot lineup artist');
-  await assertExistingRowsStable(eventId, beforeArtistIds, after.slots.map((slot) => slot.id).filter((id): id is string => Boolean(id)));
-};
-
 const runCreatePayloadIncrementalFillRegression = async (userId: string): Promise<void> => {
   logStep('create payload incremental fill path');
   const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
@@ -1075,39 +681,6 @@ const runCreatePayloadIncrementalFillRegression = async (userId: string): Promis
       await prisma.event.deleteMany({ where: { id: createdEventId } });
     }
   }
-};
-
-const runStaleBaseRevisionIgnoredRegression = async (eventId: string, userId: string): Promise<void> => {
-  logStep('stale base revision ignored path');
-  const eventBefore = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  const schedule = buildAugustMultiDaySchedule();
-  const staleBaseEventRevision = Math.max(0, eventBefore.revision - 1);
-
-  await createOrUpdateEventFromSubmission(prisma, {
-    targetEventId: eventId,
-    baseEventRevision: staleBaseEventRevision,
-    editMode: 'patch',
-    name: `Event Incremental Stale Conflict ${Date.now()}`,
-    ...schedule,
-    imageAssets: [
-      {
-        type: 'poster',
-        label: 'POSTER',
-        url: 'https://example.com/regression-poster.jpg',
-      },
-    ],
-    timetableChanges: [],
-    stageOrder: ['Main Stage', 'Second Stage'],
-  }, userId);
-
-  const eventAfter = await prisma.event.findUniqueOrThrow({
-    where: { id: eventId },
-    select: { revision: true },
-  });
-  assert(eventAfter.revision === eventBefore.revision + 1, 'stale base revision should no longer block the event edit mainline');
 };
 
 const runCreateSubmissionIdempotencyRegression = async (userId: string): Promise<void> => {
@@ -1440,16 +1013,9 @@ const main = async (): Promise<void> => {
     eventId = seeded.eventId;
     userId = seeded.userId;
     await runDirectCanonicalRegression(eventId);
-    await runManualReviewPatchRegression(eventId, userId);
-    await runTimetableIncrementalFillPatchRegression(eventId, userId);
-    await runNormalReviewApprovalRegression(eventId, userId);
     await runFullPayloadIncrementalFillRegression(eventId, userId);
     await runFullPayloadExactAlignRegression(eventId, userId);
     await runFullPayloadLargeMixedRegression(eventId, userId);
-    await runPatchDeleteTimetableKeepsLineupRegression(eventId, userId);
-    await runPatchClearAllTimetableRegression(eventId, userId);
-    await runStaleBaseRevisionIgnoredRegression(eventId, userId);
-    await runSingleStageLegacyRenameRegression(userId);
     await runCreateSubmissionIdempotencyRegression(userId);
     await runCreatePayloadIncrementalFillRegression(userId);
     await runAutoApprovalResumeRegression();

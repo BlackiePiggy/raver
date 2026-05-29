@@ -476,29 +476,6 @@ struct EventLineupArtistInput: Codable, Hashable {
     var sortOrder: Int?
 }
 
-struct EventLineupArtistPatchChange: Codable, Hashable {
-    var op: String
-    var artistId: String? = nil
-    var artist: EventLineupArtistInput? = nil
-    var patch: EventLineupArtistInput? = nil
-    var sortOrder: Int? = nil
-}
-
-struct EventLineupSlotPatchChange: Codable, Hashable {
-    var op: String
-    var slotId: String? = nil
-    var slot: EventLineupSlotInput? = nil
-    var patch: EventLineupSlotInput? = nil
-    var sortOrder: Int? = nil
-}
-
-struct EventStagePatchChange: Codable, Hashable {
-    var op: String
-    var name: String? = nil
-    var nextName: String? = nil
-    var confirmDeleteLinkedPerformances: Bool? = nil
-}
-
 struct EventLineupTimetableAlignmentIssue: Codable, Hashable {
     var missingFromLineup: [String]
     var extraInLineup: [String]
@@ -1110,11 +1087,6 @@ struct UpdateEventInput: Encodable {
     var lineupArtists: [EventLineupArtistInput]? = nil
     var lineupSlots: [EventLineupSlotInput]? = nil
     var lineupSyncMode: EventLineupSyncMode? = .incrementalFill
-    var baseEventRevision: Int? = nil
-    var editMode: String? = nil
-    var lineupChanges: [EventLineupArtistPatchChange]? = nil
-    var timetableChanges: [EventLineupSlotPatchChange]? = nil
-    var stageChanges: [EventStagePatchChange]? = nil
     var idempotencyKey: String? = nil
     var status: String?
     var clearCityI18n: Bool = false
@@ -1126,8 +1098,6 @@ struct UpdateEventInput: Encodable {
     var clearLongitude: Bool = false
     var clearStageOrder: Bool = false
     var clearLineupSlots: Bool = false
-    var clearTimetableChanges: Bool = false
-    var clearStageChanges: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -1173,11 +1143,6 @@ struct UpdateEventInput: Encodable {
         case lineupArtists
         case lineupSlots
         case lineupSyncMode
-        case baseEventRevision
-        case editMode
-        case lineupChanges
-        case timetableChanges
-        case stageChanges
         case idempotencyKey
         case status
     }
@@ -1268,19 +1233,6 @@ struct UpdateEventInput: Encodable {
             try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
         }
         try container.encodeIfPresent(lineupSyncMode, forKey: .lineupSyncMode)
-        try container.encodeIfPresent(baseEventRevision, forKey: .baseEventRevision)
-        try container.encodeIfPresent(editMode, forKey: .editMode)
-        try container.encodeIfPresent(lineupChanges, forKey: .lineupChanges)
-        if clearTimetableChanges {
-            try container.encodeNil(forKey: .timetableChanges)
-        } else {
-            try container.encodeIfPresent(timetableChanges, forKey: .timetableChanges)
-        }
-        if clearStageChanges {
-            try container.encodeNil(forKey: .stageChanges)
-        } else {
-            try container.encodeIfPresent(stageChanges, forKey: .stageChanges)
-        }
         try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
         try container.encodeIfPresent(status, forKey: .status)
     }

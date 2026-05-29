@@ -13,7 +13,6 @@ import {
   autoAlignEventLineupToTimetablePayload,
   buildSubmittedEventScheduleContextFromEvent,
   createOrUpdateEventFromSubmission,
-  EventSubmissionConflictError,
   incrementallyFillEventLineupFromTimetablePayload,
   normalizeSubmittedEventScheduleContext,
 } from '../services/content-submission-event.service';
@@ -869,14 +868,6 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       });
       return;
     }
-    if (error instanceof EventSubmissionConflictError) {
-      res.status(409).json({
-        error: error.message,
-        code: error.code,
-        details: error.details,
-      });
-      return;
-    }
     if (error instanceof BrandSubmissionConflictError) {
       res.status(409).json({
         error: error.message,
@@ -1074,14 +1065,6 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
     });
   } catch (error) {
     if (error instanceof ActiveEventEditSubmissionError) {
-      res.status(409).json({
-        error: error.message,
-        code: error.code,
-        details: error.details,
-      });
-      return;
-    }
-    if (error instanceof EventSubmissionConflictError) {
       res.status(409).json({
         error: error.message,
         code: error.code,
@@ -1295,10 +1278,6 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
     res.json({ message: decision === 'approved' ? '审核通过，内容已入库' : '审核未通过，结果已反馈给用户', submission: updated });
   } catch (error) {
     console.error('Review content submission error:', error);
-    if (error instanceof EventSubmissionConflictError) {
-      res.status(409).json({ error: error.message, code: error.code });
-      return;
-    }
     if (error instanceof BrandSubmissionConflictError) {
       res.status(409).json({
         error: error.message,

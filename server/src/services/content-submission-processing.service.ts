@@ -4,7 +4,6 @@ import { changeSummaryTextFromPayload } from './content-submission-change-summar
 import {
   applyEventTimetableFromSubmission,
   createOrUpdateEventFromSubmission,
-  EventSubmissionConflictError,
 } from './content-submission-event.service';
 import { createOrUpdateDJFromSubmission } from './content-submission-dj.service';
 import { createOrUpdateBrandFromSubmission } from './content-submission-brand.service';
@@ -995,7 +994,7 @@ export async function runContentSubmissionProcessingWorkerOnce(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Submission processing failed';
-      const retryable = !(error instanceof EventSubmissionConflictError);
+      const retryable = true;
       const shouldRetry = retryable && job.attempts < job.maxAttempts;
       const durationMs = Date.now() - startedAt;
       const retryAt = shouldRetry ? new Date(Date.now() + retryDelayMs(job.attempts)) : undefined;
@@ -1009,13 +1008,7 @@ export async function runContentSubmissionProcessingWorkerOnce(
         lastDurationMs: durationMs,
         lastError: message,
         retryable,
-        conflictDetails: error instanceof EventSubmissionConflictError && error.details
-          ? withDefinedJsonFields({
-              targetEventId: error.details.targetEventId ?? null,
-              baseEventRevision: error.details.baseEventRevision ?? null,
-              currentEventRevision: error.details.currentEventRevision ?? null,
-            })
-          : null,
+        conflictDetails: null,
         retryScheduledAt: retryAt?.toISOString() ?? null,
       });
       if (shouldRetry) {
@@ -1045,9 +1038,6 @@ export async function runContentSubmissionProcessingWorkerOnce(
         durationMs,
         error: message,
         retryAt: retryAt?.toISOString() ?? null,
-        ...(error instanceof EventSubmissionConflictError && error.details
-          ? { conflictDetails: error.details }
-          : {}),
       });
     }
   }
