@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import {
@@ -49,6 +50,7 @@ const buildUnboundClusterKey = (item: EventOrganizerBindingCatalogItem): string 
 };
 
 export default function EventOrganizerBindingPageClient() {
+  const searchParams = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -67,6 +69,8 @@ export default function EventOrganizerBindingPageClient() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [cacheMessage, setCacheMessage] = useState('目录摘要由服务端缓存层承接，适合低频绑定管理。');
+  const preselectedOrganizerId = searchParams.get('organizerId')?.trim() || '';
+  const preselectedOrganizerName = searchParams.get('organizerName')?.trim() || '';
 
   const selectedEvent = useMemo(
     () => items.find((item) => item.id === selectedEventId) ?? null,
@@ -154,6 +158,30 @@ export default function EventOrganizerBindingPageClient() {
 
     return () => window.clearTimeout(timer);
   }, [organizerQuery]);
+
+  useEffect(() => {
+    if (!preselectedOrganizerId || !preselectedOrganizerName) return;
+    setSelectedOrganizer((current) => {
+      if (current?.id === preselectedOrganizerId) return current;
+      return {
+        id: preselectedOrganizerId,
+        name: preselectedOrganizerName,
+        aliases: [],
+        country: '',
+        city: '',
+        tagline: '',
+      };
+    });
+    setOrganizerQuery((current) => current || preselectedOrganizerName);
+  }, [preselectedOrganizerId, preselectedOrganizerName]);
+
+  useEffect(() => {
+    if (!preselectedOrganizerId || organizerResults.length === 0) return;
+    const matched = organizerResults.find((item) => item.id === preselectedOrganizerId);
+    if (matched) {
+      setSelectedOrganizer((current) => (current?.id === matched.id ? current : matched));
+    }
+  }, [organizerResults, preselectedOrganizerId]);
 
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -278,6 +306,9 @@ export default function EventOrganizerBindingPageClient() {
         <>
           <Link href="/admin/content/organizers" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
             返回主办方工作区
+          </Link>
+          <Link href="/admin/content/organizers/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+            主办方目录中心
           </Link>
           <Link href="/admin/content/events/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
             活动目录中心
@@ -666,14 +697,14 @@ export default function EventOrganizerBindingPageClient() {
             <h2 className="mt-2 text-2xl font-semibold">迁移边界</h2>
             <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
               <p>这一步已经补到批量绑定和未匹配聚类第一版，先解决日常“找活动、绑主办方、清关系、批量改关系”的后台高频动作。</p>
-              <p>下一批继续补更深的 Archive / DJ 辅助管理能力和 DJ edit，让 Festival Viewer 的运营型工作继续往这里收口。</p>
+              <p>现在也支持从主办方目录中心带着预选主办方直接进入绑定面板，目录定位和关系治理已经能够在统一后台内部连续完成。</p>
             </div>
             <div className="mt-4 grid gap-3">
               <Link href="/admin/content/events/catalog" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
                 返回活动目录中心
               </Link>
-              <Link href="/admin/content/legacy-tools/brands" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
-                查看旧 Brand 工具桥接页
+              <Link href="/admin/content/organizers/catalog" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
+                返回主办方目录中心
               </Link>
             </div>
           </section>

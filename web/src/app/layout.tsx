@@ -1,9 +1,18 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { DM_Mono, DM_Sans } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 
-const inter = Inter({ subsets: ['latin'] })
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-dashboard-sans',
+})
+
+const dmMono = DM_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-dashboard-mono',
+})
 
 export const metadata: Metadata = {
   title: 'RaveHub - 电子音乐爱好者平台',
@@ -23,7 +32,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className={inter.className}>
+      <body className={`${dmSans.variable} ${dmMono.variable} ${dmSans.className}`}>
         <AuthProvider>
           {children}
         </AuthProvider>

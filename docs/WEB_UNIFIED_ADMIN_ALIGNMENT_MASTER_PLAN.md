@@ -15,6 +15,7 @@
 - [x] 新建共享后台内容布局组件，统一侧边导航与迁移期说明
 - [x] 升级统一后台为多级展开式侧栏导航，按总览台 / 内容生产 / 审核与治理 / 迁移与支持分区
 - [x] 为审核中心与旧工具补二级工作台包装页，保持统一后台框架内导航连续性
+- [x] 统一后台壳已切换到三栏 dashboard 风格，采用 DM Sans / DM Mono 与左侧多级展开目录
 - [x] 新建活动目录中心与 DJ 目录中心，统一承接全量目录型管理入口
 - [x] 在统一后台目录层接入本地 TTL 快照、分页摘要与手动刷新第一版
 - [x] 在 BFF 侧补活动 / DJ 目录 summary endpoint 与内存 TTL 缓存第一版
@@ -49,6 +50,7 @@
 - [x] 搭建 `/admin/content/organizers/[id]/edit`
 - [x] 将 `/admin/content/organizers/new` 接成第一版可提交表单
 - [x] 将 `/admin/content/organizers/[id]/edit` 接成第一版可加载回填并提交 PATCH
+- [x] 搭建 `/admin/content/organizers/catalog`
 - [x] 在 Event Studio 中补一跳式 organizer create 入口
 - [x] 补 brand image delete 与更完整 media lifecycle
 - [x] 搭建 `/admin/content/organizers/bindings` 活动绑定中心第一版
@@ -64,10 +66,12 @@
 ### Phase 6：全量目录与 Festival Viewer 回迁
 
 - [x] 新建 `/admin/content/events/catalog` 与 `/admin/content/djs/catalog`
+- [x] 新建 `/admin/content/organizers/catalog`
 - [x] 目录页采用分页摘要，不在页面打开时直接请求全量重数据
 - [x] 目录页接入本地 TTL 快照与 stale-while-revalidate 风格的低频刷新体验
 - [x] BFF 已补目录 summary 接口与服务端内存缓存，前端目录页默认优先读取摘要层
 - [x] 在活动 / DJ 工作区与统一后台首页补全目录中心入口
+- [x] 在主办方工作区与统一后台首页补全主办方目录中心入口
 - [x] 先将 Event ↔ Brand 高频关系维护回迁为统一后台活动绑定中心第一版
 - [x] 先将 Archive 年份式活动回看迁回统一后台第一版
 - [x] 在活动绑定中心补批量绑定 / 批量清空第一版
@@ -93,6 +97,7 @@
 - [x] 统一后台已补目录缓存治理台，支持活动 / DJ / Archive 摘要缓存观察与手动预热第一版
 - [x] 审核页已补活动自动审查提示、系统建议 reason code 与分组化拒绝 taxonomy 第一版
 - [x] 审核页已补 Organizer / DJ 自动审查提示与系统建议 reason code 第一版
+- [x] 统一后台已将 DJ 绑定审核与举报审核从说明页升级为原生工作台，不再依赖 festival-viewer 桥接
 - [ ] 继续补更细的业务级 diff、note 模板 / reason taxonomy
 
 ## 1. 背景
@@ -119,7 +124,9 @@
 - [x] Archive 年份中心第一版已原生接入统一后台
 - [x] 活动 ↔ 主办方绑定中心已补批量绑定 / 批量清空第一版
 - [x] 活动 ↔ 主办方绑定中心已补未匹配活动聚类视图第一版
+- [x] 主办方目录中心已支持一跳进入绑定中心并预选当前主办方
 - [x] `web` 再次执行 `npm run build` 已通过，新增 `/admin/content/djs/[id]/edit` 路由产物正常
+- [ ] 继续将活动 / 主办方 / DJ / 审核等子页内容层逐步收口到新的产品化 UI 框架
 - [x] 统一后台内容贡献审核页已原生接入 submission 列表、详情预览与基础 approve / reject
 - [x] 审核页第一版已支持按状态 / 实体类型筛选、版本历史展开与实体编辑页跳转
 - [x] 审核页已补版本 diff 摘要与结构化 review notes 面板第一版
@@ -132,6 +139,9 @@
 - [x] 统一后台已补目录缓存治理台，支持活动 / DJ / Archive 摘要缓存观察与手动预热第一版
 - [x] 审核页已补活动自动审查提示、系统建议 reason code 与分组化拒绝 taxonomy 第一版
 - [x] 审核页已补 Organizer / DJ 自动审查提示与系统建议 reason code 第一版
+- [x] 统一后台已将 DJ 绑定审核与举报审核从说明页升级为原生工作台，不再依赖 festival-viewer 桥接
+- [x] Event / Organizer / DJ 三类核心实体现已具备目录中心 + 新建 + 编辑的统一后台原生第一版闭环
+- [x] 统一后台首页已开始去除迁移说明页风格，按产品态控制台结构重做
 - [ ] 下一步补更深的 lineup-only / conflict 细节、服务端结构化 reviewNotes 扩展，以及 Redis / DB snapshot 级目录治理升级
 
 你当前想解决的不是“再做一个后台页面”，而是一次 **内容生产与审核体系收口**：

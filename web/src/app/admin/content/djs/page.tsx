@@ -19,9 +19,6 @@ export default function AdminContentDjsPage() {
           <Link href="/admin/content/djs/new" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
             新建 DJ
           </Link>
-          <Link href="/admin/festival-viewer.html#dj" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
-            打开旧 DJ 工具
-          </Link>
         </>
       }
     >
@@ -44,11 +41,11 @@ export default function AdminContentDjsPage() {
         </div>
 
         <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Current Plan</div>
-          <h2 className="mt-2 text-2xl font-semibold">当前计划</h2>
+          <div className="text-sm text-text-secondary">Native Closure</div>
+          <h2 className="mt-2 text-2xl font-semibold">当前已可原生闭环</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
-            <p>DJ Studio 的 create / edit 第一版已经接入统一后台，当前可提交头像、banner、proof、平台链接和基础平台统计。</p>
-            <p>下一步继续补 proof 生命周期、平台源对齐提示和从 Event Studio 跳转新建 / 编辑 DJ 的联动入口。</p>
+            <p>DJ 目录中心、DJ 新建和 DJ 编辑已经在统一后台内打通，当前可直接提交头像、banner、proof、平台链接和基础平台统计。</p>
+            <p>下一步继续补 proof 生命周期、平台源对齐提示和从 Event Studio 跳转新建 / 编辑 DJ 的联动入口，但主线不再依赖旧 DJ 工具页。</p>
           </div>
         </div>
 

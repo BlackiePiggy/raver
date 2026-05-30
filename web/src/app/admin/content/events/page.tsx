@@ -46,14 +46,14 @@ export default function AdminContentEventsPage() {
         </div>
 
         <div className="space-y-5">
-          <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-            <div className="text-sm text-text-secondary">Current Gap</div>
-            <h2 className="mt-2 text-2xl font-semibold">当前差距</h2>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
-              <p>活动 create/edit 主线已经收口，但 schedule/weeks/eventDays、revision conflict 和更完整的 lineup/timetable 语义还没有完全追平 iOS。</p>
-              <p>当前策略是不再加厚旧页面，而是在统一后台里继续扩展 Event Studio shared 层。</p>
-            </div>
+        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+          <div className="text-sm text-text-secondary">Native Closure</div>
+          <h2 className="mt-2 text-2xl font-semibold">当前已可原生闭环</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+            <p>活动目录中心、活动新建和活动编辑已经在统一后台内收口，当前可以直接完成主要资料、时区、主办方绑定和媒体上传的原生管理流程。</p>
+            <p>与 iOS 相比，剩余差距集中在更深的 schedule/weeks/eventDays、revision conflict 和更完整的 lineup/timetable 语义，后续会继续在统一后台内部补齐。</p>
           </div>
+        </div>
 
           <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
             <div className="text-sm text-text-secondary">Next Step</div>
