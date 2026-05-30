@@ -3,75 +3,96 @@
 import Link from 'next/link';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 
-const EVENT_PHASE_ITEMS = [
-  'Event Studio create/edit 已接上统一 /v1 提交链路',
-  '活动时区搜索、主办方绑定、封面和阵容图上传已可用',
-  '旧 /events/publish 与 /events/my/[id]/edit 已迁移到统一后台入口',
-  '下一批继续补 schedule、weeks、eventDays、revision conflict 和 richer timetable',
+const EVENT_CAPABILITIES = [
+  '活动目录、创建、编辑已经进入统一后台主入口',
+  '活动时区搜索、主办方绑定、封面和阵容图上传已可直接处理',
+  '编辑流已对齐当前 /v1 提交链路',
+  '后续继续细化 schedule、weeks、eventDays 与 timetable 语义',
 ];
+
+function MetricCard({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-5">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-[#5d5d5d]">{label}</div>
+      <div className="mt-3 font-mono text-[28px] font-semibold tracking-[-0.04em] text-[#f4f4f4]">
+        {value}
+      </div>
+      <div className="mt-2 text-[12px] text-[#7c7c7c]">{note}</div>
+    </div>
+  );
+}
 
 export default function AdminContentEventsPage() {
   return (
     <AdminContentLayout
       title="活动工作区"
-      description="这里承接 Web 端活动创建与编辑的统一主线。当前 Event Studio 第一版已经可新建、可编辑，并与 `/v1/events`、`/v1/event-timezones/search`、`/v1/events/upload-image` 对齐。"
+      description="统一管理活动目录、创建、编辑、时区、主办方绑定与媒体资料。活动主链路已经集中到这一套工作区中，可直接作为日常活动管理入口。"
       actions={
         <>
-          <Link href="/admin/content" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
             返回内容总览
           </Link>
-          <Link href="/admin/content/events/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/catalog" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
             活动目录中心
           </Link>
-          <Link href="/admin/content/events/new" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/admin/content/events/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
             新建活动
-          </Link>
-          <Link href="/admin/content/organizers/new" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
-            新建主办方
           </Link>
         </>
       }
     >
-      <section className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Implementation Track</div>
-          <h2 className="mt-2 text-2xl font-semibold">Event Studio 第一阶段任务</h2>
+      <section className="grid gap-4 lg:grid-cols-4">
+        <MetricCard label="Catalog" value="Live" note="目录与编辑入口已统一" />
+        <MetricCard label="Studio" value="/v1" note="创建与编辑对齐当前接口" />
+        <MetricCard label="Media" value="Ready" note="封面与阵容图上传可用" />
+        <MetricCard label="Binding" value="On" note="主办方绑定已进入主流程" />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
+        <div className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[#5f5f5f]">Event Studio</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">核心能力</h2>
           <div className="mt-5 space-y-3">
-            {EVENT_PHASE_ITEMS.map((item, index) => (
-              <div key={item} className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm leading-6">
-                {index + 1}. {item}
+            {EVENT_CAPABILITIES.map((item, index) => (
+              <div key={item} className="flex items-center gap-3 rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm leading-6 text-[#d3d3d3]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#a8ff3e] text-[11px] font-bold text-black">
+                  {index + 1}
+                </div>
+                <div>{item}</div>
               </div>
             ))}
           </div>
         </div>
 
         <div className="space-y-5">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Native Closure</div>
-          <h2 className="mt-2 text-2xl font-semibold">当前已可原生闭环</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
-            <p>活动目录中心、活动新建和活动编辑已经在统一后台内收口，当前可以直接完成主要资料、时区、主办方绑定和媒体上传的原生管理流程。</p>
-            <p>与 iOS 相比，剩余差距集中在更深的 schedule/weeks/eventDays、revision conflict 和更完整的 lineup/timetable 语义，后续会继续在统一后台内部补齐。</p>
-          </div>
-        </div>
-
-          <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-            <div className="text-sm text-text-secondary">Next Step</div>
-            <h2 className="mt-2 text-2xl font-semibold">下一步</h2>
-            <p className="mt-3 text-sm leading-6 text-text-secondary">
-              下一批代码会优先补更完整的 schedule / weeks / eventDays，并把 Organizer Studio 的创建绑定能力进一步嵌入活动编辑流程。
-            </p>
+          <div className="rounded-[18px] border border-[rgba(168,255,62,0.18)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.03))] p-6">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[#86b852]">Status</div>
+            <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">当前已可直接使用</h2>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-[#9ab27f]">
+              <p>活动目录中心、活动新建和活动编辑已经在统一后台内收口，主要资料、时区、主办方绑定和媒体上传都可直接处理。</p>
+              <p>剩余差距集中在更深的 schedule / eventDays / revision conflict 语义，会继续在这条主链路内补齐。</p>
+            </div>
           </div>
 
-          <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-            <div className="text-sm text-text-secondary">Catalog Center</div>
-            <h2 className="mt-2 text-2xl font-semibold">全量活动目录已收口</h2>
-            <p className="mt-3 text-sm leading-6 text-text-secondary">
-              统一后台现在已经提供活动目录中心，默认通过分页摘要、本地 TTL 快照和手动刷新来查看全量活动，不再需要每次都去分散页面里重打全量数据。
-            </p>
-            <div className="mt-4">
-              <Link href="/admin/content/events/catalog" className="text-sm font-semibold text-primary-blue hover:underline">
+          <div className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[#5f5f5f]">Quick Access</div>
+            <div className="mt-4 grid gap-3">
+              <Link href="/admin/content/events/catalog" className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
                 打开活动目录中心
+              </Link>
+              <Link href="/admin/content/events/new" className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+                创建新的活动条目
+              </Link>
+              <Link href="/admin/content/organizers/new" className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+                新建主办方并继续绑定
               </Link>
             </div>
           </div>

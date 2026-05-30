@@ -69,8 +69,10 @@ export type EventCatalogFilters = {
   limit?: number;
   search?: string;
   status?: string;
+  city?: string;
   country?: string;
   eventType?: string;
+  wikiFestivalId?: string;
   refresh?: boolean;
 };
 
@@ -119,8 +121,10 @@ export const adminCatalogApi = {
       limit,
       search: filters.search?.trim() || undefined,
       status: filters.status || undefined,
+      city: filters.city?.trim() || undefined,
       country: filters.country?.trim() || undefined,
       eventType: filters.eventType?.trim() || undefined,
+      wikiFestivalId: filters.wikiFestivalId?.trim() || undefined,
       refresh: filters.refresh ? 1 : undefined,
     });
     const response = await authenticatedJsonFetch<BffEnvelope<{ items?: EventCatalogItem[]; meta?: { cache?: CatalogCacheMeta } }>>(

@@ -155,46 +155,46 @@ export default function DJCatalogPageClient() {
     <AdminContentLayout
       title="DJ 目录中心"
       eyebrow="Admin / Content Workspace / DJ Catalog"
-      description="这里承接统一后台里的 DJ 全量管理视图，但列表层默认只读取分页摘要和本地快照，避免每次都去打全量数据。更重的资料编辑、外部源对齐和 proof 处理会按需进入详情或旧工具。"
+      description="统一查看 DJ 目录、资料摘要、编辑入口与详情入口。目录层默认读取分页摘要和本地快照，更深的资料处理按需进入编辑页。"
       actions={
         <>
-          <Link href="/admin/content/djs" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/djs" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
             返回 DJ 工作区
           </Link>
           <button
             type="button"
             onClick={handleRefresh}
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
           >
             手动刷新目录
           </button>
-          <Link href="/admin/content/djs/new" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/admin/content/djs/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
             新建 DJ
           </Link>
         </>
       }
     >
       <section className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Catalog Strategy</div>
-          <h2 className="mt-2 text-2xl font-semibold">目录页优先看快照，不优先打源</h2>
+        <div className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[#5f5f5f]">Catalog Strategy</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">目录层优先轻量管理</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {[
               `单页固定 ${PAGE_SIZE} 条 DJ 摘要，先解决管理视图而不是一次全拉`,
               '本地快照 TTL 15 分钟，目录重开时优先命中缓存',
               '排序、搜索和进入编辑分层处理，避免高频数据库压力',
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm leading-6">
+              <div key={item} className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm leading-6 text-[#d2d2d2]">
                 {item}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border-secondary bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02)),radial-gradient(circle_at_top_left,rgba(209,171,84,0.16),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(64,147,255,0.14),transparent_45%)] p-6">
-          <div className="text-sm text-text-secondary">Snapshot Meta</div>
-          <h2 className="mt-2 text-2xl font-semibold">目录快照状态</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+        <div className="rounded-[18px] border border-[rgba(168,255,62,0.18)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.03))] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[#86b852]">Snapshot Meta</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">目录快照状态</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-[#9ab27f]">
             <p>当前页：{pagination.page} / {pagination.totalPages}</p>
             <p>摘要总量：{pagination.total.toLocaleString()} 位 DJ</p>
             <p>最新快照：{cacheMeta ? formatDateTime(cacheMeta.fetchedAt) : '尚未生成'}</p>
@@ -204,52 +204,52 @@ export default function DJCatalogPageClient() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.6fr)_220px_auto_auto]">
             <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">搜索关键词</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-[#5f5f5f]">搜索关键词</span>
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="DJ 名称 / 别名 / 国家"
-                className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                className="w-full rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#f0f0f0] outline-none transition-colors focus:border-[#a8ff3e]"
               />
             </label>
             <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">排序方式</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-[#5f5f5f]">排序方式</span>
               <select
                 value={sortBy}
                 onChange={(event) => {
                   setSortBy(event.target.value as 'followerCount' | 'name' | 'createdAt');
                   setPage(1);
                 }}
-                className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                className="w-full rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#f0f0f0] outline-none transition-colors focus:border-[#a8ff3e]"
               >
                 <option value="followerCount">按粉丝量</option>
                 <option value="name">按名称</option>
                 <option value="createdAt">按创建时间</option>
               </select>
             </label>
-            <button type="submit" className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white">
+            <button type="submit" className="rounded-xl bg-[#a8ff3e] px-5 py-3 text-sm font-semibold text-black">
               搜索目录
             </button>
             <button
               type="button"
               onClick={handleReset}
-              className="rounded-xl border border-border-secondary px-5 py-3 text-sm hover:border-primary-blue hover:text-primary-blue"
+              className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-5 py-3 text-sm text-[#cfcfcf] hover:bg-[#202020] hover:text-white"
             >
               清空筛选
             </button>
           </form>
 
-          <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/50 px-4 py-3 text-sm text-text-secondary">
+          <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#8a8a8a]">
             {isRefreshing ? '检测到缓存陈旧，正在后台更新当前页 DJ 摘要…' : '目录层采用低频快照 + 手动刷新，更适合全量管理场景。'}
           </div>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
         {error ? (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {error}
@@ -265,10 +265,10 @@ export default function DJCatalogPageClient() {
             {items.map((item) => (
               <div
                 key={item.id}
-                className="grid gap-4 rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4 lg:grid-cols-[minmax(0,1fr)_240px]"
+                className="grid gap-4 rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4 lg:grid-cols-[minmax(0,1fr)_240px]"
               >
                 <div className="flex flex-col gap-4 md:flex-row">
-                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border-secondary bg-[linear-gradient(135deg,rgba(209,171,84,0.18),rgba(64,147,255,0.18))]">
+                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[linear-gradient(135deg,rgba(168,255,62,0.16),rgba(255,255,255,0.04))]">
                     {item.avatarUrl ? (
                       <Image
                         src={item.avatarUrl}
@@ -285,53 +285,50 @@ export default function DJCatalogPageClient() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {item.isVerified ? (
-                        <span className="rounded-full border border-primary-blue/30 bg-primary-blue/10 px-3 py-1 text-xs text-text-primary">
+                        <span className="rounded-full border border-[#a8ff3e]/25 bg-[#a8ff3e]/10 px-3 py-1 text-xs text-[#d9ff9a]">
                           已验证
                         </span>
                       ) : (
-                        <span className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-secondary">
+                        <span className="rounded-full border border-[rgba(255,255,255,0.08)] px-3 py-1 text-xs text-[#8a8a8a]">
                           未验证
                         </span>
                       )}
-                      <span className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-secondary">
+                      <span className="rounded-full border border-[rgba(255,255,255,0.08)] px-3 py-1 text-xs text-[#8a8a8a]">
                         {item.country || '未知国家'}
                       </span>
                     </div>
 
-                    <h3 className="mt-3 truncate text-2xl font-semibold text-text-primary">{item.name}</h3>
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">
+                    <h3 className="mt-3 truncate text-2xl font-semibold text-[#f0f0f0]">{item.name}</h3>
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#8a8a8a]">
                       {item.bio || '当前目录层只展示轻量资料摘要，更重的 proof、外部平台抓取和资料对齐会在后续详情层处理。'}
                     </p>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-3">
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm">
-                        <div className="text-text-secondary">平台粉丝</div>
+                      <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-sm">
+                        <div className="text-[#777]">平台粉丝</div>
                         <div className="mt-1 font-semibold">{formatFollowers(item.followerCount)}</div>
                       </div>
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm">
-                        <div className="text-text-secondary">最近同步</div>
+                      <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-sm">
+                        <div className="text-[#777]">最近同步</div>
                         <div className="mt-1 font-semibold">{formatDateTime(item.lastSyncedAt)}</div>
                       </div>
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm">
-                        <div className="text-text-secondary">最近更新</div>
+                      <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-sm">
+                        <div className="text-[#777]">最近更新</div>
                         <div className="mt-1 font-semibold">{formatDateTime(item.updatedAt)}</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col justify-between gap-3 rounded-2xl border border-border-secondary bg-bg-secondary/70 p-4">
-                  <div className="text-sm leading-6 text-text-secondary">
-                    目录中心先承担“看全量、做筛选、快速定位”的角色。DJ 的精细编辑能力迁移完成前，仍可按需回退旧工具。
+                <div className="flex flex-col justify-between gap-3 rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
+                  <div className="text-sm leading-6 text-[#8a8a8a]">
+                    目录中心先承担“看全量、做筛选、快速定位”的角色，深入资料处理再进入编辑页继续完成。
                   </div>
                   <div className="grid gap-3">
-                    <Link href={`/admin/content/djs/${item.id}/edit`} className="rounded-xl bg-primary-blue px-4 py-3 text-center text-sm font-semibold text-white">
+                    <Link href={`/admin/content/djs/${item.id}/edit`} className="rounded-xl bg-[#a8ff3e] px-4 py-3 text-center text-sm font-semibold text-black">
                       编辑 DJ
                     </Link>
-                    <Link href="/admin/content/legacy-tools/djs" className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm hover:border-primary-blue hover:text-primary-blue">
-                      进入 DJ 迁移工具
-                    </Link>
-                    <Link href={`/djs/${item.id}`} className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm hover:border-primary-blue hover:text-primary-blue">
+                    <Link href={`/djs/${item.id}`} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-center text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
                       打开 DJ 详情
                     </Link>
                   </div>
@@ -342,7 +339,7 @@ export default function DJCatalogPageClient() {
         )}
 
         <div className="mt-6 flex flex-col gap-3 border-t border-white/5 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-text-secondary">
+          <div className="text-sm text-[#8a8a8a]">
             共 {pagination.total.toLocaleString()} 位 DJ，当前显示第 {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} 位
           </div>
           <div className="flex gap-3">
@@ -350,7 +347,7 @@ export default function DJCatalogPageClient() {
               type="button"
               disabled={pagination.page <= 1}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-2 text-sm text-[#d0d0d0] disabled:cursor-not-allowed disabled:opacity-40"
             >
               上一页
             </button>
@@ -358,7 +355,7 @@ export default function DJCatalogPageClient() {
               type="button"
               disabled={pagination.page >= pagination.totalPages}
               onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-              className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-2 text-sm text-[#d0d0d0] disabled:cursor-not-allowed disabled:opacity-40"
             >
               下一页
             </button>
@@ -366,27 +363,17 @@ export default function DJCatalogPageClient() {
         </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Migration Bridge</div>
-          <h2 className="mt-2 text-2xl font-semibold">旧 DJ 工具的迁移边界</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
-            <p>这一版先把 DJ 全量浏览、筛选与管理定位搬进统一后台，先解决“在同一处看到全量、低压力管理”的问题。</p>
-            <p>后续继续把 proof 生命周期、平台源对齐、旧 Facebook/外部源辅助字段和精细编辑面板逐步拆回这里。</p>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Legacy Access</div>
-          <h2 className="mt-2 text-2xl font-semibold">迁移期兜底</h2>
-          <div className="mt-4 grid gap-3">
-            <Link href="/admin/content/legacy-tools/djs" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
-              打开旧 DJ 工具桥接页
-            </Link>
-            <Link href="/admin/content/reviews/dj-bindings" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
-              进入 DJ 绑定审核台
-            </Link>
-          </div>
+      <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
+        <div className="grid gap-3 lg:grid-cols-3">
+          {[
+            'DJ 目录优先承担全量查看、筛选和快速进入编辑的工作。',
+            '更重的外部源对齐、proof 生命周期和精细资料处理继续在编辑流里推进。',
+            '绑定审核和其他治理能力继续通过统一后台分区进入。',
+          ].map((item) => (
+            <div key={item} className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm leading-6 text-[#8a8a8a]">
+              {item}
+            </div>
+          ))}
         </div>
       </section>
     </AdminContentLayout>

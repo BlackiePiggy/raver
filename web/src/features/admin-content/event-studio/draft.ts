@@ -293,6 +293,7 @@ export const buildEventStudioScheduleStructure = (
 };
 
 export const createEventStudioDraft = (): EventStudioDraft => ({
+  id: crypto.randomUUID(),
   name: emptyLocalizedText(),
   description: '',
   abbreviation: '',
@@ -403,6 +404,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
   const hydratedStageOrder = normalizeStageOrder(event.stageOrder, hydratedTimetableSlots);
 
   return {
+    id: crypto.randomUUID(),
     name: fromNullableLocalizedText(event.nameI18n, event.name),
     description: event.description ?? '',
     abbreviation: event.abbreviation ?? '',
@@ -448,12 +450,16 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
       ? {
           remoteUrl: event.coverImageUrl ?? coverImageFromAssets?.url ?? '',
           fileName: event.coverImageUrl?.split('/').pop() || coverImageFromAssets?.fileName || 'cover',
+          usage: 'cover',
+          origin: 'persisted',
         }
       : null,
     lineupImage: event.lineupImageUrl || lineupImageFromAssets?.url
       ? {
           remoteUrl: event.lineupImageUrl ?? lineupImageFromAssets?.url ?? '',
           fileName: event.lineupImageUrl?.split('/').pop() || lineupImageFromAssets?.fileName || 'lineup',
+          usage: 'lineup',
+          origin: 'persisted',
         }
       : null,
     ticketTiers: (event.ticketTiers ?? []).map((tier) => ({

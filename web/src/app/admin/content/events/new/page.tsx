@@ -18,35 +18,38 @@ export default function AdminContentEventCreatePage() {
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
       setSubmitNotice(`活动已创建成功：${result.event.name}`);
-      setSubmitResultLink(`/events/${result.event.id}`);
+      setSubmitResultLink(`/admin/content/events/${result.event.id}/edit`);
       return;
     }
     setSubmitNotice(result.payload.message || '活动已进入审核队列');
-    setSubmitResultLink('/my-publishes?type=event');
+    setSubmitResultLink('/admin/content/reviews/submissions');
   };
 
   return (
     <AdminContentLayout
       title="新建活动"
-      description="这里已经接上了 Event Studio 第一版可提交流程。当前版本先覆盖基础资料、时区、媒体与简单票务，并走统一 `/v1/events` 创建链路。"
+      description="在统一后台内完成活动资料创建、主办方绑定、时区确认、时间表录入和素材上传。当前页面已经作为正式的活动创建入口使用。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
             返回活动工作区
           </Link>
-          <Link href="/admin/content/organizers/new" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/catalog" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+            活动目录中心
+          </Link>
+          <Link href="/admin/content/organizers/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
             新建主办方
           </Link>
         </>
       }
     >
       {submitNotice ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="rounded-[18px] border border-[rgba(168,255,62,0.22)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.04))] p-4 text-sm text-[#d9ff9a]">
           <div>{submitNotice}</div>
           {submitResultLink ? (
             <div className="mt-3">
-              <Link href={submitResultLink} className="text-primary-blue hover:underline">
-                打开结果页面
+              <Link href={submitResultLink} className="text-[#f0f0f0] hover:text-white hover:underline">
+                继续进入结果页面
               </Link>
             </div>
           ) : null}

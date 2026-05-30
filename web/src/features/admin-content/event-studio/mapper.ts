@@ -303,5 +303,7 @@ export const mapEventStudioDraftToUpdateInput = (draft: EventStudioDraft): Event
     clearLongitude: !hasLongitude,
     clearStageOrder: !createInput.stageOrder?.length,
     clearLineupSlots: !createInput.lineupSlots?.length,
+    coverImageUrl: draft.coverImage ? createInput.coverImageUrl : null,
+    lineupImageUrl: draft.lineupImage ? createInput.lineupImageUrl : null,
   };
 };

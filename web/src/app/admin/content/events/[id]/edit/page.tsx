@@ -58,35 +58,38 @@ export default function AdminContentEventEditPage() {
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
       setNotice(`活动编辑已提交成功：${result.event.name}`);
-      setResultLink(`/events/${result.event.id}`);
+      setResultLink(`/admin/content/events/${result.event.id}/edit`);
       return;
     }
     setNotice(result.payload.message || '编辑提交已进入审核队列');
-    setResultLink('/my-publishes?type=event');
+    setResultLink('/admin/content/reviews/submissions');
   };
 
   return (
     <AdminContentLayout
       title={pageTitle}
-      description="编辑态第一版已经接上活动详情加载、draft 回填和真实 PATCH 提交链路。下一轮会继续补 revision、冲突提示和更完整的 schedule/timetable 更新语义。"
+      description="统一后台中的活动编辑页会直接加载正式活动资料，支持结构化活动日、时间表、图片替换与主办方绑定更新。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
             返回活动工作区
           </Link>
-          <Link href="/admin/content/organizers/new" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/catalog" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+            活动目录中心
+          </Link>
+          <Link href="/admin/content/organizers/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
             新建主办方
           </Link>
         </>
       }
     >
       {notice ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="rounded-[18px] border border-[rgba(168,255,62,0.22)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.04))] p-4 text-sm text-[#d9ff9a]">
           <div>{notice}</div>
           {resultLink ? (
             <div className="mt-3">
-              <Link href={resultLink} className="text-primary-blue hover:underline">
-                打开结果页面
+              <Link href={resultLink} className="text-[#f0f0f0] hover:text-white hover:underline">
+                继续进入结果页面
               </Link>
             </div>
           ) : null}
@@ -94,11 +97,11 @@ export default function AdminContentEventEditPage() {
       ) : null}
 
       {loading ? (
-        <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6 text-sm text-text-secondary">
+        <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6 text-sm text-[#8a8a8a]">
           正在加载活动详情并回填编辑表单...
         </section>
       ) : error ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+        <section className="rounded-[18px] border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
           {error}
         </section>
       ) : (

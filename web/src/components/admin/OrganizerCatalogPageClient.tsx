@@ -80,46 +80,46 @@ export default function OrganizerCatalogPageClient() {
     <AdminContentLayout
       title="主办方目录中心"
       eyebrow="Admin / Content Workspace / Organizer Catalog"
-      description="这里承接统一后台里的主办方全量目录。现阶段优先做到原生可搜索、可进入编辑、可进入绑定中心，让 Organizer 的目录、新建、编辑形成完整闭环。"
+      description="统一查看主办方目录、资料摘要、绑定入口与编辑入口。目录层保持轻量检索，进入编辑或绑定时再进入更深的操作流。"
       actions={
         <>
-          <Link href="/admin/content/organizers" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/organizers" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
             返回主办方工作区
           </Link>
           <button
             type="button"
             onClick={() => void loadCatalog()}
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
           >
             刷新目录
           </button>
-          <Link href="/admin/content/organizers/new" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/admin/content/organizers/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
             新建主办方
           </Link>
         </>
       }
     >
       <section className="grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Catalog Goal</div>
-          <h2 className="mt-2 text-2xl font-semibold">先把目录、新建、编辑闭环做实</h2>
+        <div className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[#5f5f5f]">Catalog Scope</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">目录、编辑、绑定统一收口</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {[
               '目录层先原生承接名称、地区、视觉和链接的全量定位能力',
               '进入编辑页后继续沿用已经落地的 Organizer Studio create / edit 主链路',
               '活动绑定关系继续通过统一后台活动绑定中心处理，不再把目录能力散落到旧工具',
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm leading-6">
+              <div key={item} className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm leading-6 text-[#d2d2d2]">
                 {item}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border-secondary bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02)),radial-gradient(circle_at_top_left,rgba(209,171,84,0.16),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(64,147,255,0.14),transparent_45%)] p-6">
-          <div className="text-sm text-text-secondary">Catalog Snapshot</div>
-          <h2 className="mt-2 text-2xl font-semibold">目录概览</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+        <div className="rounded-[18px] border border-[rgba(168,255,62,0.18)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.03))] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[#86b852]">Catalog Snapshot</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">目录概览</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-[#9ab27f]">
             <p>当前页：{pagination.page} / {pagination.totalPages}</p>
             <p>目录总量：{pagination.total.toLocaleString()} 个主办方</p>
             <p>当前策略：目录先轻量定位，深入修改再进入编辑页</p>
@@ -128,37 +128,37 @@ export default function OrganizerCatalogPageClient() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.7fr)_auto_auto]">
             <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">搜索关键词</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-[#5f5f5f]">搜索关键词</span>
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="主办方名称 / 别名 / 城市 / 国家 / 官方链接"
-                className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                className="w-full rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#f0f0f0] outline-none transition-colors focus:border-[#a8ff3e]"
               />
             </label>
-            <button type="submit" className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white">
+            <button type="submit" className="rounded-xl bg-[#a8ff3e] px-5 py-3 text-sm font-semibold text-black">
               搜索目录
             </button>
             <button
               type="button"
               onClick={handleReset}
-              className="rounded-xl border border-border-secondary px-5 py-3 text-sm hover:border-primary-blue hover:text-primary-blue"
+              className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-5 py-3 text-sm text-[#cfcfcf] hover:bg-[#202020] hover:text-white"
             >
               清空筛选
             </button>
           </form>
 
-          <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/50 px-4 py-3 text-sm text-text-secondary">
+          <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#8a8a8a]">
             当前目录中心直接对齐 `/v1/learn/festivals`，不再依赖旧 Brand 页面做查找入口。
           </div>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
         {error ? (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {error}
@@ -174,8 +174,8 @@ export default function OrganizerCatalogPageClient() {
             {items.map((item) => {
               const visualUrl = resolvePrimaryVisual(item);
               return (
-                <div key={item.id} className="grid gap-4 rounded-3xl border border-border-secondary bg-bg-tertiary/35 p-4 lg:grid-cols-[140px_minmax(0,1fr)_220px]">
-                  <div className="relative overflow-hidden rounded-2xl border border-border-secondary bg-bg-secondary">
+                <div key={item.id} className="grid gap-4 rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4 lg:grid-cols-[140px_minmax(0,1fr)_220px]">
+                  <div className="relative overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.07)] bg-[#101010]">
                     {visualUrl ? (
                       <Image
                         src={visualUrl}
@@ -192,30 +192,30 @@ export default function OrganizerCatalogPageClient() {
                   </div>
 
                   <div className="min-w-0">
-                    <h3 className="text-xl font-semibold text-text-primary">{item.name}</h3>
-                    <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    <h3 className="text-xl font-semibold text-[#f0f0f0]">{item.name}</h3>
+                    <p className="mt-2 text-sm leading-6 text-[#8a8a8a]">
                       {item.city || '未知城市'} / {item.country || '未知国家'}
                       {item.abbreviation ? ` · ${item.abbreviation}` : ''}
                       {typeof item.revision === 'number' ? ` · rev ${item.revision}` : ''}
                     </p>
                     {item.tagline ? (
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">{item.tagline}</p>
+                      <p className="mt-2 text-sm leading-6 text-[#8a8a8a]">{item.tagline}</p>
                     ) : null}
                     {item.aliases?.length ? (
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      <p className="mt-2 text-sm leading-6 text-[#8a8a8a]">
                         别名：{item.aliases.slice(0, 4).join('、')}
                       </p>
                     ) : null}
-                    <p className="mt-2 text-xs text-text-tertiary">
+                    <p className="mt-2 text-xs text-[#666]">
                       更新时间：{formatDateTime(item.updatedAt)} · 创建时间：{formatDateTime(item.createdAt)}
                     </p>
                   </div>
 
                   <div className="grid gap-3">
-                    <Link href={`/admin/content/organizers/${item.id}/edit`} className="rounded-xl bg-primary-blue px-4 py-3 text-center text-sm font-semibold text-white">
+                    <Link href={`/admin/content/organizers/${item.id}/edit`} className="rounded-xl bg-[#a8ff3e] px-4 py-3 text-center text-sm font-semibold text-black">
                       编辑主办方
                     </Link>
-                    <Link href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`} className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm hover:border-primary-blue hover:text-primary-blue">
+                    <Link href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-center text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
                       打开绑定中心
                     </Link>
                     {item.officialWebsite ? (
@@ -223,12 +223,12 @@ export default function OrganizerCatalogPageClient() {
                         href={item.officialWebsite}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm hover:border-primary-blue hover:text-primary-blue"
+                        className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-center text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
                       >
                         官方链接
                       </a>
                     ) : (
-                      <div className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm text-text-secondary">
+                      <div className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-center text-sm text-[#777]">
                         暂无官方链接
                       </div>
                     )}
@@ -244,7 +244,7 @@ export default function OrganizerCatalogPageClient() {
             type="button"
             disabled={pagination.page <= 1}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
-            className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-2 text-sm text-[#d0d0d0] disabled:cursor-not-allowed disabled:opacity-40"
           >
             上一页
           </button>
@@ -252,7 +252,7 @@ export default function OrganizerCatalogPageClient() {
             type="button"
             disabled={pagination.page >= pagination.totalPages}
             onClick={() => setPage((current) => current + 1)}
-            className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-2 text-sm text-[#d0d0d0] disabled:cursor-not-allowed disabled:opacity-40"
           >
             下一页
           </button>

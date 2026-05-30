@@ -15,6 +15,7 @@ import {
 
 type UploadImageResponse = {
   url: string;
+  fileName?: string | null;
 };
 
 type EventStudioApiErrorPayload = {
@@ -67,9 +68,17 @@ export const eventStudioApi = {
     return Array.isArray(response.items) ? response.items : [];
   },
 
-  async uploadImage(file: File): Promise<UploadImageResponse> {
+  async uploadImage(
+    file: File,
+    options: {
+      usage: 'cover' | 'lineup';
+      draftId: string;
+    }
+  ): Promise<UploadImageResponse> {
     const formData = new FormData();
     formData.append('image', file);
+    formData.append('usage', options.usage);
+    formData.append('draftId', options.draftId);
 
     const response = await authenticatedFetch(getApiUrl('/v1/events/upload-image'), {
       method: 'POST',
@@ -83,6 +92,13 @@ export const eventStudioApi = {
     }
 
     return response.json();
+  },
+
+  async deleteDraftImages(input: { draftId: string; urls: string[] }): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(getApiUrl('/v1/events/delete-images'), {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
 
   async createEvent(input: EventStudioCreateInput): Promise<EventStudioCreateResult> {

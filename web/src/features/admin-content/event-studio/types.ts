@@ -29,6 +29,8 @@ export type EventStudioLineupSyncMode = 'incremental_fill' | 'exact_align';
 export type EventStudioImageState = {
   remoteUrl: string;
   fileName: string;
+  usage: EventStudioImageUsage;
+  origin: 'draft-upload' | 'persisted';
 };
 
 export type EventStudioTicketTierDraft = {
@@ -89,6 +91,7 @@ export type EventStudioTimetableSlotDraft = {
 };
 
 export type EventStudioDraft = {
+  id: string;
   name: EventStudioLocalizedText;
   description: string;
   abbreviation: string;

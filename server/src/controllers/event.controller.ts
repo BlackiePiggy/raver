@@ -1118,6 +1118,9 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       lineupSlots,
       status,
     } = req.body;
+    const requestBody = req.body as Record<string, unknown>;
+    const hasCoverImageUrl = Object.prototype.hasOwnProperty.call(requestBody, 'coverImageUrl');
+    const hasLineupImageUrl = Object.prototype.hasOwnProperty.call(requestBody, 'lineupImageUrl');
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
@@ -1179,7 +1182,6 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const nextDayRolloverHour = dayRolloverHour !== undefined
       ? normalizeDayRolloverHour(dayRolloverHour, existing.dayRolloverHour ?? 6)
       : (existing.dayRolloverHour ?? 6);
-    const requestBody = req.body as Record<string, unknown>;
     const hasStructuredSchedulePayload =
       !!requestBody.schedule
       && typeof requestBody.schedule === 'object'
@@ -1256,8 +1258,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           description: description ?? undefined,
           nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
           descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
-          coverImageUrl: coverImageUrl ?? undefined,
-          lineupImageUrl: lineupImageUrl ?? undefined,
+          coverImageUrl: hasCoverImageUrl ? (typeof coverImageUrl === 'string' && coverImageUrl.trim() ? coverImageUrl.trim() : null) : undefined,
+          lineupImageUrl: hasLineupImageUrl ? (typeof lineupImageUrl === 'string' && lineupImageUrl.trim() ? lineupImageUrl.trim() : null) : undefined,
           eventType: eventType ?? undefined,
           organizerName: organizerName ?? undefined,
           city: city ?? undefined,
