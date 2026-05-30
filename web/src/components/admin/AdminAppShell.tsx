@@ -16,7 +16,7 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
-import { ADMIN_NAV_GROUPS, getVisibleAdminNavGroups, isAdminHrefActive } from '@/lib/admin/navigation';
+import { getVisibleAdminNavGroups, isAdminHrefActive } from '@/lib/admin/navigation';
 
 type AdminAppShellProps = {
   title: string;
@@ -186,12 +186,12 @@ function Sidebar({
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
-        <div className={clsx('mb-[34px] flex items-center', collapsed ? 'justify-center' : 'gap-3')}>
+        <div className={clsx('mb-[28px] flex items-center', collapsed ? 'justify-center' : 'gap-3')}>
           <Triangle className="size-[24px] fill-[#071110] text-[#071110] drop-shadow-[0_0_10px_rgba(74,255,230,.35)]" />
           {!collapsed && <b className="text-[18px] tracking-[-0.03em] text-[#071110]">RaveHub Admin</b>}
         </div>
 
-        <div className={clsx('mb-[24px] flex shrink-0 items-center', collapsed ? 'justify-center' : 'justify-between px-1')}>
+        <div className={clsx('mb-[18px] flex shrink-0 items-center', collapsed ? 'justify-center' : 'justify-between px-1')}>
           <span className={clsx('text-[18px] font-bold tracking-[-0.03em] text-[#071110]', collapsed && 'hidden')}>Menu</span>
           <button
             type="button"
@@ -206,7 +206,7 @@ function Sidebar({
           <div className="absolute inset-0 overflow-y-auto px-1 py-2 admin-shell-scrollbar">
             {groups.map((group) => (
               <div key={group.id} className="mb-6">
-                {!collapsed && (
+                {!collapsed && group.id !== 'menu' && (
                   <div className="mb-3 flex items-center justify-between px-1 text-[13px] font-bold text-[#071110]">
                     <span>{group.label}</span>
                     <ChevronDown className="size-4" />
@@ -253,7 +253,7 @@ function Sidebar({
             {[Sparkles, Command, Settings].map((Icon, index) => (
               <span
                 key={index}
-                className="relative grid size-9 place-items-center rounded-full bg-white/60 text-[#15221f] transition hover:-translate-y-0.5 hover:bg-white"
+                className="relative grid size-9 place-items-center rounded-full bg-[#f4f6f5] text-[#15221f] transition hover:bg-white"
               >
                 <Icon className="size-[15px]" />
                 {index === 1 && (
@@ -315,7 +315,7 @@ function Topbar({
         >
           <PanelLeftClose className="size-4 rotate-180" />
         </button>
-        <label className="mx-auto flex h-[42px] w-full max-w-[360px] items-center rounded-full border border-white/50 bg-white/42 px-3 shadow-[0_10px_34px_rgba(42,56,52,.05),0_0_32px_rgba(158,89,255,.06)] backdrop-blur-xl transition-all duration-300 focus-within:max-w-[430px] focus-within:bg-white/78 md:px-4">
+        <label className="mx-auto flex h-[42px] w-full max-w-[470px] items-center rounded-full border border-[#ececec] bg-[#f5f5f7] px-3 shadow-sm transition-all duration-300 focus-within:bg-white md:px-4">
           <Search className="mr-2 size-4 shrink-0 md:mr-3" />
           <input
             value={query}
@@ -332,7 +332,7 @@ function Topbar({
           )}
         </label>
         <div className="hidden items-center gap-3 md:flex">
-          <button className="admin-shell-pill h-[42px] px-5 text-[12px] font-bold">Integration</button>
+          <button className="admin-shell-pill h-[42px] px-7 text-[12px] font-bold">Integration</button>
           <div className="flex items-center -space-x-2">
             {['RB', 'OP', 'CM'].map((label, index) => (
               <span

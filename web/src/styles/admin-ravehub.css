@@ -1,65 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 .admin-ravehub-shell {
   position: relative;
   overflow: hidden;
   color: #071110;
+  font-family: 'Inter', var(--font-dashboard-sans), system-ui, sans-serif;
 }
 
 .admin-ravehub-bg {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(circle at top left, rgba(166, 255, 222, 0.72), transparent 30%),
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.95), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(204, 251, 241, 0.9), transparent 26%),
-    linear-gradient(180deg, #f4fbf8 0%, #eef8f4 100%);
+    radial-gradient(circle at top left, rgba(189, 255, 228, 0.42), transparent 24%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.86), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(210, 250, 241, 0.44), transparent 22%),
+    linear-gradient(180deg, #f7faf8 0%, #f1f7f4 100%);
   pointer-events: none;
 }
 
 .admin-shell-sidebar,
 .admin-shell-profile,
 .admin-shell-panel,
-.admin-shell-page,
 .admin-shell-soft-panel,
 .admin-shell-pill {
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow:
-    0 18px 52px rgba(19, 37, 33, 0.08),
-    0 0 40px rgba(117, 255, 220, 0.08);
-  backdrop-filter: blur(24px);
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 10px 30px rgba(33, 52, 47, 0.06);
+  backdrop-filter: blur(14px);
 }
 
 .admin-shell-sidebar {
   margin: 16px 0 16px 16px;
-  border-radius: 32px;
+  border-radius: 34px;
   padding-top: 24px;
   padding-bottom: 18px;
 }
 
 .admin-shell-profile {
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.12),
-    0 0 44px rgba(117, 255, 220, 0.18);
+  box-shadow: 0 8px 24px rgba(18, 35, 31, 0.06);
 }
 
 .admin-shell-page {
-  border-radius: 30px;
-  padding: 22px;
+  padding: 10px 2px 8px;
 }
 
 .admin-shell-panel {
-  border-radius: 28px;
+  border-radius: 30px;
 }
 
 .admin-shell-soft-panel {
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.5);
+  border-radius: 24px;
+  background: #f8f9f8;
   box-shadow: none;
 }
 
 .admin-shell-panel-mint {
   background:
-    linear-gradient(180deg, rgba(224, 255, 243, 0.8), rgba(255, 255, 255, 0.62));
+    linear-gradient(180deg, rgba(231, 255, 244, 0.95), rgba(255, 255, 255, 0.88));
 }
 
 .admin-shell-panel-dark {
@@ -80,6 +77,7 @@
   justify-content: center;
   border-radius: 999px;
   color: #071110;
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .admin-shell-scrollbar::-webkit-scrollbar {
@@ -148,7 +146,7 @@
 
 .admin-ravehub-shell button:hover,
 .admin-ravehub-shell a:hover {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .admin-ravehub-shell [class*='bg-bg-primary'],
@@ -159,26 +157,24 @@
 .admin-ravehub-shell [class*='bg-\\[#101010\\]'],
 .admin-ravehub-shell [class*='bg-\\[#121212\\]'],
 .admin-ravehub-shell [class*='bg-\\[#202020\\]'] {
-  background: rgba(255, 255, 255, 0.58) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
   color: #071110 !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  box-shadow:
-    0 18px 52px rgba(19, 37, 33, 0.08),
-    0 0 40px rgba(117, 255, 220, 0.08) !important;
+  border-color: rgba(232, 236, 235, 0.92) !important;
+  box-shadow: 0 10px 30px rgba(33, 52, 47, 0.06) !important;
 }
 
 .admin-ravehub-shell [class*='bg-\\[linear-gradient'] {
   background:
-    linear-gradient(180deg, rgba(224, 255, 243, 0.8), rgba(255, 255, 255, 0.62)) !important;
+    linear-gradient(180deg, rgba(231, 255, 244, 0.95), rgba(255, 255, 255, 0.88)) !important;
   color: #071110 !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
+  border-color: rgba(232, 236, 235, 0.92) !important;
 }
 
 .admin-ravehub-shell [class*='border-white/6'],
 .admin-ravehub-shell [class*='border-white/5'],
 .admin-ravehub-shell [class*='border-\\[rgba\\(255,255,255,0\\.07\\)\\]'],
 .admin-ravehub-shell [class*='border-border-secondary'] {
-  border-color: rgba(255, 255, 255, 0.5) !important;
+  border-color: rgba(232, 236, 235, 0.92) !important;
 }
 
 .admin-ravehub-shell [class*='text-text-primary'],
@@ -210,7 +206,7 @@
   background: #071110 !important;
   color: white !important;
   border-color: transparent !important;
-  box-shadow: 0 0 26px rgba(92, 255, 230, 0.2) !important;
+  box-shadow: 0 8px 24px rgba(7, 17, 16, 0.12) !important;
 }
 
 .admin-ravehub-shell [class*='text-\\[#d9ff72\\]'],
@@ -230,9 +226,47 @@
   background: rgba(16, 185, 129, 0.12) !important;
 }
 
+.admin-reference-card {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 28px;
+  box-shadow: 0 10px 30px rgba(33, 52, 47, 0.06);
+}
+
+.admin-reference-soft-card {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: #f8f9f8;
+  border-radius: 24px;
+}
+
+.admin-reference-pastel-card {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  border-radius: 26px;
+  box-shadow: 0 10px 30px rgba(33, 52, 47, 0.05);
+}
+
+.admin-reference-dark-card {
+  border: 1px solid rgba(25, 28, 28, 0.9);
+  background: #1c1c1c;
+  color: white;
+  border-radius: 26px;
+  box-shadow: none;
+}
+
+.admin-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #f5f5f7;
+  color: #4b5563;
+  font-size: 12px;
+  padding: 8px 14px;
+}
+
 @media (max-width: 1279px) {
   .admin-shell-page {
-    padding: 18px;
+    padding: 8px 0 8px;
   }
 }
 
@@ -242,7 +276,6 @@
   }
 
   .admin-shell-page {
-    border-radius: 24px;
-    padding: 16px;
+    padding: 6px 0 8px;
   }
 }
