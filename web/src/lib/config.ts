@@ -4,9 +4,18 @@ export const API_BASE_URL =
     ? '/api'
     : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
 
+const ROOT_BASE_URL =
+  typeof window !== 'undefined'
+    ? ''
+    : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api').replace(/\/api\/?$/, '');
+
 export const getApiUrl = (path: string) => {
-  const baseUrl = API_BASE_URL;
-  return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const baseUrl =
+    normalizedPath.startsWith('/v1/') || normalizedPath.startsWith('/uploads/')
+      ? ROOT_BASE_URL
+      : API_BASE_URL;
+  return `${baseUrl}${normalizedPath}`;
 };
 
 export const resolveMediaUrl = (url?: string | null): string => {
