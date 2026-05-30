@@ -40,6 +40,10 @@ const nextConfig = {
         destination: `${backendOrigin}/qr/:path*`,
       },
       {
+        source: '/poster/:path*',
+        destination: `${backendOrigin}/poster/:path*`,
+      },
+      {
         source: '/admin/festival-viewer.html',
         destination: `${festivalViewerOrigin}/festival-viewer.html`,
       },
