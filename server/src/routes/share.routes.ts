@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import QRCode from 'qrcode';
 import { PNG } from 'pngjs';
 import {
+  buildSharePosterUrl,
   buildShareShortUrl,
   getRawShareLinkByCode,
   recordShareLinkEvent,
@@ -425,7 +426,8 @@ const renderLandingPage = (
   const title = htmlEscape(state.title);
   const description = htmlEscape(state.description);
   const resolvedImageUrl = resolvePublicAssetUrl(req, shareLink.imageUrl);
-  const imageUrl = cssImageUrl(resolvedImageUrl);
+  const resolvedPosterUrl = resolvePublicAssetUrl(req, buildSharePosterUrl(shareLink.code));
+  const imageUrl = cssImageUrl(resolvedPosterUrl) || cssImageUrl(resolvedImageUrl);
   const imageMeta = imageUrl ? `<meta property="og:image" content="${htmlEscape(imageUrl)}" />` : '';
   const heroImage = imageUrl ? `<div class="art" style="background-image:url('${htmlEscape(imageUrl)}')"></div>` : '<div class="art fallback">R</div>';
   const openUrl = htmlEscape(`/s/${encodeURIComponent(shareLink.code)}/open`);
