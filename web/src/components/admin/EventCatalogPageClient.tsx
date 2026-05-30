@@ -22,7 +22,7 @@ import {
 } from '@/features/admin-content/event-organizer-binding/api';
 import type { EventStudioOrganizer } from '@/features/admin-content/event-studio';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 const EMPTY_PAGINATION: AdminCatalogPagination = {
