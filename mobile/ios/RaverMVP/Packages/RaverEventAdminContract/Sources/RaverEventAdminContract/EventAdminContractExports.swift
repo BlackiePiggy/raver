@@ -1,0 +1,14 @@
+import Foundation
+import OpenAPIRuntime
+
+public typealias EventAdminComponents = Components
+public typealias EventAdminCreateEventInput = Components.Schemas.CreateEventInput
+public typealias EventAdminUpdateEventInput = Components.Schemas.UpdateEventInput
+public typealias EventAdminEventDetail = Components.Schemas.EventDetail
+public typealias EventAdminEventEnvelope = Components.Schemas.EventEnvelope
+public typealias EventAdminEventDetailEnvelope = Components.Schemas.EventDetailEnvelope
+public typealias EventAdminEventSubmissionAccepted = Components.Schemas.EventSubmissionAccepted
+public typealias EventAdminEventSubmissionAcceptedEnvelope = Components.Schemas.EventSubmissionAcceptedEnvelope
+public typealias EventAdminAlignmentPreview = Components.Schemas.EventAlignmentPreview
+public typealias EventAdminAlignmentPreviewEnvelope = Components.Schemas.EventAlignmentPreviewEnvelope
+public typealias EventAdminLocalizedText = Components.Schemas.LocalizedText

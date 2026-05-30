@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { authAPI } from '@/lib/api/auth';
 import { AdminUser, AdminUserDetail, adminUsersApi } from '@/lib/api/admin-users';
@@ -149,34 +149,35 @@ export default function AdminUsersPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="用户管理" description="加载用户检索与账号管理数据中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
   if (!user || !canOperate) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <section className="mx-auto max-w-4xl px-6 pt-28">
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-6">
+      <AdminAppShell title="用户管理" description="当前账号暂时不能访问用户管理。">
+        <section className="mx-auto max-w-4xl">
+          <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">用户管理</h1>
             <p className="mt-3 text-sm text-text-secondary">当前账号无权限访问该页面。</p>
-            <Link href={user ? '/admin' : '/login'} className="mt-5 inline-block rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+            <Link href={user ? '/admin' : '/login'} className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               {user ? '返回后台' : '去登录'}
             </Link>
           </div>
         </section>
-      </main>
+      </AdminAppShell>
     );
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl space-y-5 px-6 pb-12 pt-24">
+    <AdminAppShell
+      title="用户管理"
+      eyebrow="Raver Admin / User Admin"
+      description="按邮箱、手机号、昵称、用户名或 userId 检索账号，并查看详情、会话和高风险操作入口。"
+    >
+      <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm text-text-secondary">User Admin</p>
@@ -376,6 +377,6 @@ export default function AdminUsersPage() {
           </div>
         )}
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

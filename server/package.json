@@ -71,6 +71,7 @@
     "events:incremental-sync:regression": "ts-node src/scripts/event-incremental-sync-regression.ts",
     "events:multi-week:eventday:guardrails": "ts-node src/scripts/event-multi-week-eventday-guardrails.ts",
     "events:timetable:api:guardrails": "ts-node src/scripts/event-timetable-api-guardrails.ts",
+    "events:admin-contract:guardrails": "ts-node src/scripts/event-admin-contract-guardrails.ts",
     "events:schedule:foundation:backfill": "ts-node src/scripts/backfill-event-schedule-foundation.ts",
     "events:schedule:foundation:backfill:apply": "EVENT_SCHEDULE_FOUNDATION_BACKFILL_APPLY=1 ts-node src/scripts/backfill-event-schedule-foundation.ts",
     "events:multi-week:backfill-historical": "ts-node src/scripts/backfill-historical-multi-week-events.ts",

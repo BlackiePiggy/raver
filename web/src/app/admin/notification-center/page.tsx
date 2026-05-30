@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   NotificationCenterGlobalConfig,
@@ -303,42 +303,42 @@ export default function NotificationCenterAdminPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="通知中心后台" description="加载通知健康状态和投递明细中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">
+      <AdminAppShell title="通知中心后台" description="请先登录管理员账号后访问通知中心后台。">
+        <div className="admin-shell-panel mx-auto max-w-6xl p-8">
           <p className="text-lg">请先登录管理员账号后访问通知中心后台。</p>
-          <Link href="/login" className="mt-4 inline-block rounded-lg bg-primary-blue px-4 py-2 text-white">
+          <Link href="/login" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>
-      </main>
+      </AdminAppShell>
     );
   }
 
   if (!isAdmin) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">
+      <AdminAppShell title="通知中心后台" description="当前账号无权限访问通知中心后台。">
+        <div className="admin-shell-panel mx-auto max-w-6xl p-8">
           <p className="text-lg">当前账号无权限访问通知中心后台。</p>
         </div>
-      </main>
+      </AdminAppShell>
     );
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl px-6 pb-12 pt-24 space-y-5">
+    <AdminAppShell
+      title="通知中心后台"
+      eyebrow="Raver Admin / Notification Ops"
+      description="查看 APNs 配置诊断、通知投递明细、模板配置与测试发布能力。"
+    >
+      <section className="space-y-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold">通知中心后台</h1>
@@ -1122,6 +1122,6 @@ export default function NotificationCenterAdminPage() {
           </div>
         </section>
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

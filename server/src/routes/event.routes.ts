@@ -54,6 +54,7 @@ router.patch('/:eventId/timetable/:slotId', authenticate, updateTimetableSlot);
 router.delete('/:eventId/timetable/:slotId', authenticate, deleteTimetableSlot);
 router.get('/:id', getEvent);
 router.post('/', authenticate, createEvent);
+router.patch('/:id', authenticate, updateEvent);
 router.put('/:id', authenticate, updateEvent);
 router.delete('/:id', authenticate, deleteEvent);
 

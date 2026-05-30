@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -428,10 +428,9 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-6 text-sm text-text-secondary">加载中...</div>
       </AdminContentLayout>
     ) : (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="DJ 绑定审核" description="加载 DJ 与 Event 阵容命中审核数据中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
@@ -450,18 +449,17 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-6 text-sm text-text-secondary">当前账号无权限访问该页面。</div>
       </AdminContentLayout>
     ) : (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <section className="mx-auto max-w-4xl px-6 pt-28">
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-6">
+      <AdminAppShell title="DJ 绑定审核" description="当前账号暂时没有 DJ 绑定审核权限。">
+        <section className="mx-auto max-w-4xl">
+          <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">DJ 绑定审核</h1>
             <p className="mt-3 text-sm text-text-secondary">当前账号无权限访问该页面。</p>
-            <Link href={user ? '/admin' : '/login'} className="mt-5 inline-block rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+            <Link href={user ? '/admin' : '/login'} className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               {user ? '返回后台' : '去登录'}
             </Link>
           </div>
         </section>
-      </main>
+      </AdminAppShell>
     );
   }
 
@@ -493,9 +491,12 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl space-y-5 px-6 pb-12 pt-24">
+    <AdminAppShell
+      title="DJ 绑定审核"
+      eyebrow="Raver Admin / Content Ops"
+      description="管理 DJ 与 Event 阵容、member 和 timetable slot 的自动命中结果，优先处理 exact 命中与批量 apply。"
+    >
+      <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm text-text-secondary">Content Ops</p>
@@ -520,6 +521,6 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         </div>
         {content}
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

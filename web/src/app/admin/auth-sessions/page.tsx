@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { AdminAuthSessionListParams, AuthSessionItem, adminAuthSessionsApi, authSessionsApi } from '@/lib/api/auth-sessions';
@@ -148,34 +148,35 @@ export default function AuthSessionsAdminPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="登录设备与会话" description="加载会话与设备信息中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
   if (!user || !rolePolicy.canAccessAdminShell) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <section className="mx-auto max-w-4xl px-6 pt-28">
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-6">
+      <AdminAppShell title="登录设备与会话" description="登录后可查看当前账号和受管用户的会话情况。">
+        <section className="mx-auto max-w-4xl">
+          <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">登录设备与会话</h1>
             <p className="mt-3 text-sm text-text-secondary">请先登录后查看会话。</p>
-            <Link href="/login" className="mt-5 inline-block rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+            <Link href="/login" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               去登录
             </Link>
           </div>
         </section>
-      </main>
+      </AdminAppShell>
     );
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl space-y-5 px-6 pb-12 pt-24">
+    <AdminAppShell
+      title="登录设备与会话"
+      eyebrow="Raver Admin / Session Control"
+      description="查看当前账号的 Web Admin / iOS 登录设备，并在需要时检索和撤销其它用户会话。"
+    >
+      <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm text-text-secondary">Auth Sessions</p>
@@ -387,6 +388,6 @@ export default function AuthSessionsAdminPage() {
           </section>
         )}
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

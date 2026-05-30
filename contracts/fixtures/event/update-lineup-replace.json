@@ -1,0 +1,88 @@
+{
+  "name": "Raver Night Shanghai 2026 Updated",
+  "description": "Lineup replaced after final booking lock.",
+  "eventType": "club",
+  "city": "Shanghai",
+  "country": "China",
+  "startDate": "2026-09-13",
+  "endDate": "2026-09-13",
+  "schedule": {
+    "mode": "single_day",
+    "timeZone": "Asia/Shanghai",
+    "dayRolloverHour": 6
+  },
+  "weeks": [
+    {
+      "id": "week_1",
+      "weekIndex": 0,
+      "startDate": "2026-09-13",
+      "endDate": "2026-09-13",
+      "sortOrder": 0
+    }
+  ],
+  "eventDays": [
+    {
+      "eventDayId": "event_day_1",
+      "weekIndex": 0,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 0,
+      "date": "2026-09-13",
+      "sortOrder": 0
+    }
+  ],
+  "timeZone": "Asia/Shanghai",
+  "dayRolloverHour": 6,
+  "stageOrder": [
+    "Main Stage",
+    "Second Room"
+  ],
+  "lineupArtists": [
+    {
+      "id": "artist_anyma",
+      "djId": "dj_anyma",
+      "djName": "Anyma",
+      "sortOrder": 1
+    },
+    {
+      "id": "artist_mrak",
+      "djId": "dj_mrak",
+      "djName": "MRAK",
+      "sortOrder": 2
+    }
+  ],
+  "lineupSlots": [
+    {
+      "id": "slot_anyma",
+      "lineupArtistId": "artist_anyma",
+      "eventDayId": "event_day_1",
+      "weekIndex": 0,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 0,
+      "localDate": "2026-09-13",
+      "djId": "dj_anyma",
+      "djName": "Anyma",
+      "stageName": "Main Stage",
+      "sortOrder": 1,
+      "startTime": "2026-09-13T13:30:00.000Z",
+      "endTime": "2026-09-13T15:00:00.000Z"
+    },
+    {
+      "id": "slot_mrak",
+      "lineupArtistId": "artist_mrak",
+      "eventDayId": "event_day_1",
+      "weekIndex": 0,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 0,
+      "localDate": "2026-09-13",
+      "djId": "dj_mrak",
+      "djName": "MRAK",
+      "stageName": "Second Room",
+      "sortOrder": 2,
+      "startTime": "2026-09-13T15:15:00.000Z",
+      "endTime": "2026-09-13T16:45:00.000Z"
+    }
+  ],
+  "lineupSyncMode": "exact_align",
+  "idempotencyKey": "fixture-update-lineup-replace-001",
+  "status": "upcoming"
+}

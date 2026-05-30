@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import type { components as EventContractComponents } from '../../../../../contracts/generated/web/event-admin';
 import {
   EventStudioAlignmentPreview,
   EventStudioApiErrorCode,
@@ -13,6 +14,8 @@ import {
   EventStudioUpdateInput,
 } from './types';
 
+type EventContractSchemas = EventContractComponents['schemas'];
+
 type UploadImageResponse = {
   url: string;
   fileName?: string | null;
@@ -24,6 +27,11 @@ type EventStudioApiErrorPayload = {
   code?: EventStudioApiErrorCode;
   details?: EventStudioApiErrorDetails;
 };
+
+type EventEnvelope = EventContractSchemas['EventEnvelope'];
+type EventDetailEnvelope = EventContractSchemas['EventDetailEnvelope'];
+type EventSubmissionAcceptedEnvelope = EventContractSchemas['EventSubmissionAcceptedEnvelope'];
+type EventAlignmentPreviewEnvelope = EventContractSchemas['EventAlignmentPreviewEnvelope'];
 
 export class EventStudioApiError extends Error {
   readonly code?: EventStudioApiErrorCode;
@@ -43,6 +51,19 @@ const isSubmissionPayload = (value: unknown): value is EventStudioSubmissionAcce
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   return typeof row.message === 'string' && !!row.submission && typeof row.submission === 'object';
+};
+
+const unwrapDataEnvelope = <T>(payload: unknown): T => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('接口返回格式不匹配，请检查 Web BFF 契约');
+  }
+
+  const row = payload as { data?: T };
+  if (row.data === undefined) {
+    throw new Error('接口返回格式不匹配，请检查 Web BFF 契约');
+  }
+
+  return row.data;
 };
 
 export const eventStudioApi = {
@@ -116,23 +137,13 @@ export const eventStudioApi = {
       );
     }
     const payload = await response.json();
+    const data = unwrapDataEnvelope<EventEnvelope['data'] | EventSubmissionAcceptedEnvelope['data']>(payload);
 
-    if (isSubmissionPayload(payload)) {
-      return { kind: 'submitted', payload };
+    if (isSubmissionPayload(data)) {
+      return { kind: 'submitted', payload: data };
     }
 
-    const event = payload as {
-      id: string;
-      name: string;
-      slug: string;
-      organizerName?: string | null;
-      city?: string | null;
-      country?: string | null;
-      startDate: string;
-      endDate: string;
-      status?: string | null;
-    };
-    return { kind: 'created', event };
+    return { kind: 'created', event: data };
   },
 
   async updateEvent(id: string, input: EventStudioUpdateInput): Promise<EventStudioCreateResult> {
@@ -150,36 +161,28 @@ export const eventStudioApi = {
       );
     }
     const payload = await response.json();
+    const data = unwrapDataEnvelope<EventEnvelope['data'] | EventSubmissionAcceptedEnvelope['data']>(payload);
 
-    if (isSubmissionPayload(payload)) {
-      return { kind: 'submitted', payload };
+    if (isSubmissionPayload(data)) {
+      return { kind: 'submitted', payload: data };
     }
 
-    const event = payload as {
-      id: string;
-      name: string;
-      slug: string;
-      organizerName?: string | null;
-      city?: string | null;
-      country?: string | null;
-      startDate: string;
-      endDate: string;
-      status?: string | null;
-    };
-    return { kind: 'created', event };
+    return { kind: 'created', event: data };
   },
 
   async fetchEvent(id: string): Promise<EventStudioLoadedEvent> {
-    return authenticatedJsonFetch<EventStudioLoadedEvent>(getApiUrl(`/v1/events/${id}`));
+    const payload = await authenticatedJsonFetch<EventDetailEnvelope>(getApiUrl(`/v1/events/${id}`));
+    return payload.data;
   },
 
   async previewLineupTimetableAlignment(input: EventStudioCreateInput): Promise<EventStudioAlignmentPreview> {
-    return authenticatedJsonFetch<EventStudioAlignmentPreview>(
+    const payload = await authenticatedJsonFetch<EventAlignmentPreviewEnvelope>(
       getApiUrl('/v1/events/lineup-timetable-alignment/preview'),
       {
         method: 'POST',
         body: JSON.stringify(input),
       }
     );
+    return payload.data;
   },
 };

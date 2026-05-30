@@ -19,6 +19,22 @@ const numericOrNull = (value?: string | null): number | null => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
+const nextDateText = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  parsed.setUTCDate(parsed.getUTCDate() + 1);
+  return parsed.toISOString().slice(0, 10);
+};
+
+const composeSlotDateTime = (date: string, time: string): string => {
+  const normalizedDate = date.trim();
+  const normalizedTime = time.trim();
+  if (!normalizedDate || !normalizedTime) return '';
+  return `${normalizedDate}T${normalizedTime}:00`;
+};
+
 const normalizedLocalizedText = (value: EventStudioLocalizedText): EventStudioLocalizedText | null => {
   const next: EventStudioLocalizedText = {
     zh: value.zh.trim(),
@@ -32,18 +48,52 @@ const normalizedLocalizedText = (value: EventStudioLocalizedText): EventStudioLo
 const primaryText = (value: EventStudioLocalizedText): string =>
   value.zh.trim() || value.en.trim() || value.ja.trim() || value.enFull.trim();
 
+const normalizedAddressText = (value: EventStudioLocalizedText): EventStudioLocalizedText => ({
+  zh: value.zh.trim(),
+  en: value.en.trim(),
+  ja: value.ja.trim(),
+  enFull: value.enFull.trim(),
+});
+
+const joinAddressParts = (parts: Array<string | null | undefined>): string =>
+  parts
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+
 const joinLocalizedAddress = (
   detail: EventStudioLocalizedText,
   city: EventStudioLocalizedText,
   country: EventStudioLocalizedText
-): EventStudioLocalizedText => ({
-  zh: [country.zh.trim(), city.zh.trim(), detail.zh.trim()].filter(Boolean).join(' '),
-  en: [country.enFull.trim() || country.en.trim(), city.en.trim(), detail.en.trim()].filter(Boolean).join(', '),
-  ja: [country.ja.trim(), city.ja.trim(), detail.ja.trim()].filter(Boolean).join(' '),
-  enFull: [country.enFull.trim() || country.en.trim(), city.en.trim(), detail.enFull.trim() || detail.en.trim()].filter(Boolean).join(', '),
-});
+): EventStudioLocalizedText => {
+  const normalizedDetail = normalizedAddressText(detail);
+  const normalizedCity = normalizedAddressText(city);
+  const normalizedCountry = normalizedAddressText(country);
 
-const resolveVisualStatus = (startDate: string, endDate: string): string => {
+  return {
+    zh: joinAddressParts([
+      normalizedCountry.zh || normalizedCountry.en,
+      normalizedCity.zh || normalizedCity.en,
+      normalizedDetail.zh || normalizedDetail.en,
+    ]) || normalizedDetail.zh || normalizedDetail.en,
+    en: joinAddressParts([
+      normalizedCountry.enFull || normalizedCountry.en || normalizedCountry.zh,
+      normalizedCity.en || normalizedCity.zh,
+      normalizedDetail.en || normalizedDetail.zh,
+    ]) || normalizedDetail.en || normalizedDetail.zh,
+    ja: joinAddressParts([
+      normalizedCountry.ja || normalizedCountry.enFull || normalizedCountry.en || normalizedCountry.zh,
+      normalizedCity.ja || normalizedCity.en || normalizedCity.zh,
+      normalizedDetail.ja || normalizedDetail.en || normalizedDetail.zh,
+    ]) || normalizedDetail.ja || normalizedDetail.en || normalizedDetail.zh,
+    enFull: normalizedDetail.enFull,
+  };
+};
+
+const resolveVisualStatus = (
+  startDate: string,
+  endDate: string
+): 'upcoming' | 'ongoing' | 'ended' => {
   const today = new Date().toISOString().slice(0, 10);
   if (endDate < today) return 'ended';
   if (startDate > today) return 'upcoming';
@@ -64,6 +114,8 @@ const normalizeMemberDjIds = (memberDjIds: Array<string | null>): Array<string |
   return normalized.some((item) => item !== null) ? normalized : [];
 };
 
+const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
+
 const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   const memberNames = splitMemberNamesText(artist.memberNamesText);
   const normalizedDjId = trimOrNull(artist.djId);
@@ -83,16 +135,20 @@ const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   };
 };
 
-const lineupSlotPayload = (slot: EventStudioTimetableSlotDraft) => {
+const lineupSlotPayload = (slot: EventStudioTimetableSlotDraft, index: number) => {
   const memberNames = splitMemberNamesText(slot.memberNamesText);
   const normalizedDjId = trimOrNull(slot.djId);
-  const normalizedStageName = trimOrNull(slot.stageName);
+  const normalizedStageName = trimOrNull(slot.stageName) || defaultStageName(index);
   if (!memberNames.length && !normalizedDjId) return null;
   if (!slot.eventDayId.trim() || !slot.localDate.trim() || !slot.startTime.trim() || !slot.endTime.trim()) return null;
 
   const normalizedMemberDjIds = normalizeMemberDjIds(slot.memberDjIds);
   const displayName = memberNames.length ? memberNames.join(' / ') : normalizedDjId || '';
   if (!displayName) return null;
+  const normalizedStartTime = composeSlotDateTime(slot.localDate, slot.startTime);
+  const normalizedEndDate = slot.endTime.trim() > slot.startTime.trim()
+    ? slot.localDate
+    : nextDateText(slot.localDate);
 
   return {
     id: trimOrNull(slot.canonicalSlotId),
@@ -105,12 +161,12 @@ const lineupSlotPayload = (slot: EventStudioTimetableSlotDraft) => {
     djId: normalizedDjId,
     memberDjIds: normalizedMemberDjIds.length ? normalizedMemberDjIds : (normalizedDjId ? [normalizedDjId] : null),
     memberNames: memberNames.length ? memberNames : null,
-    festivalDayIndex: slot.overallDayIndex,
+    festivalDayIndex: null,
     djName: displayName,
     stageName: normalizedStageName,
     sortOrder: slot.sortOrder,
-    startTime: `${slot.localDate}T${slot.startTime}:00`,
-    endTime: `${slot.localDate}T${slot.endTime}:00`,
+    startTime: normalizedStartTime,
+    endTime: composeSlotDateTime(normalizedEndDate, slot.endTime),
   };
 };
 
@@ -171,7 +227,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
               ja: '',
               enFull: '',
             }
-          : null,
+          : undefined,
         addressI18n: locationAddress
           ? {
               zh: locationAddress,
@@ -179,10 +235,10 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
               ja: '',
               enFull: '',
             }
-          : detailAddressI18n,
+          : detailAddressI18n ?? undefined,
         formattedAddressI18n: detailAddressI18n
           ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
-          : null,
+          : undefined,
         city: trimOrNull(primaryText(draft.city)),
       }
     : null;
@@ -195,8 +251,8 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
       return {
         name,
         price,
-        currency: trimOrNull(tier.currency) || trimOrNull(draft.ticketCurrency),
-        sortOrder: index,
+        currency: (trimOrNull(tier.currency) || trimOrNull(draft.ticketCurrency))?.toUpperCase() || null,
+        sortOrder: index + 1,
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -242,7 +298,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
 
   return {
     name: primaryText(draft.name),
-    nameI18n,
+    nameI18n: nameI18n ?? undefined,
     wikiFestivalId: trimOrNull(draft.organizerFestivalId),
     abbreviation: trimOrNull(draft.abbreviation),
     description: trimOrNull(draft.description),
@@ -250,11 +306,11 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     organizerName: trimOrNull(draft.organizerName),
     sourceEventUrl: trimOrNull(draft.sourceEventUrl),
     city: trimOrNull(primaryText(draft.city)),
-    cityI18n,
+    cityI18n: cityI18n ?? undefined,
     country: trimOrNull(primaryText(draft.country)),
-    countryI18n,
-    manualLocation,
-    locationPoint,
+    countryI18n: countryI18n ?? undefined,
+    manualLocation: manualLocation ?? undefined,
+    locationPoint: locationPoint ?? undefined,
     latitude,
     longitude,
     ticketUrl: trimOrNull(draft.ticketUrl),
@@ -263,7 +319,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     officialWebsite: trimOrNull(draft.officialWebsite),
     startDate: draft.startDate,
     endDate: draft.endDate,
-    schedule,
+    schedule: schedule ?? undefined,
     weeks: weeks.length ? weeks : null,
     eventDays: eventDays.length ? eventDays : null,
     timeZone: trimOrNull(draft.timeZoneSelection?.timezone),
@@ -288,6 +344,8 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
 
 export const mapEventStudioDraftToUpdateInput = (draft: EventStudioDraft): EventStudioUpdateInput => {
   const createInput = mapEventStudioDraftToCreateInput(draft);
+  const hasCityI18n = Boolean(createInput.cityI18n);
+  const hasCountryI18n = Boolean(createInput.countryI18n);
   const hasManualLocation = Boolean(createInput.manualLocation);
   const hasLocationPoint = Boolean(createInput.locationPoint);
   const hasLatitude = createInput.latitude !== null && createInput.latitude !== undefined;
@@ -296,6 +354,8 @@ export const mapEventStudioDraftToUpdateInput = (draft: EventStudioDraft): Event
 
   return {
     ...createInput,
+    clearCityI18n: !hasCityI18n,
+    clearCountryI18n: !hasCountryI18n,
     clearWikiFestivalId: !hasWikiFestivalId,
     clearManualLocation: !hasManualLocation,
     clearLocationPoint: !hasLocationPoint,

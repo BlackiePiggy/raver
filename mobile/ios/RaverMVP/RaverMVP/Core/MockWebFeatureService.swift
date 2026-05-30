@@ -1,4 +1,5 @@
 import Foundation
+import RaverEventAdminContract
 
 actor MockWebFeatureService: WebFeatureService {
     private static func seededAvatarURL(for seed: String) -> String {
@@ -663,167 +664,31 @@ actor MockWebFeatureService: WebFeatureService {
         favoriteEventIDs.remove(eventID)
     }
 
+    func createEvent(input: EventAdminCreateInput) async throws -> CreateEventResult {
+        createEvent(from: input.value1)
+    }
+
+    @available(*, deprecated, message: "Legacy Event editor surface. Use createEvent(input: EventAdminCreateInput).")
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
-        let now = Date()
-        let eventID = "evt_\(UUID().uuidString)"
-        let normalizedTicketCurrency = normalizedOptional(input.ticketCurrency)
-        let normalizedTicketNotes = normalizedOptional(input.ticketNotes)
-        let normalizedOfficialWebsite = normalizedOptional(input.officialWebsite)
-        let normalizedTicketTiers: [WebEventTicketTier] = (input.ticketTiers ?? []).enumerated().map { index, tier in
-            WebEventTicketTier(
-                id: "tier_\(UUID().uuidString)",
-                name: tier.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                price: tier.price,
-                currency: normalizedOptional(tier.currency) ?? normalizedTicketCurrency,
-                sortOrder: tier.sortOrder ?? (index + 1)
-            )
-        }
-        let ticketPrices = normalizedTicketTiers.compactMap(\.price)
-        let classifiedLineup = classifyLineupInputs(
-            input.lineupSlots ?? [],
-            inputArtists: input.lineupArtists,
-            eventID: eventID,
-            eventStartDate: input.startDate
-        )
-        let event = WebEvent(
-            id: eventID,
-            name: input.name,
-            slug: slugify(input.name),
-            abbreviation: normalizedOptional(input.abbreviation),
-            description: input.description,
-            countryI18n: input.countryI18n,
-            cityI18n: input.cityI18n,
-            coverImageUrl: input.coverImageUrl,
-            lineupImageUrl: input.lineupImageUrl,
-            eventType: {
-                let trimmed = input.eventType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return trimmed.isEmpty ? nil : trimmed
-            }(),
-            organizerName: currentUser.displayName,
-            city: input.city,
-            country: input.country,
-            manualLocation: input.manualLocation,
-            locationPoint: input.locationPoint,
-            latitude: input.latitude,
-            longitude: input.longitude,
-            startDate: input.startDate,
-            endDate: input.endDate,
-            timeZone: input.timeZone,
-            stageOrder: input.stageOrder,
-            ticketUrl: {
-                let trimmed = input.ticketUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return trimmed.isEmpty ? nil : trimmed
-            }(),
-            ticketPriceMin: ticketPrices.min(),
-            ticketPriceMax: ticketPrices.max(),
-            ticketCurrency: normalizedTicketCurrency,
-            ticketNotes: normalizedTicketNotes,
-            officialWebsite: normalizedOfficialWebsite,
-            status: input.status ?? "upcoming",
-            isVerified: false,
-            createdAt: now,
-            updatedAt: now,
-            organizer: currentUser,
-            ticketTiers: normalizedTicketTiers,
-            lineupArtists: classifiedLineup.artists.isEmpty ? nil : classifiedLineup.artists,
-            lineupSlots: classifiedLineup.slots
-        )
-        events.insert(event, at: 0)
-        return .created(event)
+        try await createEvent(input: EventAdminContractBridge.createInput(from: input))
     }
 
+    func updateEvent(id: String, input: EventAdminUpdateInput) async throws -> CreateContentResult<WebEvent> {
+        try applyEventUpdate(id: id, adminInput: input)
+    }
+
+    @available(*, deprecated, message: "Legacy Event editor surface. Use updateEvent(id:input: EventAdminUpdateInput).")
     func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent> {
-        guard let idx = events.firstIndex(where: { $0.id == id }) else {
-            throw ServiceError.message("活动不存在")
-        }
-        if events[idx].organizer?.id != currentUser.id {
-            throw ServiceError.message("Forbidden")
-        }
-        if let name = input.name { events[idx].name = name }
-        if let abbreviation = input.abbreviation {
-            events[idx].abbreviation = normalizedOptional(abbreviation)
-        }
-        if let description = input.description { events[idx].description = description }
-        if let city = input.city { events[idx].city = city }
-        if input.clearCityI18n {
-            events[idx].cityI18n = nil
-            events[idx].city = nil
-        } else if let cityI18n = input.cityI18n {
-            events[idx].cityI18n = cityI18n
-        }
-        if let country = input.country { events[idx].country = country }
-        if input.clearCountryI18n {
-            events[idx].countryI18n = nil
-            events[idx].country = nil
-        } else if let countryI18n = input.countryI18n {
-            events[idx].countryI18n = countryI18n
-        }
-        if input.clearManualLocation {
-            events[idx].manualLocation = nil
-        } else if let manualLocation = input.manualLocation {
-            events[idx].manualLocation = manualLocation
-        }
-        if let locationPoint = input.locationPoint {
-            events[idx].locationPoint = locationPoint
-        }
-        if let latitude = input.latitude { events[idx].latitude = latitude }
-        if let longitude = input.longitude { events[idx].longitude = longitude }
-        if let ticketUrl = input.ticketUrl { events[idx].ticketUrl = ticketUrl }
-        if let ticketCurrency = input.ticketCurrency {
-            events[idx].ticketCurrency = normalizedOptional(ticketCurrency)
-        }
-        if let ticketNotes = input.ticketNotes {
-            events[idx].ticketNotes = normalizedOptional(ticketNotes)
-        }
-        if let officialWebsite = input.officialWebsite {
-            events[idx].officialWebsite = normalizedOptional(officialWebsite)
-        }
-        if let startDate = input.startDate { events[idx].startDate = startDate }
-        if let endDate = input.endDate { events[idx].endDate = endDate }
-        if let stageOrder = input.stageOrder { events[idx].stageOrder = stageOrder }
-        if let coverImageUrl = input.coverImageUrl { events[idx].coverImageUrl = coverImageUrl }
-        if let lineupImageUrl = input.lineupImageUrl { events[idx].lineupImageUrl = lineupImageUrl }
-        if let eventType = input.eventType {
-            let trimmed = eventType.trimmingCharacters(in: .whitespacesAndNewlines)
-            events[idx].eventType = trimmed.isEmpty ? nil : trimmed
-        }
-        if let status = input.status { events[idx].status = status }
-        if let ticketTiers = input.ticketTiers {
-            let fallbackCurrency = normalizedOptional(events[idx].ticketCurrency)
-            events[idx].ticketTiers = ticketTiers.enumerated().map { index, tier in
-                WebEventTicketTier(
-                    id: "tier_\(UUID().uuidString)",
-                    name: tier.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                    price: tier.price,
-                    currency: normalizedOptional(tier.currency) ?? fallbackCurrency,
-                    sortOrder: tier.sortOrder ?? (index + 1)
-                )
-            }
-            let prices = events[idx].ticketTiers.compactMap(\.price)
-            events[idx].ticketPriceMin = prices.min()
-            events[idx].ticketPriceMax = prices.max()
-        }
-        if let lineupSlots = input.lineupSlots {
-            let classifiedLineup = classifyLineupInputs(
-                lineupSlots,
-                inputArtists: input.lineupArtists,
-                eventID: events[idx].id,
-                eventStartDate: events[idx].startDate
-            )
-            events[idx].lineupArtists = classifiedLineup.artists.isEmpty ? nil : classifiedLineup.artists
-            events[idx].lineupSlots = classifiedLineup.slots
-        }
-        events[idx].updatedAt = Date()
-        return .created(events[idx])
+        try await updateEvent(id: id, input: EventAdminContractBridge.updateInput(from: input))
     }
 
+    func previewEventLineupTimetableAlignment(input: EventAdminCreateInput) async throws -> EventLineupTimetableAlignmentPreview {
+        previewEventLineupTimetableAlignment(from: input.value1)
+    }
+
+    @available(*, deprecated, message: "Legacy Event editor surface. Use previewEventLineupTimetableAlignment(input: EventAdminCreateInput).")
     func previewEventLineupTimetableAlignment(input: CreateEventInput) async throws -> EventLineupTimetableAlignmentPreview {
-        EventLineupTimetableAlignmentPreview(
-            aligned: true,
-            issue: nil,
-            message: nil,
-            lineupArtists: input.lineupArtists ?? []
-        )
+        try await previewEventLineupTimetableAlignment(input: EventAdminContractBridge.createInput(from: input))
     }
 
     func deleteEvent(id: String) async throws {
@@ -3854,10 +3719,252 @@ actor MockWebFeatureService: WebFeatureService {
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
+    private func createEvent(
+        from base: EventAdminComponents.Schemas.EventMutationBase
+    ) -> CreateEventResult {
+        let now = Date()
+        let eventID = "evt_\(UUID().uuidString)"
+        let timeZone = resolvedEventTimeZone(identifier: base.timeZone)
+        let startDate = Date.eventArchiveDate(from: base.startDate, timeZone: timeZone)
+            ?? now.normalizedEventArchiveDate(in: timeZone)
+        let endDate = Date.eventArchiveDate(from: base.endDate, timeZone: timeZone) ?? startDate
+        let normalizedTicketCurrency = normalizedOptional(base.ticketCurrency)
+        let normalizedTicketTiers = buildTicketTiers(
+            from: legacyTicketTiers(from: base.ticketTiers) ?? [],
+            fallbackCurrency: normalizedTicketCurrency
+        )
+        let ticketPrices = normalizedTicketTiers.compactMap(\.price)
+        let classifiedLineup = classifyLineupInputs(
+            legacyLineupSlots(from: base.lineupSlots, timeZone: timeZone) ?? [],
+            inputArtists: legacyLineupArtists(from: base.lineupArtists),
+            eventID: eventID,
+            eventStartDate: startDate
+        )
+        let event = WebEvent(
+            id: eventID,
+            name: base.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            nameI18n: legacyLocalizedText(from: base.nameI18n),
+            wikiFestivalId: normalizedOptional(base.wikiFestivalId),
+            slug: slugify(base.name),
+            abbreviation: normalizedOptional(base.abbreviation),
+            description: normalizedOptional(base.description),
+            countryI18n: legacyLocalizedText(from: base.countryI18n),
+            cityI18n: legacyLocalizedText(from: base.cityI18n),
+            coverImageUrl: normalizedOptional(base.coverImageUrl),
+            lineupImageUrl: normalizedOptional(base.lineupImageUrl),
+            imageAssets: legacyImageAssets(from: base.imageAssets),
+            eventType: normalizedOptional(base.eventType),
+            organizerName: normalizedOptional(base.organizerName) ?? currentUser.displayName,
+            sourceEventUrl: normalizedOptional(base.sourceEventUrl),
+            city: normalizedOptional(base.city),
+            country: normalizedOptional(base.country),
+            manualLocation: legacyManualLocation(from: base.manualLocation),
+            locationPoint: legacyLocationPoint(from: base.locationPoint),
+            latitude: base.latitude,
+            longitude: base.longitude,
+            startDate: startDate,
+            endDate: endDate,
+            schedule: legacySchedule(from: base.schedule),
+            weeks: legacyWeeks(from: base.weeks, timeZone: timeZone) ?? [],
+            eventDays: legacyEventDays(from: base.eventDays, timeZone: timeZone) ?? [],
+            timeZone: normalizedOptional(base.timeZone),
+            startTime: normalizedOptional(base.startTime),
+            endTime: normalizedOptional(base.endTime),
+            dayRolloverHour: base.dayRolloverHour,
+            stageOrder: normalizedStageOrder(base.stageOrder),
+            ticketUrl: normalizedOptional(base.ticketUrl),
+            ticketPriceMin: ticketPrices.min(),
+            ticketPriceMax: ticketPrices.max(),
+            ticketCurrency: normalizedTicketCurrency,
+            ticketNotes: normalizedOptional(base.ticketNotes),
+            officialWebsite: normalizedOptional(base.officialWebsite),
+            status: resolvedMutationStatus(from: base.status, startDate: startDate, endDate: endDate),
+            isVerified: false,
+            createdAt: now,
+            updatedAt: now,
+            organizer: currentUser,
+            ticketTiers: normalizedTicketTiers,
+            lineupArtists: classifiedLineup.artists.isEmpty ? nil : classifiedLineup.artists,
+            lineupSlots: classifiedLineup.slots
+        )
+        events.insert(event, at: 0)
+        return .created(event)
+    }
+
+    private func applyEventUpdate(
+        id: String,
+        adminInput: EventAdminUpdateInput
+    ) throws -> CreateContentResult<WebEvent> {
+        guard let idx = events.firstIndex(where: { $0.id == id }) else {
+            throw ServiceError.message("活动不存在")
+        }
+        if events[idx].organizer?.id != currentUser.id {
+            throw ServiceError.message("Forbidden")
+        }
+
+        let base = adminInput.value1
+        let clear = adminInput.value2
+        let timeZone = resolvedEventTimeZone(identifier: base.timeZone)
+        let startDate = Date.eventArchiveDate(from: base.startDate, timeZone: timeZone)
+            ?? events[idx].startDate.normalizedEventArchiveDate(in: timeZone)
+        let endDate = Date.eventArchiveDate(from: base.endDate, timeZone: timeZone) ?? startDate
+        let normalizedTicketCurrency = normalizedOptional(base.ticketCurrency)
+        let normalizedTicketTiers = buildTicketTiers(
+            from: legacyTicketTiers(from: base.ticketTiers) ?? [],
+            fallbackCurrency: normalizedTicketCurrency
+        )
+        let ticketPrices = normalizedTicketTiers.compactMap(\.price)
+
+        events[idx].name = base.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        events[idx].nameI18n = legacyLocalizedText(from: base.nameI18n)
+        events[idx].wikiFestivalId = clear.clearWikiFestivalId == true ? nil : normalizedOptional(base.wikiFestivalId)
+        events[idx].slug = slugify(base.name)
+        events[idx].abbreviation = normalizedOptional(base.abbreviation)
+        events[idx].description = normalizedOptional(base.description)
+        events[idx].eventType = normalizedOptional(base.eventType)
+        events[idx].organizerName = normalizedOptional(base.organizerName) ?? currentUser.displayName
+        events[idx].sourceEventUrl = normalizedOptional(base.sourceEventUrl)
+
+        if clear.clearCityI18n == true {
+            events[idx].city = nil
+            events[idx].cityI18n = nil
+        } else {
+            events[idx].city = normalizedOptional(base.city)
+            events[idx].cityI18n = legacyLocalizedText(from: base.cityI18n)
+        }
+
+        if clear.clearCountryI18n == true {
+            events[idx].country = nil
+            events[idx].countryI18n = nil
+        } else {
+            events[idx].country = normalizedOptional(base.country)
+            events[idx].countryI18n = legacyLocalizedText(from: base.countryI18n)
+        }
+
+        events[idx].manualLocation = clear.clearManualLocation == true ? nil : legacyManualLocation(from: base.manualLocation)
+        events[idx].locationPoint = clear.clearLocationPoint == true ? nil : legacyLocationPoint(from: base.locationPoint)
+        events[idx].latitude = clear.clearLatitude == true ? nil : base.latitude
+        events[idx].longitude = clear.clearLongitude == true ? nil : base.longitude
+        events[idx].startDate = startDate
+        events[idx].endDate = endDate
+        events[idx].schedule = legacySchedule(from: base.schedule)
+        events[idx].weeks = legacyWeeks(from: base.weeks, timeZone: timeZone) ?? []
+        events[idx].eventDays = legacyEventDays(from: base.eventDays, timeZone: timeZone) ?? []
+        events[idx].timeZone = normalizedOptional(base.timeZone)
+        events[idx].startTime = normalizedOptional(base.startTime)
+        events[idx].endTime = normalizedOptional(base.endTime)
+        events[idx].dayRolloverHour = base.dayRolloverHour
+        events[idx].stageOrder = clear.clearStageOrder == true ? nil : normalizedStageOrder(base.stageOrder)
+        events[idx].coverImageUrl = normalizedOptional(base.coverImageUrl)
+        events[idx].lineupImageUrl = normalizedOptional(base.lineupImageUrl)
+        events[idx].imageAssets = legacyImageAssets(from: base.imageAssets)
+        events[idx].ticketUrl = normalizedOptional(base.ticketUrl)
+        events[idx].ticketCurrency = normalizedTicketCurrency
+        events[idx].ticketNotes = normalizedOptional(base.ticketNotes)
+        events[idx].officialWebsite = normalizedOptional(base.officialWebsite)
+        events[idx].ticketTiers = normalizedTicketTiers
+        events[idx].ticketPriceMin = ticketPrices.min()
+        events[idx].ticketPriceMax = ticketPrices.max()
+        events[idx].status = resolvedMutationStatus(from: base.status, startDate: startDate, endDate: endDate)
+
+        if clear.clearLineupSlots == true {
+            events[idx].lineupArtists = nil
+            events[idx].lineupSlots = []
+        } else if base.lineupArtists != nil || base.lineupSlots != nil {
+            let classifiedLineup = classifyLineupInputs(
+                legacyLineupSlots(from: base.lineupSlots, timeZone: timeZone) ?? [],
+                inputArtists: legacyLineupArtists(from: base.lineupArtists),
+                eventID: events[idx].id,
+                eventStartDate: startDate
+            )
+            events[idx].lineupArtists = classifiedLineup.artists.isEmpty ? nil : classifiedLineup.artists
+            events[idx].lineupSlots = classifiedLineup.slots
+        }
+
+        events[idx].updatedAt = Date()
+        return .created(events[idx])
+    }
+
+    private func previewEventLineupTimetableAlignment(
+        from base: EventAdminComponents.Schemas.EventMutationBase
+    ) -> EventLineupTimetableAlignmentPreview {
+        let artists = legacyLineupArtists(from: base.lineupArtists)
+            ?? buildLineupArtists(
+                from: legacyLineupSlots(
+                    from: base.lineupSlots,
+                    timeZone: resolvedEventTimeZone(identifier: base.timeZone)
+                ) ?? [],
+                eventID: "preview"
+            ).map {
+                EventLineupArtistInput(
+                    id: $0.id,
+                    djId: $0.djId,
+                    memberDjIds: $0.memberDjIds,
+                    memberNames: $0.memberNames,
+                    djName: $0.djName,
+                    sortOrder: $0.sortOrder
+                )
+            }
+        return EventLineupTimetableAlignmentPreview(
+            aligned: true,
+            issue: nil,
+            message: nil,
+            lineupArtists: artists
+        )
+    }
+
     private func normalizedOptional(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizedStageOrder(_ values: [String]?) -> [String]? {
+        let normalized = values?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func buildTicketTiers(
+        from tiers: [EventTicketTierInput],
+        fallbackCurrency: String?
+    ) -> [WebEventTicketTier] {
+        tiers.enumerated().map { index, tier in
+            WebEventTicketTier(
+                id: "tier_\(UUID().uuidString)",
+                name: tier.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                price: tier.price,
+                currency: normalizedOptional(tier.currency) ?? fallbackCurrency,
+                sortOrder: tier.sortOrder ?? (index + 1)
+            )
+        }
+    }
+
+    private func resolvedEventTimeZone(identifier: String?) -> TimeZone {
+        TimeZone(identifier: normalizedOptional(identifier) ?? "") ?? TimeZone(identifier: "UTC") ?? .current
+    }
+
+    private func resolvedMutationStatus(
+        from status: EventAdminComponents.Schemas.EventMutationBase.StatusPayload?,
+        startDate: Date,
+        endDate: Date
+    ) -> String {
+        if let rawValue = status?.rawValue.trimmingCharacters(in: .whitespacesAndNewlines), !rawValue.isEmpty {
+            return rawValue
+        }
+        let provisional = WebEvent(
+            id: "status_probe",
+            name: "status_probe",
+            slug: "status-probe",
+            startDate: startDate,
+            endDate: endDate,
+            createdAt: startDate,
+            updatedAt: endDate,
+            ticketTiers: [],
+            lineupSlots: []
+        )
+        return resolveEventStatus(for: provisional)
     }
 
     private func resolveEventStatus(for event: WebEvent, now: Date = Date()) -> String {
@@ -3868,6 +3975,203 @@ actor MockWebFeatureService: WebFeatureService {
             return "ended"
         }
         return "ongoing"
+    }
+
+    private func legacyLocalizedText(from text: EventAdminLocalizedText?) -> WebBiText? {
+        guard let text else { return nil }
+        return WebBiText(
+            en: text.en,
+            zh: text.zh,
+            ja: text.ja,
+            enFull: text.enFull
+        )
+    }
+
+    private func legacyManualLocation(
+        from location: EventAdminComponents.Schemas.EventManualLocation?
+    ) -> WebEventManualLocation? {
+        guard let location else { return nil }
+        return WebEventManualLocation(
+            detailAddressI18n: legacyLocalizedText(from: location.detailAddressI18n),
+            formattedAddressI18n: legacyLocalizedText(from: location.formattedAddressI18n),
+            selectedAt: location.selectedAt
+        )
+    }
+
+    private func legacyLocationPoint(
+        from point: EventAdminComponents.Schemas.EventLocationPoint?
+    ) -> WebEventLocationPoint? {
+        guard let point else { return nil }
+        return WebEventLocationPoint(
+            provider: point.provider,
+            sourceMode: point.sourceMode,
+            providerPlaceId: point.providerPlaceId,
+            poiId: point.poiId,
+            location: .init(
+                lng: point.location.lng,
+                lat: point.location.lat
+            ),
+            nameI18n: legacyLocalizedText(from: point.nameI18n),
+            addressI18n: legacyLocalizedText(from: point.addressI18n),
+            formattedAddressI18n: legacyLocalizedText(from: point.formattedAddressI18n),
+            city: point.city,
+            district: point.district,
+            province: point.province,
+            countryCode: point.countryCode
+        )
+    }
+
+    private func legacySchedule(
+        from schedule: EventAdminComponents.Schemas.EventSchedule?
+    ) -> WebEventSchedule? {
+        guard let schedule else { return nil }
+        return WebEventSchedule(
+            mode: schedule.mode.rawValue,
+            timeZone: schedule.timeZone,
+            dayRolloverHour: schedule.dayRolloverHour
+        )
+    }
+
+    private func legacyWeeks(
+        from weeks: [EventAdminComponents.Schemas.EventWeek]?,
+        timeZone: TimeZone
+    ) -> [WebEventWeek]? {
+        weeks?.enumerated().compactMap { index, week in
+            guard let startDate = Date.eventArchiveDate(from: week.startDate, timeZone: timeZone),
+                  let endDate = Date.eventArchiveDate(from: week.endDate, timeZone: timeZone) else {
+                return nil
+            }
+            return WebEventWeek(
+                id: week.id ?? "week_\(index + 1)",
+                weekIndex: week.weekIndex,
+                label: week.label,
+                startDate: startDate,
+                endDate: endDate,
+                sortOrder: week.sortOrder ?? index
+            )
+        }
+    }
+
+    private func legacyEventDays(
+        from days: [EventAdminComponents.Schemas.EventDay]?,
+        timeZone: TimeZone
+    ) -> [WebEventDay]? {
+        days?.enumerated().compactMap { index, day in
+            guard let date = Date.eventArchiveDate(from: day.date, timeZone: timeZone) else {
+                return nil
+            }
+            return WebEventDay(
+                id: day.id ?? day.eventDayId,
+                eventDayId: day.eventDayId,
+                weekIndex: day.weekIndex,
+                dayIndexInWeek: day.dayIndexInWeek,
+                overallDayIndex: day.overallDayIndex,
+                label: day.label,
+                weekday: day.weekday,
+                date: date,
+                sortOrder: day.sortOrder ?? index
+            )
+        }
+    }
+
+    private func legacyImageAssets(
+        from assets: [EventAdminComponents.Schemas.EventImageAsset]?
+    ) -> [WebEventImageAsset]? {
+        assets?.map {
+            WebEventImageAsset(
+                url: $0.url,
+                type: $0._type,
+                label: $0.label,
+                sort: $0.sort,
+                order: $0.order,
+                source: $0.source,
+                fileName: $0.fileName
+            )
+        }
+    }
+
+    private func legacyTicketTiers(
+        from tiers: [EventAdminComponents.Schemas.EventTicketTierInput]?
+    ) -> [EventTicketTierInput]? {
+        tiers?.map {
+            EventTicketTierInput(
+                name: $0.name,
+                price: $0.price,
+                currency: $0.currency,
+                sortOrder: $0.sortOrder
+            )
+        }
+    }
+
+    private func legacyLineupArtists(
+        from artists: [EventAdminComponents.Schemas.EventLineupArtistInput]?
+    ) -> [EventLineupArtistInput]? {
+        artists?.map {
+            EventLineupArtistInput(
+                id: $0.id,
+                djId: $0.djId,
+                memberDjIds: $0.memberDjIds,
+                memberNames: $0.memberNames,
+                djName: $0.djName,
+                sortOrder: $0.sortOrder
+            )
+        }
+    }
+
+    private func legacyLineupSlots(
+        from slots: [EventAdminComponents.Schemas.EventLineupSlotInput]?,
+        timeZone: TimeZone
+    ) -> [EventLineupSlotInput]? {
+        slots?.map {
+            EventLineupSlotInput(
+                id: $0.id,
+                lineupArtistId: $0.lineupArtistId,
+                eventDayId: $0.eventDayId,
+                weekIndex: $0.weekIndex,
+                dayIndexInWeek: $0.dayIndexInWeek,
+                overallDayIndex: $0.overallDayIndex,
+                localDate: $0.localDate.flatMap { Date.eventArchiveDate(from: $0, timeZone: timeZone) },
+                djId: $0.djId,
+                memberDjIds: $0.memberDjIds,
+                memberNames: $0.memberNames,
+                festivalDayIndex: $0.festivalDayIndex,
+                djName: $0.djName,
+                stageName: $0.stageName,
+                sortOrder: $0.sortOrder,
+                startTime: decodeISO8601Date($0.startTime),
+                endTime: decodeISO8601Date($0.endTime)
+            )
+        }
+    }
+
+    private func legacyLineupSyncMode(
+        from mode: EventAdminComponents.Schemas.EventMutationBase.LineupSyncModePayload?
+    ) -> EventLineupSyncMode? {
+        guard let rawValue = mode?.rawValue, !rawValue.isEmpty else { return nil }
+        return EventLineupSyncMode(rawValue: rawValue)
+    }
+
+    private func legacyMutationStatus(
+        from status: EventAdminComponents.Schemas.EventMutationBase.StatusPayload?
+    ) -> String? {
+        guard let rawValue = status?.rawValue, !rawValue.isEmpty else { return nil }
+        return rawValue
+    }
+
+    private func decodeISO8601Date(_ value: String?) -> Date? {
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        fractional.timeZone = TimeZone(secondsFromGMT: 0)
+        if let parsed = fractional.date(from: value) {
+            return parsed
+        }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        plain.timeZone = TimeZone(secondsFromGMT: 0)
+        return plain.date(from: value)
     }
 
     private func classifyLineupInputs(

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminPreRegistrationItem, preRegistrationAPI, PreRegistrationBatch } from '@/lib/api/pre-registration';
 
@@ -188,42 +188,42 @@ export default function PreRegistrationAdminPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-5xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="预登记管理后台" description="加载预登记管理数据中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-5xl px-6 pt-28">
+      <AdminAppShell title="预登记管理后台" description="登录后可进入预登记和抽签运营面板。">
+        <div className="admin-shell-panel mx-auto max-w-5xl p-8">
           <p className="text-lg">请先登录后访问预登记管理后台。</p>
-          <Link href="/login" className="mt-4 inline-block rounded-full bg-primary-blue px-5 py-2 text-white">
+          <Link href="/login" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>
-      </main>
+      </AdminAppShell>
     );
   }
 
   if (!isAuthorized) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-5xl px-6 pt-28">
+      <AdminAppShell title="预登记管理后台" description="当前账号暂时没有预登记运营权限。">
+        <div className="admin-shell-panel mx-auto max-w-5xl p-8">
           <p className="text-lg">当前账号无权限访问预登记管理后台。</p>
         </div>
-      </main>
+      </AdminAppShell>
     );
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl px-6 pb-12 pt-24">
+    <AdminAppShell
+      title="预登记管理后台"
+      eyebrow="Raver Admin / Pre-registration Ops"
+      description="查看报名记录、创建抽取批次、人工决定资格，并创建多端通知任务。"
+    >
+      <section className="space-y-5">
         <div className="mb-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -438,6 +438,6 @@ export default function PreRegistrationAdminPage() {
           </div>
         </div>
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

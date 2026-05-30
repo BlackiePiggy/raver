@@ -976,6 +976,14 @@ struct EventUploadDraft: Hashable, Codable {
         let previousCanonicalWeeks = normalizedCanonicalWeeks() ?? []
         let nextRanges = normalizedRanges(ranges)
         weekRanges = nextRanges
+        if structuredScheduleMode != .multiWeek {
+            if let first = nextRanges.first {
+                startDate = first.startDate
+            }
+            if let last = nextRanges.last {
+                endDate = last.endDate
+            }
+        }
         let debugTimeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
         let rangeSummary = nextRanges
             .map { "\($0.startDate.eventArchiveDateText(in: debugTimeZone))->\($0.endDate.eventArchiveDateText(in: debugTimeZone))" }

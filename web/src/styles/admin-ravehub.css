@@ -1,0 +1,248 @@
+.admin-ravehub-shell {
+  position: relative;
+  overflow: hidden;
+  color: #071110;
+}
+
+.admin-ravehub-bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, rgba(166, 255, 222, 0.72), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.95), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(204, 251, 241, 0.9), transparent 26%),
+    linear-gradient(180deg, #f4fbf8 0%, #eef8f4 100%);
+  pointer-events: none;
+}
+
+.admin-shell-sidebar,
+.admin-shell-profile,
+.admin-shell-panel,
+.admin-shell-page,
+.admin-shell-soft-panel,
+.admin-shell-pill {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow:
+    0 18px 52px rgba(19, 37, 33, 0.08),
+    0 0 40px rgba(117, 255, 220, 0.08);
+  backdrop-filter: blur(24px);
+}
+
+.admin-shell-sidebar {
+  margin: 16px 0 16px 16px;
+  border-radius: 32px;
+  padding-top: 24px;
+  padding-bottom: 18px;
+}
+
+.admin-shell-profile {
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.12),
+    0 0 44px rgba(117, 255, 220, 0.18);
+}
+
+.admin-shell-page {
+  border-radius: 30px;
+  padding: 22px;
+}
+
+.admin-shell-panel {
+  border-radius: 28px;
+}
+
+.admin-shell-soft-panel {
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: none;
+}
+
+.admin-shell-panel-mint {
+  background:
+    linear-gradient(180deg, rgba(224, 255, 243, 0.8), rgba(255, 255, 255, 0.62));
+}
+
+.admin-shell-panel-dark {
+  background:
+    linear-gradient(180deg, rgba(7, 17, 16, 0.92), rgba(24, 33, 31, 0.86));
+  color: white;
+}
+
+.admin-shell-panel-dark .admin-shell-soft-panel,
+.admin-shell-panel-dark .text-\[\#18211f\] {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+.admin-shell-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #071110;
+}
+
+.admin-shell-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-shell-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-shell-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(7, 17, 16, 0.18);
+  border-radius: 999px;
+}
+
+.admin-ravehub-shell input,
+.admin-ravehub-shell select,
+.admin-ravehub-shell textarea {
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.66) !important;
+  color: #071110 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.admin-ravehub-shell input::placeholder,
+.admin-ravehub-shell textarea::placeholder {
+  color: rgba(7, 17, 16, 0.42) !important;
+}
+
+.admin-ravehub-shell input:focus,
+.admin-ravehub-shell select:focus,
+.admin-ravehub-shell textarea:focus {
+  outline: none !important;
+  border-color: rgba(0, 194, 168, 0.48) !important;
+  box-shadow: 0 0 0 3px rgba(125, 255, 232, 0.22) !important;
+}
+
+.admin-ravehub-shell table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-ravehub-shell th,
+.admin-ravehub-shell td {
+  border-color: rgba(7, 17, 16, 0.08) !important;
+}
+
+.admin-ravehub-shell th {
+  color: rgba(7, 17, 16, 0.52) !important;
+}
+
+.admin-ravehub-shell td {
+  color: #18211f !important;
+}
+
+.admin-ravehub-shell button,
+.admin-ravehub-shell a {
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.admin-ravehub-shell button:hover,
+.admin-ravehub-shell a:hover {
+  transform: translateY(-1px);
+}
+
+.admin-ravehub-shell [class*='bg-bg-primary'],
+.admin-ravehub-shell [class*='bg-bg-secondary'],
+.admin-ravehub-shell [class*='bg-bg-tertiary'],
+.admin-ravehub-shell [class*='bg-\\[#1a1a1a\\]'],
+.admin-ravehub-shell [class*='bg-\\[#151515\\]'],
+.admin-ravehub-shell [class*='bg-\\[#101010\\]'],
+.admin-ravehub-shell [class*='bg-\\[#121212\\]'],
+.admin-ravehub-shell [class*='bg-\\[#202020\\]'] {
+  background: rgba(255, 255, 255, 0.58) !important;
+  color: #071110 !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow:
+    0 18px 52px rgba(19, 37, 33, 0.08),
+    0 0 40px rgba(117, 255, 220, 0.08) !important;
+}
+
+.admin-ravehub-shell [class*='bg-\\[linear-gradient'] {
+  background:
+    linear-gradient(180deg, rgba(224, 255, 243, 0.8), rgba(255, 255, 255, 0.62)) !important;
+  color: #071110 !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.admin-ravehub-shell [class*='border-white/6'],
+.admin-ravehub-shell [class*='border-white/5'],
+.admin-ravehub-shell [class*='border-\\[rgba\\(255,255,255,0\\.07\\)\\]'],
+.admin-ravehub-shell [class*='border-border-secondary'] {
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.admin-ravehub-shell [class*='text-text-primary'],
+.admin-ravehub-shell [class*='text-\\[#f1f1f1\\]'],
+.admin-ravehub-shell [class*='text-\\[#f0f0f0\\]'],
+.admin-ravehub-shell [class*='text-\\[#f5f5f5\\]'],
+.admin-ravehub-shell [class*='text-\\[#d4d4d4\\]'],
+.admin-ravehub-shell [class*='text-\\[#d0d0d0\\]'],
+.admin-ravehub-shell [class*='text-\\[#cfcfcf\\]'] {
+  color: #071110 !important;
+}
+
+.admin-ravehub-shell [class*='text-text-secondary'],
+.admin-ravehub-shell [class*='text-text-tertiary'],
+.admin-ravehub-shell [class*='text-\\[#8a8a8a\\]'],
+.admin-ravehub-shell [class*='text-\\[#7a7a7a\\]'],
+.admin-ravehub-shell [class*='text-\\[#666\\]'],
+.admin-ravehub-shell [class*='text-\\[#5d5d5d\\]'],
+.admin-ravehub-shell [class*='text-\\[#5e5e5e\\]'],
+.admin-ravehub-shell [class*='text-\\[#5f5f5f\\]'],
+.admin-ravehub-shell [class*='text-\\[#9cab8e\\]'],
+.admin-ravehub-shell [class*='text-\\[#9ab27f\\]'] {
+  color: rgba(7, 17, 16, 0.48) !important;
+}
+
+.admin-ravehub-shell [class*='bg-primary-blue'],
+.admin-ravehub-shell [class*='bg-\\[#a8ff3e\\]'],
+.admin-ravehub-shell [class*='bg-\\[#d9ff72\\]'] {
+  background: #071110 !important;
+  color: white !important;
+  border-color: transparent !important;
+  box-shadow: 0 0 26px rgba(92, 255, 230, 0.2) !important;
+}
+
+.admin-ravehub-shell [class*='text-\\[#d9ff72\\]'],
+.admin-ravehub-shell [class*='text-primary-blue'] {
+  color: #071110 !important;
+}
+
+.admin-ravehub-shell [class*='bg-red-500/10'] {
+  background: rgba(244, 63, 94, 0.12) !important;
+}
+
+.admin-ravehub-shell [class*='bg-yellow-500/10'] {
+  background: rgba(250, 204, 21, 0.15) !important;
+}
+
+.admin-ravehub-shell [class*='bg-accent-green/10'] {
+  background: rgba(16, 185, 129, 0.12) !important;
+}
+
+@media (max-width: 1279px) {
+  .admin-shell-page {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-shell-sidebar {
+    margin-left: 12px;
+  }
+
+  .admin-shell-page {
+    border-radius: 24px;
+    padding: 16px;
+  }
+}

@@ -1,0 +1,95 @@
+name: Event Contract Guard
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "web/src/features/admin-content/event-studio/**"
+      - "web/tests/contracts/**"
+      - "web/package.json"
+      - "web/pnpm-lock.yaml"
+      - "web/src/lib/api/event.ts"
+      - "mobile/ios/RaverMVP/Packages/RaverEventAdminContract/**"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/EventAdminContractBridge.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/LiveWebFeatureService.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/MockWebFeatureService.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/WebFeatureModels.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/WebFeatureService.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventLineupSupport.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/UploadFlow/**"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/ViewModels/EventsModuleViewModel.swift"
+      - "mobile/ios/RaverMVP/RaverMVP.xcodeproj/project.pbxproj"
+      - "mobile/ios/RaverMVP/RaverMVPTests/EventContractParityTests.swift"
+      - "mobile/ios/RaverMVP/RaverMVPTests/EventLineupDraftDerivationTests.swift"
+      - "mobile/ios/RaverMVP/RaverMVPTests/EventUploadMultiWeekModelTests.swift"
+      - "scripts/check-event-admin-contract-sync.sh"
+      - "scripts/run-ios-event-contract-parity.sh"
+      - ".github/workflows/event-contract-guard.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "contracts/**"
+      - "web/src/features/admin-content/event-studio/**"
+      - "web/tests/contracts/**"
+      - "web/package.json"
+      - "web/pnpm-lock.yaml"
+      - "web/src/lib/api/event.ts"
+      - "mobile/ios/RaverMVP/Packages/RaverEventAdminContract/**"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/EventAdminContractBridge.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/LiveWebFeatureService.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/MockWebFeatureService.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/WebFeatureModels.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Core/WebFeatureService.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventEditorView.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/Views/EventLineupSupport.swift"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/UploadFlow/**"
+      - "mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/ViewModels/EventsModuleViewModel.swift"
+      - "mobile/ios/RaverMVP/RaverMVP.xcodeproj/project.pbxproj"
+      - "mobile/ios/RaverMVP/RaverMVPTests/EventContractParityTests.swift"
+      - "mobile/ios/RaverMVP/RaverMVPTests/EventLineupDraftDerivationTests.swift"
+      - "mobile/ios/RaverMVP/RaverMVPTests/EventUploadMultiWeekModelTests.swift"
+      - "scripts/check-event-admin-contract-sync.sh"
+      - "scripts/run-ios-event-contract-parity.sh"
+      - ".github/workflows/event-contract-guard.yml"
+  workflow_dispatch:
+
+jobs:
+  event-contract-guard:
+    name: Event Contract Guard
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Event contract sync
+        run: scripts/check-event-admin-contract-sync.sh
+
+      - name: Run web Event contract compile check
+        working-directory: web
+        run: pnpm run test:contracts:event
+
+      - name: Run web Event parity tests
+        working-directory: web
+        run: pnpm run test:parity:event
+
+      - name: Run iOS Event parity tests
+        run: scripts/run-ios-event-contract-parity.sh

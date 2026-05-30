@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminContentReport, ContentReportSummary, ModerationDecisionTemplate, contentReportsApi } from '@/lib/api/content-reports';
@@ -542,10 +542,9 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
         <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-6 text-sm text-text-secondary">加载中...</div>
       </AdminContentLayout>
     ) : (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="举报审核队列" description="加载举报审核数据中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
@@ -559,18 +558,17 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
         <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-6 text-sm text-text-secondary">当前账号无权限访问该页面。</div>
       </AdminContentLayout>
     ) : (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <section className="mx-auto max-w-4xl px-6 pt-28">
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-6">
+      <AdminAppShell title="举报审核队列" description="当前账号暂时没有举报审核权限。">
+        <section className="mx-auto max-w-4xl">
+          <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">举报审核后台</h1>
             <p className="mt-3 text-sm text-text-secondary">当前账号无权限访问该页面。</p>
-            <Link href={user ? '/admin' : '/login'} className="mt-5 inline-block rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+            <Link href={user ? '/admin' : '/login'} className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               {user ? '返回后台' : '去登录'}
             </Link>
           </div>
         </section>
-      </main>
+      </AdminAppShell>
     );
   }
 
@@ -602,9 +600,12 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl space-y-5 px-6 pb-12 pt-24">
+    <AdminAppShell
+      title="举报审核队列"
+      eyebrow="Raver Admin / Trust & Safety"
+      description="处理 UGC 举报、批量低风险动作、三语处理模板和版权投诉工作流。"
+    >
+      <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm text-text-secondary">Trust & Safety</p>
@@ -621,6 +622,6 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
         </div>
         {content}
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

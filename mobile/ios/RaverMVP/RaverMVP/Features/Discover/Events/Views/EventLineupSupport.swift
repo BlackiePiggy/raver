@@ -400,6 +400,57 @@ enum EventLineupActCodec {
     }
 }
 
+enum EventLineupDraftDerivation {
+    static func lineupOnlySlots(from timetableSlots: [EventUploadLineupSlotDraft]) -> [EventUploadLineupOnlySlotDraft] {
+        var results: [EventUploadLineupOnlySlotDraft] = []
+        var seen = Set<String>()
+
+        for slot in timetableSlots {
+            let performerNames = Array(slot.performerNames.prefix(slot.actType.performerCount))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let performerDJIDs = Array(slot.performerDJIDs.prefix(slot.actType.performerCount))
+            guard performerNames.count == slot.actType.performerCount,
+                  !performerNames.contains(where: { $0.isEmpty }) else {
+                continue
+            }
+
+            let identity = lineupIdentityKey(
+                actType: slot.actType,
+                performerNames: performerNames,
+                performerDJIDs: performerDJIDs
+            )
+            guard seen.insert(identity).inserted else { continue }
+
+            var derived = EventUploadLineupOnlySlotDraft(
+                canonicalArtistId: nil,
+                actType: slot.actType,
+                performerNames: performerNames,
+                performerDJIDs: performerDJIDs,
+                performerAvatarURLs: Array(slot.performerAvatarURLs.prefix(slot.actType.performerCount))
+            )
+            derived.normalizePerformers()
+            results.append(derived)
+        }
+
+        return results
+    }
+
+    private static func lineupIdentityKey(
+        actType: EventLineupActType,
+        performerNames: [String],
+        performerDJIDs: [String?]
+    ) -> String {
+        let normalizedIDs = performerDJIDs
+            .map { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "" }
+        if normalizedIDs.contains(where: { !$0.isEmpty }) {
+            return "\(actType.rawValue)|ids|\(normalizedIDs.joined(separator: "|"))"
+        }
+        let normalizedNames = performerNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        return "\(actType.rawValue)|names|\(normalizedNames.joined(separator: "|"))"
+    }
+}
+
 func normalizedDJLookupKey(_ raw: String) -> String {
     raw
         .trimmingCharacters(in: .whitespacesAndNewlines)

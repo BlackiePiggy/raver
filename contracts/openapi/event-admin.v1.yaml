@@ -1,0 +1,1188 @@
+openapi: 3.1.0
+info:
+  title: Raver Event Admin Contract
+  version: 1.0.0
+  summary: Unified Event admin and upload contract for Web and iOS.
+  description: |
+    First-stage contract source for Event create/edit flows shared by Web admin and iOS upload flow.
+
+    This contract reflects the current project direction:
+    - Event create/edit uses full payload only.
+    - Event update keeps HTTP PATCH, but the payload is not patch-only.
+    - Fields whose omission is different from explicit clearing must use clear* flags.
+servers:
+  - url: /v1
+tags:
+  - name: Event Admin
+    description: Event create, edit, read, and alignment preview endpoints used by Web admin and iOS.
+paths:
+  /events:
+    post:
+      tags:
+        - Event Admin
+      summary: Create event
+      operationId: createEvent
+      description: |
+        Creates an event directly for privileged roles, or queues a content submission for review.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventInput'
+      responses:
+        '200':
+          description: Event created directly
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventEnvelope'
+        '202':
+          description: Submission accepted for review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSubmissionAcceptedEnvelope'
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '409':
+          description: Active edit submission already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+  /events/{eventId}:
+    get:
+      tags:
+        - Event Admin
+      summary: Get event detail
+      operationId: getEventDetail
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Event detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetailEnvelope'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+    patch:
+      tags:
+        - Event Admin
+      summary: Update event
+      operationId: updateEvent
+      description: |
+        Updates an event using full payload semantics.
+
+        Important contract rules:
+        - This endpoint uses PATCH as the HTTP verb, but clients must submit the full event editing state.
+        - Patch-only baseline or per-field diff payloads are not part of this contract.
+        - For fields where omission differs from clearing, clients must use explicit clear* flags.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEventInput'
+      responses:
+        '200':
+          description: Event updated directly
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventEnvelope'
+        '202':
+          description: Edit submission accepted for review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSubmissionAcceptedEnvelope'
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '409':
+          description: Active edit submission already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+  /events/lineup-timetable-alignment/preview:
+    post:
+      tags:
+        - Event Admin
+      summary: Preview lineup and timetable alignment
+      operationId: previewEventLineupTimetableAlignment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventInput'
+      responses:
+        '200':
+          description: Alignment preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAlignmentPreviewEnvelope'
+        '400':
+          description: Invalid event payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    EventScheduleMode:
+      type: string
+      enum:
+        - single_day
+        - multi_day
+        - multi_week
+    EventLineupSyncMode:
+      type: string
+      enum:
+        - incremental_fill
+        - exact_align
+    EventMutationStatus:
+      type: string
+      enum:
+        - draft
+        - upcoming
+        - ongoing
+        - ended
+        - cancelled
+        - canceled
+    EventApiErrorCode:
+      type: string
+      enum:
+        - ACTIVE_EVENT_EDIT_SUBMISSION_EXISTS
+        - EVENT_SUBMISSION_INVALID_PAYLOAD
+    GenericApiError:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      oneOf:
+        - required: [error]
+        - required: [message]
+    EventApiErrorDetails:
+      type: object
+      additionalProperties: false
+      properties:
+        targetEventId:
+          type: string
+        activeSubmissionId:
+          type: string
+        activeSubmissionStatus:
+          type: string
+    EventApiError:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          $ref: '#/components/schemas/EventApiErrorCode'
+        details:
+          $ref: '#/components/schemas/EventApiErrorDetails'
+      oneOf:
+        - required: [error]
+        - required: [message]
+    LocalizedText:
+      type: object
+      additionalProperties: false
+      required:
+        - en
+        - zh
+      properties:
+        en:
+          type: string
+        zh:
+          type: string
+        ja:
+          type:
+            - string
+            - 'null'
+        enFull:
+          type:
+            - string
+            - 'null'
+    EventLocationCoordinate:
+      type: object
+      additionalProperties: false
+      required:
+        - lng
+        - lat
+      properties:
+        lng:
+          type: number
+        lat:
+          type: number
+    EventManualLocation:
+      type: object
+      additionalProperties: false
+      required:
+        - detailAddressI18n
+        - formattedAddressI18n
+        - selectedAt
+      properties:
+        detailAddressI18n:
+          $ref: '#/components/schemas/LocalizedText'
+        formattedAddressI18n:
+          $ref: '#/components/schemas/LocalizedText'
+        selectedAt:
+          type: string
+          format: date-time
+    EventLocationPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - provider
+        - sourceMode
+        - location
+      properties:
+        provider:
+          type: string
+        sourceMode:
+          type: string
+        providerPlaceId:
+          type:
+            - string
+            - 'null'
+        poiId:
+          type:
+            - string
+            - 'null'
+        location:
+          $ref: '#/components/schemas/EventLocationCoordinate'
+        nameI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        addressI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        formattedAddressI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        city:
+          type:
+            - string
+            - 'null'
+        district:
+          type:
+            - string
+            - 'null'
+        province:
+          type:
+            - string
+            - 'null'
+        countryCode:
+          type:
+            - string
+            - 'null'
+    EventSchedule:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - timeZone
+        - dayRolloverHour
+      properties:
+        mode:
+          $ref: '#/components/schemas/EventScheduleMode'
+        timeZone:
+          type: string
+        dayRolloverHour:
+          type: integer
+    EventWeek:
+      type: object
+      additionalProperties: false
+      required:
+        - weekIndex
+        - startDate
+        - endDate
+      properties:
+        id:
+          type:
+            - string
+            - 'null'
+        weekIndex:
+          type: integer
+        label:
+          type:
+            - string
+            - 'null'
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        sortOrder:
+          type:
+            - integer
+            - 'null'
+    EventDay:
+      type: object
+      additionalProperties: false
+      required:
+        - eventDayId
+        - weekIndex
+        - dayIndexInWeek
+        - overallDayIndex
+        - date
+      properties:
+        id:
+          type:
+            - string
+            - 'null'
+        eventDayId:
+          type: string
+        weekIndex:
+          type: integer
+        dayIndexInWeek:
+          type: integer
+        overallDayIndex:
+          type: integer
+        label:
+          type:
+            - string
+            - 'null'
+        weekday:
+          type:
+            - string
+            - 'null'
+        date:
+          type: string
+          format: date
+        sortOrder:
+          type:
+            - integer
+            - 'null'
+    EventImageAsset:
+      type: object
+      additionalProperties: false
+      required:
+        - url
+      properties:
+        url:
+          type: string
+        type:
+          type:
+            - string
+            - 'null'
+        label:
+          type:
+            - string
+            - 'null'
+        sort:
+          type:
+            - integer
+            - 'null'
+        order:
+          type:
+            - integer
+            - 'null'
+        source:
+          type:
+            - string
+            - 'null'
+        fileName:
+          type:
+            - string
+            - 'null'
+    EventTicketTierInput:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - price
+      properties:
+        id:
+          type:
+            - string
+            - 'null'
+        name:
+          type: string
+        price:
+          type: number
+        currency:
+          type:
+            - string
+            - 'null'
+        sortOrder:
+          type:
+            - integer
+            - 'null'
+    EventLineupArtistInput:
+      type: object
+      additionalProperties: false
+      required:
+        - djName
+      properties:
+        id:
+          type:
+            - string
+            - 'null'
+        djId:
+          type:
+            - string
+            - 'null'
+        memberDjIds:
+          type:
+            - array
+            - 'null'
+          items:
+            type:
+              - string
+              - 'null'
+        memberNames:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        djName:
+          type: string
+        sortOrder:
+          type:
+            - integer
+            - 'null'
+    EventLineupSlotInput:
+      type: object
+      additionalProperties: false
+      required:
+        - djName
+      properties:
+        id:
+          type:
+            - string
+            - 'null'
+        lineupArtistId:
+          type:
+            - string
+            - 'null'
+        eventDayId:
+          type:
+            - string
+            - 'null'
+        weekIndex:
+          type:
+            - integer
+            - 'null'
+        dayIndexInWeek:
+          type:
+            - integer
+            - 'null'
+        overallDayIndex:
+          type:
+            - integer
+            - 'null'
+        localDate:
+          type:
+            - string
+            - 'null'
+          format: date
+        djId:
+          type:
+            - string
+            - 'null'
+        memberDjIds:
+          type:
+            - array
+            - 'null'
+          items:
+            type:
+              - string
+              - 'null'
+        memberNames:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        festivalDayIndex:
+          type:
+            - integer
+            - 'null'
+        djName:
+          type: string
+        stageName:
+          type:
+            - string
+            - 'null'
+        sortOrder:
+          type:
+            - integer
+            - 'null'
+        startTime:
+          type:
+            - string
+            - 'null'
+        endTime:
+          type:
+            - string
+            - 'null'
+    EventMutationBase:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - startDate
+        - endDate
+      properties:
+        name:
+          type: string
+        nameI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        wikiFestivalId:
+          type:
+            - string
+            - 'null'
+        abbreviation:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        eventType:
+          type:
+            - string
+            - 'null'
+        organizerName:
+          type:
+            - string
+            - 'null'
+        sourceEventUrl:
+          type:
+            - string
+            - 'null'
+        city:
+          type:
+            - string
+            - 'null'
+        cityI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        country:
+          type:
+            - string
+            - 'null'
+        countryI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        manualLocation:
+          $ref: '#/components/schemas/EventManualLocation'
+          nullable: true
+        locationPoint:
+          $ref: '#/components/schemas/EventLocationPoint'
+          nullable: true
+        latitude:
+          type:
+            - number
+            - 'null'
+        longitude:
+          type:
+            - number
+            - 'null'
+        ticketUrl:
+          type:
+            - string
+            - 'null'
+        ticketCurrency:
+          type:
+            - string
+            - 'null'
+        ticketNotes:
+          type:
+            - string
+            - 'null'
+        officialWebsite:
+          type:
+            - string
+            - 'null'
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        schedule:
+          $ref: '#/components/schemas/EventSchedule'
+          nullable: true
+        weeks:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventWeek'
+        eventDays:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventDay'
+        timeZone:
+          type:
+            - string
+            - 'null'
+        timeZoneCity:
+          type:
+            - string
+            - 'null'
+        timeZoneProvince:
+          type:
+            - string
+            - 'null'
+        timeZoneCountry:
+          type:
+            - string
+            - 'null'
+        timeZoneStateAnsi:
+          type:
+            - string
+            - 'null'
+        timeZoneLat:
+          type:
+            - number
+            - 'null'
+        timeZoneLng:
+          type:
+            - number
+            - 'null'
+        startTime:
+          type:
+            - string
+            - 'null'
+        endTime:
+          type:
+            - string
+            - 'null'
+        dayRolloverHour:
+          type:
+            - integer
+            - 'null'
+        stageOrder:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        coverImageUrl:
+          type:
+            - string
+            - 'null'
+        lineupImageUrl:
+          type:
+            - string
+            - 'null'
+        imageAssets:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventImageAsset'
+        ticketTiers:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventTicketTierInput'
+        lineupArtists:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventLineupArtistInput'
+        lineupSlots:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventLineupSlotInput'
+        lineupSyncMode:
+          type:
+            - string
+            - 'null'
+          enum:
+            - incremental_fill
+            - exact_align
+            - null
+        idempotencyKey:
+          type:
+            - string
+            - 'null'
+        status:
+          type:
+            - string
+            - 'null'
+          enum:
+            - draft
+            - upcoming
+            - ongoing
+            - ended
+            - cancelled
+            - canceled
+            - null
+    CreateEventInput:
+      allOf:
+        - $ref: '#/components/schemas/EventMutationBase'
+    UpdateEventInput:
+      allOf:
+        - $ref: '#/components/schemas/EventMutationBase'
+        - type: object
+          additionalProperties: false
+          properties:
+            clearCityI18n:
+              type: boolean
+              description: Explicitly clears cityI18n when true.
+            clearCountryI18n:
+              type: boolean
+              description: Explicitly clears countryI18n when true.
+            clearWikiFestivalId:
+              type: boolean
+              description: Explicitly clears wikiFestivalId when true.
+            clearManualLocation:
+              type: boolean
+              description: Explicitly clears manualLocation when true.
+            clearLocationPoint:
+              type: boolean
+              description: Explicitly clears locationPoint when true.
+            clearLatitude:
+              type: boolean
+              description: Explicitly clears latitude when true.
+            clearLongitude:
+              type: boolean
+              description: Explicitly clears longitude when true.
+            clearStageOrder:
+              type: boolean
+              description: Explicitly clears stageOrder when true.
+            clearLineupSlots:
+              type: boolean
+              description: Explicitly clears lineupSlots when true.
+    EventSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - slug
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        organizerName:
+          type:
+            - string
+            - 'null'
+        city:
+          type:
+            - string
+            - 'null'
+        country:
+          type:
+            - string
+            - 'null'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        status:
+          type:
+            - string
+            - 'null'
+    EventDetail:
+      type: object
+      additionalProperties: true
+      description: |
+        Full Event detail shape used by Event Studio load/edit.
+        First-stage contract keeps this permissive for backward compatibility while request contracts are tightened first.
+      required:
+        - id
+        - name
+        - slug
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        nameI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        wikiFestivalId:
+          type:
+            - string
+            - 'null'
+        slug:
+          type: string
+        abbreviation:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        countryI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        cityI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        coverImageUrl:
+          type:
+            - string
+            - 'null'
+        lineupImageUrl:
+          type:
+            - string
+            - 'null'
+        imageAssets:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventImageAsset'
+        eventType:
+          type:
+            - string
+            - 'null'
+        organizerName:
+          type:
+            - string
+            - 'null'
+        sourceEventUrl:
+          type:
+            - string
+            - 'null'
+        city:
+          type:
+            - string
+            - 'null'
+        country:
+          type:
+            - string
+            - 'null'
+        manualLocation:
+          $ref: '#/components/schemas/EventManualLocation'
+          nullable: true
+        locationPoint:
+          $ref: '#/components/schemas/EventLocationPoint'
+          nullable: true
+        latitude:
+          type:
+            - number
+            - 'null'
+        longitude:
+          type:
+            - number
+            - 'null'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        schedule:
+          $ref: '#/components/schemas/EventSchedule'
+          nullable: true
+        weeks:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventWeek'
+        eventDays:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventDay'
+        stageOrder:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        lineupArtists:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventLineupArtistInput'
+        lineupSlots:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventLineupSlotInput'
+        timetableSlots:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventLineupSlotInput'
+        timeZone:
+          type:
+            - string
+            - 'null'
+        dayRolloverHour:
+          type:
+            - integer
+            - 'null'
+        ticketUrl:
+          type:
+            - string
+            - 'null'
+        ticketCurrency:
+          type:
+            - string
+            - 'null'
+        ticketNotes:
+          type:
+            - string
+            - 'null'
+        officialWebsite:
+          type:
+            - string
+            - 'null'
+        status:
+          type:
+            - string
+            - 'null'
+        revision:
+          type:
+            - integer
+            - 'null'
+        ticketTiers:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventTicketTierInput'
+    ContentSubmissionSummary:
+      type: object
+      additionalProperties: true
+      required:
+        - id
+        - entityType
+        - status
+        - title
+      properties:
+        id:
+          type: string
+        entityType:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        reviewReason:
+          type:
+            - string
+            - 'null'
+        createdEntityId:
+          type:
+            - string
+            - 'null'
+        createdAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        updatedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    EventSubmissionAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - message
+        - submission
+      properties:
+        status:
+          type: string
+          enum:
+            - submitted_for_review
+        message:
+          type: string
+        submission:
+          $ref: '#/components/schemas/ContentSubmissionSummary'
+    EventLineupTimetableAlignmentIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - missingFromLineup
+        - extraInLineup
+      properties:
+        missingFromLineup:
+          type: array
+          items:
+            type: string
+        extraInLineup:
+          type: array
+          items:
+            type: string
+    EventAlignmentPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - aligned
+        - lineupArtists
+      properties:
+        aligned:
+          type: boolean
+        issue:
+          $ref: '#/components/schemas/EventLineupTimetableAlignmentIssue'
+          nullable: true
+        message:
+          type:
+            - string
+            - 'null'
+        lineupArtists:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventLineupArtistInput'
+    EventEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/EventSummary'
+    EventDetailEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/EventDetail'
+    EventSubmissionAcceptedEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/EventSubmissionAccepted'
+    EventAlignmentPreviewEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/EventAlignmentPreview'

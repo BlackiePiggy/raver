@@ -1,4 +1,5 @@
 import Foundation
+import RaverEventAdminContract
 
 protocol WebFeatureService {
     func prepareAuthenticatedRequestForUserAction(source: String) async throws
@@ -17,9 +18,16 @@ protocol WebFeatureService {
     func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus
     func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
     func unfavoriteEvent(eventID: String) async throws
+    // Legacy EventEditorView compatibility surface. New event flows should use generated EventAdmin* inputs.
+    @available(*, deprecated, message: "Legacy Event editor surface. Use createEvent(input: EventAdminCreateInput).")
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult
+    @available(*, deprecated, message: "Legacy Event editor surface. Use updateEvent(id:input: EventAdminUpdateInput).")
     func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent>
+    @available(*, deprecated, message: "Legacy Event editor surface. Use previewEventLineupTimetableAlignment(input: EventAdminCreateInput).")
     func previewEventLineupTimetableAlignment(input: CreateEventInput) async throws -> EventLineupTimetableAlignmentPreview
+    func createEvent(input: EventAdminCreateInput) async throws -> CreateEventResult
+    func updateEvent(id: String, input: EventAdminUpdateInput) async throws -> CreateContentResult<WebEvent>
+    func previewEventLineupTimetableAlignment(input: EventAdminCreateInput) async throws -> EventLineupTimetableAlignmentPreview
     func deleteEvent(id: String) async throws
     func uploadEventImage(
         imageData: Data,

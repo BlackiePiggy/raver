@@ -1,0 +1,162 @@
+{
+  "name": "Raver Night Shanghai 2026",
+  "nameI18n": {
+    "en": "Raver Night Shanghai 2026",
+    "zh": "Raver 夜上海 2026"
+  },
+  "wikiFestivalId": "fest_ultra_shanghai",
+  "abbreviation": "RNS26",
+  "description": "Warehouse techno special night.",
+  "eventType": "club",
+  "organizerName": "Raver Crew",
+  "sourceEventUrl": "https://example.com/events/raver-night-shanghai-2026",
+  "city": "Shanghai",
+  "cityI18n": {
+    "en": "Shanghai",
+    "zh": "上海"
+  },
+  "country": "China",
+  "countryI18n": {
+    "en": "China",
+    "zh": "中国"
+  },
+  "manualLocation": {
+    "detailAddressI18n": {
+      "en": "88 Xuhui Riverside",
+      "zh": "徐汇滨江 88 号"
+    },
+    "formattedAddressI18n": {
+      "en": "Shanghai, China · 88 Xuhui Riverside",
+      "zh": "中国上海 · 徐汇滨江 88 号"
+    },
+    "selectedAt": "2026-05-30T12:00:00.000Z"
+  },
+  "locationPoint": {
+    "provider": "manual",
+    "sourceMode": "manual_pick",
+    "providerPlaceId": "manual-shanghai-riverside",
+    "location": {
+      "lng": 121.4542,
+      "lat": 31.1891
+    },
+    "nameI18n": {
+      "en": "Riverside Warehouse",
+      "zh": "滨江仓库"
+    },
+    "formattedAddressI18n": {
+      "en": "Shanghai, China · Riverside Warehouse",
+      "zh": "中国上海 · 滨江仓库"
+    },
+    "city": "Shanghai",
+    "province": "Shanghai",
+    "countryCode": "CN"
+  },
+  "latitude": 31.1891,
+  "longitude": 121.4542,
+  "ticketUrl": "https://tickets.example.com/rns26",
+  "ticketCurrency": "CNY",
+  "ticketNotes": "Early bird before 23:00.",
+  "officialWebsite": "https://example.com/rns26",
+  "startDate": "2026-09-12",
+  "endDate": "2026-09-12",
+  "schedule": {
+    "mode": "single_day",
+    "timeZone": "Asia/Shanghai",
+    "dayRolloverHour": 6
+  },
+  "weeks": [
+    {
+      "id": "week_1",
+      "weekIndex": 0,
+      "label": "Week 1",
+      "startDate": "2026-09-12",
+      "endDate": "2026-09-12",
+      "sortOrder": 0
+    }
+  ],
+  "eventDays": [
+    {
+      "id": "event_day_1",
+      "eventDayId": "event_day_1",
+      "weekIndex": 0,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 0,
+      "label": "Day 1",
+      "weekday": "Saturday",
+      "date": "2026-09-12",
+      "sortOrder": 0
+    }
+  ],
+  "timeZone": "Asia/Shanghai",
+  "timeZoneCity": "Shanghai",
+  "timeZoneProvince": "Shanghai",
+  "timeZoneCountry": "China",
+  "timeZoneLat": 31.2304,
+  "timeZoneLng": 121.4737,
+  "dayRolloverHour": 6,
+  "stageOrder": [
+    "Main Stage",
+    "Warehouse Room"
+  ],
+  "coverImageUrl": "https://cdn.example.com/events/rns26/cover.jpg",
+  "lineupImageUrl": "https://cdn.example.com/events/rns26/lineup.jpg",
+  "imageAssets": [
+    {
+      "url": "https://cdn.example.com/events/rns26/cover.jpg",
+      "type": "poster",
+      "label": "Poster",
+      "sort": 10,
+      "order": 1,
+      "source": "fixture",
+      "fileName": "cover.jpg"
+    }
+  ],
+  "ticketTiers": [
+    {
+      "name": "Early Bird",
+      "price": 199,
+      "currency": "CNY",
+      "sortOrder": 1
+    },
+    {
+      "name": "Final Release",
+      "price": 299,
+      "currency": "CNY",
+      "sortOrder": 2
+    }
+  ],
+  "lineupArtists": [
+    {
+      "id": "artist_amelie",
+      "djId": "dj_amelie",
+      "djName": "Amelie Lens",
+      "sortOrder": 1
+    },
+    {
+      "id": "artist_charlotte",
+      "djId": "dj_charlotte",
+      "djName": "Charlotte de Witte",
+      "sortOrder": 2
+    }
+  ],
+  "lineupSlots": [
+    {
+      "id": "slot_1",
+      "lineupArtistId": "artist_amelie",
+      "eventDayId": "event_day_1",
+      "weekIndex": 0,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 0,
+      "localDate": "2026-09-12",
+      "djId": "dj_amelie",
+      "djName": "Amelie Lens",
+      "stageName": "Main Stage",
+      "sortOrder": 1,
+      "startTime": "2026-09-12T13:00:00.000Z",
+      "endTime": "2026-09-12T15:00:00.000Z"
+    }
+  ],
+  "lineupSyncMode": "incremental_fill",
+  "idempotencyKey": "fixture-create-basic-001",
+  "status": "upcoming"
+}

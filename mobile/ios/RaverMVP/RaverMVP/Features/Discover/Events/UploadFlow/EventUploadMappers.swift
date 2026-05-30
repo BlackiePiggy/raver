@@ -1,4 +1,5 @@
 import Foundation
+import RaverEventAdminContract
 
 enum EventUploadMappers {
     static func imageAssets(from draft: EventUploadDraft) -> [WebEventImageAsset] {
@@ -31,7 +32,50 @@ enum EventUploadMappers {
     static func createInput(
         from draft: EventUploadDraft,
         lineupSyncMode: EventLineupSyncMode = .incrementalFill
-    ) -> CreateEventInput {
+    ) -> EventAdminCreateInput {
+        .init(
+            value1: mutationBase(
+                from: draft,
+                lineupSyncMode: lineupSyncMode,
+                includeTimeZoneSelectionMetadata: true
+            )
+        )
+    }
+
+    static func updateInput(
+        from draft: EventUploadDraft,
+        lineupSyncMode: EventLineupSyncMode = .incrementalFill
+    ) -> EventAdminUpdateInput {
+        let base = mutationBase(
+            from: draft,
+            lineupSyncMode: lineupSyncMode,
+            includeTimeZoneSelectionMetadata: draft.selectedTimeZoneLookup?.matchSource != "event-edit-hydrate"
+        )
+        return .init(
+            value1: base,
+            value2: .init(
+                clearCityI18n: false,
+                clearCountryI18n: false,
+                clearWikiFestivalId: base.wikiFestivalId == nil,
+                clearManualLocation: base.manualLocation == nil,
+                clearLocationPoint: base.locationPoint == nil,
+                clearLatitude: base.latitude == nil,
+                clearLongitude: base.longitude == nil,
+                clearStageOrder: base.stageOrder == nil,
+                clearLineupSlots: base.lineupSlots == nil
+            )
+        )
+    }
+
+    static func imageOnlyUpdateInput(from draft: EventUploadDraft) -> EventAdminUpdateInput {
+        updateInput(from: draft)
+    }
+
+    private static func mutationBase(
+        from draft: EventUploadDraft,
+        lineupSyncMode: EventLineupSyncMode,
+        includeTimeZoneSelectionMetadata: Bool
+    ) -> EventAdminComponents.Schemas.EventMutationBase {
         let language = draft.preferredLanguage
         let name = draft.name.primaryValue(preferredLanguage: language).trimmed
         let description = draft.description.trimmed.eventUploadMapperNilIfBlank
@@ -43,10 +87,15 @@ enum EventUploadMappers {
         let addressI18n = localizedText(from: draft.detailAddress, language: language)
         let timeZone = draft.timeZoneIdentifier.trimmed.eventUploadMapperNilIfBlank ?? "Asia/Shanghai"
         let ticketTiers = ticketTierInputs(from: draft.ticket)
+        let mutationStatus = EventAdminComponents.Schemas.EventMutationBase.StatusPayload(
+            rawValue: EventVisualStatus.resolve(startDate: draft.startDate, endDate: draft.endDate).apiValue
+        )
+        let generatedImageAssets = adminImageAssets(from: imageAssets(from: draft))
+        let resolvedTimeZone = TimeZone(identifier: timeZone) ?? TimeZone(identifier: "UTC") ?? .current
 
-        return CreateEventInput(
+        return .init(
             name: name,
-            nameI18n: localizedText(from: draft.name, language: language),
+            nameI18n: adminLocalizedText(from: localizedText(from: draft.name, language: language)),
             wikiFestivalId: draft.organizerFestivalID?.trimmed.eventUploadMapperNilIfBlank,
             abbreviation: draft.abbreviation.trimmed.eventUploadMapperNilIfBlank,
             description: description,
@@ -54,24 +103,28 @@ enum EventUploadMappers {
             organizerName: draft.organizerName.trimmed.eventUploadMapperNilIfBlank,
             sourceEventUrl: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
             city: city,
-            cityI18n: cityI18n,
+            cityI18n: adminLocalizedText(from: cityI18n),
             country: country,
-            countryI18n: countryI18n,
-            manualLocation: manualLocation(
-                address: address,
-                addressI18n: addressI18n,
-                cityI18n: cityI18n,
-                countryI18n: countryI18n,
-                language: language
+            countryI18n: adminLocalizedText(from: countryI18n),
+            manualLocation: adminManualLocation(
+                from: manualLocation(
+                    address: address,
+                    addressI18n: addressI18n,
+                    cityI18n: cityI18n,
+                    countryI18n: countryI18n,
+                    language: language
+                )
             ),
-            locationPoint: locationPoint(
-                from: draft,
-                address: address,
-                addressI18n: addressI18n,
-                city: city,
-                cityI18n: cityI18n,
-                country: country,
-                countryI18n: countryI18n
+            locationPoint: adminLocationPoint(
+                from: locationPoint(
+                    from: draft,
+                    address: address,
+                    addressI18n: addressI18n,
+                    city: city,
+                    cityI18n: cityI18n,
+                    country: country,
+                    countryI18n: countryI18n
+                )
             ),
             latitude: draft.latitude,
             longitude: draft.longitude,
@@ -79,97 +132,31 @@ enum EventUploadMappers {
             ticketCurrency: draft.ticket.currency.trimmed.uppercased().eventUploadMapperNilIfBlank,
             ticketNotes: draft.ticketNotes.trimmed.eventUploadMapperNilIfBlank,
             officialWebsite: draft.officialWebsite.trimmed.eventUploadMapperNilIfBlank,
-            startDate: draft.startDate,
-            endDate: draft.endDate,
-            schedule: draft.structuredSchedule,
-            weeks: draft.structuredWeeks,
-            eventDays: draft.structuredEventDays,
+            startDate: draft.startDate.eventArchiveDateText(in: resolvedTimeZone),
+            endDate: draft.endDate.eventArchiveDateText(in: resolvedTimeZone),
+            schedule: adminSchedule(from: draft.structuredSchedule),
+            weeks: adminWeeks(from: draft.structuredWeeks, timeZone: resolvedTimeZone),
+            eventDays: adminEventDays(from: draft.structuredEventDays, timeZone: resolvedTimeZone),
             timeZone: timeZone,
-            timeZoneCity: draft.selectedTimeZoneLookup?.city,
-            timeZoneProvince: draft.selectedTimeZoneLookup?.exactProvince.eventUploadMapperNilIfBlank ?? draft.selectedTimeZoneLookup?.province.eventUploadMapperNilIfBlank,
-            timeZoneCountry: draft.selectedTimeZoneLookup?.country,
-            timeZoneStateAnsi: draft.selectedTimeZoneLookup?.stateAnsi.eventUploadMapperNilIfBlank,
-            timeZoneLat: draft.selectedTimeZoneLookup?.lat,
-            timeZoneLng: draft.selectedTimeZoneLookup?.lng,
+            timeZoneCity: includeTimeZoneSelectionMetadata ? draft.selectedTimeZoneLookup?.city : nil,
+            timeZoneProvince: includeTimeZoneSelectionMetadata ? (draft.selectedTimeZoneLookup?.exactProvince.eventUploadMapperNilIfBlank ?? draft.selectedTimeZoneLookup?.province.eventUploadMapperNilIfBlank) : nil,
+            timeZoneCountry: includeTimeZoneSelectionMetadata ? draft.selectedTimeZoneLookup?.country : nil,
+            timeZoneStateAnsi: includeTimeZoneSelectionMetadata ? draft.selectedTimeZoneLookup?.stateAnsi.eventUploadMapperNilIfBlank : nil,
+            timeZoneLat: includeTimeZoneSelectionMetadata ? draft.selectedTimeZoneLookup?.lat : nil,
+            timeZoneLng: includeTimeZoneSelectionMetadata ? draft.selectedTimeZoneLookup?.lng : nil,
+            startTime: nil,
+            endTime: nil,
             dayRolloverHour: draft.dayRolloverHour,
             stageOrder: normalizedStages(from: draft),
             coverImageUrl: primaryCoverURL(from: draft),
             lineupImageUrl: primaryLineupURL(from: draft),
-            imageAssets: imageAssets(from: draft).isEmpty ? nil : imageAssets(from: draft),
-            ticketTiers: ticketTiers,
-            lineupArtists: lineupArtistInputs(from: draft),
-            lineupSlots: lineupSlotInputs(from: draft),
-            lineupSyncMode: lineupSyncMode,
-            status: EventVisualStatus.resolve(startDate: draft.startDate, endDate: draft.endDate).apiValue
-        )
-    }
-
-    static func updateInput(
-        from draft: EventUploadDraft,
-        lineupSyncMode: EventLineupSyncMode = .incrementalFill
-    ) -> UpdateEventInput {
-        let create = createInput(from: draft, lineupSyncMode: lineupSyncMode)
-        let shouldSubmitTimeZoneSelection = draft.selectedTimeZoneLookup?.matchSource != "event-edit-hydrate"
-        var input = UpdateEventInput(
-            name: create.name,
-            nameI18n: create.nameI18n,
-            wikiFestivalId: create.wikiFestivalId,
-            abbreviation: create.abbreviation ?? "",
-            description: create.description ?? "",
-            eventType: create.eventType,
-            organizerName: create.organizerName ?? "",
-            sourceEventUrl: create.sourceEventUrl ?? "",
-            city: create.city,
-            cityI18n: create.cityI18n,
-            country: create.country,
-            countryI18n: create.countryI18n,
-            manualLocation: create.manualLocation,
-            locationPoint: create.locationPoint,
-            latitude: create.latitude,
-            longitude: create.longitude,
-            ticketUrl: create.ticketUrl ?? "",
-            ticketCurrency: create.ticketCurrency ?? "",
-            ticketNotes: create.ticketNotes ?? "",
-            officialWebsite: create.officialWebsite ?? "",
-            startDate: create.startDate,
-            endDate: create.endDate,
-            schedule: create.schedule,
-            weeks: create.weeks,
-            eventDays: create.eventDays,
-            timeZone: create.timeZone,
-            timeZoneCity: shouldSubmitTimeZoneSelection ? create.timeZoneCity : nil,
-            timeZoneProvince: shouldSubmitTimeZoneSelection ? create.timeZoneProvince : nil,
-            timeZoneCountry: shouldSubmitTimeZoneSelection ? create.timeZoneCountry : nil,
-            timeZoneStateAnsi: shouldSubmitTimeZoneSelection ? create.timeZoneStateAnsi : nil,
-            timeZoneLat: shouldSubmitTimeZoneSelection ? create.timeZoneLat : nil,
-            timeZoneLng: shouldSubmitTimeZoneSelection ? create.timeZoneLng : nil,
-            dayRolloverHour: create.dayRolloverHour,
-            stageOrder: create.stageOrder,
-            coverImageUrl: create.coverImageUrl ?? "",
-            lineupImageUrl: create.lineupImageUrl ?? "",
-            imageAssets: create.imageAssets,
-            ticketTiers: create.ticketTiers,
-            lineupArtists: create.lineupArtists,
-            lineupSlots: create.lineupSlots,
-            lineupSyncMode: create.lineupSyncMode,
-            status: create.status,
-            clearManualLocation: create.manualLocation == nil,
-            clearWikiFestivalId: create.wikiFestivalId == nil,
-            clearLocationPoint: create.locationPoint == nil,
-            clearLatitude: create.latitude == nil,
-            clearLongitude: create.longitude == nil,
-            clearStageOrder: create.stageOrder == nil,
-            clearLineupSlots: create.lineupSlots == nil
-        )
-        return input
-    }
-
-    static func imageOnlyUpdateInput(from draft: EventUploadDraft) -> UpdateEventInput {
-        let create = createInput(from: draft)
-        return UpdateEventInput(
-            coverImageUrl: create.coverImageUrl ?? "",
-            lineupImageUrl: create.lineupImageUrl ?? "",
-            imageAssets: create.imageAssets ?? []
+            imageAssets: generatedImageAssets,
+            ticketTiers: adminTicketTiers(from: ticketTiers),
+            lineupArtists: adminLineupArtists(from: lineupArtistInputs(from: draft)),
+            lineupSlots: adminLineupSlots(from: lineupSlotInputs(from: draft), timeZone: resolvedTimeZone),
+            lineupSyncMode: .init(rawValue: lineupSyncMode.rawValue),
+            idempotencyKey: nil,
+            status: mutationStatus
         )
     }
 
@@ -351,7 +338,7 @@ enum EventUploadMappers {
     }
 
     private static func defaultStageName(at index: Int) -> String {
-        index == 0 ? LT("主舞台", "Main Stage", "メインステージ") : LT("舞台 \(index + 1)", "Stage \(index + 1)", "ステージ \(index + 1)")
+        index == 0 ? "Main Stage" : "Stage \(index + 1)"
     }
 
     private static func ticketTierInputs(from ticket: EventUploadTicketDraft) -> [EventTicketTierInput]? {
@@ -465,6 +452,168 @@ enum EventUploadMappers {
         if end > start { return end }
         return Calendar.current.date(byAdding: .day, value: 1, to: end) ?? end
     }
+
+    private static func adminLocalizedText(from text: WebBiText?) -> EventAdminLocalizedText? {
+        guard let text else { return nil }
+        return .init(
+            en: text.en,
+            zh: text.zh,
+            ja: text.ja,
+            enFull: text.enFull
+        )
+    }
+
+    private static func adminManualLocation(
+        from location: WebEventManualLocation?
+    ) -> EventAdminComponents.Schemas.EventManualLocation? {
+        guard let location else { return nil }
+        return .init(
+            detailAddressI18n: adminLocalizedText(from: location.detailAddressI18n) ?? .init(en: "", zh: ""),
+            formattedAddressI18n: adminLocalizedText(from: location.formattedAddressI18n) ?? .init(en: "", zh: ""),
+            selectedAt: location.selectedAt ?? Date()
+        )
+    }
+
+    private static func adminLocationPoint(
+        from point: WebEventLocationPoint?
+    ) -> EventAdminComponents.Schemas.EventLocationPoint? {
+        guard let point, let location = point.location else { return nil }
+        return .init(
+            provider: point.provider ?? "",
+            sourceMode: point.sourceMode ?? "",
+            providerPlaceId: point.providerPlaceId,
+            poiId: point.poiId,
+            location: .init(lng: location.lng, lat: location.lat),
+            nameI18n: adminLocalizedText(from: point.nameI18n),
+            addressI18n: adminLocalizedText(from: point.addressI18n),
+            formattedAddressI18n: adminLocalizedText(from: point.formattedAddressI18n),
+            city: point.city,
+            district: point.district,
+            province: point.province,
+            countryCode: point.countryCode
+        )
+    }
+
+    private static func adminSchedule(
+        from schedule: WebEventSchedule
+    ) -> EventAdminComponents.Schemas.EventSchedule? {
+        guard let mode = EventAdminComponents.Schemas.EventScheduleMode(rawValue: schedule.mode) else {
+            return nil
+        }
+        return .init(
+            mode: mode,
+            timeZone: schedule.timeZone,
+            dayRolloverHour: schedule.dayRolloverHour
+        )
+    }
+
+    private static func adminWeeks(
+        from weeks: [WebEventWeek],
+        timeZone: TimeZone
+    ) -> [EventAdminComponents.Schemas.EventWeek]? {
+        guard !weeks.isEmpty else { return nil }
+        return weeks.map {
+            .init(
+                id: $0.id,
+                weekIndex: $0.weekIndex,
+                label: $0.label,
+                startDate: $0.startDate.eventArchiveDateText(in: timeZone),
+                endDate: $0.endDate.eventArchiveDateText(in: timeZone),
+                sortOrder: $0.sortOrder
+            )
+        }
+    }
+
+    private static func adminEventDays(
+        from eventDays: [WebEventDay],
+        timeZone: TimeZone
+    ) -> [EventAdminComponents.Schemas.EventDay]? {
+        guard !eventDays.isEmpty else { return nil }
+        return eventDays.map {
+            .init(
+                id: $0.id,
+                eventDayId: $0.eventDayId,
+                weekIndex: $0.weekIndex,
+                dayIndexInWeek: $0.dayIndexInWeek,
+                overallDayIndex: $0.overallDayIndex,
+                label: $0.label,
+                weekday: $0.weekday,
+                date: $0.date.eventArchiveDateText(in: timeZone),
+                sortOrder: $0.sortOrder
+            )
+        }
+    }
+
+    private static func adminImageAssets(
+        from assets: [WebEventImageAsset]
+    ) -> [EventAdminComponents.Schemas.EventImageAsset]? {
+        guard !assets.isEmpty else { return nil }
+        return assets.map {
+            .init(
+                url: $0.url,
+                _type: $0.type,
+                label: $0.label,
+                sort: $0.sort,
+                order: $0.order,
+                source: $0.source,
+                fileName: $0.fileName
+            )
+        }
+    }
+
+    private static func adminTicketTiers(
+        from tiers: [EventTicketTierInput]?
+    ) -> [EventAdminComponents.Schemas.EventTicketTierInput]? {
+        tiers?.map {
+            .init(
+                name: $0.name,
+                price: $0.price,
+                currency: $0.currency,
+                sortOrder: $0.sortOrder
+            )
+        }
+    }
+
+    private static func adminLineupArtists(
+        from artists: [EventLineupArtistInput]?
+    ) -> [EventAdminComponents.Schemas.EventLineupArtistInput]? {
+        artists?.map {
+            .init(
+                id: $0.id,
+                djId: $0.djId,
+                memberDjIds: $0.memberDjIds,
+                memberNames: $0.memberNames,
+                djName: $0.djName,
+                sortOrder: $0.sortOrder
+            )
+        }
+    }
+
+    private static func adminLineupSlots(
+        from slots: [EventLineupSlotInput]?,
+        timeZone: TimeZone
+    ) -> [EventAdminComponents.Schemas.EventLineupSlotInput]? {
+        slots?.map {
+            .init(
+                id: $0.id,
+                lineupArtistId: $0.lineupArtistId,
+                eventDayId: $0.eventDayId,
+                weekIndex: $0.weekIndex,
+                dayIndexInWeek: $0.dayIndexInWeek,
+                overallDayIndex: $0.overallDayIndex,
+                localDate: $0.localDate?.eventArchiveDateText(in: timeZone),
+                djId: $0.djId,
+                memberDjIds: $0.memberDjIds,
+                memberNames: $0.memberNames,
+                festivalDayIndex: $0.festivalDayIndex,
+                djName: $0.djName,
+                stageName: $0.stageName,
+                sortOrder: $0.sortOrder,
+                startTime: $0.startTime?.eventUploadISO8601FractionalString,
+                endTime: $0.endTime?.eventUploadISO8601FractionalString
+            )
+        }
+    }
 }
 
 private extension String {
@@ -474,5 +623,14 @@ private extension String {
 
     var eventUploadMapperNilIfBlank: String? {
         trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private extension Date {
+    var eventUploadISO8601FractionalString: String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter.string(from: self)
     }
 }

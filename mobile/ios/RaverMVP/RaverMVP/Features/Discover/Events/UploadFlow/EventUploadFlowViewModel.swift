@@ -320,7 +320,7 @@ final class EventUploadFlowViewModel: ObservableObject {
             switch draft.mode {
             case .create:
                 var input = EventUploadMappers.createInput(from: draft)
-                input.idempotencyKey = idempotencyKey
+                input.value1.idempotencyKey = idempotencyKey
                 let result = try await webService.createEvent(input: input)
                 draftStore.clear(mode: draft.mode, userID: userID)
                 switch result {
@@ -339,7 +339,7 @@ final class EventUploadFlowViewModel: ObservableObject {
                 }
             case .edit(let eventID):
                 var input = EventUploadMappers.updateInput(from: draft)
-                input.idempotencyKey = idempotencyKey
+                input.value1.idempotencyKey = idempotencyKey
                 let eventDaySummary = draft.structuredEventDays
                     .map { "\($0.eventDayId):\(scheduleDebugDateText($0.date))" }
                     .joined(separator: ", ")

@@ -3080,33 +3080,35 @@ struct EventEditorView: View {
         return trimmed
     }
 
-    private func buildTicketTierInputs(defaultCurrency: String?) -> [EventTicketTierInput]? {
+    private func buildTicketTierDrafts(defaultCurrency: String?) -> [EventUploadTicketTierDraft]? {
         let fallbackCurrency = defaultCurrency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        var result: [EventTicketTierInput] = []
+        var result: [EventUploadTicketTierDraft] = []
 
-        for (index, draft) in ticketTierDrafts.enumerated() {
+        for draft in ticketTierDrafts {
             let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let priceText = draft.price.trimmingCharacters(in: .whitespacesAndNewlines)
+            let priceInput = draft.price.trimmingCharacters(in: .whitespacesAndNewlines)
             let currency = draft.currency.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? fallbackCurrency
 
-            if name.isEmpty && priceText.isEmpty {
+            if name.isEmpty && priceInput.isEmpty {
                 continue
             }
-            guard !name.isEmpty, !priceText.isEmpty else {
+            guard !name.isEmpty, !priceInput.isEmpty else {
                 errorMessage = LT("请完整填写票档名称和价格，或删除空票档", "Please complete ticket tier name and price, or remove empty tiers.", "チケット区分名と価格を入力するか、空の区分を削除してください。")
                 return nil
             }
-            guard let price = Double(priceText.replacingOccurrences(of: ",", with: ".")), price >= 0 else {
+            guard let price = Double(priceInput.replacingOccurrences(of: ",", with: ".")), price >= 0 else {
                 errorMessage = LT("票档价格格式不正确，请输入数字", "Invalid ticket price format. Please enter a number.", "チケット価格の形式が正しくありません。数字を入力してください。")
+                return nil
+            }
+            guard currency != nil else {
+                errorMessage = LT("请先填写票价币种", "Please enter the ticket currency first.", "先にチケット通貨を入力してください。")
                 return nil
             }
 
             result.append(
-                EventTicketTierInput(
+                EventUploadTicketTierDraft(
                     name: name,
-                    price: price,
-                    currency: currency,
-                    sortOrder: index + 1
+                    price: priceText(for: price)
                 )
             )
         }
@@ -3517,56 +3519,7 @@ struct EventEditorView: View {
 
         let normalizedStartDate = normalizedEventStartDate
         let normalizedEndDate = normalizedEventEndDate
-        let resolvedCityEn = cityEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedCityZh = cityZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedCountryEn = countryEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedCountryEnFull = countryEnFull.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedCountryZh = countryZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedCityPrimary = resolvedCityZh ?? resolvedCityEn
-        let resolvedCountryPrimary = resolvedCountryZh ?? resolvedCountryEnFull ?? resolvedCountryEn
-        let resolvedCityI18n = (resolvedCityEn != nil || resolvedCityZh != nil)
-            ? WebBiText(en: resolvedCityEn ?? resolvedCityZh ?? "", zh: resolvedCityZh ?? resolvedCityEn ?? "")
-            : nil
-        let resolvedCountryI18n = (resolvedCountryEn != nil || resolvedCountryZh != nil || resolvedCountryEnFull != nil)
-            ? WebBiText(
-                en: resolvedCountryEn ?? resolvedCountryZh ?? "",
-                zh: resolvedCountryZh ?? resolvedCountryEn ?? "",
-                enFull: resolvedCountryEnFull
-            )
-            : nil
-        let shouldClearCityI18n = resolvedCityEn == nil && resolvedCityZh == nil
-        let shouldClearCountryI18n = resolvedCountryEn == nil && resolvedCountryZh == nil && resolvedCountryEnFull == nil
-        let resolvedDetailAddressZh = detailAddressZh.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedDetailAddressEn = detailAddressEn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedPrimaryAddress = resolvedDetailAddressZh ?? resolvedDetailAddressEn
-        let resolvedTicketUrl = ticketUrl.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedOfficialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         let resolvedTicketCurrency = ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let resolvedTicketNotes = ticketNotes.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let cleanedDescription = description
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
-        let structuredSchedule = editorStructuredSchedule
-        let structuredWeeks = editorStructuredWeeks
-        let structuredEventDays = editorStructuredEventDays
-        let resolvedManualLocation = buildManualLocationPayload(
-            detailAddressZh: resolvedDetailAddressZh,
-            detailAddressEn: resolvedDetailAddressEn,
-            cityZh: resolvedCityZh,
-            cityEn: resolvedCityEn,
-            countryZh: resolvedCountryZh,
-            countryEn: resolvedCountryEn,
-            countryEnFull: resolvedCountryEnFull
-        )
-        let shouldClearManualLocation = resolvedManualLocation == nil
-        let resolvedLocationPoint = buildLocationPointPayload(
-            latitude: pickedLatitude,
-            longitude: pickedLongitude,
-            displayAddress: pickedMapAddress.nilIfEmpty ?? resolvedPrimaryAddress,
-            city: resolvedCityPrimary,
-            country: resolvedCountryPrimary,
-            placeName: pickedPlaceName.nilIfEmpty
-        )
 
         if normalizedEndDate < normalizedStartDate {
             errorMessage = LT("结束时间不能早于开始时间", "End time cannot be earlier than start time.", "終了時間は開始時間より前にできません。")
@@ -3583,15 +3536,12 @@ struct EventEditorView: View {
             return
         }
 
-        guard let lineupSlotsInput = buildLineupSlotsInput() else {
+        guard let timetableSlots = buildTimetableSlotDrafts() else {
             return
         }
-        guard let ticketTierInputs = buildTicketTierInputs(defaultCurrency: resolvedTicketCurrency) else {
+        guard let ticketTierDrafts = buildTicketTierDrafts(defaultCurrency: resolvedTicketCurrency) else {
             return
         }
-
-        let resolvedEventType = EventTypeOption.submissionValue(for: eventType)
-        let resolvedStatus = EventVisualStatus.resolve(startDate: normalizedStartDate, endDate: normalizedEndDate).apiValue
 
         isSaving = true
         defer { isSaving = false }
@@ -3599,44 +3549,16 @@ struct EventEditorView: View {
         do {
             switch mode {
             case .create:
-                let createResult = try await eventCommandRepository.createEvent(
-                    input: CreateEventInput(
-                        name: trimmedName,
-                        description: cleanedDescription,
-                        eventType: resolvedEventType,
-                        city: resolvedCityPrimary,
-                        cityI18n: resolvedCityI18n,
-                        country: resolvedCountryPrimary,
-                        countryI18n: resolvedCountryI18n,
-                        manualLocation: resolvedManualLocation,
-                        locationPoint: resolvedLocationPoint,
-                        latitude: pickedLatitude,
-                        longitude: pickedLongitude,
-                        ticketUrl: resolvedTicketUrl,
-                        ticketCurrency: resolvedTicketCurrency,
-                        ticketNotes: resolvedTicketNotes,
-                        officialWebsite: resolvedOfficialWebsite,
-                        startDate: normalizedStartDate,
-                        endDate: normalizedEndDate,
-                        schedule: structuredSchedule,
-                        weeks: structuredWeeks,
-                        eventDays: structuredEventDays,
-                        timeZone: eventTimeZoneIdentifier,
-                        timeZoneCity: selectedTimeZoneLookup?.city,
-                        timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
-                        timeZoneCountry: selectedTimeZoneLookup?.country,
-                        timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
-                        timeZoneLat: selectedTimeZoneLookup?.lat,
-                        timeZoneLng: selectedTimeZoneLookup?.lng,
-                        dayRolloverHour: 6,
-                        stageOrder: normalizedStageEntries,
-                        coverImageUrl: nil,
-                        lineupImageUrl: nil,
-                        ticketTiers: ticketTierInputs,
-                        lineupSlots: lineupSlotsInput,
-                        status: resolvedStatus
-                    )
+                let submissionDraft = buildSubmissionDraft(
+                    coverURL: nil,
+                    lineupURL: nil,
+                    ticketTiers: ticketTierDrafts,
+                    timetableSlots: timetableSlots
                 )
+                var createInput = EventUploadMappers.createInput(from: submissionDraft)
+                createInput.value1.coverImageUrl = nil
+                createInput.value1.lineupImageUrl = nil
+                let createResult = try await eventCommandRepository.createEvent(input: createInput)
 
                 guard case .created(let created) = createResult else {
                     completeEventSubmissionSuccess()
@@ -3669,19 +3591,16 @@ struct EventEditorView: View {
                 }
 
                 if uploadedCoverURL != nil || uploadedLineupURL != nil {
-                    _ = try await eventCommandRepository.updateEvent(
-                        id: created.id,
-                        input: UpdateEventInput(
-                            timeZoneCity: selectedTimeZoneLookup?.city,
-                            timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
-                            timeZoneCountry: selectedTimeZoneLookup?.country,
-                            timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
-                            timeZoneLat: selectedTimeZoneLookup?.lat,
-                            timeZoneLng: selectedTimeZoneLookup?.lng,
-                            coverImageUrl: uploadedCoverURL,
-                            lineupImageUrl: uploadedLineupURL
-                        )
+                    let imageDraft = buildSubmissionDraft(
+                        coverURL: uploadedCoverURL,
+                        lineupURL: uploadedLineupURL,
+                        ticketTiers: ticketTierDrafts,
+                        timetableSlots: timetableSlots
                     )
+                    var imageOnlyInput = EventUploadMappers.imageOnlyUpdateInput(from: imageDraft)
+                    imageOnlyInput.value1.coverImageUrl = uploadedCoverURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    imageOnlyInput.value1.lineupImageUrl = uploadedLineupURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    _ = try await eventCommandRepository.updateEvent(id: created.id, input: imageOnlyInput)
                 }
                 completeEventSubmissionSuccess()
                 return
@@ -3711,50 +3630,16 @@ struct EventEditorView: View {
                     finalLineup = upload.url
                 }
 
-                _ = try await eventCommandRepository.updateEvent(
-                    id: event.id,
-                        input: UpdateEventInput(
-                            name: trimmedName,
-                            description: cleanedDescription,
-                            eventType: resolvedEventType,
-                            city: resolvedCityPrimary,
-                            cityI18n: resolvedCityI18n,
-                            country: resolvedCountryPrimary,
-                            countryI18n: resolvedCountryI18n,
-                            manualLocation: resolvedManualLocation,
-                            locationPoint: resolvedLocationPoint,
-                        latitude: pickedLatitude,
-                        longitude: pickedLongitude,
-                        ticketUrl: resolvedTicketUrl ?? "",
-                        ticketCurrency: resolvedTicketCurrency ?? "",
-                        ticketNotes: resolvedTicketNotes ?? "",
-                        officialWebsite: resolvedOfficialWebsite ?? "",
-                        startDate: normalizedStartDate,
-                        endDate: normalizedEndDate,
-                        schedule: structuredSchedule,
-                        weeks: structuredWeeks,
-                        eventDays: structuredEventDays,
-                        timeZone: eventTimeZoneIdentifier,
-                        timeZoneCity: selectedTimeZoneLookup?.city,
-                        timeZoneProvince: selectedTimeZoneLookup?.exactProvince.nilIfEmpty ?? selectedTimeZoneLookup?.province.nilIfEmpty,
-                        timeZoneCountry: selectedTimeZoneLookup?.country,
-                        timeZoneStateAnsi: selectedTimeZoneLookup?.stateAnsi.nilIfEmpty,
-                        timeZoneLat: selectedTimeZoneLookup?.lat,
-                        timeZoneLng: selectedTimeZoneLookup?.lng,
-                        dayRolloverHour: 6,
-                        stageOrder: normalizedStageEntries,
-                        coverImageUrl: finalCover.nilIfEmpty ?? "",
-                        lineupImageUrl: finalLineup.nilIfEmpty ?? "",
-                        ticketTiers: ticketTierInputs,
-                        lineupSlots: lineupSlotsInput,
-                        status: resolvedStatus,
-                        clearCityI18n: shouldClearCityI18n,
-                        clearCountryI18n: shouldClearCountryI18n,
-                        clearManualLocation: shouldClearManualLocation,
-                        clearStageOrder: normalizedStageEntries.isEmpty,
-                        clearLineupSlots: lineupSlotsInput.isEmpty
-                    )
+                let submissionDraft = buildSubmissionDraft(
+                    coverURL: finalCover,
+                    lineupURL: finalLineup,
+                    ticketTiers: ticketTierDrafts,
+                    timetableSlots: timetableSlots
                 )
+                var updateInput = EventUploadMappers.updateInput(from: submissionDraft)
+                updateInput.value1.coverImageUrl = finalCover.nilIfEmpty
+                updateInput.value1.lineupImageUrl = finalLineup.nilIfEmpty
+                _ = try await eventCommandRepository.updateEvent(id: event.id, input: updateInput)
             }
 
             onSaved()
@@ -4820,8 +4705,8 @@ struct EventEditorView: View {
         }
     }
 
-    private func buildLineupSlotsInput() -> [EventLineupSlotInput]? {
-        var result: [EventLineupSlotInput] = []
+    private func buildTimetableSlotDrafts() -> [EventUploadLineupSlotDraft]? {
+        var result: [EventUploadLineupSlotDraft] = []
         let sortedEntries = groupedLineupSlotGroups
             .flatMap(\.slotIDs)
             .compactMap { id in
@@ -4879,27 +4764,175 @@ struct EventEditorView: View {
             }()
             let resolvedDayID = resolveDayID(for: item)
             let resolvedEventDay = structuredEventDay(for: resolvedDayID)
-            let resolvedLocalDate = resolvedEventDay?.date ?? resolvedDayID.flatMap { dayDate(for: $0) }
-
-            result.append(
-                EventLineupSlotInput(
-                    eventDayId: resolvedEventDay?.eventDayId ?? resolvedDayID,
-                    weekIndex: resolvedEventDay?.weekIndex,
-                    dayIndexInWeek: resolvedEventDay?.dayIndexInWeek,
-                    overallDayIndex: resolvedEventDay?.overallDayIndex,
-                    localDate: resolvedLocalDate,
-                    djId: primaryDJID,
-                    festivalDayIndex: nil,
-                    djName: composedName,
-                    stageName: normalizedStage.nilIfEmpty,
-                    sortOrder: index + 1,
-                    startTime: item.startTime,
-                    endTime: item.endTime
-                )
+            let resolvedLocalDate = resolvedEventDay?.date ?? resolvedDayID.flatMap { dayDate(for: $0) } ?? normalizedEventStartDate
+            let performerDJIDs = Array(
+                item.performers
+                    .prefix(expectedCount)
+                    .map { performer in
+                        performer.djId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    }
             )
+            var slotDraft = EventUploadLineupSlotDraft(
+                canonicalSlotId: nil,
+                eventDayId: resolvedEventDay?.eventDayId ?? resolvedDayID,
+                weekIndex: resolvedEventDay?.weekIndex ?? 1,
+                dayIndexInWeek: resolvedEventDay?.dayIndexInWeek ?? 1,
+                overallDayIndex: resolvedEventDay?.overallDayIndex ?? festivalDayIndex(for: resolvedDayID) ?? 1,
+                localDate: resolvedLocalDate,
+                actType: item.actType,
+                performerNames: Array(trimmedNames.prefix(expectedCount)),
+                performerDJIDs: performerDJIDs,
+                performerAvatarURLs: Array(repeating: nil, count: expectedCount),
+                stageName: normalizedStage,
+                dayIndex: resolvedEventDay?.overallDayIndex ?? festivalDayIndex(for: resolvedDayID) ?? 1,
+                startDayOffset: item.startTime.map { slotDayOffset(for: $0, logicalDate: resolvedLocalDate) } ?? .sameDay,
+                endDayOffset: item.endTime.map { slotDayOffset(for: $0, logicalDate: resolvedLocalDate) } ?? .sameDay,
+                startTime: item.startTime,
+                endTime: item.endTime
+            )
+            slotDraft.performerDJIDs = slotDraft.performerDJIDs.isEmpty && primaryDJID != nil ? [primaryDJID] : slotDraft.performerDJIDs
+            slotDraft.normalizePerformers()
+            result.append(slotDraft)
         }
 
         return result
+    }
+
+    private func buildSubmissionDraft(
+        coverURL: String?,
+        lineupURL: String?,
+        ticketTiers: [EventUploadTicketTierDraft],
+        timetableSlots: [EventUploadLineupSlotDraft]
+    ) -> EventUploadDraft {
+        let preferredLanguage = eventUploadPreferredLanguage()
+        let scheduleMode = resolvedEventUploadScheduleMode
+        let weekRanges = editorStructuredWeeks.map { week in
+            EventUploadWeekRangeDraft(
+                startDate: week.startDate,
+                endDate: week.endDate
+            )
+        }
+        var draft: EventUploadDraft = {
+            switch mode {
+            case .create:
+                return .create()
+            case .edit(let event):
+                return .edit(event: event)
+            }
+        }()
+
+        draft.preferredLanguage = preferredLanguage
+        draft.name = localizedNameFields(preferredLanguage: preferredLanguage)
+        draft.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.eventType = eventType
+        draft.city = EventUploadLocalizedFields(zh: cityZh, en: cityEn)
+        draft.country = EventUploadLocalizedFields(zh: countryZh, en: countryEn, enFull: countryEnFull)
+        draft.detailAddress = EventUploadLocalizedFields(zh: detailAddressZh, en: detailAddressEn)
+        draft.officialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.startDate = normalizedEventStartDate
+        draft.endDate = normalizedEventEndDate
+        draft.timeZoneIdentifier = eventTimeZoneIdentifier
+        draft.timeZoneSearchQuery = timeZoneSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.selectedTimeZoneLookup = submissionTimeZoneLookup()
+        draft.scheduleMode = scheduleMode
+        draft.dayRolloverHour = 6
+        draft.latitude = pickedLatitude
+        draft.longitude = pickedLongitude
+        draft.pickedMapAddress = pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.pickedPlaceName = pickedPlaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.stageEntries = normalizedStageEntries
+        draft.lineupOnlySlots = EventLineupDraftDerivation.lineupOnlySlots(from: timetableSlots)
+        draft.timetableSlots = timetableSlots
+        draft.ticket = EventUploadTicketDraft(
+            currency: ticketCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+            ticketURL: ticketUrl.trimmingCharacters(in: .whitespacesAndNewlines),
+            tiers: ticketTiers
+        )
+        draft.ticketNotes = ticketNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.applyScheduleMode(scheduleMode)
+        draft.applyWeekRanges(weekRanges.isEmpty ? [EventUploadWeekRangeDraft(startDate: normalizedEventStartDate, endDate: normalizedEventEndDate)] : weekRanges)
+        draft.timetableSlots = timetableSlots
+        setPrimaryImage(url: coverURL, zone: .cover, fileName: "event-cover", draft: &draft)
+        setPrimaryImage(url: lineupURL, zone: .lineup, fileName: "event-lineup", draft: &draft)
+        draft.rebuildStructuredScheduleBindings()
+        draft.dirty = true
+        draft.updatedAt = Date()
+        return draft
+    }
+
+    private var resolvedEventUploadScheduleMode: EventUploadScheduleMode {
+        if isWeekScheduleEnabled {
+            return .multiWeek
+        }
+        return eventCalendar.isDate(startDate, inSameDayAs: endDate) ? .singleDay : .multiDay
+    }
+
+    private func eventUploadPreferredLanguage() -> EventUploadPreferredLanguage {
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .zh, .system:
+            return .zh
+        case .en:
+            return .en
+        case .ja:
+            return .ja
+        }
+    }
+
+    private func localizedNameFields(preferredLanguage: EventUploadPreferredLanguage) -> EventUploadLocalizedFields {
+        var fields = EventUploadLocalizedFields()
+        fields.setValue(name, for: preferredLanguage)
+        return fields
+    }
+
+    private func submissionTimeZoneLookup() -> EventTimezoneLookupItem? {
+        guard var lookup = selectedTimeZoneLookup else { return nil }
+        if case .edit = mode, lookup.matchSource == "prefilled-existing-event" {
+            lookup.matchSource = "event-edit-hydrate"
+        }
+        return lookup
+    }
+
+    private func setPrimaryImage(
+        url: String?,
+        zone: EventUploadImageZone,
+        fileName: String,
+        draft: inout EventUploadDraft
+    ) {
+        guard let normalizedURL = url?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
+            draft.imageZones[zone] = []
+            return
+        }
+        let ownership: EventUploadImageDraft.Ownership = {
+            switch draft.mode {
+            case .create:
+                return .createDraftUploaded
+            case .edit:
+                return .persistedEvent
+            }
+        }()
+        draft.imageZones[zone] = [
+            EventUploadImageDraft(
+                zone: zone,
+                remoteURL: normalizedURL,
+                fileName: "\(fileName).jpg",
+                mimeType: "image/jpeg",
+                sortOrder: 1,
+                ownership: ownership
+            )
+        ]
+    }
+
+    private func slotDayOffset(for date: Date, logicalDate: Date) -> EventUploadSlotDayOffset {
+        let dayOffset = eventCalendar.dateComponents(
+            [.day],
+            from: eventCalendar.startOfDay(for: logicalDate),
+            to: eventCalendar.startOfDay(for: date)
+        ).day ?? 0
+        return dayOffset > 0 ? .nextDay : .sameDay
+    }
+
+    private func priceText(for price: Double) -> String {
+        price.rounded(.towardZero) == price ? String(Int(price)) : String(price)
     }
 
     private func editorDayKey(for date: Date) -> String {

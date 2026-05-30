@@ -1,0 +1,90 @@
+{
+  "name": "Raver Weekender 2026",
+  "description": "Two-weekend event schedule update.",
+  "eventType": "festival",
+  "city": "Shanghai",
+  "country": "China",
+  "startDate": "2026-10-03",
+  "endDate": "2026-10-11",
+  "schedule": {
+    "mode": "multi_week",
+    "timeZone": "Asia/Shanghai",
+    "dayRolloverHour": 7
+  },
+  "weeks": [
+    {
+      "id": "week_1",
+      "weekIndex": 0,
+      "label": "Weekend One",
+      "startDate": "2026-10-03",
+      "endDate": "2026-10-04",
+      "sortOrder": 0
+    },
+    {
+      "id": "week_2",
+      "weekIndex": 1,
+      "label": "Weekend Two",
+      "startDate": "2026-10-10",
+      "endDate": "2026-10-11",
+      "sortOrder": 1
+    }
+  ],
+  "eventDays": [
+    {
+      "id": "day_1",
+      "eventDayId": "day_1",
+      "weekIndex": 0,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 0,
+      "label": "Weekend One Day 1",
+      "weekday": "Saturday",
+      "date": "2026-10-03",
+      "sortOrder": 0
+    },
+    {
+      "id": "day_2",
+      "eventDayId": "day_2",
+      "weekIndex": 0,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 1,
+      "label": "Weekend One Day 2",
+      "weekday": "Sunday",
+      "date": "2026-10-04",
+      "sortOrder": 1
+    },
+    {
+      "id": "day_3",
+      "eventDayId": "day_3",
+      "weekIndex": 1,
+      "dayIndexInWeek": 0,
+      "overallDayIndex": 2,
+      "label": "Weekend Two Day 1",
+      "weekday": "Saturday",
+      "date": "2026-10-10",
+      "sortOrder": 2
+    },
+    {
+      "id": "day_4",
+      "eventDayId": "day_4",
+      "weekIndex": 1,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 3,
+      "label": "Weekend Two Day 2",
+      "weekday": "Sunday",
+      "date": "2026-10-11",
+      "sortOrder": 3
+    }
+  ],
+  "timeZone": "Asia/Shanghai",
+  "timeZoneCity": "Shanghai",
+  "timeZoneProvince": "Shanghai",
+  "timeZoneCountry": "China",
+  "dayRolloverHour": 7,
+  "stageOrder": [
+    "Main Stage",
+    "Garden Stage"
+  ],
+  "lineupSyncMode": "incremental_fill",
+  "idempotencyKey": "fixture-update-schedule-multi-week-001",
+  "status": "upcoming"
+}

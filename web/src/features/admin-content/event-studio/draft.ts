@@ -16,6 +16,13 @@ const emptyLocalizedText = (): EventStudioLocalizedText => ({
   enFull: '',
 });
 
+type EventStudioLooseLocalizedText = {
+  zh?: string | null;
+  en?: string | null;
+  ja?: string | null;
+  enFull?: string | null;
+};
+
 const createTicketTier = (): EventStudioTicketTierDraft => ({
   id: crypto.randomUUID(),
   name: '',
@@ -33,7 +40,7 @@ const defaultMemberNamesText = (members?: string[] | null, fallback?: string | n
   return String(fallback || '').trim();
 };
 
-const defaultStageName = (index: number): string => `Stage ${index + 1}`;
+const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
 
 const normalizeStageOrder = (stageOrder?: string[] | null, slots?: Array<{ stageName?: string | null }> | null): string[] => {
   const seen = new Set<string>();
@@ -186,6 +193,16 @@ const formatDateOnly = (date: Date): string => {
 const weekdayKey = (date: Date): string =>
   ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][date.getDay()] || 'unknown';
 
+const weekdayDisplayName = (date: Date): string =>
+  ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()] || 'Unknown';
+
+const eventDayIdentifier = (
+  scheduleMode: EventStudioDraft['scheduleMode'],
+  weekIndex: number,
+  dayIndexInWeek: number,
+  overallDayIndex: number
+): string => (scheduleMode === 'multi_week' ? `w${weekIndex}d${dayIndexInWeek}` : `d${overallDayIndex}`);
+
 const defaultScheduleMode = (startDate: string, endDate: string) => {
   if (!startDate || !endDate) return 'single_day' as const;
   if (startDate === endDate) return 'single_day' as const;
@@ -239,7 +256,7 @@ export const buildEventStudioScheduleStructure = (
       while (dayCursor.getTime() <= weekEnd.getTime()) {
         eventDays.push({
           id: crypto.randomUUID(),
-          eventDayId: `week${currentWeekIndex}-day${dayIndexInWeek}`,
+          eventDayId: eventDayIdentifier(scheduleMode, currentWeekIndex, dayIndexInWeek, overallDayIndex),
           weekIndex: currentWeekIndex,
           dayIndexInWeek,
           overallDayIndex,
@@ -275,12 +292,11 @@ export const buildEventStudioScheduleStructure = (
     const dayIndexInWeek = overallDayIndex;
     eventDays.push({
       id: crypto.randomUUID(),
-      eventDayId:
-        scheduleMode === 'single_day' ? 'day1' : `day${dayIndexInWeek}`,
+      eventDayId: eventDayIdentifier(scheduleMode, 1, dayIndexInWeek, overallDayIndex),
       weekIndex: 1,
       dayIndexInWeek,
       overallDayIndex,
-      label: scheduleMode === 'single_day' ? 'Day 1' : `Day ${dayIndexInWeek}`,
+      label: weekdayDisplayName(dayCursor),
       weekday: weekdayKey(dayCursor),
       date: formatDateOnly(dayCursor),
       sortOrder: overallDayIndex,
@@ -333,7 +349,7 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
 export const createEmptyTicketTierDraft = createTicketTier;
 
 const fromNullableLocalizedText = (
-  value?: EventStudioLocalizedText | null,
+  value?: EventStudioLooseLocalizedText | null,
   fallback = ''
 ): EventStudioLocalizedText => ({
   zh: value?.zh ?? fallback,

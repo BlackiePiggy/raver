@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Navigation from '@/components/Navigation';
+import AdminAppShell from '@/components/admin/AdminAppShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { AdminHealthStatus, AdminStatus, adminStatusApi } from '@/lib/api/admin-status';
@@ -82,73 +82,68 @@ export default function AdminOverviewPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">加载中...</div>
-      </main>
+      <AdminAppShell title="后台工作台" description="加载后台总览中。">
+        <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
+      </AdminAppShell>
     );
   }
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">
+      <AdminAppShell title="后台工作台" description="登录后可进入后台工作台和内容管理体系。">
+        <div className="admin-shell-panel p-8">
           <p className="text-lg">请先登录后访问运营后台。</p>
-          <Link href="/login" className="mt-4 inline-block rounded-lg bg-primary-blue px-4 py-2 text-white">
+          <Link href="/login" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>
-      </main>
+      </AdminAppShell>
     );
   }
 
   if (!rolePolicy.canAccessAdminShell) {
     return (
-      <main className="min-h-screen bg-bg-primary text-text-primary">
-        <Navigation />
-        <div className="mx-auto max-w-6xl px-6 pt-28">
+      <AdminAppShell title="后台工作台" description="当前账号暂时没有后台访问权限。">
+        <div className="admin-shell-panel p-8">
           <p className="text-lg">当前账号无权限访问后台。</p>
         </div>
-      </main>
+      </AdminAppShell>
     );
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <Navigation />
-      <section className="mx-auto max-w-7xl space-y-5 px-6 pb-12 pt-24">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">后台工作台</h1>
-            <p className="mt-2 text-text-secondary">Admin / Content CMS / Operations</p>
+    <AdminAppShell
+      title="后台工作台"
+      eyebrow="Raver Admin / Operations"
+      description="统一后台总览，承接内容管理、运营工具、审核治理和账号会话等模块入口。"
+      actions={
+        rolePolicy.canAccessOperations ? (
+          <>
+            <label className="admin-shell-soft-panel flex items-center gap-3 rounded-full px-4 py-3 text-sm text-[#071110]">
+              <span className="text-black/45">统计窗口</span>
+              <input
+                value={windowHours}
+                onChange={(event) => setWindowHours(event.target.value)}
+                className="w-16 rounded-full px-3 py-2 text-center text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void loadStatus()}
+              disabled={loading}
+              className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {loading ? '刷新中...' : '刷新'}
+            </button>
+          </>
+        ) : (
+          <div className="admin-shell-soft-panel rounded-full px-4 py-3 text-sm text-[#071110]">
+            当前身份：{rolePolicy.label}
           </div>
-          {rolePolicy.canAccessOperations ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="text-sm text-text-secondary">
-                统计窗口
-                <input
-                  value={windowHours}
-                  onChange={(event) => setWindowHours(event.target.value)}
-                  className="ml-2 w-20 rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm text-text-primary"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void loadStatus()}
-                disabled={loading}
-                className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue disabled:opacity-60"
-              >
-                {loading ? '刷新中...' : '刷新'}
-              </button>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border-secondary bg-bg-secondary px-4 py-3 text-sm">
-              <div className="text-text-secondary">当前身份</div>
-              <div className="mt-1 font-semibold">{rolePolicy.label}</div>
-            </div>
-          )}
-        </div>
+        )
+      }
+    >
+      <section className="space-y-5">
 
         {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
 
@@ -385,6 +380,6 @@ export default function AdminOverviewPage() {
           </>
         )}
       </section>
-    </main>
+    </AdminAppShell>
   );
 }

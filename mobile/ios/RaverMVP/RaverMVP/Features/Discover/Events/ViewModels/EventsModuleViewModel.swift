@@ -74,8 +74,12 @@ protocol EventLiveDiscussionRepository {
 }
 
 protocol EventCommandRepository {
+    @available(*, deprecated, message: "Legacy Event editor surface. Use generated EventAdmin* inputs for new event flows.")
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult
+    func createEvent(input: EventAdminCreateInput) async throws -> CreateEventResult
+    @available(*, deprecated, message: "Legacy Event editor surface. Use generated EventAdmin* inputs for new event flows.")
     func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent>
+    func updateEvent(id: String, input: EventAdminUpdateInput) async throws -> CreateContentResult<WebEvent>
     func deleteEvent(id: String) async throws
 }
 
@@ -248,12 +252,23 @@ struct EventCommandRepositoryAdapter: EventCommandRepository {
         throw ServiceError.accountEnforcementRestricted(restriction)
     }
 
+    @available(*, deprecated, message: "Legacy Event editor surface. Use EventAdminCreateInput through WebFeatureService in new event flows.")
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
         try await ensureAllowed([.eventCreate])
         return try await service.createEvent(input: input)
     }
 
+    func createEvent(input: EventAdminCreateInput) async throws -> CreateEventResult {
+        try await ensureAllowed([.eventCreate])
+        return try await service.createEvent(input: input)
+    }
+
+    @available(*, deprecated, message: "Legacy Event editor surface. Use EventAdminUpdateInput through WebFeatureService in new event flows.")
     func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent> {
+        try await service.updateEvent(id: id, input: input)
+    }
+
+    func updateEvent(id: String, input: EventAdminUpdateInput) async throws -> CreateContentResult<WebEvent> {
         try await service.updateEvent(id: id, input: input)
     }
 

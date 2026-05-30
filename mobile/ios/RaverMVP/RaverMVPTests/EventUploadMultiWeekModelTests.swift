@@ -49,16 +49,16 @@ final class EventUploadMultiWeekModelTests: XCTestCase {
 
         let input = EventUploadMappers.createInput(from: draft)
 
-        XCTAssertEqual(input.schedule?.mode, "multi_week")
-        XCTAssertEqual(input.weeks?.count, 2)
-        XCTAssertEqual(input.eventDays?.map(\.eventDayId), ["w1d1", "w1d2", "w1d3", "w2d1", "w2d2", "w2d3"])
-        XCTAssertEqual(input.lineupSlots?.count, 1)
-        XCTAssertEqual(input.lineupSlots?.first?.eventDayId, "w2d1")
-        XCTAssertEqual(input.lineupSlots?.first?.weekIndex, 2)
-        XCTAssertEqual(input.lineupSlots?.first?.dayIndexInWeek, 1)
-        XCTAssertEqual(input.lineupSlots?.first?.overallDayIndex, 4)
-        XCTAssertNil(input.lineupSlots?.first?.festivalDayIndex)
-        XCTAssertEqual(input.lineupSlots?.first?.localDate, Self.date("2026-07-24", timeZoneID: "Europe/Brussels"))
+        XCTAssertEqual(input.value1.schedule?.mode, .multiWeek)
+        XCTAssertEqual(input.value1.weeks?.count, 2)
+        XCTAssertEqual(input.value1.eventDays?.map(\.eventDayId), ["w1d1", "w1d2", "w1d3", "w2d1", "w2d2", "w2d3"])
+        XCTAssertEqual(input.value1.lineupSlots?.count, 1)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.eventDayId, "w2d1")
+        XCTAssertEqual(input.value1.lineupSlots?.first?.weekIndex, 2)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.dayIndexInWeek, 1)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.overallDayIndex, 4)
+        XCTAssertNil(input.value1.lineupSlots?.first?.festivalDayIndex)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.localDate, "2026-07-24")
     }
 
     func testValidationFlagsMissingEventDayBinding() {

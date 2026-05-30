@@ -17,6 +17,8 @@ packages:
     path: ../../../thirdparty/chat
   GiphyUISDK:
     path: ../../../thirdparty/giphy-ios-sdk
+  RaverEventAdminContract:
+    path: Packages/RaverEventAdminContract
 targets:
   RaverMVP:
     type: application
@@ -53,6 +55,8 @@ targets:
         product: ExyteChat
       - package: GiphyUISDK
         product: GiphyUISDK
+      - package: RaverEventAdminContract
+        product: RaverEventAdminContract
       - target: RaverCountdownWidgets
         embed: true
       - target: RaverNotificationService
@@ -100,6 +104,18 @@ targets:
         CODE_SIGN_ENTITLEMENTS: RaverNotificationService/RaverNotificationService.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.raver.mvp.notificationservice
         TARGETED_DEVICE_FAMILY: "1"
+  RaverMVPTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: RaverMVPTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.raver.mvp.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: RaverMVP
   RaverMVPUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -127,4 +143,5 @@ schemes:
       config: Debug
       gatherCoverageData: false
       targets:
+        - name: RaverMVPTests
         - name: RaverMVPUITests

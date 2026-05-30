@@ -753,6 +753,9 @@ struct EventTimezoneLookupItem: Codable, Hashable, Identifiable {
     }
 }
 
+// Legacy Event editor payload kept only for compatibility bridges and the old EventEditorView path.
+// New event flows should emit generated EventAdmin* models through EventAdminContractBridge.
+@available(*, deprecated, message: "Legacy Event editor payload. Use EventAdminCreateInput in new event flows.")
 struct CreateEventInput: Encodable {
     var name: String
     var nameI18n: WebBiText? = nil
@@ -1053,6 +1056,9 @@ enum CreatePostResult: Decodable, Hashable {
     }
 }
 
+// Legacy Event editor payload kept only for compatibility bridges and the old EventEditorView path.
+// New event flows should emit generated EventAdmin* models through EventAdminContractBridge.
+@available(*, deprecated, message: "Legacy Event editor payload. Use EventAdminUpdateInput in new event flows.")
 struct UpdateEventInput: Encodable {
     var name: String?
     var nameI18n: WebBiText? = nil

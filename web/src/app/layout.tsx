@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { DM_Mono, DM_Sans } from 'next/font/google'
 import './globals.css'
+import '../styles/admin-ravehub.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 
 const dmSans = DM_Sans({

@@ -165,6 +165,9 @@ class EventAPI {
     return response.json();
   }
 
+  /**
+   * @deprecated Legacy event mutation path. Use `eventStudioApi.createEvent` with generated Event contract input.
+   */
   async createEvent(data: Partial<Event>, token: string): Promise<Event> {
     const response = await fetch(`${API_URL}/events`, {
       method: 'POST',
@@ -207,9 +210,12 @@ class EventAPI {
     return response.json();
   }
 
+  /**
+   * @deprecated Legacy event mutation path. Use `eventStudioApi.updateEvent` with generated Event contract input.
+   */
   async updateEvent(id: string, data: Partial<Event>, token: string): Promise<Event> {
     const response = await fetch(`${API_URL}/events/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: this.getHeaders(token),
       body: JSON.stringify(data),
     });

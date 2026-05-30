@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "isolatedModules": false,
+    "incremental": false
+  },
+  "include": [
+    "./event-mapper-parity.ts"
+  ]
+}

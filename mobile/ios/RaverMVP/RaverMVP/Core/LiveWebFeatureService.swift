@@ -1,4 +1,5 @@
 import Foundation
+import RaverEventAdminContract
 
 final class LiveWebFeatureService: WebFeatureService {
     private static let userActionRefreshLeadTime: TimeInterval = 300
@@ -303,7 +304,12 @@ final class LiveWebFeatureService: WebFeatureService {
         )
     }
 
+    @available(*, deprecated, message: "Legacy Event editor surface. Use createEvent(input: EventAdminCreateInput).")
     func createEvent(input: CreateEventInput) async throws -> CreateEventResult {
+        try await createEvent(input: EventAdminContractBridge.createInput(from: input))
+    }
+
+    func createEvent(input: EventAdminCreateInput) async throws -> CreateEventResult {
         let response: BFFEnvelope<CreateEventResponsePayload> = try await request(
             path: "/v1/events",
             method: "POST",
@@ -318,7 +324,12 @@ final class LiveWebFeatureService: WebFeatureService {
         }
     }
 
+    @available(*, deprecated, message: "Legacy Event editor surface. Use updateEvent(id:input: EventAdminUpdateInput).")
     func updateEvent(id: String, input: UpdateEventInput) async throws -> CreateContentResult<WebEvent> {
+        try await updateEvent(id: id, input: EventAdminContractBridge.updateInput(from: input))
+    }
+
+    func updateEvent(id: String, input: EventAdminUpdateInput) async throws -> CreateContentResult<WebEvent> {
         let response: BFFEnvelope<CreateContentResult<WebEvent>> = try await request(
             path: "/v1/events/\(id)",
             method: "PATCH",
@@ -333,7 +344,12 @@ final class LiveWebFeatureService: WebFeatureService {
         }
     }
 
+    @available(*, deprecated, message: "Legacy Event editor surface. Use previewEventLineupTimetableAlignment(input: EventAdminCreateInput).")
     func previewEventLineupTimetableAlignment(input: CreateEventInput) async throws -> EventLineupTimetableAlignmentPreview {
+        try await previewEventLineupTimetableAlignment(input: EventAdminContractBridge.createInput(from: input))
+    }
+
+    func previewEventLineupTimetableAlignment(input: EventAdminCreateInput) async throws -> EventLineupTimetableAlignmentPreview {
         let response: BFFEnvelope<EventLineupTimetableAlignmentPreview> = try await request(
             path: "/v1/events/lineup-timetable-alignment/preview",
             method: "POST",

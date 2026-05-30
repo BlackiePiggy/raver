@@ -27,6 +27,10 @@ import {
   normalizeSubmittedTimetableSlots,
   syncStructuredEventSchedule,
 } from '../services/content-submission-event.service';
+import {
+  EventAdminContractGuardrailError,
+  validateEventAdminContractPayload,
+} from '../services/event-admin-contract-guardrail.service';
 
 const cityTimezones = require('city-timezones') as {
   lookupViaCity: (city: string) => unknown[];
@@ -885,6 +889,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    validateEventAdminContractPayload(req.body, 'create');
+
     const {
       name,
       slug,
@@ -1067,7 +1073,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
 
     res.status(201).json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
-    if (error instanceof EventInputValidationError || error instanceof EventSubmissionValidationError) {
+    if (
+      error instanceof EventInputValidationError
+      || error instanceof EventSubmissionValidationError
+      || error instanceof EventAdminContractGuardrailError
+    ) {
       res.status(400).json({ error: error.message });
       return;
     }
@@ -1085,6 +1095,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+
+    validateEventAdminContractPayload(req.body, 'update');
 
     const {
       name,
@@ -1366,7 +1378,11 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
 
     res.json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
-    if (error instanceof EventInputValidationError || error instanceof EventSubmissionValidationError) {
+    if (
+      error instanceof EventInputValidationError
+      || error instanceof EventSubmissionValidationError
+      || error instanceof EventAdminContractGuardrailError
+    ) {
       res.status(400).json({ error: error.message });
       return;
     }

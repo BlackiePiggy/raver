@@ -1,0 +1,20 @@
+{
+  "name": "Raver Night Shanghai 2026 Updated",
+  "description": "Location cleared for venue reassignment.",
+  "eventType": "club",
+  "city": "Shanghai",
+  "country": "China",
+  "startDate": "2026-09-13",
+  "endDate": "2026-09-13",
+  "timeZone": "Asia/Shanghai",
+  "dayRolloverHour": 6,
+  "coverImageUrl": "https://cdn.example.com/events/rns26/cover-v2.jpg",
+  "lineupImageUrl": "https://cdn.example.com/events/rns26/lineup-v2.jpg",
+  "lineupSyncMode": "incremental_fill",
+  "idempotencyKey": "fixture-update-clear-location-001",
+  "status": "upcoming",
+  "clearManualLocation": true,
+  "clearLocationPoint": true,
+  "clearLatitude": true,
+  "clearLongitude": true
+}
