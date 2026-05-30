@@ -90,6 +90,22 @@ const cssImageUrl = (value: string | null | undefined): string => {
 };
 
 const currentPublicUrl = (req: Request): string => `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+const currentOrigin = (req: Request): string => `${req.protocol}://${req.get('host')}`;
+
+const resolvePublicAssetUrl = (req: Request, value: string | null | undefined): string => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+  if (normalized.startsWith('//')) {
+    return `${req.protocol}:${normalized}`;
+  }
+  if (normalized.startsWith('/')) {
+    return `${currentOrigin(req)}${normalized}`;
+  }
+  return `${currentOrigin(req)}/${normalized.replace(/^\/+/, '')}`;
+};
 
 const getClientIp = (req: Request): string => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -133,6 +149,9 @@ const requestContext = (req: Request) => {
     uaRisk,
   };
 };
+
+const isWeChatUserAgent = (userAgent: string | null | undefined): boolean =>
+  /MicroMessenger/i.test(String(userAgent || ''));
 
 const appendShareCode = (value: string, code: string): string => {
   try {
@@ -278,6 +297,89 @@ const renderDownloadPage = (): string => {
 </html>`;
 };
 
+const renderWeChatOpenGuidePage = (
+  shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>
+): string => {
+  const shortUrl = htmlEscape(buildShareShortUrl(shareLink.code));
+  const title = htmlEscape(shareLink.title || '打开 Raver');
+  const pageTitle = htmlEscape('请在 Safari 中打开');
+  const pageDescription = htmlEscape('微信内通常会拦截 App 自定义跳转。请先用 Safari 打开，再进入 Raver。');
+  const downloadUrl = htmlEscape(`/s/${encodeURIComponent(shareLink.code)}/download`);
+
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${pageTitle}</title>
+    <meta name="description" content="${pageDescription}" />
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f2ea; color: #171717; }
+      main { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 18px; }
+      section { width: 100%; max-width: 500px; background: #fff; border-radius: 24px; padding: 28px; box-shadow: 0 18px 50px rgba(23,23,23,.1); }
+      h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.14; }
+      h2 { margin: 16px 0 8px; font-size: 16px; }
+      p, li { margin: 0; color: #525252; line-height: 1.6; font-size: 16px; }
+      ol { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 8px; }
+      .target { margin-top: 10px; font-size: 14px; color: #737373; }
+      .linkbox { margin-top: 16px; padding: 12px 14px; border-radius: 16px; background: #fafaf9; border: 1px solid rgba(23,23,23,.08); word-break: break-all; font-size: 14px; color: #171717; }
+      .actions { display: grid; gap: 10px; margin-top: 20px; }
+      a, button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; font-weight: 700; font-size: 16px; border: 0; cursor: pointer; }
+      .primary { background: #171717; color: #fff; }
+      .secondary { background: #fff; color: #171717; border: 1px solid rgba(23,23,23,.12); }
+      .helper { margin-top: 12px; font-size: 13px; color: #737373; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>${pageTitle}</h1>
+        <p>${pageDescription}</p>
+        <p class="target">当前内容：${title}</p>
+        <h2>操作步骤</h2>
+        <ol>
+          <li>点击微信右上角菜单</li>
+          <li>选择“在 Safari 中打开”</li>
+          <li>在 Safari 页面中点击“打开 Raver”</li>
+        </ol>
+        <div class="linkbox" id="share-link">${shortUrl}</div>
+        <div class="actions">
+          <button class="primary" id="copy-link-button" type="button">复制链接</button>
+          <a class="secondary" href="${downloadUrl}">下载 App</a>
+        </div>
+        <p class="helper" id="copy-helper">如果当前设备已安装 App，复制后用 Safari 打开这个链接即可进入 App。</p>
+      </section>
+    </main>
+    <script>
+      (function () {
+        var button = document.getElementById('copy-link-button');
+        var helper = document.getElementById('copy-helper');
+        var value = document.getElementById('share-link') ? document.getElementById('share-link').textContent || '' : '';
+        if (!button || !value) return;
+        button.addEventListener('click', async function () {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(value);
+            } else {
+              var input = document.createElement('textarea');
+              input.value = value;
+              document.body.appendChild(input);
+              input.select();
+              document.execCommand('copy');
+              document.body.removeChild(input);
+            }
+            if (helper) helper.textContent = '链接已复制，请在 Safari 中打开。';
+          } catch (error) {
+            if (helper) helper.textContent = '复制失败，请手动长按复制上方链接。';
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>`;
+};
+
 const buildAppleAppSiteAssociationPayload = () => ({
   applinks: {
     apps: [],
@@ -322,7 +424,8 @@ const renderLandingPage = (
   const pageUrl = htmlEscape(currentPublicUrl(req));
   const title = htmlEscape(state.title);
   const description = htmlEscape(state.description);
-  const imageUrl = cssImageUrl(shareLink.imageUrl);
+  const resolvedImageUrl = resolvePublicAssetUrl(req, shareLink.imageUrl);
+  const imageUrl = cssImageUrl(resolvedImageUrl);
   const imageMeta = imageUrl ? `<meta property="og:image" content="${htmlEscape(imageUrl)}" />` : '';
   const heroImage = imageUrl ? `<div class="art" style="background-image:url('${htmlEscape(imageUrl)}')"></div>` : '<div class="art fallback">R</div>';
   const openUrl = htmlEscape(`/s/${encodeURIComponent(shareLink.code)}/open`);
@@ -334,9 +437,11 @@ const renderLandingPage = (
   const buttons = state.ok
     ? `<div class="actions">
         <a class="primary" href="${openUrl}">打开 Raver</a>
+        <button class="secondary" id="copy-link-button" type="button">复制链接</button>
         <a class="secondary" href="${downloadUrl}">下载 App</a>
       </div>`
     : `<div class="actions"><a class="secondary" href="${htmlEscape(APP_DOWNLOAD_URL)}">下载 App</a></div>`;
+  const weChatHint = `<div class="wechat-note" id="wechat-note" hidden>微信内可能无法直接拉起 App。请点右上角，选择“在 Safari 中打开”，再点击“打开 Raver”。</div>`;
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -361,12 +466,14 @@ const renderLandingPage = (
       h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.14; letter-spacing: 0; }
       p { margin: 0; color: #525252; line-height: 1.6; font-size: 16px; }
       .note { margin-top: 12px; font-size: 14px; color: #737373; }
+      .wechat-note { margin-top: 14px; padding: 12px 14px; border-radius: 16px; background: #fff7ed; color: #9a3412; font-size: 14px; line-height: 1.6; }
       .actions { display: grid; gap: 10px; margin-top: 24px; }
-      a { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; font-weight: 700; }
+      a, button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; font-weight: 700; font-size: 16px; border: 0; cursor: pointer; }
       .primary { background: #171717; color: #fff; }
       .secondary { background: #fff; color: #171717; border: 1px solid rgba(23,23,23,.12); }
+      .helper { margin-top: 12px; font-size: 13px; color: #737373; }
       @media (min-width: 520px) {
-        .actions { grid-template-columns: 1fr 1fr; }
+        .actions { grid-template-columns: 1fr 1fr 1fr; }
       }
     </style>
   </head>
@@ -377,9 +484,55 @@ const renderLandingPage = (
         <h1>${title}</h1>
         <p>${description}</p>
         <p class="note">${statusNote}</p>
+        ${weChatHint}
         ${buttons}
+        <p class="helper" id="copy-helper"></p>
       </section>
     </main>
+    <script>
+      (function () {
+        var isWeChat = /MicroMessenger/i.test(navigator.userAgent || '');
+        var openButton = document.querySelector('a.primary');
+        var wechatNote = document.getElementById('wechat-note');
+        var copyButton = document.getElementById('copy-link-button');
+        var helper = document.getElementById('copy-helper');
+        var shortUrl = ${JSON.stringify(buildShareShortUrl(shareLink.code))};
+
+        if (isWeChat && wechatNote) {
+          wechatNote.hidden = false;
+        }
+
+        if (isWeChat && openButton) {
+          openButton.textContent = '请在 Safari 中打开';
+        }
+
+        if (copyButton) {
+          copyButton.addEventListener('click', async function () {
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(shortUrl);
+              } else {
+                var input = document.createElement('textarea');
+                input.value = shortUrl;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+              }
+              if (helper) {
+                helper.textContent = isWeChat
+                  ? '链接已复制，请在 Safari 中打开。'
+                  : '链接已复制。';
+              }
+            } catch (error) {
+              if (helper) {
+                helper.textContent = '复制失败，请手动复制当前页面链接。';
+              }
+            }
+          });
+        }
+      })();
+    </script>
   </body>
 </html>`;
 };
@@ -506,6 +659,11 @@ router.get('/s/:code/open', async (req: Request, res: Response): Promise<void> =
     }
 
     const context = requestContext(req);
+    if (isWeChatUserAgent(context.userAgent)) {
+      res.status(200).type('html').send(renderWeChatOpenGuidePage(shareLink));
+      return;
+    }
+
     await recordShareLinkEvent({
       prisma,
       code,
