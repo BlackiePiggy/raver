@@ -18,33 +18,33 @@ const formatTime = (value?: string | null): string => {
 };
 
 const jobStatusClassName = (status: string): string => {
-  if (status === 'applied') return 'border-accent-green/40 bg-accent-green/10 text-accent-green';
-  if (status === 'partially_applied') return 'border-primary-blue/40 bg-primary-blue/10 text-primary-blue';
-  if (status === 'dismissed') return 'border-border-secondary bg-bg-tertiary text-text-secondary';
-  return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300';
+  if (status === 'applied') return 'border-[#dceabf] bg-[#eef8d8] text-[#2f4027]';
+  if (status === 'partially_applied') return 'border-[#d9e4f3] bg-[#eef3fb] text-[#345179]';
+  if (status === 'dismissed') return 'border-[#e8eceb] bg-[#f5f5f7] text-[#5f6a67]';
+  return 'border-[#eadfbe] bg-[#f6edd7] text-[#604a1b]';
 };
 
 const candidateStatusClassName = (status: string): string => {
-  if (status === 'applied') return 'border-accent-green/40 bg-accent-green/10 text-accent-green';
-  if (status === 'skipped_already_bound') return 'border-border-secondary bg-bg-tertiary text-text-secondary';
-  if (status === 'dismissed') return 'border-red-500/30 bg-red-500/10 text-red-300';
-  return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300';
+  if (status === 'applied') return 'border-[#dceabf] bg-[#eef8d8] text-[#2f4027]';
+  if (status === 'skipped_already_bound') return 'border-[#e8eceb] bg-[#f5f5f7] text-[#5f6a67]';
+  if (status === 'dismissed') return 'border-[#efdad8] bg-[#f7e3e0] text-[#6a3530]';
+  return 'border-[#eadfbe] bg-[#f6edd7] text-[#604a1b]';
 };
 
 const tierClassName = (tier: string): string =>
   tier === 'exact'
-    ? 'border-accent-green/40 bg-accent-green/10 text-accent-green'
-    : 'border-primary-blue/40 bg-primary-blue/10 text-primary-blue';
+    ? 'border-[#dceabf] bg-[#eef8d8] text-[#2f4027]'
+    : 'border-[#d9e4f3] bg-[#eef3fb] text-[#345179]';
 
 function StatusBadge({ status, className }: { status: string; className: (status: string) => string }) {
-  return <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${className(status)}`}>{status}</span>;
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${className(status)}`}>{status}</span>;
 }
 
 function SummaryMetric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-4">
-      <div className="text-sm text-text-secondary">{label}</div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
+    <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4">
+      <div className="text-sm text-black/48">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-[#071110]">{value}</div>
     </div>
   );
 }
@@ -176,8 +176,8 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
 
   const content = (
     <>
-      {error && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
-      {notice && <div className="rounded-2xl border border-accent-green/40 bg-accent-green/10 px-4 py-3 text-sm text-accent-green">{notice}</div>}
+      {error && <div className="rounded-[18px] border border-[#efdad8] bg-[#f7e3e0] px-4 py-3 text-sm text-[#6a3530]">{error}</div>}
+      {notice && <div className="rounded-[18px] border border-[#dceabf] bg-[#eef8d8] px-4 py-3 text-sm text-[#2f4027]">{notice}</div>}
 
       <div className="grid gap-4 md:grid-cols-4">
         <SummaryMetric label="当前任务" value={summary.total} />
@@ -187,16 +187,16 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+        <section className="admin-reference-card p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm text-text-secondary">任务列表</div>
-              <div className="mt-1 text-lg font-semibold">Binding Review Jobs</div>
+              <div className="text-sm text-black/45">任务列表</div>
+              <div className="mt-1 text-lg font-semibold text-[#071110]">Binding Review Jobs</div>
             </div>
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
-              className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
+              className="rounded-full px-4 py-3 text-sm"
             >
               <option value="">全部状态</option>
               <option value="pending">pending</option>
@@ -214,25 +214,25 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                   key={job.id}
                   type="button"
                   onClick={() => setSelectedJobId(job.id)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${
+                  className={`w-full rounded-[24px] border p-4 text-left transition ${
                     isSelected
-                      ? 'border-primary-blue bg-primary-blue/10'
-                      : 'border-border-secondary bg-bg-tertiary hover:border-primary-blue/60'
+                      ? 'border-[#dceabf] bg-[#edf7f2]'
+                      : 'border-[#e8eceb] bg-[#f8f9f8]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm text-text-secondary">{job.djNameSnapshot}</div>
-                      <div className="truncate text-base font-semibold">{job.dj.name}</div>
+                      <div className="truncate text-sm text-black/45">{job.djNameSnapshot}</div>
+                      <div className="truncate text-base font-semibold text-[#071110]">{job.dj.name}</div>
                     </div>
                     <StatusBadge status={job.status} className={jobStatusClassName} />
                   </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-text-secondary">
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-black/45">
                     <div>Exact {job.exactCount}</div>
                     <div>Fuzzy {job.fuzzyCount}</div>
                     <div>Applied {job.appliedCount}</div>
                   </div>
-                  <div className="mt-3 text-xs text-text-secondary">
+                  <div className="mt-3 text-xs text-black/42">
                     来源 {job.triggerSource} · {formatTime(job.createdAt)}
                   </div>
                 </button>
@@ -240,16 +240,16 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
             })}
 
             {!jobs.length && !listLoading && (
-              <div className="rounded-2xl border border-dashed border-border-secondary px-4 py-8 text-center text-sm text-text-secondary">
+              <div className="rounded-[24px] border border-dashed border-[#d7dddb] px-4 py-8 text-center text-sm text-black/45">
                 暂无 DJ 绑定审核任务
               </div>
             )}
           </div>
         </section>
 
-        <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+        <section className="admin-reference-card p-5">
           {!selectedJob ? (
-            <div className="rounded-2xl border border-dashed border-border-secondary px-4 py-12 text-center text-sm text-text-secondary">
+            <div className="rounded-[24px] border border-dashed border-[#d7dddb] px-4 py-12 text-center text-sm text-black/45">
               请选择左侧一个 DJ 绑定审核任务
             </div>
           ) : (
@@ -259,9 +259,9 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                   <div className="text-sm text-text-secondary">任务详情</div>
                   <h2 className="mt-1 text-2xl font-semibold">{selectedJob.dj.name}</h2>
                   <div className="mt-2 flex flex-wrap gap-2 text-sm text-text-secondary">
-                    <span>状态 {selectedJob.status}</span>
-                    <span>来源 {selectedJob.triggerSource}</span>
-                    <span>创建于 {formatTime(selectedJob.createdAt)}</span>
+                    <span className="text-black/45">状态 {selectedJob.status}</span>
+                    <span className="text-black/45">来源 {selectedJob.triggerSource}</span>
+                    <span className="text-black/45">创建于 {formatTime(selectedJob.createdAt)}</span>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -274,7 +274,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                         '已应用全部 exact 候选'
                       )
                     }
-                    className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                   >
                     Apply Exact
                   </button>
@@ -287,7 +287,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                         '已应用所选候选'
                       )
                     }
-                    className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue disabled:opacity-50"
+                    className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:opacity-50"
                   >
                     Apply Selected
                   </button>
@@ -303,7 +303,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                         '已忽略所选候选'
                       )
                     }
-                    className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                    className="rounded-full border border-[#efdad8] bg-[#f7e3e0] px-4 py-3 text-sm font-semibold text-[#6a3530] disabled:opacity-50"
                   >
                     Dismiss Selected
                   </button>
@@ -316,14 +316,14 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                 <SummaryMetric label="Applied" value={selectedJob.appliedCount} />
               </div>
 
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-border-secondary bg-bg-tertiary px-4 py-3">
+              <div className="admin-reference-soft-card flex items-center justify-between gap-3 px-4 py-3">
                 <div>
-                  <div className="text-sm font-semibold">候选列表</div>
-                  <div className="mt-1 text-xs text-text-secondary">
+                  <div className="text-sm font-semibold text-[#071110]">候选列表</div>
+                  <div className="mt-1 text-xs text-black/45">
                     pending 候选可批量勾选。Exact 命中通常可以直接点 `Apply Exact`。
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-text-secondary">
+                <label className="flex items-center gap-2 text-sm text-black/45">
                   <input
                     type="checkbox"
                     checked={pendingCandidates.length > 0 && selectedCandidateIds.length === pendingCandidates.length}
@@ -338,7 +338,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                   const isSelected = selectedCandidateIds.includes(candidate.id);
                   const canSelect = candidate.status === 'pending';
                   return (
-                    <div key={candidate.id} className="rounded-2xl border border-border-secondary bg-bg-tertiary p-4">
+                    <div key={candidate.id} className="admin-reference-soft-card p-4">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -354,13 +354,13 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                             <StatusBadge status={candidate.matchTier} className={tierClassName} />
                             <StatusBadge status={candidate.status} className={candidateStatusClassName} />
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-3 text-sm text-text-secondary">
+                          <div className="mt-2 flex flex-wrap gap-3 text-sm text-black/48">
                             <span>事件：{candidate.eventNameSnapshot}</span>
                             <span>来源：{candidate.sourceType}</span>
                             <span>分数：{candidate.matchScore}</span>
                             <span>原因：{candidate.matchReason}</span>
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-secondary">
+                          <div className="mt-2 flex flex-wrap gap-3 text-xs text-black/42">
                             <span>eventId {candidate.eventId}</span>
                             {candidate.eventArtistId && <span>artist {candidate.eventArtistId}</span>}
                             {candidate.eventArtistMemberId && <span>member {candidate.eventArtistMemberId}</span>}
@@ -381,7 +381,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                                     '已应用该候选'
                                   )
                                 }
-                                className="rounded-md bg-primary-blue px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                                className="rounded-full bg-[#071110] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                               >
                                 Apply
                               </button>
@@ -397,7 +397,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                                     '已忽略该候选'
                                   )
                                 }
-                                className="rounded-md border border-red-500/40 px-3 py-2 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                                className="rounded-full border border-[#efdad8] bg-[#f7e3e0] px-3 py-2 text-xs font-semibold text-[#6a3530] disabled:opacity-50"
                               >
                                 Dismiss
                               </button>
@@ -410,7 +410,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                 })}
 
                 {!selectedJob.candidates?.length && !detailLoading && (
-                  <div className="rounded-2xl border border-dashed border-border-secondary px-4 py-8 text-center text-sm text-text-secondary">
+                  <div className="rounded-[24px] border border-dashed border-[#d7dddb] px-4 py-8 text-center text-sm text-black/45">
                     这个任务当前没有候选
                   </div>
                 )}
@@ -441,7 +441,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         eyebrow="Admin / Content Workspace / Reviews"
         description="当前账号无权限访问该页面。"
         actions={
-          <Link href={user ? '/admin/content' : '/login'} className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+          <Link href={user ? '/admin/content' : '/login'} className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             {user ? '返回内容后台' : '去登录'}
           </Link>
         }
@@ -471,14 +471,14 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         description="原生承接 DJ 与 Event 阵容 / member / timetable slot 的自动命中审核，不再通过旧工具说明页做跳转。这里直接处理 apply、dismiss 与 exact 批量应用。"
         actions={
           <>
-            <Link href="/admin/content/reviews" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+            <Link href="/admin/content/reviews" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
               返回审核中心
             </Link>
             <button
               type="button"
               onClick={() => void refreshAll()}
               disabled={listLoading || detailLoading || actionLoading}
-              className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               {listLoading || detailLoading ? '刷新中...' : '刷新'}
             </button>
@@ -499,7 +499,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
       <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-text-secondary">Content Ops</p>
+            <p className="text-sm text-black/45">Content Ops</p>
             <h1 className="mt-1 text-3xl font-semibold">DJ 绑定审核</h1>
             <p className="mt-2 text-sm leading-6 text-text-secondary">
               管理 DJ 与 Event 阵容 / member / timetable slot 的自动命中结果。可先看 exact 命中，再一键 apply。
@@ -510,11 +510,11 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
               type="button"
               onClick={() => void refreshAll()}
               disabled={listLoading || detailLoading || actionLoading}
-              className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            >
+            className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
               {listLoading || detailLoading ? '刷新中...' : '刷新'}
             </button>
-            <Link href="/admin" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+            <Link href="/admin" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
               返回后台
             </Link>
           </div>

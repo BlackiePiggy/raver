@@ -28,17 +28,17 @@ const formatTime = (value?: string | null): string => {
 };
 
 const priorityClass = (priority?: string): string => {
-  if (priority === 'high') return 'border-red-500/40 bg-red-500/10 text-red-300';
-  if (priority === 'medium') return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300';
-  return 'border-border-secondary bg-bg-tertiary text-text-secondary';
+  if (priority === 'high') return 'border-[#efdad8] bg-[#f7e3e0] text-[#6a3530]';
+  if (priority === 'medium') return 'border-[#eadfbe] bg-[#f6edd7] text-[#604a1b]';
+  return 'border-[#e8eceb] bg-[#f5f5f7] text-[#5f6a67]';
 };
 
 const statusClass = (status: string): string => {
-  if (status === 'pending') return 'border-red-500/40 bg-red-500/10 text-red-300';
-  if (status === 'reviewing') return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300';
-  if (status === 'resolved') return 'border-accent-green/40 bg-accent-green/10 text-accent-green';
-  if (status === 'rejected') return 'border-blue-400/40 bg-blue-400/10 text-blue-300';
-  return 'border-border-secondary bg-bg-tertiary text-text-secondary';
+  if (status === 'pending') return 'border-[#efdad8] bg-[#f7e3e0] text-[#6a3530]';
+  if (status === 'reviewing') return 'border-[#eadfbe] bg-[#f6edd7] text-[#604a1b]';
+  if (status === 'resolved') return 'border-[#dceabf] bg-[#eef8d8] text-[#2f4027]';
+  if (status === 'rejected') return 'border-[#d9e4f3] bg-[#eef3fb] text-[#345179]';
+  return 'border-[#e8eceb] bg-[#f5f5f7] text-[#5f6a67]';
 };
 
 const shortJson = (value: unknown): string => {
@@ -244,101 +244,101 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
 
   const content = (
     <>
-      {error && <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
-      {notice && <div className="rounded-2xl border border-accent-green/40 bg-accent-green/10 px-4 py-3 text-sm text-accent-green">{notice}</div>}
+      {error && <div className="rounded-[18px] border border-[#efdad8] bg-[#f7e3e0] px-4 py-3 text-sm text-[#6a3530]">{error}</div>}
+      {notice && <div className="rounded-[18px] border border-[#dceabf] bg-[#eef8d8] px-4 py-3 text-sm text-[#2f4027]">{notice}</div>}
 
       {summary && (
         <section className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">待处理</div>
-            <div className="mt-2 text-2xl font-semibold">{summary.pendingCount}</div>
+          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4">
+            <div className="text-sm text-black/48">待处理</div>
+            <div className="mt-2 text-2xl font-semibold text-[#071110]">{summary.pendingCount}</div>
           </div>
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <div className="text-sm text-red-200">SLA 超时</div>
-            <div className="mt-2 text-2xl font-semibold text-red-200">{summary.overdueCount}</div>
+          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4">
+            <div className="text-sm text-[#6a3530]">SLA 超时</div>
+            <div className="mt-2 text-2xl font-semibold text-[#6a3530]">{summary.overdueCount}</div>
           </div>
-          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4">
-            <div className="text-sm text-yellow-200">高优先级待处理</div>
-            <div className="mt-2 text-2xl font-semibold text-yellow-200">{summary.highPriorityPendingCount}</div>
+          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)] p-4">
+            <div className="text-sm text-[#604a1b]">高优先级待处理</div>
+            <div className="mt-2 text-2xl font-semibold text-[#604a1b]">{summary.highPriorityPendingCount}</div>
           </div>
-          <div className="rounded-2xl border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">最早待处理</div>
-            <div className="mt-2 text-sm font-semibold">{formatTime(summary.oldestPendingAt)}</div>
+          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#eef3fb_0%,#ffffff_100%)] p-4">
+            <div className="text-sm text-black/48">最早待处理</div>
+            <div className="mt-2 text-sm font-semibold text-[#071110]">{formatTime(summary.oldestPendingAt)}</div>
           </div>
         </section>
       )}
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-4">
+      <section className="admin-reference-card p-5">
         <div className="grid gap-3 md:grid-cols-5">
           <label className="text-sm">
-            <span className="text-text-secondary">状态</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2">
+            <span className="text-[11px] uppercase tracking-[0.18em] text-black/35">状态</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-2 w-full rounded-full px-4 py-3">
               {STATUS_OPTIONS.map((item) => <option key={item || 'all'} value={item}>{item || '全部'}</option>)}
             </select>
           </label>
           <label className="text-sm">
-            <span className="text-text-secondary">优先级</span>
-            <select value={priority} onChange={(event) => setPriority(event.target.value)} className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2">
+            <span className="text-[11px] uppercase tracking-[0.18em] text-black/35">优先级</span>
+            <select value={priority} onChange={(event) => setPriority(event.target.value)} className="mt-2 w-full rounded-full px-4 py-3">
               {PRIORITY_OPTIONS.map((item) => <option key={item || 'all'} value={item}>{item || '全部'}</option>)}
             </select>
           </label>
           <label className="text-sm">
-            <span className="text-text-secondary">对象类型</span>
-            <input value={targetType} onChange={(event) => setTargetType(event.target.value)} list="report-target-types" className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2" />
+            <span className="text-[11px] uppercase tracking-[0.18em] text-black/35">对象类型</span>
+            <input value={targetType} onChange={(event) => setTargetType(event.target.value)} list="report-target-types" className="mt-2 w-full rounded-full px-4 py-3" />
             <datalist id="report-target-types">{targetTypes.map((item) => <option key={item} value={item} />)}</datalist>
           </label>
           <label className="text-sm">
-            <span className="text-text-secondary">原因</span>
-            <input value={reason} onChange={(event) => setReason(event.target.value)} list="report-reasons" className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2" />
+            <span className="text-[11px] uppercase tracking-[0.18em] text-black/35">原因</span>
+            <input value={reason} onChange={(event) => setReason(event.target.value)} list="report-reasons" className="mt-2 w-full rounded-full px-4 py-3" />
             <datalist id="report-reasons">{reasons.map((item) => <option key={item} value={item} />)}</datalist>
           </label>
           <div className="flex items-end">
-            <button type="button" onClick={() => void loadReports()} className="w-full rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+            <button type="button" onClick={() => void loadReports()} className="w-full rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white">
               应用筛选
             </button>
           </div>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-4">
+      <section className="admin-reference-card p-5">
         <div className="grid gap-4 lg:grid-cols-[260px_1fr_1fr]">
           <div className="space-y-3">
             <div>
-              <div className="font-semibold">三语处理模板</div>
-              <p className="mt-1 text-xs text-text-secondary">支持草稿、预览、发布和回滚到历史版本。</p>
+              <div className="font-semibold text-[#071110]">三语处理模板</div>
+              <p className="mt-1 text-xs text-black/45">支持草稿、预览、发布和回滚到历史版本。</p>
             </div>
-            <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} className="w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm">
+            <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} className="w-full rounded-full px-4 py-3 text-sm">
               {['report_resolved', 'report_dismissed', 'content_hidden', 'content_restored', 'user_warned', 'user_restricted', 'user_suspended', 'user_banned', 'report_escalated'].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <select value={templateLocale} onChange={(event) => setTemplateLocale(event.target.value)} className="w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm">
+            <select value={templateLocale} onChange={(event) => setTemplateLocale(event.target.value)} className="w-full rounded-full px-4 py-3 text-sm">
               {['ja-JP', 'zh-CN', 'en'].map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </div>
           <div className="space-y-3">
-            <input value={templateTitle} onChange={(event) => setTemplateTitle(event.target.value)} placeholder="模板标题" className="w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm" />
-            <textarea value={templateBody} onChange={(event) => setTemplateBody(event.target.value)} rows={4} placeholder="模板正文，可使用 {{reportId}} {{targetType}} {{reason}}" className="w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm" />
+            <input value={templateTitle} onChange={(event) => setTemplateTitle(event.target.value)} placeholder="模板标题" className="w-full rounded-full px-4 py-3 text-sm" />
+            <textarea value={templateBody} onChange={(event) => setTemplateBody(event.target.value)} rows={4} placeholder="模板正文，可使用 {{reportId}} {{targetType}} {{reason}}" className="w-full rounded-[22px] px-4 py-3 text-sm" />
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => void previewTemplate()} className="rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">预览</button>
-              <button type="button" onClick={() => void saveTemplateDraft()} className="rounded-lg bg-primary-blue px-3 py-2 text-sm font-semibold text-white">保存草稿</button>
+              <button type="button" onClick={() => void previewTemplate()} className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]">预览</button>
+              <button type="button" onClick={() => void saveTemplateDraft()} className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white">保存草稿</button>
             </div>
           </div>
           <div className="space-y-3 text-sm">
             {templatePreview && (
-              <div className="rounded-md border border-border-secondary bg-bg-tertiary p-3">
+              <div className="admin-reference-soft-card p-3">
                 <div className="font-semibold">{templatePreview.title}</div>
-                <p className="mt-2 whitespace-pre-wrap text-text-secondary">{templatePreview.body}</p>
+                <p className="mt-2 whitespace-pre-wrap text-black/52">{templatePreview.body}</p>
               </div>
             )}
             <div className="max-h-44 space-y-2 overflow-auto">
               {templates.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-border-secondary bg-bg-tertiary p-2">
+                <div key={item.id} className="admin-reference-soft-card flex items-center justify-between gap-3 p-3">
                   <span>v{item.version} · {item.status}</span>
                   <div className="flex gap-2">
                     {item.status !== 'published' && !item.id.startsWith('default:') && (
-                      <button type="button" onClick={() => void publishTemplate(item.id)} className="text-primary-blue">发布</button>
+                      <button type="button" onClick={() => void publishTemplate(item.id)} className="text-sm font-semibold text-[#071110]">发布</button>
                     )}
                     {item.status === 'archived' && (
-                      <button type="button" onClick={() => void contentReportsApi.rollbackTemplate(token!, item.id).then(loadTemplates)} className="text-primary-blue">回滚</button>
+                      <button type="button" onClick={() => void contentReportsApi.rollbackTemplate(token!, item.id).then(loadTemplates)} className="text-sm font-semibold text-[#071110]">回滚</button>
                     )}
                   </div>
                 </div>
@@ -351,16 +351,16 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
       <section className="grid gap-5 lg:grid-cols-[430px_1fr]">
         <div className="space-y-3">
           {items.length > 0 && (
-            <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-4">
+            <section className="admin-reference-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-semibold">批量低风险处理</div>
-                  <div className="mt-1 text-xs text-text-secondary">仅后端允许同对象类型、同原因、未结案 normal 优先级举报。</div>
+                  <div className="font-semibold text-[#071110]">批量低风险处理</div>
+                  <div className="mt-1 text-xs text-black/45">仅后端允许同对象类型、同原因、未结案 normal 优先级举报。</div>
                 </div>
-                <span className="text-sm text-text-secondary">已选 {selectedIds.length}</span>
+                <span className="text-sm text-black/45">已选 {selectedIds.length}</span>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                <select value={batchAction} onChange={(event) => setBatchAction(event.target.value as 'resolve' | 'dismiss')} className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm">
+                <select value={batchAction} onChange={(event) => setBatchAction(event.target.value as 'resolve' | 'dismiss')} className="rounded-full px-4 py-3 text-sm">
                   <option value="resolve">标记已处理</option>
                   <option value="dismiss">驳回举报</option>
                 </select>
@@ -368,7 +368,7 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
                   type="button"
                   onClick={() => void submitBatchDecision()}
                   disabled={selectedIds.length === 0}
-                  className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue disabled:opacity-50"
+                  className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   批量提交
                 </button>
@@ -378,17 +378,17 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
                 onChange={(event) => setBatchNote(event.target.value)}
                 rows={2}
                 placeholder="批量处理备注"
-                className="mt-3 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
+                className="mt-3 w-full rounded-[22px] px-4 py-3 text-sm"
               />
             </section>
           )}
           {items.length === 0 && !loading && (
-            <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-5 text-sm text-text-secondary">暂无符合条件的举报。</div>
+            <div className="admin-reference-card p-5 text-sm text-black/48">暂无符合条件的举报。</div>
           )}
           {items.map((item) => (
             <div
               key={item.id}
-              className={`w-full rounded-2xl border p-4 text-left hover:border-primary-blue ${selected?.id === item.id ? 'border-primary-blue bg-bg-tertiary' : 'border-border-secondary bg-bg-secondary'}`}
+              className={`w-full rounded-[24px] border p-4 text-left ${selected?.id === item.id ? 'border-[#dceabf] bg-[#edf7f2]' : 'border-[#e8eceb] bg-white'}`}
             >
               <div className="flex items-start gap-3">
                 <input
@@ -402,11 +402,11 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${priorityClass(item.priority)}`}>{item.priority || 'normal'}</span>
                     <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(item.status)}`}>{item.status}</span>
-                    {item.isOverdue && <span className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300">SLA 超时</span>}
+                    {item.isOverdue && <span className="rounded-full border border-[#efdad8] px-2 py-1 text-xs font-semibold text-[#6a3530]">SLA 超时</span>}
                   </div>
                   <div className="mt-3 font-semibold">{item.reason}</div>
-                  <div className="mt-1 break-all text-sm text-text-secondary">{item.targetType} · {item.targetId}</div>
-                  <div className="mt-2 text-xs text-text-secondary">举报量 {item.reportCountForTarget || 1} · {formatTime(item.createdAt)}</div>
+                  <div className="mt-1 break-all text-sm text-black/48">{item.targetType} · {item.targetId}</div>
+                  <div className="mt-2 text-xs text-black/42">举报量 {item.reportCountForTarget || 1} · {formatTime(item.createdAt)}</div>
                 </button>
               </div>
             </div>
@@ -415,11 +415,11 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
 
         {selected ? (
           <div className="space-y-5">
-            <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+            <section className="admin-reference-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-semibold">举报详情</h2>
-                  <p className="mt-1 font-mono text-xs text-text-secondary">{selected.id}</p>
+                  <p className="mt-1 font-mono text-xs text-black/45">{selected.id}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${priorityClass(selected.priority)}`}>{selected.priority || 'normal'}</span>
@@ -427,43 +427,43 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
                 </div>
               </div>
               <dl className="mt-5 grid gap-4 text-sm md:grid-cols-2">
-                <div><dt className="text-text-secondary">举报人</dt><dd className="mt-1"><UserLine user={selected.reporter} fallback={selected.reporterUserId} /></dd></div>
-                <div><dt className="text-text-secondary">目标用户</dt><dd className="mt-1"><UserLine user={selected.targetUser} fallback={selected.targetUserId || '-'} /></dd></div>
-                <div><dt className="text-text-secondary">对象</dt><dd className="mt-1 font-mono text-xs">{selected.targetType}:{selected.targetId}</dd></div>
-                <div><dt className="text-text-secondary">SLA</dt><dd className="mt-1">{formatTime(selected.slaDueAt)} {selected.isOverdue ? '· 已超时' : ''}</dd></div>
+                <div><dt className="text-black/42">举报人</dt><dd className="mt-1"><UserLine user={selected.reporter} fallback={selected.reporterUserId} /></dd></div>
+                <div><dt className="text-black/42">目标用户</dt><dd className="mt-1"><UserLine user={selected.targetUser} fallback={selected.targetUserId || '-'} /></dd></div>
+                <div><dt className="text-black/42">对象</dt><dd className="mt-1 font-mono text-xs">{selected.targetType}:{selected.targetId}</dd></div>
+                <div><dt className="text-black/42">SLA</dt><dd className="mt-1">{formatTime(selected.slaDueAt)} {selected.isOverdue ? '· 已超时' : ''}</dd></div>
               </dl>
               <div className="mt-5">
-                <div className="text-sm text-text-secondary">补充说明</div>
-                <p className="mt-2 whitespace-pre-wrap rounded-md border border-border-secondary bg-bg-tertiary p-3 text-sm leading-6">{selected.detail || '无'}</p>
+                <div className="text-sm text-black/42">补充说明</div>
+                <p className="admin-reference-soft-card mt-2 whitespace-pre-wrap p-3 text-sm leading-6">{selected.detail || '无'}</p>
               </div>
               <div className="mt-5">
-                <div className="text-sm text-text-secondary">截图/附件</div>
-                <div className="mt-2 space-y-2 rounded-md border border-border-secondary bg-bg-tertiary p-3 text-sm">
+                <div className="text-sm text-black/42">截图/附件</div>
+                <div className="admin-reference-soft-card mt-2 space-y-2 p-3 text-sm">
                   {(selected.attachments || []).map((attachment, index) => (
-                    <a key={`${attachment.url}-${index}`} href={attachment.url || '#'} target="_blank" rel="noreferrer" className="block break-all text-primary-blue">
+                    <a key={`${attachment.url}-${index}`} href={attachment.url || '#'} target="_blank" rel="noreferrer" className="block break-all font-semibold text-[#071110]">
                       {attachment.type || 'link'} · {attachment.label || attachment.url}
                     </a>
                   ))}
-                  {(!selected.attachments || selected.attachments.length === 0) && <div className="text-text-secondary">无附件。</div>}
+                  {(!selected.attachments || selected.attachments.length === 0) && <div className="text-black/48">无附件。</div>}
                 </div>
               </div>
             </section>
 
-            <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+            <section className="admin-reference-card p-5">
               <h2 className="text-xl font-semibold">对象预览</h2>
-              <pre className="mt-4 max-h-[360px] overflow-auto rounded-md border border-border-secondary bg-bg-tertiary p-4 text-xs leading-5 text-text-secondary">
+              <pre className="admin-reference-soft-card mt-4 max-h-[360px] overflow-auto p-4 text-xs leading-5 text-black/52">
                 {shortJson(selected.targetPreview)}
               </pre>
             </section>
 
-            <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+            <section className="admin-reference-card p-5">
               <h2 className="text-xl font-semibold">上下文</h2>
-              <pre className="mt-4 max-h-[260px] overflow-auto rounded-md border border-border-secondary bg-bg-tertiary p-4 text-xs leading-5 text-text-secondary">
+              <pre className="admin-reference-soft-card mt-4 max-h-[260px] overflow-auto p-4 text-xs leading-5 text-black/52">
                 {shortJson(selected.context)}
               </pre>
             </section>
 
-            <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+            <section className="admin-reference-card p-5">
               <h2 className="text-xl font-semibold">处理动作</h2>
               {selected.reason === 'copyright' && (
                 <div className="mt-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
@@ -484,34 +484,34 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
               )}
               <form onSubmit={(event) => void submitDecision(event)} className="mt-4 space-y-4">
                 <label className="block text-sm">
-                  <span className="text-text-secondary">动作</span>
-                  <select value={action} onChange={(event) => setAction(event.target.value)} className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2">
+                  <span className="text-black/42">动作</span>
+                  <select value={action} onChange={(event) => setAction(event.target.value)} className="mt-2 w-full rounded-full px-4 py-3">
                     {ACTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="text-text-secondary">处理备注</span>
-                  <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={4} className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2" />
+                  <span className="text-black/42">处理备注</span>
+                  <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={4} className="mt-2 w-full rounded-[22px] px-4 py-3" />
                 </label>
-                <button type="submit" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">提交处理</button>
+                <button type="submit" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">提交处理</button>
               </form>
             </section>
 
             <section className="grid gap-5 md:grid-cols-2">
-              <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+              <div className="admin-reference-card p-5">
                 <h2 className="text-lg font-semibold">相同对象举报</h2>
-                <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                <div className="mt-3 space-y-2 text-sm text-black/48">
                   {(selected.similarReports || []).slice(0, 8).map((item) => (
-                    <div key={item.id} className="rounded-md border border-border-secondary bg-bg-tertiary p-3">{item.reason} · {formatTime(item.createdAt)}</div>
+                    <div key={item.id} className="admin-reference-soft-card p-3">{item.reason} · {formatTime(item.createdAt)}</div>
                   ))}
                   {(selected.similarReports || []).length === 0 && <div>暂无相似举报。</div>}
                 </div>
               </div>
-              <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+              <div className="admin-reference-card p-5">
                 <h2 className="text-lg font-semibold">目标用户历史</h2>
-                <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                <div className="mt-3 space-y-2 text-sm text-black/48">
                   {(selected.targetHistory || []).slice(0, 8).map((item) => (
-                    <div key={item.id} className="rounded-md border border-border-secondary bg-bg-tertiary p-3">{item.targetType} · {item.reason} · {formatTime(item.createdAt)}</div>
+                    <div key={item.id} className="admin-reference-soft-card p-3">{item.targetType} · {item.reason} · {formatTime(item.createdAt)}</div>
                   ))}
                   {(selected.targetHistory || []).length === 0 && <div>暂无目标用户历史举报。</div>}
                 </div>
@@ -519,18 +519,18 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
             </section>
 
             <section className="grid gap-5 md:grid-cols-2">
-              <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+              <div className="admin-reference-card p-5">
                 <h2 className="text-lg font-semibold">历史处罚</h2>
-                <pre className="mt-3 max-h-[260px] overflow-auto rounded-md border border-border-secondary bg-bg-tertiary p-3 text-xs text-text-secondary">{shortJson(selected.enforcementHistory)}</pre>
+                <pre className="admin-reference-soft-card mt-3 max-h-[260px] overflow-auto p-3 text-xs text-black/52">{shortJson(selected.enforcementHistory)}</pre>
               </div>
-              <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-5">
+              <div className="admin-reference-card p-5">
                 <h2 className="text-lg font-semibold">历史申诉</h2>
-                <pre className="mt-3 max-h-[260px] overflow-auto rounded-md border border-border-secondary bg-bg-tertiary p-3 text-xs text-text-secondary">{shortJson(selected.appealHistory)}</pre>
+                <pre className="admin-reference-soft-card mt-3 max-h-[260px] overflow-auto p-3 text-xs text-black/52">{shortJson(selected.appealHistory)}</pre>
               </div>
             </section>
           </div>
         ) : (
-          <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-5 text-sm text-text-secondary">请选择一条举报查看详情。</div>
+          <div className="admin-reference-card p-5 text-sm text-black/48">请选择一条举报查看详情。</div>
         )}
       </section>
     </>
@@ -580,14 +580,14 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
         description="统一后台原生承接举报处理、批量低风险动作、三语处理模板和版权投诉工作流，不再通过说明页跳转到其它后台入口。"
         actions={
           <>
-            <Link href="/admin/content/reviews" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+            <Link href="/admin/content/reviews" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
               返回审核中心
             </Link>
             <button
               type="button"
               onClick={() => void loadReports()}
               disabled={loading}
-              className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               {loading ? '刷新中...' : '刷新'}
             </button>
@@ -608,14 +608,14 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
       <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-text-secondary">Trust & Safety</p>
+            <p className="text-sm text-black/45">Trust & Safety</p>
             <h1 className="mt-1 text-3xl font-semibold">举报审核队列</h1>
           </div>
           <button
             type="button"
             onClick={() => void loadReports()}
             disabled={loading}
-            className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
           >
             {loading ? '刷新中...' : '刷新'}
           </button>

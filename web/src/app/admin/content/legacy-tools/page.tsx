@@ -15,10 +15,10 @@ function LegacyCard({
   eyebrow: string;
 }) {
   return (
-    <Link href={href} className="rounded-3xl border border-border-secondary bg-bg-secondary p-5 transition-colors hover:border-primary-blue">
-      <div className="text-sm text-text-secondary">{eyebrow}</div>
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <p className="mt-3 text-sm leading-6 text-text-secondary">{description}</p>
+    <Link href={href} className="admin-reference-card block p-5">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">{eyebrow}</div>
+      <h2 className="mt-2 text-xl font-semibold text-[#071110]">{title}</h2>
+      <p className="mt-3 text-sm leading-6 text-black/52">{description}</p>
     </Link>
   );
 }
@@ -30,15 +30,29 @@ export default function AdminContentLegacyToolsPage() {
       description="统一内容后台已经建立，但部分审核、Brand/DJ 历史工具、长尾编辑能力仍需通过 Festival Viewer 过渡访问。这里集中保留这些入口，避免后台再次分散。"
       actions={
         <>
-          <Link href="/admin/content" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回内容总览
           </Link>
-          <Link href="/admin/festival-viewer.html" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/admin/festival-viewer.html" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             打开 Festival Viewer
           </Link>
         </>
       }
     >
+      <section className="admin-reference-card mb-5 p-6">
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            { title: '迁移兜底', body: '先把还没完全回迁的新旧工具集中在一个入口，避免再次分散。', tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
+            { title: '审核桥接', body: '保留审核与历史工具的过渡入口，但视觉上仍保持统一后台语言。', tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
+            { title: '逐步收口', body: '等新工作台稳定后，再逐页把这里的能力完全替换掉。', tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
+          ].map((item) => (
+            <div key={item.title} className={`admin-reference-pastel-card p-4 ${item.tone}`}>
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{item.title}</div>
+              <div className="mt-4 text-sm leading-6 text-[#24312d]">{item.body}</div>
+            </div>
+          ))}
+        </div>
+      </section>
       <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
         <LegacyCard
           href="/admin/content/legacy-tools/festival-viewer"

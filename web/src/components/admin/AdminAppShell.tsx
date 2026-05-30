@@ -24,13 +24,6 @@ type AdminAppShellProps = {
   eyebrow?: string;
   actions?: ReactNode;
   children: ReactNode;
-  rail?: ReactNode;
-};
-
-type RailBlock = {
-  title: string;
-  tone?: 'mint' | 'dark' | 'soft';
-  rows: string[];
 };
 
 const SIDEBAR_STATE_KEY = 'raver-admin-shell-collapsed';
@@ -43,123 +36,6 @@ const initialsFromName = (value?: string | null): string =>
     .map((item) => item.slice(0, 1).toUpperCase())
     .join('') || 'RA';
 
-const currentDateLabel = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-}).format(new Date());
-
-const buildRailBlocks = (pathname: string): RailBlock[] => {
-  if (pathname.startsWith('/admin/users')) {
-    return [
-      {
-        title: 'User Admin Focus',
-        tone: 'mint',
-        rows: ['检索账号状态', '查看会话与角色', '需要时执行删除或处罚联动'],
-      },
-      {
-        title: 'Review Notes',
-        rows: ['优先核验邮箱、手机号和角色', '危险操作保持二次确认', '会话与删除建议结合查看'],
-      },
-    ];
-  }
-
-  if (pathname.startsWith('/admin/notification-center')) {
-    return [
-      {
-        title: 'Notification Ops',
-        tone: 'mint',
-        rows: ['关注模板状态', '检查失败投递', '观察配置是否已同步'],
-      },
-      {
-        title: 'Daily Flow',
-        rows: ['先看健康状态', '再看 delivery 失败窗口', '最后处理模板与配置变更'],
-      },
-    ];
-  }
-
-  if (pathname.startsWith('/admin/pre-registrations')) {
-    return [
-      {
-        title: 'Pre-registration Ops',
-        tone: 'mint',
-        rows: ['优先处理待审核数据', '抽签批次与通知分开核对', '发送前确认渠道配置'],
-      },
-      {
-        title: 'Quick Path',
-        rows: ['查看报名列表', '管理批次结果', '发送通知并回看日志'],
-      },
-    ];
-  }
-
-  if (pathname.startsWith('/admin/account-enforcements')) {
-    return [
-      {
-        title: 'Trust & Safety',
-        tone: 'dark',
-        rows: ['先确认处罚原因', '处理申诉时对照历史记录', '高风险操作谨慎执行'],
-      },
-      {
-        title: 'Safety Notes',
-        rows: ['处罚动作建议配合审计', '批量动作前先缩小筛选范围', '优先处理高优先级用户'],
-      },
-    ];
-  }
-
-  if (pathname.startsWith('/admin/account-deletions')) {
-    return [
-      {
-        title: 'Deletion Queue',
-        tone: 'dark',
-        rows: ['先看 pending', '失败任务优先重试', '到期任务集中处理'],
-      },
-      {
-        title: 'Checklist',
-        rows: ['确认用户身份', '核查 IM / 媒体清理', '记录失败原因与补偿动作'],
-      },
-    ];
-  }
-
-  if (pathname.startsWith('/admin/auth-sessions')) {
-    return [
-      {
-        title: 'Session Control',
-        tone: 'soft',
-        rows: ['优先查看当前会话', '发现异常设备立即撤销', '必要时按用户检索全量会话'],
-      },
-      {
-        title: 'Security Flow',
-        rows: ['核验设备来源', '确认最后活跃时间', '高风险情况建议改密'],
-      },
-    ];
-  }
-
-  if (pathname.startsWith('/admin/content')) {
-    return [
-      {
-        title: 'Content Workspace',
-        tone: 'mint',
-        rows: ['目录与编辑链路统一', '审核入口保持清晰', '旧工具集中桥接'],
-      },
-      {
-        title: 'Publishing Rhythm',
-        rows: ['先进入目录中心', '再进入编辑页', '审核与缓存治理按需处理'],
-      },
-    ];
-  }
-
-  return [
-    {
-      title: 'System Snapshot',
-      tone: 'mint',
-      rows: ['统一后台视觉已切换到参考站风格', '核心模块通过左侧分组进入', '右侧区按页面职责展示辅助信息'],
-    },
-    {
-      title: 'Today Focus',
-      rows: ['先看总览状态', '进入高频模块处理任务', '必要时回到内容控制台继续深度操作'],
-    },
-  ];
-};
 
 function Sidebar({
   collapsed,
@@ -187,7 +63,7 @@ function Sidebar({
         )}
       >
         <div className={clsx('mb-[28px] flex items-center', collapsed ? 'justify-center' : 'gap-3')}>
-          <Triangle className="size-[24px] fill-[#071110] text-[#071110] drop-shadow-[0_0_10px_rgba(74,255,230,.35)]" />
+          <Triangle className="size-[24px] fill-[#071110] text-[#071110]" />
           {!collapsed && <b className="text-[18px] tracking-[-0.03em] text-[#071110]">RaveHub Admin</b>}
         </div>
 
@@ -315,7 +191,7 @@ function Topbar({
         >
           <PanelLeftClose className="size-4 rotate-180" />
         </button>
-        <label className="mx-auto flex h-[42px] w-full max-w-[470px] items-center rounded-full border border-[#ececec] bg-[#f5f5f7] px-3 shadow-sm transition-all duration-300 focus-within:bg-white md:px-4">
+        <label className="mx-auto flex h-[42px] w-full max-w-[470px] items-center rounded-full border border-[#ececec] bg-[#f5f5f7] px-3 transition-all duration-300 md:px-4">
           <Search className="mr-2 size-4 shrink-0 md:mr-3" />
           <input
             value={query}
@@ -363,72 +239,12 @@ function Topbar({
   );
 }
 
-function RightRail({ children }: { children?: ReactNode }) {
-  const pathname = usePathname();
-  const { user } = useAuth();
-  const railBlocks = useMemo(() => buildRailBlocks(pathname), [pathname]);
-
-  return (
-    <aside className="hidden xl:block xl:w-[320px] xl:shrink-0">
-      <div className="space-y-4 pt-[18px]">
-        <section className="admin-shell-panel p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-black/35">Current session</p>
-              <h2 className="mt-2 text-[22px] font-extrabold tracking-[-0.03em] text-[#071110]">
-                {user?.displayName || user?.username || 'Admin User'}
-              </h2>
-              <p className="mt-2 text-[12px] leading-6 text-black/45">{user?.email || '未登录邮箱'}</p>
-            </div>
-            <span className="grid size-12 place-items-center rounded-full bg-[#071110] text-[13px] font-extrabold text-white">
-              {initialsFromName(user?.displayName || user?.username || user?.email)}
-            </span>
-          </div>
-          <div className="mt-5 grid grid-cols-2 gap-3 text-[11px]">
-            <div className="admin-shell-soft-panel p-3">
-              <div className="text-black/35">Date</div>
-              <div className="mt-2 font-bold text-[#071110]">{currentDateLabel}</div>
-            </div>
-            <div className="admin-shell-soft-panel p-3">
-              <div className="text-black/35">Mode</div>
-              <div className="mt-2 font-bold text-[#071110]">Operations</div>
-            </div>
-          </div>
-        </section>
-
-        {railBlocks.map((block) => (
-          <section
-            key={block.title}
-            className={clsx(
-              'admin-shell-panel p-5',
-              block.tone === 'mint' && 'admin-shell-panel-mint',
-              block.tone === 'dark' && 'admin-shell-panel-dark'
-            )}
-          >
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">{block.title}</div>
-            <div className="mt-4 space-y-3">
-              {block.rows.map((row) => (
-                <div key={row} className="admin-shell-soft-panel px-4 py-3 text-[13px] leading-6 text-[#18211f]">
-                  {row}
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-
-        {children}
-      </div>
-    </aside>
-  );
-}
-
 export default function AdminAppShell({
   title,
   description,
   eyebrow = 'Raver Admin',
   actions,
   children,
-  rail,
 }: AdminAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -445,12 +261,12 @@ export default function AdminAppShell({
   }, [collapsed]);
 
   return (
-    <main className="admin-ravehub-shell min-h-screen">
+    <main className="admin-ravehub-shell h-screen">
       <div className="admin-ravehub-bg" />
-      <div className="relative flex min-h-screen">
+      <div className="relative flex h-screen overflow-hidden">
         <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
-        <div className="flex min-w-0 flex-1 gap-5 px-3 pb-4 md:px-4 md:pb-5">
-          <section className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 overflow-hidden px-3 pb-4 md:px-4 md:pb-5">
+          <section className="min-w-0 flex-1 overflow-y-auto admin-shell-scrollbar">
             <Topbar
               title={title}
               eyebrow={eyebrow}
@@ -462,7 +278,6 @@ export default function AdminAppShell({
               {children}
             </div>
           </section>
-          <RightRail>{rail}</RightRail>
         </div>
       </div>
     </main>
