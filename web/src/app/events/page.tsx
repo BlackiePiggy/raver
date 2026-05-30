@@ -117,7 +117,7 @@ export default function EventsPage() {
               <div className="mt-6">
                 <button
                   type="button"
-                  onClick={() => router.push('/events/publish')}
+                  onClick={() => router.push('/admin/content/events/new')}
                   className="px-5 py-2.5 bg-primary-blue hover:bg-primary-purple text-white rounded-full text-sm transition-colors"
                 >
                   发布活动

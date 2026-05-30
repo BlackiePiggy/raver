@@ -7853,6 +7853,7 @@ private struct EventTimelineBoardView: View {
     var showsColumnFill: Bool = true
     var showsGridLines: Bool = true
     var usesHorizontalScrollContainer: Bool = true
+    var enablesStickyStageHeader: Bool = true
 
     @State private var layoutCache = EventTimelineBoardLayoutCache()
 
@@ -7919,61 +7920,95 @@ private struct EventTimelineBoardView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let containerMinY = geo.frame(in: .global).minY
-#if DEBUG
-            let _ = EventDetailPerfLog.sampled(
-                "timeline-board-body-count-\(event.id)-\(day.id)",
-                every: 20
-            ) { count in
-                "timeline board body count=\(count) event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(geo.size.width)) minY=\(String(format: "%.1f", containerMinY)) maxVisibleStages=\(maxVisibleStages)"
-            }
-            let _ = EventDetailPerfLog.throttled(
-                "timeline-board-body-\(event.id)-\(day.id)",
-                interval: 1
-            ) {
-                "timeline board body event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(geo.size.width)) minY=\(String(format: "%.1f", containerMinY)) maxVisibleStages=\(maxVisibleStages)"
-            }
-#endif
+            let availableWidth = max(geo.size.width, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth)
             let layout = layoutCache.layout(
                 event: event,
                 day: day,
-                availableWidth: max(geo.size.width, EventTimelineLayout.axisWidth + EventTimelineLayout.minStageWidth),
+                availableWidth: availableWidth,
                 maxVisibleStages: maxVisibleStages
             )
-            let stickyHeaderOffset = stickyHeaderOffset(containerMinY: containerMinY, layout: layout)
-#if DEBUG
-            let _ = EventDetailPerfLog.sampled(
-                "timeline-sticky-offset-count-\(event.id)-\(day.id)",
-                every: 20
-            ) { count in
-                "timeline sticky offset count=\(count) event=\(event.id) day=\(day.id) minY=\(String(format: "%.1f", containerMinY)) stickyTopInset=\(String(format: "%.1f", stickyTopInset)) offset=\(String(format: "%.1f", stickyHeaderOffset)) bodyHeight=\(String(format: "%.1f", layout.bodyHeight))"
-            }
-#endif
 
-            ZStack {
-                if showsBoardBackground {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: boardGradientColors,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(boardStrokeColor, lineWidth: 1)
-                        )
-                }
-
-                HStack(spacing: 0) {
-                    timelineAxis(layout: layout)
-                    stageMatrix(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
-                }
-                .padding(.vertical, 10)
+            if enablesStickyStageHeader {
+                stickyEnabledBoard(geo: geo, layout: layout)
+            } else {
+                staticBoard(layout: layout, availableWidth: availableWidth)
             }
         }
         .frame(height: boardHeight)
+    }
+
+    @ViewBuilder
+    private func stickyEnabledBoard(geo: GeometryProxy, layout: EventTimelineLayout) -> some View {
+        let containerMinY = geo.frame(in: .global).minY
+#if DEBUG
+        let _ = EventDetailPerfLog.sampled(
+            "timeline-board-body-count-\(event.id)-\(day.id)",
+            every: 20
+        ) { count in
+            "timeline board body count=\(count) event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(geo.size.width)) minY=\(String(format: "%.1f", containerMinY)) maxVisibleStages=\(maxVisibleStages)"
+        }
+        let _ = EventDetailPerfLog.throttled(
+            "timeline-board-body-\(event.id)-\(day.id)",
+            interval: 1
+        ) {
+            "timeline board body event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(geo.size.width)) minY=\(String(format: "%.1f", containerMinY)) maxVisibleStages=\(maxVisibleStages)"
+        }
+#endif
+        let stickyHeaderOffset = stickyHeaderOffset(containerMinY: containerMinY, layout: layout)
+#if DEBUG
+        let _ = EventDetailPerfLog.sampled(
+            "timeline-sticky-offset-count-\(event.id)-\(day.id)",
+            every: 20
+        ) { count in
+            "timeline sticky offset count=\(count) event=\(event.id) day=\(day.id) minY=\(String(format: "%.1f", containerMinY)) stickyEnabled=\(enablesStickyStageHeader) stickyTopInset=\(String(format: "%.1f", stickyTopInset)) offset=\(String(format: "%.1f", stickyHeaderOffset)) bodyHeight=\(String(format: "%.1f", layout.bodyHeight))"
+        }
+#endif
+        boardScaffold(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+    }
+
+    @ViewBuilder
+    private func staticBoard(layout: EventTimelineLayout, availableWidth: CGFloat) -> some View {
+#if DEBUG
+        let _ = EventDetailPerfLog.sampled(
+            "timeline-board-static-count-\(event.id)-\(day.id)",
+            every: 20
+        ) { count in
+            "timeline board static count=\(count) event=\(event.id) day=\(day.id) slots=\(day.slots.count) selectedSlots=\(selectedSlotIDs.count) width=\(Int(availableWidth)) maxVisibleStages=\(maxVisibleStages)"
+        }
+        let _ = EventDetailPerfLog.sampled(
+            "timeline-sticky-static-count-\(event.id)-\(day.id)",
+            every: 20
+        ) { count in
+            "timeline sticky offset count=\(count) event=\(event.id) day=\(day.id) stickyEnabled=\(enablesStickyStageHeader) stickyTopInset=\(String(format: "%.1f", stickyTopInset)) offset=0.0 bodyHeight=\(String(format: "%.1f", layout.bodyHeight))"
+        }
+#endif
+        boardScaffold(layout: layout, stickyHeaderOffset: 0)
+    }
+
+    @ViewBuilder
+    private func boardScaffold(layout: EventTimelineLayout, stickyHeaderOffset: CGFloat) -> some View {
+        ZStack {
+            if showsBoardBackground {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: boardGradientColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(boardStrokeColor, lineWidth: 1)
+                    )
+            }
+
+            HStack(spacing: 0) {
+                timelineAxis(layout: layout)
+                stageMatrix(layout: layout, stickyHeaderOffset: stickyHeaderOffset)
+            }
+            .padding(.vertical, 10)
+        }
     }
 
     private func stickyHeaderOffset(containerMinY: CGFloat, layout: EventTimelineLayout) -> CGFloat {
@@ -11594,7 +11629,8 @@ private struct EventRoutineView: View {
                 onSelectSlot: { slot in
                     handleTimelineSlotTap(slot)
                 },
-                stickyTopInset: timelineStickyTopInset
+                stickyTopInset: timelineStickyTopInset,
+                enablesStickyStageHeader: !isEmbedded
             )
             .frame(height: EventTimelineLayout.estimatedHeight(for: selectedDay.slots))
         } else {

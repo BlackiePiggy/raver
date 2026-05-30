@@ -24,7 +24,7 @@ export default function AdminContentCmsPage() {
       }
     } finally {
       setRedirecting(true);
-      router.replace('/admin/festival-viewer.html');
+      router.replace('/admin/content');
     }
   }, [isLoading, policy.canAccessContentCms, router, token, user]);
 
@@ -68,9 +68,9 @@ export default function AdminContentCmsPage() {
       <section className="mx-auto max-w-3xl space-y-5 px-6 pb-10 pt-28">
         <div>
           <div className="text-sm text-text-secondary">Admin / Content CMS</div>
-          <h1 className="mt-2 text-3xl font-semibold">正在进入内容管理中心</h1>
+          <h1 className="mt-2 text-3xl font-semibold">正在进入统一内容后台</h1>
           <p className="mt-2 text-sm leading-6 text-text-secondary">
-            正在同步当前登录态，并跳转到完整的 festival-viewer 管理页面。
+            正在同步当前登录态，并跳转到新的 Web 内容工作区。Festival Viewer 会作为迁移期旧工具继续保留在工作区内。
           </p>
         </div>
 
@@ -101,12 +101,17 @@ export default function AdminContentCmsPage() {
             <div>
               <h2 className="text-lg font-semibold">{redirecting ? '跳转中...' : '准备跳转'}</h2>
               <p className="mt-1 text-sm text-text-secondary">
-                如果没有自动跳转，可以手动打开完整页面。
+                如果没有自动跳转，可以手动打开统一内容后台或迁移期旧工具。
               </p>
             </div>
-            <Link href="/admin/festival-viewer.html" className="rounded-md border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
-              打开内容管理
-            </Link>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/admin/content" className="rounded-md border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+                打开统一内容后台
+              </Link>
+              <Link href="/admin/content/legacy-tools" className="rounded-md border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+                打开旧工具桥接
+              </Link>
+            </div>
           </div>
         </div>
 

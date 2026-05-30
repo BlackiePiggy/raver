@@ -25,6 +25,7 @@ import {
   normalizeCanonicalLineupArtists,
   syncCanonicalEventLineupAndTimetable,
 } from '../services/event-lineup-canonical.service';
+import { adminSummaryCache } from '../infrastructure/admin-summary-cache';
 import {
   USER_ENTITY_RELATION_FAVORITE,
   USER_ENTITY_RELATION_FOLLOW,
@@ -7693,6 +7694,10 @@ const DAILY_DJ_RECOMMENDATION_ALGORITHM_VERSION = 'daily-dj-recommendations-soun
 const DAILY_DJ_RECOMMENDATION_SIZE = 10;
 const DAILY_DJ_RECOMMENDATION_CANDIDATE_LIMIT = 100;
 const DAILY_DJ_RECOMMENDATION_CANDIDATE_SOURCE = 'soundcloud_followers_top_100';
+const ADMIN_EVENT_CATALOG_SNAPSHOT_VERSION = 'admin-event-catalog-summary-v1';
+const ADMIN_DJ_CATALOG_SNAPSHOT_VERSION = 'admin-dj-catalog-summary-v1';
+const ADMIN_EVENT_ARCHIVE_YEAR_SUMMARY_VERSION = 'admin-event-archive-year-summary-v1';
+const ADMIN_CATALOG_MEMORY_TTL_MS = 5 * 60 * 1000;
 
 type DailyEventRecommendationSnapshot = {
   userId: string;
@@ -7723,6 +7728,9 @@ const dailyDJRecommendationMemoryCache = new Map<
   string,
   { expiresAt: number; snapshot: DailyDJRecommendationSnapshot }
 >();
+
+const isTruthyQueryFlag = (value: unknown): boolean =>
+  value === '1' || value === 'true' || value === 1 || value === true;
 
 const eventRecommendationStatusOrder: EventRecommendationStatus[] = [
   'ongoing',
@@ -8409,6 +8417,306 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     );
   } catch (error) {
     console.error('BFF web events error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 50, 100);
+    const skip = (page - 1) * limit;
+
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const city = typeof req.query.city === 'string' ? req.query.city.trim() : '';
+    const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+    const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
+    const wikiFestivalId = typeof req.query.wikiFestivalId === 'string' ? req.query.wikiFestivalId.trim() : '';
+    const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : 'all';
+    const status = statusRaw.toLowerCase() === 'canceled' ? 'cancelled' : statusRaw.toLowerCase();
+    const forceRefresh = isTruthyQueryFlag(req.query.refresh);
+
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search,
+      city,
+      country,
+      eventType,
+      wikiFestivalId,
+      status,
+    });
+    const cached = !forceRefresh
+      ? await adminSummaryCache.get<{
+          items: unknown[];
+          pagination: BFFPagination;
+          generatedAt: string;
+        }>({
+          namespace: 'event-catalog-summary',
+          key: cacheKey,
+          snapshotVersion: ADMIN_EVENT_CATALOG_SNAPSHOT_VERSION,
+        })
+      : null;
+    if (cached) {
+      res.json({
+        data: {
+          items: cached.payload.items,
+          meta: {
+            cache: {
+              scope: cached.scope,
+              hit: true,
+              stale: false,
+              generatedAt: cached.payload.generatedAt,
+              ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+              snapshotVersion: ADMIN_EVENT_CATALOG_SNAPSHOT_VERSION,
+            },
+          },
+        },
+        pagination: cached.payload.pagination,
+      });
+      return;
+    }
+
+    const where: any = {};
+    const now = new Date();
+    if (status === 'upcoming') {
+      where.startDate = { gt: now };
+      where.status = { not: 'cancelled' };
+    } else if (status === 'ongoing') {
+      where.startDate = { lte: now };
+      where.endDate = { gte: now };
+      where.status = { not: 'cancelled' };
+    } else if (status === 'ended') {
+      where.endDate = { lt: now };
+      where.status = { not: 'cancelled' };
+    } else if (status === 'cancelled') {
+      where.status = 'cancelled';
+    } else if (status === 'all' || status === '') {
+      // no status filter
+    } else if (status) {
+      where.status = status;
+    }
+    if (search) {
+      const aliasMatchedBrands = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "wiki_festivals"
+        WHERE "is_active" = true
+          AND cardinality("aliases") > 0
+          AND EXISTS (
+            SELECT 1
+            FROM unnest("aliases") AS alias
+            WHERE alias ILIKE ${`%${search}%`}
+          )
+        LIMIT 100
+      `);
+      const aliasMatchedBrandIDs = aliasMatchedBrands.map((brand) => brand.id);
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { abbreviation: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { slug: { contains: search, mode: 'insensitive' } },
+        { city: { contains: search, mode: 'insensitive' } },
+        { country: { contains: search, mode: 'insensitive' } },
+        { organizerName: { contains: search, mode: 'insensitive' } },
+        { wikiFestivalId: { contains: search, mode: 'insensitive' } },
+        {
+          wikiFestival: {
+            is: {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { abbreviation: { contains: search, mode: 'insensitive' } },
+                { aliases: { has: search } },
+              ],
+            },
+          },
+        },
+        ...(aliasMatchedBrandIDs.length > 0 ? [{ wikiFestivalId: { in: aliasMatchedBrandIDs } }] : []),
+        { nameI18n: { path: ['zh'], string_contains: search } },
+        { nameI18n: { path: ['en'], string_contains: search } },
+        { descriptionI18n: { path: ['zh'], string_contains: search } },
+        { descriptionI18n: { path: ['en'], string_contains: search } },
+        { manualLocation: { path: ['detailAddressI18n', 'zh'], string_contains: search } },
+        { manualLocation: { path: ['detailAddressI18n', 'en'], string_contains: search } },
+        { manualLocation: { path: ['formattedAddressI18n', 'zh'], string_contains: search } },
+        { manualLocation: { path: ['formattedAddressI18n', 'en'], string_contains: search } },
+        { cityI18n: { path: ['zh'], string_contains: search } },
+        { cityI18n: { path: ['en'], string_contains: search } },
+        { countryI18n: { path: ['zh'], string_contains: search } },
+        { countryI18n: { path: ['en'], string_contains: search } },
+        { countryI18n: { path: ['enFull'], string_contains: search } },
+      ];
+    }
+    if (city) where.city = city;
+    if (country) where.country = country;
+    if (wikiFestivalId) where.wikiFestivalId = wikiFestivalId;
+    if (eventType) {
+      const eventTypeValues = resolveEventTypeFilterValues(eventType);
+      if (eventTypeValues.length <= 1) {
+        where.eventType = eventTypeValues[0] ?? eventType;
+      } else {
+        where.eventType = { in: eventTypeValues };
+      }
+    }
+
+    const eventOrderBy: Prisma.EventOrderByWithRelationInput[] =
+      status === 'ended'
+        ? [{ startDate: 'desc' }, { id: 'desc' }]
+        : [{ startDate: 'asc' }, { id: 'asc' }];
+
+    const [rows, total] = await Promise.all([
+      prisma.event.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: eventOrderBy,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          coverImageUrl: true,
+          organizerName: true,
+          city: true,
+          country: true,
+          eventType: true,
+          status: true,
+          isVerified: true,
+          startDate: true,
+          endDate: true,
+          timeZone: true,
+          updatedAt: true,
+          wikiFestival: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          eventDays: {
+            orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+            select: {
+              eventDayId: true,
+            },
+          },
+        },
+      }),
+      prisma.event.count({ where }),
+    ]);
+
+    const pagination = {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+    const generatedAt = new Date().toISOString();
+    await adminSummaryCache.set({
+      namespace: 'event-catalog-summary',
+      key: cacheKey,
+      ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+      snapshotVersion: ADMIN_EVENT_CATALOG_SNAPSHOT_VERSION,
+      payload: {
+        items: rows,
+        pagination,
+        generatedAt,
+      },
+    });
+
+    res.json({
+      data: {
+        items: rows,
+        meta: {
+          cache: {
+            scope: 'memory',
+            hit: false,
+            stale: false,
+            generatedAt,
+            ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+            snapshotVersion: ADMIN_EVENT_CATALOG_SNAPSHOT_VERSION,
+          },
+        },
+      },
+      pagination,
+    });
+  } catch (error) {
+    console.error('BFF web event catalog summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/archive-year-summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const cacheKey = 'archive-year-summary';
+    const forceRefresh = isTruthyQueryFlag(req.query.refresh);
+    const cached = !forceRefresh
+      ? await adminSummaryCache.get<{
+          items: unknown[];
+          generatedAt: string;
+        }>({
+          namespace: 'event-archive-year-summary',
+          key: cacheKey,
+          snapshotVersion: ADMIN_EVENT_ARCHIVE_YEAR_SUMMARY_VERSION,
+        })
+      : null;
+    if (cached) {
+      res.json({
+        data: {
+          items: cached.payload.items,
+          meta: {
+            cache: {
+              scope: cached.scope,
+              hit: true,
+              stale: false,
+              generatedAt: cached.payload.generatedAt,
+              ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+              snapshotVersion: ADMIN_EVENT_ARCHIVE_YEAR_SUMMARY_VERSION,
+            },
+          },
+        },
+      });
+      return;
+    }
+
+    const rows = await prisma.$queryRaw<Array<{ year: number; count: number }>>(Prisma.sql`
+      SELECT
+        EXTRACT(YEAR FROM "start_date")::int AS "year",
+        COUNT(*)::int AS "count"
+      FROM "events"
+      GROUP BY EXTRACT(YEAR FROM "start_date")
+      ORDER BY "year" DESC
+    `);
+
+    const items = rows.map((row) => ({
+      year: Number(row.year),
+      count: Number(row.count),
+    }));
+    const generatedAt = new Date().toISOString();
+    await adminSummaryCache.set({
+      namespace: 'event-archive-year-summary',
+      key: cacheKey,
+      ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+      snapshotVersion: ADMIN_EVENT_ARCHIVE_YEAR_SUMMARY_VERSION,
+      payload: {
+        items,
+        generatedAt,
+      },
+    });
+
+    res.json({
+      data: {
+        items,
+        meta: {
+          cache: {
+            scope: 'memory',
+            hit: false,
+            stale: false,
+            generatedAt,
+            ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+            snapshotVersion: ADMIN_EVENT_ARCHIVE_YEAR_SUMMARY_VERSION,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.error('BFF web event archive year summary error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -10413,6 +10721,142 @@ router.get('/djs', optionalAuth, async (req: Request, res: Response): Promise<vo
     );
   } catch (error) {
     console.error('BFF web djs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 50, 100);
+    const skip = (page - 1) * limit;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+    const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'followerCount';
+    const forceRefresh = isTruthyQueryFlag(req.query.refresh);
+
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search,
+      country,
+      sortBy,
+    });
+    const cached = !forceRefresh
+      ? await adminSummaryCache.get<{
+          items: unknown[];
+          pagination: BFFPagination;
+          generatedAt: string;
+        }>({
+          namespace: 'dj-catalog-summary',
+          key: cacheKey,
+          snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
+        })
+      : null;
+    if (cached) {
+      res.json({
+        data: {
+          items: cached.payload.items,
+          meta: {
+            cache: {
+              scope: cached.scope,
+              hit: true,
+              stale: false,
+              generatedAt: cached.payload.generatedAt,
+              ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+              snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
+            },
+          },
+        },
+        pagination: cached.payload.pagination,
+      });
+      return;
+    }
+
+    const where: Prisma.DJWhereInput = {};
+    if (search) {
+      const normalizedSearchVariants = Array.from(new Set([search, search.toLowerCase(), search.toUpperCase()]));
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { aliases: { hasSome: normalizedSearchVariants } },
+        { bio: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (country) where.country = country;
+
+    const orderBy: Prisma.DJOrderByWithRelationInput =
+      sortBy === 'name'
+        ? { name: 'asc' }
+        : sortBy === 'createdAt'
+          ? { createdAt: 'desc' }
+          : sortBy === 'soundcloudFollowers'
+            ? { soundCloudFollowers: 'desc' }
+            : { followerCount: 'desc' };
+
+    const [rows, total] = await Promise.all([
+      prisma.dJ.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          avatarUrl: true,
+          bannerUrl: true,
+          country: true,
+          bio: true,
+          followerCount: true,
+          soundCloudFollowers: true,
+          instagramUrl: true,
+          spotifyId: true,
+          isVerified: true,
+          updatedAt: true,
+          createdAt: true,
+          lastSyncedAt: true,
+        },
+      }),
+      prisma.dJ.count({ where }),
+    ]);
+
+    const pagination = {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+    const generatedAt = new Date().toISOString();
+    await adminSummaryCache.set({
+      namespace: 'dj-catalog-summary',
+      key: cacheKey,
+      ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+      snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
+      payload: {
+        items: rows,
+        pagination,
+        generatedAt,
+      },
+    });
+
+    res.json({
+      data: {
+        items: rows,
+        meta: {
+          cache: {
+            scope: 'memory',
+            hit: false,
+            stale: false,
+            generatedAt,
+            ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+            snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
+          },
+        },
+      },
+      pagination,
+    });
+  } catch (error) {
+    console.error('BFF web DJ catalog summary error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

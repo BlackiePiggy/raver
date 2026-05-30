@@ -2,7 +2,14 @@ import { getApiUrl } from '@/lib/config';
 import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 
 export type ContentSubmissionEntityType = 'event' | 'dj' | 'news' | 'set' | 'brand' | 'label' | 'id' | 'rating';
-export type ContentSubmissionStatus = 'pending' | 'approved' | 'rejected';
+export type ContentSubmissionStatus =
+  | 'pending'
+  | 'processing'
+  | 'reviewing'
+  | 'approved'
+  | 'rejected'
+  | 'failed'
+  | 'cancelled';
 
 export interface ContentSubmissionUser {
   id: string;
@@ -28,6 +35,27 @@ export interface ContentSubmission {
   submitter?: ContentSubmissionUser;
 }
 
+export interface ContentSubmissionVersion {
+  id: string;
+  submissionId: string;
+  version: number;
+  title: string;
+  payload: Record<string, unknown>;
+  submittedAt: string;
+  submittedBy: string | null;
+  changeNote: string | null;
+}
+
+export interface ContentSubmissionDetail extends ContentSubmission {
+  versions: ContentSubmissionVersion[];
+}
+
+export interface ContentSubmissionReviewInput {
+  decision: 'approved' | 'rejected';
+  reason?: string;
+  reviewNotes?: Record<string, unknown>;
+}
+
 const buildQuery = (params?: Record<string, string | number | undefined>): string => {
   const search = new URLSearchParams();
   if (params) {
@@ -42,7 +70,6 @@ const buildQuery = (params?: Record<string, string | number | undefined>): strin
 
 export const contentSubmissionsApi = {
   async listAdmin(
-    _token: string,
     params?: {
       status?: string;
       entityType?: string;
@@ -51,16 +78,21 @@ export const contentSubmissionsApi = {
       missingLocale?: 'ja' | 'en' | 'zh' | string;
       translationStatus?: 'needs_manual_confirmation' | string;
     }
-  ): Promise<{ items: ContentSubmission[] }> {
-    return authenticatedJsonFetch<{ items: ContentSubmission[] }>(
+  ): Promise<{ items: ContentSubmission[]; total: number }> {
+    return authenticatedJsonFetch<{ items: ContentSubmission[]; total: number }>(
       getApiUrl(`/admin/v1/content-submissions${buildQuery(params)}`)
     );
   },
 
+  async getAdminDetail(submissionId: string): Promise<{ submission: ContentSubmissionDetail }> {
+    return authenticatedJsonFetch<{ submission: ContentSubmissionDetail }>(
+      getApiUrl(`/admin/v1/content-submissions/${submissionId}`)
+    );
+  },
+
   async review(
-    _token: string,
     submissionId: string,
-    input: { decision: 'approved' | 'rejected'; reason?: string }
+    input: ContentSubmissionReviewInput
   ): Promise<{ message: string; submission: ContentSubmission }> {
     return authenticatedJsonFetch<{ message: string; submission: ContentSubmission }>(
       getApiUrl(`/admin/v1/content-submissions/${submissionId}/review`),

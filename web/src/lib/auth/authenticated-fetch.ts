@@ -10,13 +10,14 @@ const parseJsonSafe = async (response: Response): Promise<unknown> => {
   }
 };
 
-const buildAuthHeaders = (headers?: HeadersInit): Headers => {
+const buildAuthHeaders = (headers?: HeadersInit, body?: BodyInit | null): Headers => {
   const nextHeaders = new Headers(headers || {});
   const token = authSessionToken.get();
   if (token) {
     nextHeaders.set('Authorization', `Bearer ${token}`);
   }
-  if (!nextHeaders.has('Content-Type')) {
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (!nextHeaders.has('Content-Type') && !isFormData) {
     nextHeaders.set('Content-Type', 'application/json');
   }
   return nextHeaders;
@@ -63,7 +64,7 @@ export const authenticatedFetch = async (input: RequestInfo | URL, init?: Reques
     fetch(input, {
       ...init,
       credentials: 'include',
-      headers: buildAuthHeaders(init?.headers),
+      headers: buildAuthHeaders(init?.headers, init?.body),
     });
 
   let response = await attempt();

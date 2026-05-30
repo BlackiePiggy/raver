@@ -1,0 +1,76 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import OrganizerStudioForm from '@/components/admin/OrganizerStudioForm';
+import {
+  createOrganizerStudioDraft,
+  type OrganizerStudioCreateResult,
+  type OrganizerStudioDraft,
+} from '@/features/admin-content/organizer-studio';
+
+export default function OrganizerStudioCreatePageClient({
+  initialName,
+}: {
+  initialName: string;
+}) {
+  const [draft, setDraft] = useState<OrganizerStudioDraft>(() =>
+    createOrganizerStudioDraft(initialName)
+  );
+  const [submitNotice, setSubmitNotice] = useState<string | null>(null);
+  const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
+
+  const handleSubmitResult = (result: OrganizerStudioCreateResult) => {
+    if (result.kind === 'created') {
+      setSubmitNotice(`主办方已创建成功：${result.organizer.name}`);
+      setSubmitResultLink(`/admin/content/organizers/${result.organizer.id}/edit`);
+      return;
+    }
+    setSubmitNotice(result.payload.message || '主办方已进入审核队列');
+    setSubmitResultLink('/admin/content/reviews');
+  };
+
+  return (
+    <AdminContentLayout
+      title="新建主办方"
+      description="这里已经接上 Organizer Studio 第一版可提交流程。当前版本先覆盖头像、背景、证明、品牌资料和官方链接，并走统一 `/v1/learn/festivals` 创建链路。"
+      actions={
+        <>
+          <Link
+            href="/admin/content/organizers"
+            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+          >
+            返回主办方工作区
+          </Link>
+          <Link
+            href="/admin/content/events/new"
+            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+          >
+            去新建活动
+          </Link>
+        </>
+      }
+    >
+      {submitNotice ? (
+        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+          <div>{submitNotice}</div>
+          {submitResultLink ? (
+            <div className="mt-3">
+              <Link href={submitResultLink} className="text-primary-blue hover:underline">
+                打开结果页面
+              </Link>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <OrganizerStudioForm
+        mode="create"
+        draft={draft}
+        setDraft={setDraft}
+        onSubmit={handleSubmitResult}
+      />
+    </AdminContentLayout>
+  );
+}

@@ -19,7 +19,7 @@ export default function NewPublishPage() {
             <p className="text-sm text-text-secondary mt-2">上传视频链接、封面与 tracklist。</p>
           </Link>
 
-          <Link href="/events/publish" className="rounded-xl border border-bg-tertiary bg-bg-secondary p-5 hover:border-primary-purple/50 transition-colors">
+          <Link href="/admin/content/events/new" className="rounded-xl border border-bg-tertiary bg-bg-secondary p-5 hover:border-primary-purple/50 transition-colors">
             <h2 className="text-xl font-semibold text-text-primary">发布活动</h2>
             <p className="text-sm text-text-secondary mt-2">发布活动封面、阵容与演出时段。</p>
           </Link>

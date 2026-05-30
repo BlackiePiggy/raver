@@ -185,7 +185,7 @@ export default function MyPublishesPage() {
             </div>
             <div className="mt-4 pt-4 border-t border-bg-primary space-y-2">
               <Link href="/upload" className="block text-sm text-primary-blue hover:text-primary-purple">+ 发布 DJ Set</Link>
-              <Link href="/events/publish" className="block text-sm text-primary-blue hover:text-primary-purple">+ 发布活动</Link>
+              <Link href="/admin/content/events/new" className="block text-sm text-primary-blue hover:text-primary-purple">+ 发布活动</Link>
             </div>
           </aside>
 
@@ -239,7 +239,7 @@ export default function MyPublishesPage() {
                 {events.map((event) => (
                   <div key={event.id} className="rounded-lg border border-bg-primary bg-bg-tertiary/50 p-3 hover:border-primary-purple/50">
                     <div className="flex items-center gap-3">
-                      <Link href={`/events/my/${event.id}/edit`} className="flex min-w-0 flex-1 items-center gap-3">
+                      <Link href={`/admin/content/events/${event.id}/edit`} className="flex min-w-0 flex-1 items-center gap-3">
                         {event.coverImageUrl ? (
                           <div className="relative h-16 w-28 rounded-md overflow-hidden border border-bg-primary">
                             <Image src={event.coverImageUrl} alt={event.name} fill className="object-cover" sizes="112px" />

@@ -58,7 +58,7 @@ export default function MyPublishedEventsPage() {
             <p className="text-text-secondary mt-1">查看并修改你发布过的活动内容。</p>
           </div>
           <Link
-            href="/events/publish"
+            href="/admin/content/events/new"
             className="px-4 py-2 rounded-lg bg-primary-blue hover:bg-primary-purple text-white"
           >
             + 发布新活动
@@ -72,7 +72,7 @@ export default function MyPublishedEventsPage() {
         ) : events.length === 0 ? (
           <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-10 text-center">
             <p className="text-text-secondary mb-4">你还没有发布过活动。</p>
-            <Link href="/events/publish" className="text-primary-blue hover:text-primary-purple">去发布第一个活动</Link>
+            <Link href="/admin/content/events/new" className="text-primary-blue hover:text-primary-purple">去发布第一个活动</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -95,7 +95,7 @@ export default function MyPublishedEventsPage() {
                     <Link href={`/events/${event.id}`} className="px-3 py-2 rounded-lg border border-bg-primary text-text-secondary hover:text-text-primary text-sm">
                       查看
                     </Link>
-                    <Link href={`/events/my/${event.id}/edit`} className="px-3 py-2 rounded-lg bg-primary-blue hover:bg-primary-purple text-white text-sm">
+                    <Link href={`/admin/content/events/${event.id}/edit`} className="px-3 py-2 rounded-lg bg-primary-blue hover:bg-primary-purple text-white text-sm">
                       编辑
                     </Link>
                   </div>
