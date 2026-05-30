@@ -89,16 +89,16 @@ export default function CatalogCacheGovernancePageClient() {
       description="这里不是再去直接看全量库，而是管理统一后台目录层的摘要缓存策略。当前采用服务端内存热缓存 + 磁盘快照兜底 + 前端本地 TTL，先把高频后台查询压到一个可控、可观察、可手动预热的层。"
       actions={
         <>
-          <Link href="/admin/content/events/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             活动目录中心
           </Link>
-          <Link href="/admin/content/djs/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/djs/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             DJ 目录中心
           </Link>
           <button
             type="button"
             onClick={() => void loadAll()}
-            className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
           >
             刷新治理面板
           </button>
@@ -106,38 +106,38 @@ export default function CatalogCacheGovernancePageClient() {
       }
     >
       {error ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4 text-sm text-[#6a3530]">
           {error}
         </section>
       ) : null}
 
       {successMessage ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4 text-sm text-[#2f4027]">
           {successMessage}
         </section>
       ) : null}
 
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Governance Strategy</div>
-          <h2 className="mt-2 text-2xl font-semibold">商用后台更稳的低压目录层</h2>
+        <div className="admin-reference-card p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Governance Strategy</div>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">商用后台更稳的低压目录层</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {[
               '目录页只读分页摘要，不在每次进入后台时直接扫描全量重数据。',
               '服务端先命中内存热缓存，重启后再落回磁盘快照，降低冷启动压力。',
               '管理台可手动预热重点摘要，让运营在活动高峰前先把常用目录加热。',
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm leading-6">
+              <div key={item} className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm leading-6 text-[#24312d]">
                 {item}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border-secondary bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02)),radial-gradient(circle_at_top_left,rgba(209,171,84,0.16),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(64,147,255,0.14),transparent_45%)] p-6">
-          <div className="text-sm text-text-secondary">Governance Snapshot</div>
-          <h2 className="mt-2 text-2xl font-semibold">治理快照</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+        <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Governance Snapshot</div>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">治理快照</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
             <p>治理资源：{summary.total} 个</p>
             <p>当前命中缓存：{summary.cacheHits} 个</p>
             <p>磁盘快照兜底：{summary.diskBacked} 个</p>
@@ -146,12 +146,12 @@ export default function CatalogCacheGovernancePageClient() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="admin-reference-card p-6">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-sm text-text-secondary">Cache Resources</div>
-            <h2 className="mt-2 text-2xl font-semibold">摘要缓存资源</h2>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Cache Resources</div>
+            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">摘要缓存资源</h2>
+            <p className="mt-2 text-sm leading-6 text-black/52">
               当前优先治理活动目录、DJ 目录和 Archive 年份摘要。后续如果接 Redis 或 DB snapshot，也优先在这一层升级，而不是让页面直接加重查询。
             </p>
           </div>
@@ -159,17 +159,17 @@ export default function CatalogCacheGovernancePageClient() {
 
         <div className="mt-5 space-y-4">
           {isLoading ? (
-            <div className="py-16 text-center text-sm text-text-secondary">治理资源加载中…</div>
+            <div className="py-16 text-center text-sm text-black/48">治理资源加载中…</div>
           ) : (
             items.map((item) => (
-              <div key={item.key} className="grid gap-4 rounded-3xl border border-border-secondary bg-bg-tertiary/35 p-5 xl:grid-cols-[1.2fr_0.9fr_220px]">
+              <div key={item.key} className="grid gap-4 rounded-[28px] border border-[#e8eceb] bg-[#fcfcfb] p-5 xl:grid-cols-[1.2fr_0.9fr_220px]">
                 <div>
-                  <div className="text-sm text-text-secondary">{item.label}</div>
-                  <h3 className="mt-2 text-2xl font-semibold text-text-primary">{scopeLabel(item.cache?.scope)}</h3>
-                  <p className="mt-3 text-sm leading-6 text-text-secondary">{item.description}</p>
+                  <div className="text-sm text-black/42">{item.label}</div>
+                  <h3 className="mt-2 text-2xl font-semibold text-[#071110]">{scopeLabel(item.cache?.scope)}</h3>
+                  <p className="mt-3 text-sm leading-6 text-black/52">{item.description}</p>
                 </div>
 
-                <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-4 text-sm leading-6 text-text-secondary">
+                <div className="admin-reference-soft-card px-4 py-4 text-sm leading-6 text-black/52">
                   <div>缓存命中：{item.cache?.hit ? '是' : '否'}</div>
                   <div>摘要时间：{formatDateTime(item.cache?.generatedAt || item.fetchedAt)}</div>
                   <div>TTL：{formatDuration(item.cache?.ttlMs)}</div>
@@ -181,11 +181,11 @@ export default function CatalogCacheGovernancePageClient() {
                     type="button"
                     onClick={() => void handleRefresh(item.key)}
                     disabled={refreshingKey === item.key}
-                    className="rounded-xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {refreshingKey === item.key ? '刷新中…' : '手动预热摘要'}
                   </button>
-                  <div className="rounded-xl border border-border-secondary px-4 py-3 text-sm text-text-secondary">
+                  <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
                     {item.cache?.scope === 'disk'
                       ? '当前已从磁盘快照回暖，适合服务重启后快速恢复目录浏览。'
                       : item.cache?.scope === 'memory'

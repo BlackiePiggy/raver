@@ -42,8 +42,8 @@ function StatusBadge({ status, className }: { status: string; className: (status
 
 function SummaryMetric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4">
-      <div className="text-sm text-black/48">{label}</div>
+    <div className="admin-reference-soft-card p-4">
+      <div className="text-sm text-black/42">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-[#071110]">{value}</div>
     </div>
   );
@@ -254,84 +254,95 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="text-sm text-text-secondary">任务详情</div>
-                  <h2 className="mt-1 text-2xl font-semibold">{selectedJob.dj.name}</h2>
-                  <div className="mt-2 flex flex-wrap gap-2 text-sm text-text-secondary">
-                    <span className="text-black/45">状态 {selectedJob.status}</span>
-                    <span className="text-black/45">来源 {selectedJob.triggerSource}</span>
-                    <span className="text-black/45">创建于 {formatTime(selectedJob.createdAt)}</span>
+              <section className="admin-reference-dark-card p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-sm text-white/45">Review Action Panel</div>
+                    <h2 className="mt-1 text-2xl font-semibold text-white">{selectedJob.dj.name}</h2>
+                    <div className="mt-2 flex flex-wrap gap-2 text-sm text-white/58">
+                      <span>状态 {selectedJob.status}</span>
+                      <span>来源 {selectedJob.triggerSource}</span>
+                      <span>创建于 {formatTime(selectedJob.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={!exactPendingCandidates.length || actionLoading}
+                      onClick={() =>
+                        void handleAction(
+                          async () => djEventBindingReviewApi.applyExact(token || '', selectedJob.id),
+                          '已应用全部 exact 候选'
+                        )
+                      }
+                      className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:opacity-50"
+                    >
+                      Apply Exact
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedCandidateIds.length || actionLoading}
+                      onClick={() =>
+                        void handleAction(
+                          async () => djEventBindingReviewApi.applyCandidates(token || '', selectedJob.id, selectedCandidateIds),
+                          '已应用所选候选'
+                        )
+                      }
+                      className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      Apply Selected
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedCandidateIds.length || actionLoading}
+                      onClick={() =>
+                        void handleAction(
+                          async () =>
+                            djEventBindingReviewApi.dismissCandidates(token || '', selectedJob.id, {
+                              candidateIds: selectedCandidateIds,
+                            }),
+                          '已忽略所选候选'
+                        )
+                      }
+                      className="rounded-full border border-white/10 bg-[#6a3530] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      Dismiss Selected
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    disabled={!exactPendingCandidates.length || actionLoading}
-                    onClick={() =>
-                      void handleAction(
-                        async () => djEventBindingReviewApi.applyExact(token || '', selectedJob.id),
-                        '已应用全部 exact 候选'
-                      )
-                    }
-                    className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                  >
-                    Apply Exact
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!selectedCandidateIds.length || actionLoading}
-                    onClick={() =>
-                      void handleAction(
-                        async () => djEventBindingReviewApi.applyCandidates(token || '', selectedJob.id, selectedCandidateIds),
-                        '已应用所选候选'
-                      )
-                    }
-                    className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:opacity-50"
-                  >
-                    Apply Selected
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!selectedCandidateIds.length || actionLoading}
-                    onClick={() =>
-                      void handleAction(
-                        async () =>
-                          djEventBindingReviewApi.dismissCandidates(token || '', selectedJob.id, {
-                            candidateIds: selectedCandidateIds,
-                          }),
-                        '已忽略所选候选'
-                      )
-                    }
-                    className="rounded-full border border-[#efdad8] bg-[#f7e3e0] px-4 py-3 text-sm font-semibold text-[#6a3530] disabled:opacity-50"
-                  >
-                    Dismiss Selected
-                  </button>
-                </div>
-              </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                <SummaryMetric label="Exact" value={selectedJob.exactCount} />
-                <SummaryMetric label="Fuzzy" value={selectedJob.fuzzyCount} />
-                <SummaryMetric label="Applied" value={selectedJob.appliedCount} />
-              </div>
-
-              <div className="admin-reference-soft-card flex items-center justify-between gap-3 px-4 py-3">
-                <div>
-                  <div className="text-sm font-semibold text-[#071110]">候选列表</div>
-                  <div className="mt-1 text-xs text-black/45">
-                    pending 候选可批量勾选。Exact 命中通常可以直接点 `Apply Exact`。
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="rounded-[20px] border border-white/10 bg-white/8 p-4">
+                    <div className="text-sm text-white/42">Exact</div>
+                    <div className="mt-2 text-2xl font-semibold text-white">{selectedJob.exactCount}</div>
+                  </div>
+                  <div className="rounded-[20px] border border-white/10 bg-white/8 p-4">
+                    <div className="text-sm text-white/42">Fuzzy</div>
+                    <div className="mt-2 text-2xl font-semibold text-white">{selectedJob.fuzzyCount}</div>
+                  </div>
+                  <div className="rounded-[20px] border border-white/10 bg-white/8 p-4">
+                    <div className="text-sm text-white/42">Applied</div>
+                    <div className="mt-2 text-2xl font-semibold text-white">{selectedJob.appliedCount}</div>
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-black/45">
-                  <input
-                    type="checkbox"
-                    checked={pendingCandidates.length > 0 && selectedCandidateIds.length === pendingCandidates.length}
-                    onChange={(event) => toggleAllPending(event.target.checked)}
-                  />
-                  全选 pending
-                </label>
-              </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/8 px-4 py-3">
+                  <div>
+                    <div className="text-sm font-semibold text-white">候选列表</div>
+                    <div className="mt-1 text-xs text-white/45">
+                      pending 候选可批量勾选。Exact 命中通常可以直接点 `Apply Exact`。
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-white/55">
+                    <input
+                      type="checkbox"
+                      checked={pendingCandidates.length > 0 && selectedCandidateIds.length === pendingCandidates.length}
+                      onChange={(event) => toggleAllPending(event.target.checked)}
+                    />
+                    全选 pending
+                  </label>
+                </div>
+              </section>
 
               <div className="space-y-3">
                 {(selectedJob.candidates ?? []).map((candidate) => {

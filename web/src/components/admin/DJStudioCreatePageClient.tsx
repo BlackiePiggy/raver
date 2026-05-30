@@ -35,21 +35,21 @@ export default function DJStudioCreatePageClient({
       description="这里已经接上 DJ Studio 第一版可提交流程。当前版本先覆盖头像、banner、proof、平台链接和基础平台统计，并走统一 `/v1/djs/manual/import` 创建链路。"
       actions={
         <>
-          <Link href="/admin/content/djs" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/djs" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回 DJ 工作区
           </Link>
-          <Link href="/admin/content/events/new" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/new" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             去新建活动
           </Link>
         </>
       }
     >
       {submitNotice ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
           <div>{submitNotice}</div>
           {submitResultLink ? (
             <div className="mt-3">
-              <Link href={submitResultLink} className="text-primary-blue hover:underline">
+              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
                 打开结果页面
               </Link>
             </div>

@@ -304,42 +304,42 @@ export default function EventOrganizerBindingPageClient() {
       description="这一页把 Festival Viewer 里最常用的 Event ↔ Brand 关系维护迁回统一后台。左侧用低频目录摘要选活动，右侧集中完成主办方搜索、绑定、清空与编辑跳转。"
       actions={
         <>
-          <Link href="/admin/content/organizers" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/organizers" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回主办方工作区
           </Link>
-          <Link href="/admin/content/organizers/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/organizers/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             主办方目录中心
           </Link>
-          <Link href="/admin/content/events/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             活动目录中心
           </Link>
-          <Link href="/admin/content/organizers/new" className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/admin/content/organizers/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建主办方
           </Link>
         </>
       }
     >
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Binding Strategy</div>
-          <h2 className="mt-2 text-2xl font-semibold">低频目录 + 关系面板</h2>
+        <div className="admin-reference-card p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Binding Strategy</div>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">低频目录 + 关系面板</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {[
               '左侧活动目录只看摘要卡片，不直接加载完整活动详情',
               '右侧只在真正绑定时拉取完整活动并提交标准化 update payload',
               '先把高频关系维护回迁，当前已经补到批量绑定第一版',
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm leading-6">
+              <div key={item} className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm leading-6 text-[#24312d]">
                 {item}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border-secondary bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02)),radial-gradient(circle_at_top_left,rgba(209,171,84,0.16),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(64,147,255,0.14),transparent_45%)] p-6">
-          <div className="text-sm text-text-secondary">Cache Status</div>
-          <h2 className="mt-2 text-2xl font-semibold">摘要层说明</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+        <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)] p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Cache Status</div>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">摘要层说明</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
             <p>{cacheMessage}</p>
             <p>当前页：{page} / {totalPages}</p>
             <p>可管理活动：{total.toLocaleString()} 条</p>
@@ -347,37 +347,37 @@ export default function EventOrganizerBindingPageClient() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="admin-reference-card p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-sm text-text-secondary">Unbound Clusters</div>
-            <h2 className="mt-2 text-2xl font-semibold">未匹配聚类视图</h2>
-            <p className="mt-3 text-sm leading-6 text-text-secondary">
+            <div className="text-sm text-black/42">Unbound Clusters</div>
+            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">未匹配聚类视图</h2>
+            <p className="mt-3 text-sm leading-6 text-black/48">
               把当前页还没绑定正式主办方的活动按主办方文案或活动名关键词聚类，方便运营集中勾选后再做批量绑定。
             </p>
           </div>
-          <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm text-text-secondary">
+          <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
             当前页未绑定活动：{items.filter((item) => !item.wikiFestivalId).length} 条
           </div>
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {unboundClusters.length === 0 ? (
-            <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/35 px-4 py-6 text-sm text-text-secondary">
+            <div className="admin-reference-soft-card px-4 py-6 text-sm text-black/48">
               当前页没有待治理的未匹配活动。
             </div>
           ) : (
             unboundClusters.map((cluster) => (
-              <div key={cluster.label} className="rounded-2xl border border-border-secondary bg-bg-tertiary/35 p-4">
+              <div key={cluster.label} className="admin-reference-soft-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-text-primary">{cluster.label}</div>
-                    <div className="mt-1 text-xs text-text-secondary">{cluster.rows.length} 条待绑定活动</div>
+                    <div className="text-sm font-semibold text-[#071110]">{cluster.label}</div>
+                    <div className="mt-1 text-xs text-black/42">{cluster.rows.length} 条待绑定活动</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => selectCluster(cluster.rows.map((item) => item.id))}
-                    className="rounded-xl border border-border-secondary px-3 py-2 text-xs hover:border-primary-blue hover:text-primary-blue"
+                    className="rounded-full border border-[#e8eceb] bg-white px-3 py-2 text-xs font-semibold text-[#071110]"
                   >
                     选中这一组
                   </button>
@@ -389,10 +389,10 @@ export default function EventOrganizerBindingPageClient() {
                       key={row.id}
                       type="button"
                       onClick={() => setSelectedEventId(row.id)}
-                      className="block w-full rounded-xl border border-border-secondary bg-bg-secondary/60 px-3 py-3 text-left hover:border-primary-blue/40"
+                      className="block w-full rounded-[20px] border border-[#e8eceb] bg-white px-3 py-3 text-left"
                     >
-                      <div className="text-sm font-medium text-text-primary">{row.name}</div>
-                      <div className="mt-1 text-xs leading-5 text-text-secondary">
+                      <div className="text-sm font-medium text-[#071110]">{row.name}</div>
+                      <div className="mt-1 text-xs leading-5 text-black/48">
                         {row.city || '未知城市'} / {row.country || '未知国家'} · {formatDateRange(row.startDate, row.endDate)}
                       </div>
                     </button>
@@ -404,28 +404,28 @@ export default function EventOrganizerBindingPageClient() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="admin-reference-card p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.7fr)_220px_auto]">
               <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">搜索活动</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-black/35">搜索活动</span>
                 <input
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="活动名 / 城市 / 主办方"
-                  className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                  className="w-full rounded-full px-4 py-3 text-sm"
                 />
               </label>
               <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">活动状态</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-black/35">活动状态</span>
                 <select
                   value={status}
                   onChange={(event) => {
                     setStatus(event.target.value);
                     setPage(1);
                   }}
-                  className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                  className="w-full rounded-full px-4 py-3 text-sm"
                 >
                   <option value="all">全部状态</option>
                   <option value="upcoming">即将开始</option>
@@ -434,7 +434,7 @@ export default function EventOrganizerBindingPageClient() {
                   <option value="cancelled">已取消</option>
                 </select>
               </label>
-              <button type="submit" className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white">
+              <button type="submit" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
                 检索活动
               </button>
             </form>
@@ -442,11 +442,11 @@ export default function EventOrganizerBindingPageClient() {
               <button
                 type="button"
                 onClick={toggleSelectAllVisible}
-                className="rounded-xl border border-border-secondary px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue"
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]"
               >
                 {allVisibleSelected ? '取消全选当前页' : '全选当前页'}
               </button>
-              <div className="rounded-xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm text-text-secondary">
+              <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
                 已选 {selectedEventIds.length} 条
               </div>
             </div>
@@ -454,9 +454,9 @@ export default function EventOrganizerBindingPageClient() {
 
           <div className="mt-5">
             {isLoading ? (
-              <div className="py-20 text-center text-sm text-text-secondary">活动摘要加载中…</div>
+              <div className="py-20 text-center text-sm text-black/48">活动摘要加载中…</div>
             ) : items.length === 0 ? (
-              <div className="py-20 text-center text-sm text-text-secondary">当前筛选下没有活动可供绑定。</div>
+              <div className="py-20 text-center text-sm text-black/48">当前筛选下没有活动可供绑定。</div>
             ) : (
               <div className="space-y-4">
                 {items.map((item) => {
@@ -464,10 +464,10 @@ export default function EventOrganizerBindingPageClient() {
                   return (
                     <div
                       key={item.id}
-                      className={`grid gap-4 rounded-3xl border p-4 transition-colors lg:grid-cols-[32px_120px_minmax(0,1fr)] ${
+                      className={`grid gap-4 rounded-[24px] border p-4 transition-colors lg:grid-cols-[32px_120px_minmax(0,1fr)] ${
                         selected
-                          ? 'border-primary-blue bg-primary-blue/8'
-                          : 'border-border-secondary bg-bg-tertiary/35 hover:border-primary-blue/40'
+                          ? 'border-[#dceabf] bg-[#edf7f2]'
+                          : 'border-[#e8eceb] bg-[#f8f9f8]'
                       }`}
                     >
                       <label className="flex items-start pt-1">
@@ -475,10 +475,10 @@ export default function EventOrganizerBindingPageClient() {
                           type="checkbox"
                           checked={selectedEventIds.includes(item.id)}
                           onChange={() => toggleEventSelection(item.id)}
-                          className="mt-1 h-4 w-4 rounded border-border-secondary bg-bg-secondary"
+                          className="mt-1 h-4 w-4 rounded border-border-secondary bg-white"
                         />
                       </label>
-                      <div className="relative overflow-hidden rounded-2xl border border-border-secondary bg-bg-secondary">
+                      <div className="relative overflow-hidden rounded-[20px] border border-[#e8eceb] bg-[#f5f5f7]">
                         {item.coverImageUrl ? (
                           <Image
                             src={item.coverImageUrl}
@@ -488,7 +488,7 @@ export default function EventOrganizerBindingPageClient() {
                             className="h-full min-h-[100px] w-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-full min-h-[100px] items-center justify-center bg-[linear-gradient(135deg,rgba(209,171,84,0.18),rgba(64,147,255,0.18))] text-sm text-text-secondary">
+                          <div className="flex h-full min-h-[100px] items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/42">
                             暂无封面
                           </div>
                         )}
@@ -505,31 +505,31 @@ export default function EventOrganizerBindingPageClient() {
                         className="min-w-0 text-left"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-secondary">
+                          <span className="admin-reference-chip">
                             {item.eventType || '未标记类型'}
                           </span>
-                          <span className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-secondary">
+                          <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">
                             {item.status || 'unknown'}
                           </span>
                           {item.wikiFestivalId ? (
-                            <span className="rounded-full border border-primary-blue/30 bg-primary-blue/10 px-3 py-1 text-xs text-text-primary">
+                            <span className="rounded-full border border-[#dceabf] bg-[#eef8d8] px-3 py-1 text-xs font-semibold text-[#2f4027]">
                               已绑定主办方
                             </span>
                           ) : (
-                            <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs text-amber-100">
+                            <span className="rounded-full border border-[#eadfbe] bg-[#f6edd7] px-3 py-1 text-xs font-semibold text-[#604a1b]">
                               待绑定
                             </span>
                           )}
                         </div>
 
-                        <h3 className="mt-3 truncate text-xl font-semibold text-text-primary">{item.name}</h3>
-                        <p className="mt-2 text-sm leading-6 text-text-secondary">
+                        <h3 className="mt-3 truncate text-xl font-semibold text-[#071110]">{item.name}</h3>
+                        <p className="mt-2 text-sm leading-6 text-black/48">
                           {item.city || '未知城市'} / {item.country || '未知国家'} · {formatDateRange(item.startDate, item.endDate)}
                         </p>
-                        <p className="mt-2 text-sm leading-6 text-text-secondary">
+                        <p className="mt-2 text-sm leading-6 text-black/48">
                           当前主办方：{item.wikiFestival?.name || item.organizerName || '尚未绑定正式主办方'}
                         </p>
-                        <p className="mt-2 text-xs text-text-secondary">最近更新：{formatDateTime(item.updatedAt)}</p>
+                        <p className="mt-2 text-xs text-black/38">最近更新：{formatDateTime(item.updatedAt)}</p>
                       </button>
                     </div>
                   );
@@ -539,7 +539,7 @@ export default function EventOrganizerBindingPageClient() {
           </div>
 
           <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-6">
-            <div className="text-sm text-text-secondary">
+            <div className="text-sm text-black/48">
               共 {total.toLocaleString()} 条活动摘要
             </div>
             <div className="flex gap-3">
@@ -547,7 +547,7 @@ export default function EventOrganizerBindingPageClient() {
                 type="button"
                 disabled={page <= 1}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 上一页
               </button>
@@ -555,7 +555,7 @@ export default function EventOrganizerBindingPageClient() {
                 type="button"
                 disabled={page >= totalPages}
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 下一页
               </button>
@@ -564,23 +564,23 @@ export default function EventOrganizerBindingPageClient() {
         </div>
 
         <div className="space-y-5">
-          <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-            <div className="text-sm text-text-secondary">Binding Panel</div>
-            <h2 className="mt-2 text-2xl font-semibold">当前活动关系面板</h2>
+          <section className="admin-reference-dark-card p-6">
+            <div className="text-sm text-white/45">Binding Panel</div>
+            <h2 className="mt-2 text-2xl font-semibold text-white">当前活动关系面板</h2>
 
             {selectedEvent ? (
               <div className="mt-5 space-y-4">
-                <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/50 p-4">
-                  <div className="text-sm text-text-secondary">当前活动</div>
-                  <div className="mt-1 text-xl font-semibold text-text-primary">{selectedEvent.name}</div>
-                  <div className="mt-2 text-sm leading-6 text-text-secondary">
+                <div className="rounded-[22px] border border-white/10 bg-white/8 p-4">
+                  <div className="text-sm text-white/45">当前活动</div>
+                  <div className="mt-1 text-xl font-semibold text-white">{selectedEvent.name}</div>
+                  <div className="mt-2 text-sm leading-6 text-white/62">
                     当前绑定：
                     {selectedEvent.wikiFestival?.name || selectedEvent.organizerName || '尚未绑定正式主办方'}
                   </div>
                 </div>
 
                 <label className="space-y-2">
-                  <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">搜索主办方</span>
+                  <span className="text-xs uppercase tracking-[0.2em] text-white/45">搜索主办方</span>
                   <input
                     value={organizerQuery}
                     onChange={(event) => {
@@ -589,15 +589,15 @@ export default function EventOrganizerBindingPageClient() {
                       setSuccessMessage('');
                     }}
                     placeholder="输入主办方名 / alias / 城市"
-                    className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                    className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/35"
                   />
                 </label>
 
-                <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/35 p-3">
+                <div className="rounded-[22px] border border-white/10 bg-white/8 p-3">
                   {isSearchingOrganizers ? (
-                    <div className="text-sm text-text-secondary">正在搜索主办方…</div>
+                    <div className="text-sm text-white/55">正在搜索主办方…</div>
                   ) : organizerResults.length === 0 ? (
-                    <div className="text-sm text-text-secondary">输入关键词后会在正式主办方库中检索候选。</div>
+                    <div className="text-sm text-white/55">输入关键词后会在正式主办方库中检索候选。</div>
                   ) : (
                     <div className="space-y-2">
                       {organizerResults.map((organizer) => {
@@ -607,14 +607,14 @@ export default function EventOrganizerBindingPageClient() {
                             key={organizer.id}
                             type="button"
                             onClick={() => setSelectedOrganizer(organizer)}
-                            className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                            className={`w-full rounded-[20px] border px-4 py-3 text-left transition-colors ${
                               active
-                                ? 'border-primary-blue bg-primary-blue/10'
-                                : 'border-border-secondary bg-bg-secondary/70 hover:border-primary-blue/40'
+                                ? 'border-white/20 bg-white/14'
+                                : 'border-white/10 bg-white/6'
                             }`}
                           >
-                            <div className="text-sm font-semibold text-text-primary">{organizer.name}</div>
-                            <div className="mt-1 text-xs leading-5 text-text-secondary">
+                            <div className="text-sm font-semibold text-white">{organizer.name}</div>
+                            <div className="mt-1 text-xs leading-5 text-white/45">
                               {organizer.city || '未知城市'} / {organizer.country || '未知国家'}
                             </div>
                           </button>
@@ -625,17 +625,17 @@ export default function EventOrganizerBindingPageClient() {
                 </div>
 
                 {selectedOrganizer ? (
-                  <div className="rounded-2xl border border-primary-blue/20 bg-primary-blue/8 p-4 text-sm leading-6 text-text-primary">
+                  <div className="rounded-[22px] border border-white/10 bg-white/10 p-4 text-sm leading-6 text-white">
                     即将绑定到：{selectedOrganizer.name}
                   </div>
                 ) : null}
 
-                <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
                     disabled={!selectedOrganizer || isSubmitting}
                     onClick={handleBind}
-                    className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     绑定到所选主办方
                   </button>
@@ -643,24 +643,24 @@ export default function EventOrganizerBindingPageClient() {
                     type="button"
                     disabled={isSubmitting || !selectedEvent?.wikiFestivalId}
                     onClick={handleClear}
-                    className="rounded-xl border border-border-secondary px-5 py-3 text-sm hover:border-primary-blue hover:text-primary-blue disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-full border border-white/10 bg-white/8 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     清空当前绑定
                   </button>
                 </div>
 
-                <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/35 p-4">
-                  <div className="text-sm font-semibold text-text-primary">批量操作</div>
-                  <div className="mt-2 text-sm leading-6 text-text-secondary">
+                <div className="rounded-[22px] border border-white/10 bg-white/8 p-4">
+                  <div className="text-sm font-semibold text-white">批量操作</div>
+                  <div className="mt-2 text-sm leading-6 text-white/58">
                     当前已选 {selectedEventIds.length} 条活动
                     {selectedEvents.length > 0 ? `，其中本页可见 ${selectedEvents.length} 条` : ''}
                   </div>
-                  <div className="mt-4 grid gap-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <button
                       type="button"
                       disabled={!selectedOrganizer || selectedEventIds.length === 0 || isSubmitting}
                       onClick={handleBatchBind}
-                      className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       批量绑定到所选主办方
                     </button>
@@ -668,7 +668,7 @@ export default function EventOrganizerBindingPageClient() {
                       type="button"
                       disabled={selectedEventIds.length === 0 || isSubmitting}
                       onClick={handleBatchClear}
-                      className="rounded-xl border border-border-secondary px-5 py-3 text-sm hover:border-primary-blue hover:text-primary-blue disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-full border border-white/10 bg-white/8 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       批量清空绑定
                     </button>
@@ -676,34 +676,34 @@ export default function EventOrganizerBindingPageClient() {
                 </div>
               </div>
             ) : (
-              <div className="mt-5 text-sm text-text-secondary">先从左侧选择一个活动。</div>
+              <div className="mt-5 text-sm text-white/55">先从左侧选择一个活动。</div>
             )}
           </section>
 
           {error ? (
-            <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+            <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4 text-sm text-[#6a3530]">
               {error}
             </section>
           ) : null}
 
           {successMessage ? (
-            <section className="rounded-3xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+            <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4 text-sm text-[#2f4027]">
               {successMessage}
             </section>
           ) : null}
 
-          <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-            <div className="text-sm text-text-secondary">Migration Note</div>
-            <h2 className="mt-2 text-2xl font-semibold">迁移边界</h2>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+          <section className="admin-reference-soft-card p-6">
+            <div className="text-sm text-black/42">Migration Note</div>
+            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">迁移边界</h2>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-black/48">
               <p>这一步已经补到批量绑定和未匹配聚类第一版，先解决日常“找活动、绑主办方、清关系、批量改关系”的后台高频动作。</p>
               <p>现在也支持从主办方目录中心带着预选主办方直接进入绑定面板，目录定位和关系治理已经能够在统一后台内部连续完成。</p>
             </div>
             <div className="mt-4 grid gap-3">
-              <Link href="/admin/content/events/catalog" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
+              <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]">
                 返回活动目录中心
               </Link>
-              <Link href="/admin/content/organizers/catalog" className="rounded-2xl border border-border-secondary bg-bg-tertiary/60 px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
+              <Link href="/admin/content/organizers/catalog" className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]">
                 返回主办方目录中心
               </Link>
             </div>

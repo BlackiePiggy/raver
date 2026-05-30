@@ -39,13 +39,13 @@ export default function OrganizerStudioCreatePageClient({
         <>
           <Link
             href="/admin/content/organizers"
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
             返回主办方工作区
           </Link>
           <Link
             href="/admin/content/events/new"
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
             去新建活动
           </Link>
@@ -53,11 +53,11 @@ export default function OrganizerStudioCreatePageClient({
       }
     >
       {submitNotice ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
           <div>{submitNotice}</div>
           {submitResultLink ? (
             <div className="mt-3">
-              <Link href={submitResultLink} className="text-primary-blue hover:underline">
+              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
                 打开结果页面
               </Link>
             </div>

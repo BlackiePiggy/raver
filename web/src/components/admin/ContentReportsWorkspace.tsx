@@ -249,8 +249,8 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
 
       {summary && (
         <section className="grid gap-3 md:grid-cols-4">
-          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4">
-            <div className="text-sm text-black/48">待处理</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">待处理</div>
             <div className="mt-2 text-2xl font-semibold text-[#071110]">{summary.pendingCount}</div>
           </div>
           <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4">
@@ -261,8 +261,8 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
             <div className="text-sm text-[#604a1b]">高优先级待处理</div>
             <div className="mt-2 text-2xl font-semibold text-[#604a1b]">{summary.highPriorityPendingCount}</div>
           </div>
-          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#eef3fb_0%,#ffffff_100%)] p-4">
-            <div className="text-sm text-black/48">最早待处理</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">最早待处理</div>
             <div className="mt-2 text-sm font-semibold text-[#071110]">{formatTime(summary.oldestPendingAt)}</div>
           </div>
         </section>
@@ -351,16 +351,16 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
       <section className="grid gap-5 lg:grid-cols-[430px_1fr]">
         <div className="space-y-3">
           {items.length > 0 && (
-            <section className="admin-reference-card p-5">
+            <section className="admin-reference-dark-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-semibold text-[#071110]">批量低风险处理</div>
-                  <div className="mt-1 text-xs text-black/45">仅后端允许同对象类型、同原因、未结案 normal 优先级举报。</div>
+                  <div className="font-semibold text-white">批量低风险处理</div>
+                  <div className="mt-1 text-xs text-white/45">仅后端允许同对象类型、同原因、未结案 normal 优先级举报。</div>
                 </div>
-                <span className="text-sm text-black/45">已选 {selectedIds.length}</span>
+                <span className="text-sm text-white/45">已选 {selectedIds.length}</span>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                <select value={batchAction} onChange={(event) => setBatchAction(event.target.value as 'resolve' | 'dismiss')} className="rounded-full px-4 py-3 text-sm">
+                <select value={batchAction} onChange={(event) => setBatchAction(event.target.value as 'resolve' | 'dismiss')} className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white">
                   <option value="resolve">标记已处理</option>
                   <option value="dismiss">驳回举报</option>
                 </select>
@@ -368,7 +368,7 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
                   type="button"
                   onClick={() => void submitBatchDecision()}
                   disabled={selectedIds.length === 0}
-                  className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                  className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:opacity-50"
                 >
                   批量提交
                 </button>
@@ -378,7 +378,7 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
                 onChange={(event) => setBatchNote(event.target.value)}
                 rows={2}
                 placeholder="批量处理备注"
-                className="mt-3 w-full rounded-[22px] px-4 py-3 text-sm"
+                className="mt-3 w-full rounded-[22px] border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/35"
               />
             </section>
           )}
@@ -415,22 +415,82 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
 
         {selected ? (
           <div className="space-y-5">
-            <section className="admin-reference-card p-5">
+            <section className="admin-reference-dark-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold">举报详情</h2>
-                  <p className="mt-1 font-mono text-xs text-black/45">{selected.id}</p>
+                  <div className="text-sm text-white/45">Moderation Action</div>
+                  <h2 className="mt-1 text-2xl font-semibold text-white">处理动作</h2>
+                  <p className="mt-2 text-sm leading-6 text-white/58">
+                    先完成本条举报的决策，再回看详情、上下文和历史记录。
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${priorityClass(selected.priority)}`}>{selected.priority || 'normal'}</span>
                   <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(selected.status)}`}>{selected.status}</span>
                 </div>
               </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-[20px] border border-white/10 bg-white/8 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Reason</div>
+                  <div className="mt-2 text-sm font-semibold text-white">{selected.reason}</div>
+                </div>
+                <div className="rounded-[20px] border border-white/10 bg-white/8 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">Target</div>
+                  <div className="mt-2 text-sm font-semibold text-white">{selected.targetType}</div>
+                  <div className="mt-1 text-xs text-white/45">{selected.targetId}</div>
+                </div>
+                <div className="rounded-[20px] border border-white/10 bg-white/8 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/35">SLA</div>
+                  <div className="mt-2 text-sm font-semibold text-white">
+                    {formatTime(selected.slaDueAt)} {selected.isOverdue ? '· 已超时' : ''}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 font-mono text-xs text-white/45">{selected.id}</p>
+              {selected.reason === 'copyright' && (
+                <div className="mt-4 rounded-[22px] border border-white/10 bg-[#f7efda] p-4 text-sm text-[#604a1b]">
+                  <div className="font-semibold">版权投诉处理</div>
+                  <div className="mt-2 leading-6 text-[#6b5527]">
+                    投诉成立时先下架内容；反通知或复核通过后可恢复。目标用户累计已成立版权投诉 {selected.copyrightStats?.resolvedCopyrightCount ?? 0}/{selected.copyrightStats?.repeatInfringerThreshold ?? 3} 次。
+                    {selected.copyrightStats?.repeatInfringer ? ' 已达到重复侵权复核阈值，可限制、临时封禁或永久封禁。' : ' 未达到重复侵权阈值。'}
+                  </div>
+                  {Object.keys(selectedCopyrightWorkflow).length > 0 && (
+                    <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                      <div><dt className="text-[#8d7442]">下架状态</dt><dd>{String(selectedCopyrightWorkflow.takedownStatus ?? '-')}</dd></div>
+                      <div><dt className="text-[#8d7442]">已应用到内容</dt><dd>{selectedCopyrightWorkflow.takedownApplied ? '是' : '否'}</dd></div>
+                      <div><dt className="text-[#8d7442]">临时下架</dt><dd>{formatTime(typeof selectedCopyrightWorkflow.temporaryTakedownAt === 'string' ? selectedCopyrightWorkflow.temporaryTakedownAt : null)}</dd></div>
+                      <div><dt className="text-[#8d7442]">恢复时间</dt><dd>{formatTime(typeof selectedCopyrightWorkflow.restoredAt === 'string' ? selectedCopyrightWorkflow.restoredAt : null)}</dd></div>
+                    </dl>
+                  )}
+                </div>
+              )}
+              <form onSubmit={(event) => void submitDecision(event)} className="mt-4 space-y-4">
+                <label className="block text-sm">
+                  <span className="text-white/45">动作</span>
+                  <select value={action} onChange={(event) => setAction(event.target.value)} className="mt-2 w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-white">
+                    {ACTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="text-white/45">处理备注</span>
+                  <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={4} className="mt-2 w-full rounded-[22px] border border-white/10 bg-white/8 px-4 py-3 text-white placeholder:text-white/35" />
+                </label>
+                <button type="submit" className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#071110]">提交处理</button>
+              </form>
+            </section>
+
+            <section className="admin-reference-card p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">举报详情</h2>
+                  <p className="mt-1 font-mono text-xs text-black/45">{selected.id}</p>
+                </div>
+              </div>
               <dl className="mt-5 grid gap-4 text-sm md:grid-cols-2">
                 <div><dt className="text-black/42">举报人</dt><dd className="mt-1"><UserLine user={selected.reporter} fallback={selected.reporterUserId} /></dd></div>
                 <div><dt className="text-black/42">目标用户</dt><dd className="mt-1"><UserLine user={selected.targetUser} fallback={selected.targetUserId || '-'} /></dd></div>
                 <div><dt className="text-black/42">对象</dt><dd className="mt-1 font-mono text-xs">{selected.targetType}:{selected.targetId}</dd></div>
-                <div><dt className="text-black/42">SLA</dt><dd className="mt-1">{formatTime(selected.slaDueAt)} {selected.isOverdue ? '· 已超时' : ''}</dd></div>
+                <div><dt className="text-black/42">创建时间</dt><dd className="mt-1">{formatTime(selected.createdAt)}</dd></div>
               </dl>
               <div className="mt-5">
                 <div className="text-sm text-black/42">补充说明</div>
@@ -461,40 +521,6 @@ export default function ContentReportsWorkspace({ embedded = false }: ContentRep
               <pre className="admin-reference-soft-card mt-4 max-h-[260px] overflow-auto p-4 text-xs leading-5 text-black/52">
                 {shortJson(selected.context)}
               </pre>
-            </section>
-
-            <section className="admin-reference-card p-5">
-              <h2 className="text-xl font-semibold">处理动作</h2>
-              {selected.reason === 'copyright' && (
-                <div className="mt-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
-                  <div className="font-semibold">版权投诉处理</div>
-                  <div className="mt-2 leading-6 text-yellow-100/80">
-                    投诉成立时先下架内容；反通知或复核通过后可恢复。目标用户累计已成立版权投诉 {selected.copyrightStats?.resolvedCopyrightCount ?? 0}/{selected.copyrightStats?.repeatInfringerThreshold ?? 3} 次。
-                    {selected.copyrightStats?.repeatInfringer ? ' 已达到重复侵权复核阈值，可限制、临时封禁或永久封禁。' : ' 未达到重复侵权阈值。'}
-                  </div>
-                  {Object.keys(selectedCopyrightWorkflow).length > 0 && (
-                    <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                      <div><dt className="text-yellow-100/60">下架状态</dt><dd>{String(selectedCopyrightWorkflow.takedownStatus ?? '-')}</dd></div>
-                      <div><dt className="text-yellow-100/60">已应用到内容</dt><dd>{selectedCopyrightWorkflow.takedownApplied ? '是' : '否'}</dd></div>
-                      <div><dt className="text-yellow-100/60">临时下架</dt><dd>{formatTime(typeof selectedCopyrightWorkflow.temporaryTakedownAt === 'string' ? selectedCopyrightWorkflow.temporaryTakedownAt : null)}</dd></div>
-                      <div><dt className="text-yellow-100/60">恢复时间</dt><dd>{formatTime(typeof selectedCopyrightWorkflow.restoredAt === 'string' ? selectedCopyrightWorkflow.restoredAt : null)}</dd></div>
-                    </dl>
-                  )}
-                </div>
-              )}
-              <form onSubmit={(event) => void submitDecision(event)} className="mt-4 space-y-4">
-                <label className="block text-sm">
-                  <span className="text-black/42">动作</span>
-                  <select value={action} onChange={(event) => setAction(event.target.value)} className="mt-2 w-full rounded-full px-4 py-3">
-                    {ACTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                </label>
-                <label className="block text-sm">
-                  <span className="text-black/42">处理备注</span>
-                  <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={4} className="mt-2 w-full rounded-[22px] px-4 py-3" />
-                </label>
-                <button type="submit" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">提交处理</button>
-              </form>
             </section>
 
             <section className="grid gap-5 md:grid-cols-2">

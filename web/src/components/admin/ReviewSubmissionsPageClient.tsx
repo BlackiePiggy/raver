@@ -1219,40 +1219,40 @@ export default function ReviewSubmissionsPageClient() {
       description="统一后台现在已经开始原生承接 content submissions 审核列表、详情预览和基础 approve / reject。当前版本先优先覆盖 Event / Organizer / DJ 主线，其它长尾实体继续渐进迁移。"
       actions={
         <>
-          <Link href="/admin/content/reviews" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/reviews" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回审核中心
           </Link>
-          <Link href="/admin/festival-viewer.html#review" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/festival-viewer.html#review" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             打开旧审核台
           </Link>
         </>
       }
     >
       {error ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4 text-sm text-[#6a3530]">
           {error}
         </section>
       ) : null}
 
       {successMessage ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4 text-sm text-[#2f4027]">
           {successMessage}
         </section>
       ) : null}
 
       <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-5">
-          <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+          <section className="admin-reference-card p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <div className="text-sm text-text-secondary">Submission Queue</div>
-                <h2 className="mt-2 text-2xl font-semibold">审核队列</h2>
-                <p className="mt-2 text-sm leading-6 text-text-secondary">当前筛选下共有 {total.toLocaleString()} 条提交，先在统一后台完成定位、预览和基础决策。</p>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Submission Queue</div>
+                <h2 className="mt-2 text-2xl font-semibold text-[#071110]">审核队列</h2>
+                <p className="mt-2 text-sm leading-6 text-black/52">当前筛选下共有 {total.toLocaleString()} 条提交，先在统一后台完成定位、预览和基础决策。</p>
               </div>
               <button
                 type="button"
                 onClick={() => void loadList()}
-                className="rounded-xl border border-border-secondary px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue"
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]"
               >
                 刷新列表
               </button>
@@ -1260,11 +1260,11 @@ export default function ReviewSubmissionsPageClient() {
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">状态</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-black/35">状态</span>
                 <select
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
-                  className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                  className="w-full rounded-full px-4 py-3 text-sm"
                 >
                   {STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1274,11 +1274,11 @@ export default function ReviewSubmissionsPageClient() {
                 </select>
               </label>
               <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">实体类型</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-black/35">实体类型</span>
                 <select
                   value={entityFilter}
                   onChange={(event) => setEntityFilter(event.target.value)}
-                  className="w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                  className="w-full rounded-full px-4 py-3 text-sm"
                 >
                   {ENTITY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1290,11 +1290,11 @@ export default function ReviewSubmissionsPageClient() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-4">
+          <section className="admin-reference-card p-4">
             {loadingList ? (
-              <div className="py-20 text-center text-sm text-text-secondary">审核队列加载中…</div>
+              <div className="py-20 text-center text-sm text-black/48">审核队列加载中…</div>
             ) : items.length === 0 ? (
-              <div className="py-20 text-center text-sm text-text-secondary">当前筛选条件下暂无提交。</div>
+              <div className="py-20 text-center text-sm text-black/48">当前筛选条件下暂无提交。</div>
             ) : (
               <div className="space-y-3">
                 {items.map((item) => {
@@ -1304,23 +1304,23 @@ export default function ReviewSubmissionsPageClient() {
                       key={item.id}
                       type="button"
                       onClick={() => setSelectedId(item.id)}
-                      className={`w-full rounded-3xl border p-4 text-left transition-colors ${
+                      className={`w-full rounded-[24px] border p-4 text-left transition-colors ${
                         active
-                          ? 'border-primary-blue bg-primary-blue/10'
-                          : 'border-border-secondary bg-bg-tertiary/40 hover:border-primary-blue/50'
+                          ? 'border-[#dceabf] bg-[#edf7f2]'
+                          : 'border-[#e8eceb] bg-[#f8f9f8]'
                       }`}
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-secondary">
+                        <span className="admin-reference-chip">
                           {item.entityType}
                         </span>
-                        <span className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-secondary">
+                        <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">
                           {item.status}
                         </span>
                       </div>
-                      <div className="mt-3 text-lg font-semibold text-text-primary">{item.title}</div>
-                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">{summarizePayload(item)}</p>
-                      <div className="mt-3 text-xs text-text-tertiary">
+                      <div className="mt-3 text-lg font-semibold text-[#071110]">{item.title}</div>
+                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-black/48">{summarizePayload(item)}</p>
+                      <div className="mt-3 text-xs text-black/38">
                         提交人：{item.submitter?.displayName || item.submitter?.username || item.submitterId} · 创建于 {formatDateTime(item.createdAt)}
                       </div>
                     </button>
@@ -1331,34 +1331,34 @@ export default function ReviewSubmissionsPageClient() {
           </section>
         </div>
 
-        <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+        <section className="admin-reference-card p-6">
           {loadingDetail ? (
-            <div className="py-24 text-center text-sm text-text-secondary">正在加载提交详情…</div>
+            <div className="py-24 text-center text-sm text-black/48">正在加载提交详情…</div>
           ) : !selectedDetail ? (
-            <div className="py-24 text-center text-sm text-text-secondary">请选择左侧的一条提交查看详情。</div>
+            <div className="py-24 text-center text-sm text-black/48">请选择左侧的一条提交查看详情。</div>
           ) : (
             <div className="space-y-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <div className="text-sm text-text-secondary">Submission Detail</div>
-                  <h2 className="mt-2 text-3xl font-semibold">{selectedDetail.title}</h2>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-text-secondary">
-                    <span className="rounded-full border border-border-secondary px-3 py-1">{selectedDetail.entityType}</span>
-                    <span className="rounded-full border border-border-secondary px-3 py-1">{selectedDetail.status}</span>
-                    <span className="rounded-full border border-border-secondary px-3 py-1">版本 {selectedDetail.versions?.[0]?.version || 1}</span>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Submission Detail</div>
+                  <h2 className="mt-2 text-3xl font-semibold text-[#071110]">{selectedDetail.title}</h2>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-black/45">
+                    <span className="admin-reference-chip">{selectedDetail.entityType}</span>
+                    <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">{selectedDetail.status}</span>
+                    <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">版本 {selectedDetail.versions?.[0]?.version || 1}</span>
                   </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   {detailEditLink ? (
-                    <Link href={detailEditLink} className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm hover:border-primary-blue hover:text-primary-blue">
+                    <Link href={detailEditLink} className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
                       打开实体编辑页
                     </Link>
                   ) : null}
                   <button
                     type="button"
                     onClick={() => void loadDetail(selectedDetail.id)}
-                    className="rounded-xl border border-border-secondary px-4 py-3 text-sm hover:border-primary-blue hover:text-primary-blue"
+                    className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]"
                   >
                     刷新详情
                   </button>
@@ -1372,17 +1372,17 @@ export default function ReviewSubmissionsPageClient() {
                   ['最近更新', formatDateTime(selectedDetail.updatedAt)],
                   ['审核时间', formatDateTime(selectedDetail.reviewedAt)],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border border-border-secondary bg-bg-tertiary/50 px-4 py-3 text-sm">
-                    <div className="text-text-secondary">{label}</div>
-                    <div className="mt-2 font-semibold text-text-primary">{value}</div>
+                  <div key={label} className="admin-reference-soft-card px-4 py-3 text-sm">
+                    <div className="text-black/42">{label}</div>
+                    <div className="mt-2 font-semibold text-[#071110]">{value}</div>
                   </div>
                 ))}
               </div>
 
               {noteLines.length > 0 ? (
-                <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                  <div className="text-sm text-text-secondary">Review Signals</div>
-                  <div className="mt-3 space-y-2 text-sm leading-6 text-text-primary">
+                <div className="admin-reference-soft-card p-4">
+                  <div className="text-sm text-black/42">Review Signals</div>
+                  <div className="mt-3 space-y-2 text-sm leading-6 text-[#24312d]">
                     {noteLines.map((line) => (
                       <div key={line}>{line}</div>
                     ))}
@@ -1391,15 +1391,15 @@ export default function ReviewSubmissionsPageClient() {
               ) : null}
 
               <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-                <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                  <div className="text-sm text-text-secondary">Review Decision</div>
-                  <h3 className="mt-2 text-xl font-semibold">基础审核动作</h3>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">当前版本已经支持基础 approve / reject，并会把 decision、reason code 和 reviewer note 结构化写回 review notes，方便后续复审和统计。</p>
+                <div className="admin-reference-dark-card p-5">
+                  <div className="text-sm text-white/45">Review Decision</div>
+                  <h3 className="mt-2 text-2xl font-semibold text-white">基础审核动作</h3>
+                  <p className="mt-2 text-sm leading-6 text-white/65">当前版本已经支持基础 approve / reject，并会把 decision、reason code 和 reviewer note 结构化写回 review notes，方便后续复审和统计。</p>
 
                   <div className="mt-4">
                     {autoReviewInsights.recommendations.length > 0 ? (
-                      <div className="mb-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
-                        <div className="text-sm font-semibold text-amber-100">系统建议原因</div>
+                      <div className="mb-4 rounded-[22px] border border-white/10 bg-white/8 p-4">
+                        <div className="text-sm font-semibold text-white">系统建议原因</div>
                         <div className="mt-3 grid gap-3">
                           {autoReviewInsights.recommendations.map((recommendation) => (
                             <button
@@ -1409,18 +1409,18 @@ export default function ReviewSubmissionsPageClient() {
                                 setSelectedReasonCode(recommendation.code);
                                 setDecisionReason(recommendation.suggestion);
                               }}
-                              className="rounded-2xl border border-amber-300/30 bg-black/15 p-4 text-left transition-colors hover:border-primary-blue/60"
+                              className="rounded-[20px] border border-white/10 bg-white/6 p-4 text-left transition-colors"
                             >
-                              <div className="text-sm font-semibold text-text-primary">{recommendation.label}</div>
-                              <div className="mt-2 text-xs uppercase tracking-[0.2em] text-text-tertiary">{recommendation.code}</div>
-                              <div className="mt-3 text-sm leading-6 text-text-secondary">{recommendation.rationale}</div>
+                              <div className="text-sm font-semibold text-white">{recommendation.label}</div>
+                              <div className="mt-2 text-xs uppercase tracking-[0.2em] text-white/35">{recommendation.code}</div>
+                              <div className="mt-3 text-sm leading-6 text-white/58">{recommendation.rationale}</div>
                             </button>
                           ))}
                         </div>
                       </div>
                     ) : null}
 
-                    <div className="text-sm text-text-secondary">拒绝模板</div>
+                    <div className="text-sm text-white/45">拒绝模板</div>
                     <div className="mt-3 grid gap-3">
                       {reasonTemplates.map((template) => {
                         const active = selectedReasonCode === template.code;
@@ -1434,18 +1434,18 @@ export default function ReviewSubmissionsPageClient() {
                                 setDecisionReason(template.suggestion);
                               }
                             }}
-                            className={`rounded-2xl border p-4 text-left transition-colors ${
+                            className={`rounded-[20px] border p-4 text-left transition-colors ${
                               active
-                                ? 'border-primary-blue bg-primary-blue/10'
-                                : 'border-border-secondary bg-bg-secondary hover:border-primary-blue/50'
+                                ? 'border-white/20 bg-white/12'
+                                : 'border-white/10 bg-white/6'
                             }`}
                           >
-                            <div className="text-sm font-semibold text-text-primary">{template.label}</div>
+                            <div className="text-sm font-semibold text-white">{template.label}</div>
                             {template.group ? (
-                              <div className="mt-2 text-[11px] uppercase tracking-[0.2em] text-primary-blue">{template.group}</div>
+                              <div className="mt-2 text-[11px] uppercase tracking-[0.2em] text-white/55">{template.group}</div>
                             ) : null}
-                            <div className="mt-2 text-xs uppercase tracking-[0.2em] text-text-tertiary">{template.code}</div>
-                            <div className="mt-3 text-sm leading-6 text-text-secondary">{template.suggestion}</div>
+                            <div className="mt-2 text-xs uppercase tracking-[0.2em] text-white/35">{template.code}</div>
+                            <div className="mt-3 text-sm leading-6 text-white/58">{template.suggestion}</div>
                           </button>
                         );
                       })}
@@ -1453,12 +1453,12 @@ export default function ReviewSubmissionsPageClient() {
                   </div>
 
                   <label className="mt-4 block space-y-2">
-                    <span className="text-sm text-text-secondary">拒绝原因</span>
+                    <span className="text-sm text-white/45">拒绝原因</span>
                     <textarea
                       value={decisionReason}
                       onChange={(event) => setDecisionReason(event.target.value)}
                       placeholder="如果需要拒绝，请补充具体原因，方便内容同学回改。"
-                      className="min-h-28 w-full rounded-xl border border-border-secondary bg-bg-secondary px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue"
+                      className="min-h-28 w-full rounded-[22px] border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/35 outline-none"
                     />
                   </label>
 
@@ -1467,7 +1467,7 @@ export default function ReviewSubmissionsPageClient() {
                       type="button"
                       disabled={!canReview || submittingDecision}
                       onClick={() => void handleDecision('approved')}
-                      className="rounded-xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       审核通过
                     </button>
@@ -1475,21 +1475,21 @@ export default function ReviewSubmissionsPageClient() {
                       type="button"
                       disabled={!canReview || submittingDecision}
                       onClick={() => void handleDecision('rejected')}
-                      className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       拒绝提交
                     </button>
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                  <div className="text-sm text-text-secondary">Review Notes</div>
-                  <h3 className="mt-2 text-xl font-semibold">结构化审核信号</h3>
+                <div className="admin-reference-soft-card p-4">
+                  <div className="text-sm text-black/42">Review Notes</div>
+                  <h3 className="mt-2 text-xl font-semibold text-[#071110]">结构化审核信号</h3>
                   <div className="mt-4 space-y-4">
                     {autoReviewInsights.signals.length > 0 ? (
-                      <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
-                        <div className="text-sm font-semibold text-amber-100">自动审查提示</div>
-                        <div className="mt-3 space-y-2 text-sm leading-6 text-text-primary">
+                      <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)] p-4">
+                        <div className="text-sm font-semibold text-[#604a1b]">自动审查提示</div>
+                        <div className="mt-3 space-y-2 text-sm leading-6 text-[#4f4326]">
                           {autoReviewInsights.signals.map((row) => (
                             <div key={row}>{row}</div>
                           ))}
@@ -1497,14 +1497,14 @@ export default function ReviewSubmissionsPageClient() {
                       </div>
                     ) : null}
                     {noteSections.length === 0 ? (
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm leading-6 text-text-secondary">
+                      <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
                         当前 submission 还没有更细的结构化审核 notes，后续会继续补字段级点评与模板化 reason code。
                       </div>
                     ) : (
                       noteSections.map((section) => (
-                        <div key={section.title} className="rounded-2xl border border-border-secondary bg-bg-secondary/70 p-4">
-                          <div className="text-sm font-semibold text-text-primary">{section.title}</div>
-                          <div className="mt-3 space-y-2 text-sm leading-6 text-text-secondary">
+                        <div key={section.title} className="admin-reference-card p-4">
+                          <div className="text-sm font-semibold text-[#071110]">{section.title}</div>
+                          <div className="mt-3 space-y-2 text-sm leading-6 text-black/48">
                             {section.rows.map((row) => (
                               <div key={row}>{row}</div>
                             ))}
@@ -1517,19 +1517,19 @@ export default function ReviewSubmissionsPageClient() {
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-                <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                  <div className="text-sm text-text-secondary">Semantic Diff</div>
-                  <h3 className="mt-2 text-xl font-semibold">业务语义差异</h3>
+                <div className="admin-reference-card p-5">
+                  <div className="text-sm text-black/42">Semantic Diff</div>
+                  <h3 className="mt-2 text-xl font-semibold text-[#071110]">业务语义差异</h3>
                   <div className="mt-4 space-y-4">
                     {semanticSections.length === 0 ? (
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm leading-6 text-text-secondary">
+                      <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
                         当前实体暂时还没有更细的业务语义 diff，先回退到字段级 diff 摘要。
                       </div>
                     ) : (
                       semanticSections.map((section) => (
-                        <div key={section.title} className="rounded-2xl border border-border-secondary bg-bg-secondary/70 p-4">
-                          <div className="text-sm font-semibold text-text-primary">{section.title}</div>
-                          <div className="mt-3 space-y-2 text-sm leading-6 text-text-secondary">
+                        <div key={section.title} className="admin-reference-soft-card p-4">
+                          <div className="text-sm font-semibold text-[#071110]">{section.title}</div>
+                          <div className="mt-3 space-y-2 text-sm leading-6 text-black/48">
                             {section.rows.map((row) => (
                               <div key={row}>{row}</div>
                             ))}
@@ -1540,47 +1540,47 @@ export default function ReviewSubmissionsPageClient() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                  <div className="text-sm text-text-secondary">Version Diff</div>
-                  <h3 className="mt-2 text-xl font-semibold">版本差异摘要</h3>
+                <div className="admin-reference-card p-5">
+                  <div className="text-sm text-black/42">Version Diff</div>
+                  <h3 className="mt-2 text-xl font-semibold text-[#071110]">版本差异摘要</h3>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     {[
                       ['新增字段', diffStats.added],
                       ['移除字段', diffStats.removed],
                       ['变更字段', diffStats.changed],
                     ].map(([label, value]) => (
-                      <div key={label} className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm">
-                        <div className="text-text-secondary">{label}</div>
-                        <div className="mt-2 text-lg font-semibold text-text-primary">{value}</div>
+                      <div key={label} className="admin-reference-soft-card px-4 py-3 text-sm">
+                        <div className="text-black/42">{label}</div>
+                        <div className="mt-2 text-lg font-semibold text-[#071110]">{value}</div>
                       </div>
                     ))}
                   </div>
 
                   <div className="mt-4 space-y-3">
                     {!previousVersion ? (
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm leading-6 text-text-secondary">
+                      <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
                         当前只有首个版本，暂时没有可对比的上一版 payload。
                       </div>
                     ) : versionDiffRows.length === 0 ? (
-                      <div className="rounded-2xl border border-border-secondary bg-bg-secondary/70 px-4 py-3 text-sm leading-6 text-text-secondary">
+                      <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
                         最近两个版本的 payload 没有检测到字段变化。
                       </div>
                     ) : (
                       versionDiffRows.slice(0, 12).map((row) => (
-                        <div key={row.key} className="rounded-2xl border border-border-secondary bg-bg-secondary/70 p-4">
+                        <div key={row.key} className="admin-reference-soft-card p-4">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-text-primary">{formatLabelFromKey(row.key)}</span>
-                            <span className="rounded-full border border-border-secondary px-2 py-1 text-[11px] text-text-secondary">
+                            <span className="text-sm font-semibold text-[#071110]">{formatLabelFromKey(row.key)}</span>
+                            <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">
                               {row.kind === 'added' ? '新增' : row.kind === 'removed' ? '移除' : '变更'}
                             </span>
                           </div>
                           <div className="mt-3 grid gap-3 md:grid-cols-2">
-                            <div className="rounded-xl border border-border-secondary bg-bg-primary/60 px-3 py-3 text-xs leading-6 text-text-secondary">
-                              <div className="mb-1 text-[11px] uppercase tracking-[0.2em]">Before</div>
+                            <div className="rounded-[20px] border border-[#e8eceb] bg-white px-3 py-3 text-xs leading-6 text-black/48">
+                              <div className="mb-1 text-[11px] uppercase tracking-[0.2em] text-black/35">Before</div>
                               {summarizePrimitive(row.before)}
                             </div>
-                            <div className="rounded-xl border border-border-secondary bg-bg-primary/60 px-3 py-3 text-xs leading-6 text-text-secondary">
-                              <div className="mb-1 text-[11px] uppercase tracking-[0.2em]">After</div>
+                            <div className="rounded-[20px] border border-[#e8eceb] bg-white px-3 py-3 text-xs leading-6 text-black/48">
+                              <div className="mb-1 text-[11px] uppercase tracking-[0.2em] text-black/35">After</div>
                               {summarizePrimitive(row.after)}
                             </div>
                           </div>
@@ -1591,24 +1591,24 @@ export default function ReviewSubmissionsPageClient() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                  <div className="text-sm text-text-secondary">Payload Preview</div>
-                  <h3 className="mt-2 text-xl font-semibold">提交内容预览</h3>
-                  <pre className="mt-4 max-h-[420px] overflow-auto rounded-2xl border border-border-secondary bg-bg-primary/70 p-4 text-xs leading-6 text-text-secondary">
+              <div className="admin-reference-card p-5">
+                  <div className="text-sm text-black/42">Payload Preview</div>
+                  <h3 className="mt-2 text-xl font-semibold text-[#071110]">提交内容预览</h3>
+                  <pre className="mt-4 max-h-[420px] overflow-auto rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 text-xs leading-6 text-black/52">
                     {JSON.stringify(selectedDetail.payload, null, 2)}
                   </pre>
               </div>
 
-              <div className="rounded-3xl border border-border-secondary bg-bg-tertiary/40 p-4">
-                <div className="text-sm text-text-secondary">Version History</div>
-                <h3 className="mt-2 text-xl font-semibold">版本历史</h3>
+              <div className="admin-reference-card p-5">
+                <div className="text-sm text-black/42">Version History</div>
+                <h3 className="mt-2 text-xl font-semibold text-[#071110]">版本历史</h3>
                 <div className="mt-4 space-y-3">
                   {(selectedDetail.versions || []).map((version) => (
-                    <details key={version.id} className="rounded-2xl border border-border-secondary bg-bg-secondary/70 p-4">
-                      <summary className="cursor-pointer list-none text-sm font-semibold text-text-primary">
+                    <details key={version.id} className="admin-reference-soft-card p-4">
+                      <summary className="cursor-pointer list-none text-sm font-semibold text-[#071110]">
                         v{version.version} · {version.changeNote || '未填写变更说明'} · {formatDateTime(version.submittedAt)}
                       </summary>
-                      <pre className="mt-4 max-h-64 overflow-auto rounded-2xl border border-border-secondary bg-bg-primary/70 p-4 text-xs leading-6 text-text-secondary">
+                      <pre className="mt-4 max-h-64 overflow-auto rounded-[20px] border border-[#e8eceb] bg-white p-4 text-xs leading-6 text-black/52">
                         {JSON.stringify(version.payload, null, 2)}
                       </pre>
                     </details>

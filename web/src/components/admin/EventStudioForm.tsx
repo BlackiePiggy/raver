@@ -37,10 +37,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[20px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
+    <section className="admin-studio-section p-6">
       <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[#5f5f5f]">{title}</div>
-        <p className="mt-3 text-sm leading-6 text-[#8a8a8a]">{description}</p>
+        <div className="admin-studio-label">{title}</div>
+        <p className="mt-3 text-sm leading-6 text-black/52">{description}</p>
       </div>
       <div className="mt-5">{children}</div>
     </section>
@@ -58,16 +58,16 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="mb-2 text-xs uppercase tracking-[0.16em] text-[#6d6d6d]">{label}</div>
+      <div className="mb-2 admin-studio-label">{label}</div>
       {children}
-      {error ? <div className="mt-2 text-xs text-red-300">{error}</div> : null}
+      {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
   );
 }
 
 const textInputClassName =
-  'w-full rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#f0f0f0] outline-none transition-colors focus:border-[#a8ff3e]';
-const textAreaClassName = `${textInputClassName} min-h-28 resize-y`;
+  'admin-studio-input';
+const textAreaClassName = 'admin-studio-textarea min-h-28';
 
 const formatEventDayLabel = (day: EventStudioDraft['eventDays'][number]) =>
   `${day.label || day.eventDayId} · ${day.date}`;
@@ -361,49 +361,49 @@ export default function EventStudioForm({
   return (
     <div className="space-y-5">
       {conflictNotice ? (
-        <section className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+        <section className="admin-studio-pastel-sand p-4 text-sm text-[#604a1b]">
           {conflictNotice}
         </section>
       ) : null}
 
       {submitError ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <section className="admin-studio-pastel-rose p-4 text-sm text-[#6a3530]">
           {submitError}
         </section>
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-        <div className="rounded-[20px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[#5f5f5f]">
+        <div className="admin-studio-section p-6">
+          <div className="admin-studio-label">
             {mode === 'create' ? 'Event Studio' : 'Edit Session'}
           </div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">
             {draft.name.zh || draft.name.en || '活动资料编辑'}
           </h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm">
-              <div className="text-[#777]">主办方绑定</div>
-              <div className="mt-1 font-semibold text-[#f0f0f0]">
+            <div className="admin-studio-pastel-mint px-4 py-3 text-sm">
+              <div className="text-black/42">主办方绑定</div>
+              <div className="mt-1 font-semibold text-[#071110]">
                 {draft.organizerFestivalId ? '已绑定实体' : draft.organizerName.trim() ? '文本主办方' : '待补充'}
               </div>
             </div>
-            <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm">
-              <div className="text-[#777]">排期结构</div>
-              <div className="mt-1 font-semibold text-[#f0f0f0]">
+            <div className="admin-studio-pastel-sand px-4 py-3 text-sm">
+              <div className="text-black/42">排期结构</div>
+              <div className="mt-1 font-semibold text-[#071110]">
                 {draft.weeks.length} 周 / {draft.eventDays.length} 天
               </div>
             </div>
-            <div className="rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm">
-              <div className="text-[#777]">时间表条目</div>
-              <div className="mt-1 font-semibold text-[#f0f0f0]">{draft.timetableSlots.length} 条</div>
+            <div className="admin-studio-pastel-rose px-4 py-3 text-sm">
+              <div className="text-black/42">时间表条目</div>
+              <div className="mt-1 font-semibold text-[#071110]">{draft.timetableSlots.length} 条</div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-[20px] border border-[rgba(168,255,62,0.18)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.03))] p-6">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[#86b852]">Submission</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#f0f0f0]">提交状态</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-[#9ab27f]">
+        <div className="admin-studio-pastel-mint p-6">
+          <div className="admin-studio-label">Submission</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">提交状态</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
             <p>{mode === 'create' ? '当前流程会直接创建活动或进入审核队列。' : '当前流程会提交活动编辑并处理 revision 更新。'}</p>
             <p>封面、阵容图、主办方绑定、结构化日期和时间表都会随本次提交一并写入。</p>
             <p>如果遇到进行中的编辑任务，页面会直接提示冲突状态，避免重复提交。</p>
@@ -448,7 +448,7 @@ export default function EventStudioForm({
                 <button
                   type="button"
                   onClick={() => void searchOrganizers()}
-                  className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
+                  className="admin-studio-button-secondary"
                 >
                   {organizerLoading ? '搜索中...' : '搜索主办方'}
                 </button>
@@ -460,14 +460,14 @@ export default function EventStudioForm({
                         )}`
                       : '/admin/content/organizers/new'
                   }
-                  className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
+                  className="admin-studio-button-secondary"
                 >
                   新建主办方
                 </Link>
               </div>
 
               {draft.organizerFestivalId ? (
-                <div className="rounded-xl border border-[#a8ff3e]/30 bg-[#a8ff3e]/10 px-4 py-3 text-sm text-[#d9ff9a]">
+                <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#2f4027]">
                   已绑定主办方 ID：{draft.organizerFestivalId}
                 </div>
               ) : null}
@@ -486,10 +486,10 @@ export default function EventStudioForm({
                         setOrganizerItems([]);
                         setOrganizerError('');
                       }}
-                      className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-left text-sm hover:border-[#a8ff3e]"
+                      className="admin-reference-soft-card px-4 py-3 text-left text-sm"
                     >
-                      <div className="font-semibold text-[#f0f0f0]">{item.name}</div>
-                      <div className="mt-1 text-xs text-[#8a8a8a]">
+                      <div className="font-semibold text-[#071110]">{item.name}</div>
+                      <div className="mt-1 text-xs text-black/42">
                         {[item.country, item.city, item.tagline].filter(Boolean).join(' · ') || item.id}
                       </div>
                     </button>
@@ -540,7 +540,7 @@ export default function EventStudioForm({
           <Field label="地图地址（可选）">
             <input value={draft.pickedMapAddress} onChange={(event) => updateDraft('pickedMapAddress', event.target.value)} className={textInputClassName} placeholder="用于 locationPoint 回填" />
           </Field>
-          <div className="lg:col-span-2 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+          <div className="admin-reference-card lg:col-span-2 p-4">
             <Field label="活动时区搜索" error={errors.timeZone || timezoneError}>
               <div className="flex flex-col gap-3 lg:flex-row">
                 <input
@@ -554,12 +554,12 @@ export default function EventStudioForm({
                   className={textInputClassName}
                   placeholder="输入城市或城市+州/国家，例如 Chicago / Amsterdam NL"
                 />
-                <button type="button" onClick={() => void searchTimezones()} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+                <button type="button" onClick={() => void searchTimezones()} className="admin-studio-button-secondary">
                   {timezoneLoading ? '搜索中...' : '搜索时区'}
                 </button>
               </div>
             </Field>
-            <div className={`mt-3 rounded-xl border px-4 py-3 text-sm ${draft.timeZoneSelection ? 'border-[#a8ff3e]/30 bg-[#a8ff3e]/10 text-[#d9ff9a]' : 'border-[rgba(255,255,255,0.07)] bg-[#101010] text-[#8a8a8a]'}`}>
+            <div className={`mt-3 rounded-[20px] border px-4 py-3 text-sm ${draft.timeZoneSelection ? 'border-[#dceabf] bg-[#edf7f2] text-[#2f4027]' : 'border-[#e8eceb] bg-[#f8f9f8] text-black/48'}`}>
               {draft.timeZoneSelection ? `${draft.timeZoneSelection.label}` : '还没有确认活动时区。保存前必须从候选列表中选定。'}
             </div>
             {timezoneItems.length ? (
@@ -580,7 +580,7 @@ export default function EventStudioForm({
                         return next;
                       });
                     }}
-                    className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-3 text-left text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
+                    className="admin-reference-soft-card px-4 py-3 text-left text-sm"
                   >
                     {item.label}
                   </button>
@@ -630,7 +630,7 @@ export default function EventStudioForm({
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+        <div className="admin-reference-card mt-6 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">结构化日期预览</div>
@@ -644,49 +644,49 @@ export default function EventStudioForm({
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
-              <div className="text-sm font-semibold text-[#f0f0f0]">Weeks</div>
+            <div className="admin-reference-soft-card p-4">
+              <div className="text-sm font-semibold text-[#071110]">Weeks</div>
               <div className="mt-3 space-y-2">
                 {draft.weeks.length ? (
                   draft.weeks.map((week) => (
-                    <div key={week.id} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-3 py-2 text-sm">
-                      <div className="font-medium text-[#f0f0f0]">
+                    <div key={week.id} className="rounded-[18px] border border-[#e8eceb] bg-white px-3 py-2 text-sm">
+                      <div className="font-medium text-[#071110]">
                         {week.label || `Week ${week.weekIndex}`}
                       </div>
-                      <div className="mt-1 text-xs text-[#8a8a8a]">
+                      <div className="mt-1 text-xs text-black/42">
                         {week.startDate} → {week.endDate}
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="text-sm text-[#8a8a8a]">请先完成开始/结束日期设置。</div>
+                  <div className="text-sm text-black/48">请先完成开始/结束日期设置。</div>
                 )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
-              <div className="text-sm font-semibold text-[#f0f0f0]">Event Days</div>
+            <div className="admin-reference-soft-card p-4">
+              <div className="text-sm font-semibold text-[#071110]">Event Days</div>
               <div className="mt-3 space-y-2">
                 {draft.eventDays.length ? (
                   draft.eventDays.map((day) => (
-                    <div key={day.id} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-3 py-2 text-sm">
-                      <div className="font-medium text-[#f0f0f0]">
+                    <div key={day.id} className="rounded-[18px] border border-[#e8eceb] bg-white px-3 py-2 text-sm">
+                      <div className="font-medium text-[#071110]">
                         {day.label || day.eventDayId}
                       </div>
-                      <div className="mt-1 text-xs text-[#8a8a8a]">
+                      <div className="mt-1 text-xs text-black/42">
                         {day.date} · week {day.weekIndex} / day {day.dayIndexInWeek} / overall {day.overallDayIndex}
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="text-sm text-[#8a8a8a]">当前还没有生成 eventDays。</div>
+                  <div className="text-sm text-black/48">当前还没有生成 eventDays。</div>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+        <div className="admin-reference-card mt-6 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">票档</div>
@@ -695,7 +695,7 @@ export default function EventStudioForm({
             <button
               type="button"
               onClick={() => updateDraft('ticketTiers', [...draft.ticketTiers, createEmptyTicketTierDraft()])}
-              className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
+              className="admin-studio-button-secondary"
             >
               新增票档
             </button>
@@ -703,7 +703,7 @@ export default function EventStudioForm({
 
           <div className="mt-4 space-y-3">
             {draft.ticketTiers.map((tier) => (
-              <div key={tier.id} className="grid gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4 lg:grid-cols-[1.4fr_1fr_120px_auto]">
+              <div key={tier.id} className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[1.4fr_1fr_120px_auto]">
                 <input
                   value={tier.name}
                   onChange={(event) =>
@@ -740,7 +740,7 @@ export default function EventStudioForm({
                 <button
                   type="button"
                   onClick={() => updateDraft('ticketTiers', draft.ticketTiers.filter((current) => current.id !== tier.id))}
-              className="rounded-xl border border-red-500/30 bg-[#101010] px-4 py-3 text-sm text-red-300 hover:border-red-400"
+                  className="admin-studio-button-danger"
                 >
                   删除
                 </button>
@@ -1081,15 +1081,15 @@ export default function EventStudioForm({
 
       <Section title="媒体" description="封面和阵容图支持上传、替换和移除。草稿上传素材会即时清理，已持久化图片则在本次编辑提交时解除引用。">
         <div className="grid gap-5 lg:grid-cols-2">
-          <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+          <div className="admin-reference-card p-4">
             <Field label="封面 / 海报" error={errors.coverImage}>
-              <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[rgba(255,255,255,0.1)] bg-[#101010] p-4">
+              <div className="admin-reference-soft-card flex flex-col gap-3 border border-dashed p-4">
                 {draft.coverImage?.remoteUrl ? (
                   <div className="relative aspect-video overflow-hidden rounded-xl border border-border-secondary">
                     <Image src={draft.coverImage.remoteUrl} alt="cover" fill className="object-cover" sizes="800px" />
                   </div>
                 ) : (
-                  <div className="flex aspect-video items-center justify-center rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] text-sm text-[#8a8a8a]">
+                  <div className="flex aspect-video items-center justify-center rounded-xl border border-[#e8eceb] bg-white text-sm text-black/42">
                     还没有上传封面
                   </div>
                 )}
@@ -1102,12 +1102,12 @@ export default function EventStudioForm({
                       <button
                         type="button"
                         onClick={() => void handleImageRemove('cover')}
-                        className="rounded-lg border border-[rgba(255,255,255,0.07)] px-3 py-2 text-xs text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
+                        className="admin-studio-button-secondary px-3 py-2 text-xs"
                       >
                         移除
                       </button>
                     ) : null}
-                    <label className="rounded-lg border border-[rgba(255,255,255,0.07)] px-3 py-2 text-xs text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+                    <label className="admin-studio-button-secondary px-3 py-2 text-xs">
                       上传
                       <input type="file" accept="image/*" className="hidden" onChange={(event) => void handleImageUpload(event, 'cover')} />
                     </label>
@@ -1120,15 +1120,15 @@ export default function EventStudioForm({
             ) : null}
           </div>
 
-          <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+          <div className="admin-reference-card p-4">
             <Field label="阵容图（可选）">
-              <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[rgba(255,255,255,0.1)] bg-[#101010] p-4">
+              <div className="admin-reference-soft-card flex flex-col gap-3 border border-dashed p-4">
                 {draft.lineupImage?.remoteUrl ? (
                   <div className="relative aspect-video overflow-hidden rounded-xl border border-border-secondary">
                     <Image src={draft.lineupImage.remoteUrl} alt="lineup" fill className="object-cover" sizes="800px" />
                   </div>
                 ) : (
-                  <div className="flex aspect-video items-center justify-center rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] text-sm text-[#8a8a8a]">
+                  <div className="flex aspect-video items-center justify-center rounded-xl border border-[#e8eceb] bg-white text-sm text-black/42">
                     还没有上传阵容图
                   </div>
                 )}
@@ -1141,12 +1141,12 @@ export default function EventStudioForm({
                       <button
                         type="button"
                         onClick={() => void handleImageRemove('lineup')}
-                        className="rounded-lg border border-[rgba(255,255,255,0.07)] px-3 py-2 text-xs text-[#d0d0d0] hover:bg-[#202020] hover:text-white"
+                        className="admin-studio-button-secondary px-3 py-2 text-xs"
                       >
                         移除
                       </button>
                     ) : null}
-                    <label className="rounded-lg border border-[rgba(255,255,255,0.07)] px-3 py-2 text-xs text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+                    <label className="admin-studio-button-secondary px-3 py-2 text-xs">
                       上传
                       <input type="file" accept="image/*" className="hidden" onChange={(event) => void handleImageUpload(event, 'lineup')} />
                     </label>
@@ -1167,11 +1167,11 @@ export default function EventStudioForm({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={submitting || uploadingCover || uploadingLineup || deletingCover || deletingLineup || !canSubmit}
-            className="rounded-xl bg-[#a8ff3e] px-5 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-60"
+            className="admin-studio-button-primary"
           >
             {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交活动' : '提交编辑')}
           </button>
-          <Link href="/admin/content/events/catalog" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-5 py-3 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+          <Link href="/admin/content/events/catalog" className="admin-studio-button-secondary">
             返回活动目录
           </Link>
         </div>

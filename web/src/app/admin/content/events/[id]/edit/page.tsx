@@ -71,24 +71,24 @@ export default function AdminContentEventEditPage() {
       description="统一后台中的活动编辑页会直接加载正式活动资料，支持结构化活动日、时间表、图片替换与主办方绑定更新。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+          <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回活动工作区
           </Link>
-          <Link href="/admin/content/events/catalog" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             活动目录中心
           </Link>
-          <Link href="/admin/content/organizers/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
+          <Link href="/admin/content/organizers/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建主办方
           </Link>
         </>
       }
     >
       {notice ? (
-        <section className="rounded-[18px] border border-[rgba(168,255,62,0.22)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.04))] p-4 text-sm text-[#d9ff9a]">
+        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
           <div>{notice}</div>
           {resultLink ? (
             <div className="mt-3">
-              <Link href={resultLink} className="text-[#f0f0f0] hover:text-white hover:underline">
+              <Link href={resultLink} className="font-semibold text-[#071110] hover:underline">
                 继续进入结果页面
               </Link>
             </div>
@@ -97,11 +97,11 @@ export default function AdminContentEventEditPage() {
       ) : null}
 
       {loading ? (
-        <section className="rounded-[18px] border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] p-6 text-sm text-[#8a8a8a]">
+        <section className="admin-studio-section p-6 text-sm text-black/48">
           正在加载活动详情并回填编辑表单...
         </section>
       ) : error ? (
-        <section className="rounded-[18px] border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">
           {error}
         </section>
       ) : (

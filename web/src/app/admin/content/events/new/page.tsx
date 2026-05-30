@@ -31,24 +31,24 @@ export default function AdminContentEventCreatePage() {
       description="在统一后台内完成活动资料创建、主办方绑定、时区确认、时间表录入和素材上传。当前页面已经作为正式的活动创建入口使用。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+          <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回活动工作区
           </Link>
-          <Link href="/admin/content/events/catalog" className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#1a1a1a] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white">
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             活动目录中心
           </Link>
-          <Link href="/admin/content/organizers/new" className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black">
+          <Link href="/admin/content/organizers/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建主办方
           </Link>
         </>
       }
     >
       {submitNotice ? (
-        <section className="rounded-[18px] border border-[rgba(168,255,62,0.22)] bg-[linear-gradient(180deg,rgba(168,255,62,0.12),rgba(168,255,62,0.04))] p-4 text-sm text-[#d9ff9a]">
+        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
           <div>{submitNotice}</div>
           {submitResultLink ? (
             <div className="mt-3">
-              <Link href={submitResultLink} className="text-[#f0f0f0] hover:text-white hover:underline">
+              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
                 继续进入结果页面
               </Link>
             </div>

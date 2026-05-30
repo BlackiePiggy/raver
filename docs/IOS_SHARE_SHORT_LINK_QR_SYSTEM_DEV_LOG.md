@@ -401,6 +401,43 @@
   - 补完整 `UniversalLinkRouter` 对 `https://raver.app/s/{code}` 的解析
 - 在这些完成前，继续不进入海报系统、Android 端和复杂运营后台。
 
+### 外部扫码进 App 收尾补丁已完成
+
+- 服务端公开分享路由已新增 AASA 出口：
+  - `GET /.well-known/apple-app-site-association`
+  - `GET /apple-app-site-association`
+- AASA 内容改为服务端动态生成，默认读取：
+  - `RAVER_IOS_ASSOCIATED_APP_IDS`
+  - 或 `RAVER_IOS_ASSOCIATED_TEAM_ID + RAVER_IOS_BUNDLE_ID`
+  - 若未配置，则返回 `503` 和 `ios_associated_app_ids_not_configured`，避免误以为已可上线
+- 服务端已新增最小下载承接页：
+  - `GET /download`
+  - 若 `RAVER_IOS_APP_STORE_URL` 已配置，则展示 App Store 按钮
+  - `RAVER_IOS_DOWNLOAD_URL` 未配置时，`/s/:code/download` 会兜底跳到 `${PUBLIC_SHARE_BASE_URL}/download`
+- 公开分享路由中的分享域名与下载地址不再只靠硬编码：
+  - `PUBLIC_SHARE_BASE_URL`
+  - `RAVER_IOS_DOWNLOAD_URL`
+  - `RAVER_IOS_APP_STORE_URL`
+- 本轮目标是把“二维码分享 + 外部扫码 + AASA + 下载兜底”补成可部署状态，不包含真机实域名验证本身。
+
+### 本轮校验
+
+- 服务端构建通过：
+  - `pnpm build`
+- 本轮结果：
+  - server build 退出码 `0`
+
+### 下一步
+
+- 在真实部署环境配置：
+  - `PUBLIC_SHARE_BASE_URL`
+  - `RAVER_IOS_ASSOCIATED_TEAM_ID` 或 `RAVER_IOS_ASSOCIATED_APP_IDS`
+  - `RAVER_IOS_APP_STORE_URL`
+- 部署后真机验证：
+  - `https://<share-domain>/.well-known/apple-app-site-association`
+  - `https://<share-domain>/s/{code}`
+  - 未安装场景 `https://<share-domain>/download`
+
 ### Universal Link Router 第九刀已完成
 
 - 已在 iOS 分享核心模块中新增 `UniversalLinkRouter`，避免新增文件时额外扰动 Xcode project。

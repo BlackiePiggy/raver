@@ -78,13 +78,13 @@ export default function AdminContentOrganizerEditPage() {
         <>
           <Link
             href="/admin/content/organizers"
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
             返回主办方工作区
           </Link>
           <Link
             href="/admin/content/events"
-            className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
             打开活动工作区
           </Link>
@@ -92,11 +92,11 @@ export default function AdminContentOrganizerEditPage() {
       }
     >
       {notice ? (
-        <section className="rounded-3xl border border-primary-blue/30 bg-primary-blue/10 p-4 text-sm text-text-primary">
+        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
           <div>{notice}</div>
           {resultLink ? (
             <div className="mt-3">
-              <Link href={resultLink} className="text-primary-blue hover:underline">
+              <Link href={resultLink} className="font-semibold text-[#071110] hover:underline">
                 打开结果页面
               </Link>
             </div>
@@ -105,11 +105,11 @@ export default function AdminContentOrganizerEditPage() {
       ) : null}
 
       {loading ? (
-        <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6 text-sm text-text-secondary">
+        <section className="admin-studio-section p-6 text-sm text-black/48">
           正在加载主办方详情并回填编辑表单...
         </section>
       ) : error ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">
           {error}
         </section>
       ) : (

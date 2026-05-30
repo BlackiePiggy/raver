@@ -20,6 +20,26 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/.well-known/apple-app-site-association',
+        destination: `${backendOrigin}/.well-known/apple-app-site-association`,
+      },
+      {
+        source: '/apple-app-site-association',
+        destination: `${backendOrigin}/apple-app-site-association`,
+      },
+      {
+        source: '/download',
+        destination: `${backendOrigin}/download`,
+      },
+      {
+        source: '/s/:path*',
+        destination: `${backendOrigin}/s/:path*`,
+      },
+      {
+        source: '/qr/:path*',
+        destination: `${backendOrigin}/qr/:path*`,
+      },
+      {
         source: '/admin/festival-viewer.html',
         destination: `${festivalViewerOrigin}/festival-viewer.html`,
       },

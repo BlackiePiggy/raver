@@ -270,6 +270,107 @@
   padding: 8px 14px;
 }
 
+.admin-studio-section {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 28px;
+  box-shadow: 0 10px 30px rgba(33, 52, 47, 0.06);
+}
+
+.admin-studio-soft {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: #f8f9f8;
+  border-radius: 24px;
+}
+
+.admin-studio-pastel-mint {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: linear-gradient(180deg, #edf7f2 0%, #ffffff 100%);
+  border-radius: 26px;
+}
+
+.admin-studio-pastel-sand {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: linear-gradient(180deg, #f7efda 0%, #ffffff 100%);
+  border-radius: 26px;
+}
+
+.admin-studio-pastel-rose {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: linear-gradient(180deg, #f7e3e0 0%, #ffffff 100%);
+  border-radius: 26px;
+}
+
+.admin-studio-dark {
+  border: 1px solid rgba(25, 28, 28, 0.9);
+  background: #1c1c1c;
+  color: white;
+  border-radius: 26px;
+}
+
+.admin-studio-label {
+  color: rgba(7, 17, 16, 0.38);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.admin-studio-input {
+  width: 100%;
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  color: #071110;
+  border-radius: 999px;
+  padding: 0.9rem 1rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.admin-studio-textarea {
+  width: 100%;
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  color: #071110;
+  border-radius: 22px;
+  padding: 0.9rem 1rem;
+  font-size: 0.875rem;
+  outline: none;
+  resize: vertical;
+}
+
+.admin-studio-button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #071110;
+  color: white;
+  font-weight: 700;
+}
+
+.admin-studio-button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  background: white;
+  color: #071110;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.admin-studio-button-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #efdad8;
+  background: #f7e3e0;
+  color: #6a3530;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
 @media (max-width: 1279px) {
   .admin-shell-page {
     padding: 8px 0 8px;

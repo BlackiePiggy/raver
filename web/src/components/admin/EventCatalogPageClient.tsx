@@ -492,8 +492,8 @@ export default function EventCatalogPageClient() {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="admin-reference-card p-6">
+      <section className="admin-reference-card p-6">
+        <div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Page Summary</div>
@@ -524,62 +524,67 @@ export default function EventCatalogPageClient() {
             ))}
           </div>
         </div>
+      </section>
 
-        <div className="admin-reference-dark-card p-6">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Bulk Actions</div>
-          <h2 className="mt-2 text-[20px] font-semibold tracking-[-0.03em] text-white">批量管理</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-white/65">
-            <p>已选中 {selectedItems.length} 条活动，可复制活动 ID、活动名称或详情链接。</p>
-            <p>当前也支持直接批量指定主办方或批量清空主办方绑定，沿用统一后台已验证的绑定链路。</p>
+      <section className="admin-reference-dark-card p-6">
+        <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Bulk Actions</div>
+            <h2 className="mt-2 text-[20px] font-semibold tracking-[-0.03em] text-white">批量管理</h2>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-white/65">
+              <p>已选中 {selectedItems.length} 条活动，可复制活动 ID、活动名称或详情链接。</p>
+              <p>当前也支持直接批量指定主办方或批量清空主办方绑定，沿用统一后台已验证的绑定链路。</p>
+            </div>
+            <div className="mt-5 space-y-3">
+              <label className="space-y-2">
+                <span className="text-xs uppercase tracking-[0.18em] text-white/45">批量指定主办方</span>
+                <input
+                  value={organizerQuery}
+                  onChange={(event) => setOrganizerQuery(event.target.value)}
+                  placeholder="搜索主办方名称"
+                  className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/45"
+                />
+              </label>
+
+              {selectedOrganizer ? (
+                <div className="rounded-[18px] border border-white/10 bg-white/8 px-4 py-3 text-sm text-white/78">
+                  当前选中主办方：{selectedOrganizer.name}
+                </div>
+              ) : null}
+
+              {organizerQuery.trim() ? (
+                <div className="rounded-[18px] border border-white/10 bg-white/8 p-3">
+                  {isSearchingOrganizers ? (
+                    <div className="text-sm text-white/55">主办方搜索中…</div>
+                  ) : organizerResults.length ? (
+                    <div className="space-y-2">
+                      {organizerResults.slice(0, 5).map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrganizer(item);
+                            setOrganizerQuery(item.name);
+                            setOrganizerResults([]);
+                          }}
+                          className="block w-full rounded-[18px] border border-white/10 bg-white/6 px-4 py-3 text-left"
+                        >
+                          <div className="text-sm font-semibold text-white">{item.name}</div>
+                          <div className="mt-1 text-xs text-white/45">
+                            {[item.country, item.city, item.tagline].filter(Boolean).join(' · ') || item.id}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-white/55">没有匹配的主办方结果。</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
-          <div className="mt-5 space-y-3">
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.18em] text-white/45">批量指定主办方</span>
-              <input
-                value={organizerQuery}
-                onChange={(event) => setOrganizerQuery(event.target.value)}
-                placeholder="搜索主办方名称"
-                className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/45"
-              />
-            </label>
 
-            {selectedOrganizer ? (
-              <div className="rounded-[18px] border border-white/10 bg-white/8 px-4 py-3 text-sm text-white/78">
-                当前选中主办方：{selectedOrganizer.name}
-              </div>
-            ) : null}
-
-            {organizerQuery.trim() ? (
-              <div className="rounded-[18px] border border-white/10 bg-white/8 p-3">
-                {isSearchingOrganizers ? (
-                  <div className="text-sm text-white/55">主办方搜索中…</div>
-                ) : organizerResults.length ? (
-                  <div className="space-y-2">
-                    {organizerResults.slice(0, 5).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedOrganizer(item);
-                          setOrganizerQuery(item.name);
-                          setOrganizerResults([]);
-                        }}
-                        className="block w-full rounded-[18px] border border-white/10 bg-white/6 px-4 py-3 text-left"
-                      >
-                        <div className="text-sm font-semibold text-white">{item.name}</div>
-                        <div className="mt-1 text-xs text-white/45">
-                          {[item.country, item.city, item.tagline].filter(Boolean).join(' · ') || item.id}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-white/55">没有匹配的主办方结果。</div>
-                )}
-              </div>
-            ) : null}
-          </div>
-          <div className="mt-5 grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <button
               type="button"
               onClick={() => void handleBulkCopy('ids')}
@@ -629,7 +634,7 @@ export default function EventCatalogPageClient() {
                 选中单条活动后可一跳进入编辑
               </div>
             )}
-            {bulkNotice ? <div className="text-sm text-white/78">{bulkNotice}</div> : null}
+            {bulkNotice ? <div className="md:col-span-2 text-sm text-white/78">{bulkNotice}</div> : null}
           </div>
         </div>
       </section>

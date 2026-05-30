@@ -15,7 +15,58 @@ import { normalizePosterLocale, normalizePosterVariant, renderSharePoster } from
 
 const router: Router = Router();
 const prisma = new PrismaClient();
-const APP_DOWNLOAD_URL = process.env.RAVER_IOS_DOWNLOAD_URL || 'https://ravehub.top/download';
+const SHARE_BASE_URL = (process.env.PUBLIC_SHARE_BASE_URL || 'https://ravehub.top').replace(/\/+$/, '');
+const APP_STORE_URL = (() => {
+  const normalized = String(process.env.RAVER_IOS_APP_STORE_URL || '').trim();
+  if (!normalized || !/^https?:\/\//i.test(normalized)) {
+    return null;
+  }
+  return normalized;
+})();
+const APP_DOWNLOAD_URL = (() => {
+  const normalized = String(process.env.RAVER_IOS_DOWNLOAD_URL || '').trim();
+  if (normalized && /^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+  return `${SHARE_BASE_URL}/download`;
+})();
+const IOS_ASSOCIATED_DEFAULT_PATHS = [
+  '/s/*',
+  '/u/*',
+  '/g/*',
+  '/p/*',
+  '/e/*',
+  '/n/*',
+  '/dj/*',
+  '/set/*',
+  '/label/*',
+  '/festival/*',
+  '/ranking/*',
+  '/rating/*',
+  '/circle/*',
+] as const;
+const IOS_ASSOCIATED_APP_IDS = (() => {
+  const explicit = String(process.env.RAVER_IOS_ASSOCIATED_APP_IDS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (explicit.length > 0) {
+    return explicit;
+  }
+
+  const teamId = String(
+    process.env.RAVER_IOS_ASSOCIATED_TEAM_ID ||
+      process.env.NOTIFICATION_APNS_TEAM_ID ||
+      ''
+  ).trim();
+  const bundleId = String(process.env.RAVER_IOS_BUNDLE_ID || 'com.raver.mvp').trim();
+
+  if (!teamId || !bundleId) {
+    return [];
+  }
+
+  return [`${teamId}.${bundleId}`];
+})();
 const IP_HASH_SALT = process.env.SHARE_LINK_IP_HASH_SALT || process.env.AUTH_REFRESH_TOKEN_SECRET || 'raver-share-link';
 const APP_ICON_PATH = path.resolve(
   __dirname,
@@ -178,6 +229,91 @@ const renderStatePage = (title: string, description: string, primaryURL?: string
 </html>`;
 };
 
+const renderDownloadPage = (): string => {
+  const title = htmlEscape('下载 Raver');
+  const description = htmlEscape('安装 Raver 后，你可以从分享二维码直接回到对应内容页面。');
+  const storeButton = APP_STORE_URL
+    ? `<a class="primary" href="${htmlEscape(APP_STORE_URL)}">前往 App Store</a>`
+    : '';
+  const note = APP_STORE_URL
+    ? '如果你的设备已安装 App，也可以重新扫码直接打开内容。'
+    : 'App Store 地址暂未配置，请联系团队补充 `RAVER_IOS_APP_STORE_URL`。';
+
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f2ea; color: #171717; }
+      main { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 18px; }
+      section { width: 100%; max-width: 460px; background: #fff; border-radius: 24px; padding: 28px; box-shadow: 0 18px 50px rgba(23,23,23,.1); }
+      h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.14; }
+      p { margin: 0; color: #525252; line-height: 1.6; font-size: 16px; }
+      .note { margin-top: 12px; font-size: 14px; color: #737373; }
+      .actions { display: grid; gap: 10px; margin-top: 24px; }
+      a { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; font-weight: 700; }
+      .primary { background: #171717; color: #fff; }
+      .secondary { background: #fff; color: #171717; border: 1px solid rgba(23,23,23,.12); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>${title}</h1>
+        <p>${description}</p>
+        <p class="note">${htmlEscape(note)}</p>
+        <div class="actions">
+          ${storeButton}
+          <a class="secondary" href="${htmlEscape(SHARE_BASE_URL)}">返回分享站点</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>`;
+};
+
+const buildAppleAppSiteAssociationPayload = () => ({
+  applinks: {
+    apps: [],
+    details:
+      IOS_ASSOCIATED_APP_IDS.length > 0
+        ? [
+            {
+              appIDs: IOS_ASSOCIATED_APP_IDS,
+              components: IOS_ASSOCIATED_DEFAULT_PATHS.map((routePath) => ({
+                '/': routePath,
+              })),
+            },
+          ]
+        : [],
+  },
+});
+
+const sendAppleAppSiteAssociation = (_req: Request, res: Response): void => {
+  const payload = buildAppleAppSiteAssociationPayload();
+  const configured = IOS_ASSOCIATED_APP_IDS.length > 0;
+  res
+    .status(configured ? 200 : 503)
+    .set('Cache-Control', configured ? 'public, max-age=300' : 'no-store')
+    .type('application/json')
+    .send(
+      JSON.stringify(
+        configured
+          ? payload
+          : {
+              ...payload,
+              error: 'ios_associated_app_ids_not_configured',
+            }
+      )
+    );
+};
+
 const renderLandingPage = (
   req: Request,
   shareLink: Awaited<ReturnType<typeof getRawShareLinkByCode>>,
@@ -309,6 +445,13 @@ const overlayPngScaled = (
     }
   }
 };
+
+router.get('/.well-known/apple-app-site-association', sendAppleAppSiteAssociation);
+router.get('/apple-app-site-association', sendAppleAppSiteAssociation);
+
+router.get('/download', (_req: Request, res: Response): void => {
+  res.status(200).type('html').send(renderDownloadPage());
+});
 
 router.get('/s/:code', async (req: Request, res: Response): Promise<void> => {
   try {

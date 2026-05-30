@@ -24,10 +24,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+    <section className="admin-studio-section p-6">
       <div>
-        <h2 className="text-2xl font-semibold">{title}</h2>
-        <p className="mt-2 text-sm leading-6 text-text-secondary">{description}</p>
+        <div className="admin-studio-label">{title}</div>
+        <p className="mt-3 text-sm leading-6 text-black/52">{description}</p>
       </div>
       <div className="mt-5">{children}</div>
     </section>
@@ -45,9 +45,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="mb-2 text-sm text-text-secondary">{label}</div>
+      <div className="mb-2 admin-studio-label">{label}</div>
       {children}
-      {error ? <div className="mt-2 text-xs text-red-300">{error}</div> : null}
+      {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
   );
 }
@@ -68,29 +68,29 @@ function ImageDropZone({
   acceptMultiple?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border-secondary bg-bg-tertiary/50 p-4">
+    <div className="admin-studio-soft p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-text-secondary">{label}</p>
+        <p className="text-sm text-black/48">{label}</p>
         {previewUrl && onRemove ? (
           <button
             type="button"
             onClick={onRemove}
-            className="text-xs text-text-secondary hover:text-text-primary"
+            className="text-xs text-black/48"
           >
             移除
           </button>
         ) : null}
       </div>
       {previewUrl ? (
-        <div className="relative mt-3 aspect-video overflow-hidden rounded-xl border border-border-secondary">
+        <div className="relative mt-3 aspect-video overflow-hidden rounded-[20px] border border-[#e8eceb]">
           <Image src={previewUrl} alt={label} fill className="object-cover" sizes="640px" />
         </div>
       ) : (
-        <div className="mt-3 flex aspect-video items-center justify-center rounded-xl bg-bg-primary/40 text-sm text-text-tertiary">
+        <div className="mt-3 flex aspect-video items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#edf7f2,#f7efda)] text-sm text-black/42">
           暂无图片
         </div>
       )}
-      <label className="mt-4 inline-flex cursor-pointer items-center rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+      <label className="admin-studio-button-secondary mt-4 cursor-pointer px-4 py-3 text-sm">
         {uploading ? '上传中...' : acceptMultiple ? '选择图片' : '上传图片'}
         <input
           type="file"
@@ -105,8 +105,8 @@ function ImageDropZone({
 }
 
 const textInputClassName =
-  'w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue';
-const textAreaClassName = `${textInputClassName} min-h-28 resize-y`;
+  'admin-studio-input';
+const textAreaClassName = 'admin-studio-textarea min-h-28';
 
 type OrganizerStudioFormProps = {
   mode: 'create' | 'edit';
@@ -367,7 +367,7 @@ export default function OrganizerStudioForm({
   return (
     <div className="space-y-5">
       {submitError ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <section className="admin-studio-pastel-rose p-4 text-sm text-[#6a3530]">
           {submitError}
         </section>
       ) : null}
@@ -421,7 +421,7 @@ export default function OrganizerStudioForm({
                 {draft.proofImages.map((image, index) => (
                   <div
                     key={`${image.remoteUrl}-${index}`}
-                    className="rounded-2xl border border-border-secondary bg-bg-tertiary/50 p-3"
+                    className="admin-reference-soft-card p-3"
                   >
                     <div className="relative aspect-video overflow-hidden rounded-xl border border-border-secondary">
                       <Image
@@ -433,14 +433,14 @@ export default function OrganizerStudioForm({
                       />
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0 text-xs text-text-secondary">
+                      <div className="min-w-0 text-xs text-black/42">
                         <div className="truncate">{image.fileName}</div>
                       </div>
                       <button
                         type="button"
                         onClick={() => void handleProofRemove(index)}
                         disabled={deletingProofIndexes.includes(index)}
-                        className="text-xs text-text-secondary hover:text-text-primary"
+                        className="text-xs text-black/48 hover:text-[#071110]"
                       >
                         {deletingProofIndexes.includes(index) ? '移除中...' : '移除'}
                       </button>
@@ -554,7 +554,7 @@ export default function OrganizerStudioForm({
               placeholder="例如：Global electronic music festival"
             />
           </Field>
-          <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm leading-6 text-text-secondary">
+          <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
             当前版本先覆盖基础 profile 字段。活动绑定、similar brand 提示和更完整的 revision diff 会在下一批继续补上。
           </div>
           <Field label="简介（中文）">
@@ -635,11 +635,11 @@ export default function OrganizerStudioForm({
           </Field>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-border-secondary bg-bg-tertiary/40 p-4">
+        <div className="admin-reference-card mt-5 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold">补充链接</h3>
-              <p className="mt-1 text-sm text-text-secondary">
+              <p className="mt-1 text-sm text-black/48">
                 用于官网之外的购票页、播客页、社区页或其他外部资料。
               </p>
             </div>
@@ -651,7 +651,7 @@ export default function OrganizerStudioForm({
                   createEmptyOrganizerExtraLinkDraft(),
                 ])
               }
-              className="rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+              className="admin-studio-button-secondary px-3 py-2 text-sm"
             >
               添加链接
             </button>
@@ -662,7 +662,7 @@ export default function OrganizerStudioForm({
               {draft.extraLinks.map((item) => (
                 <div
                   key={item.id}
-                  className="grid gap-3 rounded-2xl border border-border-secondary bg-bg-secondary p-4 lg:grid-cols-[0.8fr_0.8fr_1.6fr_auto]"
+                  className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.8fr_0.8fr_1.6fr_auto]"
                 >
                   <input
                     value={item.title}
@@ -696,7 +696,7 @@ export default function OrganizerStudioForm({
                         draft.extraLinks.filter((link) => link.id !== item.id)
                       )
                     }
-                    className="rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+                    className="admin-studio-button-secondary px-3 py-2 text-sm"
                   >
                     删除
                   </button>
@@ -704,7 +704,7 @@ export default function OrganizerStudioForm({
               ))}
             </div>
           ) : (
-            <div className="mt-4 text-sm text-text-secondary">当前还没有补充链接。</div>
+            <div className="mt-4 text-sm text-black/48">当前还没有补充链接。</div>
           )}
         </div>
       </Section>
@@ -715,15 +715,15 @@ export default function OrganizerStudioForm({
       >
         <div className="space-y-4">
           {mode === 'edit' ? (
-            <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm text-text-secondary">
+            <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
               当前编辑基线 revision：
-              <span className="ml-2 font-semibold text-text-primary">
+              <span className="ml-2 font-semibold text-[#071110]">
                 {draft.baseBrandRevision ?? '未加载'}
               </span>
             </div>
           ) : null}
 
-          <label className="flex items-start gap-3 rounded-2xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm">
+          <label className="admin-reference-soft-card flex items-start gap-3 px-4 py-3 text-sm">
             <input
               type="checkbox"
               checked={draft.rightsConfirmed}
@@ -733,7 +733,7 @@ export default function OrganizerStudioForm({
             <span>我确认已获得本次提交所用图片、品牌资料和外部链接的合法使用权。</span>
           </label>
 
-          <label className="flex items-start gap-3 rounded-2xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm">
+          <label className="admin-reference-soft-card flex items-start gap-3 px-4 py-3 text-sm">
             <input
               type="checkbox"
               checked={draft.identityConfirmed}
@@ -747,11 +747,11 @@ export default function OrganizerStudioForm({
             <div className="text-sm text-red-300">{errors.review}</div>
           ) : null}
 
-          <div className="rounded-2xl border border-border-secondary bg-bg-tertiary/40 px-4 py-3 text-sm leading-6 text-text-secondary">
+          <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
             Event 绑定还没有完全内嵌到本页。
             <Link
               href="/admin/content/events"
-              className="ml-1 text-primary-blue hover:underline"
+              className="ml-1 font-semibold text-[#071110] hover:underline"
             >
               先去活动工作区
             </Link>
@@ -765,7 +765,7 @@ export default function OrganizerStudioForm({
           type="button"
           onClick={() => void handleSubmit()}
           disabled={submitting || !canSubmit}
-          className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+          className="admin-studio-button-primary"
         >
           {submitting
             ? '提交中...'

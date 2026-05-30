@@ -269,6 +269,7 @@
 - [x] 梳理现有后端路由和 Prisma 结构
 - [x] 设计 `share_links` / `share_link_events` / `invite_referrals` migration
 - [x] 落第一版 BFF resolve API 和 code redirect 逻辑
+- [x] 补 `apple-app-site-association` 与 `/download` 最小承接页服务端入口
 
 ## 9. 更新规则
 

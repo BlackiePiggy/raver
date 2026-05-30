@@ -23,10 +23,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+    <section className="admin-studio-section p-6">
       <div>
-        <h2 className="text-2xl font-semibold">{title}</h2>
-        <p className="mt-2 text-sm leading-6 text-text-secondary">{description}</p>
+        <div className="admin-studio-label">{title}</div>
+        <p className="mt-3 text-sm leading-6 text-black/52">{description}</p>
       </div>
       <div className="mt-5">{children}</div>
     </section>
@@ -44,9 +44,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="mb-2 text-sm text-text-secondary">{label}</div>
+      <div className="mb-2 admin-studio-label">{label}</div>
       {children}
-      {error ? <div className="mt-2 text-xs text-red-300">{error}</div> : null}
+      {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
   );
 }
@@ -65,29 +65,29 @@ function ImageDropZone({
   onRemove?: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border-secondary bg-bg-tertiary/50 p-4">
+    <div className="admin-studio-soft p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-text-secondary">{label}</p>
+        <p className="text-sm text-black/48">{label}</p>
         {previewUrl && onRemove ? (
           <button
             type="button"
             onClick={onRemove}
-            className="text-xs text-text-secondary hover:text-text-primary"
+            className="text-xs text-black/48"
           >
             移除
           </button>
         ) : null}
       </div>
       {previewUrl ? (
-        <div className="relative mt-3 aspect-video overflow-hidden rounded-xl border border-border-secondary">
+        <div className="relative mt-3 aspect-video overflow-hidden rounded-[20px] border border-[#e8eceb]">
           <Image src={previewUrl} alt={label} fill className="object-cover" sizes="640px" />
         </div>
       ) : (
-        <div className="mt-3 flex aspect-video items-center justify-center rounded-xl bg-bg-primary/40 text-sm text-text-tertiary">
+        <div className="mt-3 flex aspect-video items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#edf7f2,#f7efda)] text-sm text-black/42">
           暂无图片
         </div>
       )}
-      <label className="mt-4 inline-flex cursor-pointer items-center rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+      <label className="admin-studio-button-secondary mt-4 cursor-pointer px-4 py-3 text-sm">
         {uploading ? '上传中...' : '上传图片'}
         <input
           type="file"
@@ -101,8 +101,8 @@ function ImageDropZone({
 }
 
 const textInputClassName =
-  'w-full rounded-xl border border-border-secondary bg-bg-tertiary/70 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-primary-blue';
-const textAreaClassName = `${textInputClassName} min-h-28 resize-y`;
+  'admin-studio-input';
+const textAreaClassName = 'admin-studio-textarea min-h-28';
 
 type DJStudioFormProps = {
   mode: 'create' | 'edit';
@@ -248,7 +248,7 @@ export default function DJStudioForm({
   return (
     <div className="space-y-5">
       {submitError ? (
-        <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <section className="admin-studio-pastel-rose p-4 text-sm text-[#6a3530]">
           {submitError}
         </section>
       ) : null}
@@ -383,11 +383,11 @@ export default function DJStudioForm({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={submitting || uploadingAvatar || uploadingBanner || uploadingProof || !canSubmit}
-            className="rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="admin-studio-button-primary"
           >
             {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交 DJ' : '提交编辑')}
           </button>
-          <Link href="/admin/content/djs" className="rounded-xl border border-border-secondary px-5 py-3 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/djs" className="admin-studio-button-secondary">
             返回 DJ 工作区
           </Link>
         </div>
