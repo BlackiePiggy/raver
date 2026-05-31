@@ -1,4 +1,5 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import {
   USER_ENTITY_RELATION_FAVORITE,
   USER_ENTITY_TARGET_EVENT,
@@ -13,7 +14,6 @@ import type {
   RegisterDevicePushTokenInput,
 } from './notification-center.types';
 
-const prisma = new PrismaClient();
 const handlers = new Map<NotificationChannel, NotificationChannelHandler>();
 
 const readBoolEnv = (key: string, fallback: boolean): boolean => {

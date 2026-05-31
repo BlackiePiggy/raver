@@ -1,8 +1,7 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { normalizeCountryBiTextPayload } from '../utils/country-i18n';
 import { normalizeTriTextPayload } from '../utils/i18n';
-
-const prisma = new PrismaClient();
 
 const cozeDjEnrichmentRunUrl = String(
   process.env.COZE_DJ_ENRICH_RUN_URL || 'https://wd6gv5pg6k.coze.site/run'
@@ -25,11 +24,11 @@ const djEnrichmentWorkerIntervalMs = (() => {
   return 5000;
 })();
 const djEnrichmentDefaultConcurrency = (() => {
-  const parsed = Number(process.env.DJ_ENRICH_MAX_CONCURRENCY || 10);
+  const parsed = Number(process.env.DJ_ENRICH_MAX_CONCURRENCY || 2);
   if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 20) {
     return Math.floor(parsed);
   }
-  return 10;
+  return 2;
 })();
 
 type DjEnrichmentInputItem = {

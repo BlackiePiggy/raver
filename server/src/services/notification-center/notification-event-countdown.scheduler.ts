@@ -1,11 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { notificationCenterService, type EventCountdownPreference } from './notification-center.service';
 import {
   USER_ENTITY_RELATION_FAVORITE,
   USER_ENTITY_TARGET_EVENT,
 } from '../user-entity-follow.service';
-
-const prisma = new PrismaClient();
 
 const readEnv = (key: string): string => String(process.env[key] || '').trim();
 const readBooleanEnv = (key: string, fallback = false): boolean => {

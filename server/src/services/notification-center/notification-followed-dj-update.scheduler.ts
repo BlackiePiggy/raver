@@ -1,11 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { notificationCenterService, type FollowedDJUpdatePreference } from './notification-center.service';
 import {
   USER_ENTITY_RELATION_FOLLOW,
   USER_ENTITY_TARGET_DJ,
 } from '../user-entity-follow.service';
-
-const prisma = new PrismaClient();
 
 const readEnv = (key: string): string => String(process.env[key] || '').trim();
 const readBooleanEnv = (key: string, fallback = false): boolean => {

@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { notificationCenterService, type RouteDJReminderPreference } from './notification-center.service';
-
-const prisma = new PrismaClient();
 
 const readEnv = (key: string): string => String(process.env[key] || '').trim();
 const readBooleanEnv = (key: string, fallback = false): boolean => {
