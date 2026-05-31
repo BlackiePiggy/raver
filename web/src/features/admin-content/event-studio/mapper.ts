@@ -17,6 +17,26 @@ const trimOrNull = (value?: string | null): string | null => {
   return trimmed || null;
 };
 
+const splitLines = (value: string): string[] =>
+  Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+
+const parseJsonTextOrNull = (value: string): unknown | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+};
+
 const numericOrNull = (value?: string | null): number | null => {
   const trimmed = String(value || '').trim();
   if (!trimmed) return null;
@@ -412,7 +432,12 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     description: trimOrNull(draft.description),
     eventType: trimOrNull(draft.eventType),
     organizerName: trimOrNull(draft.organizerName),
+    venueName: trimOrNull(draft.venueName),
+    venueAddress: trimOrNull(draft.venueAddress),
     sourceEventUrl: trimOrNull(draft.sourceEventUrl),
+    sourceProvider: trimOrNull(draft.sourceProvider),
+    referenceLinks: splitLines(draft.referenceLinksText),
+    socialLinks: parseJsonTextOrNull(draft.socialLinksText),
     city: trimOrNull(primaryText(draft.city)),
     cityI18n: cityI18n ?? undefined,
     country: trimOrNull(primaryText(draft.country)),

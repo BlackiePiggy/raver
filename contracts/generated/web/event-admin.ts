@@ -202,7 +202,12 @@ export interface components {
             description?: string | null;
             eventType?: string | null;
             organizerName?: string | null;
+            venueName?: string | null;
+            venueAddress?: string | null;
             sourceEventUrl?: string | null;
+            sourceProvider?: string | null;
+            referenceLinks?: string[] | null;
+            socialLinks?: unknown;
             city?: string | null;
             cityI18n?: components["schemas"]["LocalizedText"];
             country?: string | null;
@@ -298,7 +303,12 @@ export interface components {
             imageAssets?: components["schemas"]["EventImageAsset"][] | null;
             eventType?: string | null;
             organizerName?: string | null;
+            venueName?: string | null;
+            venueAddress?: string | null;
             sourceEventUrl?: string | null;
+            sourceProvider?: string | null;
+            referenceLinks?: string[] | null;
+            socialLinks?: unknown;
             city?: string | null;
             country?: string | null;
             manualLocation?: components["schemas"]["EventManualLocation"];

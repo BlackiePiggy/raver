@@ -4,6 +4,7 @@ import {
   buildEventStudioScheduleStructure,
   createEmptyEventStudioTimetableSlotDraft,
   createEventStudioDraft,
+  hydrateEventStudioDraftFromEvent,
   fillLineupArtistsFromTimetableSlots,
   syncEventStudioLineupState,
   syncEventStudioScheduleStructure,
@@ -12,6 +13,32 @@ import {
   mapEventStudioDraftToCreateInput,
   mapEventStudioDraftToUpdateInput,
 } from "../../src/features/admin-content/event-studio/mapper";
+import {
+  hydrateDJStudioDraftFromDJ,
+} from "../../src/features/admin-content/dj-studio/draft";
+import {
+  mapDJStudioDraftToCreateInput,
+  mapDJStudioDraftToUpdateInput,
+} from "../../src/features/admin-content/dj-studio/mapper";
+import {
+  hydrateNewsStudioDraftFromArticle,
+} from "../../src/features/admin-content/news-studio/draft";
+import {
+  mapNewsStudioDraftToCreateInput,
+} from "../../src/features/admin-content/news-studio/mapper";
+import {
+  hydrateOrganizerStudioDraftFromOrganizer,
+} from "../../src/features/admin-content/organizer-studio/draft";
+import {
+  mapOrganizerStudioDraftToCreateInput,
+  mapOrganizerStudioDraftToUpdateInput,
+} from "../../src/features/admin-content/organizer-studio/mapper";
+import {
+  hydrateLabelStudioDraftFromLabel,
+} from "../../src/features/admin-content/label-studio/draft";
+import {
+  mapLabelStudioDraftToCreateInput,
+} from "../../src/features/admin-content/label-studio/mapper";
 
 type TestCase = {
   name: string;
@@ -70,7 +97,12 @@ const tests: TestCase[] = [
       draft.eventType = "festival";
       draft.organizerFestivalId = "fest_future_rave";
       draft.organizerName = "Raver Crew";
+      draft.venueName = "The Warehouse";
+      draft.venueAddress = "88 Xuhui Riverside";
       draft.sourceEventUrl = "https://example.com/events/future-rave";
+      draft.sourceProvider = "manual";
+      draft.referenceLinksText = "https://example.com/a\nhttps://example.com/b";
+      draft.socialLinksText = '[{"type":"instagram","url":"https://instagram.com/future-rave"}]';
       draft.city = {
         zh: "上海",
         en: "Shanghai",
@@ -164,6 +196,11 @@ const tests: TestCase[] = [
 
       assert.deepEqual(payload.weeks?.map((week) => week.weekIndex), [1]);
       assert.deepEqual(payload.eventDays?.map((day) => day.eventDayId), ["d1", "d2"]);
+      assert.equal(payload.venueName, "The Warehouse");
+      assert.equal(payload.venueAddress, "88 Xuhui Riverside");
+      assert.equal(payload.sourceProvider, "manual");
+      assert.deepEqual(payload.referenceLinks, ["https://example.com/a", "https://example.com/b"]);
+      assert.deepEqual(payload.socialLinks, [{ type: "instagram", url: "https://instagram.com/future-rave" }]);
       assert.equal(payload.manualLocation?.formattedAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 88 号");
       assert.equal(payload.manualLocation?.formattedAddressI18n?.en, "China · Shanghai · 88 Xuhui Riverside");
       assert.equal(payload.locationPoint?.formattedAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 88 号");
@@ -367,6 +404,396 @@ const tests: TestCase[] = [
 
       assert.equal(payload.lineupSlots?.[0]?.startTime, "2099-09-12T23:30:00");
       assert.equal(payload.lineupSlots?.[0]?.endTime, "2099-09-13T01:00:00");
+    },
+  },
+  {
+    name: "hydrateEventStudioDraftFromEvent reads lineup and timetable slots from EventDetail payload",
+    run: () => {
+      const event = {
+        id: "event_1",
+        name: "Hydration Test",
+        slug: "hydration-test",
+        startDate: "2099-09-12T00:00:00Z",
+        endDate: "2099-09-13T00:00:00Z",
+        venueName: "The Warehouse",
+        venueAddress: "88 Xuhui Riverside",
+        sourceProvider: "manual",
+        referenceLinks: ["https://example.com/a"],
+        socialLinks: [{ type: "instagram", url: "https://instagram.com/future-rave" }],
+        eventDays: [
+          {
+            id: "day_1",
+            eventDayId: "d1",
+            weekIndex: 1,
+            dayIndexInWeek: 1,
+            overallDayIndex: 1,
+            label: "Day 1",
+            weekday: "sat",
+            date: "2099-09-12",
+            sortOrder: 1,
+          },
+        ],
+        lineupArtists: [],
+        lineupSlots: [
+          {
+            id: "slot_1",
+            eventDayId: "d1",
+            weekIndex: 1,
+            dayIndexInWeek: 1,
+            overallDayIndex: 1,
+            localDate: "2099-09-12",
+            djId: "dj_anyma",
+            memberDjIds: ["dj_anyma", "dj_mrak"],
+            memberNames: ["Anyma", "MRAK"],
+            stageName: "Main Stage",
+            sortOrder: 1,
+            startTime: "2099-09-12T23:30:00",
+            endTime: "2099-09-13T01:00:00",
+            performerType: "b2b",
+          },
+        ],
+      } as any;
+
+      const draft = hydrateEventStudioDraftFromEvent(event);
+
+      assert.equal(draft.eventDays.length, 1);
+      assert.equal(draft.timetableSlots.length, 1);
+      assert.equal(draft.timetableSlots[0]?.eventDayId, "d1");
+      assert.equal(draft.timetableSlots[0]?.stageName, "Main Stage");
+      assert.equal(draft.venueName, "The Warehouse");
+      assert.equal(draft.venueAddress, "88 Xuhui Riverside");
+      assert.equal(draft.sourceProvider, "manual");
+      assert.equal(draft.referenceLinksText, "https://example.com/a");
+      assert.equal(draft.socialLinksText, JSON.stringify([{ type: "instagram", url: "https://instagram.com/future-rave" }], null, 2));
+      assert.equal(draft.lineupArtists.length, 1);
+      assert.equal(draft.lineupArtists[0]?.djId, "dj_anyma");
+      assert.deepEqual(draft.lineupArtists[0]?.memberDjIds, ["dj_anyma", "dj_mrak"]);
+      assert.equal(draft.lineupArtists[0]?.memberNamesText, "Anyma / MRAK");
+    },
+  },
+  {
+    name: "hydrateDJStudioDraftFromDJ and mapper preserve platform links, images and stats",
+    run: () => {
+      const dj = {
+        id: "dj_1",
+        name: "Anyma",
+        nameI18n: {
+          zh: "Anyma",
+          en: "Anyma",
+          ja: "",
+          enFull: "",
+        },
+        aliases: ["Matteo", "Anyma Project"],
+        genres: ["techno", "melodic techno"],
+        bio: "Melodic techno producer",
+        bioI18n: {
+          zh: "Melodic techno producer",
+          en: "Melodic techno producer",
+          ja: "",
+          enFull: "",
+        },
+        avatarUrl: "https://cdn.example.com/dj/avatar.jpg",
+        bannerUrl: "https://cdn.example.com/dj/banner.jpg",
+        country: {
+          zh: "Italy",
+          en: "Italy",
+          ja: "",
+          enFull: "",
+        },
+        countryI18n: {
+          zh: "Italy",
+          en: "Italy",
+          ja: "",
+          enFull: "",
+        },
+        spotifyId: "spotify_anyma",
+        spotifyUrl: "https://open.spotify.com/artist/anyma",
+        spotifyFollowers: 123456,
+        appleMusicId: "apple_anyma",
+        soundcloudUrl: "https://soundcloud.com/anyma",
+        soundcloudId: "soundcloud_anyma",
+        instagramUrl: "https://instagram.com/anyma",
+        facebookUrl: "https://facebook.com/anyma",
+        twitterUrl: "https://twitter.com/anyma",
+        youtubeUrl: "https://youtube.com/anyma",
+        neteaseUrl: "https://music.163.com/#/artist?id=1",
+        qqMusicUrl: "https://y.qq.com/n/ryqq/artist/1",
+        website: "https://anyma.com",
+        otherPlatformUrl: "https://bandcamp.com/anyma",
+        isVerified: true,
+        trackCount: 42,
+        playlistCount: 7,
+        soundCloudFollowers: 555,
+        soundCloudFavorites: 99,
+      } as any;
+
+      const draft = hydrateDJStudioDraftFromDJ(dj);
+      assert.equal(draft.name.zh, "Anyma");
+      assert.equal(draft.aliasesText, "Matteo\nAnyma Project");
+      assert.equal(draft.avatarImage?.remoteUrl, "https://cdn.example.com/dj/avatar.jpg");
+      assert.equal(draft.bannerImage?.remoteUrl, "https://cdn.example.com/dj/banner.jpg");
+      assert.equal(draft.spotifyId, "spotify_anyma");
+      assert.equal(draft.spotifyUrl, "https://open.spotify.com/artist/anyma");
+      assert.equal(draft.spotifyFollowers, "123456");
+      assert.equal(draft.website, "https://anyma.com");
+      assert.equal(draft.trackCount, "42");
+      assert.equal(draft.soundCloudFollowers, "555");
+
+      const createPayload = mapDJStudioDraftToCreateInput(draft);
+      const updatePayload = mapDJStudioDraftToUpdateInput(draft);
+
+      for (const payload of [createPayload, updatePayload]) {
+        assert.deepEqual(payload.aliases, ["Matteo", "Anyma Project"]);
+        assert.deepEqual(payload.genres, ["techno", "melodic techno"]);
+        assert.equal(payload.avatarUrl, "https://cdn.example.com/dj/avatar.jpg");
+        assert.equal(payload.bannerUrl, "https://cdn.example.com/dj/banner.jpg");
+        assert.equal(payload.spotifyId, "spotify_anyma");
+        assert.equal(payload.spotifyUrl, "https://open.spotify.com/artist/anyma");
+        assert.equal(payload.spotifyFollowers, 123456);
+        assert.equal(payload.appleMusicId, "apple_anyma");
+        assert.equal(payload.soundcloudUrl, "https://soundcloud.com/anyma");
+        assert.equal(payload.soundcloudId, "soundcloud_anyma");
+        assert.equal(payload.instagramUrl, "https://instagram.com/anyma");
+        assert.equal(payload.facebookUrl, "https://facebook.com/anyma");
+        assert.equal(payload.twitterUrl, "https://twitter.com/anyma");
+        assert.equal(payload.youtubeUrl, "https://youtube.com/anyma");
+        assert.equal(payload.neteaseUrl, "https://music.163.com/#/artist?id=1");
+        assert.equal(payload.qqMusicUrl, "https://y.qq.com/n/ryqq/artist/1");
+        assert.equal(payload.website, "https://anyma.com");
+        assert.equal(payload.otherPlatformUrl, "https://bandcamp.com/anyma");
+        assert.equal(payload.trackCount, 42);
+        assert.equal(payload.playlistCount, 7);
+        assert.equal(payload.soundCloudFollowers, 555);
+        assert.equal(payload.soundCloudFavorites, 99);
+      }
+    },
+  },
+  {
+    name: "hydrateNewsStudioDraftFromArticle and mapper preserve bound entity ids",
+    run: () => {
+      const article = {
+        id: "article_1",
+        category: "community",
+        source: "Raver",
+        title: "Weekend update",
+        summary: "Short summary",
+        body: "Full body text",
+        link: "https://example.com/news/weekend-update",
+        coverImageURL: "https://cdn.example.com/news/cover.jpg",
+        publishedAt: "2026-05-31T10:00:00.000Z",
+        boundDjIDs: ["dj_1", "dj_2"],
+        boundBrandIDs: ["brand_1"],
+        boundEventIDs: ["event_1", "event_2"],
+      } as any;
+
+      const draft = hydrateNewsStudioDraftFromArticle(article);
+      assert.equal(draft.title, "Weekend update");
+      assert.equal(draft.boundDjIdsText, "dj_1, dj_2");
+      assert.equal(draft.boundBrandIdsText, "brand_1");
+      assert.equal(draft.boundEventIdsText, "event_1, event_2");
+
+      const payload = mapNewsStudioDraftToCreateInput({
+        ...draft,
+        boundDjIdsText: "dj_1\ndj_2",
+        boundBrandIdsText: "brand_1",
+        boundEventIdsText: "event_1, event_2",
+      });
+
+      assert.deepEqual(payload.boundDjIDs, ["dj_1", "dj_2"]);
+      assert.deepEqual(payload.boundBrandIDs, ["brand_1"]);
+      assert.deepEqual(payload.boundEventIDs, ["event_1", "event_2"]);
+      assert.equal(payload.coverImageURL, "https://cdn.example.com/news/cover.jpg");
+      assert.equal(payload.link, "https://example.com/news/weekend-update");
+    },
+  },
+  {
+    name: "hydrateOrganizerStudioDraftFromOrganizer and mapper preserve links and image assets",
+    run: () => {
+      const organizer = {
+        id: "org_1",
+        name: "Raver Crew",
+        nameI18n: {
+          zh: "Raver Crew",
+          en: "Raver Crew",
+          ja: "",
+          enFull: "",
+        },
+        revision: 12,
+        abbreviation: "RC",
+        aliases: ["Raver", "RC"],
+        country: "China",
+        countryI18n: {
+          zh: "China",
+          en: "China",
+          ja: "",
+          enFull: "",
+        },
+        city: "Shanghai",
+        cityI18n: {
+          zh: "Shanghai",
+          en: "Shanghai",
+          ja: "",
+          enFull: "",
+        },
+        foundedYear: "2018",
+        frequency: "annual",
+        frequencyI18n: {
+          zh: "annual",
+          en: "annual",
+          ja: "",
+          enFull: "",
+        },
+        tagline: "Keep dancing",
+        introduction: "Organizer introduction",
+        descriptionI18n: {
+          zh: "Organizer introduction",
+          en: "Organizer introduction",
+          ja: "",
+          enFull: "",
+        },
+        officialWebsite: "https://raver.example.com",
+        facebookUrl: "https://facebook.com/ravercrew",
+        instagramUrl: "https://instagram.com/ravercrew",
+        twitterUrl: "https://twitter.com/ravercrew",
+        youtubeUrl: "https://youtube.com/ravercrew",
+        tiktokUrl: "https://tiktok.com/@ravercrew",
+        avatarUrl: "https://cdn.example.com/org/avatar.jpg",
+        backgroundUrl: "https://cdn.example.com/org/background.jpg",
+        imageAssets: [
+          {
+            url: "https://cdn.example.com/org/avatar.jpg",
+            type: "avatar",
+            fileName: "avatar.jpg",
+          },
+          {
+            url: "https://cdn.example.com/org/background.jpg",
+            type: "background",
+            fileName: "background.jpg",
+          },
+          {
+            url: "https://cdn.example.com/org/proof-1.jpg",
+            type: "proof",
+            fileName: "proof-1.jpg",
+          },
+        ],
+        links: [
+          {
+            title: "Website",
+            icon: "link",
+            url: "https://raver.example.com",
+          },
+          {
+            title: "Discord",
+            icon: "message-circle",
+            url: "https://discord.gg/ravercrew",
+          },
+        ],
+        contributors: [
+          {
+            id: "user_1",
+            username: "alice",
+            displayName: "Alice",
+            avatarUrl: "https://cdn.example.com/users/alice.jpg",
+          },
+        ],
+        canEdit: true,
+      } as any;
+
+      const draft = hydrateOrganizerStudioDraftFromOrganizer(organizer);
+      assert.equal(draft.name.zh, "Raver Crew");
+      assert.equal(draft.avatarImage?.remoteUrl, "https://cdn.example.com/org/avatar.jpg");
+      assert.equal(draft.backgroundImage?.remoteUrl, "https://cdn.example.com/org/background.jpg");
+      assert.equal(draft.proofImages.length, 1);
+      assert.equal(draft.extraLinks.length, 1);
+      assert.equal(draft.extraLinks[0]?.title, "Discord");
+      assert.equal(draft.baseBrandRevision, 12);
+
+      const createPayload = mapOrganizerStudioDraftToCreateInput({
+        ...draft,
+        rightsConfirmed: true,
+        identityConfirmed: true,
+      });
+      const updatePayload = mapOrganizerStudioDraftToUpdateInput({
+        ...draft,
+        rightsConfirmed: true,
+        identityConfirmed: true,
+      });
+
+      for (const payload of [createPayload, updatePayload]) {
+        assert.equal(payload.officialWebsite, "https://raver.example.com");
+        assert.equal(payload.facebookUrl, "https://facebook.com/ravercrew");
+        assert.equal(payload.instagramUrl, "https://instagram.com/ravercrew");
+        assert.equal(payload.twitterUrl, "https://twitter.com/ravercrew");
+        assert.equal(payload.youtubeUrl, "https://youtube.com/ravercrew");
+        assert.equal(payload.tiktokUrl, "https://tiktok.com/@ravercrew");
+        assert.equal(payload.avatarUrl, "https://cdn.example.com/org/avatar.jpg");
+        assert.equal(payload.backgroundUrl, "https://cdn.example.com/org/background.jpg");
+        assert.equal(payload.proofImageUrl, "https://cdn.example.com/org/proof-1.jpg");
+        assert.deepEqual(payload.imageAssets?.map((item) => item.type), ["avatar", "background", "proof"]);
+        assert.deepEqual(payload.links?.map((item) => item.url), ["https://discord.gg/ravercrew"]);
+        assert.equal(payload.rightsConfirmed, true);
+        assert.equal(payload.identityConfirmed, true);
+      }
+
+      assert.equal(updatePayload.baseBrandRevision, 12);
+    },
+  },
+  {
+    name: "hydrateLabelStudioDraftFromLabel and mapper preserve founder DJ and profile fields",
+    run: () => {
+      const label = {
+        id: "label_1",
+        name: "Afterlife",
+        slug: "afterlife",
+        profileUrl: "https://raver.example.com/labels/afterlife",
+        profileSlug: "afterlife",
+        logoUrl: "https://cdn.example.com/label/logo.jpg",
+        avatarUrl: "https://cdn.example.com/label/avatar.jpg",
+        backgroundUrl: "https://cdn.example.com/label/background.jpg",
+        nation: "Italy",
+        soundcloudFollowers: 12345,
+        likes: 54321,
+        genres: ["techno", "melodic techno"],
+        genresPreview: "Techno / Melodic Techno",
+        latestReleaseListing: "2026 releases",
+        locationPeriod: "2010-2026",
+        introductionPreview: "Intro preview",
+        introduction: "Full intro",
+        generalContactEmail: "contact@example.com",
+        demoSubmissionUrl: "https://example.com/demo",
+        demoSubmissionDisplay: "Demo portal",
+        facebookUrl: "https://facebook.com/afterlife",
+        soundcloudUrl: "https://soundcloud.com/afterlife",
+        musicPurchaseUrl: "https://bandcamp.com/afterlife",
+        officialWebsiteUrl: "https://after.life",
+        founderName: "Tale Of Us",
+        foundedAt: "2016",
+        founderDjId: "dj_afterlife",
+      } as any;
+
+      const draft = hydrateLabelStudioDraftFromLabel(label);
+      assert.equal(draft.founderDjId, "dj_afterlife");
+      assert.equal(draft.logoUrl, "https://cdn.example.com/label/logo.jpg");
+      assert.equal(draft.avatarUrl, "https://cdn.example.com/label/avatar.jpg");
+      assert.equal(draft.backgroundUrl, "https://cdn.example.com/label/background.jpg");
+      assert.equal(draft.soundcloudFollowers, "12345");
+      assert.equal(draft.likes, "54321");
+      assert.equal(draft.genresText, "techno, melodic techno");
+
+      const payload = mapLabelStudioDraftToCreateInput({
+        ...draft,
+        founderDjId: "dj_afterlife",
+      });
+
+      assert.equal(payload.founderDjId, "dj_afterlife");
+      assert.equal(payload.profileUrl, "https://raver.example.com/labels/afterlife");
+      assert.equal(payload.profileSlug, "afterlife");
+      assert.equal(payload.logoUrl, "https://cdn.example.com/label/logo.jpg");
+      assert.equal(payload.avatarUrl, "https://cdn.example.com/label/avatar.jpg");
+      assert.equal(payload.backgroundUrl, "https://cdn.example.com/label/background.jpg");
+      assert.equal(payload.soundcloudFollowers, 12345);
+      assert.equal(payload.likes, 54321);
+      assert.deepEqual(payload.genres, ["techno", "melodic techno"]);
     },
   },
 ];

@@ -123,6 +123,9 @@ const normalizedMemberDjIds = (memberDjIds?: Array<string | null> | null): strin
     .map((item) => String(item || '').trim())
     .filter(Boolean);
 
+const firstNonEmptyArray = <T,>(...candidates: Array<T[] | null | undefined>): T[] =>
+  candidates.find((items) => Array.isArray(items) && items.length > 0) ?? [];
+
 export const eventStudioLineupArtistIdentityKey = (artist: Pick<
   EventStudioLineupArtistDraft,
   'djId' | 'memberDjIds' | 'memberNamesText'
@@ -518,10 +521,14 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
   organizerFestivalId: '',
   organizerName: '',
   sourceEventUrl: '',
+  sourceProvider: '',
+  referenceLinksText: '',
+  socialLinksText: '',
   city: emptyLocalizedText(),
   country: emptyLocalizedText(),
   detailAddress: emptyLocalizedText(),
   venueName: '',
+  venueAddress: '',
   latitude: '',
   longitude: '',
   locationPoint: null,
@@ -562,6 +569,9 @@ const fromNullableLocalizedText = (
 export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent): EventStudioDraft => {
   const manualDetail = event.manualLocation?.detailAddressI18n;
   const locationAddress = event.locationPoint?.addressI18n;
+  const socialLinksText = event.socialLinks == null
+    ? ''
+    : JSON.stringify(event.socialLinks, null, 2);
   const hydratedImageZones = createEmptyImageZones();
   (event.imageAssets ?? []).forEach((asset, index) => {
     const url = String(asset.url || '').trim();
@@ -616,36 +626,50 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     startDate,
     endDate
   );
+  const hydratedEventDaysFromInput: EventStudioEventDayDraft[] = Array.isArray(event.eventDays) && event.eventDays.length
+    ? event.eventDays.map((day) => ({
+        id: day.id || crypto.randomUUID(),
+        eventDayId: day.eventDayId,
+        weekIndex: day.weekIndex,
+        dayIndexInWeek: day.dayIndexInWeek,
+        overallDayIndex: day.overallDayIndex,
+        label: day.label ?? '',
+        weekday: day.weekday ?? '',
+        date: day.date.slice(0, 10),
+        sortOrder: day.sortOrder ?? day.overallDayIndex,
+      }))
+    : fallbackStructure.eventDays;
+  const timetableSlotSource = firstNonEmptyArray(event.timetableSlots, event.lineupSlots);
   const hydratedTimetableSlots: EventStudioTimetableSlotDraft[] = [];
-  (event.timetableSlots ?? event.lineupSlots ?? []).forEach((slot, index) => {
-      const localDate = datePartFromIsoLike(slot.localDate) || '';
-      const eventDayId = slot.eventDayId || '';
-      const eventDay =
-        fallbackStructure.eventDays.find((day) => day.eventDayId === eventDayId) ||
-        (slot.overallDayIndex != null
-          ? fallbackStructure.eventDays.find((day) => day.overallDayIndex === slot.overallDayIndex)
-          : null) ||
-        (localDate
-          ? fallbackStructure.eventDays.find((day) => day.date === localDate)
-          : null);
-      if (!eventDay) return;
+  timetableSlotSource.forEach((slot, index) => {
+    const localDate = datePartFromIsoLike(slot.localDate) || '';
+    const eventDayId = slot.eventDayId || '';
+    const eventDay =
+      hydratedEventDaysFromInput.find((day) => day.eventDayId === eventDayId) ||
+      (slot.overallDayIndex != null
+        ? hydratedEventDaysFromInput.find((day) => day.overallDayIndex === slot.overallDayIndex)
+        : null) ||
+      (localDate
+        ? hydratedEventDaysFromInput.find((day) => day.date === localDate)
+        : null);
+    if (!eventDay) return;
 
-      hydratedTimetableSlots.push({
-        id: crypto.randomUUID(),
-        canonicalSlotId: slot.id || null,
-        lineupArtistId: slot.lineupArtistId || null,
-        eventDayId: eventDay.eventDayId,
-        weekIndex: eventDay.weekIndex,
-        dayIndexInWeek: eventDay.dayIndexInWeek,
-        overallDayIndex: eventDay.overallDayIndex,
-        localDate: eventDay.date,
-        djId: slot.djId || '',
-        memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
-        memberNamesText: defaultMemberNamesText(slot.memberNames, slot.djName),
-        stageName: String(slot.stageName || '').trim() || defaultStageName(index),
-        sortOrder: slot.sortOrder ?? index + 1,
-        startTime: timePartFromIsoLike(slot.startTime),
-        endTime: timePartFromIsoLike(slot.endTime),
+    hydratedTimetableSlots.push({
+      id: crypto.randomUUID(),
+      canonicalSlotId: slot.id || null,
+      lineupArtistId: slot.lineupArtistId || null,
+      eventDayId: eventDay.eventDayId,
+      weekIndex: eventDay.weekIndex,
+      dayIndexInWeek: eventDay.dayIndexInWeek,
+      overallDayIndex: eventDay.overallDayIndex,
+      localDate: eventDay.date,
+      djId: slot.djId || '',
+      memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
+      memberNamesText: defaultMemberNamesText(slot.memberNames, slot.djName),
+      stageName: String(slot.stageName || '').trim() || defaultStageName(index),
+      sortOrder: slot.sortOrder ?? index + 1,
+      startTime: timePartFromIsoLike(slot.startTime),
+      endTime: timePartFromIsoLike(slot.endTime),
       startDayOffset: dayOffsetFromIsoLike(slot.startTime),
       endDayOffset: dayOffsetFromIsoLike(slot.endTime),
       actType: inferActType(
@@ -657,7 +681,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         )
       ),
     });
-    });
+  });
   const hydratedLineupArtistsFromInput = buildLineupArtistsFromInput(event.lineupArtists ?? null);
   const hydratedLineupArtists = hydratedLineupArtistsFromInput.length
     ? hydratedLineupArtistsFromInput
@@ -673,10 +697,14 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     organizerFestivalId: event.wikiFestivalId ?? '',
     organizerName: event.organizerName ?? '',
     sourceEventUrl: event.sourceEventUrl ?? '',
+    sourceProvider: event.sourceProvider ?? '',
+    referenceLinksText: (event.referenceLinks ?? []).join('\n'),
+    socialLinksText,
     city: fromNullableLocalizedText(event.cityI18n, event.city ?? ''),
     country: fromNullableLocalizedText(event.countryI18n, event.country ?? ''),
     detailAddress: fromNullableLocalizedText(manualDetail || locationAddress, ''),
-    venueName: '',
+    venueName: event.venueName ?? '',
+    venueAddress: event.venueAddress ?? '',
     latitude: event.latitude != null ? String(event.latitude) : '',
     longitude: event.longitude != null ? String(event.longitude) : '',
     locationPoint: event.locationPoint
@@ -742,19 +770,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
           sortOrder: week.sortOrder ?? week.weekIndex,
         }))
       : fallbackStructure.weeks,
-    eventDays: (event.eventDays ?? []).length
-      ? (event.eventDays ?? []).map((day) => ({
-          id: day.id || crypto.randomUUID(),
-          eventDayId: day.eventDayId,
-          weekIndex: day.weekIndex,
-          dayIndexInWeek: day.dayIndexInWeek,
-          overallDayIndex: day.overallDayIndex,
-          label: day.label ?? '',
-          weekday: day.weekday ?? '',
-          date: day.date.slice(0, 10),
-          sortOrder: day.sortOrder ?? day.overallDayIndex,
-        }))
-      : fallbackStructure.eventDays,
+    eventDays: hydratedEventDaysFromInput,
     stageOrder: hydratedStageOrder,
     lineupSyncMode: (event.lineupArtists?.length ? 'incremental_fill' : 'exact_align'),
     lineupArtists: hydratedLineupArtists,

@@ -156,10 +156,14 @@ export type EventStudioDraft = {
   organizerFestivalId: string;
   organizerName: string;
   sourceEventUrl: string;
+  sourceProvider: string;
+  referenceLinksText: string;
+  socialLinksText: string;
   city: EventStudioLocalizedText;
   country: EventStudioLocalizedText;
   detailAddress: EventStudioLocalizedText;
   venueName: string;
+  venueAddress: string;
   latitude: string;
   longitude: string;
   locationPoint: EventStudioLocationPoint | null;

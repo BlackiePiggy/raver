@@ -652,10 +652,30 @@ components:
           type:
             - string
             - 'null'
+        venueName:
+          type:
+            - string
+            - 'null'
+        venueAddress:
+          type:
+            - string
+            - 'null'
         sourceEventUrl:
           type:
             - string
             - 'null'
+        sourceProvider:
+          type:
+            - string
+            - 'null'
+        referenceLinks:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        socialLinks:
+          nullable: true
         city:
           type:
             - string
@@ -959,10 +979,30 @@ components:
           type:
             - string
             - 'null'
+        venueName:
+          type:
+            - string
+            - 'null'
+        venueAddress:
+          type:
+            - string
+            - 'null'
         sourceEventUrl:
           type:
             - string
             - 'null'
+        sourceProvider:
+          type:
+            - string
+            - 'null'
+        referenceLinks:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        socialLinks:
+          nullable: true
         city:
           type:
             - string

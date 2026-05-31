@@ -119,6 +119,39 @@ const resolveOptionalNullableTextField = (
   return cleanText(payload[key]) || null;
 };
 
+const resolveOptionalStringArrayField = (
+  payload: Prisma.JsonObject,
+  key: string
+): string[] | undefined => {
+  if (!hasOwn(payload, key)) return undefined;
+  const value = payload[key];
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[\n,]/)
+      : [];
+  return Array.from(new Set(source.map((item) => cleanText(item)).filter((item): item is string => Boolean(item))));
+};
+
+const resolveOptionalJsonField = (
+  payload: Prisma.JsonObject,
+  key: string
+): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined => {
+  if (!hasOwn(payload, key)) return undefined;
+  const value = payload[key];
+  if (value == null) return Prisma.JsonNull;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return Prisma.JsonNull;
+    try {
+      return JSON.parse(trimmed) as Prisma.InputJsonValue;
+    } catch {
+      return Prisma.JsonNull;
+    }
+  }
+  return value as Prisma.InputJsonValue;
+};
+
 const resolveOptionalTriTextField = (
   payload: Prisma.JsonObject,
   key: string,
@@ -1384,6 +1417,11 @@ const normalizeEventSubmissionWriteInput = async (
   const lineupImageUrl = resolveOptionalNullableTextField(payload, 'lineupImageUrl');
   const eventType = resolveOptionalNullableTextField(payload, 'eventType');
   const organizerName = resolveOptionalNullableTextField(payload, 'organizerName');
+  const venueName = resolveOptionalNullableTextField(payload, 'venueName');
+  const venueAddress = resolveOptionalNullableTextField(payload, 'venueAddress');
+  const referenceLinks = resolveOptionalStringArrayField(payload, 'referenceLinks');
+  const socialLinks = resolveOptionalJsonField(payload, 'socialLinks');
+  const sourceProvider = resolveOptionalNullableTextField(payload, 'sourceProvider');
   const city = resolveOptionalNullableTextField(payload, 'city');
   const country = resolveOptionalNullableTextField(payload, 'country');
   const manualLocation = hasOwn(payload, 'manualLocation')
@@ -1426,6 +1464,11 @@ const normalizeEventSubmissionWriteInput = async (
       imageAssets: imageAssets.length ? imageAssets : Prisma.JsonNull,
       eventType,
       organizerName,
+      venueName,
+      venueAddress,
+      referenceLinks,
+      socialLinks,
+      sourceProvider,
       sourceEventUrl,
       city,
       country,

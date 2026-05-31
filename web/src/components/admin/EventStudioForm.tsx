@@ -1539,6 +1539,14 @@ export default function EventStudioForm({
                   placeholder="例如：National Stadium"
                 />
               </Field>
+              <Field label="场馆地址（可选）">
+                <input
+                  value={draft.venueAddress}
+                  onChange={(event) => updateDraft('venueAddress', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="例如：88 Xuhui Riverside"
+                />
+              </Field>
               <Field label="来源链接">
                 <input
                   value={draft.sourceEventUrl}
@@ -1547,6 +1555,37 @@ export default function EventStudioForm({
                   placeholder="https://..."
                 />
               </Field>
+
+              <Field label="来源平台（可选）">
+                <input
+                  value={draft.sourceProvider}
+                  onChange={(event) => updateDraft('sourceProvider', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="例如：official_website / instagram / manual"
+                />
+              </Field>
+
+              <div className="lg:col-span-2">
+                <Field label="参考链接（每行一个，可选）">
+                  <textarea
+                    value={draft.referenceLinksText}
+                    onChange={(event) => updateDraft('referenceLinksText', event.target.value)}
+                    className={textAreaClassName}
+                    placeholder="https://example.com/page-1&#10;https://example.com/page-2"
+                  />
+                </Field>
+              </div>
+
+              <div className="lg:col-span-2">
+                <Field label="社交链接 JSON（可选）">
+                  <textarea
+                    value={draft.socialLinksText}
+                    onChange={(event) => updateDraft('socialLinksText', event.target.value)}
+                    className={textAreaClassName}
+                    placeholder='[{"type":"instagram","url":"https://instagram.com/example"}]'
+                  />
+                </Field>
+              </div>
 
               <div className="lg:col-span-2">
                 <Field label="主办方绑定">

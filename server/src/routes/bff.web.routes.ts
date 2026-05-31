@@ -2084,6 +2084,22 @@ const selectEventDetailForWeb = {
   ticketTiers: {
     orderBy: { sortOrder: 'asc' as const },
   },
+  canonicalArtists: {
+    orderBy: { billingOrder: 'asc' as const },
+    include: {
+      primaryDj: {
+        select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+      },
+      members: {
+        orderBy: { memberOrder: 'asc' as const },
+        include: {
+          dj: {
+            select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+          },
+        },
+      },
+    },
+  },
   weeks: {
     orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
     select: {
@@ -2112,6 +2128,39 @@ const selectEventDetailForWeb = {
   stages: {
     orderBy: { sortOrder: 'asc' as const },
     select: { name: true },
+  },
+  performances: {
+    orderBy: [{ startAt: 'asc' as const }, { sortOrder: 'asc' as const }],
+    include: {
+      stage: {
+        select: { name: true },
+      },
+      eventDay: {
+        select: {
+          id: true,
+          eventDayId: true,
+          weekIndex: true,
+          dayIndexInWeek: true,
+          overallDayIndex: true,
+          date: true,
+        },
+      },
+      eventArtist: {
+        include: {
+          primaryDj: {
+            select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+          },
+          members: {
+            orderBy: { memberOrder: 'asc' as const },
+            include: {
+              dj: {
+                select: { id: true, name: true, avatarUrl: true, bannerUrl: true, country: true, soundCloudFollowers: true },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   organizer: {
     select: { id: true, username: true, displayName: true, avatarUrl: true },
@@ -6788,6 +6837,8 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     sourceEventUrl: row.sourceEventUrl ?? null,
     eventType: row.eventType,
     organizerName: row.organizerName,
+    venueName: row.venueName ?? null,
+    venueAddress: row.venueAddress ?? null,
     city: row.city,
     country: row.country,
     manualLocation: manualLocation ?? null,
