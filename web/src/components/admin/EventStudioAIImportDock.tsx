@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useMemo, useRef, useState } from 'react';
+import { DJAggregatorAPI } from '@/lib/api';
 import {
   eventStudioApi,
   syncEventStudioScheduleStructure,
@@ -23,6 +24,37 @@ type ImportPanelState = {
   statusText: string;
   errorText: string | null;
   resultJson: unknown | null;
+  lineupItems: EventStudioAIEditableLineupItem[];
+  timetableSlots: EventStudioAIEditableTimetableSlot[];
+  selectedTimetableSlotIds: string[];
+  warnings: string[];
+  unparsedTexts: string[];
+};
+
+type EventStudioAIActType = 'solo' | 'b2b' | 'b3b';
+
+type EventStudioAIEditableLineupItem = {
+  id: string;
+  actType: EventStudioAIActType;
+  performerNamesText: string;
+  performerDJIDs: Array<string | null>;
+  confidence?: number | null;
+  notes: string[];
+};
+
+type EventStudioAIEditableTimetableSlot = EventStudioAIEditableLineupItem & {
+  eventDayId: string;
+  weekIndex: number;
+  dayIndexInWeek: number;
+  overallDayIndex: number;
+  localDate: string;
+  dayLabel: string;
+  stageName: string;
+  startTimeText: string;
+  endTimeText: string;
+  startDayOffset: number;
+  endDayOffset: number;
+  sortOrder: number;
 };
 
 const PANEL_ITEMS: Array<{
@@ -45,6 +77,67 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
 };
 
 const safeString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const ACT_TYPE_ITEMS: Array<{ value: EventStudioAIActType; label: string; count: number }> = [
+  { value: 'solo', label: 'Solo', count: 1 },
+  { value: 'b2b', label: 'B2B', count: 2 },
+  { value: 'b3b', label: 'B3B', count: 3 },
+];
+
+const normalizeActType = (value: unknown, performerCount = 0): EventStudioAIActType => {
+  const normalized = safeString(value).toLowerCase();
+  if (normalized === 'b3b') return 'b3b';
+  if (normalized === 'b2b') return 'b2b';
+  if (performerCount >= 3) return 'b3b';
+  if (performerCount === 2) return 'b2b';
+  return 'solo';
+};
+
+const actTypePerformerCount = (value: unknown): number =>
+  ACT_TYPE_ITEMS.find((item) => item.value === normalizeActType(value))?.count ?? 1;
+
+const splitPerformerNames = (value: string): string[] =>
+  value
+    .split(/[\/,&]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const editableClockText = (value: unknown): string => {
+  const text = safeString(value);
+  const isoMatch = text.match(/T(\d{2}:\d{2})/);
+  if (isoMatch?.[1]) return isoMatch[1];
+  const looseMatch = text.match(/(\d{1,2}):(\d{2})/);
+  if (!looseMatch) return '';
+  return `${looseMatch[1].padStart(2, '0')}:${looseMatch[2]}`;
+};
+
+const dayOffsetFromClockText = (value: unknown): number => {
+  const text = safeString(value);
+  const hourMatch = text.match(/(?:T|^)(\d{1,2}):\d{2}/);
+  if (!hourMatch) return 0;
+  const hour = Number(hourMatch[1]);
+  return Number.isFinite(hour) && hour >= 24 ? 1 : 0;
+};
+
+const normalizeDateOnly = (value: string): string => value.trim().slice(0, 10);
+
+const normalizePerformerIds = (ids: unknown, count: number): Array<string | null> => {
+  const source = Array.isArray(ids) ? ids : [];
+  return Array.from({ length: count }, (_, index) => {
+    const trimmed = safeString(source[index]);
+    return trimmed || null;
+  });
+};
+
+const normalizeWarnings = (raw: Record<string, any>): string[] =>
+  (Array.isArray(raw.warnings) ? raw.warnings : [])
+    .map((item) => safeString(item))
+    .filter(Boolean);
+
+const normalizeUnparsedTexts = (raw: Record<string, any>): string[] =>
+  (Array.isArray(raw.unparsedTexts ?? raw.unparsed_texts) ? raw.unparsedTexts ?? raw.unparsed_texts : [])
+    .map((item: unknown) => safeString(item))
+    .filter(Boolean);
 
 const findImportImage = (
   draft: EventStudioDraft,
@@ -101,8 +194,6 @@ const normalizeWeekRanges = (raw: unknown): EventStudioWeekDraft[] => {
     .filter((item): item is EventStudioWeekDraft => item !== null);
 };
 
-const normalizeDateOnly = (value: string): string => value.trim().slice(0, 10);
-
 const normalizeScheduleMode = (value: unknown): EventStudioScheduleMode => {
   const normalized = safeString(value);
   if (normalized === 'multi_week') return 'multi_week';
@@ -118,6 +209,107 @@ const importImageOptions = (
     return [...draft.imageZones.poster, ...draft.imageZones.cover].sort((left, right) => left.sortOrder - right.sortOrder);
   }
   return [...draft.imageZones[kind]].sort((left, right) => left.sortOrder - right.sortOrder);
+};
+
+const parseLineupEditableItems = (raw: Record<string, any>): EventStudioAIEditableLineupItem[] => {
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  const parsed: Array<EventStudioAIEditableLineupItem | null> = items
+    .slice()
+    .sort((left: any, right: any) => Number(left?.order || 0) - Number(right?.order || 0))
+    .map((item: any, index: number) => {
+      const names = Array.isArray(item?.performerNames)
+        ? item.performerNames.map((name: unknown) => safeString(name)).filter(Boolean)
+        : [];
+      const fallbackNames = names.length
+        ? names
+        : splitPerformerNames(firstFilledText(item?.displayName, item?.rawText).replace(/\bB2B\b|\bB3B\b/gi, '/'));
+      const actType = normalizeActType(item?.performerType, fallbackNames.length);
+      const count = actTypePerformerCount(actType);
+      const normalizedNames = fallbackNames.slice(0, count);
+      if (!normalizedNames.length) return null;
+      return {
+        id: crypto.randomUUID(),
+        actType,
+        performerNamesText: normalizedNames.join(' / '),
+        performerDJIDs: normalizePerformerIds(item?.performerDJIDs ?? item?.performerDjIds ?? item?.memberDjIds, count),
+        confidence: Number.isFinite(Number(item?.confidence)) ? Number(item.confidence) : null,
+        notes: Array.isArray(item?.notes) ? item.notes.map((note: unknown) => safeString(note)).filter(Boolean) : [],
+        sortOrder: index + 1,
+      };
+    });
+  return parsed.filter((item): item is EventStudioAIEditableLineupItem => item !== null);
+};
+
+const parseTimetableEditableSlots = (
+  raw: Record<string, any>,
+  draft: EventStudioDraft
+): EventStudioAIEditableTimetableSlot[] => {
+  const weeks = Array.isArray(raw.weeks) ? raw.weeks : [];
+  return weeks.flatMap((week: any) =>
+    Array.isArray(week?.days)
+      ? week.days.flatMap((day: any) =>
+          Array.isArray(day?.stages)
+            ? day.stages.flatMap((stage: any) =>
+                Array.isArray(stage?.slots)
+                  ? stage.slots.map((slot: any, index: number) => {
+                      const eventDayRef = day?.eventDayRef || day?.event_day_ref || {};
+                      const resolvedEventDay =
+                        draft.eventDays.find((item) => item.eventDayId === safeString(eventDayRef.eventDayId || eventDayRef.event_day_id)) ||
+                        draft.eventDays.find((item) => item.overallDayIndex === Number(eventDayRef.overallDayIndex || eventDayRef.overall_day_index)) ||
+                        draft.eventDays.find((item) => item.date === normalizeDateOnly(safeString(eventDayRef.date || day?.dateText || day?.date || '')));
+                      const rawNames = Array.isArray(slot?.performerNames)
+                        ? slot.performerNames.map((name: unknown) => safeString(name)).filter(Boolean)
+                        : [];
+                      const fallbackNames = rawNames.length
+                        ? rawNames
+                        : splitPerformerNames(firstFilledText(slot?.displayName, slot?.rawText).replace(/\bB2B\b|\bB3B\b/gi, '/'));
+                      const actType = normalizeActType(slot?.performerType, fallbackNames.length);
+                      const count = actTypePerformerCount(actType);
+                      const names = fallbackNames.slice(0, count);
+                      if (!names.length) return null;
+                      const startSource = slot?.normalizedStartTime ?? slot?.normalized_start_time ?? slot?.startTimeText ?? slot?.start_time_text;
+                      const endSource = slot?.normalizedEndTime ?? slot?.normalized_end_time ?? slot?.endTimeText ?? slot?.end_time_text;
+                      return {
+                        id: crypto.randomUUID(),
+                        eventDayId: resolvedEventDay?.eventDayId || safeString(eventDayRef.eventDayId || eventDayRef.event_day_id),
+                        weekIndex: resolvedEventDay?.weekIndex || Number(week?.weekIndex || week?.week_index || 1),
+                        dayIndexInWeek: resolvedEventDay?.dayIndexInWeek || Number(day?.dayIndexInWeek || day?.day_index_in_week || 1),
+                        overallDayIndex: resolvedEventDay?.overallDayIndex || Number(eventDayRef.overallDayIndex || eventDayRef.overall_day_index || 1),
+                        localDate: resolvedEventDay?.date || normalizeDateOnly(safeString(eventDayRef.date || day?.dateText || day?.date || '')),
+                        dayLabel: safeString(day?.dayLabel || day?.day_label) || resolvedEventDay?.label || '',
+                        stageName: safeString(stage?.stageName || stage?.stage_name) || 'Main Stage',
+                        actType,
+                        performerNamesText: names.join(' / '),
+                        performerDJIDs: normalizePerformerIds(slot?.performerDJIDs ?? slot?.performerDjIds ?? slot?.memberDjIds, count),
+                        confidence: Number.isFinite(Number(slot?.confidence)) ? Number(slot.confidence) : null,
+                        notes: Array.isArray(slot?.notes) ? slot.notes.map((note: unknown) => safeString(note)).filter(Boolean) : [],
+                        startTimeText: editableClockText(startSource),
+                        endTimeText: editableClockText(endSource),
+                        startDayOffset: dayOffsetFromClockText(startSource),
+                        endDayOffset: dayOffsetFromClockText(endSource),
+                        sortOrder: Number.isFinite(Number(slot?.orderInStage || slot?.order))
+                          ? Math.max(1, Math.floor(Number(slot?.orderInStage || slot?.order)))
+                          : index + 1,
+                      };
+                    }).filter((item: EventStudioAIEditableTimetableSlot | null): item is EventStudioAIEditableTimetableSlot => item !== null)
+                  : []
+              )
+            : []
+        )
+      : []
+  );
+};
+
+const normalizeEditableAct = <T extends EventStudioAIEditableLineupItem | EventStudioAIEditableTimetableSlot>(item: T): T => {
+  const actType = normalizeActType(item.actType, splitPerformerNames(item.performerNamesText).length);
+  const count = actTypePerformerCount(actType);
+  const names = splitPerformerNames(item.performerNamesText).slice(0, count);
+  return {
+    ...item,
+    actType,
+    performerNamesText: names.join(' / '),
+    performerDJIDs: normalizePerformerIds(item.performerDJIDs, count),
+  } as T;
 };
 
 export default function EventStudioAIImportDock({
@@ -161,6 +353,11 @@ export default function EventStudioAIImportDock({
       statusText: '请选择图片后开始识别。',
       errorText: null,
       resultJson: null,
+      lineupItems: [],
+      timetableSlots: [],
+      selectedTimetableSlotIds: [],
+      warnings: [],
+      unparsedTexts: [],
     });
   };
 
@@ -176,6 +373,22 @@ export default function EventStudioAIImportDock({
 
   const updatePanel = (patch: Partial<ImportPanelState>) => {
     setPanel((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const setEditablePanelResult = (kind: ImportPanelKind, rawJson: unknown) => {
+    const rawRecord = rawJson && typeof rawJson === 'object' && !Array.isArray(rawJson) ? rawJson as Record<string, any> : {};
+    setPanel((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        resultJson: rawJson,
+        lineupItems: kind === 'lineup' ? parseLineupEditableItems(rawRecord) : current.lineupItems,
+        timetableSlots: kind === 'timetable' ? parseTimetableEditableSlots(rawRecord, draft) : current.timetableSlots,
+        selectedTimetableSlotIds: [],
+        warnings: normalizeWarnings(rawRecord),
+        unparsedTexts: normalizeUnparsedTexts(rawRecord),
+      };
+    });
   };
 
   const pollJob = async (kind: ImportPanelKind, jobId: string) => {
@@ -198,6 +411,9 @@ export default function EventStudioAIImportDock({
         resultJson: snapshot.result?.rawJson ?? null,
         running: snapshot.status === 'pending' || snapshot.status === 'running',
       });
+      if (snapshot.status === 'succeeded') {
+        setEditablePanelResult(kind, snapshot.result?.rawJson ?? null);
+      }
       if (snapshot.status === 'succeeded' || snapshot.status === 'failed' || snapshot.status === 'cancelled') {
         return snapshot;
       }
@@ -263,6 +479,9 @@ export default function EventStudioAIImportDock({
         resultJson: snapshot.result?.rawJson ?? null,
         running: false,
       });
+      if (snapshot.status === 'succeeded') {
+        setEditablePanelResult(panel.kind, snapshot.result?.rawJson ?? null);
+      }
     } catch (error) {
       updatePanel({
         running: false,
@@ -292,11 +511,92 @@ export default function EventStudioAIImportDock({
     }
   };
 
-  const applyResult = () => {
-    if (!panel?.resultJson) return;
-    const raw = panel.resultJson as Record<string, any>;
+  const updateLineupItem = (itemId: string, updater: (item: EventStudioAIEditableLineupItem) => EventStudioAIEditableLineupItem) => {
+    setPanel((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        lineupItems: current.lineupItems.map((item) => (item.id === itemId ? updater(item) : item)),
+      };
+    });
+  };
 
+  const updateTimetableSlot = (slotId: string, updater: (slot: EventStudioAIEditableTimetableSlot) => EventStudioAIEditableTimetableSlot) => {
+    setPanel((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        timetableSlots: current.timetableSlots.map((slot) => (slot.id === slotId ? updater(slot) : slot)),
+      };
+    });
+  };
+
+  const removeLineupItem = (itemId: string) => {
+    setPanel((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        lineupItems: current.lineupItems.filter((item) => item.id !== itemId).map((item, index) => ({ ...item, sortOrder: index + 1 })),
+      };
+    });
+  };
+
+  const removeTimetableSlot = (slotId: string) => {
+    setPanel((current) => {
+      if (!current) return current;
+      const nextSlots = current.timetableSlots.filter((slot) => slot.id !== slotId).map((slot, index) => ({ ...slot, sortOrder: index + 1 }));
+      return {
+        ...current,
+        timetableSlots: nextSlots,
+        selectedTimetableSlotIds: current.selectedTimetableSlotIds.filter((id) => id !== slotId),
+      };
+    });
+  };
+
+  const autoMatchAIItems = async () => {
+    if (!panel) return;
+    const items = panel.kind === 'lineup' ? panel.lineupItems : panel.timetableSlots;
+    const nextItems = await Promise.all(
+      items.map(async (item) => {
+        const names = splitPerformerNames(item.performerNamesText);
+        const nextDJIds = Array.from({ length: actTypePerformerCount(item.actType) }, (_, index) => item.performerDJIDs[index] || null);
+        for (let index = 0; index < names.length; index += 1) {
+          if (nextDJIds[index]) continue;
+          const result = await safeSearchDJ(names[index]);
+          if (result?.id) {
+            nextDJIds[index] = result.id;
+          }
+        }
+        return { ...item, performerDJIDs: nextDJIds };
+      })
+    );
+    setPanel((current) => {
+      if (!current) return current;
+      return panel.kind === 'lineup'
+        ? { ...current, lineupItems: nextItems as EventStudioAIEditableLineupItem[] }
+        : { ...current, timetableSlots: nextItems as EventStudioAIEditableTimetableSlot[] };
+    });
+  };
+
+  const safeSearchDJ = async (name: string) => {
+    const query = name.trim();
+    if (!query) return null;
+    try {
+      const response = await DJAggregatorAPI.searchDJ(query);
+      if (Array.isArray(response?.items) && response.items.length > 0) {
+        return response.items[0] as { id?: string } | null;
+      }
+      if (response?.id) return response as { id?: string };
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const applyResult = () => {
+    if (!panel) return;
     if (panel.kind === 'poster') {
+      const raw = panel.resultJson as Record<string, any>;
       const schedule = raw.schedule && typeof raw.schedule === 'object' ? raw.schedule as Record<string, any> : {};
       const ticketInfo = raw.ticketInfo && typeof raw.ticketInfo === 'object' ? raw.ticketInfo as Record<string, any> : {};
       const posterWeeks = normalizeWeekRanges(schedule.weekRanges ?? schedule.week_ranges);
@@ -338,100 +638,71 @@ export default function EventStudioAIImportDock({
         ticketCurrency: safeString(ticketInfo.currency || draft.ticketCurrency).toUpperCase() || draft.ticketCurrency,
         ticketNotes: safeString(ticketInfo.notes || ticketInfo.ticketNotes || draft.ticketNotes),
       };
-
-      const hydratedWeeks = posterWeeks.length
-        ? posterWeeks
-        : nextDraft.scheduleMode === 'multi_week'
-          ? draft.weeks
-          : [];
-
+      const hydratedWeeks = posterWeeks.length ? posterWeeks : nextDraft.scheduleMode === 'multi_week' ? draft.weeks : [];
       setDraft(syncEventStudioScheduleStructure({
         ...nextDraft,
         weeks: hydratedWeeks.length ? hydratedWeeks : nextDraft.weeks,
         eventDays: draft.eventDays,
       }));
+      closePanel();
+      return;
     }
-
-    if (panel.kind === 'timetable') {
-      const weeks = Array.isArray(raw.weeks) ? raw.weeks : [];
-      const stageNames = new Set<string>();
-      const nextSlots = weeks.flatMap((week: any) =>
-        Array.isArray(week?.days)
-          ? week.days.flatMap((day: any) =>
-              Array.isArray(day?.stages)
-                ? day.stages.flatMap((stage: any) =>
-                    Array.isArray(stage?.slots)
-                      ? stage.slots.map((slot: any, index: number) => {
-                          const eventDayRef = day?.eventDayRef || {};
-                          const resolvedEventDay =
-                            draft.eventDays.find((item) => item.eventDayId === safeString(eventDayRef.eventDayId || eventDayRef.event_day_id)) ||
-                            draft.eventDays.find((item) => item.overallDayIndex === Number(eventDayRef.overallDayIndex || eventDayRef.overall_day_index)) ||
-                            draft.eventDays.find((item) => item.date === normalizeDateOnly(safeString(eventDayRef.date || day?.dateText || day?.date || '')));
-                          const stageName = safeString(stage?.stageName) || 'Main Stage';
-                          stageNames.add(stageName);
-                          return {
-                            id: crypto.randomUUID(),
-                            canonicalSlotId: null,
-                            lineupArtistId: null,
-                            eventDayId: resolvedEventDay?.eventDayId || safeString(eventDayRef.eventDayId || eventDayRef.event_day_id),
-                            weekIndex: resolvedEventDay?.weekIndex || Number(week?.weekIndex || 1),
-                            dayIndexInWeek: resolvedEventDay?.dayIndexInWeek || Number(day?.dayIndexInWeek || 1),
-                            overallDayIndex: resolvedEventDay?.overallDayIndex || Number(eventDayRef.overallDayIndex || eventDayRef.overall_day_index || 1),
-                            localDate: resolvedEventDay?.date || normalizeDateOnly(safeString(eventDayRef.date || day?.dateText || day?.date || '')),
-                            djId: '',
-                            memberDjIds: [],
-                            memberNamesText: firstFilledText(
-                              slot?.displayName,
-                              Array.isArray(slot?.performerNames) ? slot.performerNames.join(' / ') : '',
-                              safeString(slot?.rawText)
-                            ),
-                            stageName,
-                            sortOrder: Number.isFinite(Number(slot?.orderInStage || slot?.order))
-                              ? Math.max(1, Math.floor(Number(slot?.orderInStage || slot?.order)))
-                              : index + 1,
-                            startTime: safeString(slot?.normalizedStartTime || slot?.startTimeText),
-                            endTime: safeString(slot?.normalizedEndTime || slot?.endTimeText),
-                          };
-                        })
-                      : []
-                  )
-                : []
-            )
-          : []
-      );
-
-      setDraft((current) => ({
-        ...current,
-        timetableSlots: nextSlots,
-        stageOrder: Array.from(stageNames),
-      }));
-    }
-
     if (panel.kind === 'lineup') {
-      const items = Array.isArray(raw.items) ? raw.items : [];
-      const nextLineup = items
-        .slice()
-        .sort((left: any, right: any) => Number(left?.order || 0) - Number(right?.order || 0))
-        .map((item: any, index: number) => ({
-          id: crypto.randomUUID(),
-          canonicalArtistId: null,
-          djId: '',
-          memberDjIds: [],
-          memberNamesText: firstFilledText(
-            Array.isArray(item?.performerNames) ? item.performerNames.join(' / ') : '',
-            item?.displayName,
-            item?.rawText
-          ),
-          sortOrder: Number.isFinite(Number(item?.order)) ? Math.max(1, Math.floor(Number(item?.order))) : index + 1,
-        }))
-        .filter((item: EventStudioDraft['lineupArtists'][number]) => item.memberNamesText.trim().length > 0);
-
+      const nextLineup = panel.lineupItems
+        .map((item, index): EventStudioDraft['lineupArtists'][number] | null => {
+          const normalized = normalizeEditableAct(item);
+          const names = splitPerformerNames(normalized.performerNamesText).slice(0, actTypePerformerCount(normalized.actType));
+          if (!names.length) return null;
+          return {
+            id: crypto.randomUUID(),
+            canonicalArtistId: null,
+            djId: normalized.performerDJIDs.find(Boolean) || '',
+            memberDjIds: normalizePerformerIds(normalized.performerDJIDs, actTypePerformerCount(normalized.actType)),
+            memberNamesText: names.join(' / '),
+            actType: normalized.actType,
+            sortOrder: index + 1,
+          };
+        })
+        .filter((item): item is EventStudioDraft['lineupArtists'][number] => item !== null);
       setDraft((current) => ({
         ...current,
         lineupArtists: nextLineup,
       }));
+      closePanel();
+      return;
     }
-
+    const nextSlots = panel.timetableSlots
+      .map((slot, index): EventStudioDraft['timetableSlots'][number] | null => {
+        const normalized = normalizeEditableAct(slot);
+        const names = splitPerformerNames(normalized.performerNamesText).slice(0, actTypePerformerCount(normalized.actType));
+        if (!names.length) return null;
+        return {
+          id: crypto.randomUUID(),
+          canonicalSlotId: null,
+          lineupArtistId: null,
+          actType: normalized.actType,
+          eventDayId: slot.eventDayId,
+          weekIndex: slot.weekIndex,
+          dayIndexInWeek: slot.dayIndexInWeek,
+          overallDayIndex: slot.overallDayIndex,
+          localDate: slot.localDate,
+          djId: normalized.performerDJIDs.find(Boolean) || '',
+          memberDjIds: normalizePerformerIds(normalized.performerDJIDs, actTypePerformerCount(normalized.actType)),
+          memberNamesText: names.join(' / '),
+          stageName: slot.stageName || 'Main Stage',
+          sortOrder: index + 1,
+          startTime: slot.startTimeText,
+          endTime: slot.endTimeText,
+          startDayOffset: slot.startDayOffset,
+          endDayOffset: slot.endDayOffset,
+        };
+      })
+      .filter((slot): slot is EventStudioDraft['timetableSlots'][number] => slot !== null);
+    setDraft((current) => ({
+      ...current,
+      timetableSlots: nextSlots,
+      stageOrder: Array.from(new Set([...current.stageOrder, ...nextSlots.map((slot) => slot.stageName).filter(Boolean)])),
+    }));
     closePanel();
   };
 
@@ -526,23 +797,278 @@ export default function EventStudioAIImportDock({
                 </div>
 
                 {panel.resultJson ? (
-                  <div className="admin-reference-card p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-[#071110]">识别结果</div>
-                        <div className="mt-1 text-xs text-black/40">确认无误后再应用到草稿</div>
+                  <div className="space-y-3">
+                    <div className="admin-reference-card p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-[#071110]">识别结果</div>
+                          <div className="mt-1 text-xs text-black/40">确认无误后再应用到草稿</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void autoMatchAIItems()}
+                            className="admin-studio-button-secondary px-4 py-2 text-sm"
+                          >
+                            自动匹配 DJ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={applyResult}
+                            className="admin-studio-button-primary px-4 py-2 text-sm"
+                          >
+                            应用结果
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={applyResult}
-                        className="admin-studio-button-primary px-4 py-2 text-sm"
-                      >
-                        应用结果
-                      </button>
+                      {panel.warnings.length || panel.unparsedTexts.length ? (
+                        <div className="mt-3 space-y-2 text-xs text-black/48">
+                          {panel.warnings.length ? <div>Warnings: {panel.warnings.join(' · ')}</div> : null}
+                          {panel.unparsedTexts.length ? <div>Unparsed: {panel.unparsedTexts.join(' · ')}</div> : null}
+                        </div>
+                      ) : null}
                     </div>
-                    <pre className="mt-3 max-h-[320px] overflow-auto rounded-[18px] bg-[#0b1210] p-4 text-xs leading-6 text-[#d6f3df]">
-{JSON.stringify(panel.resultJson, null, 2)}
-                    </pre>
+
+                    {panel.kind === 'lineup' ? (
+                      <div className="space-y-3">
+                        {panel.lineupItems.map((item, index) => {
+                          const count = actTypePerformerCount(item.actType);
+                          const names = splitPerformerNames(item.performerNamesText);
+                          return (
+                            <div key={item.id} className="admin-reference-card p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="text-sm font-semibold text-[#071110]">Lineup #{index + 1}</div>
+                                <button type="button" onClick={() => removeLineupItem(item.id)} className="admin-studio-button-danger px-3 py-1.5 text-xs">
+                                  删除
+                                </button>
+                              </div>
+                              <div className="mt-3 grid gap-3 lg:grid-cols-4">
+                                <select
+                                  className="admin-studio-input"
+                                  value={item.actType}
+                                  onChange={(event) =>
+                                    updateLineupItem(item.id, (current) => normalizeEditableAct({
+                                      ...current,
+                                      actType: normalizeActType(event.target.value, splitPerformerNames(current.performerNamesText).length),
+                                    }))
+                                  }
+                                >
+                                  {ACT_TYPE_ITEMS.map((act) => (
+                                    <option key={act.value} value={act.value}>
+                                      {act.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  className="admin-studio-input"
+                                  value={item.performerNamesText}
+                                  onChange={(event) =>
+                                    updateLineupItem(item.id, (current) => normalizeEditableAct({
+                                      ...current,
+                                      performerNamesText: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <input
+                                  className="admin-studio-input"
+                                  value={item.performerDJIDs[0] || ''}
+                                  onChange={(event) =>
+                                    updateLineupItem(item.id, (current) => ({
+                                      ...current,
+                                      performerDJIDs: normalizePerformerIds([event.target.value], count),
+                                    }))
+                                  }
+                                  placeholder="DJ ID"
+                                />
+                                <input
+                                  className="admin-studio-input"
+                                  value={item.performerDJIDs[1] || ''}
+                                  onChange={(event) =>
+                                    updateLineupItem(item.id, (current) => ({
+                                      ...current,
+                                      performerDJIDs: normalizePerformerIds([current.performerDJIDs[0], event.target.value], count),
+                                    }))
+                                  }
+                                  placeholder="DJ ID 2"
+                                />
+                              </div>
+                              <div className="mt-2 text-xs text-black/40">
+                                {names.join(' / ')} · {item.notes.join(' · ') || 'No notes'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : panel.kind === 'timetable' ? (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const firstDay = draft.eventDays[0];
+                              if (!firstDay || !panel.timetableSlots.length) return;
+                              setPanel((current) => current ? {
+                                ...current,
+                                selectedTimetableSlotIds: panel.selectedTimetableSlotIds.length ? [] : panel.timetableSlots.map((slot) => slot.id),
+                              } : current);
+                            }}
+                            className="admin-studio-button-secondary px-3 py-2 text-xs"
+                          >
+                            全选/取消
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentDay = draft.eventDays.find((day) => day.eventDayId === draft.eventDays[0]?.eventDayId) || draft.eventDays[0];
+                              if (!currentDay) return;
+                              setPanel((current) => current ? {
+                                ...current,
+                                timetableSlots: current.timetableSlots.map((slot) =>
+                                  current.selectedTimetableSlotIds.includes(slot.id)
+                                    ? { ...slot, eventDayId: currentDay.eventDayId, weekIndex: currentDay.weekIndex, dayIndexInWeek: currentDay.dayIndexInWeek, overallDayIndex: currentDay.overallDayIndex, localDate: currentDay.date, dayLabel: currentDay.label }
+                                    : slot
+                                ),
+                              } : current);
+                            }}
+                            className="admin-studio-button-secondary px-3 py-2 text-xs"
+                          >
+                            移动到当前日
+                          </button>
+                        </div>
+                        {panel.timetableSlots.map((slot) => (
+                          <div key={slot.id} className="admin-reference-card p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={panel.selectedTimetableSlotIds.includes(slot.id)}
+                                  onChange={() =>
+                                    setPanel((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            selectedTimetableSlotIds: current.selectedTimetableSlotIds.includes(slot.id)
+                                              ? current.selectedTimetableSlotIds.filter((id) => id !== slot.id)
+                                              : [...current.selectedTimetableSlotIds, slot.id],
+                                          }
+                                        : current
+                                    )
+                                  }
+                                />
+                                <div className="text-sm font-semibold text-[#071110]">Timetable #{slot.sortOrder}</div>
+                              </div>
+                              <button type="button" onClick={() => removeTimetableSlot(slot.id)} className="admin-studio-button-danger px-3 py-1.5 text-xs">
+                                删除
+                              </button>
+                            </div>
+                            <div className="mt-3 grid gap-3 lg:grid-cols-4">
+                              <select
+                                className="admin-studio-input"
+                                value={slot.actType}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => normalizeEditableAct({
+                                    ...current,
+                                    actType: normalizeActType(event.target.value, splitPerformerNames(current.performerNamesText).length),
+                                  }) as EventStudioAIEditableTimetableSlot)
+                                }
+                              >
+                                {ACT_TYPE_ITEMS.map((act) => (
+                                  <option key={act.value} value={act.value}>
+                                    {act.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                className="admin-studio-input"
+                                value={slot.performerNamesText}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({
+                                    ...current,
+                                    performerNamesText: event.target.value,
+                                  }))
+                                }
+                              />
+                              <input
+                                className="admin-studio-input"
+                                value={slot.startTimeText}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({ ...current, startTimeText: event.target.value }))
+                                }
+                              />
+                              <input
+                                className="admin-studio-input"
+                                value={slot.endTimeText}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({ ...current, endTimeText: event.target.value }))
+                                }
+                              />
+                              <select
+                                className="admin-studio-input"
+                                value={String(slot.startDayOffset)}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({ ...current, startDayOffset: Number(event.target.value) || 0 }))
+                                }
+                              >
+                                <option value="0">开始同日</option>
+                                <option value="1">开始次日</option>
+                              </select>
+                              <select
+                                className="admin-studio-input"
+                                value={String(slot.endDayOffset)}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({ ...current, endDayOffset: Number(event.target.value) || 0 }))
+                                }
+                              >
+                                <option value="0">结束同日</option>
+                                <option value="1">结束次日</option>
+                              </select>
+                            </div>
+                            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                              <input
+                                className="admin-studio-input"
+                                value={slot.performerDJIDs[0] || ''}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({
+                                    ...current,
+                                    performerDJIDs: normalizePerformerIds([event.target.value], actTypePerformerCount(current.actType)),
+                                  }))
+                                }
+                                placeholder="DJ ID 1"
+                              />
+                              <input
+                                className="admin-studio-input"
+                                value={slot.performerDJIDs[1] || ''}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({
+                                    ...current,
+                                    performerDJIDs: normalizePerformerIds([current.performerDJIDs[0], event.target.value], actTypePerformerCount(current.actType)),
+                                  }))
+                                }
+                                placeholder="DJ ID 2"
+                              />
+                              <input
+                                className="admin-studio-input"
+                                value={slot.performerDJIDs[2] || ''}
+                                onChange={(event) =>
+                                  updateTimetableSlot(slot.id, (current) => ({
+                                    ...current,
+                                    performerDJIDs: normalizePerformerIds([current.performerDJIDs[0], current.performerDJIDs[1], event.target.value], actTypePerformerCount(current.actType)),
+                                  }))
+                                }
+                                placeholder="DJ ID 3"
+                              />
+                            </div>
+                            <div className="mt-2 text-xs text-black/40">
+                              {slot.dayLabel || slot.localDate} · {slot.stageName}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <pre className="mt-3 max-h-[320px] overflow-auto rounded-[18px] bg-[#0b1210] p-4 text-xs leading-6 text-[#d6f3df]">
+                        {JSON.stringify(panel.resultJson, null, 2)}
+                      </pre>
+                    )}
                   </div>
                 ) : (
                   <div className="admin-reference-soft-card p-4 text-sm text-black/48">

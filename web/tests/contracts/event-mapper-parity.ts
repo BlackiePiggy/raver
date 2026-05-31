@@ -4,6 +4,7 @@ import {
   buildEventStudioScheduleStructure,
   createEmptyEventStudioTimetableSlotDraft,
   createEventStudioDraft,
+  fillLineupArtistsFromTimetableSlots,
   syncEventStudioLineupState,
   syncEventStudioScheduleStructure,
 } from "../../src/features/admin-content/event-studio/draft";
@@ -139,6 +140,7 @@ const tests: TestCase[] = [
       slot.djId = "dj_anyma";
       slot.memberDjIds = ["dj_anyma", "dj_mrak"];
       slot.memberNamesText = "Anyma / MRAK";
+      slot.actType = "b2b";
       slot.stageName = "";
       slot.sortOrder = 1;
       slot.startTime = "23:30";
@@ -148,6 +150,7 @@ const tests: TestCase[] = [
         {
           ...draft,
           timetableSlots: [slot],
+          lineupSyncMode: "exact_align",
         },
         draft.eventDays
       );
@@ -176,12 +179,14 @@ const tests: TestCase[] = [
       assert.equal(payload.lineupArtists?.[0]?.djId, "dj_anyma");
       assert.deepEqual(payload.lineupArtists?.[0]?.memberDjIds, ["dj_anyma", "dj_mrak"]);
       assert.deepEqual(payload.lineupArtists?.[0]?.memberNames, ["Anyma", "MRAK"]);
-      assert.equal(payload.lineupArtists?.[0]?.djName, "Anyma / MRAK");
+      assert.equal(payload.lineupArtists?.[0]?.djName, "Anyma B2B MRAK");
       assert.equal(payload.lineupSlots?.[0]?.eventDayId, "d1");
       assert.equal(payload.lineupSlots?.[0]?.festivalDayIndex, null);
       assert.equal(payload.lineupSlots?.[0]?.stageName, "Main Stage");
       assert.equal(payload.lineupSlots?.[0]?.startTime, "2099-09-12T23:30:00");
       assert.equal(payload.lineupSlots?.[0]?.endTime, "2099-09-13T01:00:00");
+      assert.equal(payload.lineupSlots?.[0]?.djName, "Anyma B2B MRAK");
+      assert.equal((payload.lineupSlots?.[0] as { performerType?: string })?.performerType, "b2b");
       assert.equal(payload.lineupSyncMode, "exact_align");
       assert.equal(payload.status, "upcoming");
     },
@@ -226,6 +231,142 @@ const tests: TestCase[] = [
       assert.equal(payload.coverImageUrl, null);
       assert.equal(payload.lineupImageUrl, null);
       assert.equal(payload.timeZoneProvince, "Shanghai");
+    },
+  },
+  {
+    name: "syncEventStudioScheduleStructure preserves existing lineup artists unless exact alignment is requested",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.startDate = "2099-09-12";
+      draft.endDate = "2099-09-13";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft = syncEventStudioScheduleStructure(draft);
+      const firstEventDay = draft.eventDays[0];
+      const slot = createEmptyEventStudioTimetableSlotDraft(firstEventDay, "Main Stage");
+      slot.eventDayId = firstEventDay.eventDayId;
+      slot.weekIndex = firstEventDay.weekIndex;
+      slot.dayIndexInWeek = firstEventDay.dayIndexInWeek;
+      slot.overallDayIndex = firstEventDay.overallDayIndex;
+      slot.localDate = firstEventDay.date;
+      slot.djId = "dj_anyma";
+      slot.memberDjIds = ["dj_anyma"];
+      slot.memberNamesText = "Anyma";
+      draft.lineupArtists = [
+        {
+          id: "artist_1",
+          canonicalArtistId: "artist_1",
+          djId: "dj_manual",
+          memberDjIds: ["dj_manual"],
+          memberNamesText: "Manual Artist",
+          sortOrder: 1,
+        },
+      ];
+      draft.timetableSlots = [slot];
+
+      const incremental = syncEventStudioScheduleStructure({
+        ...draft,
+        lineupSyncMode: "incremental_fill",
+      });
+      assert.equal(incremental.lineupArtists.length, 1);
+      assert.equal(incremental.lineupArtists[0]?.djId, "dj_manual");
+
+      const exact = syncEventStudioScheduleStructure({
+        ...draft,
+        lineupSyncMode: "exact_align",
+      });
+      assert.equal(exact.lineupArtists.length, 1);
+      assert.equal(exact.lineupArtists[0]?.djId, "dj_anyma");
+    },
+  },
+  {
+    name: "fillLineupArtistsFromTimetableSlots appends only missing timetable artists",
+    run: () => {
+      const existing = [
+        {
+          id: "artist_1",
+          canonicalArtistId: "artist_1",
+          djId: "dj_manual",
+          memberDjIds: ["dj_manual"],
+          memberNamesText: "Manual Artist",
+          sortOrder: 1,
+        },
+      ];
+      const added = fillLineupArtistsFromTimetableSlots(existing, [
+        {
+          id: "slot_1",
+          canonicalSlotId: null,
+          lineupArtistId: null,
+          eventDayId: "d1",
+          weekIndex: 1,
+          dayIndexInWeek: 1,
+          overallDayIndex: 1,
+          localDate: "2099-09-12",
+          djId: "dj_manual",
+          memberDjIds: ["dj_manual"],
+          memberNamesText: "Manual Artist",
+          stageName: "Main Stage",
+          sortOrder: 1,
+          startTime: "21:00",
+          endTime: "22:00",
+        },
+        {
+          id: "slot_2",
+          canonicalSlotId: null,
+          lineupArtistId: null,
+          eventDayId: "d1",
+          weekIndex: 1,
+          dayIndexInWeek: 1,
+          overallDayIndex: 1,
+          localDate: "2099-09-12",
+          djId: "dj_anyma",
+          memberDjIds: ["dj_anyma"],
+          memberNamesText: "Anyma",
+          stageName: "Main Stage",
+          sortOrder: 2,
+          startTime: "22:00",
+          endTime: "23:00",
+        },
+      ]);
+      assert.equal(added.length, 2);
+      assert.equal(added[0]?.djId, "dj_manual");
+      assert.equal(added[1]?.djId, "dj_anyma");
+    },
+  },
+  {
+    name: "mapEventStudioDraftToCreateInput preserves explicit day offsets for cross-day timetable slots",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name.zh = "跨天测试";
+      draft.name.en = "Cross Day Test";
+      draft.city.zh = "Shanghai";
+      draft.country.en = "China";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.startDate = "2099-09-12";
+      draft.endDate = "2099-09-13";
+      draft = syncEventStudioScheduleStructure(draft);
+
+      const firstEventDay = draft.eventDays[0];
+      const slot = createEmptyEventStudioTimetableSlotDraft(firstEventDay, "Main Stage");
+      slot.eventDayId = firstEventDay.eventDayId;
+      slot.weekIndex = firstEventDay.weekIndex;
+      slot.dayIndexInWeek = firstEventDay.dayIndexInWeek;
+      slot.overallDayIndex = firstEventDay.overallDayIndex;
+      slot.localDate = firstEventDay.date;
+      slot.djId = "dj_anyma";
+      slot.memberDjIds = ["dj_anyma"];
+      slot.memberNamesText = "Anyma";
+      slot.actType = "solo";
+      slot.startTime = "23:30";
+      slot.endTime = "01:00";
+      slot.startDayOffset = 0;
+      slot.endDayOffset = 1;
+      draft.timetableSlots = [slot];
+      draft.lineupArtists = fillLineupArtistsFromTimetableSlots([], [slot]);
+
+      const payload = mapEventStudioDraftToCreateInput(draft);
+
+      assert.equal(payload.lineupSlots?.[0]?.startTime, "2099-09-12T23:30:00");
+      assert.equal(payload.lineupSlots?.[0]?.endTime, "2099-09-13T01:00:00");
     },
   },
 ];

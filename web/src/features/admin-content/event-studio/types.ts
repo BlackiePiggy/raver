@@ -122,6 +122,7 @@ export type EventStudioLineupArtistDraft = {
   djId: string;
   memberDjIds: Array<string | null>;
   memberNamesText: string;
+  actType?: 'solo' | 'b2b' | 'b3b';
   sortOrder: number;
 };
 
@@ -129,6 +130,7 @@ export type EventStudioTimetableSlotDraft = {
   id: string;
   canonicalSlotId?: string | null;
   lineupArtistId?: string | null;
+  actType?: 'solo' | 'b2b' | 'b3b';
   eventDayId: string;
   weekIndex: number;
   dayIndexInWeek: number;
@@ -141,6 +143,8 @@ export type EventStudioTimetableSlotDraft = {
   sortOrder: number;
   startTime: string;
   endTime: string;
+  startDayOffset?: number;
+  endDayOffset?: number;
 };
 
 export type EventStudioDraft = {

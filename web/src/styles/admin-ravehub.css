@@ -573,7 +573,6 @@
 .admin-event-stage-column {
   display: flex;
   flex-direction: column;
-  min-height: 620px;
   border: 1px solid rgba(232, 236, 235, 0.92);
   border-radius: 24px;
   background:
@@ -604,8 +603,45 @@
 .admin-event-stage-lane {
   position: relative;
   flex: 1;
-  min-height: 560px;
   padding: 14px;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(7, 17, 16, 0.04) 0,
+    rgba(7, 17, 16, 0.04) 1px,
+    transparent 1px,
+    transparent 64px
+  );
+}
+
+.admin-event-stage-empty {
+  position: absolute;
+  inset: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed rgba(7, 17, 16, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.54);
+  color: rgba(7, 17, 16, 0.38);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-event-stage-empty button {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  border-radius: 999px;
+  background: white;
+  color: #071110;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-event-stage-empty button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .admin-event-slot-card {
@@ -650,6 +686,12 @@
 
 .admin-event-slot-card.tone-3 {
   background: linear-gradient(180deg, #eef4ff 0%, #ffffff 100%);
+}
+
+.admin-event-slot-card.is-selected {
+  outline: 2px solid #3aa66b;
+  outline-offset: 0;
+  box-shadow: 0 12px 26px rgba(58, 166, 107, 0.18);
 }
 
 .admin-ravehub-shell .admin-event-workbench button {

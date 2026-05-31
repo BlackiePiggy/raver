@@ -11,6 +11,23 @@ import {
   EventStudioWeekDraft,
 } from './types';
 
+const EVENT_STUDIO_ACT_TYPES = ['solo', 'b2b', 'b3b'] as const;
+type EventStudioActType = (typeof EVENT_STUDIO_ACT_TYPES)[number];
+
+const normalizeActType = (value?: string | null): EventStudioActType => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'b2b' || normalized === 'b3b') return normalized;
+  return 'solo';
+};
+
+const inferActType = (value?: string | null, performerCount = 0): EventStudioActType => {
+  const normalized = normalizeActType(value);
+  if (normalized !== 'solo') return normalized;
+  if (performerCount >= 3) return 'b3b';
+  if (performerCount === 2) return 'b2b';
+  return 'solo';
+};
+
 const emptyLocalizedText = (): EventStudioLocalizedText => ({
   zh: '',
   en: '',
@@ -95,6 +112,45 @@ const defaultMemberNamesText = (members?: string[] | null, fallback?: string | n
   return String(fallback || '').trim();
 };
 
+const splitMemberNamesText = (value: string): string[] =>
+  value
+    .split(/[\/,&]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const normalizedMemberDjIds = (memberDjIds?: Array<string | null> | null): string[] =>
+  (memberDjIds ?? [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+
+export const eventStudioLineupArtistIdentityKey = (artist: Pick<
+  EventStudioLineupArtistDraft,
+  'djId' | 'memberDjIds' | 'memberNamesText'
+>): string | null => {
+  const djId = artist.djId.trim();
+  if (djId) return `dj:${djId}`;
+
+  const memberDjIds = normalizedMemberDjIds(artist.memberDjIds).sort();
+  if (memberDjIds.length) return `members:${memberDjIds.join('|')}`;
+
+  const memberNames = splitMemberNamesText(artist.memberNamesText)
+    .map((item) => item.toLowerCase())
+    .sort();
+  if (memberNames.length) return `names:${memberNames.join('|')}`;
+
+  return null;
+};
+
+export const eventStudioTimetableSlotIdentityKey = (slot: Pick<
+  EventStudioTimetableSlotDraft,
+  'djId' | 'memberDjIds' | 'memberNamesText'
+>): string | null =>
+  eventStudioLineupArtistIdentityKey({
+    djId: slot.djId,
+    memberDjIds: slot.memberDjIds,
+    memberNamesText: slot.memberNamesText,
+  });
+
 const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
 
 const normalizeStageOrder = (stageOrder?: string[] | null, slots?: Array<{ stageName?: string | null }> | null): string[] => {
@@ -114,7 +170,7 @@ const normalizeStageOrder = (stageOrder?: string[] | null, slots?: Array<{ stage
   return result;
 };
 
-const buildLineupArtistsFromTimetableSlots = (
+export const buildLineupArtistsFromTimetableSlots = (
   timetableSlots: EventStudioTimetableSlotDraft[]
 ): EventStudioLineupArtistDraft[] => {
   const artistsByKey = new Map<string, EventStudioLineupArtistDraft>();
@@ -126,11 +182,7 @@ const buildLineupArtistsFromTimetableSlots = (
       const trimmed = String(item || '').trim();
       return trimmed || null;
     });
-    const identityKey = normalizedDjId
-      ? `dj:${normalizedDjId}`
-      : memberNamesText
-        ? `name:${memberNamesText.toLowerCase()}`
-        : '';
+    const identityKey = eventStudioTimetableSlotIdentityKey(slot);
     if (!identityKey) return;
     if (artistsByKey.has(identityKey)) return;
 
@@ -140,11 +192,67 @@ const buildLineupArtistsFromTimetableSlots = (
       djId: normalizedDjId,
       memberDjIds: normalizedMemberDjIds,
       memberNamesText,
+      actType: inferActType(slot.actType, Math.max(memberNamesText ? memberNamesText.split(/[\/,&]/).map((item) => item.trim()).filter(Boolean).length : 0, normalizedMemberDjIds.filter(Boolean).length)),
       sortOrder: artistsByKey.size + 1 || index + 1,
     });
   });
 
   return Array.from(artistsByKey.values());
+};
+
+export const fillLineupArtistsFromTimetableSlots = (
+  lineupArtists: EventStudioLineupArtistDraft[],
+  timetableSlots: EventStudioTimetableSlotDraft[]
+): EventStudioLineupArtistDraft[] => {
+  const seenKeys = new Set(
+    lineupArtists
+      .map(eventStudioLineupArtistIdentityKey)
+      .filter((key): key is string => Boolean(key))
+  );
+  const additions: EventStudioLineupArtistDraft[] = [];
+
+  buildLineupArtistsFromTimetableSlots(timetableSlots).forEach((artist) => {
+    const key = eventStudioLineupArtistIdentityKey(artist);
+    if (!key || seenKeys.has(key)) return;
+    seenKeys.add(key);
+    additions.push({
+      ...artist,
+      id: crypto.randomUUID(),
+      canonicalArtistId: null,
+      actType: normalizeActType(artist.actType),
+      sortOrder: lineupArtists.length + additions.length + 1,
+    });
+  });
+
+  return [...lineupArtists, ...additions];
+};
+
+const buildLineupArtistsFromInput = (
+  lineupArtists?: EventStudioLoadedEvent['lineupArtists'] | null
+): EventStudioLineupArtistDraft[] => {
+  if (!Array.isArray(lineupArtists)) return [];
+  const result: EventStudioLineupArtistDraft[] = [];
+  lineupArtists.forEach((artist, index) => {
+    const memberNamesText = defaultMemberNamesText(artist.memberNames, artist.djName);
+    const djId = String(artist.djId || '').trim();
+    const memberDjIds = Array.isArray(artist.memberDjIds)
+      ? artist.memberDjIds.map((item) => {
+          const trimmed = String(item || '').trim();
+          return trimmed || null;
+        })
+      : (djId ? [djId] : []);
+    if (!memberNamesText && !djId) return;
+    result.push({
+      id: crypto.randomUUID(),
+      canonicalArtistId: artist.id || null,
+      djId,
+      memberDjIds,
+      memberNamesText,
+      actType: inferActType((artist as { performerType?: string | null }).performerType, Math.max(memberNamesText ? memberNamesText.split(/[\/,&]/).map((item) => item.trim()).filter(Boolean).length : 0, memberDjIds.filter(Boolean).length, djId ? 1 : 0)),
+      sortOrder: artist.sortOrder ?? index + 1,
+    });
+  });
+  return result.sort((left, right) => left.sortOrder - right.sortOrder);
 };
 
 const datePartFromIsoLike = (value?: string | null): string => String(value || '').slice(0, 10);
@@ -157,11 +265,24 @@ const timePartFromIsoLike = (value?: string | null): string => {
   return '';
 };
 
+const dayOffsetFromIsoLike = (value?: string | null): number => {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  if (!match) return 0;
+  const hour = Number(match[2].slice(0, 2));
+  return Number.isFinite(hour) && hour >= 24 ? 1 : 0;
+};
+
 const composeSlotDateTime = (date: string, time: string): string => {
   const normalizedDate = date.trim();
   const normalizedTime = time.trim();
   if (!normalizedDate || !normalizedTime) return '';
   return `${normalizedDate}T${normalizedTime}:00`;
+};
+
+const normalizeSlotDayOffset = (value?: number | null): number => {
+  const normalized = Math.max(0, Math.floor(Number(value) || 0));
+  return normalized;
 };
 
 const mapTimetableSlotsToCurrentSchedule = (
@@ -189,6 +310,8 @@ const mapTimetableSlotsToCurrentSchedule = (
       overallDayIndex: matchedDay.overallDayIndex,
       localDate: matchedDay.date,
       sortOrder: index + 1,
+      startDayOffset: normalizeSlotDayOffset(slot.startDayOffset),
+      endDayOffset: normalizeSlotDayOffset(slot.endDayOffset),
     }];
   });
 };
@@ -198,13 +321,33 @@ export const syncEventStudioLineupState = (
   eventDays: EventStudioEventDayDraft[]
 ): Pick<EventStudioDraft, 'stageOrder' | 'lineupArtists' | 'timetableSlots'> => {
   const timetableSlots = mapTimetableSlotsToCurrentSchedule(draft.timetableSlots, eventDays);
-  const lineupArtists = buildLineupArtistsFromTimetableSlots(timetableSlots);
+  const lineupArtists = draft.lineupSyncMode === 'exact_align'
+    ? buildLineupArtistsFromTimetableSlots(timetableSlots)
+    : draft.lineupArtists;
   const stageOrder = normalizeStageOrder(draft.stageOrder, timetableSlots);
+  const normalizedLineupArtists = lineupArtists.map((artist, index) => ({
+    ...artist,
+    actType: inferActType(artist.actType, Math.max(
+      splitMemberNamesText(artist.memberNamesText).length,
+      normalizedMemberDjIds(artist.memberDjIds).length,
+      artist.djId.trim() ? 1 : 0
+    )),
+    sortOrder: artist.sortOrder || index + 1,
+  }));
+  const normalizedTimetableSlots = timetableSlots.map((slot, index) => ({
+    ...slot,
+    actType: inferActType(slot.actType, Math.max(
+      splitMemberNamesText(slot.memberNamesText).length,
+      normalizedMemberDjIds(slot.memberDjIds).length,
+      slot.djId.trim() ? 1 : 0
+    )),
+    sortOrder: slot.sortOrder || index + 1,
+  }));
 
   return {
     stageOrder,
-    lineupArtists,
-    timetableSlots,
+    lineupArtists: normalizedLineupArtists,
+    timetableSlots: normalizedTimetableSlots,
   };
 };
 
@@ -215,6 +358,7 @@ export const createEmptyEventStudioTimetableSlotDraft = (
   id: crypto.randomUUID(),
   canonicalSlotId: null,
   lineupArtistId: null,
+  actType: 'solo',
   eventDayId: eventDay?.eventDayId || '',
   weekIndex: eventDay?.weekIndex || 1,
   dayIndexInWeek: eventDay?.dayIndexInWeek || 1,
@@ -227,6 +371,8 @@ export const createEmptyEventStudioTimetableSlotDraft = (
   sortOrder: 1,
   startTime: '',
   endTime: '',
+  startDayOffset: 0,
+  endDayOffset: 0,
 });
 
 const parseDateOnly = (value: string): Date | null => {
@@ -500,9 +646,22 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         sortOrder: slot.sortOrder ?? index + 1,
         startTime: timePartFromIsoLike(slot.startTime),
         endTime: timePartFromIsoLike(slot.endTime),
-      });
+      startDayOffset: dayOffsetFromIsoLike(slot.startTime),
+      endDayOffset: dayOffsetFromIsoLike(slot.endTime),
+      actType: inferActType(
+        (slot as { performerType?: string | null }).performerType,
+        Math.max(
+          defaultMemberNamesText(slot.memberNames, slot.djName).split(/[\/,&]/).map((item) => item.trim()).filter(Boolean).length,
+          Array.isArray(slot.memberDjIds) ? slot.memberDjIds.filter(Boolean).length : 0,
+          slot.djId ? 1 : 0
+        )
+      ),
     });
-  const hydratedLineupArtists = buildLineupArtistsFromTimetableSlots(hydratedTimetableSlots);
+    });
+  const hydratedLineupArtistsFromInput = buildLineupArtistsFromInput(event.lineupArtists ?? null);
+  const hydratedLineupArtists = hydratedLineupArtistsFromInput.length
+    ? hydratedLineupArtistsFromInput
+    : buildLineupArtistsFromTimetableSlots(hydratedTimetableSlots);
   const hydratedStageOrder = normalizeStageOrder(event.stageOrder, hydratedTimetableSlots);
 
   return {
@@ -597,7 +756,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         }))
       : fallbackStructure.eventDays,
     stageOrder: hydratedStageOrder,
-    lineupSyncMode: 'incremental_fill',
+    lineupSyncMode: (event.lineupArtists?.length ? 'incremental_fill' : 'exact_align'),
     lineupArtists: hydratedLineupArtists,
     timetableSlots: hydratedTimetableSlots,
   };

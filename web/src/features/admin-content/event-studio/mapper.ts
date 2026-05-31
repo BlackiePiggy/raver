@@ -7,6 +7,10 @@ import {
   EventStudioTimetableSlotDraft,
   EventStudioUpdateInput,
 } from './types';
+import {
+  eventStudioLineupArtistIdentityKey,
+  eventStudioTimetableSlotIdentityKey,
+} from './draft';
 
 const trimOrNull = (value?: string | null): string | null => {
   const trimmed = String(value || '').trim();
@@ -34,6 +38,17 @@ const composeSlotDateTime = (date: string, time: string): string => {
   const normalizedTime = time.trim();
   if (!normalizedDate || !normalizedTime) return '';
   return `${normalizedDate}T${normalizedTime}:00`;
+};
+
+const dateWithDayOffset = (date: string, offset?: number): string => {
+  const normalizedDate = date.trim();
+  const normalizedOffset = Math.max(0, Math.floor(Number(offset) || 0));
+  if (!normalizedDate || normalizedOffset <= 0) return normalizedDate;
+  let result = normalizedDate;
+  for (let index = 0; index < normalizedOffset; index += 1) {
+    result = nextDateText(result);
+  }
+  return result;
 };
 
 const normalizedLocalizedText = (value: EventStudioLocalizedText): EventStudioLocalizedText | null => {
@@ -107,6 +122,29 @@ const splitMemberNamesText = (value: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const normalizeActType = (value?: string | null): 'solo' | 'b2b' | 'b3b' => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'b2b' || normalized === 'b3b') return normalized;
+  return 'solo';
+};
+
+const actTypePerformerCount = (value?: string | null): number => {
+  const normalized = normalizeActType(value);
+  if (normalized === 'b3b') return 3;
+  if (normalized === 'b2b') return 2;
+  return 1;
+};
+
+const composeActDisplayName = (actType: string | undefined, memberNames: string[], fallback: string): string => {
+  const normalizedActType = normalizeActType(actType);
+  const count = actTypePerformerCount(normalizedActType);
+  const names = memberNames.slice(0, count).filter(Boolean);
+  if (!names.length) return fallback;
+  if (normalizedActType === 'b3b') return names.join(' B3B ');
+  if (normalizedActType === 'b2b') return names.join(' B2B ');
+  return names[0] || fallback;
+};
+
 const normalizeMemberDjIds = (memberDjIds: Array<string | null>): Array<string | null> => {
   const normalized = memberDjIds.map((item) => {
     const trimmed = String(item || '').trim();
@@ -139,12 +177,13 @@ const cloneLocalizedTextOrUndefined = (value?: {
 const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
 
 const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
-  const memberNames = splitMemberNamesText(artist.memberNamesText);
+  const performerCount = actTypePerformerCount(artist.actType);
+  const memberNames = splitMemberNamesText(artist.memberNamesText).slice(0, performerCount);
   const normalizedDjId = trimOrNull(artist.djId);
   if (!memberNames.length && !normalizedDjId) return null;
 
-  const normalizedMemberDjIds = normalizeMemberDjIds(artist.memberDjIds);
-  const displayName = memberNames.length ? memberNames.join(' / ') : normalizedDjId || '';
+  const normalizedMemberDjIds = normalizeMemberDjIds(artist.memberDjIds).slice(0, performerCount);
+  const displayName = composeActDisplayName(artist.actType, memberNames, normalizedDjId || '');
   if (!displayName) return null;
 
   return {
@@ -157,24 +196,33 @@ const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   };
 };
 
-const lineupSlotPayload = (slot: EventStudioTimetableSlotDraft, index: number) => {
-  const memberNames = splitMemberNamesText(slot.memberNamesText);
+const lineupSlotPayload = (
+  slot: EventStudioTimetableSlotDraft,
+  index: number,
+  lineupArtistIdByKey: Map<string, string>
+) => {
+  const performerCount = actTypePerformerCount(slot.actType);
+  const memberNames = splitMemberNamesText(slot.memberNamesText).slice(0, performerCount);
   const normalizedDjId = trimOrNull(slot.djId);
   const normalizedStageName = trimOrNull(slot.stageName) || defaultStageName(index);
   if (!memberNames.length && !normalizedDjId) return null;
   if (!slot.eventDayId.trim() || !slot.localDate.trim() || !slot.startTime.trim() || !slot.endTime.trim()) return null;
 
-  const normalizedMemberDjIds = normalizeMemberDjIds(slot.memberDjIds);
-  const displayName = memberNames.length ? memberNames.join(' / ') : normalizedDjId || '';
+  if (memberNames.length < performerCount) return null;
+
+  const normalizedMemberDjIds = normalizeMemberDjIds(slot.memberDjIds).slice(0, performerCount);
+  const displayName = composeActDisplayName(slot.actType, memberNames, normalizedDjId || '');
   if (!displayName) return null;
-  const normalizedStartTime = composeSlotDateTime(slot.localDate, slot.startTime);
-  const normalizedEndDate = slot.endTime.trim() > slot.startTime.trim()
-    ? slot.localDate
-    : nextDateText(slot.localDate);
+  const startDayOffset = Math.max(0, Math.floor(Number(slot.startDayOffset) || 0));
+  const inferredEndOffset = slot.endTime.trim() > slot.startTime.trim() ? startDayOffset : startDayOffset + 1;
+  const endDayOffset = Math.max(startDayOffset, Math.floor(Number(slot.endDayOffset) || inferredEndOffset));
+  const normalizedStartTime = composeSlotDateTime(dateWithDayOffset(slot.localDate, startDayOffset), slot.startTime);
+  const normalizedEndDate = dateWithDayOffset(slot.localDate, endDayOffset);
+  const identityKey = eventStudioTimetableSlotIdentityKey(slot);
 
   return {
     id: trimOrNull(slot.canonicalSlotId),
-    lineupArtistId: trimOrNull(slot.lineupArtistId),
+    lineupArtistId: trimOrNull(slot.lineupArtistId) || (identityKey ? lineupArtistIdByKey.get(identityKey) : null) || null,
     eventDayId: slot.eventDayId,
     weekIndex: slot.weekIndex,
     dayIndexInWeek: slot.dayIndexInWeek,
@@ -189,6 +237,7 @@ const lineupSlotPayload = (slot: EventStudioTimetableSlotDraft, index: number) =
     sortOrder: slot.sortOrder,
     startTime: normalizedStartTime,
     endTime: composeSlotDateTime(normalizedEndDate, slot.endTime),
+    performerType: normalizeActType(slot.actType),
   };
 };
 
@@ -340,11 +389,19 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
   const stageOrder = draft.stageOrder
     .map((stage) => stage.trim())
     .filter(Boolean);
+  const lineupArtistIdByKey = new Map<string, string>();
+  draft.lineupArtists.forEach((artist) => {
+    const key = eventStudioLineupArtistIdentityKey(artist);
+    const artistId = trimOrNull(artist.canonicalArtistId);
+    if (key && artistId && !lineupArtistIdByKey.has(key)) {
+      lineupArtistIdByKey.set(key, artistId);
+    }
+  });
   const lineupArtists = draft.lineupArtists
     .map(lineupArtistPayload)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const lineupSlots = draft.timetableSlots
-    .map(lineupSlotPayload)
+    .map((slot, index) => lineupSlotPayload(slot, index, lineupArtistIdByKey))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return {

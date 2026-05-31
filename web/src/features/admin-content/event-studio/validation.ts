@@ -10,6 +10,11 @@ const firstFilledText = (...values: Array<string | undefined | null>): string =>
 
 export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioValidationErrors => {
   const errors: EventStudioValidationErrors = {};
+  const expectedPerformersByActType: Record<NonNullable<EventStudioDraft['timetableSlots'][number]['actType']>, number> = {
+    solo: 1,
+    b2b: 2,
+    b3b: 3,
+  };
   const hasEntryVisual =
     draft.imageZones.poster.some((item) => item.remoteUrl.trim()) ||
     draft.imageZones.lineup.some((item) => item.remoteUrl.trim()) ||
@@ -86,6 +91,7 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     const hasAnyValue = [
       slot.memberNamesText,
       slot.djId,
+      slot.actType,
       slot.stageName,
       slot.startTime,
       slot.endTime,
@@ -98,7 +104,21 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     const hasLocalDate = slot.localDate.trim().length > 0;
     const hasStart = /^\d{2}:\d{2}$/.test(slot.startTime.trim());
     const hasEnd = /^\d{2}:\d{2}$/.test(slot.endTime.trim());
-    return !hasIdentity || !hasStage || !hasEventDayId || !hasLocalDate || !hasStart || !hasEnd;
+    const actType = slot.actType || 'solo';
+    const expectedCount = expectedPerformersByActType[actType];
+    const performerNames = slot.memberNamesText
+      .split(/[\/,&]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return (
+      !hasIdentity ||
+      !hasStage ||
+      !hasEventDayId ||
+      !hasLocalDate ||
+      !hasStart ||
+      !hasEnd ||
+      performerNames.length < expectedCount
+    );
   });
 
   if (invalidSlot) {

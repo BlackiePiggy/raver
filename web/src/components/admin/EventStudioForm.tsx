@@ -13,6 +13,10 @@ import {
   createEmptyEventStudioTimetableSlotDraft,
   eventStudioApi,
   EventStudioApiError,
+  buildLineupArtistsFromTimetableSlots,
+  eventStudioLineupArtistIdentityKey,
+  eventStudioTimetableSlotIdentityKey,
+  fillLineupArtistsFromTimetableSlots,
   mapEventStudioDraftToCreateInput,
   mapEventStudioDraftToUpdateInput,
   syncEventStudioLineupState,
@@ -24,6 +28,7 @@ import {
   type EventStudioEventDayDraft,
   type EventStudioImageState,
   type EventStudioImageUsage,
+  type EventStudioLineupArtistDraft,
   type EventStudioOrganizer,
   type EventStudioTimetableSlotDraft,
   type EventStudioValidationErrors,
@@ -381,25 +386,139 @@ function WorkflowRail({
   );
 }
 
+function LineupArtistPill({
+  title,
+  subtitle,
+  tone = 'soft',
+}: {
+  title: string;
+  subtitle: string;
+  tone?: 'soft' | 'mint' | 'sand' | 'rose';
+}) {
+  const className =
+    tone === 'mint'
+      ? 'admin-studio-pastel-mint'
+      : tone === 'sand'
+        ? 'admin-studio-pastel-sand'
+        : tone === 'rose'
+          ? 'admin-studio-pastel-rose'
+          : 'admin-reference-soft-card';
+  return (
+    <div className={`${className} px-4 py-3`}>
+      <div className="text-sm font-semibold text-[#071110]">{title}</div>
+      <div className="mt-1 text-xs leading-5 text-black/48">{subtitle}</div>
+    </div>
+  );
+}
+
 const EVENT_STUDIO_STEP_STORAGE_KEY = 'raver-event-studio-step';
 
+const normalizeStageName = (value?: string | null): string => String(value || 'Main Stage').trim() || 'Main Stage';
+
+const stageKey = (value?: string | null): string => normalizeStageName(value).toLowerCase();
+
+const EVENT_STUDIO_ACT_TYPES = [
+  { value: 'solo' as const, label: 'Solo', performerCount: 1 },
+  { value: 'b2b' as const, label: 'B2B', performerCount: 2 },
+  { value: 'b3b' as const, label: 'B3B', performerCount: 3 },
+];
+
+const normalizeActType = (value?: string | null): 'solo' | 'b2b' | 'b3b' => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'b2b' || normalized === 'b3b') return normalized;
+  return 'solo';
+};
+
+const actTypePerformerCount = (value?: string | null): number => {
+  const normalized = normalizeActType(value);
+  return EVENT_STUDIO_ACT_TYPES.find((item) => item.value === normalized)?.performerCount ?? 1;
+};
+
+const splitPerformerNames = (value: string): string[] =>
+  value
+    .split(/[\/,&]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const compactTimetableSlot = (slot: EventStudioTimetableSlotDraft): EventStudioTimetableSlotDraft | null => {
+  const names = splitPerformerNames(slot.memberNamesText);
+  if (!names.length) return null;
+  const djIds = slot.memberDjIds
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  const performerCount = Math.max(names.length, djIds.length, 1);
+  const actType = performerCount >= 3 ? 'b3b' : performerCount === 2 ? 'b2b' : 'solo';
+  const count = actTypePerformerCount(actType);
+  return {
+    ...slot,
+    actType,
+    memberNamesText: names.slice(0, count).join(' / '),
+    memberDjIds: slot.memberDjIds.slice(0, count).map((item) => {
+      const trimmed = String(item || '').trim();
+      return trimmed || null;
+    }),
+  };
+};
+
+const normalizeTimetableSlotActType = (
+  slot: EventStudioTimetableSlotDraft,
+  actType: 'solo' | 'b2b' | 'b3b'
+): EventStudioTimetableSlotDraft => {
+  const count = actTypePerformerCount(actType);
+  return {
+    ...slot,
+    actType,
+    memberNamesText: splitPerformerNames(slot.memberNamesText).slice(0, count).join(' / '),
+    memberDjIds: slot.memberDjIds.slice(0, count).map((item) => {
+      const trimmed = String(item || '').trim();
+      return trimmed || null;
+    }),
+  };
+};
+
+const normalizeLineupArtistActType = (
+  artist: EventStudioLineupArtistDraft,
+  actType: 'solo' | 'b2b' | 'b3b'
+): EventStudioLineupArtistDraft => ({
+  ...artist,
+  actType,
+});
+
+const extractTimeValue = (value: string): string => {
+  const text = String(value || '').trim();
+  const isoMatch = text.match(/T(\d{2}:\d{2})/);
+  if (isoMatch?.[1]) return isoMatch[1];
+  const looseMatch = text.match(/^(\d{1,2}):(\d{2})/);
+  if (!looseMatch) return '';
+  return `${looseMatch[1].padStart(2, '0')}:${looseMatch[2]}`;
+};
+
+const TIMETABLE_BOARD_START_MINUTES = 12 * 60;
+const TIMETABLE_BOARD_END_MINUTES = 30 * 60;
+const TIMETABLE_ROW_HEIGHT_MINUTES = 60;
+const TIMETABLE_ROW_HEIGHT_PX = 64;
+const TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX =
+  ((TIMETABLE_BOARD_END_MINUTES - TIMETABLE_BOARD_START_MINUTES) / TIMETABLE_ROW_HEIGHT_MINUTES) * TIMETABLE_ROW_HEIGHT_PX;
+
 const minutesFromTime = (value: string): number | null => {
-  const match = value.match(/^(\d{2}):(\d{2})$/);
+  const match = extractTimeValue(value).match(/^(\d{2}):(\d{2})$/);
   if (!match) return null;
   return Number(match[1]) * 60 + Number(match[2]);
 };
 
 const getSlotLayout = (slot: EventStudioTimetableSlotDraft): CSSProperties => {
-  const start = minutesFromTime(slot.startTime) ?? 18 * 60;
-  const endRaw = minutesFromTime(slot.endTime) ?? start + 60;
+  const startOffset = Math.max(0, Math.floor(Number(slot.startDayOffset) || 0));
+  const endOffset = Math.max(startOffset, Math.floor(Number(slot.endDayOffset) || 0));
+  const start = (minutesFromTime(slot.startTime) ?? 18 * 60) + startOffset * 24 * 60;
+  const endRaw = (minutesFromTime(slot.endTime) ?? start + 60) + endOffset * 24 * 60;
   const end = endRaw <= start ? endRaw + 24 * 60 : endRaw;
-  const boardStart = 12 * 60;
-  const boardEnd = 30 * 60;
-  const top = Math.max(0, ((start - boardStart) / (boardEnd - boardStart)) * 100);
-  const height = Math.max(7, ((end - start) / (boardEnd - boardStart)) * 100);
+  const visibleStart = Math.max(start, TIMETABLE_BOARD_START_MINUTES);
+  const visibleEnd = Math.min(Math.max(end, visibleStart + 30), TIMETABLE_BOARD_END_MINUTES);
+  const top = ((visibleStart - TIMETABLE_BOARD_START_MINUTES) / TIMETABLE_ROW_HEIGHT_MINUTES) * TIMETABLE_ROW_HEIGHT_PX;
+  const height = Math.max(32, ((visibleEnd - visibleStart) / TIMETABLE_ROW_HEIGHT_MINUTES) * TIMETABLE_ROW_HEIGHT_PX);
   return {
-    top: `${Math.min(top, 92)}%`,
-    height: `${Math.min(height, 34)}%`,
+    top: `${top}px`,
+    height: `${height}px`,
   };
 };
 
@@ -437,6 +556,10 @@ export default function EventStudioForm({
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [uploadingUsage, setUploadingUsage] = useState<EventStudioImageUsage | null>(null);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+  const [selectedTimetableWeekIndex, setSelectedTimetableWeekIndex] = useState(1);
+  const [selectedTimetableDayId, setSelectedTimetableDayId] = useState('');
+  const [timetableSelectionMode, setTimetableSelectionMode] = useState(false);
+  const [selectedTimetableSlotIds, setSelectedTimetableSlotIds] = useState<string[]>([]);
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
@@ -473,6 +596,23 @@ export default function EventStudioForm({
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(EVENT_STUDIO_STEP_STORAGE_KEY, String(currentStep));
   }, [currentStep]);
+
+  useEffect(() => {
+    if (!draft.eventDays.length) {
+      setSelectedTimetableDayId('');
+      return;
+    }
+    const currentDay = draft.eventDays.find((day) => day.eventDayId === selectedTimetableDayId);
+    if (currentDay) {
+      setSelectedTimetableWeekIndex(currentDay.weekIndex);
+      return;
+    }
+    const fallbackDay =
+      draft.eventDays.find((day) => day.weekIndex === selectedTimetableWeekIndex) ||
+      draft.eventDays[0];
+    setSelectedTimetableDayId(fallbackDay.eventDayId);
+    setSelectedTimetableWeekIndex(fallbackDay.weekIndex);
+  }, [draft.eventDays, selectedTimetableDayId, selectedTimetableWeekIndex]);
 
   const locationPointInitial = useMemo<EventLocationPoint | null>(() => {
     if (draft.locationPoint) {
@@ -1064,13 +1204,168 @@ export default function EventStudioForm({
         djId: artist.djId || '',
         memberDjIds: artist.memberDjIds ?? (artist.djId ? [artist.djId] : []),
         memberNamesText: (artist.memberNames ?? []).filter(Boolean).join(' / ') || artist.djName,
+        actType: artist.memberNames && artist.memberNames.length >= 3 ? 'b3b' : artist.memberNames && artist.memberNames.length === 2 ? 'b2b' : 'solo',
         sortOrder: artist.sortOrder ?? index + 1,
       })),
       lineupSyncMode: 'exact_align',
     }));
   };
 
+  const toggleTimetableSelectionMode = () => {
+    setTimetableSelectionMode((current) => {
+      if (current) setSelectedTimetableSlotIds([]);
+      return !current;
+    });
+  };
+
+  const toggleTimetableSlotSelection = (slotId: string) => {
+    setSelectedTimetableSlotIds((current) =>
+      current.includes(slotId) ? current.filter((id) => id !== slotId) : [...current, slotId]
+    );
+  };
+
+  const moveSelectedTimetableSlotsToDay = (day: EventStudioEventDayDraft) => {
+    if (!selectedTimetableSlotIds.length) return;
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      timetableSlots: current.timetableSlots.map((slot) =>
+        selectedTimetableSlotIds.includes(slot.id)
+          ? {
+              ...slot,
+              eventDayId: day.eventDayId,
+              weekIndex: day.weekIndex,
+              dayIndexInWeek: day.dayIndexInWeek,
+              overallDayIndex: day.overallDayIndex,
+              localDate: day.date,
+            }
+          : slot
+      ),
+    }));
+    setSelectedTimetableWeekIndex(day.weekIndex);
+    setSelectedTimetableDayId(day.eventDayId);
+    setSelectedTimetableSlotIds([]);
+    setTimetableSelectionMode(false);
+  };
+
+  const moveSelectedTimetableSlotsToStage = (stage: string) => {
+    const normalizedStage = normalizeStageName(stage);
+    if (!selectedTimetableSlotIds.length || !normalizedStage) return;
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      timetableSlots: current.timetableSlots.map((slot) =>
+        selectedTimetableSlotIds.includes(slot.id) ? { ...slot, stageName: normalizedStage } : slot
+      ),
+      stageOrder: current.stageOrder.some((item) => stageKey(item) === stageKey(normalizedStage))
+        ? current.stageOrder
+        : [...current.stageOrder, normalizedStage],
+    }));
+    setSelectedTimetableSlotIds([]);
+    setTimetableSelectionMode(false);
+  };
+
+  const cleanupVisibleTimetableSlots = () => {
+    const visibleIds = new Set(visibleTimetableSlots.map((slot) => slot.id));
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      timetableSlots: current.timetableSlots
+        .flatMap((slot) => {
+          if (!visibleIds.has(slot.id)) return [slot];
+          const cleaned = compactTimetableSlot(slot);
+          return cleaned ? [cleaned] : [];
+        })
+        .map((slot, index) => ({ ...slot, sortOrder: index + 1 })),
+    }));
+    setSelectedTimetableSlotIds((current) => current.filter((id) => !visibleIds.has(id)));
+  };
+
   const currentStepItem = EVENT_STUDIO_STEP_ITEMS[currentStep];
+  const timetableWeeks = useMemo(() => {
+    if (draft.weeks.length) return draft.weeks;
+    const firstDay = draft.eventDays[0];
+    return [{
+      id: 'single-week',
+      weekIndex: firstDay?.weekIndex || 1,
+      label: 'Week 1',
+      startDate: firstDay?.date || draft.startDate,
+      endDate: draft.endDate || firstDay?.date || draft.startDate,
+      sortOrder: 1,
+    }];
+  }, [draft.endDate, draft.eventDays, draft.startDate, draft.weeks]);
+  const selectedTimetableDay =
+    draft.eventDays.find((day) => day.eventDayId === selectedTimetableDayId) ||
+    draft.eventDays.find((day) => day.weekIndex === selectedTimetableWeekIndex) ||
+    draft.eventDays[0] ||
+    null;
+  const timetableDaysInSelectedWeek = useMemo(
+    () => draft.eventDays.filter((day) => day.weekIndex === selectedTimetableWeekIndex),
+    [draft.eventDays, selectedTimetableWeekIndex]
+  );
+  const visibleTimetableDays = timetableDaysInSelectedWeek.length ? timetableDaysInSelectedWeek : draft.eventDays;
+  const visibleTimetableSlots = useMemo(() => {
+    if (!selectedTimetableDay) return draft.timetableSlots;
+    return draft.timetableSlots
+      .filter((slot) =>
+        slot.eventDayId === selectedTimetableDay.eventDayId ||
+        slot.localDate === selectedTimetableDay.date ||
+        slot.overallDayIndex === selectedTimetableDay.overallDayIndex
+      )
+      .sort((a, b) => (minutesFromTime(a.startTime) ?? 9999) - (minutesFromTime(b.startTime) ?? 9999) || a.sortOrder - b.sortOrder);
+  }, [draft.timetableSlots, selectedTimetableDay]);
+  const visibleStageOrder = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    const pushStage = (stage?: string | null) => {
+      const normalized = normalizeStageName(stage);
+      const key = stageKey(normalized);
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(normalized);
+    };
+    draft.stageOrder.forEach(pushStage);
+    visibleTimetableSlots.forEach((slot) => pushStage(slot.stageName));
+    if (!result.length) result.push('Main Stage');
+    return result;
+  }, [draft.stageOrder, visibleTimetableSlots]);
+  const lineupPreviewArtists = useMemo(() => {
+    const source = draft.lineupArtists.length ? draft.lineupArtists : buildLineupArtistsFromTimetableSlots(draft.timetableSlots);
+    return [...source].sort((left, right) => left.sortOrder - right.sortOrder);
+  }, [draft.lineupArtists, draft.timetableSlots]);
+  const lineupStageCount = useMemo(
+    () => draft.lineupArtists.filter((artist) => artist.memberNamesText.trim() || artist.djId.trim()).length,
+    [draft.lineupArtists]
+  );
+  const lineupIdentityKeys = useMemo(
+    () => new Set(draft.lineupArtists.map(eventStudioLineupArtistIdentityKey).filter((key): key is string => Boolean(key))),
+    [draft.lineupArtists]
+  );
+  const timetableIdentityKeys = useMemo(
+    () => new Set(draft.timetableSlots.map(eventStudioTimetableSlotIdentityKey).filter((key): key is string => Boolean(key))),
+    [draft.timetableSlots]
+  );
+  const missingLineupArtistsFromTimetable = useMemo(() => {
+    const seen = new Set<string>();
+    return buildLineupArtistsFromTimetableSlots(draft.timetableSlots).filter((artist) => {
+      const key = eventStudioLineupArtistIdentityKey(artist);
+      if (!key || lineupIdentityKeys.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [draft.timetableSlots, lineupIdentityKeys]);
+  const lineupArtistsOnlyInLineup = useMemo(
+    () => draft.lineupArtists.filter((artist) => {
+      const key = eventStudioLineupArtistIdentityKey(artist);
+      return Boolean(key && !timetableIdentityKeys.has(key));
+    }),
+    [draft.lineupArtists, timetableIdentityKeys]
+  );
+
+  const applyTimetableIncrementalFillToLineup = () => {
+    updateLineupDraft((current) => ({
+      ...current,
+      lineupSyncMode: 'incremental_fill',
+      lineupArtists: fillLineupArtistsFromTimetableSlots(current.lineupArtists, current.timetableSlots),
+    }));
+  };
 
   const renderMediaZone = (usage: EventStudioImageUsage) => {
     const config = IMAGE_ZONE_CONFIG.find((item) => item.usage === usage);
@@ -1713,8 +2008,19 @@ export default function EventStudioForm({
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="admin-studio-button-secondary px-4 py-3 text-sm">
-                  批量操作
+                <button
+                  type="button"
+                  onClick={() => setTimetableSelectionMode((current) => !current)}
+                  className="admin-studio-button-secondary px-4 py-3 text-sm"
+                >
+                  {timetableSelectionMode ? '完成多选' : '批量操作'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void cleanupVisibleTimetableSlots()}
+                  className="admin-studio-button-secondary px-4 py-3 text-sm"
+                >
+                  一键清理当前页
                 </button>
                 <button
                   type="button"
@@ -1723,7 +2029,9 @@ export default function EventStudioForm({
                       const stageName = `Stage ${current.stageOrder.length + 1}`;
                       return {
                         ...current,
-                        stageOrder: [...current.stageOrder, stageName],
+                        stageOrder: current.stageOrder.some((stage) => stageKey(stage) === stageKey(stageName))
+                          ? current.stageOrder
+                          : [...current.stageOrder, stageName],
                       };
                     })
                   }
@@ -1731,6 +2039,29 @@ export default function EventStudioForm({
                 >
                   添加舞台
                 </button>
+                {timetableSelectionMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const day = draft.eventDays.find((item) => item.eventDayId === selectedTimetableDay?.eventDayId) || draft.eventDays[0];
+                        if (day) moveSelectedTimetableSlotsToDay(day);
+                      }}
+                      disabled={!selectedTimetableSlotIds.length}
+                      className="admin-studio-button-secondary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      移动到当前日
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveSelectedTimetableSlotsToStage(visibleStageOrder[0] || draft.stageOrder[0] || 'Main Stage')}
+                      disabled={!selectedTimetableSlotIds.length}
+                      className="admin-studio-button-secondary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      移动到当前舞台
+                    </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   onClick={() =>
@@ -1738,7 +2069,10 @@ export default function EventStudioForm({
                       ...current,
                       timetableSlots: [
                         ...current.timetableSlots,
-                        createEmptyEventStudioTimetableSlotDraft(current.eventDays[0], current.stageOrder[0] || 'Main Stage'),
+                        createEmptyEventStudioTimetableSlotDraft(
+                          current.eventDays.find((day) => day.eventDayId === selectedTimetableDay?.eventDayId) || current.eventDays[0],
+                          visibleStageOrder[0] || current.stageOrder[0] || 'Main Stage'
+                        ),
                       ].map((slot, index) => ({
                         ...slot,
                         sortOrder: index + 1,
@@ -1754,8 +2088,17 @@ export default function EventStudioForm({
             </div>
 
             <div className="mt-6 flex gap-3 overflow-x-auto pb-2">
-              {(draft.weeks.length ? draft.weeks : [{ id: 'single-week', label: 'Week 1', weekIndex: 1 }]).map((week) => (
-                <button key={week.id} type="button" className="admin-event-timetable-tab is-active">
+              {timetableWeeks.map((week) => (
+                <button
+                  key={week.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTimetableWeekIndex(week.weekIndex);
+                    const firstDayInWeek = draft.eventDays.find((day) => day.weekIndex === week.weekIndex);
+                    if (firstDayInWeek) setSelectedTimetableDayId(firstDayInWeek.eventDayId);
+                  }}
+                  className={`admin-event-timetable-tab ${week.weekIndex === selectedTimetableWeekIndex ? 'is-active' : ''}`}
+                >
                   {week.label || `Week ${week.weekIndex}`}
                 </button>
               ))}
@@ -1763,8 +2106,16 @@ export default function EventStudioForm({
 
             <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
               {draft.eventDays.length ? (
-                draft.eventDays.map((day, index) => (
-                  <button key={day.id} type="button" className={`admin-event-day-tab ${index === 0 ? 'is-active' : ''}`}>
+                visibleTimetableDays.map((day) => (
+                  <button
+                    key={day.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTimetableWeekIndex(day.weekIndex);
+                      setSelectedTimetableDayId(day.eventDayId);
+                    }}
+                    className={`admin-event-day-tab ${day.eventDayId === selectedTimetableDay?.eventDayId ? 'is-active' : ''}`}
+                  >
                     <span>{day.label || `Day ${day.overallDayIndex}`}</span>
                     <b>{day.date || '未设置日期'}</b>
                   </button>
@@ -1777,34 +2128,73 @@ export default function EventStudioForm({
             </div>
 
             <div className="admin-event-stage-grid mt-6">
-              <div className="admin-event-time-axis">
+              <div className="admin-event-time-axis" style={{ minHeight: TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX }}>
                 {['12:00', '15:00', '18:00', '21:00', '00:00', '03:00', '06:00'].map((time) => (
                   <span key={time}>{time}</span>
                 ))}
               </div>
-              {(draft.stageOrder.length ? draft.stageOrder : ['Main Stage']).map((stage, stageIndex) => {
-                const stageSlots = draft.timetableSlots.filter((slot) => (slot.stageName || 'Main Stage') === stage);
+              {visibleStageOrder.map((stage, stageIndex) => {
+                const stageSlots = visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage));
                 return (
                   <div key={stage} className="admin-event-stage-column">
                     <div className="admin-event-stage-heading">
                       <span>{stage}</span>
                       <b>{stageSlots.length} Sets</b>
                     </div>
-                    <div className="admin-event-stage-lane">
-                      {stageSlots.map((slot, index) => (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          style={getSlotLayout(slot)}
-                          className={`admin-event-slot-card tone-${(stageIndex + index) % 4}`}
-                        >
-                          <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/38">
-                            {slot.startTime || '--:--'} - {slot.endTime || '--:--'}
-                          </span>
-                          <strong>{slot.memberNamesText || '未填写艺人'}</strong>
-                          <small>{slot.localDate || '未选择活动日'}</small>
-                        </button>
-                      ))}
+                    <div className="admin-event-stage-lane" style={{ minHeight: TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX }}>
+                      {stageSlots.length ? (
+                        stageSlots.map((slot, index) => (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            onClick={() => timetableSelectionMode && toggleTimetableSlotSelection(slot.id)}
+                            style={getSlotLayout(slot)}
+                            className={`admin-event-slot-card tone-${(stageIndex + index) % 4} ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''}`}
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/38">
+                              {extractTimeValue(slot.startTime) || '--:--'}
+                              {Number(slot.startDayOffset) > 0 ? ` +${Number(slot.startDayOffset)}` : ''}
+                              {' - '}
+                              {extractTimeValue(slot.endTime) || '--:--'}
+                              {Number(slot.endDayOffset) > 0 ? ` +${Number(slot.endDayOffset)}` : ''}
+                            </span>
+                            <strong>
+                              {slot.memberNamesText || slot.djId || '未填写艺人'}
+                              <span className="ml-2 text-[10px] uppercase tracking-[0.14em] text-black/30">
+                                {normalizeActType(slot.actType)}
+                              </span>
+                            </strong>
+                            <small>
+                              {selectedTimetableDay?.label || slot.localDate || '未选择活动日'} · {normalizeStageName(slot.stageName)}
+                            </small>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="admin-event-stage-empty">
+                          <span>当前日期暂无演出</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateScheduleDerivedDraft((current) => ({
+                                ...current,
+                                timetableSlots: [
+                                  ...current.timetableSlots,
+                                  createEmptyEventStudioTimetableSlotDraft(
+                                    current.eventDays.find((day) => day.eventDayId === selectedTimetableDay?.eventDayId) || current.eventDays[0],
+                                    stage
+                                  ),
+                                ].map((slot, index) => ({
+                                  ...slot,
+                                  sortOrder: index + 1,
+                                })),
+                              }))
+                            }
+                            disabled={!draft.eventDays.length}
+                          >
+                            添加到此舞台
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1834,6 +2224,29 @@ export default function EventStudioForm({
               {draft.timetableSlots.length ? (
                 draft.timetableSlots.map((slot) => (
                   <div key={slot.id} className="grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-3">
+                    <Field label="演出形式">
+                      <select
+                        value={normalizeActType(slot.actType)}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id
+                                ? normalizeTimetableSlotActType(currentSlot, normalizeActType(event.target.value))
+                                : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                      >
+                        {EVENT_STUDIO_ACT_TYPES.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
                     <Field label="演出日">
                       <select
                         value={slot.eventDayId}
@@ -1882,21 +2295,32 @@ export default function EventStudioForm({
                       />
                     </Field>
 
-                    <Field label="演出人名称">
-                      <input
-                        value={slot.memberNamesText}
-                        onChange={(event) =>
-                          updateScheduleDerivedDraft((current) => ({
-                            ...current,
-                            timetableSlots: current.timetableSlots.map((currentSlot) =>
-                              currentSlot.id === slot.id ? { ...currentSlot, memberNamesText: event.target.value } : currentSlot
-                            ),
-                          }))
-                        }
-                        className={textInputClassName}
-                        placeholder="例如：Martin Garrix / Alesso"
-                      />
-                    </Field>
+                    {Array.from({ length: actTypePerformerCount(slot.actType) }).map((_, performerIndex) => (
+                      <Field
+                        key={`${slot.id}-member-${performerIndex}`}
+                        label={normalizeActType(slot.actType) === 'solo' ? 'DJ / 艺人名称' : `成员 ${performerIndex + 1}`}
+                      >
+                        <input
+                          value={splitPerformerNames(slot.memberNamesText)[performerIndex] || ''}
+                          onChange={(event) =>
+                            updateScheduleDerivedDraft((current) => ({
+                              ...current,
+                              timetableSlots: current.timetableSlots.map((currentSlot) => {
+                                if (currentSlot.id !== slot.id) return currentSlot;
+                                const names = splitPerformerNames(currentSlot.memberNamesText);
+                                names[performerIndex] = event.target.value;
+                                return {
+                                  ...currentSlot,
+                                  memberNamesText: names.filter(Boolean).join(' / '),
+                                };
+                              }),
+                            }))
+                          }
+                          className={textInputClassName}
+                          placeholder={normalizeActType(slot.actType) === 'solo' ? '输入艺人名称' : `成员 ${performerIndex + 1}`}
+                        />
+                      </Field>
+                    ))}
 
                     <Field label="已绑定 DJ ID（可选）">
                       <input
@@ -1909,7 +2333,11 @@ export default function EventStudioForm({
                                 ? {
                                     ...currentSlot,
                                     djId: event.target.value,
-                                    memberDjIds: event.target.value.trim() ? [event.target.value.trim()] : [],
+                                    memberDjIds: event.target.value.trim()
+                                      ? Array.from({ length: actTypePerformerCount(currentSlot.actType) }, (_, index) =>
+                                          index === 0 ? event.target.value.trim() : null
+                                        )
+                                      : [],
                                   }
                                 : currentSlot
                             ),
@@ -1952,6 +2380,46 @@ export default function EventStudioForm({
                       />
                     </Field>
 
+                    <Field label="开始跨天">
+                      <select
+                        value={String(Math.max(0, Math.floor(Number(slot.startDayOffset) || 0)))}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id
+                                ? { ...currentSlot, startDayOffset: Number(event.target.value) || 0 }
+                                : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                      >
+                        <option value="0">同日</option>
+                        <option value="1">次日</option>
+                      </select>
+                    </Field>
+
+                    <Field label="结束跨天">
+                      <select
+                        value={String(Math.max(0, Math.floor(Number(slot.endDayOffset) || 0)))}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id
+                                ? { ...currentSlot, endDayOffset: Number(event.target.value) || 0 }
+                                : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                      >
+                        <option value="0">同日</option>
+                        <option value="1">次日</option>
+                      </select>
+                    </Field>
+
                     <div className="flex justify-end lg:col-span-3">
                       <button
                         type="button"
@@ -1984,40 +2452,35 @@ export default function EventStudioForm({
       ) : null}
 
       {currentStep === 4 ? (
-        <Section title="阵容" description="阵容页单独处理 DJ 列表与对齐策略，让重点操作从 timetable 中解耦出来。">
-          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <Section title="阵容" description="先读取已有阵容，再允许直接修改；如果需要，也能从时间表一键同步补齐。">
+          <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
             <div className="space-y-4">
-              <div className="admin-reference-soft-card p-4">
-                <div className="text-sm font-semibold text-[#071110]">Lineup Sync Mode</div>
-                <div className="mt-3 space-y-2">
-                  <label className="admin-reference-card flex cursor-pointer items-start gap-3 px-3 py-3 text-sm">
-                    <input
-                      type="radio"
-                      name="lineupSyncMode"
-                      checked={draft.lineupSyncMode === 'incremental_fill'}
-                      onChange={() => updateDraft('lineupSyncMode', 'incremental_fill')}
-                    />
-                    <span>增量补齐：保留当前阵容基础上，用 timetable 补全缺失艺人。</span>
-                  </label>
-                  <label className="admin-reference-card flex cursor-pointer items-start gap-3 px-3 py-3 text-sm">
-                    <input
-                      type="radio"
-                      name="lineupSyncMode"
-                      checked={draft.lineupSyncMode === 'exact_align'}
-                      onChange={() => updateDraft('lineupSyncMode', 'exact_align')}
-                    />
-                    <span>严格对齐：以 timetable 中出现的艺人为准重建 lineup。</span>
-                  </label>
+              <div className="admin-studio-section p-4">
+                <div className="admin-studio-label">Lineup Snapshot</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <LineupArtistPill
+                    title={`${lineupPreviewArtists.length} 位阵容艺人`}
+                    subtitle="优先显示已读取的后端阵容，编辑页不会再被 timetable 覆盖。"
+                    tone="mint"
+                  />
+                  <LineupArtistPill
+                    title={draft.lineupSyncMode === 'exact_align' ? '严格对齐' : '增量补齐'}
+                    subtitle="和 iOS 一样，可切换同步策略。"
+                    tone="sand"
+                  />
+                  <LineupArtistPill
+                    title={`${draft.timetableSlots.length} 条时间表`}
+                    subtitle="可作为阵容补全来源，也可反向校验缺失艺人。"
+                    tone="rose"
+                  />
                 </div>
               </div>
 
               <div className="admin-reference-soft-card p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold">对齐预览</div>
-                    <div className="mt-1 text-xs text-text-secondary">
-                      先用后端规则预览阵容和时间表是否一致，再决定是否直接应用建议阵容。
-                    </div>
+                    <div className="text-sm font-semibold text-[#071110]">同步策略</div>
+                    <div className="mt-1 text-xs text-text-secondary">保留已有阵容后，可选择是否按时间表补齐缺失信息。</div>
                   </div>
                   <button
                     type="button"
@@ -2028,13 +2491,69 @@ export default function EventStudioForm({
                     {alignmentPreviewLoading ? '预览中...' : '预览对齐'}
                   </button>
                 </div>
-
+                <div className="mt-4 grid gap-2">
+                  <label className="admin-reference-card flex cursor-pointer items-start gap-3 px-3 py-3 text-sm">
+                    <input
+                      type="radio"
+                      name="lineupSyncMode"
+                      checked={draft.lineupSyncMode === 'incremental_fill'}
+                      onChange={() => updateDraft('lineupSyncMode', 'incremental_fill')}
+                    />
+                    <span>增量补齐：保留当前阵容，使用 timetable 补全缺失艺人。</span>
+                  </label>
+                  <label className="admin-reference-card flex cursor-pointer items-start gap-3 px-3 py-3 text-sm">
+                    <input
+                      type="radio"
+                      name="lineupSyncMode"
+                      checked={draft.lineupSyncMode === 'exact_align'}
+                      onChange={() => updateDraft('lineupSyncMode', 'exact_align')}
+                    />
+                    <span>严格对齐：以 timetable 为准重建阵容。</span>
+                  </label>
+                </div>
+                {(missingLineupArtistsFromTimetable.length || lineupArtistsOnlyInLineup.length) ? (
+                  <div className="mt-4 grid gap-3">
+                    {missingLineupArtistsFromTimetable.length ? (
+                      <div className="admin-reference-card px-4 py-3 text-sm">
+                        <div className="font-semibold text-[#071110]">
+                          时间表中有 {missingLineupArtistsFromTimetable.length} 位艺人尚未加入阵容
+                        </div>
+                        <div className="mt-2 text-black/48">
+                          {missingLineupArtistsFromTimetable
+                            .map((artist) => artist.memberNamesText || artist.djId)
+                            .join('、')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={applyTimetableIncrementalFillToLineup}
+                          className="admin-studio-button-primary mt-3 px-4 py-2 text-sm"
+                        >
+                          从时间表一键补齐阵容
+                        </button>
+                      </div>
+                    ) : null}
+                    {lineupArtistsOnlyInLineup.length ? (
+                      <div className="admin-reference-card px-4 py-3 text-sm">
+                        <div className="font-semibold text-[#071110]">
+                          阵容中有 {lineupArtistsOnlyInLineup.length} 位艺人目前不在时间表里
+                        </div>
+                        <div className="mt-2 text-black/48">
+                          {lineupArtistsOnlyInLineup
+                            .map((artist) => artist.memberNamesText || artist.djId)
+                            .join('、')}
+                        </div>
+                        <div className="mt-2 text-xs text-black/40">
+                          默认提交会保留这些阵容艺人，和 iOS 上传/编辑流程一致。
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {alignmentPreviewError ? (
                   <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                     {alignmentPreviewError}
                   </div>
                 ) : null}
-
                 {alignmentPreview ? (
                   <div className="mt-3 space-y-3">
                     <div
@@ -2046,11 +2565,10 @@ export default function EventStudioForm({
                     >
                       {alignmentPreview.message || (alignmentPreview.aligned ? '当前阵容与时间表已对齐。' : '当前阵容与时间表存在差异。')}
                     </div>
-
                     {!alignmentPreview.aligned && alignmentPreview.issue ? (
                       <div className="grid gap-3">
                         <div className="admin-reference-card px-4 py-3 text-sm">
-                          <div className="font-semibold text-[#071110]">时间表中存在但阵容里缺少</div>
+                          <div className="font-semibold text-[#071110]">时间表有但阵容缺少</div>
                           <div className="mt-2 text-black/48">
                             {alignmentPreview.issue.missingFromLineup.length
                               ? alignmentPreview.issue.missingFromLineup.join('、')
@@ -2058,7 +2576,7 @@ export default function EventStudioForm({
                           </div>
                         </div>
                         <div className="admin-reference-card px-4 py-3 text-sm">
-                          <div className="font-semibold text-[#071110]">阵容中存在但时间表里缺少</div>
+                          <div className="font-semibold text-[#071110]">阵容有但时间表缺少</div>
                           <div className="mt-2 text-black/48">
                             {alignmentPreview.issue.extraInLineup.length ? alignmentPreview.issue.extraInLineup.join('、') : '无'}
                           </div>
@@ -2071,12 +2589,14 @@ export default function EventStudioForm({
             </div>
 
             <div className="admin-reference-card p-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-[#071110]">阵容艺人</div>
-                  <div className="mt-1 text-xs text-text-secondary">你可以直接微调阵容名称、DJ ID 和排序。</div>
+                  <div className="text-sm font-semibold text-[#071110]">已有阵容</div>
+                  <div className="mt-1 text-xs text-text-secondary">
+                    已读取 {lineupPreviewArtists.length} 位艺人，你可以直接改名字、DJ ID、排序，或新增/删除。
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {alignmentPreview?.lineupArtists?.length ? (
                     <button type="button" onClick={applyAlignedLineupArtists} className="admin-studio-button-primary px-4 py-2 text-sm">
                       应用建议阵容
@@ -2107,10 +2627,62 @@ export default function EventStudioForm({
                 </div>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {lineupPreviewArtists.length ? (
+                  lineupPreviewArtists.map((artist, index) => {
+                    const artistKey = eventStudioLineupArtistIdentityKey(artist);
+                    const hasTimetableMatch = Boolean(artistKey && timetableIdentityKeys.has(artistKey)) ||
+                      draft.timetableSlots.some((slot) => Boolean(artist.canonicalArtistId && slot.lineupArtistId === artist.canonicalArtistId));
+                    return (
+                      <div key={artist.id} className="admin-reference-soft-card p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/38">#{index + 1}</div>
+                            <div className="mt-1 text-sm font-semibold text-[#071110]">
+                              {artist.memberNamesText || artist.djId || '未命名阵容'}
+                            </div>
+                            <div className="mt-1 text-xs text-black/42">
+                              {artist.djId || '无 DJ ID'} · {artist.memberDjIds.filter(Boolean).length} 个 member IDs
+                            </div>
+                          </div>
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${hasTimetableMatch ? 'bg-[#edf7f2] text-[#2f4027]' : 'bg-[#f7efda] text-[#604a1b]'}`}>
+                            {hasTimetableMatch ? '已在时间表中出现' : '待补齐'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="admin-reference-soft-card p-4 text-sm text-black/48">
+                    当前还没有读取到阵容艺人。若后端有 lineupArtists，这里会直接显示；否则会尝试从 timetable 自动推导。
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 space-y-3">
                 {draft.lineupArtists.length ? (
                   draft.lineupArtists.map((artist, index) => (
-                    <div key={artist.id} className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.7fr_1.4fr_1fr_auto]">
+                    <div key={artist.id} className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.72fr_0.55fr_1.25fr_1fr_1fr_auto]">
+                      <select
+                        value={normalizeActType(artist.actType)}
+                        onChange={(event) =>
+                          updateLineupDraft((current) => ({
+                            ...current,
+                            lineupArtists: current.lineupArtists.map((currentArtist) =>
+                              currentArtist.id === artist.id
+                                ? normalizeLineupArtistActType(currentArtist, normalizeActType(event.target.value))
+                                : currentArtist
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                      >
+                        {EVENT_STUDIO_ACT_TYPES.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         value={String(artist.sortOrder)}
                         onChange={(event) =>
@@ -2158,6 +2730,21 @@ export default function EventStudioForm({
                         className={textInputClassName}
                         placeholder="DJ ID（可选）"
                       />
+                      <input
+                        value={artist.canonicalArtistId || ''}
+                        onChange={(event) =>
+                          updateLineupDraft((current) => ({
+                            ...current,
+                            lineupArtists: current.lineupArtists.map((currentArtist) =>
+                              currentArtist.id === artist.id
+                                ? { ...currentArtist, canonicalArtistId: event.target.value.trim() || null }
+                                : currentArtist
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                        placeholder="canonical artist id"
+                      />
                       <button
                         type="button"
                         onClick={() =>
@@ -2179,7 +2766,7 @@ export default function EventStudioForm({
                   ))
                 ) : (
                   <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                    当前还没有可提交的阵容艺人。你可以直接新增，也可以先在左侧做对齐预览后应用建议阵容。
+                    当前没有阵容艺人可编辑。你可以新增，或先用“预览对齐”同步时间表中的艺人。
                   </div>
                 )}
               </div>
