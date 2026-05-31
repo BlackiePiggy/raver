@@ -16,6 +16,10 @@ const cozeDjEnrichmentTimeoutMs = (() => {
   }
   return 120_000;
 })();
+const djEnrichmentWorkerEnabled = (() => {
+  const normalized = String(process.env.DJ_ENRICH_WORKER_ENABLED || '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+})();
 const djEnrichmentWorkerIntervalMs = (() => {
   const parsed = Number(process.env.DJ_ENRICH_WORKER_INTERVAL_MS || 5000);
   if (Number.isFinite(parsed) && parsed >= 1000 && parsed <= 60000) {
@@ -664,6 +668,10 @@ const runWorkerTick = async (): Promise<void> => {
 };
 
 export const startDjEnrichmentWorker = (): void => {
+  if (!djEnrichmentWorkerEnabled) {
+    console.info('[dj-enrichment-worker] disabled');
+    return;
+  }
   if (workerStarted) return;
   workerStarted = true;
   workerTimer = setInterval(() => {
