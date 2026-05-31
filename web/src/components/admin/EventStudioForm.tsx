@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChangeEvent, ReactNode, useMemo, useState } from 'react';
+import { ChangeEvent, CSSProperties, ReactNode, useEffect, useMemo, useState } from 'react';
 import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
@@ -25,6 +25,7 @@ import {
   type EventStudioImageState,
   type EventStudioImageUsage,
   type EventStudioOrganizer,
+  type EventStudioTimetableSlotDraft,
   type EventStudioValidationErrors,
   type EventStudioWeekDraft,
 } from '@/features/admin-content/event-studio';
@@ -262,6 +263,146 @@ function StepNavigation({
   );
 }
 
+function StudioTopbar({
+  mode,
+  draftTitle,
+  currentStepItem,
+  canSubmit,
+  submitting,
+  uploading,
+  onCancel,
+  onSaveDraft,
+  onSubmit,
+  submitButtonText,
+}: {
+  mode: 'create' | 'edit';
+  draftTitle: string;
+  currentStepItem: (typeof EVENT_STUDIO_STEP_ITEMS)[number];
+  canSubmit: boolean;
+  submitting: boolean;
+  uploading: boolean;
+  onCancel: () => void;
+  onSaveDraft: () => void;
+  onSubmit: () => void;
+  submitButtonText?: string;
+}) {
+  return (
+    <section className="admin-event-workbench-topbar">
+      <div className="min-w-0">
+        <div className="admin-event-workbench-crumb">
+          <span>活动工作区</span>
+          <span>/</span>
+          <span className="truncate">{draftTitle}</span>
+          <span>/</span>
+          <span>{currentStepItem.title}</span>
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div>
+            <div className="admin-studio-label">{mode === 'create' ? 'Create Event Flow' : 'Edit Event Flow'}</div>
+            <h2 className="mt-1 text-[30px] font-extrabold tracking-[-0.045em] text-[#071110]">{currentStepItem.title}</h2>
+          </div>
+          <p className="max-w-2xl text-sm leading-6 text-black/48">{currentStepItem.description}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <button type="button" onClick={onCancel} className="admin-studio-button-secondary px-5 py-3 text-sm">
+          取消
+        </button>
+        <button type="button" onClick={onSaveDraft} className="admin-studio-button-secondary px-5 py-3 text-sm">
+          保存草稿
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitting || uploading}
+          className="admin-studio-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+          title={canSubmit ? '当前表单已满足提交条件' : '还有必填项未完成，提交时会自动跳转到对应分页'}
+        >
+          {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交审核' : '提交审核')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function WorkflowRail({
+  currentStep,
+  onSelect,
+  draft,
+  mediaCount,
+  canSubmit,
+}: {
+  currentStep: number;
+  onSelect: (index: number) => void;
+  draft: EventStudioDraft;
+  mediaCount: number;
+  canSubmit: boolean;
+}) {
+  return (
+    <aside className="admin-event-workbench-rail">
+      <div className="rounded-[28px] bg-[#071110] p-5 text-white shadow-[0_24px_55px_rgba(7,17,16,.18)]">
+        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Event Session</div>
+        <div className="mt-3 text-2xl font-black tracking-[-0.05em]">{currentStep + 1}/7</div>
+        <div className="mt-2 text-sm leading-6 text-white/62">{canSubmit ? '资料已满足提交条件' : '按 iOS 上传分页继续补齐资料'}</div>
+      </div>
+
+      <nav className="mt-4 space-y-2">
+        {EVENT_STUDIO_STEP_ITEMS.map((item, index) => {
+          const active = currentStep === index;
+          const done = index < currentStep;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onSelect(index)}
+              className={`admin-event-workbench-step ${active ? 'is-active' : ''} ${done ? 'is-done' : ''}`}
+            >
+              <span className="admin-event-workbench-step-index">{String(index + 1).padStart(2, '0')}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-bold">{item.title}</span>
+                <span className="mt-1 block truncate text-xs text-black/42">{item.description}</span>
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="admin-event-workbench-rail-card mt-4">
+        <div className="admin-studio-label">当前数据</div>
+        <div className="mt-3 grid gap-2 text-sm">
+          <div className="flex justify-between gap-3"><span>媒体</span><b>{mediaCount} 张</b></div>
+          <div className="flex justify-between gap-3"><span>活动日</span><b>{draft.eventDays.length} 天</b></div>
+          <div className="flex justify-between gap-3"><span>舞台</span><b>{draft.stageOrder.length || 0} 个</b></div>
+          <div className="flex justify-between gap-3"><span>时间块</span><b>{draft.timetableSlots.length} 条</b></div>
+          <div className="flex justify-between gap-3"><span>阵容</span><b>{draft.lineupArtists.length} 位</b></div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+const EVENT_STUDIO_STEP_STORAGE_KEY = 'raver-event-studio-step';
+
+const minutesFromTime = (value: string): number | null => {
+  const match = value.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+};
+
+const getSlotLayout = (slot: EventStudioTimetableSlotDraft): CSSProperties => {
+  const start = minutesFromTime(slot.startTime) ?? 18 * 60;
+  const endRaw = minutesFromTime(slot.endTime) ?? start + 60;
+  const end = endRaw <= start ? endRaw + 24 * 60 : endRaw;
+  const boardStart = 12 * 60;
+  const boardEnd = 30 * 60;
+  const top = Math.max(0, ((start - boardStart) / (boardEnd - boardStart)) * 100);
+  const height = Math.max(7, ((end - start) / (boardEnd - boardStart)) * 100);
+  return {
+    top: `${Math.min(top, 92)}%`,
+    height: `${Math.min(height, 34)}%`,
+  };
+};
+
 type EventStudioFormProps = {
   mode: 'create' | 'edit';
   eventId?: string;
@@ -319,6 +460,19 @@ export default function EventStudioForm({
       draft.detailAddress.ja,
       draft.detailAddress.enFull
     ) || '还没有地点地址';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedStep = Number(window.localStorage.getItem(EVENT_STUDIO_STEP_STORAGE_KEY));
+    if (Number.isFinite(savedStep)) {
+      setCurrentStep(Math.max(0, Math.min(savedStep, totalSteps - 1)));
+    }
+  }, [totalSteps]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(EVENT_STUDIO_STEP_STORAGE_KEY, String(currentStep));
+  }, [currentStep]);
 
   const locationPointInitial = useMemo<EventLocationPoint | null>(() => {
     if (draft.locationPoint) {
@@ -404,6 +558,15 @@ export default function EventStudioForm({
 
   const goToStep = (index: number) => {
     setCurrentStep(Math.max(0, Math.min(index, totalSteps - 1)));
+  };
+
+  const handleCancelFlow = () => {
+    window.location.href = '/admin/content/events/catalog';
+  };
+
+  const handleSaveDraft = () => {
+    setSubmitError(null);
+    setConflictNotice('草稿已保存在当前页面状态中。你可以继续切换分页，系统会保留当前步骤。');
   };
 
   const updateDraftState = (
@@ -974,7 +1137,20 @@ export default function EventStudioForm({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="admin-event-workbench space-y-5">
+      <StudioTopbar
+        mode={mode}
+        draftTitle={draftTitle}
+        currentStepItem={currentStepItem}
+        canSubmit={canSubmit}
+        submitting={submitting}
+        uploading={uploadingUsage !== null || deletingImageId !== null}
+        onCancel={handleCancelFlow}
+        onSaveDraft={handleSaveDraft}
+        onSubmit={() => void handleSubmit()}
+        submitButtonText={submitButtonText}
+      />
+
       {conflictNotice ? (
         <section className="admin-studio-pastel-sand p-4 text-sm text-[#604a1b]">{conflictNotice}</section>
       ) : null}
@@ -983,30 +1159,9 @@ export default function EventStudioForm({
         <section className="admin-studio-pastel-rose p-4 text-sm text-[#6a3530]">{submitError}</section>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr]">
-            <div className="admin-studio-section p-6">
-              <div className="admin-studio-label">{mode === 'create' ? 'Event Studio' : 'Edit Session'}</div>
-              <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">{draftTitle}</h2>
-              <div className="mt-5 grid gap-3 md:grid-cols-4">
-                <SummaryStat label="地点绑定" value={draft.locationPoint ? '已绑定地图点位' : '待选择'} tone="mint" />
-                <SummaryStat label="排期结构" value={`${draft.weeks.length} 周 / ${draft.eventDays.length} 天`} tone="sand" />
-                <SummaryStat label="媒体数量" value={`${mediaCount} 张`} tone="rose" />
-                <SummaryStat label="当前分页" value={`${currentStep + 1}/${totalSteps} · ${currentStepItem.title}`} tone="soft" />
-              </div>
-            </div>
-
-        <div className="admin-studio-pastel-mint p-6">
-          <div className="admin-studio-label">Submission</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">iOS 对齐分页流程</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
-            <p>当前 web 端创建与编辑流程已经按 iOS 的分页顺序组织：媒体、信息、周期、时间表、阵容、票务、检查。</p>
-            <p>地图选点能力直接嵌入当前页面，保留多地图 provider 与原始 locationPoint 语义。</p>
-            <p>媒体页不再只支持两张图，而是按 Poster / Cover / Lineup / Timetable / Map / Other 分区上传。</p>
-          </div>
-        </div>
-      </section>
-
-      <StepNavigation currentStep={currentStep} onSelect={goToStep} />
+      <div className="admin-event-workbench-shell">
+        <WorkflowRail currentStep={currentStep} onSelect={goToStep} draft={draft} mediaCount={mediaCount} canSubmit={canSubmit} />
+        <main className="min-w-0 space-y-5">
 
       {currentStep === 0 ? (
         <Section title="媒体" description="先把主视觉、封面、阵容图和排期图集中整理好。提交校验会要求 Poster / Lineup / Cover 至少有一张。">
@@ -1547,213 +1702,282 @@ export default function EventStudioForm({
       ) : null}
 
       {currentStep === 3 ? (
-        <Section title="时间表" description="先按 event day 建立演出时段，再决定舞台名与 DJ 绑定。这里是活动编辑里最核心的操作区。">
-          <div className="admin-reference-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <Section title="时间表" description="按 iOS 的活动日、舞台和演出时段组织，主视图优先展示可视化排期板。">
+          <div className="admin-event-timetable-board">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <div className="text-sm font-semibold">时间表条目</div>
-                <div className="mt-1 text-xs text-text-secondary">
-                  先完成活动日期结构后，就可以按 event day 逐条补充舞台、演出人和开始结束时间。
-                </div>
+                <div className="admin-studio-label">Timetable Board</div>
+                <h3 className="mt-2 text-2xl font-black tracking-[-0.045em] text-[#071110]">舞台排期</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-black/48">
+                  先在这里看整体结构，再用下方条目做精确编辑。时间轴按 12:00 到次日 06:00 呈现。
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  updateScheduleDerivedDraft((current) => ({
-                    ...current,
-                    timetableSlots: [
-                      ...current.timetableSlots,
-                      createEmptyEventStudioTimetableSlotDraft(current.eventDays[0], current.stageOrder[0] || 'Main Stage'),
-                    ].map((slot, index) => ({
-                      ...slot,
-                      sortOrder: index + 1,
-                    })),
-                  }))
-                }
-                disabled={!draft.eventDays.length}
-                className="admin-studio-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                新增时间表条目
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="admin-studio-button-secondary px-4 py-3 text-sm">
+                  批量操作
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateScheduleDerivedDraft((current) => {
+                      const stageName = `Stage ${current.stageOrder.length + 1}`;
+                      return {
+                        ...current,
+                        stageOrder: [...current.stageOrder, stageName],
+                      };
+                    })
+                  }
+                  className="admin-studio-button-secondary px-4 py-3 text-sm"
+                >
+                  添加舞台
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateScheduleDerivedDraft((current) => ({
+                      ...current,
+                      timetableSlots: [
+                        ...current.timetableSlots,
+                        createEmptyEventStudioTimetableSlotDraft(current.eventDays[0], current.stageOrder[0] || 'Main Stage'),
+                      ].map((slot, index) => ({
+                        ...slot,
+                        sortOrder: index + 1,
+                      })),
+                    }))
+                  }
+                  disabled={!draft.eventDays.length}
+                  className="admin-studio-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  新增时间块
+                </button>
+              </div>
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-              <div className="space-y-3">
-                {draft.timetableSlots.length ? (
-                  draft.timetableSlots.map((slot) => (
-                    <div key={slot.id} className="grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-2">
-                      <Field label="演出日">
-                        <select
-                          value={slot.eventDayId}
-                          onChange={(event) => {
-                            const selectedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value);
-                            if (!selectedDay) return;
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots.map((currentSlot) =>
-                                currentSlot.id === slot.id
-                                  ? {
-                                      ...currentSlot,
-                                      eventDayId: selectedDay.eventDayId,
-                                      weekIndex: selectedDay.weekIndex,
-                                      dayIndexInWeek: selectedDay.dayIndexInWeek,
-                                      overallDayIndex: selectedDay.overallDayIndex,
-                                      localDate: selectedDay.date,
-                                    }
-                                  : currentSlot
-                              ),
-                            }));
-                          }}
-                          className={textInputClassName}
-                        >
-                          {draft.eventDays.map((day) => (
-                            <option key={day.id} value={day.eventDayId}>
-                              {formatEventDayLabel(day)}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
+            <div className="mt-6 flex gap-3 overflow-x-auto pb-2">
+              {(draft.weeks.length ? draft.weeks : [{ id: 'single-week', label: 'Week 1', weekIndex: 1 }]).map((week) => (
+                <button key={week.id} type="button" className="admin-event-timetable-tab is-active">
+                  {week.label || `Week ${week.weekIndex}`}
+                </button>
+              ))}
+            </div>
 
-                      <Field label="舞台名">
-                        <input
-                          value={slot.stageName}
-                          onChange={(event) =>
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots.map((currentSlot) =>
-                                currentSlot.id === slot.id ? { ...currentSlot, stageName: event.target.value } : currentSlot
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                          placeholder="Main Stage"
-                        />
-                      </Field>
+            <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+              {draft.eventDays.length ? (
+                draft.eventDays.map((day, index) => (
+                  <button key={day.id} type="button" className={`admin-event-day-tab ${index === 0 ? 'is-active' : ''}`}>
+                    <span>{day.label || `Day ${day.overallDayIndex}`}</span>
+                    <b>{day.date || '未设置日期'}</b>
+                  </button>
+                ))
+              ) : (
+                <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
+                  请先在“周期”分页完成日期结构。
+                </div>
+              )}
+            </div>
 
-                      <Field label="演出人名称">
-                        <input
-                          value={slot.memberNamesText}
-                          onChange={(event) =>
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots.map((currentSlot) =>
-                                currentSlot.id === slot.id ? { ...currentSlot, memberNamesText: event.target.value } : currentSlot
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                          placeholder="例如：Martin Garrix / Alesso"
-                        />
-                      </Field>
-
-                      <Field label="已绑定 DJ ID（可选）">
-                        <input
-                          value={slot.djId}
-                          onChange={(event) =>
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots.map((currentSlot) =>
-                                currentSlot.id === slot.id
-                                  ? {
-                                      ...currentSlot,
-                                      djId: event.target.value,
-                                      memberDjIds: event.target.value.trim() ? [event.target.value.trim()] : [],
-                                    }
-                                  : currentSlot
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                          placeholder="如已绑定实体，可填写 DJ ID"
-                        />
-                      </Field>
-
-                      <Field label="开始时间">
-                        <input
-                          type="time"
-                          value={slot.startTime}
-                          onChange={(event) =>
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots.map((currentSlot) =>
-                                currentSlot.id === slot.id ? { ...currentSlot, startTime: event.target.value } : currentSlot
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                        />
-                      </Field>
-
-                      <Field label="结束时间">
-                        <input
-                          type="time"
-                          value={slot.endTime}
-                          onChange={(event) =>
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots.map((currentSlot) =>
-                                currentSlot.id === slot.id ? { ...currentSlot, endTime: event.target.value } : currentSlot
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                        />
-                      </Field>
-
-                      <div className="flex justify-end lg:col-span-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateScheduleDerivedDraft((current) => ({
-                              ...current,
-                              timetableSlots: current.timetableSlots
-                                .filter((currentSlot) => currentSlot.id !== slot.id)
-                                .map((currentSlot, index) => ({
-                                  ...currentSlot,
-                                  sortOrder: index + 1,
-                                })),
-                            }))
-                          }
-                          className="admin-studio-button-danger px-4 py-3 text-sm"
-                        >
-                          删除条目
-                        </button>
-                      </div>
+            <div className="admin-event-stage-grid mt-6">
+              <div className="admin-event-time-axis">
+                {['12:00', '15:00', '18:00', '21:00', '00:00', '03:00', '06:00'].map((time) => (
+                  <span key={time}>{time}</span>
+                ))}
+              </div>
+              {(draft.stageOrder.length ? draft.stageOrder : ['Main Stage']).map((stage, stageIndex) => {
+                const stageSlots = draft.timetableSlots.filter((slot) => (slot.stageName || 'Main Stage') === stage);
+                return (
+                  <div key={stage} className="admin-event-stage-column">
+                    <div className="admin-event-stage-heading">
+                      <span>{stage}</span>
+                      <b>{stageSlots.length} Sets</b>
                     </div>
-                  ))
-                ) : (
-                  <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                    还没有时间表条目。先完成活动日期结构后，就可以开始录入演出时段。
+                    <div className="admin-event-stage-lane">
+                      {stageSlots.map((slot, index) => (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          style={getSlotLayout(slot)}
+                          className={`admin-event-slot-card tone-${(stageIndex + index) % 4}`}
+                        >
+                          <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/38">
+                            {slot.startTime || '--:--'} - {slot.endTime || '--:--'}
+                          </span>
+                          <strong>{slot.memberNamesText || '未填写艺人'}</strong>
+                          <small>{slot.localDate || '未选择活动日'}</small>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                )}
+                );
+              })}
+            </div>
 
-                {errors.timetableSlots ? <div className="text-xs text-[#6a3530]">{errors.timetableSlots}</div> : null}
-              </div>
+            <div className="mt-5 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.14em] text-black/40">
+              <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#b9f1d0]" /> 正常时段</span>
+              <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#f7d884]" /> 跨夜/待核对</span>
+              <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#c9defa]" /> 已录入艺人</span>
+            </div>
 
-              <div className="space-y-4">
-                <div className="admin-reference-soft-card p-4">
-                  <div className="text-sm font-semibold text-[#071110]">Stage Order 预览</div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {draft.stageOrder.length ? (
-                      draft.stageOrder.map((stage) => (
-                        <span key={stage} className="admin-reference-chip">
-                          {stage}
-                        </span>
-                      ))
-                    ) : (
-                      <div className="text-sm text-black/48">添加 timetable 条目后会自动生成。</div>
-                    )}
-                  </div>
+            {errors.timetableSlots ? <div className="mt-4 text-xs text-[#6a3530]">{errors.timetableSlots}</div> : null}
+          </div>
+
+          <div className="admin-reference-card mt-5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold">时间表条目编辑</div>
+                <div className="mt-1 text-xs text-text-secondary">
+                  下方保留完整字段编辑，确保 web 和 iOS 上传流程提交的数据结构一致。
                 </div>
-
-                <div className="admin-reference-soft-card p-4">
-                  <div className="text-sm font-semibold text-[#071110]">录入密度提醒</div>
-                  <div className="mt-3 space-y-2 text-sm leading-6 text-black/52">
-                    <p>这一页优先突出“新增时段、改演出日、改舞台、改时间”这些核心动作。</p>
-                    <p>阵容的最终整理放到下一步处理，避免在一页里混太多次级信息。</p>
-                  </div>
-                </div>
               </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {draft.timetableSlots.length ? (
+                draft.timetableSlots.map((slot) => (
+                  <div key={slot.id} className="grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-3">
+                    <Field label="演出日">
+                      <select
+                        value={slot.eventDayId}
+                        onChange={(event) => {
+                          const selectedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value);
+                          if (!selectedDay) return;
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id
+                                ? {
+                                    ...currentSlot,
+                                    eventDayId: selectedDay.eventDayId,
+                                    weekIndex: selectedDay.weekIndex,
+                                    dayIndexInWeek: selectedDay.dayIndexInWeek,
+                                    overallDayIndex: selectedDay.overallDayIndex,
+                                    localDate: selectedDay.date,
+                                  }
+                                : currentSlot
+                            ),
+                          }));
+                        }}
+                        className={textInputClassName}
+                      >
+                        {draft.eventDays.map((day) => (
+                          <option key={day.id} value={day.eventDayId}>
+                            {formatEventDayLabel(day)}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="舞台名">
+                      <input
+                        value={slot.stageName}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id ? { ...currentSlot, stageName: event.target.value } : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                        placeholder="Main Stage"
+                      />
+                    </Field>
+
+                    <Field label="演出人名称">
+                      <input
+                        value={slot.memberNamesText}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id ? { ...currentSlot, memberNamesText: event.target.value } : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                        placeholder="例如：Martin Garrix / Alesso"
+                      />
+                    </Field>
+
+                    <Field label="已绑定 DJ ID（可选）">
+                      <input
+                        value={slot.djId}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id
+                                ? {
+                                    ...currentSlot,
+                                    djId: event.target.value,
+                                    memberDjIds: event.target.value.trim() ? [event.target.value.trim()] : [],
+                                  }
+                                : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                        placeholder="如已绑定实体，可填写 DJ ID"
+                      />
+                    </Field>
+
+                    <Field label="开始时间">
+                      <input
+                        type="time"
+                        value={slot.startTime}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id ? { ...currentSlot, startTime: event.target.value } : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                      />
+                    </Field>
+
+                    <Field label="结束时间">
+                      <input
+                        type="time"
+                        value={slot.endTime}
+                        onChange={(event) =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots.map((currentSlot) =>
+                              currentSlot.id === slot.id ? { ...currentSlot, endTime: event.target.value } : currentSlot
+                            ),
+                          }))
+                        }
+                        className={textInputClassName}
+                      />
+                    </Field>
+
+                    <div className="flex justify-end lg:col-span-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateScheduleDerivedDraft((current) => ({
+                            ...current,
+                            timetableSlots: current.timetableSlots
+                              .filter((currentSlot) => currentSlot.id !== slot.id)
+                              .map((currentSlot, index) => ({
+                                ...currentSlot,
+                                sortOrder: index + 1,
+                              })),
+                          }))
+                        }
+                        className="admin-studio-button-danger px-4 py-3 text-sm"
+                      >
+                        删除条目
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="admin-reference-soft-card p-4 text-sm text-black/48">
+                  还没有时间表条目。先完成活动日期结构后，就可以开始录入演出时段。
+                </div>
+              )}
             </div>
           </div>
         </Section>
@@ -2174,6 +2398,9 @@ export default function EventStudioForm({
           </div>
         </section>
       )}
+
+        </main>
+      </div>
 
       <EventLocationPickerModal
         open={showLocationPicker}
