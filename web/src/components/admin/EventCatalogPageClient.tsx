@@ -66,7 +66,7 @@ const resolveEventStatus = (
     return {
       label: 'Ready',
       dot: 'bg-[#ff4f7a]',
-      badgeTone: 'bg-[#f7f0f4] text-[#4b505b]',
+      badgeTone: 'bg-[#fff0f3] text-[#ff4f7a]',
       metricLabel: 'Ready',
     };
   }
@@ -74,7 +74,7 @@ const resolveEventStatus = (
     return {
       label: 'Live',
       dot: 'bg-[#22c55e]',
-      badgeTone: 'bg-[#f5f6f8] text-[#4b505b]',
+      badgeTone: 'bg-[#f0fdf4] text-[#16a34a]',
       metricLabel: 'Live',
     };
   }
@@ -82,14 +82,14 @@ const resolveEventStatus = (
     return {
       label: '/v1',
       dot: 'bg-[#ffbe2e]',
-      badgeTone: 'bg-[#f5f6f8] text-[#4b505b]',
+      badgeTone: 'bg-[#fffbeb] text-[#d97706]',
       metricLabel: '/v1',
     };
   }
   return {
     label: 'Draft',
     dot: 'bg-[#4a86f7]',
-    badgeTone: 'bg-[#f5f6f8] text-[#4b505b]',
+    badgeTone: 'bg-[#eff6ff] text-[#2563eb]',
     metricLabel: 'Draft',
   };
 };
@@ -97,6 +97,7 @@ const resolveEventStatus = (
 const formatLocation = (item: EventCatalogItem): string =>
   [item.city, item.country].filter(Boolean).join(', ') || '地点待补充';
 
+// ① StatCard 改为扁平横排样式
 function StatCard({
   label,
   value,
@@ -109,22 +110,20 @@ function StatCard({
   dotClassName?: string;
 }) {
   return (
-    <div className="rounded-[24px] border border-[#ebeef2] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(15,23,42,0.03)]">
-      <div className="flex items-center gap-3">
-        {icon ? (
-          <div className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-[#eefaf1] text-[#22c55e]">
-            {icon}
-          </div>
-        ) : (
-          <span className={`h-3.5 w-3.5 rounded-full ${dotClassName || 'bg-[#22c55e]'}`} />
-        )}
-        <div className="text-[15px] font-semibold leading-none text-[#111827]">{label}</div>
-      </div>
-      <div className="mt-5 flex items-end gap-1.5 text-[#111827]">
-        <span className="text-[30px] font-semibold leading-none tracking-[-0.04em]">
+    <div className="flex items-center gap-2.5">
+      {icon ? (
+        <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#eefaf1] text-[#22c55e]">
+          {icon}
+        </div>
+      ) : (
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotClassName || 'bg-[#22c55e]'}`} />
+      )}
+      <div className="text-[14px] font-semibold text-[#6b7280]">{label}</div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[22px] font-semibold leading-none tracking-[-0.03em] text-[#111827]">
           {value.toLocaleString()}
         </span>
-        <span className="pb-0.5 text-[18px] leading-none text-[#b1b7c3]">个</span>
+        <span className="text-[13px] leading-none text-[#b1b7c3]">个</span>
       </div>
     </div>
   );
@@ -210,13 +209,7 @@ export default function EventCatalogPageClient() {
   };
 
   const statusCounts = useMemo(() => {
-    const counts = {
-      live: 0,
-      v1: 0,
-      ready: 0,
-      draft: 0,
-    };
-
+    const counts = { live: 0, v1: 0, ready: 0, draft: 0 };
     items.forEach((item) => {
       const state = resolveEventStatus(item).metricLabel;
       if (state === 'Live') counts.live += 1;
@@ -224,7 +217,6 @@ export default function EventCatalogPageClient() {
       else if (state === 'Ready') counts.ready += 1;
       else counts.draft += 1;
     });
-
     return counts;
   }, [items]);
 
@@ -244,46 +236,43 @@ export default function EventCatalogPageClient() {
         <>
           <Link
             href="/admin/content/events/new"
-            className="inline-flex items-center gap-3 rounded-full border border-[#e8eceb] bg-white px-8 py-4 text-[15px] font-semibold text-[#111827] shadow-[0_4px_18px_rgba(17,24,39,0.04)]"
+            className="inline-flex items-center gap-2.5 rounded-full border border-[#e8eceb] bg-white px-7 py-3.5 text-[15px] font-semibold text-[#111827] shadow-[0_2px_10px_rgba(15,23,42,0.04)]"
           >
             <Upload className="h-5 w-5" />
             <span>导入活动</span>
           </Link>
           <Link
             href="/admin/content/events/new"
-            className="inline-flex items-center gap-3 rounded-full bg-[#071110] px-8 py-4 text-[15px] font-semibold text-white shadow-[0_12px_28px_rgba(7,17,16,0.18)]"
+            className="inline-flex items-center gap-2.5 rounded-full bg-[#071110] px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_10px_24px_rgba(7,17,16,0.18)]"
           >
-            <span className="text-[24px] leading-none">+</span>
+            <span className="text-[22px] leading-none">+</span>
             <span>新建活动</span>
           </Link>
         </>
       }
     >
-      <section className="space-y-6">
-        <section className="rounded-[34px] border border-[#edf0f2] bg-white px-6 py-6 shadow-[0_8px_32px_rgba(17,24,39,0.04)]">
-          <form
-            onSubmit={handleSearchSubmit}
-            className="flex flex-wrap gap-4"
-          >
-            <label className="flex h-[68px] min-w-[240px] flex-[1.45_1_320px] items-center gap-4 rounded-[22px] border border-[#eceff1] bg-white px-5 text-[#111827] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+      <section className="space-y-5">
+        {/* ② 筛选区 + 统计块 — 同一白卡 */}
+        <section className="rounded-[28px] border border-[#edf0f2] bg-white px-6 py-5 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
+          <form onSubmit={handleSearchSubmit} className="flex flex-wrap gap-3">
+            {/* 搜索框 — ① h-[54px] */}
+            <label className="flex h-[54px] min-w-[240px] flex-[1.45_1_280px] items-center gap-3 rounded-[18px] border border-[#eceff1] bg-white px-5 text-[#111827]">
+              <Search className="h-5 w-5 shrink-0 text-[#9ca3af]" />
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="搜索活动名称、主办方、城市..."
-                className="w-full border-0 bg-transparent px-0 py-0 text-[16px] font-medium text-[#111827] outline-none placeholder:text-[#9ca3af]"
+                className="w-full border-0 bg-transparent px-0 py-0 text-[15px] font-medium text-[#111827] outline-none placeholder:text-[#9ca3af]"
               />
-              <Search className="h-6 w-6 text-[#4b5563]" />
             </label>
 
-            <label className="relative flex h-[68px] min-w-[170px] flex-1 items-center justify-between rounded-[22px] border border-[#eceff1] bg-white px-7 text-[15px] font-semibold text-[#111827]">
+            {/* 全部状态 */}
+            <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
               <span>{status === 'all' ? '全部状态' : status}</span>
               <select
                 value={status}
-                onChange={(event) => {
-                  setStatus(event.target.value);
-                  setPage(1);
-                }}
-                className="absolute opacity-0"
+                onChange={(event) => { setStatus(event.target.value); setPage(1); }}
+                className="absolute inset-0 opacity-0"
               >
                 <option value="all">全部状态</option>
                 <option value="upcoming">Upcoming</option>
@@ -291,18 +280,16 @@ export default function EventCatalogPageClient() {
                 <option value="ended">Ended</option>
                 <option value="cancelled">Cancelled</option>
               </select>
-              <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
             </label>
 
-            <label className="relative flex h-[68px] min-w-[170px] flex-1 items-center justify-between rounded-[22px] border border-[#eceff1] bg-white px-7 text-[15px] font-semibold text-[#111827]">
+            {/* 全部类型 */}
+            <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
               <span>{eventType === 'all' ? '全部类型' : eventType}</span>
               <select
                 value={eventType}
-                onChange={(event) => {
-                  setEventType(event.target.value);
-                  setPage(1);
-                }}
-                className="absolute opacity-0"
+                onChange={(event) => { setEventType(event.target.value); setPage(1); }}
+                className="absolute inset-0 opacity-0"
               >
                 <option value="all">全部类型</option>
                 <option value="电音节">电音节</option>
@@ -313,18 +300,16 @@ export default function EventCatalogPageClient() {
                 <option value="巡演专场">巡演专场</option>
                 <option value="其他">其他</option>
               </select>
-              <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
             </label>
 
-            <label className="relative flex h-[68px] min-w-[170px] flex-1 items-center justify-between rounded-[22px] border border-[#eceff1] bg-white px-7 text-[15px] font-semibold text-[#111827]">
+            {/* 全部时区 */}
+            <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
               <span>{timezone === 'all' ? '全部时区' : timezone}</span>
               <select
                 value={timezone}
-                onChange={(event) => {
-                  setTimezone(event.target.value);
-                  setPage(1);
-                }}
-                className="absolute opacity-0"
+                onChange={(event) => { setTimezone(event.target.value); setPage(1); }}
+                className="absolute inset-0 opacity-0"
               >
                 <option value="all">全部时区</option>
                 <option value="Asia/Shanghai">Asia/Shanghai</option>
@@ -332,37 +317,51 @@ export default function EventCatalogPageClient() {
                 <option value="America/Los_Angeles">America/Los_Angeles</option>
                 <option value="Europe/Brussels">Europe/Brussels</option>
               </select>
-              <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
             </label>
 
+            {/* 更多筛选 */}
             <button
               type="button"
-              className="flex h-[68px] min-w-[148px] items-center justify-center gap-3 rounded-[22px] border border-[#eceff1] bg-white px-6 text-[15px] font-semibold text-[#111827]"
+              className="flex h-[54px] min-w-[130px] items-center justify-center gap-2.5 rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]"
             >
-              <SlidersHorizontal className="h-5 w-5" />
+              <SlidersHorizontal className="h-4.5 w-4.5" />
               <span>更多筛选</span>
             </button>
 
-            <label className="ml-auto flex h-[68px] min-w-[124px] items-center justify-between rounded-[22px] border border-[#eceff1] bg-white px-6 text-[15px] font-semibold text-[#111827]">
+            {/* 最新更新排序 */}
+            <label className="ml-auto flex h-[54px] min-w-[120px] cursor-pointer items-center justify-between gap-2 rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
               <span>最新更新</span>
-              <ChevronDown className="h-5 w-5 text-[#9ca3af]" />
+              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
             </label>
           </form>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <StatCard
-              label="全部活动"
-              value={pagination.total}
-              icon={<List className="h-8 w-8" strokeWidth={2.4} />}
-            />
-            <StatCard label="Live" value={statusCounts.live} dotClassName="bg-[#22c55e]" />
-            <StatCard label="/v1" value={statusCounts.v1} dotClassName="bg-[#ffbe2e]" />
-            <StatCard label="Ready" value={statusCounts.ready} dotClassName="bg-[#ff4f7a]" />
-            <StatCard label="Draft" value={statusCounts.draft} dotClassName="bg-[#4a86f7]" />
+          {/* ③ 统计块 — 扁平横排，用竖线分隔 */}
+          <div className="mt-5 flex flex-wrap items-center gap-0 divide-x divide-[#edf0f2]">
+            <div className="pr-7">
+              <StatCard
+                label="全部活动"
+                value={pagination.total}
+                icon={<List className="h-5 w-5" strokeWidth={2.4} />}
+              />
+            </div>
+            <div className="px-7">
+              <StatCard label="Live" value={statusCounts.live} dotClassName="bg-[#22c55e]" />
+            </div>
+            <div className="px-7">
+              <StatCard label="/v1" value={statusCounts.v1} dotClassName="bg-[#ffbe2e]" />
+            </div>
+            <div className="px-7">
+              <StatCard label="Ready" value={statusCounts.ready} dotClassName="bg-[#ff4f7a]" />
+            </div>
+            <div className="pl-7">
+              <StatCard label="Draft" value={statusCounts.draft} dotClassName="bg-[#4a86f7]" />
+            </div>
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-[34px] border border-[#edf0f2] bg-white shadow-[0_8px_32px_rgba(17,24,39,0.04)]">
+        {/* 列表区 */}
+        <section className="overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
           {error ? (
             <div className="border-b border-red-200 bg-red-50 px-6 py-4 text-sm text-[#7a2d29]">{error}</div>
           ) : null}
@@ -372,29 +371,25 @@ export default function EventCatalogPageClient() {
           ) : items.length === 0 ? (
             <div className="px-6 py-20 text-center text-sm text-[#6b7280]">当前筛选条件下还没有活动。</div>
           ) : (
-            <div>
-              <div className="hidden border-b border-[#edf0f2] px-6 py-4 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#9aa1ad] lg:grid lg:grid-cols-[minmax(0,1.8fr)_180px_220px]">
-                <span>活动信息</span>
-                <span>状态与更新时间</span>
-                <span className="text-right">操作</span>
-              </div>
-
-              <div className="divide-y divide-[#edf0f2]">
+            // ④ 无表头，直接列表
+            <div className="divide-y divide-[#edf0f2]">
               {items.map((item) => {
                 const state = resolveEventStatus(item);
                 return (
                   <article
                     key={item.id}
-                    className="gap-5 px-6 py-6 lg:grid lg:grid-cols-[minmax(0,1.8fr)_180px_220px] lg:items-center"
+                    className="flex flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:gap-6"
                   >
-                    <div className="flex min-w-0 gap-4">
-                      <div className="h-[104px] w-[140px] shrink-0 overflow-hidden rounded-[20px] bg-[#f3f5f7]">
+                    {/* 左：封面 + 信息 */}
+                    <div className="flex min-w-0 flex-1 gap-4">
+                      {/* ⑦ 封面图 180×110 */}
+                      <div className="h-[110px] w-[180px] shrink-0 overflow-hidden rounded-[16px] bg-[#f3f5f7]">
                         {item.coverImageUrl ? (
                           <Image
                             src={item.coverImageUrl}
                             alt={item.name}
-                            width={140}
-                            height={104}
+                            width={180}
+                            height={110}
                             className="h-full w-full object-cover"
                           />
                         ) : (
@@ -403,64 +398,67 @@ export default function EventCatalogPageClient() {
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2.5">
+                        {/* 状态 badge */}
+                        <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${state.badgeTone}`}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold ${state.badgeTone}`}
                           >
-                            <span className={`h-3 w-3 rounded-full ${state.dot}`} />
-                            <span>{state.label}</span>
-                          </span>
-                          <span className="text-[13px] font-medium text-[#a0a7b3]">
-                            {item.timeZone || '未设置时区'}
+                            <span className={`h-2 w-2 rounded-full ${state.dot}`} />
+                            {state.label}
                           </span>
                         </div>
 
-                        <h2 className="mt-3 truncate text-[22px] font-semibold tracking-[-0.03em] text-[#111827]">
+                        <h2 className="mt-2 truncate text-[20px] font-semibold tracking-[-0.025em] text-[#111827]">
                           {item.name}
                         </h2>
 
-                        <div className="mt-1 truncate text-[14px] font-medium text-[#6b7280]">
+                        <div className="mt-0.5 truncate text-[13px] font-medium text-[#6b7280]">
                           {item.wikiFestival?.name || item.organizerName || '未绑定主办方'} · {formatLocation(item)}
                         </div>
 
-                        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-[14px] font-medium text-[#7d8592]">
-                          <div className="flex items-center gap-2.5">
-                            <CalendarDays className="h-4.5 w-4.5 text-[#a0a7b3]" />
+                        <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] font-medium text-[#7d8592]">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4 text-[#b1b7c3]" />
                             <span>{formatDateRange(item)}</span>
                           </div>
-                          <div className="flex items-center gap-2.5">
-                            <Users2 className="h-4.5 w-4.5 text-[#a0a7b3]" />
+                          <div className="flex items-center gap-2">
+                            <Users2 className="h-4 w-4 text-[#b1b7c3]" />
                             <span>{item.eventDays?.length ?? 0} 天</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 space-y-2 lg:mt-0">
-                      <div className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[#a0a7b3]">
-                        更新时间
-                      </div>
-                      <div className="text-[15px] font-medium text-[#111827]">
-                        {formatDateTime(item.updatedAt)}
+                    {/* ⑤ 右侧：时区 tag + 更新时间 合并列 */}
+                    <div className="flex shrink-0 flex-col items-start gap-2 lg:w-[200px]">
+                      {item.timeZone ? (
+                        <span className="inline-flex rounded-[8px] bg-[#f4f5f7] px-3 py-1.5 text-[12px] font-semibold text-[#6b7280]">
+                          {item.timeZone}
+                        </span>
+                      ) : null}
+                      <div className="text-[14px] font-medium text-[#6b7280]">
+                        更新于 {formatDateTime(item.updatedAt)}
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center gap-3 lg:mt-0 lg:justify-end">
+                    {/* ⑥ 操作按钮 — rounded-full 风格 */}
+                    <div className="flex shrink-0 items-center gap-2.5">
                       <Link
                         href={`/events/${item.id}`}
-                        className="inline-flex h-[46px] items-center justify-center rounded-[16px] border border-[#e7ebef] bg-white px-5 text-[14px] font-semibold text-[#111827] transition hover:bg-[#f7f8fa]"
+                        className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-6 text-[14px] font-semibold text-[#111827] transition hover:bg-[#f7f8fa]"
                       >
                         查看详情
                       </Link>
                       <Link
                         href={`/admin/content/events/${item.id}/edit`}
-                        className="inline-flex h-[46px] items-center justify-center rounded-[16px] bg-[#071110] px-5 text-[14px] font-semibold text-white shadow-[0_8px_20px_rgba(7,17,16,0.15)]"
+                        className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#071110] px-6 text-[14px] font-semibold text-white shadow-[0_6px_16px_rgba(7,17,16,0.15)]"
                       >
                         编辑活动
                       </Link>
                       <button
                         type="button"
-                        className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-[16px] border border-[#e7ebef] bg-white text-[#111827]"
+                        className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white text-[#111827]"
+                        aria-label="更多操作"
                       >
                         <Ellipsis className="h-5 w-5" />
                       </button>
@@ -468,21 +466,21 @@ export default function EventCatalogPageClient() {
                   </article>
                 );
               })}
-              </div>
             </div>
           )}
 
+          {/* 分页 */}
           <div className="flex flex-col gap-4 border-t border-[#edf0f2] px-6 py-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="text-[14px] font-medium text-[#6b7280]">
               共 {pagination.total.toLocaleString()} 条
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={pagination.page <= 1}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#9ca3af] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#9ca3af] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -492,7 +490,7 @@ export default function EventCatalogPageClient() {
                   key={pageNumber}
                   type="button"
                   onClick={() => setPage(pageNumber)}
-                  className={`inline-flex h-11 min-w-11 items-center justify-center rounded-[16px] px-4 text-[16px] font-semibold ${
+                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3.5 text-[15px] font-semibold ${
                     pageNumber === pagination.page
                       ? 'bg-[#071110] text-white'
                       : 'text-[#111827]'
@@ -504,11 +502,11 @@ export default function EventCatalogPageClient() {
 
               {pagination.totalPages > visiblePages[visiblePages.length - 1] ? (
                 <>
-                  <span className="px-1 text-[20px] text-[#9ca3af]">...</span>
+                  <span className="px-1 text-[18px] text-[#9ca3af]">...</span>
                   <button
                     type="button"
                     onClick={() => setPage(pagination.totalPages)}
-                    className="inline-flex h-11 min-w-11 items-center justify-center rounded-[16px] px-4 text-[16px] font-semibold text-[#111827]"
+                    className="inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3.5 text-[15px] font-semibold text-[#111827]"
                   >
                     {pagination.totalPages}
                   </button>
@@ -519,15 +517,15 @@ export default function EventCatalogPageClient() {
                 type="button"
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex items-center gap-3 rounded-[16px] border border-[#e8ecef] bg-white px-5 py-3 text-[14px] font-semibold text-[#111827]">
+            <div className="flex cursor-pointer items-center gap-2 rounded-[14px] border border-[#e8ecef] bg-white px-5 py-2.5 text-[14px] font-semibold text-[#111827]">
               <span>{pagination.limit} 条/页</span>
-              <ChevronDown className="h-5 w-5 text-[#6b7280]" />
+              <ChevronDown className="h-4 w-4 text-[#9ca3af]" />
             </div>
           </div>
         </section>
