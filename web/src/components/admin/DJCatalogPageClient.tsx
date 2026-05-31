@@ -136,7 +136,7 @@ export default function DJCatalogPageClient() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [country, setCountry] = useState('all');
-  const [verificationStatus, setVerificationStatus] = useState
+  const [verificationStatus, setVerificationStatus] = useState<
     'all' | 'verified' | 'unverified' | 'incomplete'
   >('all');
   const [sortBy, setSortBy] = useState<'followerCount' | 'name' | 'createdAt'>('followerCount');
