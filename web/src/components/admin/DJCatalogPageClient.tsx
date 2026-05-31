@@ -57,10 +57,7 @@ const formatDateCell = (value?: string | null): { date: string; time: string } =
   if (!value) return { date: '未记录', time: '' };
   const formatted = formatDateTime(value);
   const [date, time] = formatted.split(' ');
-  return {
-    date: date || '未记录',
-    time: time || '',
-  };
+  return { date: date || '未记录', time: time || '' };
 };
 
 const formatFollowers = (value?: number | null): string => {
@@ -76,60 +73,70 @@ const formatPercentage = (value: number, total: number): string => {
 const isDJIncomplete = (item: DJCatalogItem): boolean =>
   !item.avatarUrl || !item.bio || !item.country || !Array.isArray(item.genres) || item.genres.length === 0;
 
-const resolveDJState = (
-  item: DJCatalogItem
-): {
-  label: string;
-  tone: string;
-} => {
+const resolveDJState = (item: DJCatalogItem): { label: string; tone: string } => {
   if (item.isVerified) {
-    return {
-      label: '已验证',
-      tone: 'border-[#dceabf] bg-[#eef8d8] text-[#2f8b4f]',
-    };
+    return { label: '已验证', tone: 'border-[#c6e8c8] bg-[#eef8ee] text-[#2f8b4f]' };
   }
   if (isDJIncomplete(item)) {
-    return {
-      label: '资料待完善',
-      tone: 'border-[#dbe7ff] bg-[#eef4ff] text-[#4267c7]',
-    };
+    return { label: '资料待完善', tone: 'border-[#c8d9fb] bg-[#eef2ff] text-[#4267c7]' };
   }
-  return {
-    label: '未验证',
-    tone: 'border-[#f0dfaf] bg-[#fff4d8] text-[#b57a12]',
-  };
+  return { label: '未验证', tone: 'border-[#f0dfaf] bg-[#fff9ec] text-[#b57a12]' };
 };
 
-const resolveCountryDisplay = (
-  country?: string | null
-): {
-  flag: string | null;
-  label: string;
-} => {
+const resolveCountryDisplay = (country?: string | null): { flag: string | null; label: string } => {
   if (!country) return { flag: null, label: '待补充' };
   const code = getCountryCode(country);
   return {
     flag: code ? getEmojiFlag(code) : null,
-    label: country,
+    label: country, // ⑤ 显示完整国家名
   };
 };
 
 const resolveTagPills = (item: DJCatalogItem): string[] => {
   const genres = Array.isArray(item.genres) ? item.genres : [];
   const aliases = Array.isArray(item.aliases) ? item.aliases : [];
-  const tags = [...genres, ...aliases]
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
+  const tags = [...genres, ...aliases].map((entry) => entry.trim()).filter(Boolean);
   if (!tags.length) return ['资料标签待补充'];
   return Array.from(new Set(tags)).slice(0, 2);
 };
+
+// ② 统计块 — 扁平横排，label上方，数字+百分比下方两端
+function StatBlock({
+  label,
+  value,
+  rightText,
+  helper,
+}: {
+  label: string;
+  value: number;
+  rightText?: string;
+  helper?: string;
+}) {
+  return (
+    <div className="flex flex-1 flex-col gap-2 px-6 py-5">
+      <div className="text-[13px] font-medium text-[#6b7280]">{label}</div>
+      <div className="flex items-end justify-between gap-2">
+        <div className="text-[28px] font-semibold leading-none tracking-[-0.035em] text-[#111827]">
+          {value.toLocaleString()}
+        </div>
+        {helper ? (
+          <div className="flex items-center gap-1 pb-0.5 text-[12px] font-semibold text-[#22c55e]">
+            {helper}
+          </div>
+        ) : null}
+        {rightText ? (
+          <div className="pb-0.5 text-[13px] font-medium text-[#9aa1ad]">{rightText}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function DJCatalogPageClient() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [country, setCountry] = useState('all');
-  const [verificationStatus, setVerificationStatus] = useState<
+  const [verificationStatus, setVerificationStatus] = useState
     'all' | 'verified' | 'unverified' | 'incomplete'
   >('all');
   const [sortBy, setSortBy] = useState<'followerCount' | 'name' | 'createdAt'>('followerCount');
@@ -169,7 +176,6 @@ export default function DJCatalogPageClient() {
   const loadCatalog = useCallback(
     async (options?: { force?: boolean }) => {
       const cached = !options?.force ? readAdminCatalogCache<DJCatalogResponse>(cacheKey) : null;
-
       if (cached) {
         setItems(cached.data.items);
         setPagination(cached.data.pagination);
@@ -181,7 +187,6 @@ export default function DJCatalogPageClient() {
       } else {
         setIsLoading(true);
       }
-
       try {
         const response = await adminCatalogApi.fetchDJs(filters);
         writeAdminCatalogCache(cacheKey, response, CACHE_TTL_MS);
@@ -225,7 +230,6 @@ export default function DJCatalogPageClient() {
 
   const handleExport = () => {
     if (typeof window === 'undefined' || !items.length) return;
-
     const header = ['DJ 名称', '国家/地区', '认证状态', '平台粉丝', '最近同步', '最近更新'];
     const rows = items.map((item) => [
       item.name,
@@ -235,11 +239,9 @@ export default function DJCatalogPageClient() {
       formatDateTime(item.lastSyncedAt),
       formatDateTime(item.updatedAt),
     ]);
-
     const csv = [header, ...rows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
-
     const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -253,47 +255,19 @@ export default function DJCatalogPageClient() {
 
   const computedSummary = useMemo<DJCatalogSummary>(() => {
     if (summary) return summary;
-    const nextSummary = {
-      total: items.length,
-      verified: 0,
-      unverified: 0,
-      incomplete: 0,
-    };
-
+    const nextSummary = { total: items.length, verified: 0, unverified: 0, incomplete: 0 };
     items.forEach((item) => {
-      if (item.isVerified) {
-        nextSummary.verified += 1;
-      } else if (isDJIncomplete(item)) {
-        nextSummary.incomplete += 1;
-      } else {
-        nextSummary.unverified += 1;
-      }
+      if (item.isVerified) nextSummary.verified += 1;
+      else if (isDJIncomplete(item)) nextSummary.incomplete += 1;
+      else nextSummary.unverified += 1;
     });
-
     nextSummary.total = nextSummary.verified + nextSummary.unverified + nextSummary.incomplete;
     return nextSummary;
   }, [items, summary]);
 
-  const newThisMonth = useMemo(() => {
-    const now = new Date();
-    return items.reduce((count, item) => {
-      if (!item.createdAt) return count;
-      const createdAt = new Date(item.createdAt);
-      if (
-        createdAt.getFullYear() === now.getFullYear() &&
-        createdAt.getMonth() === now.getMonth()
-      ) {
-        return count + 1;
-      }
-      return count;
-    }, 0);
-  }, [items]);
-
   const countryOptions = useMemo(() => {
     const options = Array.from(new Set(items.map((item) => item.country).filter(Boolean))) as string[];
-    if (country !== 'all' && country && !options.includes(country)) {
-      options.push(country);
-    }
+    if (country !== 'all' && country && !options.includes(country)) options.push(country);
     return options.sort((left, right) => left.localeCompare(right, 'en'));
   }, [country, items]);
 
@@ -311,206 +285,173 @@ export default function DJCatalogPageClient() {
       description="管理平台 DJ 资料、认证状态与内容。可筛选、编辑资料或查看 DJ 详情。"
       actions={
         <>
+          {/* ① 导入按钮：无边框、纯文字+图标 */}
           <Link
             href="/admin/content/djs/new"
-            className="inline-flex h-[52px] items-center gap-2.5 rounded-full border border-[#e8eceb] bg-white px-8 text-[15px] font-semibold text-[#071110] shadow-[0_2px_10px_rgba(15,23,42,0.03)]"
+            className="inline-flex h-[44px] items-center gap-2 rounded-full border border-[#e8eceb] bg-white px-5 text-[14px] font-semibold text-[#111827]"
           >
-            <Upload className="h-5 w-5" />
+            <Upload className="h-4 w-4" />
             <span>导入 DJ</span>
           </Link>
           <Link
             href="/admin/content/djs/new"
-            className="inline-flex h-[52px] items-center gap-2.5 rounded-full bg-[#071110] px-8 text-[15px] font-semibold text-white shadow-[0_10px_24px_rgba(7,17,16,0.15)]"
+            className="inline-flex h-[44px] items-center gap-2 rounded-full bg-[#071110] px-5 text-[14px] font-semibold text-white"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
             <span>新增 DJ</span>
           </Link>
         </>
       }
     >
-      <section className="space-y-7">
-        <section className="rounded-[34px] border border-[#edf0f2] bg-white px-8 py-8 shadow-[0_10px_34px_rgba(17,24,39,0.05)]">
-          <div className="flex flex-col gap-6">
-            <div className="grid gap-4 xl:grid-cols-[minmax(240px,1.25fr)_165px_175px_150px_56px_110px]">
-              <form
-                onSubmit={handleSearchSubmit}
-                className="contents"
+      <section className="space-y-4">
+
+        {/* ① 筛选栏 — 无外层卡片，扁平一行 */}
+        <div className="flex flex-wrap items-center gap-3">
+          <form onSubmit={handleSearchSubmit} className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            {/* 搜索框：图标在右侧 */}
+            <label className="flex h-[44px] min-w-[220px] flex-[1.5_1_280px] items-center gap-3 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[#111827]">
+              <input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="搜索 DJ 名称、国家、标签..."
+                className="w-full border-0 bg-transparent px-0 py-0 text-[14px] font-medium outline-none placeholder:text-[#9aa1ad]"
+              />
+              <Search className="h-4 w-4 shrink-0 text-[#9aa1ad]" />
+            </label>
+
+            {/* 全部认证状态 */}
+            <label className="relative flex h-[44px] min-w-[160px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
+              <span>
+                {verificationStatus === 'all'
+                  ? '全部认证状态'
+                  : verificationStatus === 'verified'
+                    ? '已验证'
+                    : verificationStatus === 'unverified'
+                      ? '未验证'
+                      : '资料待完善'}
+              </span>
+              <select
+                value={verificationStatus}
+                onChange={(event) => {
+                  setVerificationStatus(event.target.value as 'all' | 'verified' | 'unverified' | 'incomplete');
+                  setPage(1);
+                }}
+                className="absolute inset-0 opacity-0"
               >
-                <label className="flex h-[54px] min-w-0 items-center gap-3 rounded-[22px] border border-[#e8eceb] bg-white px-5 text-[#111827] shadow-[0_2px_10px_rgba(15,23,42,0.02)]">
-                  <Search className="h-5 w-5 text-[#7d8592]" />
-                  <input
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                    placeholder="搜索 DJ 名称、国家、标签..."
-                    className="w-full border-0 bg-transparent px-0 py-0 text-[15px] font-medium outline-none placeholder:text-[#9aa1ad]"
-                  />
-                </label>
+                <option value="all">全部认证状态</option>
+                <option value="verified">已验证</option>
+                <option value="unverified">未验证</option>
+                <option value="incomplete">资料待完善</option>
+              </select>
+              <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
+            </label>
 
-                <label className="relative flex h-[54px] min-w-0 items-center justify-between rounded-[22px] border border-[#e8eceb] bg-white px-5 text-[15px] font-semibold text-[#111827]">
-                  <span>
-                    {verificationStatus === 'all'
-                      ? '全部认证状态'
-                      : verificationStatus === 'verified'
-                        ? '已验证'
-                        : verificationStatus === 'unverified'
-                          ? '未验证'
-                          : '资料待完善'}
-                  </span>
-                  <select
-                    value={verificationStatus}
-                    onChange={(event) => {
-                      setVerificationStatus(
-                        event.target.value as 'all' | 'verified' | 'unverified' | 'incomplete'
-                      );
-                      setPage(1);
-                    }}
-                    className="absolute inset-0 opacity-0"
-                  >
-                    <option value="all">全部认证状态</option>
-                    <option value="verified">已验证</option>
-                    <option value="unverified">未验证</option>
-                    <option value="incomplete">资料待完善</option>
-                  </select>
-                  <ChevronDown className="h-5 w-5 text-[#7d8592]" />
-                </label>
-
-                <label className="relative flex h-[54px] min-w-0 items-center justify-between rounded-[22px] border border-[#e8eceb] bg-white px-5 text-[15px] font-semibold text-[#111827]">
-                  <span>{country === 'all' ? '全部国家/地区' : country}</span>
-                  <select
-                    value={country}
-                    onChange={(event) => {
-                      setCountry(event.target.value);
-                      setPage(1);
-                    }}
-                    className="absolute inset-0 opacity-0"
-                  >
-                    <option value="all">全部国家/地区</option>
-                    {countryOptions.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="h-5 w-5 text-[#7d8592]" />
-                </label>
-
-                <details className="relative">
-                  <summary className="flex h-[54px] cursor-pointer list-none items-center gap-3 rounded-[22px] border border-[#e8eceb] bg-white px-5 text-[15px] font-semibold text-[#111827]">
-                    <Filter className="h-5 w-5" />
-                    <span>更多筛选</span>
-                  </summary>
-                  <div className="absolute left-0 top-[calc(100%+10px)] z-20 min-w-[220px] rounded-[24px] border border-[#e8eceb] bg-white p-4 shadow-[0_18px_42px_rgba(33,52,47,0.12)]">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">
-                      排序方式
-                    </div>
-                    <select
-                      value={sortBy}
-                      onChange={(event) => {
-                        setSortBy(event.target.value as 'followerCount' | 'name' | 'createdAt');
-                        setPage(1);
-                      }}
-                      className="w-full rounded-[18px] border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#111827] outline-none"
-                    >
-                      <option value="followerCount">按平台粉丝</option>
-                      <option value="name">按名称</option>
-                      <option value="createdAt">按创建时间</option>
-                    </select>
-                  </div>
-                </details>
-              </form>
-
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className="inline-flex h-[54px] w-[54px] items-center justify-center rounded-[22px] border border-[#e8eceb] bg-white text-[#071110]"
-                aria-label="刷新目录"
+            {/* 全部国家/地区 */}
+            <label className="relative flex h-[44px] min-w-[150px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
+              <span>{country === 'all' ? '全部国家/地区' : country}</span>
+              <select
+                value={country}
+                onChange={(event) => {
+                  setCountry(event.target.value);
+                  setPage(1);
+                }}
+                className="absolute inset-0 opacity-0"
               >
-                <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
+                <option value="all">全部国家/地区</option>
+                {countryOptions.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+              <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
+            </label>
 
-              <button
-                type="button"
-                onClick={handleExport}
-                className="inline-flex h-[54px] items-center justify-center gap-3 rounded-[22px] border border-[#e8eceb] bg-white px-5 text-[15px] font-semibold text-[#111827]"
-              >
-                <Download className="h-5 w-5" />
-                <span>导出</span>
-              </button>
-            </div>
-
-            <div className="overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.03)]">
-              <div className="grid xl:grid-cols-4">
-                <div className="flex min-h-[112px] flex-col justify-between px-10 py-6">
-                  <div className="text-[15px] font-semibold text-[#111827]">全部 DJ</div>
-                  <div className="flex items-end justify-between gap-4">
-                    <div className="text-[38px] font-semibold leading-none tracking-[-0.04em] text-[#111827]">
-                      {computedSummary.total.toLocaleString()}
-                    </div>
-                    <div className="pb-1 text-[13px] font-semibold text-[#55b776]">
-                      ↑ {newThisMonth} 本月新增
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex min-h-[112px] flex-col justify-between border-t border-[#edf0f2] px-10 py-6 xl:border-l xl:border-t-0">
-                  <div className="text-[15px] font-semibold text-[#111827]">已验证</div>
-                  <div className="flex items-end justify-between gap-4">
-                    <div className="text-[38px] font-semibold leading-none tracking-[-0.04em] text-[#111827]">
-                      {computedSummary.verified.toLocaleString()}
-                    </div>
-                    <div className="pb-1 text-[15px] font-semibold text-[#7a818d]">
-                      {formatPercentage(computedSummary.verified, computedSummary.total)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex min-h-[112px] flex-col justify-between border-t border-[#edf0f2] px-10 py-6 xl:border-l xl:border-t-0">
-                  <div className="text-[15px] font-semibold text-[#111827]">未验证</div>
-                  <div className="flex items-end justify-between gap-4">
-                    <div className="text-[38px] font-semibold leading-none tracking-[-0.04em] text-[#111827]">
-                      {computedSummary.unverified.toLocaleString()}
-                    </div>
-                    <div className="pb-1 text-[15px] font-semibold text-[#7a818d]">
-                      {formatPercentage(computedSummary.unverified, computedSummary.total)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex min-h-[112px] flex-col justify-between border-t border-[#edf0f2] px-10 py-6 xl:border-l xl:border-t-0">
-                  <div className="text-[15px] font-semibold text-[#111827]">资料待完善</div>
-                  <div className="flex items-end justify-between gap-4">
-                    <div className="text-[38px] font-semibold leading-none tracking-[-0.04em] text-[#111827]">
-                      {computedSummary.incomplete.toLocaleString()}
-                    </div>
-                    <div className="pb-1 text-[15px] font-semibold text-[#7a818d]">
-                      {formatPercentage(computedSummary.incomplete, computedSummary.total)}
-                    </div>
-                  </div>
-                </div>
+            {/* 更多筛选 */}
+            <details className="relative">
+              <summary className="flex h-[44px] cursor-pointer list-none items-center gap-2 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
+                <Filter className="h-4 w-4" />
+                <span>更多筛选</span>
+              </summary>
+              <div className="absolute left-0 top-[calc(100%+8px)] z-20 min-w-[200px] rounded-[18px] border border-[#e8eceb] bg-white p-4 shadow-[0_12px_32px_rgba(33,52,47,0.10)]">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">排序方式</div>
+                <select
+                  value={sortBy}
+                  onChange={(event) => {
+                    setSortBy(event.target.value as 'followerCount' | 'name' | 'createdAt');
+                    setPage(1);
+                  }}
+                  className="w-full rounded-[12px] border border-[#e8eceb] bg-white px-3 py-2.5 text-sm font-semibold text-[#111827] outline-none"
+                >
+                  <option value="followerCount">按平台粉丝</option>
+                  <option value="name">按名称</option>
+                  <option value="createdAt">按创建时间</option>
+                </select>
               </div>
-            </div>
-          </div>
-        </section>
+            </details>
+          </form>
 
-        <section className="overflow-hidden rounded-[34px] border border-[#edf0f2] bg-white shadow-[0_10px_34px_rgba(17,24,39,0.05)]">
+          {/* ① 刷新、导出 — 移至最右，图标+文字风格 */}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-[14px] border border-[#e8eceb] bg-white text-[#6b7280]"
+            aria-label="刷新目录"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExport}
+            className="inline-flex h-[44px] items-center gap-2 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]"
+          >
+            <Download className="h-4 w-4" />
+            <span>导出</span>
+          </button>
+        </div>
+
+        {/* ② 统计块 — 扁平四格横排，轻边框容器，竖线分隔 */}
+        <div className="flex overflow-hidden rounded-[18px] border border-[#edf0f2] bg-white divide-x divide-[#edf0f2]">
+          <StatBlock
+            label="全部 DJ"
+            value={computedSummary.total}
+            helper={computedSummary.total ? `↑ ${Math.max(0, Math.min(items.length, PAGE_SIZE))} 本月新增` : undefined}
+          />
+          <StatBlock
+            label="已验证"
+            value={computedSummary.verified}
+            rightText={formatPercentage(computedSummary.verified, computedSummary.total)}
+          />
+          <StatBlock
+            label="未验证"
+            value={computedSummary.unverified}
+            rightText={formatPercentage(computedSummary.unverified, computedSummary.total)}
+          />
+          <StatBlock
+            label="资料待完善"
+            value={computedSummary.incomplete}
+            rightText={formatPercentage(computedSummary.incomplete, computedSummary.total)}
+          />
+        </div>
+
+        {/* 列表区 */}
+        <section className="overflow-hidden rounded-[18px] border border-[#edf0f2] bg-white">
           {error ? (
-            <div className="border-b border-red-200 bg-red-50 px-8 py-4 text-sm text-[#7a2d29]">
-              {error}
-            </div>
+            <div className="border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-[#7a2d29]">{error}</div>
           ) : null}
 
-          <div className="hidden border-b border-[#edf0f2] px-7 py-6 lg:grid lg:grid-cols-[minmax(0,2.9fr)_1.15fr_0.95fr_1fr_1.15fr_1.15fr_156px] lg:gap-6">
+          {/* ③ 表头 — 更小更轻 */}
+          <div className="hidden border-b border-[#edf0f2] px-5 py-3 lg:grid lg:grid-cols-[minmax(0,2.4fr)_1.2fr_0.9fr_1fr_1.2fr_1.2fr_140px] lg:gap-6">
             {['DJ 信息', '国家/地区', '认证状态', '平台粉丝', '最近同步', '最近更新', '操作'].map((label) => (
-              <div key={label} className="text-[15px] font-semibold text-[#4b5563]">
+              <div key={label} className="text-[13px] font-medium text-[#9aa1ad]">
                 {label}
               </div>
             ))}
           </div>
 
           {isLoading ? (
-            <div className="px-8 py-20 text-center text-sm text-[#6b7280]">DJ 目录加载中…</div>
+            <div className="px-6 py-16 text-center text-sm text-[#6b7280]">DJ 目录加载中…</div>
           ) : items.length === 0 ? (
-            <div className="px-8 py-20 text-center text-sm text-[#6b7280]">当前筛选条件下还没有 DJ。</div>
+            <div className="px-6 py-16 text-center text-sm text-[#6b7280]">当前筛选条件下还没有 DJ。</div>
           ) : (
             <div className="divide-y divide-[#edf0f2]">
               {items.map((item) => {
@@ -522,38 +463,38 @@ export default function DJCatalogPageClient() {
                 return (
                   <article
                     key={item.id}
-                    className="px-7 py-5 lg:grid lg:grid-cols-[minmax(0,2.9fr)_1.15fr_0.95fr_1fr_1.15fr_1.15fr_156px] lg:items-center lg:gap-6"
+                    className="px-5 py-3.5 lg:grid lg:grid-cols-[minmax(0,2.4fr)_1.2fr_0.9fr_1fr_1.2fr_1.2fr_140px] lg:items-center lg:gap-6"
                   >
+                    {/* ④ DJ信息列：头像56×56，更紧凑 */}
                     <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-4">
-                        <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-[#f1f4f6]">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-[56px] w-[56px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[#f1f4f6]">
                           {item.avatarUrl ? (
                             <Image
                               src={item.avatarUrl}
                               alt={item.name}
-                              width={72}
-                              height={72}
+                              width={56}
+                              height={56}
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <span className="text-xs text-[#9aa1ad]">暂无头像</span>
+                            <span className="text-xs text-[#9aa1ad]">暂无</span>
                           )}
                         </div>
-
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[#111827]">
+                          <div className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[#111827]">
                             {item.name}
                           </div>
-                          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             {tags.map((tag) => (
                               <span
                                 key={`${item.id}-${tag}`}
-                                className="rounded-full bg-[#f4f5f7] px-3 py-1 text-[12px] font-semibold text-[#6b7280]"
+                                className="rounded-full bg-[#f4f5f7] px-2.5 py-0.5 text-[11px] font-semibold text-[#6b7280]"
                               >
                                 {tag}
                               </span>
                             ))}
-                            <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-[12px] font-semibold text-[#8f96a3]">
+                            <span className="rounded-full bg-[#f4f5f7] px-2.5 py-0.5 text-[11px] font-semibold text-[#8f96a3]">
                               ...
                             </span>
                           </div>
@@ -561,48 +502,53 @@ export default function DJCatalogPageClient() {
                       </div>
                     </div>
 
-                    <div className="mt-4 flex items-center gap-3 text-[17px] font-medium text-[#111827] lg:mt-0">
+                    {/* ⑤ 国家：完整名称 */}
+                    <div className="mt-3 flex items-center gap-2 text-[14px] font-medium text-[#111827] lg:mt-0">
                       {countryDisplay.flag ? (
-                        <span className="text-[28px] leading-none" aria-hidden="true">
+                        <span className="text-[20px] leading-none" aria-hidden="true">
                           {countryDisplay.flag}
                         </span>
                       ) : null}
-                      <span className="truncate">{countryDisplay.label}</span>
+                      <span>{countryDisplay.label}</span>
                     </div>
 
-                    <div className="mt-4 lg:mt-0">
+                    {/* ⑥ 认证状态 badge — 更紧凑 */}
+                    <div className="mt-3 lg:mt-0">
                       <span
-                        className={`inline-flex rounded-full border px-4 py-2 text-[14px] font-semibold ${state.tone}`}
+                        className={`inline-flex rounded-full border px-3 py-1 text-[12px] font-semibold ${state.tone}`}
                       >
                         {state.label}
                       </span>
                     </div>
 
-                    <div className="mt-4 text-[17px] font-medium text-[#111827] lg:mt-0">
+                    <div className="mt-3 text-[14px] font-medium text-[#111827] lg:mt-0">
                       {formatFollowers(item.followerCount ?? item.soundCloudFollowers)}
                     </div>
 
-                    <div className="mt-4 text-[16px] font-medium text-[#111827] lg:mt-0">
-                      <div>{lastSynced.date}{lastSynced.time ? ` ${lastSynced.time}` : ''}</div>
+                    <div className="mt-3 text-[13px] font-medium text-[#111827] lg:mt-0">
+                      <div>{lastSynced.date}</div>
+                      {lastSynced.time ? <div className="text-[#6b7280]">{lastSynced.time}</div> : null}
                     </div>
 
-                    <div className="mt-4 text-[16px] font-medium text-[#111827] lg:mt-0">
-                      <div>{updatedAt.date}{updatedAt.time ? ` ${updatedAt.time}` : ''}</div>
+                    <div className="mt-3 text-[13px] font-medium text-[#111827] lg:mt-0">
+                      <div>{updatedAt.date}</div>
+                      {updatedAt.time ? <div className="text-[#6b7280]">{updatedAt.time}</div> : null}
                     </div>
 
-                    <div className="mt-4 flex items-center gap-3 lg:mt-0 lg:justify-end">
+                    {/* ⑦ 操作按钮 — 更小，描边风格 */}
+                    <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:justify-end">
                       <Link
                         href={`/admin/content/djs/${item.id}/edit`}
-                        className="inline-flex h-[50px] items-center rounded-full border border-[#e8eceb] bg-white px-6 text-[15px] font-semibold text-[#111827]"
+                        className="inline-flex h-[36px] items-center rounded-[10px] border border-[#e8eceb] bg-white px-4 text-[13px] font-semibold text-[#111827]"
                       >
                         编辑
                       </Link>
                       <button
                         type="button"
-                        className="inline-flex h-[50px] w-[50px] items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#111827]"
+                        className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-[10px] border border-[#e8eceb] bg-white text-[#6b7280]"
                         aria-label="更多操作"
                       >
-                        <Ellipsis className="h-5 w-5" />
+                        <Ellipsis className="h-4 w-4" />
                       </button>
                     </div>
                   </article>
@@ -611,17 +557,20 @@ export default function DJCatalogPageClient() {
             </div>
           )}
 
-          <div className="flex flex-col gap-4 border-t border-[#edf0f2] px-7 py-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="text-[15px] font-medium text-[#6b7280]">共 {pagination.total.toLocaleString()} 条</div>
+          {/* 分页 */}
+          <div className="flex flex-col gap-3 border-t border-[#edf0f2] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-[13px] font-medium text-[#6b7280]">
+              共 {pagination.total.toLocaleString()} 条
+            </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={pagination.page <= 1}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#8f96a3] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#8f96a3] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft className="h-4 w-4" />
               </button>
 
               {visiblePages.map((pageNumber) => (
@@ -629,7 +578,7 @@ export default function DJCatalogPageClient() {
                   key={pageNumber}
                   type="button"
                   onClick={() => setPage(pageNumber)}
-                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-[14px] px-3 text-[15px] font-semibold ${
+                  className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-[14px] font-semibold ${
                     pageNumber === pagination.page ? 'bg-[#071110] text-white' : 'text-[#111827]'
                   }`}
                 >
@@ -639,11 +588,11 @@ export default function DJCatalogPageClient() {
 
               {pagination.totalPages > visiblePages[visiblePages.length - 1] ? (
                 <>
-                  <span className="px-2 text-[#9aa1ad]">...</span>
+                  <span className="px-1 text-[#9aa1ad]">...</span>
                   <button
                     type="button"
                     onClick={() => setPage(pagination.totalPages)}
-                    className="inline-flex h-10 min-w-10 items-center justify-center rounded-[14px] px-3 text-[15px] font-semibold text-[#111827]"
+                    className="inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-[14px] font-semibold text-[#111827]"
                   >
                     {pagination.totalPages}
                   </button>
@@ -654,15 +603,15 @@ export default function DJCatalogPageClient() {
                 type="button"
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="flex items-center gap-2 rounded-[16px] border border-[#e8eceb] bg-white px-5 py-3 text-[15px] font-semibold text-[#111827]">
+            <div className="flex items-center gap-2 rounded-[12px] border border-[#e8eceb] bg-white px-4 py-2 text-[13px] font-semibold text-[#111827]">
               <span>{pagination.limit} 条/页</span>
-              <ChevronDown className="h-4 w-4 text-[#7d8592]" />
+              <ChevronDown className="h-3.5 w-3.5 text-[#9aa1ad]" />
             </div>
           </div>
         </section>
