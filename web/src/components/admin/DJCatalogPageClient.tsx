@@ -26,7 +26,14 @@ import {
   DJCatalogSummary,
 } from '@/features/admin-content/catalog/api';
 import { djStudioApi } from '@/features/admin-content/dj-studio/api';
-import type { DJStudioLoadedDJ } from '@/features/admin-content/dj-studio/types';
+import type {
+  DJStudioLoadedDJ,
+  DJStudioPagination,
+  DJStudioRatingUnit,
+  DJStudioRelatedArticle,
+  DJStudioRelatedEvent,
+  DJStudioRelatedSet,
+} from '@/features/admin-content/dj-studio/types';
 import {
   buildAdminCatalogCacheKey,
   clearAdminCatalogCache,
@@ -43,6 +50,70 @@ const EMPTY_PAGINATION: AdminCatalogPagination = {
   total: 0,
   totalPages: 1,
 };
+
+const RELATED_PAGE_SIZE = {
+  events: 8,
+  ratings: 10,
+  posts: 10,
+  sets: 10,
+};
+
+type DJDetailTabKey = 'intro' | 'events' | 'ratings' | 'posts' | 'sets';
+
+type DJRelatedSectionState<T> = {
+  items: T[];
+  pagination: DJStudioPagination;
+  loading: boolean;
+  error: string;
+  loaded: boolean;
+};
+
+type DJEventSectionsState = {
+  upcoming: DJRelatedSectionState<DJStudioRelatedEvent>;
+  ended: DJRelatedSectionState<DJStudioRelatedEvent>;
+};
+
+type DJPostsState = {
+  items: DJStudioRelatedArticle[];
+  nextCursor: string | null;
+  loading: boolean;
+  error: string;
+  loaded: boolean;
+};
+
+const createRelatedState = <T,>(limit: number): DJRelatedSectionState<T> => ({
+  items: [],
+  pagination: {
+    page: 1,
+    limit,
+    total: 0,
+    totalPages: 1,
+  },
+  loading: false,
+  error: '',
+  loaded: false,
+});
+
+const createEventSectionsState = (): DJEventSectionsState => ({
+  upcoming: createRelatedState<DJStudioRelatedEvent>(RELATED_PAGE_SIZE.events),
+  ended: createRelatedState<DJStudioRelatedEvent>(RELATED_PAGE_SIZE.events),
+});
+
+const createPostsState = (): DJPostsState => ({
+  items: [],
+  nextCursor: null,
+  loading: false,
+  error: '',
+  loaded: false,
+});
+
+const DJ_DETAIL_TABS: Array<{ key: DJDetailTabKey; label: string; helper: string }> = [
+  { key: 'intro', label: 'Intro', helper: '简介' },
+  { key: 'events', label: 'Events', helper: '活动' },
+  { key: 'ratings', label: 'Ratings', helper: '评分' },
+  { key: 'posts', label: 'Posts', helper: '动态' },
+  { key: 'sets', label: 'Sets', helper: '演出' },
+];
 
 const formatDateTime = (value?: string | null): string => {
   if (!value) return '未记录';
@@ -65,6 +136,32 @@ const formatDateCell = (value?: string | null): { date: string; time: string } =
 const formatFollowers = (value?: number | null): string => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '未同步';
   return new Intl.NumberFormat('zh-CN').format(value);
+};
+
+const formatCompactNumber = (value?: number | null): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '0';
+  return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+};
+
+const formatDateOnly = (value?: string | null): string => {
+  if (!value) return '日期未记录';
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+};
+
+const formatDuration = (value?: number | string | null): string => {
+  const seconds = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = total % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
+    : `${minutes}:${String(rest).padStart(2, '0')}`;
 };
 
 const formatPercentage = (value: number, total: number): string => {
@@ -128,6 +225,56 @@ const detailLinks = (detail: DJStudioLoadedDJ) =>
     { label: 'Other', value: detail.otherPlatformUrl },
   ].filter((item) => item.value || item.id);
 
+const hasNextPage = (pagination: DJStudioPagination): boolean =>
+  pagination.page < Math.max(1, pagination.totalPages);
+
+const mergeById = <T extends { id: string }>(items: T[]): T[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+};
+
+const detailText = (label: string, value?: string | number | null) => (
+  <div>
+    <span className="font-medium text-[#111827]">{label}: </span>
+    {value === undefined || value === null || value === '' ? '未设置' : value}
+  </div>
+);
+
+function EmptyTabState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-[22px] border border-dashed border-[#d8dfdc] bg-white/70 px-5 py-8 text-center">
+      <div className="text-sm font-semibold text-[#111827]">{title}</div>
+      <div className="mt-2 text-sm leading-6 text-[#6b7280]">{description}</div>
+    </div>
+  );
+}
+
+function LoadMoreButton({
+  disabled,
+  loading,
+  onClick,
+}: {
+  disabled: boolean;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  if (disabled) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="mt-4 inline-flex h-10 items-center rounded-full border border-[#d8dfdc] bg-white px-5 text-sm font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {loading ? '加载中...' : '加载更多'}
+    </button>
+  );
+}
+
 function DJDetailOverlay({
   item,
   detail,
@@ -141,6 +288,171 @@ function DJDetailOverlay({
   error: string;
   onClose: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<DJDetailTabKey>('intro');
+  const [setsState, setSetsState] = useState(() => createRelatedState<DJStudioRelatedSet>(RELATED_PAGE_SIZE.sets));
+  const [eventsState, setEventsState] = useState<DJEventSectionsState>(() => createEventSectionsState());
+  const [ratingsState, setRatingsState] = useState(() => createRelatedState<DJStudioRatingUnit>(RELATED_PAGE_SIZE.ratings));
+  const [postsState, setPostsState] = useState<DJPostsState>(() => createPostsState());
+
+  useEffect(() => {
+    setActiveTab('intro');
+    setSetsState(createRelatedState<DJStudioRelatedSet>(RELATED_PAGE_SIZE.sets));
+    setEventsState(createEventSectionsState());
+    setRatingsState(createRelatedState<DJStudioRatingUnit>(RELATED_PAGE_SIZE.ratings));
+    setPostsState(createPostsState());
+  }, [item?.id]);
+
+  const loadSets = useCallback(async (pageToLoad = 1) => {
+    if (!item?.id) return;
+    setSetsState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const page = await djStudioApi.fetchDJSets(item.id, pageToLoad, RELATED_PAGE_SIZE.sets);
+      setSetsState((current) => ({
+        ...current,
+        items: pageToLoad === 1 ? page.items : mergeById([...current.items, ...page.items]),
+        pagination: page.pagination,
+        loading: false,
+        loaded: true,
+      }));
+    } catch (nextError) {
+      setSetsState((current) => ({
+        ...current,
+        loading: false,
+        loaded: true,
+        error: nextError instanceof Error ? nextError.message : 'Sets 加载失败',
+      }));
+    }
+  }, [item?.id]);
+
+  const loadEvents = useCallback(async (pageToLoad = 1, section?: 'upcoming' | 'ended') => {
+    if (!item?.id) return;
+    const sections: Array<'upcoming' | 'ended'> = section ? [section] : ['upcoming', 'ended'];
+    setEventsState((current) => {
+      const next = { ...current };
+      sections.forEach((key) => {
+        next[key] = { ...next[key], loading: true, error: '' };
+      });
+      return next;
+    });
+    try {
+      const results = await Promise.all(
+        sections.map(async (key) => ({
+          key,
+          page: await djStudioApi.fetchDJEvents(
+            item.id,
+            pageToLoad,
+            RELATED_PAGE_SIZE.events,
+            key === 'upcoming' ? ['ongoing', 'upcoming'] : ['ended', 'cancelled', 'canceled']
+          ),
+        }))
+      );
+      setEventsState((current) => {
+        const next = { ...current };
+        results.forEach(({ key, page }) => {
+          const sortedItems = key === 'upcoming'
+            ? mergeById(pageToLoad === 1 ? page.items : [...next[key].items, ...page.items])
+                .sort((left, right) => new Date(left.startDate || 0).getTime() - new Date(right.startDate || 0).getTime())
+            : mergeById(pageToLoad === 1 ? page.items : [...next[key].items, ...page.items])
+                .sort((left, right) => new Date(right.startDate || 0).getTime() - new Date(left.startDate || 0).getTime());
+          next[key] = {
+            ...next[key],
+            items: sortedItems,
+            pagination: page.pagination,
+            loading: false,
+            loaded: true,
+          };
+        });
+        return next;
+      });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : '活动加载失败';
+      setEventsState((current) => {
+        const next = { ...current };
+        sections.forEach((key) => {
+          next[key] = { ...next[key], loading: false, loaded: true, error: message };
+        });
+        return next;
+      });
+    }
+  }, [item?.id]);
+
+  const loadRatings = useCallback(async (pageToLoad = 1) => {
+    if (!item?.id) return;
+    setRatingsState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const page = await djStudioApi.fetchDJRatingUnits(item.id, pageToLoad, RELATED_PAGE_SIZE.ratings);
+      setRatingsState((current) => ({
+        ...current,
+        items: pageToLoad === 1 ? page.items : mergeById([...current.items, ...page.items]),
+        pagination: page.pagination,
+        loading: false,
+        loaded: true,
+      }));
+    } catch (nextError) {
+      setRatingsState((current) => ({
+        ...current,
+        loading: false,
+        loaded: true,
+        error: nextError instanceof Error ? nextError.message : '评分单元加载失败',
+      }));
+    }
+  }, [item?.id]);
+
+  const loadPosts = useCallback(async (cursor?: string | null) => {
+    if (!item?.id) return;
+    setPostsState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const page = await djStudioApi.fetchDJRelatedArticles(item.id, cursor, RELATED_PAGE_SIZE.posts);
+      setPostsState((current) => ({
+        items: cursor ? mergeById([...current.items, ...page.items]) : page.items,
+        nextCursor: page.nextCursor ?? null,
+        loading: false,
+        loaded: true,
+        error: '',
+      }));
+    } catch (nextError) {
+      setPostsState((current) => ({
+        ...current,
+        loading: false,
+        loaded: true,
+        error: nextError instanceof Error ? nextError.message : '动态加载失败',
+      }));
+    }
+  }, [item?.id]);
+
+  useEffect(() => {
+    if (!item?.id) return;
+    if (activeTab === 'sets' && !setsState.loaded && !setsState.loading) {
+      void loadSets(1);
+    }
+    if (activeTab === 'events' && !eventsState.upcoming.loaded && !eventsState.ended.loaded && !eventsState.upcoming.loading && !eventsState.ended.loading) {
+      void loadEvents(1);
+    }
+    if (activeTab === 'ratings' && !ratingsState.loaded && !ratingsState.loading) {
+      void loadRatings(1);
+    }
+    if (activeTab === 'posts' && !postsState.loaded && !postsState.loading) {
+      void loadPosts(null);
+    }
+  }, [
+    activeTab,
+    eventsState.ended.loaded,
+    eventsState.ended.loading,
+    eventsState.upcoming.loaded,
+    eventsState.upcoming.loading,
+    item?.id,
+    loadEvents,
+    loadPosts,
+    loadRatings,
+    loadSets,
+    postsState.loaded,
+    postsState.loading,
+    ratingsState.loaded,
+    ratingsState.loading,
+    setsState.loaded,
+    setsState.loading,
+  ]);
+
   if (!item) return null;
 
   const resolved = detail ?? null;
@@ -160,6 +472,14 @@ function DJDetailOverlay({
     resolved?.slug
   );
   const linkItems = resolved ? detailLinks(resolved) : [];
+  const contributors: Array<{
+    id: string;
+    username?: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  }> = Array.isArray(resolved?.contributors)
+    ? resolved.contributors
+    : compactTextList(resolved?.contributorUsernames).map((username) => ({ id: username, username }));
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
@@ -255,7 +575,7 @@ function DJDetailOverlay({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">DJ Profile</div>
-                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">详细信息</div>
+                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">DJ 详情</div>
               </div>
               <Link
                 href={`/admin/content/djs/${item.id}/edit`}
@@ -263,6 +583,26 @@ function DJDetailOverlay({
               >
                 编辑 DJ
               </Link>
+            </div>
+
+            <div className="mt-5 flex gap-2 overflow-x-auto rounded-full border border-[#e8eceb] bg-white/70 p-1">
+              {DJ_DETAIL_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`shrink-0 rounded-full px-4 py-2 text-left transition ${
+                    activeTab === tab.key
+                      ? 'bg-[#071110] text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]'
+                      : 'text-[#6b7280] hover:bg-white'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold leading-none">{tab.label}</span>
+                  <span className={`mt-1 block text-[11px] leading-none ${activeTab === tab.key ? 'text-white/70' : 'text-[#9aa1ad]'}`}>
+                    {tab.helper}
+                  </span>
+                </button>
+              ))}
             </div>
 
             {loading ? (
@@ -274,89 +614,315 @@ function DJDetailOverlay({
                 {error}
               </div>
             ) : (
-              <div className="mt-6 space-y-5">
-                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                  <div className="text-sm font-semibold text-[#111827]">简介</div>
-                  <div className="mt-3 text-sm leading-7 text-[#4b5563]">
-                    {bioText || '暂无简介信息。'}
-                  </div>
-                </section>
-
-                <section className="grid gap-5 lg:grid-cols-2">
-                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                    <div className="text-sm font-semibold text-[#111827]">基础资料</div>
-                    <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
-                      <div><span className="font-medium text-[#111827]">ID：</span>{resolved?.id || item.id}</div>
-                      <div><span className="font-medium text-[#111827]">Slug：</span>{resolved?.slug || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">可编辑：</span>{resolved?.canEdit === false ? '否' : '是'}</div>
-                      <div><span className="font-medium text-[#111827]">最近同步：</span>{formatDateTime(item.lastSyncedAt)}</div>
-                      <div><span className="font-medium text-[#111827]">最近更新：</span>{formatDateTime(item.updatedAt)}</div>
-                      <div><span className="font-medium text-[#111827]">创建时间：</span>{formatDateTime(item.createdAt)}</div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                    <div className="text-sm font-semibold text-[#111827]">标签资料</div>
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Genres</div>
-                        <div className="flex flex-wrap gap-2">
-                          {genres.length ? genres.map((genre) => (
-                            <span key={genre} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
-                              {genre}
-                            </span>
-                          )) : <span className="text-sm text-[#6b7280]">暂无</span>}
+              <div className="mt-6">
+                {activeTab === 'intro' ? (
+                  <div className="space-y-5">
+                    <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-sm font-semibold text-[#111827]">简介</div>
+                          <div className="mt-1 text-xs text-[#9aa1ad]">对应 iOS Intro 页：基础资料、简介、风格、外链与贡献者</div>
                         </div>
-                      </div>
-                      <div>
-                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Aliases</div>
-                        <div className="flex flex-wrap gap-2">
-                          {aliases.length ? aliases.map((alias) => (
-                            <span key={alias} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
-                              {alias}
-                            </span>
-                          )) : <span className="text-sm text-[#6b7280]">暂无</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                  <div className="text-sm font-semibold text-[#111827]">平台与外链</div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {linkItems.length ? linkItems.map((linkItem) => (
-                      <div key={linkItem.label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
-                        <div className="font-semibold text-[#111827]">{linkItem.label}</div>
-                        {linkItem.value ? (
-                          <div className="mt-1 break-all">{linkItem.value}</div>
-                        ) : null}
-                        {linkItem.id ? (
-                          <div className="mt-1 text-xs text-[#8b93a1]">ID: {linkItem.id}</div>
+                        {typeof resolved?.viewerWatchedCount === 'number' ? (
+                          <span className="rounded-full bg-[#eef8ee] px-3 py-1 text-xs font-semibold text-[#2f8b4f]">
+                            已看 {resolved.viewerWatchedCount}
+                          </span>
                         ) : null}
                       </div>
-                    )) : (
-                      <div className="text-sm text-[#6b7280]">暂无平台链接。</div>
+                      <div className="mt-4 text-sm leading-7 text-[#4b5563]">
+                        {bioText || '暂无简介信息。'}
+                      </div>
+                    </section>
+
+                    <section className="grid gap-5 lg:grid-cols-2">
+                      <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                        <div className="text-sm font-semibold text-[#111827]">基础资料</div>
+                        <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                          {detailText('ID', resolved?.id || item.id)}
+                          {detailText('Slug', resolved?.slug || '未设置')}
+                          {detailText('国家/地区', countryDisplay.label)}
+                          {detailText('可编辑', resolved?.canEdit === false ? '否' : '是')}
+                          {detailText('最近同步', formatDateTime(item.lastSyncedAt))}
+                          {detailText('最近更新', formatDateTime(item.updatedAt))}
+                          {detailText('创建时间', formatDateTime(item.createdAt))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                        <div className="text-sm font-semibold text-[#111827]">风格与别名</div>
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Genres</div>
+                            <div className="flex flex-wrap gap-2">
+                              {genres.length ? genres.map((genre) => (
+                                <span key={genre} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                                  {genre}
+                                </span>
+                              )) : <span className="text-sm text-[#6b7280]">暂无</span>}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Aliases</div>
+                            <div className="flex flex-wrap gap-2">
+                              {aliases.length ? aliases.map((alias) => (
+                                <span key={alias} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                                  {alias}
+                                </span>
+                              )) : <span className="text-sm text-[#6b7280]">暂无</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                      <div className="text-sm font-semibold text-[#111827]">平台与外链</div>
+                      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                        {linkItems.length ? linkItems.map((linkItem) => (
+                          <div key={linkItem.label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
+                            <div className="font-semibold text-[#111827]">{linkItem.label}</div>
+                            {linkItem.value ? <div className="mt-1 break-all">{linkItem.value}</div> : null}
+                            {linkItem.id ? <div className="mt-1 text-xs text-[#8b93a1]">ID: {linkItem.id}</div> : null}
+                          </div>
+                        )) : (
+                          <div className="text-sm text-[#6b7280]">暂无平台链接。</div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                      <div className="text-sm font-semibold text-[#111827]">平台统计</div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        {[
+                          ['Spotify Followers', formatFollowers(resolved?.spotifyFollowers ?? null)],
+                          ['SoundCloud Followers', formatFollowers(resolved?.soundCloudFollowers ?? null)],
+                          ['SoundCloud Favorites', typeof resolved?.soundCloudFavorites === 'number' ? resolved.soundCloudFavorites.toLocaleString() : '未同步'],
+                          ['Follower Count', formatFollowers(item.followerCount ?? null)],
+                        ].map(([label, value]) => (
+                          <div key={label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
+                            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{label}</div>
+                            <div className="mt-2 text-lg font-semibold text-[#111827]">{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                      <div className="text-sm font-semibold text-[#111827]">贡献者</div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {contributors.length ? contributors.map((contributor) => (
+                          <span key={contributor.id} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                            {contributor.displayName || contributor.username || contributor.id}
+                          </span>
+                        )) : <span className="text-sm text-[#6b7280]">暂无贡献者信息。</span>}
+                      </div>
+                    </section>
+                  </div>
+                ) : null}
+
+                {activeTab === 'events' ? (
+                  <div className="space-y-5">
+                    {(['upcoming', 'ended'] as const).map((section) => {
+                      const sectionState = eventsState[section];
+                      const title = section === 'upcoming' ? '即将开始 / 进行中' : '历史活动';
+                      return (
+                        <section key={section} className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-[#111827]">{title}</div>
+                              <div className="mt-1 text-xs text-[#9aa1ad]">对应 iOS Events 页的分组与分页</div>
+                            </div>
+                            <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#6b7280]">
+                              {sectionState.pagination.total} 场
+                            </span>
+                          </div>
+                          {sectionState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{sectionState.error}</div> : null}
+                          {sectionState.loading && !sectionState.items.length ? (
+                            <div className="mt-4 text-sm text-[#6b7280]">正在加载活动...</div>
+                          ) : sectionState.items.length ? (
+                            <div className="mt-4 space-y-3">
+                              {sectionState.items.map((eventItem) => (
+                                <Link
+                                  key={eventItem.id}
+                                  href={`/admin/content/events/${eventItem.id}/edit`}
+                                  className="flex gap-3 rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] p-3 transition hover:bg-white"
+                                >
+                                  <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-[14px] bg-[#e7ece9]">
+                                    {eventItem.coverImageUrl || eventItem.imageUrl ? (
+                                      <Image src={eventItem.coverImageUrl || eventItem.imageUrl || ''} alt={eventItem.name} fill className="object-cover" sizes="160px" />
+                                    ) : null}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-sm font-semibold text-[#111827]">{eventItem.name}</div>
+                                    <div className="mt-1 text-xs text-[#6b7280]">{formatDateOnly(eventItem.startDate)} · {[eventItem.city, eventItem.country].filter(Boolean).join(', ') || '地点未设置'}</div>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {eventItem.status ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.status}</span> : null}
+                                      {eventItem.eventType ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.eventType}</span> : null}
+                                    </div>
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-4">
+                              <EmptyTabState title="暂无活动" description="这个分组下还没有绑定到该 DJ 的活动。" />
+                            </div>
+                          )}
+                          <LoadMoreButton
+                            disabled={!hasNextPage(sectionState.pagination)}
+                            loading={sectionState.loading}
+                            onClick={() => void loadEvents(sectionState.pagination.page + 1, section)}
+                          />
+                        </section>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {activeTab === 'ratings' ? (
+                  <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[#111827]">评分单元</div>
+                        <div className="mt-1 text-xs text-[#9aa1ad]">对应 iOS Ratings 页</div>
+                      </div>
+                      <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#6b7280]">
+                        {ratingsState.pagination.total} 个
+                      </span>
+                    </div>
+                    {ratingsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{ratingsState.error}</div> : null}
+                    {ratingsState.loading && !ratingsState.items.length ? (
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载评分...</div>
+                    ) : ratingsState.items.length ? (
+                      <div className="mt-4 grid gap-3">
+                        {ratingsState.items.map((unit) => (
+                          <div key={unit.id} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-[#111827]">{unit.name}</div>
+                                <div className="mt-1 text-xs text-[#6b7280]">{unit.event?.name || '未绑定活动'} · {formatDateOnly(unit.createdAt)}</div>
+                              </div>
+                              <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#111827]">
+                                {(unit.rating ?? 0).toFixed(1)} / {unit.ratingCount ?? 0}
+                              </div>
+                            </div>
+                            {unit.description ? <div className="mt-3 text-sm leading-6 text-[#4b5563]">{unit.description}</div> : null}
+                            {unit.createdBy ? <div className="mt-3 text-xs text-[#8b93a1]">创建者：{unit.createdBy.displayName || unit.createdBy.username || unit.createdBy.id}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <EmptyTabState title="暂无评分单元" description="还没有与这个 DJ 绑定的评分内容。" />
+                      </div>
                     )}
-                  </div>
-                </section>
+                    <LoadMoreButton
+                      disabled={!hasNextPage(ratingsState.pagination)}
+                      loading={ratingsState.loading}
+                      onClick={() => void loadRatings(ratingsState.pagination.page + 1)}
+                    />
+                  </section>
+                ) : null}
 
-                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                  <div className="text-sm font-semibold text-[#111827]">平台统计</div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {[
-                      ['Spotify Followers', formatFollowers(resolved?.spotifyFollowers ?? null)],
-                      ['SoundCloud Followers', formatFollowers(resolved?.soundCloudFollowers ?? null)],
-                      ['SoundCloud Favorites', typeof resolved?.soundCloudFavorites === 'number' ? resolved.soundCloudFavorites.toLocaleString() : '未同步'],
-                      ['Follower Count', formatFollowers(item.followerCount ?? null)],
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
-                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{label}</div>
-                        <div className="mt-2 text-lg font-semibold text-[#111827]">{value}</div>
+                {activeTab === 'posts' ? (
+                  <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[#111827]">相关动态</div>
+                        <div className="mt-1 text-xs text-[#9aa1ad]">对应 iOS Posts 页，来自绑定 DJ 的 News feed</div>
                       </div>
-                    ))}
-                  </div>
-                </section>
+                    </div>
+                    {postsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{postsState.error}</div> : null}
+                    {postsState.loading && !postsState.items.length ? (
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载动态...</div>
+                    ) : postsState.items.length ? (
+                      <div className="mt-4 space-y-3">
+                        {postsState.items.map((article) => {
+                          const cover = article.coverImageURL || article.coverImageUrl || '';
+                          return (
+                            <Link
+                              key={article.id}
+                              href={`/admin/content/news/${article.id}/edit`}
+                              className="flex gap-3 rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] p-3 transition hover:bg-white"
+                            >
+                              <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-[14px] bg-[#e7ece9]">
+                                {cover ? <Image src={cover} alt={article.title} fill className="object-cover" sizes="160px" /> : null}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="line-clamp-2 text-sm font-semibold text-[#111827]">{article.title}</div>
+                                <div className="mt-1 text-xs text-[#6b7280]">{article.source || 'Raver'} · {formatDateOnly(article.publishedAt)}</div>
+                                {article.summary ? <div className="mt-2 line-clamp-2 text-xs leading-5 text-[#6b7280]">{article.summary}</div> : null}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <EmptyTabState title="暂无相关动态" description="还没有与这个 DJ 绑定的新闻或动态内容。" />
+                      </div>
+                    )}
+                    <LoadMoreButton
+                      disabled={!postsState.nextCursor}
+                      loading={postsState.loading}
+                      onClick={() => void loadPosts(postsState.nextCursor)}
+                    />
+                  </section>
+                ) : null}
+
+                {activeTab === 'sets' ? (
+                  <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[#111827]">DJ Sets</div>
+                        <div className="mt-1 text-xs text-[#9aa1ad]">对应 iOS Sets 页</div>
+                      </div>
+                      <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#6b7280]">
+                        {setsState.pagination.total} 个
+                      </span>
+                    </div>
+                    {setsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{setsState.error}</div> : null}
+                    {setsState.loading && !setsState.items.length ? (
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载 Sets...</div>
+                    ) : setsState.items.length ? (
+                      <div className="mt-4 grid gap-3">
+                        {setsState.items.map((setItem) => (
+                          <Link
+                            key={setItem.id}
+                            href={`/dj-sets/${setItem.id}`}
+                            className="flex gap-3 rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] p-3 transition hover:bg-white"
+                          >
+                            <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-[14px] bg-[#e7ece9]">
+                              {setItem.thumbnailUrl ? <Image src={setItem.thumbnailUrl} alt={setItem.title} fill className="object-cover" sizes="220px" /> : null}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="line-clamp-2 text-sm font-semibold text-[#111827]">{setItem.title}</div>
+                              <div className="mt-1 text-xs text-[#6b7280]">
+                                {[setItem.eventName, setItem.venue, formatDateOnly(setItem.recordedAt || setItem.createdAt)].filter(Boolean).join(' · ')}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {setItem.platform ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{setItem.platform}</span> : null}
+                                {formatDuration(setItem.duration) ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{formatDuration(setItem.duration)}</span> : null}
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{setItem.trackCount ?? setItem.tracks?.length ?? 0} tracks</span>
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{formatCompactNumber(setItem.viewCount)} views</span>
+                                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{formatCompactNumber(setItem.likeCount)} likes</span>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <EmptyTabState title="暂无 Sets" description="还没有与这个 DJ 绑定的 Set 或视频内容。" />
+                      </div>
+                    )}
+                    <LoadMoreButton
+                      disabled={!hasNextPage(setsState.pagination)}
+                      loading={setsState.loading}
+                      onClick={() => void loadSets(setsState.pagination.page + 1)}
+                    />
+                  </section>
+                ) : null}
               </div>
             )}
           </div>

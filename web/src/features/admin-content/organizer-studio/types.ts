@@ -119,6 +119,58 @@ export type OrganizerStudioLoadedOrganizer = {
     fileName?: string | null;
   }> | null;
   links: OrganizerStudioLinkPayload[];
+  contributors?: Array<{
+    id: string;
+    username: string;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  }> | null;
+  canEdit?: boolean | null;
+};
+
+export type OrganizerStudioPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export type OrganizerStudioRelatedEvent = {
+  id: string;
+  name: string;
+  nameI18n?: OrganizerStudioLocalizedText | null;
+  slug?: string | null;
+  city?: string | null;
+  country?: string | null;
+  coverImageUrl?: string | null;
+  cardImageUrl?: string | null;
+  eventType?: string | null;
+  status?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  timeZone?: string | null;
+  organizerName?: string | null;
+};
+
+export type OrganizerStudioRelatedArticle = {
+  id: string;
+  title: string;
+  summary?: string | null;
+  source?: string | null;
+  category?: string | null;
+  publishedAt?: string | null;
+  coverImageURL?: string | null;
+  coverImageUrl?: string | null;
+};
+
+export type OrganizerStudioRelatedPage<T> = {
+  items: T[];
+  pagination: OrganizerStudioPagination;
+};
+
+export type OrganizerStudioEventFeed = {
+  upcoming: OrganizerStudioRelatedPage<OrganizerStudioRelatedEvent>;
+  ended: OrganizerStudioRelatedPage<OrganizerStudioRelatedEvent>;
 };
 
 export type OrganizerStudioCreateInput = {

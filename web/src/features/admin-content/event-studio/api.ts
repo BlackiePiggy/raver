@@ -7,6 +7,8 @@ import {
   EventStudioApiErrorDetails,
   EventStudioCreateInput,
   EventStudioCreateResult,
+  EventStudioImportJobKind,
+  EventStudioImportJobSnapshot,
   EventStudioLoadedEvent,
   EventStudioOrganizer,
   EventStudioSubmissionAcceptedPayload,
@@ -26,6 +28,13 @@ type EventStudioApiErrorPayload = {
   message?: string;
   code?: EventStudioApiErrorCode;
   details?: EventStudioApiErrorDetails;
+};
+
+type CreateImportJobInput = {
+  kind: EventStudioImportJobKind;
+  imageUrl: string;
+  fileType?: string;
+  context?: Record<string, unknown>;
 };
 
 type EventEnvelope = EventContractSchemas['EventEnvelope'];
@@ -64,6 +73,16 @@ const unwrapDataEnvelope = <T>(payload: unknown): T => {
   }
 
   return row.data;
+};
+
+const importJobPath = (kind: EventStudioImportJobKind, jobId?: string): string => {
+  const base =
+    kind === 'poster'
+      ? '/v1/events/poster/import-image/jobs'
+      : kind === 'lineup'
+        ? '/v1/events/lineup/import-image/jobs'
+        : '/v1/events/timetable/import-image/jobs';
+  return jobId ? `${base}/${encodeURIComponent(jobId)}` : base;
 };
 
 export const eventStudioApi = {
@@ -181,6 +200,38 @@ export const eventStudioApi = {
       {
         method: 'POST',
         body: JSON.stringify(input),
+      }
+    );
+    return payload.data;
+  },
+
+  async createImportImageJob(input: CreateImportJobInput): Promise<EventStudioImportJobSnapshot> {
+    const payload = await authenticatedJsonFetch<{ data: EventStudioImportJobSnapshot }>(
+      getApiUrl(importJobPath(input.kind)),
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          imageUrl: input.imageUrl,
+          fileType: input.fileType || 'image/jpeg',
+          ...(input.context ? { context: input.context } : {}),
+        }),
+      }
+    );
+    return payload.data;
+  },
+
+  async fetchImportImageJob(kind: EventStudioImportJobKind, jobId: string): Promise<EventStudioImportJobSnapshot> {
+    const payload = await authenticatedJsonFetch<{ data: EventStudioImportJobSnapshot }>(
+      getApiUrl(importJobPath(kind, jobId))
+    );
+    return payload.data;
+  },
+
+  async cancelImportImageJob(kind: EventStudioImportJobKind, jobId: string): Promise<EventStudioImportJobSnapshot> {
+    const payload = await authenticatedJsonFetch<{ data: EventStudioImportJobSnapshot }>(
+      getApiUrl(importJobPath(kind, jobId)),
+      {
+        method: 'DELETE',
       }
     );
     return payload.data;

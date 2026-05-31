@@ -28,6 +28,24 @@ export type EventStudioTimezoneLookupItem = {
 
 export type EventStudioImageUsage = 'poster' | 'lineup' | 'timetable' | 'cover' | 'map' | 'other';
 
+export type EventStudioImportJobKind = 'poster' | 'lineup' | 'timetable';
+
+export type EventStudioImportJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+export type EventStudioImportJobSnapshot = {
+  jobId: string;
+  status: EventStudioImportJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  result?: {
+    rawJson: unknown;
+    rawResponse: unknown;
+  } | null;
+  error?: string | null;
+};
+
 export type EventStudioLineupSyncMode = 'incremental_fill' | 'exact_align';
 
 export type EventStudioLocationProviderMeta = {

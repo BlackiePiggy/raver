@@ -7,6 +7,7 @@ import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
 } from '@/components/admin/EventLocationPickerModal';
+import EventStudioAIImportDock from '@/components/admin/EventStudioAIImportDock';
 import {
   createEmptyTicketTierDraft,
   createEmptyEventStudioTimetableSlotDraft,
@@ -983,16 +984,16 @@ export default function EventStudioForm({
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.5fr_0.9fr]">
-        <div className="admin-studio-section p-6">
-          <div className="admin-studio-label">{mode === 'create' ? 'Event Studio' : 'Edit Session'}</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">{draftTitle}</h2>
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
-            <SummaryStat label="地点绑定" value={draft.locationPoint ? '已绑定地图点位' : '待选择'} tone="mint" />
-            <SummaryStat label="排期结构" value={`${draft.weeks.length} 周 / ${draft.eventDays.length} 天`} tone="sand" />
-            <SummaryStat label="媒体数量" value={`${mediaCount} 张`} tone="rose" />
-            <SummaryStat label="当前分页" value={`${currentStep + 1}/${totalSteps} · ${currentStepItem.title}`} tone="soft" />
-          </div>
-        </div>
+            <div className="admin-studio-section p-6">
+              <div className="admin-studio-label">{mode === 'create' ? 'Event Studio' : 'Edit Session'}</div>
+              <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">{draftTitle}</h2>
+              <div className="mt-5 grid gap-3 md:grid-cols-4">
+                <SummaryStat label="地点绑定" value={draft.locationPoint ? '已绑定地图点位' : '待选择'} tone="mint" />
+                <SummaryStat label="排期结构" value={`${draft.weeks.length} 周 / ${draft.eventDays.length} 天`} tone="sand" />
+                <SummaryStat label="媒体数量" value={`${mediaCount} 张`} tone="rose" />
+                <SummaryStat label="当前分页" value={`${currentStep + 1}/${totalSteps} · ${currentStepItem.title}`} tone="soft" />
+              </div>
+            </div>
 
         <div className="admin-studio-pastel-mint p-6">
           <div className="admin-studio-label">Submission</div>
@@ -1021,6 +1022,18 @@ export default function EventStudioForm({
             <SummaryStat label="入口视觉" value={`${entryVisualCount} 张`} tone="mint" />
             <SummaryStat label="全部图片" value={`${mediaCount} 张`} tone="soft" />
             <SummaryStat label="提交要求" value="Poster / Cover / Lineup 至少一张" tone="sand" />
+          </div>
+
+          <div className="mt-6">
+            <EventStudioAIImportDock
+              draft={draft}
+              setDraft={setDraft}
+              onOpenStep={(step) => {
+                if (step === 'media') setCurrentStep(0);
+                if (step === 'timetable') setCurrentStep(3);
+                if (step === 'lineup') setCurrentStep(4);
+              }}
+            />
           </div>
 
           {errors.coverImage ? <div className="text-xs text-[#6a3530]">{errors.coverImage}</div> : null}

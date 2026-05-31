@@ -28,6 +28,8 @@ import {
   readAdminCatalogCache,
   writeAdminCatalogCache,
 } from '@/features/admin-content/catalog/cache';
+import { eventStudioApi } from '@/features/admin-content/event-studio/api';
+import type { EventStudioLoadedEvent } from '@/features/admin-content/event-studio/types';
 
 const PAGE_SIZE = 10;
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -98,6 +100,344 @@ const formatLocation = (item: EventCatalogItem): string =>
   [item.city, item.country].filter(Boolean).join(', ') || '地点待补充';
 
 // ① StatCard 改为扁平横排样式
+const firstFilledText = (...values: Array<string | null | undefined>): string => {
+  for (const value of values) {
+    const trimmed = String(value || '').trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+};
+
+const compactStringList = (value?: Array<string | null> | null): string[] =>
+  Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
+
+const sortedByOrder = <T extends { sortOrder?: number | null; sort?: number | null; order?: number | null }>(
+  items?: T[] | null
+): T[] =>
+  Array.isArray(items)
+    ? [...items].sort((left, right) => {
+        const leftOrder = left.sortOrder ?? left.sort ?? left.order ?? 0;
+        const rightOrder = right.sortOrder ?? right.sort ?? right.order ?? 0;
+        return leftOrder - rightOrder;
+      })
+    : [];
+
+const formatMaybeDate = (value?: string | null): string => {
+  if (!value) return '未设置';
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+};
+
+const detailText = (label: string, value?: string | number | null) => (
+  <div>
+    <span className="font-medium text-[#111827]">{label}: </span>
+    {value === undefined || value === null || value === '' ? '未设置' : value}
+  </div>
+);
+
+function EventDetailOverlay({
+  item,
+  detail,
+  loading,
+  error,
+  onClose,
+}: {
+  item: EventCatalogItem | null;
+  detail: EventStudioLoadedEvent | null;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  const resolved = detail ?? null;
+  const state = resolveEventStatus(item);
+  const primaryName =
+    firstFilledText(resolved?.nameI18n?.zh, resolved?.nameI18n?.en, resolved?.name, item.name) || item.name;
+  const description = firstFilledText(resolved?.description);
+  const imageAssets = sortedByOrder(resolved?.imageAssets);
+  const posterAsset = imageAssets.find((asset) => ['poster', 'cover'].includes(String(asset.type || '').toLowerCase()));
+  const heroImage = resolved?.coverImageUrl || posterAsset?.url || item.coverImageUrl || resolved?.lineupImageUrl || '';
+  const weeks = sortedByOrder(resolved?.weeks);
+  const eventDays = sortedByOrder(resolved?.eventDays);
+  const lineupArtists = sortedByOrder(resolved?.lineupArtists);
+  const timetableSlots = sortedByOrder(resolved?.timetableSlots ?? resolved?.lineupSlots);
+  const ticketTiers = sortedByOrder(resolved?.ticketTiers);
+  const stageOrder = compactStringList(resolved?.stageOrder);
+  const locationName = firstFilledText(
+    resolved?.locationPoint?.nameI18n?.zh,
+    resolved?.locationPoint?.nameI18n?.en,
+    resolved?.manualLocation?.formattedAddressI18n?.zh,
+    resolved?.manualLocation?.formattedAddressI18n?.en
+  );
+  const address = firstFilledText(
+    resolved?.locationPoint?.formattedAddressI18n?.zh,
+    resolved?.locationPoint?.formattedAddressI18n?.en,
+    resolved?.locationPoint?.addressI18n?.zh,
+    resolved?.locationPoint?.addressI18n?.en,
+    resolved?.manualLocation?.detailAddressI18n?.zh,
+    resolved?.manualLocation?.detailAddressI18n?.en
+  );
+  const cityCountry = [resolved?.city ?? item.city, resolved?.country ?? item.country].filter(Boolean).join(', ');
+  const scheduleMode = resolved?.schedule?.mode || '未设置';
+  const timeZone = resolved?.schedule?.timeZone || resolved?.timeZone || item.timeZone || '未设置';
+  const dayRolloverHour = resolved?.schedule?.dayRolloverHour ?? resolved?.dayRolloverHour;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div
+        className="relative max-h-[90vh] w-full max-w-[1080px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+          aria-label="关闭活动详情"
+        >
+          ×
+        </button>
+
+        <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[1.05fr_1.45fr]">
+          <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
+            <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
+              <div className="relative aspect-[1.42/1]">
+                {heroImage ? (
+                  <Image src={heroImage} alt={primaryName} fill className="object-cover" sizes="900px" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-[#7b8794]">暂无活动封面</div>
+                )}
+              </div>
+            </div>
+
+            <div className="-mt-10 px-4">
+              <div className="rounded-[24px] border border-[#e8eceb] bg-white/96 p-5 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold ${state.badgeTone}`}>
+                    <span className={`h-2 w-2 rounded-full ${state.dot}`} />
+                    {state.label}
+                  </span>
+                  {resolved?.eventType || item.eventType ? (
+                    <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-[12px] font-semibold text-[#6b7280]">
+                      {resolved?.eventType || item.eventType}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{primaryName}</div>
+                <div className="mt-2 text-sm font-medium text-[#6b7280]">
+                  {resolved?.organizerName || item.wikiFestival?.name || item.organizerName || '未绑定主办方'} · {cityCountry || '地点待补充'}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {[
+                ['Weeks', weeks.length.toLocaleString()],
+                ['Event Days', (eventDays.length || item.eventDays?.length || 0).toLocaleString()],
+                ['Lineup', lineupArtists.length.toLocaleString()],
+                ['Timetable', timetableSlots.length.toLocaleString()],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{label}</div>
+                  <div className="mt-2 text-xl font-semibold text-[#111827]">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#e8eceb] bg-white p-5">
+              <div className="text-sm font-semibold text-[#111827]">核心时间</div>
+              <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                {detailText('开始日期', formatMaybeDate(resolved?.startDate || item.startDate))}
+                {detailText('结束日期', formatMaybeDate(resolved?.endDate || item.endDate))}
+                {detailText('时区', timeZone)}
+                {detailText('Schedule Mode', scheduleMode)}
+                {detailText('Day Rollover', typeof dayRolloverHour === 'number' ? `${dayRolloverHour}:00` : null)}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">Event Profile</div>
+                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">详细信息</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/events/${item.id}`}
+                  className="inline-flex h-[42px] items-center rounded-full border border-[#e8eceb] bg-white px-5 text-sm font-semibold text-[#111827]"
+                >
+                  前台页
+                </Link>
+                <Link
+                  href={`/admin/content/events/${item.id}/edit`}
+                  className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
+                >
+                  编辑活动
+                </Link>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="mt-6 rounded-[22px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
+                正在加载活动完整信息...
+              </div>
+            ) : error ? (
+              <div className="mt-6 rounded-[22px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-[#7a2d29]">
+                {error}
+              </div>
+            ) : (
+              <div className="mt-6 space-y-5">
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">活动简介</div>
+                  <div className="mt-3 text-sm leading-7 text-[#4b5563]">
+                    {description || '暂无活动简介。'}
+                  </div>
+                </section>
+
+                <section className="grid gap-5 lg:grid-cols-2">
+                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="text-sm font-semibold text-[#111827]">基础资料</div>
+                    <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                      {detailText('ID', resolved?.id || item.id)}
+                      {detailText('Slug', resolved?.slug || item.slug)}
+                      {detailText('Abbreviation', resolved?.abbreviation)}
+                      {detailText('Status', resolved?.status || item.status)}
+                      {detailText('Revision', resolved?.revision)}
+                      {detailText('Wiki Festival ID', resolved?.wikiFestivalId || item.wikiFestival?.id)}
+                      {detailText('最近更新', formatDateTime(item.updatedAt))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="text-sm font-semibold text-[#111827]">地点信息</div>
+                    <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                      {detailText('地点', locationName)}
+                      {detailText('地址', address)}
+                      {detailText('城市/国家', cityCountry)}
+                      {detailText('Provider', resolved?.locationPoint?.provider)}
+                      {detailText('Place ID', resolved?.locationPoint?.providerPlaceId || resolved?.locationPoint?.poiId)}
+                      {detailText('Lat/Lng', resolved?.locationPoint?.location ? `${resolved.locationPoint.location.lat}, ${resolved.locationPoint.location.lng}` : [resolved?.latitude, resolved?.longitude].filter((value) => typeof value === 'number').join(', '))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[#111827]">Weeks / Event Days</div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">
+                      {weeks.length} weeks · {eventDays.length} days
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {weeks.map((week) => (
+                      <div key={`${week.weekIndex}-${week.startDate}`} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
+                        <div className="font-semibold text-[#111827]">{week.label || `Week ${week.weekIndex}`}</div>
+                        <div className="mt-1">{formatMaybeDate(week.startDate)} - {formatMaybeDate(week.endDate)}</div>
+                      </div>
+                    ))}
+                    {eventDays.slice(0, 8).map((day) => (
+                      <div key={day.eventDayId} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
+                        <div className="font-semibold text-[#111827]">{day.label || `Day ${day.overallDayIndex}`}</div>
+                        <div className="mt-1">{formatMaybeDate(day.date)} {day.weekday ? `· ${day.weekday}` : ''}</div>
+                      </div>
+                    ))}
+                    {!weeks.length && !eventDays.length ? <div className="text-sm text-[#6b7280]">暂无 weeks / eventDays。</div> : null}
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">Lineup / Timetable</div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] p-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Lineup Artists</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {lineupArtists.slice(0, 18).map((artist, index) => (
+                          <span key={artist.id || `${artist.djName}-${index}`} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                            {artist.djName || compactStringList(artist.memberNames).join(' / ') || 'Unnamed'}
+                          </span>
+                        ))}
+                        {!lineupArtists.length ? <span className="text-sm text-[#6b7280]">暂无 lineup。</span> : null}
+                      </div>
+                    </div>
+                    <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] p-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Stage Order</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {stageOrder.map((stage) => (
+                          <span key={stage} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                            {stage}
+                          </span>
+                        ))}
+                        {!stageOrder.length ? <span className="text-sm text-[#6b7280]">暂无 stage。</span> : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {timetableSlots.slice(0, 8).map((slot, index) => (
+                      <div key={slot.id || `${slot.djName}-${index}`} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
+                        <span className="font-semibold text-[#111827]">{slot.djName || compactStringList(slot.memberNames).join(' / ') || 'Unnamed'}</span>
+                        <span> · {slot.stageName || 'Stage TBD'} · {slot.localDate || 'Date TBD'} {slot.startTime || slot.endTime ? `· ${slot.startTime || '?'} - ${slot.endTime || '?'}` : ''}</span>
+                      </div>
+                    ))}
+                    {!timetableSlots.length ? <div className="text-sm text-[#6b7280]">暂无 timetable slot。</div> : null}
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">票务与外链</div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {[
+                      ['Ticket URL', resolved?.ticketUrl],
+                      ['Currency', resolved?.ticketCurrency],
+                      ['Official Website', resolved?.officialWebsite],
+                      ['Source URL', resolved?.sourceEventUrl],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
+                        <div className="font-semibold text-[#111827]">{label}</div>
+                        <div className="mt-1 break-all">{value || '未设置'}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {ticketTiers.length ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {ticketTiers.map((tier, index) => (
+                        <span key={tier.id || `${tier.name}-${index}`} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                          {tier.name}: {tier.price} {tier.currency || resolved?.ticketCurrency || ''}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {resolved?.ticketNotes ? <div className="mt-4 text-sm leading-6 text-[#4b5563]">{resolved.ticketNotes}</div> : null}
+                </section>
+
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">Media Assets</div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {imageAssets.slice(0, 9).map((asset, index) => (
+                      <div key={`${asset.url}-${index}`} className="overflow-hidden rounded-[18px] border border-[#edf0f2] bg-[#fafbfb]">
+                        <div className="relative aspect-[1.35/1] bg-[#eef1f3]">
+                          <Image src={asset.url} alt={asset.label || asset.type || 'event asset'} fill className="object-cover" sizes="360px" />
+                        </div>
+                        <div className="px-3 py-2 text-xs font-semibold text-[#4b5563]">
+                          {asset.label || asset.type || asset.fileName || 'Asset'}
+                        </div>
+                      </div>
+                    ))}
+                    {!imageAssets.length ? <div className="text-sm text-[#6b7280]">暂无 media assets。</div> : null}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({
   label,
   value,
@@ -140,6 +480,11 @@ export default function EventCatalogPageClient() {
   const [pagination, setPagination] = useState<AdminCatalogPagination>(EMPTY_PAGINATION);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<EventCatalogItem | null>(null);
+  const [selectedEventDetail, setSelectedEventDetail] = useState<EventStudioLoadedEvent | null>(null);
+  const [selectedEventError, setSelectedEventError] = useState('');
+  const [selectedEventLoading, setSelectedEventLoading] = useState(false);
+  const [detailCache, setDetailCache] = useState<Record<string, EventStudioLoadedEvent>>({});
 
   const filters = useMemo<EventCatalogFilters>(
     () => ({
@@ -226,6 +571,36 @@ export default function EventCatalogPageClient() {
     const end = Math.min(totalPages, start + 4);
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }, [pagination.page, pagination.totalPages]);
+
+  const openDetailOverlay = useCallback(async (item: EventCatalogItem) => {
+    setSelectedEvent(item);
+    setSelectedEventError('');
+    const cached = detailCache[item.id];
+    if (cached) {
+      setSelectedEventDetail(cached);
+      setSelectedEventLoading(false);
+      return;
+    }
+
+    setSelectedEventDetail(null);
+    setSelectedEventLoading(true);
+    try {
+      const detail = await eventStudioApi.fetchEvent(item.id);
+      setDetailCache((current) => ({ ...current, [item.id]: detail }));
+      setSelectedEventDetail(detail);
+    } catch (detailError) {
+      setSelectedEventError(detailError instanceof Error ? detailError.message : '活动详情加载失败');
+    } finally {
+      setSelectedEventLoading(false);
+    }
+  }, [detailCache]);
+
+  const closeDetailOverlay = useCallback(() => {
+    setSelectedEvent(null);
+    setSelectedEventDetail(null);
+    setSelectedEventError('');
+    setSelectedEventLoading(false);
+  }, []);
 
   return (
     <AdminContentLayout
@@ -378,7 +753,16 @@ export default function EventCatalogPageClient() {
                 return (
                   <article
                     key={item.id}
-                    className="flex flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:gap-6"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void openDetailOverlay(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void openDetailOverlay(item);
+                      }
+                    }}
+                    className="flex cursor-pointer flex-col gap-4 px-6 py-5 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-6"
                   >
                     {/* 左：封面 + 信息 */}
                     <div className="flex min-w-0 flex-1 gap-4">
@@ -443,20 +827,26 @@ export default function EventCatalogPageClient() {
 
                     {/* ⑥ 操作按钮 — rounded-full 风格 */}
                     <div className="flex shrink-0 items-center gap-2.5">
-                      <Link
-                        href={`/events/${item.id}`}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openDetailOverlay(item);
+                        }}
                         className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-6 text-[14px] font-semibold text-[#111827] transition hover:bg-[#f7f8fa]"
                       >
                         查看详情
-                      </Link>
+                      </button>
                       <Link
                         href={`/admin/content/events/${item.id}/edit`}
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#071110] px-6 text-[14px] font-semibold text-white shadow-[0_6px_16px_rgba(7,17,16,0.15)]"
                       >
                         编辑活动
                       </Link>
                       <button
                         type="button"
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white text-[#111827]"
                         aria-label="更多操作"
                       >
@@ -529,6 +919,13 @@ export default function EventCatalogPageClient() {
             </div>
           </div>
         </section>
+      <EventDetailOverlay
+        item={selectedEvent}
+        detail={selectedEventDetail}
+        loading={selectedEventLoading}
+        error={selectedEventError}
+        onClose={closeDetailOverlay}
+      />
       </section>
     </AdminContentLayout>
   );
