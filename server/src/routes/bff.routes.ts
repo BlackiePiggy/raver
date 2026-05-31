@@ -7354,6 +7354,97 @@ router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<
   }
 });
 
+router.patch('/news/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const viewerRole = authReq.user?.role ?? null;
+    const articleId = String(req.params.id || '').trim();
+    if (!articleId) {
+      res.status(400).json({ error: 'article id is required' });
+      return;
+    }
+
+    const existing = await prisma.newsArticle.findUnique({
+      where: { id: articleId },
+      select: { id: true, authorId: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'News article not found' });
+      return;
+    }
+
+    const canEdit = viewerRole === 'admin' || existing.authorId === userId;
+    if (!canEdit) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const draft = normalizeNewsDraft(body);
+    if (draft.publishedAt === 'invalid') {
+      res.status(400).json({ error: 'publishedAt is invalid' });
+      return;
+    }
+    if (!draft.title && !draft.body) {
+      res.status(400).json({ error: 'title or body is required' });
+      return;
+    }
+
+    const compliancePayload = {
+      ...body,
+      title: draft.title,
+      summary: draft.summary,
+      body: draft.body,
+      source: draft.source,
+      category: draft.category,
+      link: draft.link,
+      coverImageURL: draft.coverImageUrl,
+      boundDjIds: draft.boundDjIds,
+      boundBrandIds: draft.boundBrandIds,
+      boundEventIds: draft.boundEventIds,
+      publishedAt: (draft.publishedAt || new Date()).toISOString(),
+    };
+    const complianceError = contentCompliance.validationError('news', compliancePayload);
+    if (complianceError) {
+      res.status(400).json({ error: complianceError });
+      return;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.newsArticle.update({
+        where: { id: articleId },
+        data: {
+          category: draft.category,
+          source: draft.source,
+          title: draft.title || newsTitleFromContent(draft.body),
+          summary: draft.summary,
+          body: draft.body,
+          link: draft.link,
+          coverImageUrl: draft.coverImageUrl,
+          publishedAt: draft.publishedAt || undefined,
+        },
+      });
+      await syncNewsBindings(tx, articleId, {
+        djIds: draft.boundDjIds,
+        brandIds: draft.boundBrandIds,
+        eventIds: draft.boundEventIds,
+      });
+      return tx.newsArticle.findUniqueOrThrow({
+        where: { id: articleId },
+        include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
+      });
+    });
+
+    res.json(mapNewsArticle(updated));
+  } catch (error) {
+    console.error('BFF update news article error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/feed/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;

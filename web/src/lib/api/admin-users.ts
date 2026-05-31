@@ -47,6 +47,13 @@ export interface AdminUserDetail {
   };
 }
 
+export interface AdminUsersPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 const buildQuery = (params?: Record<string, string | number | undefined>): string => {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params || {})) {
@@ -62,10 +69,10 @@ export const adminUsersApi = {
     q?: string;
     role?: string;
     status?: string;
-    cursor?: string;
+    page?: number;
     limit?: number;
-  }): Promise<{ success: true; items: AdminUser[]; nextCursor: string | null }> {
-    return authenticatedJsonFetch<{ success: true; items: AdminUser[]; nextCursor: string | null }>(
+  }): Promise<{ success: true; items: AdminUser[]; pagination: AdminUsersPagination }> {
+    return authenticatedJsonFetch<{ success: true; items: AdminUser[]; pagination: AdminUsersPagination }>(
       getApiUrl(`/admin/v1/users${buildQuery(params)}`)
     );
   },

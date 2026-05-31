@@ -77,10 +77,10 @@ export default function AdminContentReviewsPage() {
             </div>
           </section>
 
-          <section className="admin-reference-dark-card p-6">
-            <div className="text-[12px] uppercase tracking-[0.18em] text-white/30">Current Split</div>
-            <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-white">当前分工</h2>
-            <div className="mt-5 space-y-4 text-[15px] leading-8 text-white/72">
+          <section className="admin-reference-soft-card p-6">
+            <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">Current Split</div>
+            <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">当前分工</h2>
+            <div className="mt-5 space-y-4 text-[15px] leading-8 text-black/55">
               <p>内容贡献审核负责 Event / Organizer / DJ 等内容稿件的创建、编辑、版本比对和审批。</p>
               <p>DJ 自动命中的 Event 阵容候选通过统一后台内的 DJ 绑定审核工作台处理。</p>
               <p>举报审核与内容审核仍是不同工作流，但现在都在统一后台原生承接，不再依赖旧工具说明页跳转。</p>

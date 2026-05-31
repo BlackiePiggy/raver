@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
@@ -27,6 +27,7 @@ type AdminAppShellProps = {
 };
 
 const SIDEBAR_STATE_KEY = 'raver-admin-shell-collapsed';
+const SIDEBAR_SCROLL_KEY = 'raver-admin-shell-scroll-top';
 
 const initialsFromName = (value?: string | null): string =>
   value
@@ -52,6 +53,27 @@ function Sidebar({
   const { user, logout } = useAuth();
   const policy = useMemo(() => getAdminCmsRolePolicy(user), [user]);
   const groups = useMemo(() => getVisibleAdminNavGroups(policy), [policy]);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextScrollTop = Number(window.sessionStorage.getItem(SIDEBAR_SCROLL_KEY) || '0');
+    if (!Number.isFinite(nextScrollTop)) return;
+
+    const restore = () => {
+      if (scrollAreaRef.current) {
+        scrollAreaRef.current.scrollTop = nextScrollTop;
+      }
+    };
+
+    restore();
+    window.requestAnimationFrame(restore);
+  }, [pathname]);
+
+  const persistSidebarScroll = () => {
+    if (typeof window === 'undefined' || !scrollAreaRef.current) return;
+    window.sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(scrollAreaRef.current.scrollTop));
+  };
 
   return (
     <>
@@ -79,7 +101,11 @@ function Sidebar({
         </div>
 
         <div className="relative min-h-0 flex-1">
-          <div className="absolute inset-0 overflow-y-auto px-1 py-2 admin-shell-scrollbar">
+          <div
+            ref={scrollAreaRef}
+            onScroll={persistSidebarScroll}
+            className="absolute inset-0 overflow-y-auto px-1 py-2 admin-shell-scrollbar"
+          >
             {groups.map((group) => (
               <div key={group.id} className="mb-6">
                 {!collapsed && group.id !== 'menu' && (
@@ -90,13 +116,16 @@ function Sidebar({
                 )}
                 <nav className="space-y-[7px]">
                   {group.items.map((item) => {
-                    const active = isAdminHrefActive(pathname, item.href);
+                    const active = isAdminHrefActive(pathname, item.href, item.matchMode);
                     const Icon = item.icon;
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
-                        onClick={() => setMobileOpen(false)}
+                        onClick={() => {
+                          persistSidebarScroll();
+                          setMobileOpen(false);
+                        }}
                         className={clsx(
                           'group flex h-[44px] w-full items-center rounded-full text-[13px] font-semibold transition-all duration-300 hover:-translate-y-0.5',
                           collapsed ? 'justify-center px-0' : 'gap-4 px-[15px]',

@@ -1087,14 +1087,25 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
 
 router.get('/admin', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const page = parsePage(req.query.page, 1);
+    const limit = parseLimit(req.query.limit, 50, 200);
+    const skip = (page - 1) * limit;
     const status = cleanText(req.query.status)?.toLowerCase();
+    const statuses = cleanText(req.query.statuses)
+      ?.split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => STATUSES.has(item));
     const entityType = cleanText(req.query.entityType)?.toLowerCase();
     const i18nStatus = cleanText(req.query.i18nStatus)?.toLowerCase();
     const missingLocale = cleanText(req.query.missingLocale)?.toLowerCase();
     const translationStatus = cleanText(req.query.translationStatus)?.toLowerCase();
     const where: Prisma.ContentSubmissionWhereInput = {};
     const andFilters: Prisma.ContentSubmissionWhereInput[] = [];
-    if (status && STATUSES.has(status)) where.status = status;
+    if (statuses && statuses.length > 0) {
+      where.status = { in: statuses };
+    } else if (status && STATUSES.has(status)) {
+      where.status = status;
+    }
     if (entityType && ENTITY_TYPES.has(entityType)) where.entityType = entityType;
     if (i18nStatus) {
       andFilters.push({ reviewNotes: {
@@ -1125,11 +1136,21 @@ router.get('/admin', authenticate, requireAdminOrOperator, async (req: AuthReque
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: parseLimit(req.query.limit),
+        skip,
+        take: limit,
       }),
       prisma.contentSubmission.count({ where }),
     ]);
-    res.json({ items, total });
+    res.json({
+      items,
+      total,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    });
   } catch (error) {
     console.error('List admin content submissions error:', error);
     res.status(500).json({ error: '获取审核列表失败' });

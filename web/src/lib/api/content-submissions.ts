@@ -50,17 +50,29 @@ export interface ContentSubmissionDetail extends ContentSubmission {
   versions: ContentSubmissionVersion[];
 }
 
+export interface ContentSubmissionPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface ContentSubmissionReviewInput {
   decision: 'approved' | 'rejected';
   reason?: string;
   reviewNotes?: Record<string, unknown>;
 }
 
-const buildQuery = (params?: Record<string, string | number | undefined>): string => {
+const buildQuery = (params?: Record<string, string | number | string[] | undefined>): string => {
   const search = new URLSearchParams();
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value === undefined || value === '') continue;
+      if (Array.isArray(value)) {
+        if (value.length === 0) continue;
+        search.set(key, value.join(','));
+        continue;
+      }
       search.set(key, String(value));
     }
   }
@@ -72,14 +84,16 @@ export const contentSubmissionsApi = {
   async listAdmin(
     params?: {
       status?: string;
+      statuses?: string[];
       entityType?: string;
       limit?: number;
+      page?: number;
       i18nStatus?: 'ready' | 'missing_ja' | 'needs_manual_confirmation' | string;
       missingLocale?: 'ja' | 'en' | 'zh' | string;
       translationStatus?: 'needs_manual_confirmation' | string;
     }
-  ): Promise<{ items: ContentSubmission[]; total: number }> {
-    return authenticatedJsonFetch<{ items: ContentSubmission[]; total: number }>(
+  ): Promise<{ items: ContentSubmission[]; total: number; pagination: ContentSubmissionPagination }> {
+    return authenticatedJsonFetch<{ items: ContentSubmission[]; total: number; pagination: ContentSubmissionPagination }>(
       getApiUrl(`/admin/v1/content-submissions${buildQuery(params)}`)
     );
   },

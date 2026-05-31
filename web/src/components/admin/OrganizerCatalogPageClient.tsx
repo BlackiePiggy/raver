@@ -226,14 +226,14 @@ export default function OrganizerCatalogPageClient() {
                     </p>
                   </div>
 
-                  <div className="admin-reference-dark-card grid gap-3 p-4">
-                    <div className="text-sm leading-6 text-white/65">
+                  <div className="admin-reference-soft-card grid gap-3 p-4">
+                    <div className="text-sm leading-6 text-black/48">
                       目录中心承接查找和跳转，深入资料处理继续进入编辑与绑定工作流。
                     </div>
-                    <Link href={`/admin/content/organizers/${item.id}/edit`} className="rounded-full bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
+                    <Link href={`/admin/content/organizers/${item.id}/edit`} className="rounded-full bg-[#071110] px-4 py-3 text-center text-sm font-semibold text-white">
                       编辑主办方
                     </Link>
-                    <Link href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`} className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-center text-sm text-white">
+                    <Link href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`} className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
                       打开绑定中心
                     </Link>
                     {item.officialWebsite ? (
@@ -241,12 +241,12 @@ export default function OrganizerCatalogPageClient() {
                         href={item.officialWebsite}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-center text-sm text-white"
+                        className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]"
                       >
                         官方链接
                       </a>
                     ) : (
-                      <div className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-center text-sm text-white/45">
+                      <div className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm text-black/42">
                         暂无官方链接
                       </div>
                     )}

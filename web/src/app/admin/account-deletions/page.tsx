@@ -159,7 +159,7 @@ export default function AccountDeletionsAdminPage() {
         <section className="mx-auto max-w-4xl">
           <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">账号删除请求</h1>
-            <p className="mt-3 text-sm text-text-secondary">当前账号无权限访问该页面。</p>
+            <p className="mt-3 text-sm text-black/48">当前账号无权限访问该页面。</p>
             <Link href={user ? '/admin' : '/login'} className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               {user ? '返回后台' : '去登录'}
             </Link>
@@ -178,7 +178,7 @@ export default function AccountDeletionsAdminPage() {
       <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-text-secondary">Privacy Ops</p>
+            <p className="text-sm text-black/45">Privacy Ops</p>
             <h1 className="mt-1 text-3xl font-semibold">账号删除请求</h1>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -186,7 +186,7 @@ export default function AccountDeletionsAdminPage() {
               <button
                 type="button"
                 onClick={() => void processDue()}
-                className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110]"
               >
                 处理到期任务
               </button>
@@ -195,32 +195,32 @@ export default function AccountDeletionsAdminPage() {
               type="button"
               onClick={() => void loadAll()}
               disabled={loading}
-              className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
               {loading ? '刷新中...' : '刷新'}
             </button>
           </div>
         </div>
 
-        {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
-        {notice && <div className="rounded-lg border border-accent-green/40 bg-accent-green/10 px-4 py-3 text-sm text-accent-green">{notice}</div>}
+        {error && <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#6a3530]">{error}</div>}
+        {notice && <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#2f4027]">{notice}</div>}
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">当前列表</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">当前列表</div>
             <div className="mt-2 text-2xl font-semibold">{summary.total}</div>
           </div>
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">待处理</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">待处理</div>
             <div className="mt-2 text-2xl font-semibold">{summary.pending}</div>
           </div>
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">需重试</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">需重试</div>
             <div className="mt-2 text-2xl font-semibold">{summary.failed}</div>
           </div>
         </div>
 
-        <section className="rounded-lg border border-border-secondary bg-bg-secondary p-5">
+        <section className="admin-reference-card p-5">
           <div className="grid gap-3 md:grid-cols-[1fr_180px_auto]">
             <input
               value={filterUserId}
@@ -241,22 +241,22 @@ export default function AccountDeletionsAdminPage() {
             <button
               type="button"
               onClick={() => void loadAll()}
-              className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110]"
             >
               应用筛选
             </button>
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-lg border border-border-secondary bg-bg-secondary">
-          <div className="grid grid-cols-[1.1fr_0.8fr_0.8fr_1.2fr_120px] gap-3 border-b border-border-secondary px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+        <section className="admin-reference-card overflow-hidden">
+          <div className="grid grid-cols-[1.1fr_0.8fr_0.8fr_1.2fr_120px] gap-3 border-b border-[#e8eceb] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-black/42">
             <div>请求</div>
             <div>IM 删除</div>
             <div>OSS 媒体</div>
             <div>失败原因 / 目标</div>
             <div>操作</div>
           </div>
-          <div className="divide-y divide-border-secondary">
+          <div className="divide-y divide-[#e8eceb]">
             {items.map((item) => {
               const objectKeys = item.mediaTargets?.objectKeys || [];
               return (
@@ -301,17 +301,17 @@ export default function AccountDeletionsAdminPage() {
                 </div>
               );
             })}
-            {items.length === 0 && <div className="px-4 py-8 text-sm text-text-secondary">暂无账号删除请求。</div>}
+            {items.length === 0 && <div className="px-4 py-8 text-sm text-black/48">暂无账号删除请求。</div>}
           </div>
         </section>
       </section>
       {pendingReauthAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <form onSubmit={submitReauth} className="w-full max-w-md rounded-lg border border-border-secondary bg-bg-secondary p-6 shadow-2xl">
+          <form onSubmit={submitReauth} className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-2xl">
             <h2 className="text-xl font-semibold">安全复验</h2>
-            <p className="mt-3 text-sm leading-6 text-text-secondary">该操作会触发账号删除或媒体清理，请输入当前账号密码后继续。</p>
+            <p className="mt-3 text-sm leading-6 text-black/48">该操作会触发账号删除或媒体清理，请输入当前账号密码后继续。</p>
             <label className="mt-5 block text-sm">
-              <span className="text-text-secondary">密码</span>
+              <span className="text-black/48">密码</span>
               <input
                 type="password"
                 value={reauthPassword}
@@ -321,19 +321,19 @@ export default function AccountDeletionsAdminPage() {
                 className="mt-2 w-full rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
               />
             </label>
-            {reauthError && <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{reauthError}</div>}
+            {reauthError && <div className="mt-4 rounded-[18px] border border-[#efdad8] bg-[#f7e3e0] px-3 py-2 text-sm text-[#6a3530]">{reauthError}</div>}
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setPendingReauthAction(null)}
-                className="rounded-lg border border-border-secondary px-4 py-2 text-sm text-text-secondary hover:border-red-500 hover:text-red-300"
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110]"
               >
                 取消
               </button>
               <button
                 type="submit"
                 disabled={reauthLoading}
-                className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {reauthLoading ? '验证中...' : '确认继续'}
               </button>

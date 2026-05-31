@@ -54,6 +54,8 @@ export type DJCatalogItem = {
   bannerUrl?: string | null;
   country?: string | null;
   bio?: string | null;
+  aliases?: string[] | null;
+  genres?: string[] | null;
   followerCount?: number | null;
   soundCloudFollowers?: number | null;
   instagramUrl?: string | null;
@@ -81,8 +83,16 @@ export type DJCatalogFilters = {
   limit?: number;
   search?: string;
   country?: string;
+  verificationStatus?: 'all' | 'verified' | 'unverified' | 'incomplete';
   sortBy?: 'followerCount' | 'name' | 'createdAt';
   refresh?: boolean;
+};
+
+export type DJCatalogSummary = {
+  total: number;
+  verified: number;
+  unverified: number;
+  incomplete: number;
 };
 
 export type EventCatalogResponse = {
@@ -95,6 +105,7 @@ export type DJCatalogResponse = {
   items: DJCatalogItem[];
   pagination: AdminCatalogPagination;
   cache?: CatalogCacheMeta | null;
+  summary?: DJCatalogSummary | null;
 };
 
 const buildSearch = (params: Record<string, string | number | boolean | undefined>): string => {
@@ -145,10 +156,20 @@ export const adminCatalogApi = {
       limit,
       search: filters.search?.trim() || undefined,
       country: filters.country?.trim() || undefined,
+      verificationStatus:
+        filters.verificationStatus && filters.verificationStatus !== 'all'
+          ? filters.verificationStatus
+          : undefined,
       sortBy: filters.sortBy || undefined,
       refresh: filters.refresh ? 1 : undefined,
     });
-    const response = await authenticatedJsonFetch<BffEnvelope<{ items?: DJCatalogItem[]; meta?: { cache?: CatalogCacheMeta } }>>(
+    const response = await authenticatedJsonFetch<BffEnvelope<{
+      items?: DJCatalogItem[];
+      meta?: {
+        cache?: CatalogCacheMeta;
+        summary?: DJCatalogSummary;
+      };
+    }>>(
       getApiUrl(`/v1/djs/catalog-summary?${query}`)
     );
 
@@ -156,6 +177,7 @@ export const adminCatalogApi = {
       items: Array.isArray(response.data?.items) ? response.data.items : [],
       pagination: normalizePagination(response.pagination, limit),
       cache: response.data?.meta?.cache ?? null,
+      summary: response.data?.meta?.summary ?? null,
     };
   },
 };

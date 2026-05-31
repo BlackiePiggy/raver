@@ -77,24 +77,24 @@ export default function ArchiveYearCenterPageClient() {
       description="这里先把 Festival Viewer 里最常用的年份式活动回看迁回统一后台。先看年份摘要，再按年读取活动摘要，而不是一次性全量加载整个 Archive。"
       actions={
         <>
-          <Link href="/admin/content/legacy-tools/archive" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/legacy-tools/archive" className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110]">
             返回旧 Archive 桥接页
           </Link>
-          <Link href="/admin/content/events/catalog" className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue">
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110]">
             活动目录中心
           </Link>
         </>
       }
     >
       <section className="grid gap-5 xl:grid-cols-[0.7fr_1.3fr]">
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
-          <div className="text-sm text-text-secondary">Year Summary</div>
-          <h2 className="mt-2 text-2xl font-semibold">年份总览</h2>
-          <p className="mt-3 text-sm leading-6 text-text-secondary">{cacheMessage}</p>
+        <div className="admin-reference-card p-6">
+          <div className="text-sm text-black/42">Year Summary</div>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">年份总览</h2>
+          <p className="mt-3 text-sm leading-6 text-black/48">{cacheMessage}</p>
 
           <div className="mt-5">
             {isLoadingYears ? (
-              <div className="py-10 text-sm text-text-secondary">年份摘要加载中…</div>
+              <div className="py-10 text-sm text-black/48">年份摘要加载中…</div>
             ) : (
               <div className="space-y-3">
                 {years.map((yearItem) => {
@@ -109,12 +109,12 @@ export default function ArchiveYearCenterPageClient() {
                       }}
                       className={`w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
                         active
-                          ? 'border-primary-blue bg-primary-blue/10'
-                          : 'border-border-secondary bg-bg-tertiary/40 hover:border-primary-blue/40'
+                          ? 'border-[#dceabf] bg-[#edf7f2]'
+                          : 'border-[#e8eceb] bg-[#f8f9f8]'
                       }`}
                     >
-                      <div className="text-lg font-semibold text-text-primary">{yearItem.year}</div>
-                      <div className="mt-1 text-sm text-text-secondary">{yearItem.count.toLocaleString()} 场活动</div>
+                      <div className="text-lg font-semibold text-[#071110]">{yearItem.year}</div>
+                      <div className="mt-1 text-sm text-black/48">{yearItem.count.toLocaleString()} 场活动</div>
                     </button>
                   );
                 })}
@@ -123,35 +123,35 @@ export default function ArchiveYearCenterPageClient() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border-secondary bg-bg-secondary p-6">
+        <div className="admin-reference-card p-6">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="text-sm text-text-secondary">Year Events</div>
-              <h2 className="mt-2 text-2xl font-semibold">{selectedYear ? `${selectedYear} 年活动摘要` : '选择年份'}</h2>
+              <div className="text-sm text-black/42">Year Events</div>
+              <h2 className="mt-2 text-2xl font-semibold text-[#071110]">{selectedYear ? `${selectedYear} 年活动摘要` : '选择年份'}</h2>
             </div>
             {selectedYear ? (
-              <div className="text-sm text-text-secondary">当前页：{page}</div>
+              <div className="text-sm text-black/48">当前页：{page}</div>
             ) : null}
           </div>
 
           {error ? (
-            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="mt-4 rounded-2xl border border-[#efdad8] bg-[#f7e3e0] px-4 py-3 text-sm text-[#6a3530]">
               {error}
             </div>
           ) : null}
 
           <div className="mt-5">
             {isLoadingEvents ? (
-              <div className="py-20 text-center text-sm text-text-secondary">年份活动加载中…</div>
+              <div className="py-20 text-center text-sm text-black/48">年份活动加载中…</div>
             ) : !selectedYear ? (
-              <div className="py-20 text-center text-sm text-text-secondary">先从左侧选择年份。</div>
+              <div className="py-20 text-center text-sm text-black/48">先从左侧选择年份。</div>
             ) : items.length === 0 ? (
-              <div className="py-20 text-center text-sm text-text-secondary">这一年暂时没有活动摘要。</div>
+              <div className="py-20 text-center text-sm text-black/48">这一年暂时没有活动摘要。</div>
             ) : (
               <div className="space-y-4">
                 {items.map((item) => (
-                  <div key={item.id} className="grid gap-4 rounded-3xl border border-border-secondary bg-bg-tertiary/35 p-4 lg:grid-cols-[140px_minmax(0,1fr)_200px]">
-                    <div className="relative overflow-hidden rounded-2xl border border-border-secondary bg-bg-secondary">
+                  <div key={item.id} className="grid gap-4 rounded-3xl border border-[#e8eceb] bg-[#fcfcfb] p-4 lg:grid-cols-[140px_minmax(0,1fr)_200px]">
+                    <div className="relative overflow-hidden rounded-2xl border border-[#e8eceb] bg-[#f5f5f7]">
                       {item.coverImageUrl ? (
                         <Image
                           src={item.coverImageUrl}
@@ -161,27 +161,27 @@ export default function ArchiveYearCenterPageClient() {
                           className="h-full min-h-[110px] w-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-full min-h-[110px] items-center justify-center bg-[linear-gradient(135deg,rgba(209,171,84,0.18),rgba(64,147,255,0.18))] text-sm text-text-secondary">
+                        <div className="flex h-full min-h-[110px] items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/45">
                           暂无封面
                         </div>
                       )}
                     </div>
 
                     <div className="min-w-0">
-                      <h3 className="text-xl font-semibold text-text-primary">{item.name}</h3>
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      <h3 className="text-xl font-semibold text-[#071110]">{item.name}</h3>
+                      <p className="mt-2 text-sm leading-6 text-black/48">
                         {item.city || '未知城市'} / {item.country || '未知国家'} · {formatDateRange(item.startDate, item.endDate)}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      <p className="mt-2 text-sm leading-6 text-black/48">
                         主办方：{item.wikiFestival?.name || item.organizerName || '未绑定正式主办方'}
                       </p>
                     </div>
 
-                    <div className="grid gap-3">
-                      <Link href={`/admin/content/events/${item.id}/edit`} className="rounded-xl bg-primary-blue px-4 py-3 text-center text-sm font-semibold text-white">
+                    <div className="admin-reference-soft-card grid gap-3 p-4">
+                      <Link href={`/admin/content/events/${item.id}/edit`} className="rounded-full bg-[#071110] px-4 py-3 text-center text-sm font-semibold text-white">
                         编辑活动
                       </Link>
-                      <Link href={`/events/${item.id}`} className="rounded-xl border border-border-secondary px-4 py-3 text-center text-sm hover:border-primary-blue hover:text-primary-blue">
+                      <Link href={`/events/${item.id}`} className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
                         打开详情
                       </Link>
                     </div>
@@ -196,7 +196,7 @@ export default function ArchiveYearCenterPageClient() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
             >
               上一页
             </button>
@@ -204,7 +204,7 @@ export default function ArchiveYearCenterPageClient() {
               type="button"
               disabled={items.length < PAGE_SIZE}
               onClick={() => setPage((current) => current + 1)}
-              className="rounded-xl border border-border-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
             >
               下一页
             </button>

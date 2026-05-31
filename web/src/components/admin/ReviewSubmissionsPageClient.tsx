@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import {
   contentSubmissionsApi,
@@ -35,6 +36,8 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'failed', label: '失败' },
   { value: 'cancelled', label: '已取消' },
 ];
+
+const PAGE_SIZE = 20;
 
 type ReviewReasonTemplate = {
   code: string;
@@ -520,6 +523,8 @@ const buildAdminEditLink = (submission: ContentSubmission | ContentSubmissionDet
   if (submission.entityType === 'event') return `/admin/content/events/${submission.createdEntityId}/edit`;
   if (submission.entityType === 'brand') return `/admin/content/organizers/${submission.createdEntityId}/edit`;
   if (submission.entityType === 'dj') return `/admin/content/djs/${submission.createdEntityId}/edit`;
+  if (submission.entityType === 'news') return `/admin/content/news/${submission.createdEntityId}/edit`;
+  if (submission.entityType === 'label') return `/admin/content/labels/${submission.createdEntityId}/edit`;
   return null;
 };
 
@@ -1032,8 +1037,10 @@ const semanticDiffSections = (
 export default function ReviewSubmissionsPageClient() {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [entityFilter, setEntityFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [items, setItems] = useState<ContentSubmission[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedId, setSelectedId] = useState('');
   const [selectedDetail, setSelectedDetail] = useState<ContentSubmissionDetail | null>(null);
   const [loadingList, setLoadingList] = useState(true);
@@ -1055,44 +1062,23 @@ export default function ReviewSubmissionsPageClient() {
       setError('');
       setSuccessMessage('');
 
-      if (statusFilter === 'pending') {
-        const results = await Promise.all(
-          REVIEWABLE_STATUSES.map((status) =>
-            contentSubmissionsApi.listAdmin({
-              status,
-              entityType: entityFilter || undefined,
-              limit: 80,
-            })
-          )
-        );
-
-        const merged = new Map<string, ContentSubmission>();
-        results.forEach((result) => {
-          result.items.forEach((item) => merged.set(item.id, item));
-        });
-        const nextItems = Array.from(merged.values()).sort(
-          (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-        );
-        setItems(nextItems);
-        setTotal(nextItems.length);
-        setSelectedId((current) => (nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id || ''));
-        return;
-      }
-
       const result = await contentSubmissionsApi.listAdmin({
-        status: statusFilter,
+        status: statusFilter === 'pending' ? undefined : statusFilter,
+        statuses: statusFilter === 'pending' ? REVIEWABLE_STATUSES : undefined,
         entityType: entityFilter || undefined,
-        limit: 120,
+        page,
+        limit: PAGE_SIZE,
       });
       setItems(result.items);
       setTotal(result.total);
+      setTotalPages(result.pagination.totalPages);
       setSelectedId((current) => (result.items.some((item) => item.id === current) ? current : result.items[0]?.id || ''));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '审核列表加载失败');
     } finally {
       setLoadingList(false);
     }
-  }, [entityFilter, statusFilter]);
+  }, [entityFilter, page, statusFilter]);
 
   const loadDetail = useCallback(async (submissionId: string) => {
     if (!submissionId) {
@@ -1163,13 +1149,19 @@ export default function ReviewSubmissionsPageClient() {
       });
       setSuccessMessage(result.message || `已${decision === 'approved' ? '通过' : '拒绝'}当前提交`);
       await loadList();
-      await loadDetail(selectedDetail.id);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '提交审核决策失败');
     } finally {
       setSubmittingDecision(false);
     }
   };
+
+  const visiblePages = useMemo(() => {
+    const safeTotalPages = Math.max(1, totalPages);
+    const start = Math.max(1, Math.min(safeTotalPages - 4, page - 2));
+    const end = Math.min(safeTotalPages, start + 4);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [page, totalPages]);
 
   const detailEditLink = selectedDetail
     ? buildAdminEditLink(selectedDetail)
@@ -1263,7 +1255,10 @@ export default function ReviewSubmissionsPageClient() {
                 <span className="text-xs uppercase tracking-[0.2em] text-black/35">状态</span>
                 <select
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value);
+                    setPage(1);
+                  }}
                   className="w-full rounded-full px-4 py-3 text-sm"
                 >
                   {STATUS_OPTIONS.map((option) => (
@@ -1277,7 +1272,10 @@ export default function ReviewSubmissionsPageClient() {
                 <span className="text-xs uppercase tracking-[0.2em] text-black/35">实体类型</span>
                 <select
                   value={entityFilter}
-                  onChange={(event) => setEntityFilter(event.target.value)}
+                  onChange={(event) => {
+                    setEntityFilter(event.target.value);
+                    setPage(1);
+                  }}
                   className="w-full rounded-full px-4 py-3 text-sm"
                 >
                   {ENTITY_OPTIONS.map((option) => (
@@ -1328,6 +1326,49 @@ export default function ReviewSubmissionsPageClient() {
                 })}
               </div>
             )}
+
+            <div className="mt-5 flex flex-col gap-3 border-t border-[#edf0ee] pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-black/48">
+                共 {total.toLocaleString()} 条，当前显示第 {total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+                {' - '}
+                {Math.min(page * PAGE_SIZE, total)} 条
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {visiblePages.map((pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-10 min-w-10 rounded-full px-3 text-sm font-semibold ${
+                      pageNumber === page
+                        ? 'bg-[#071110] text-white'
+                        : 'border border-[#e8eceb] bg-white text-[#071110]'
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           </section>
         </div>
 

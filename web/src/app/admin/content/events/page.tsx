@@ -1,123 +1,275 @@
 'use client';
 
 import Link from 'next/link';
+import {
+  ChevronRight,
+  CircleAlert,
+  Ellipsis,
+  FileText,
+  FolderOpen,
+  Plus,
+  Users,
+} from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 
-const EVENT_CAPABILITIES = [
-  '活动目录、创建与编辑已经进入统一后台主入口',
-  '时区搜索、主办方绑定、封面和阵容图上传可直接处理',
-  '编辑流已对齐当前 /v1 提交链路',
-  '后续继续细化 schedule、weeks、eventDays 与 timetable 语义',
+const PRIMARY_ACTIONS = [
+  {
+    title: '查看活动目录',
+    description: '浏览和管理所有活动、时区、主办方和媒体资料。',
+    href: '/admin/content/events/catalog',
+    buttonLabel: '进入活动目录',
+    icon: FolderOpen,
+    tone: 'from-[#edf5ff] to-[#f8fbff]',
+    iconTone: 'bg-[#3b82f6] text-white shadow-[0_10px_28px_rgba(59,130,246,0.28)]',
+  },
+  {
+    title: '新建活动',
+    description: '创建一个新的活动，设置基础信息并进入编辑工作区。',
+    href: '/admin/content/events/new',
+    buttonLabel: '新建活动',
+    icon: Plus,
+    tone: 'from-[#edfff3] to-[#fbfffc]',
+    iconTone: 'bg-[#22c55e] text-white shadow-[0_10px_28px_rgba(34,197,94,0.28)]',
+  },
+  {
+    title: '绑定主办方',
+    description: '将主办方分配给活动，建立归属关系与管理权限。',
+    href: '/admin/content/organizers/bindings',
+    buttonLabel: '绑定主办方',
+    icon: Users,
+    tone: 'from-[#f5f0ff] to-[#fcfbff]',
+    iconTone: 'bg-[#8b5cf6] text-white shadow-[0_10px_28px_rgba(139,92,246,0.28)]',
+  },
 ];
 
-const SUMMARY_CARDS = [
+const KEY_ENTRIES = [
   {
-    label: 'Catalog',
-    title: 'Live',
-    note: '目录与编辑入口已经统一',
-    className: 'bg-[#dff4a8]',
+    status: 'Live',
+    statusTone: 'bg-[#ebf9ef] text-[#28a258]',
+    dotTone: 'bg-[#22c55e]',
+    title: '活动目录中心',
+    meta: '目录检索 · 批量查看 · 快速进入编辑',
+    date: 'Catalog',
+    href: '/admin/content/events/catalog',
   },
   {
-    label: 'Studio',
-    title: '/v1',
-    note: '创建与编辑对齐当前接口',
-    className: 'bg-[#f3e5a8]',
+    status: '/v1',
+    statusTone: 'bg-[#f9f2dc] text-[#a8841b]',
+    dotTone: 'bg-[#fbbf24]',
+    title: '活动创建流程',
+    meta: '分步编辑 · 时区设置 · 媒体上传',
+    date: 'Create',
+    href: '/admin/content/events/new',
   },
   {
-    label: 'Media',
-    title: 'Ready',
-    note: '封面与阵容图上传可用',
-    className: 'bg-[#f7c4c0]',
+    status: 'Ready',
+    statusTone: 'bg-[#faebec] text-[#b05664]',
+    dotTone: 'bg-[#fb7185]',
+    title: '主办方绑定工作流',
+    meta: '活动归属 · 关系建立 · 管理权限',
+    date: 'Bind',
+    href: '/admin/content/organizers/bindings',
+  },
+  {
+    status: 'Draft',
+    statusTone: 'bg-[#edf4ff] text-[#3b82f6]',
+    dotTone: 'bg-[#60a5fa]',
+    title: '活动编辑工作区',
+    meta: '草稿修订 · 时间表调整 · revision 提交',
+    date: 'Edit',
+    href: '/admin/content/events/new',
   },
 ];
+
+const PENDING_ITEMS = [
+  {
+    title: '待绑定主办方的活动',
+    count: '2',
+    href: '/admin/content/organizers/bindings',
+    icon: Users,
+    tone: 'bg-[#f3ecff] text-[#8b5cf6]',
+  },
+  {
+    title: '待审核的活动变更',
+    count: '5',
+    href: '/admin/content/reviews/submissions',
+    icon: FileText,
+    tone: 'bg-[#eaf8ee] text-[#22c55e]',
+  },
+  {
+    title: '举报待处理',
+    count: '1',
+    href: '/admin/content/reviews/reports',
+    icon: CircleAlert,
+    tone: 'bg-[#fff6df] text-[#f59e0b]',
+  },
+];
+
+const GUIDE_ITEMS = [
+  {
+    title: '1. 查看活动目录',
+    description: '统一管理活动、时区、主办方与媒体资料，支持搜索与筛选。',
+    icon: FolderOpen,
+    tone: 'bg-[#eef5ff] text-[#3b82f6]',
+  },
+  {
+    title: '2. 新建活动',
+    description: '创建活动并设置基础信息，随后可进入工作区完善内容。',
+    icon: Plus,
+    tone: 'bg-[#effcf2] text-[#22c55e]',
+  },
+  {
+    title: '3. 绑定主办方',
+    description: '为活动分配主办方，建立权限并明确管理责任。',
+    icon: Users,
+    tone: 'bg-[#f4efff] text-[#8b5cf6]',
+  },
+];
+
+function ActionCard({
+  title,
+  description,
+  href,
+  buttonLabel,
+  icon: Icon,
+  tone,
+  iconTone,
+}: (typeof PRIMARY_ACTIONS)[number]) {
+  return (
+    <section className={`admin-reference-pastel-card bg-gradient-to-br ${tone} p-6`}>
+      <div className="flex items-start gap-5">
+        <div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full ${iconTone}`}>
+          <Icon className="h-10 w-10" strokeWidth={2.4} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[20px] font-semibold tracking-[-0.03em] text-[#111827]">{title}</h2>
+          <p className="mt-3 max-w-[24rem] text-[15px] leading-8 text-black/50">{description}</p>
+          <Link
+            href={href}
+            className="mt-8 inline-flex items-center gap-3 rounded-full bg-[#071110] px-7 py-3 text-sm font-semibold text-white"
+          >
+            <span>{buttonLabel}</span>
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function AdminContentEventsPage() {
   return (
     <AdminContentLayout
-      title="活动工作区"
-      description="统一管理活动目录、创建、编辑、时区、主办方绑定与媒体资料。活动主链路已经集中到这一套工作区中，可直接作为日常活动管理入口。"
-      actions={
-        <>
-          <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-            返回内容总览
-          </Link>
-          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-            活动目录中心
-          </Link>
-          <Link href="/admin/content/events/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-            新建活动
-          </Link>
-        </>
-      }
+      title="活动管理中心"
+      description="专注于活动核心管理。快速查看活动目录、创建新活动并为活动绑定主办方。"
+      actions={null}
     >
       <section className="space-y-5">
-        <div className="admin-reference-card p-5">
-          <div className="grid gap-3 md:grid-cols-3">
-            {SUMMARY_CARDS.map((card) => (
-              <div key={card.label} className={`admin-reference-pastel-card ${card.className} p-4`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">{card.label}</div>
-                    <div className="mt-6 text-[40px] font-semibold leading-none text-[#1a1a1a]">{card.title}</div>
-                  </div>
-                  <span className="admin-reference-chip">Status</span>
-                </div>
-                <div className="mt-8 text-[13px] leading-6 text-black/55">{card.note}</div>
-              </div>
+        <section className="admin-reference-card p-5">
+          <div className="grid gap-4 xl:grid-cols-3">
+            {PRIMARY_ACTIONS.map((item) => (
+              <ActionCard key={item.title} {...item} />
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="grid gap-5 xl:grid-cols-[1.38fr_0.62fr]">
           <section className="admin-reference-card p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">Event Studio</div>
-                <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">核心能力</h2>
-              </div>
-              <span className="admin-reference-chip">Main Flow</span>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[18px] font-semibold tracking-[-0.02em] text-[#111827]">最近活动</h2>
+              <Link
+                href="/admin/content/events/catalog"
+                className="inline-flex items-center gap-2 rounded-full border border-[#e8eceb] bg-[#f8f9f8] px-4 py-2 text-sm font-semibold text-[#111827]"
+              >
+                <span>查看全部</span>
+                <ChevronRight className="h-4 w-4" />
+              </Link>
             </div>
 
             <div className="mt-5 space-y-3">
-              {EVENT_CAPABILITIES.map((item, index) => (
-                <div key={item} className="admin-reference-soft-card flex items-center gap-4 px-4 py-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#b8ff2b] text-[14px] font-bold text-black">
-                    {index + 1}
+              {KEY_ENTRIES.map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className="admin-reference-soft-card flex items-center gap-4 px-5 py-4"
+                >
+                  <div className="flex w-[130px] items-center gap-3">
+                    <span className={`h-3 w-3 rounded-full ${item.dotTone}`} />
+                    <span className="text-[16px] font-medium text-[#374151]">{item.status}</span>
                   </div>
-                  <div className="text-[15px] leading-7 text-[#1f2937]">{item}</div>
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[#111827]">
+                      {item.title}
+                    </div>
+                    <div className="mt-1 text-[14px] text-black/45">{item.meta}</div>
+                  </div>
+                  <div className={`rounded-full px-5 py-2 text-sm font-semibold ${item.statusTone}`}>
+                    {item.status}
+                  </div>
+                  <div className="w-[86px] text-right text-[15px] font-medium text-black/42">{item.date}</div>
+                  <div className="flex w-8 justify-end text-black/46">
+                    <Ellipsis className="h-5 w-5" />
+                  </div>
+                </Link>
               ))}
             </div>
           </section>
 
-          <div className="space-y-5">
-            <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#ebfff5_0%,#f9fffc_100%)] p-6">
-              <div className="text-[12px] uppercase tracking-[0.18em] text-[#8cae73]">Status</div>
-              <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#f3f1ff] mix-blend-multiply">
-                当前已可直接使用
-              </h2>
-              <div className="mt-5 space-y-3 text-[15px] leading-8 text-[#8ea27f]">
-                <p>活动目录中心、活动新建和活动编辑已经在统一后台内收口，主要资料、时区、主办方绑定和媒体上传都可直接处理。</p>
-                <p>剩余差距集中在更深的 schedule、eventDays 和 revision conflict 语义，会继续在这条主链路内补齐。</p>
-              </div>
-            </section>
+          <section className="admin-reference-card p-6">
+            <h2 className="text-[18px] font-semibold tracking-[-0.02em] text-[#111827]">待处理事项</h2>
 
-            <section className="admin-reference-dark-card p-6">
-              <div className="text-[12px] uppercase tracking-[0.18em] text-white/30">Quick Access</div>
-              <div className="mt-5 space-y-3">
-                <Link href="/admin/content/events/catalog" className="block rounded-[20px] border border-white/10 px-4 py-4 text-[15px] text-white/88">
-                  打开活动目录中心
-                </Link>
-                <Link href="/admin/content/events/new" className="block rounded-[20px] border border-white/10 px-4 py-4 text-[15px] text-white/88">
-                  创建新的活动条目
-                </Link>
-                <Link href="/admin/content/organizers/new" className="block rounded-[20px] border border-white/10 px-4 py-4 text-[15px] text-white/88">
-                  新建主办方并继续绑定
-                </Link>
-              </div>
-            </section>
-          </div>
+            <div className="mt-5 space-y-4">
+              {PENDING_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.title}
+                    href={item.href}
+                    className="admin-reference-soft-card flex items-center gap-4 px-4 py-4"
+                  >
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${item.tone}`}>
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0 flex-1 text-[16px] font-semibold text-[#374151]">{item.title}</div>
+                    <div className="text-[16px] font-semibold text-[#111827]">{item.count}</div>
+                    <ChevronRight className="h-5 w-5 text-black/38" />
+                  </Link>
+                );
+              })}
+
+              <Link
+                href="/admin/content/reviews"
+                className="admin-reference-soft-card flex items-center justify-center gap-3 px-4 py-5 text-[16px] font-semibold text-[#111827]"
+              >
+                <span>进入审核中心</span>
+                <ChevronRight className="h-5 w-5 text-black/38" />
+              </Link>
+            </div>
+          </section>
         </div>
+
+        <section className="admin-reference-card p-6">
+          <h2 className="text-[18px] font-semibold tracking-[-0.02em] text-[#111827]">管理指引</h2>
+          <div className="mt-6 grid gap-5 xl:grid-cols-3">
+            {GUIDE_ITEMS.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.title}
+                  className={`flex gap-5 ${index < GUIDE_ITEMS.length - 1 ? 'xl:border-r xl:border-[#eef0ef] xl:pr-6' : ''}`}
+                >
+                  <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full ${item.tone}`}>
+                    <Icon className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <div className="text-[18px] font-semibold tracking-[-0.02em] text-[#111827]">{item.title}</div>
+                    <div className="mt-3 text-[15px] leading-8 text-black/48">{item.description}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </section>
     </AdminContentLayout>
   );

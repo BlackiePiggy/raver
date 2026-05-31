@@ -371,6 +371,51 @@
   font-weight: 700;
 }
 
+.admin-ravehub-shell .divide-border-secondary > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(232, 236, 235, 0.92) !important;
+}
+
+.admin-ravehub-shell .text-text-tertiary {
+  color: rgba(7, 17, 16, 0.38) !important;
+}
+
+.admin-ravehub-shell .border-accent-green\/40 {
+  border-color: #dceabf !important;
+}
+
+.admin-ravehub-shell .bg-accent-green\/10 {
+  background: #eef8d8 !important;
+}
+
+.admin-ravehub-shell .text-accent-green {
+  color: #2f4027 !important;
+}
+
+.admin-ravehub-shell .border-yellow-500\/40 {
+  border-color: #eadfbe !important;
+}
+
+.admin-ravehub-shell .bg-yellow-500\/10 {
+  background: #f6edd7 !important;
+}
+
+.admin-ravehub-shell .text-yellow-300 {
+  color: #604a1b !important;
+}
+
+.admin-ravehub-shell .border-red-500\/40 {
+  border-color: #efdad8 !important;
+}
+
+.admin-ravehub-shell .bg-red-500\/10 {
+  background: #f7e3e0 !important;
+}
+
+.admin-ravehub-shell .text-red-300,
+.admin-ravehub-shell .text-red-200 {
+  color: #6a3530 !important;
+}
+
 @media (max-width: 1279px) {
   .admin-shell-page {
     padding: 8px 0 8px;

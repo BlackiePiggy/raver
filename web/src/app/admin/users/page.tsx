@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import AdminAppShell from '@/components/admin/AdminAppShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { authAPI } from '@/lib/api/auth';
@@ -10,6 +11,7 @@ import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { formatDateTimeWithSystemTimeZoneLabel } from '@/lib/timezone';
 
 const REAUTH_SCOPE = 'account_deletion.write';
+const PAGE_SIZE = 24;
 
 const formatTime = (value?: string | null): string => {
   if (!value) return '-';
@@ -25,15 +27,15 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
 
 function UserIdentity({ item }: { item: AdminUser }) {
   return (
-    <div className="min-w-0 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="min-w-0 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <StatusBadge isActive={item.isActive} />
-        <span className="rounded-md border border-border-secondary bg-bg-tertiary px-2 py-1 text-xs text-text-secondary">{item.role}</span>
+        <span className="rounded-md border border-border-secondary bg-bg-tertiary px-2 py-0.5 text-[11px] text-text-secondary">{item.role}</span>
       </div>
-      <div className="font-semibold">{item.displayName || item.username}</div>
-      <div className="break-all text-xs text-text-secondary">{item.email}</div>
-      <div className="break-all text-xs text-text-secondary">{item.phoneNumber || '未绑定手机号'}</div>
-      <div className="break-all font-mono text-xs text-text-tertiary">{item.id}</div>
+      <div className="truncate font-semibold leading-5">{item.displayName || item.username}</div>
+      <div className="break-all text-[11px] leading-5 text-text-secondary">{item.email}</div>
+      <div className="break-all text-[11px] leading-5 text-text-secondary">{item.phoneNumber || '未绑定手机号'}</div>
+      <div className="break-all font-mono text-[11px] leading-5 text-text-tertiary">{item.id}</div>
     </div>
   );
 }
@@ -44,13 +46,15 @@ export default function AdminUsersPage() {
   const canOperate = rolePolicy.canAccessOperations;
   const canDelete = user?.role === 'admin';
 
+  const [queryInput, setQueryInput] = useState('');
+  const [query, setQuery] = useState('');
   const [items, setItems] = useState<AdminUser[]>([]);
-  const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [status, setStatus] = useState('');
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -63,27 +67,27 @@ export default function AdminUsersPage() {
   const [reauthLoading, setReauthLoading] = useState(false);
   const [pendingDeleteUser, setPendingDeleteUser] = useState<AdminUser | null>(null);
 
-  const loadUsers = useCallback(async (cursor?: string | null) => {
+  const loadUsers = useCallback(async () => {
     if (!canOperate) return;
     try {
-      cursor ? setLoadingMore(true) : setLoading(true);
+      setLoading(true);
       setError(null);
       const result = await adminUsersApi.list({
-        q: q.trim() || undefined,
+        q: query.trim() || undefined,
         role: role || undefined,
         status: status || undefined,
-        cursor: cursor || undefined,
-        limit: 50,
+        page,
+        limit: PAGE_SIZE,
       });
-      setItems((prev) => (cursor ? [...prev, ...result.items] : result.items));
-      setNextCursor(result.nextCursor);
+      setItems(result.items);
+      setTotal(result.pagination.total);
+      setTotalPages(result.pagination.totalPages);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '加载用户失败');
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
-  }, [canOperate, q, role, status]);
+  }, [canOperate, page, query, role, status]);
 
   const loadDetail = useCallback(async (userId: string) => {
     try {
@@ -99,7 +103,7 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    void loadUsers(null);
+    void loadUsers();
   }, [loadUsers]);
 
   useEffect(() => {
@@ -110,10 +114,17 @@ export default function AdminUsersPage() {
     }
   }, [loadDetail, selectedUserId]);
 
+  useEffect(() => {
+    if (!selectedUserId) return;
+    if (items.some((item) => item.id === selectedUserId)) return;
+    setSelectedUserId(null);
+  }, [items, selectedUserId]);
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSelectedUserId(null);
-    void loadUsers(null);
+    setPage(1);
+    setQuery(queryInput);
   };
 
   const openDeleteDialog = (item: AdminUser) => {
@@ -138,7 +149,7 @@ export default function AdminUsersPage() {
       setNotice(`账号已匿名化删除，删除请求 ID：${result.deletionRequestId || '-'}`);
       setPendingDeleteUser(null);
       setSelectedUserId(null);
-      await loadUsers(null);
+      await loadUsers();
     } catch (deleteError) {
       setReauthError(deleteError instanceof Error ? deleteError.message : '删除失败');
     } finally {
@@ -146,6 +157,13 @@ export default function AdminUsersPage() {
       setDeletingUserId(null);
     }
   };
+
+  const visiblePages = useMemo(() => {
+    const safeTotalPages = Math.max(1, totalPages);
+    const start = Math.max(1, Math.min(safeTotalPages - 4, page - 2));
+    const end = Math.min(safeTotalPages, start + 4);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [page, totalPages]);
 
   if (isLoading) {
     return (
@@ -186,7 +204,7 @@ export default function AdminUsersPage() {
           </div>
           <button
             type="button"
-            onClick={() => void loadUsers(null)}
+            onClick={() => void loadUsers()}
             disabled={loading}
             className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
@@ -200,12 +218,20 @@ export default function AdminUsersPage() {
         <form onSubmit={submitSearch} className="rounded-lg border border-border-secondary bg-bg-secondary p-5">
           <div className="grid gap-3 md:grid-cols-[1fr_150px_150px_auto]">
             <input
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
               placeholder="邮箱 / 手机号 / 昵称 / 用户名 / userId"
               className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
             />
-            <select value={role} onChange={(event) => setRole(event.target.value)} className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm">
+            <select
+              value={role}
+              onChange={(event) => {
+                setRole(event.target.value);
+                setPage(1);
+                setSelectedUserId(null);
+              }}
+              className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
+            >
               <option value="">全部角色</option>
               <option value="user">user</option>
               <option value="artist">artist</option>
@@ -213,7 +239,15 @@ export default function AdminUsersPage() {
               <option value="operator">operator</option>
               <option value="admin">admin</option>
             </select>
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm">
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+                setSelectedUserId(null);
+              }}
+              className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm"
+            >
               <option value="">全部状态</option>
               <option value="active">active</option>
               <option value="inactive">inactive</option>
@@ -226,7 +260,15 @@ export default function AdminUsersPage() {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section className="overflow-hidden rounded-lg border border-border-secondary bg-bg-secondary">
-            <div className="grid grid-cols-[1.25fr_0.8fr_0.9fr_150px] gap-3 border-b border-border-secondary px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            <div className="flex items-center justify-between border-b border-border-secondary px-4 py-3 text-xs text-text-secondary">
+              <div>
+                共 {total.toLocaleString()} 个用户，当前第 {page} / {Math.max(1, totalPages)} 页
+              </div>
+              <div>
+                显示 {total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} - {Math.min(page * PAGE_SIZE, total)}
+              </div>
+            </div>
+            <div className="grid grid-cols-[1.2fr_0.78fr_0.86fr_130px] gap-3 border-b border-border-secondary px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
               <div>用户</div>
               <div>数据</div>
               <div>时间</div>
@@ -234,16 +276,16 @@ export default function AdminUsersPage() {
             </div>
             <div className="divide-y divide-border-secondary">
               {items.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1.25fr_0.8fr_0.9fr_150px] gap-3 px-4 py-4 text-sm">
+                <div key={item.id} className="grid grid-cols-[1.2fr_0.78fr_0.86fr_130px] gap-3 px-4 py-3 text-[13px]">
                   <UserIdentity item={item} />
-                  <div className="space-y-2 text-text-secondary">
+                  <div className="space-y-1 text-[12px] leading-5 text-text-secondary">
                     <div>帖子：{item.counts?.posts ?? 0}</div>
                     <div>关注：{item.counts?.follows ?? 0}</div>
                     <div>粉丝：{item.counts?.followers ?? 0}</div>
                     <div>会话：{item.counts?.authSessions ?? 0}</div>
                     <div>处罚：{item.counts?.enforcements ?? 0}</div>
                   </div>
-                  <div className="space-y-2 text-text-secondary">
+                  <div className="space-y-1 text-[12px] leading-5 text-text-secondary">
                     <div>注册：{formatTime(item.createdAt)}</div>
                     <div>登录：{formatTime(item.lastLoginAt)}</div>
                     <div>更新：{formatTime(item.updatedAt)}</div>
@@ -252,7 +294,7 @@ export default function AdminUsersPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedUserId(item.id)}
-                      className="w-full rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-primary-blue hover:text-primary-blue"
+                      className="w-full rounded-lg border border-border-secondary px-3 py-1.5 text-[12px] hover:border-primary-blue hover:text-primary-blue"
                     >
                       查看
                     </button>
@@ -261,7 +303,7 @@ export default function AdminUsersPage() {
                         type="button"
                         onClick={() => openDeleteDialog(item)}
                         disabled={deletingUserId === item.id}
-                        className="w-full rounded-lg border border-border-secondary px-3 py-2 text-sm hover:border-red-500 hover:text-red-300 disabled:opacity-60"
+                        className="w-full rounded-lg border border-border-secondary px-3 py-1.5 text-[12px] hover:border-red-500 hover:text-red-300 disabled:opacity-60"
                       >
                         {deletingUserId === item.id ? '删除中...' : '删除账号'}
                       </button>
@@ -271,18 +313,41 @@ export default function AdminUsersPage() {
               ))}
               {items.length === 0 && <div className="px-4 py-10 text-center text-sm text-text-secondary">暂无用户</div>}
             </div>
-            {nextCursor && (
-              <div className="border-t border-border-secondary p-4 text-center">
+            <div className="flex flex-col gap-3 border-t border-border-secondary px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs text-text-secondary">每页 {PAGE_SIZE} 条</div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => void loadUsers(nextCursor)}
-                  disabled={loadingMore}
-                  className="rounded-lg border border-border-secondary px-4 py-2 text-sm hover:border-primary-blue hover:text-primary-blue disabled:opacity-60"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-secondary bg-bg-secondary text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {loadingMore ? '加载中...' : '加载更多'}
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {visiblePages.map((pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-9 min-w-9 rounded-full px-3 text-xs font-semibold ${
+                      pageNumber === page
+                        ? 'bg-[#071110] text-white'
+                        : 'border border-border-secondary bg-bg-secondary text-text-primary'
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-secondary bg-bg-secondary text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-            )}
+            </div>
           </section>
 
           <aside className="rounded-lg border border-border-secondary bg-bg-secondary p-5">

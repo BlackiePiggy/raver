@@ -29,6 +29,22 @@ const HUB_CARDS = [
     tone: 'bg-[#f7c4c0]',
   },
   {
+    eyebrow: 'News Studio',
+    title: '资讯工作区',
+    description: '资讯正文、封面、发布时间与关联绑定统一收口到网页后台。',
+    bullets: ['资讯创建与编辑已接入', '正文区域优先级更高', '支持 DJ / 主办方 / 活动绑定'],
+    href: '/admin/content/news',
+    tone: 'bg-[#dbeefe]',
+  },
+  {
+    eyebrow: 'Label Studio',
+    title: '厂牌工作区',
+    description: '厂牌资料、视觉 URL 与官方链接可以直接在统一后台维护。',
+    bullets: ['厂牌创建与编辑已接入', '目录支持分页检索', '资料区与视觉区已拆分'],
+    href: '/admin/content/labels',
+    tone: 'bg-[#e7f7d7]',
+  },
+  {
     eyebrow: 'Review Center',
     title: '审核中心',
     description: '内容贡献审核、DJ 绑定审核与举报审核在统一后台中分区处理。',
@@ -93,8 +109,8 @@ export default function AdminContentWorkspacePage() {
       <section className="space-y-5">
         <div className="grid gap-4 lg:grid-cols-4">
           {[
-            { label: 'Active Modules', value: '12', note: '核心工作台' },
-            { label: 'Catalog Surfaces', value: '03', note: '活动 / 主办方 / DJ' },
+            { label: 'Active Modules', value: '14', note: '核心工作台' },
+            { label: 'Catalog Surfaces', value: '05', note: '活动 / 主办方 / DJ / 资讯 / 厂牌' },
             { label: 'Review Queues', value: '03', note: '内容 / 绑定 / 举报' },
             { label: 'Admin Focus', value: 'Live', note: '统一后台主链路' },
           ].map((item, index) => (
@@ -147,6 +163,9 @@ export default function AdminContentWorkspacePage() {
                 <Link href="/admin/content/organizers/catalog" className="rounded-full border border-[#ececec] bg-white px-4 py-2 text-sm text-[#18211f]">
                   打开主办方目录
                 </Link>
+                <Link href="/admin/content/news" className="rounded-full border border-[#ececec] bg-white px-4 py-2 text-sm text-[#18211f]">
+                  打开资讯工作区
+                </Link>
               </div>
             </section>
 
@@ -157,6 +176,8 @@ export default function AdminContentWorkspacePage() {
                   { href: '/admin/content/events/catalog', label: '活动目录中心' },
                   { href: '/admin/content/organizers/catalog', label: '主办方目录中心' },
                   { href: '/admin/content/djs/catalog', label: 'DJ 目录中心' },
+                  { href: '/admin/content/news', label: '资讯工作区' },
+                  { href: '/admin/content/labels', label: '厂牌工作区' },
                   { href: '/admin/content/events/cache-governance', label: '目录缓存治理' },
                 ].map((item) => (
                   <Link key={item.href} href={item.href} className="block rounded-[20px] border border-white/10 px-4 py-4 text-[15px] text-white/88">

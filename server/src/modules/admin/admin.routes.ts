@@ -50,6 +50,12 @@ const parseLimit = (value: unknown, fallback = 50, max = 200): number => {
   return Math.min(Math.floor(parsed), max);
 };
 
+const parsePage = (value: unknown, fallback = 1): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+};
+
 const parseDateCursor = (value: unknown): Date | undefined => {
   if (typeof value !== 'string' || !value.trim()) return undefined;
   const date = new Date(value);
@@ -1082,8 +1088,9 @@ router.get('/users', authenticate, requireAdminOrOperator, async (req: AuthReque
     const q = firstQueryValue(query.q)?.trim();
     const role = firstQueryValue(query.role)?.trim();
     const status = firstQueryValue(query.status)?.trim();
-    const limit = parseLimit(query.limit, 50, 200);
-    const cursor = firstQueryValue(query.cursor)?.trim();
+    const page = parsePage(query.page, 1);
+    const limit = parseLimit(query.limit, 24, 100);
+    const skip = (page - 1) * limit;
 
     const where: Prisma.UserWhereInput = {};
     if (q) {
@@ -1104,44 +1111,45 @@ router.get('/users', authenticate, requireAdminOrOperator, async (req: AuthReque
       where.isActive = false;
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        phoneNumber: true,
-        displayName: true,
-        avatarUrl: true,
-        role: true,
-        isActive: true,
-        isVerified: true,
-        regionCode: true,
-        birthYear: true,
-        ageBand: true,
-        createdAt: true,
-        updatedAt: true,
-        lastLoginAt: true,
-        _count: {
-          select: {
-            posts: true,
-            authRefreshTokens: true,
-            accountEnforcements: true,
-            accountDeletionRequests: true,
+    const [users, total] = await prisma.$transaction([
+      prisma.user.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          phoneNumber: true,
+          displayName: true,
+          avatarUrl: true,
+          role: true,
+          isActive: true,
+          isVerified: true,
+          regionCode: true,
+          birthYear: true,
+          ageBand: true,
+          createdAt: true,
+          updatedAt: true,
+          lastLoginAt: true,
+          _count: {
+            select: {
+              posts: true,
+              authRefreshTokens: true,
+              accountEnforcements: true,
+              accountDeletionRequests: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-    const hasMore = users.length > limit;
-    const pageItems = hasMore ? users.slice(0, limit) : users;
-    const followCountsByUserId = await loadUserFollowCounts(pageItems.map((user) => user.id));
+    const followCountsByUserId = await loadUserFollowCounts(users.map((user) => user.id));
     res.json({
       success: true,
-      items: pageItems.map((user) =>
+      items: users.map((user) =>
         mapAdminUser({
           ...user,
           counts: {
@@ -1154,7 +1162,12 @@ router.get('/users', authenticate, requireAdminOrOperator, async (req: AuthReque
           },
         })
       ),
-      nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
     });
   } catch (error) {
     console.error('Fetch admin users error:', error);

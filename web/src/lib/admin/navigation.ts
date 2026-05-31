@@ -4,11 +4,13 @@ import {
   Bell,
   BookCheck,
   CircleUserRound,
+  Disc3,
   FileWarning,
   FolderKanban,
   Gavel,
   Headphones,
   LayoutGrid,
+  Newspaper,
   RadioTower,
   ShieldCheck,
   TicketCheck,
@@ -22,6 +24,7 @@ export type AdminNavItem = {
   description: string;
   icon: LucideIcon;
   visible: (policy: AdminCmsRolePolicy) => boolean;
+  matchMode?: 'exact' | 'prefix';
 };
 
 export type AdminNavGroup = {
@@ -47,13 +50,21 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '总览与状态',
         icon: LayoutGrid,
         visible: alwaysVisible,
+        matchMode: 'exact',
       },
+    ],
+  },
+  {
+    id: 'overview',
+    label: 'Overview',
+    items: [
       {
         href: '/admin/content',
         label: '内容控制台',
-        description: '内容总入口',
+        description: '内容总览入口',
         icon: FolderKanban,
         visible: contentVisible,
+        matchMode: 'exact',
       },
     ],
   },
@@ -67,6 +78,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '活动目录与编辑',
         icon: RadioTower,
         visible: contentVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/content/organizers',
@@ -74,6 +86,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '主办方目录与绑定',
         icon: TicketCheck,
         visible: contentVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/content/djs',
@@ -81,13 +94,23 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: 'DJ 目录与编辑',
         icon: Headphones,
         visible: contentVisible,
+        matchMode: 'prefix',
       },
       {
-        href: '/admin/content/reviews',
-        label: '审核中心',
-        description: '审核与举报',
-        icon: BookCheck,
+        href: '/admin/content/news',
+        label: '资讯工作区',
+        description: '资讯创建与编辑',
+        icon: Newspaper,
         visible: contentVisible,
+        matchMode: 'prefix',
+      },
+      {
+        href: '/admin/content/labels',
+        label: '厂牌工作区',
+        description: '厂牌资料与编辑',
+        icon: Disc3,
+        visible: contentVisible,
+        matchMode: 'prefix',
       },
     ],
   },
@@ -96,11 +119,20 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: 'Governance',
     items: [
       {
+        href: '/admin/content/reviews',
+        label: '审核中心',
+        description: '内容审核与举报',
+        icon: BookCheck,
+        visible: contentVisible,
+        matchMode: 'prefix',
+      },
+      {
         href: '/admin/dj-binding-reviews',
         label: 'DJ 绑定审核',
         description: '阵容命中处理',
         icon: FileWarning,
         visible: opsVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/content-reports',
@@ -108,6 +140,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: 'UGC 举报处理',
         icon: Gavel,
         visible: opsVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/account-enforcements',
@@ -115,6 +148,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '封禁与申诉',
         icon: ShieldCheck,
         visible: opsVisible,
+        matchMode: 'prefix',
       },
     ],
   },
@@ -128,6 +162,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '用户检索与删除',
         icon: Users,
         visible: opsVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/pre-registrations',
@@ -135,6 +170,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '批次与通知',
         icon: Activity,
         visible: preregVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/notification-center',
@@ -142,6 +178,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '模板与投递状态',
         icon: Bell,
         visible: notificationVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/account-deletions',
@@ -149,6 +186,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '删除与重试',
         icon: CircleUserRound,
         visible: opsVisible,
+        matchMode: 'prefix',
       },
       {
         href: '/admin/auth-sessions',
@@ -156,6 +194,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '会话与撤销',
         icon: ShieldCheck,
         visible: alwaysVisible,
+        matchMode: 'prefix',
       },
     ],
   },
@@ -167,8 +206,12 @@ export const getVisibleAdminNavGroups = (policy: AdminCmsRolePolicy): AdminNavGr
     items: group.items.filter((item) => item.visible(policy)),
   })).filter((group) => group.items.length > 0);
 
-export const isAdminHrefActive = (pathname: string, href: string): boolean => {
-  if (href === '/admin') {
+export const isAdminHrefActive = (
+  pathname: string,
+  href: string,
+  matchMode: 'exact' | 'prefix' = 'prefix'
+): boolean => {
+  if (matchMode === 'exact') {
     return pathname === href;
   }
 

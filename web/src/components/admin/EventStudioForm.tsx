@@ -26,6 +26,32 @@ const SCHEDULE_MODE_ITEMS: Array<{ value: EventStudioDraft['scheduleMode']; labe
   { value: 'multi_day', label: '多日', description: '连续多天但仍视为同一周次的活动。' },
   { value: 'multi_week', label: '多周', description: '跨多个周次，按 week + eventDay 结构提交。' },
 ];
+const EVENT_STUDIO_STEP_ITEMS = [
+  {
+    key: 'basics',
+    eyebrow: 'Step 1',
+    title: '基础信息',
+    description: '活动名称、类型、主办方和来源',
+  },
+  {
+    key: 'location',
+    eyebrow: 'Step 2',
+    title: '地点与时区',
+    description: '城市、国家、地址与时区确认',
+  },
+  {
+    key: 'schedule',
+    eyebrow: 'Step 3',
+    title: '时间、票务与阵容',
+    description: '日期结构、票档、eventDay 与 timetable',
+  },
+  {
+    key: 'media',
+    eyebrow: 'Step 4',
+    title: '媒体与提交',
+    description: '封面、阵容图与最终保存',
+  },
+] as const;
 
 function Section({
   title,
@@ -72,6 +98,34 @@ const textAreaClassName = 'admin-studio-textarea min-h-28';
 const formatEventDayLabel = (day: EventStudioDraft['eventDays'][number]) =>
   `${day.label || day.eventDayId} · ${day.date}`;
 
+function StepNavigation({
+  currentStep,
+  onSelect,
+}: {
+  currentStep: number;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <div className="grid gap-3 xl:grid-cols-5">
+      {EVENT_STUDIO_STEP_ITEMS.map((item, index) => {
+        const active = currentStep === index;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onSelect(index)}
+            className={active ? 'admin-studio-section p-4 text-left' : 'admin-reference-soft-card p-4 text-left'}
+          >
+            <div className="admin-studio-label">{item.eyebrow}</div>
+            <div className="mt-2 text-base font-semibold tracking-[-0.02em] text-[#071110]">{item.title}</div>
+            <div className="mt-2 text-sm leading-6 text-black/48">{item.description}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 type EventStudioFormProps = {
   mode: 'create' | 'edit';
   eventId?: string;
@@ -101,6 +155,7 @@ export default function EventStudioForm({
   const [deletingCover, setDeletingCover] = useState(false);
   const [deletingLineup, setDeletingLineup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [alignmentPreviewLoading, setAlignmentPreviewLoading] = useState(false);
   const [alignmentPreview, setAlignmentPreview] = useState<EventStudioAlignmentPreview | null>(null);
   const [alignmentPreviewError, setAlignmentPreviewError] = useState<string | null>(null);
@@ -108,6 +163,19 @@ export default function EventStudioForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
+  const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
+
+  const getStepForErrors = (nextErrors: EventStudioValidationErrors): number => {
+    if (nextErrors.name) return 0;
+    if (nextErrors.city || nextErrors.country || nextErrors.detailAddress || nextErrors.timeZone) return 1;
+    if (nextErrors.startDate || nextErrors.endDate || nextErrors.ticketTiers || nextErrors.timetableSlots) return 2;
+    if (nextErrors.coverImage) return 3;
+    return currentStep;
+  };
+
+  const goToStep = (index: number) => {
+    setCurrentStep(Math.max(0, Math.min(index, totalSteps - 1)));
+  };
 
   const updateDraft = <K extends keyof EventStudioDraft>(key: K, value: EventStudioDraft[K]) => {
     setDraft((current) => {
@@ -293,7 +361,10 @@ export default function EventStudioForm({
     setErrors(nextErrors);
     setSubmitError(null);
     setConflictNotice(null);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      goToStep(getStepForErrors(nextErrors));
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -324,6 +395,7 @@ export default function EventStudioForm({
     setAlignmentPreviewError(null);
     setSubmitError(null);
     if (Object.keys(nextErrors).length > 0) {
+      goToStep(getStepForErrors(nextErrors));
       setAlignmentPreviewError('请先补齐必填字段后再预览阵容和时间表对齐情况。');
       return;
     }
@@ -411,6 +483,9 @@ export default function EventStudioForm({
         </div>
       </section>
 
+      <StepNavigation currentStep={currentStep} onSelect={goToStep} />
+
+      {currentStep === 0 ? (
       <Section title="基础信息" description="填写活动名称、类型、主办方绑定和来源链接。当前页面直接面向正式运营使用。">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="活动名称（中文）" error={errors.name}>
@@ -508,7 +583,9 @@ export default function EventStudioForm({
           </div>
         </div>
       </Section>
+      ) : null}
 
+      {currentStep === 1 ? (
       <Section title="地点与时区" description="手动地址、时区确认和坐标录入都在这里完成。时区必须从候选项中明确选择。">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="城市（中文）" error={errors.city}>
@@ -590,8 +667,10 @@ export default function EventStudioForm({
           </div>
         </div>
       </Section>
+      ) : null}
 
-      <Section title="时间与票务" description="这里会同步生成 `weeks / eventDays`，直接服务活动编辑、时间表录入和审核对比。">
+      {currentStep === 2 ? (
+      <Section title="时间、票务与阵容" description="这里会同步生成 `weeks / eventDays`，并继续完成票档、时间表与 lineup 对齐。">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="排期模式">
             <select value={draft.scheduleMode} onChange={(event) => updateDraft('scheduleMode', event.target.value as EventStudioDraft['scheduleMode'])} className={textInputClassName}>
@@ -750,7 +829,7 @@ export default function EventStudioForm({
           {errors.ticketTiers ? <div className="mt-3 text-xs text-red-300">{errors.ticketTiers}</div> : null}
         </div>
 
-          <div className="mt-6 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+          <div className="admin-reference-card mt-6 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">阵容与时间表</div>
@@ -776,7 +855,7 @@ export default function EventStudioForm({
                 }))
               }
               disabled={!draft.eventDays.length}
-              className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               新增时间表条目
             </button>
@@ -786,7 +865,7 @@ export default function EventStudioForm({
             <div className="space-y-3">
               {draft.timetableSlots.length ? (
                 draft.timetableSlots.map((slot) => (
-                  <div key={slot.id} className="grid gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4 lg:grid-cols-2">
+                  <div key={slot.id} className="grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-2">
                     <Field label="演出日">
                       <select
                         value={slot.eventDayId}
@@ -917,7 +996,7 @@ export default function EventStudioForm({
                               })),
                           }))
                         }
-                        className="rounded-xl border border-red-500/30 bg-[#151515] px-4 py-3 text-sm text-red-300 hover:border-red-400"
+                        className="admin-studio-button-danger px-4 py-3 text-sm"
                       >
                         删除条目
                       </button>
@@ -925,7 +1004,7 @@ export default function EventStudioForm({
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4 text-sm text-[#8a8a8a]">
+                <div className="admin-reference-soft-card p-4 text-sm text-black/48">
                   还没有时间表条目。先完成活动日期结构后，就可以按 event day 逐条补充舞台和演出时段。
                 </div>
               )}
@@ -933,25 +1012,25 @@ export default function EventStudioForm({
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
-                <div className="text-sm font-semibold text-[#f0f0f0]">Stage Order 预览</div>
+              <div className="admin-reference-soft-card p-4">
+                <div className="text-sm font-semibold text-[#071110]">Stage Order 预览</div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {draft.stageOrder.length ? (
                     draft.stageOrder.map((stage) => (
-                      <span key={stage} className="rounded-full border border-[rgba(255,255,255,0.07)] bg-[#151515] px-3 py-1 text-xs text-[#f0f0f0]">
+                      <span key={stage} className="admin-reference-chip">
                         {stage}
                       </span>
                     ))
                   ) : (
-                    <div className="text-sm text-[#8a8a8a]">添加 timetable 条目后会自动生成。</div>
+                    <div className="text-sm text-black/48">添加 timetable 条目后会自动生成。</div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
-                <div className="text-sm font-semibold text-[#f0f0f0]">Lineup Sync Mode</div>
+              <div className="admin-reference-soft-card p-4">
+                <div className="text-sm font-semibold text-[#071110]">Lineup Sync Mode</div>
                 <div className="mt-3 space-y-2">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-3 py-3 text-sm text-[#d0d0d0]">
+                  <label className="admin-reference-card flex cursor-pointer items-start gap-3 px-3 py-3 text-sm">
                     <input
                       type="radio"
                       name="lineupSyncMode"
@@ -960,7 +1039,7 @@ export default function EventStudioForm({
                     />
                     <span>增量补齐：保留当前阵容基础上，用 timetable 补全缺失艺人。</span>
                   </label>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-3 py-3 text-sm text-[#d0d0d0]">
+                  <label className="admin-reference-card flex cursor-pointer items-start gap-3 px-3 py-3 text-sm">
                     <input
                       type="radio"
                       name="lineupSyncMode"
@@ -972,7 +1051,7 @@ export default function EventStudioForm({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
+              <div className="admin-reference-soft-card p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold">对齐预览</div>
@@ -984,7 +1063,7 @@ export default function EventStudioForm({
                     type="button"
                     onClick={() => void handlePreviewAlignment()}
                     disabled={alignmentPreviewLoading || !draft.timetableSlots.length}
-                    className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-2 text-sm text-[#d0d0d0] hover:bg-[#202020] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {alignmentPreviewLoading ? '预览中...' : '预览对齐'}
                   </button>
@@ -1008,17 +1087,17 @@ export default function EventStudioForm({
 
                     {!alignmentPreview.aligned && alignmentPreview.issue ? (
                       <div className="grid gap-3">
-                        <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm">
-                          <div className="font-semibold text-[#f0f0f0]">时间表中存在但阵容里缺少</div>
-                          <div className="mt-2 text-[#8a8a8a]">
+                        <div className="admin-reference-card px-4 py-3 text-sm">
+                          <div className="font-semibold text-[#071110]">时间表中存在但阵容里缺少</div>
+                          <div className="mt-2 text-black/48">
                             {alignmentPreview.issue.missingFromLineup.length
                               ? alignmentPreview.issue.missingFromLineup.join('、')
                               : '无'}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-4 py-3 text-sm">
-                          <div className="font-semibold text-[#f0f0f0]">阵容中存在但时间表里缺少</div>
-                          <div className="mt-2 text-[#8a8a8a]">
+                        <div className="admin-reference-card px-4 py-3 text-sm">
+                          <div className="font-semibold text-[#071110]">阵容中存在但时间表里缺少</div>
+                          <div className="mt-2 text-black/48">
                             {alignmentPreview.issue.extraInLineup.length
                               ? alignmentPreview.issue.extraInLineup.join('、')
                               : '无'}
@@ -1028,22 +1107,22 @@ export default function EventStudioForm({
                     ) : null}
 
                     {alignmentPreview.lineupArtists.length ? (
-                      <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#151515] p-4">
+                      <div className="admin-reference-card p-4">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-[#f0f0f0]">建议对齐后的 Lineup</div>
+                          <div className="text-sm font-semibold text-[#071110]">建议对齐后的 Lineup</div>
                           <button
                             type="button"
                             onClick={applyAlignedLineupArtists}
-                            className="rounded-xl bg-[#a8ff3e] px-4 py-2 text-sm font-semibold text-black"
+                            className="admin-studio-button-primary px-4 py-2 text-sm"
                           >
                             应用建议阵容
                           </button>
                         </div>
                         <div className="mt-3 space-y-2">
                           {alignmentPreview.lineupArtists.map((artist, index) => (
-                            <div key={`${artist.djName}-${index}`} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#101010] px-3 py-2 text-sm">
-                              <div className="font-medium text-[#f0f0f0]">{artist.djName}</div>
-                              <div className="mt-1 text-xs text-[#8a8a8a]">
+                            <div key={`${artist.djName}-${index}`} className="admin-reference-soft-card px-3 py-2 text-sm">
+                              <div className="font-medium text-[#071110]">{artist.djName}</div>
+                              <div className="mt-1 text-xs text-black/42">
                                 sort: {artist.sortOrder ?? index + 1}
                               </div>
                             </div>
@@ -1055,22 +1134,22 @@ export default function EventStudioForm({
                 ) : null}
               </div>
 
-              <div className="rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[#101010] p-4">
-                <div className="text-sm font-semibold text-[#f0f0f0]">衍生 Lineup Artists 预览</div>
+              <div className="admin-reference-soft-card p-4">
+                <div className="text-sm font-semibold text-[#071110]">衍生 Lineup Artists 预览</div>
                 <div className="mt-3 space-y-2">
                   {draft.lineupArtists.length ? (
                     draft.lineupArtists.map((artist) => (
-                      <div key={artist.id} className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#151515] px-3 py-2 text-sm">
-                        <div className="font-medium text-[#f0f0f0]">
+                      <div key={artist.id} className="admin-reference-card px-3 py-2 text-sm">
+                        <div className="font-medium text-[#071110]">
                           {artist.memberNamesText || artist.djId || '未命名艺人'}
                         </div>
-                        <div className="mt-1 text-xs text-[#8a8a8a]">
+                        <div className="mt-1 text-xs text-black/42">
                           sort: {artist.sortOrder}{artist.canonicalArtistId ? ` · canonical: ${artist.canonicalArtistId}` : ''}
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-sm text-[#8a8a8a]">当前还没有可提交的阵容艺人。</div>
+                    <div className="text-sm text-black/48">当前还没有可提交的阵容艺人。</div>
                   )}
                 </div>
               </div>
@@ -1078,7 +1157,10 @@ export default function EventStudioForm({
           </div>
         </div>
       </Section>
+      ) : null}
 
+      {currentStep === 3 ? (
+      <>
       <Section title="媒体" description="封面和阵容图支持上传、替换和移除。草稿上传素材会即时清理，已持久化图片则在本次编辑提交时解除引用。">
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="admin-reference-card p-4">
@@ -1094,7 +1176,7 @@ export default function EventStudioForm({
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#8a8a8a]">
+                  <span className="text-sm text-black/48">
                     {uploadingCover || deletingCover ? '处理中...' : '选择并上传图片'}
                   </span>
                   <div className="flex items-center gap-2">
@@ -1133,7 +1215,7 @@ export default function EventStudioForm({
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#8a8a8a]">
+                  <span className="text-sm text-black/48">
                     {uploadingLineup || deletingLineup ? '处理中...' : '选择并上传图片'}
                   </span>
                   <div className="flex items-center gap-2">
@@ -1176,6 +1258,44 @@ export default function EventStudioForm({
           </Link>
         </div>
       </Section>
+      </>
+      ) : null}
+
+      {currentStep < totalSteps - 1 ? (
+        <section className="admin-reference-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <button
+            type="button"
+            onClick={() => goToStep(currentStep - 1)}
+            disabled={currentStep === 0}
+            className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
+          >
+            上一步
+          </button>
+          <div className="text-sm text-black/45">
+            {EVENT_STUDIO_STEP_ITEMS[currentStep].eyebrow} / {EVENT_STUDIO_STEP_ITEMS[currentStep].title}
+          </div>
+          <button
+            type="button"
+            onClick={() => goToStep(currentStep + 1)}
+            className="admin-studio-button-primary px-5 py-3 text-sm"
+          >
+            下一步
+          </button>
+        </section>
+      ) : (
+        <section className="admin-reference-card flex items-center justify-between gap-3 px-5 py-4">
+          <button
+            type="button"
+            onClick={() => goToStep(currentStep - 1)}
+            className="admin-studio-button-secondary px-5 py-3 text-sm"
+          >
+            返回上一步
+          </button>
+          <div className="text-sm text-black/45">
+            {EVENT_STUDIO_STEP_ITEMS[currentStep].eyebrow} / {EVENT_STUDIO_STEP_ITEMS[currentStep].title}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

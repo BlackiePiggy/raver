@@ -3,6 +3,22 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  CalendarRange,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Copy,
+  Ellipsis,
+  Link2,
+  MapPin,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  UserRoundPlus,
+  XCircle,
+} from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import {
   adminCatalogApi,
@@ -62,6 +78,34 @@ const resolveEventTone = (status?: string | null): string => {
       return 'border-[#efdad8] bg-[#f7e3e0] text-[#6a3530]';
     default:
       return 'border-[#eadfbe] bg-[#f6edd7] text-[#604a1b]';
+  }
+};
+
+const resolveEventStatusLabel = (status?: string | null): string => {
+  switch (status) {
+    case 'ongoing':
+      return 'Live';
+    case 'ended':
+      return 'Ended';
+    case 'cancelled':
+    case 'canceled':
+      return 'Cancelled';
+    default:
+      return 'Upcoming';
+  }
+};
+
+const resolveEventStatusSummary = (status?: string | null): string => {
+  switch (status) {
+    case 'ongoing':
+      return '进行中';
+    case 'ended':
+      return '已结束';
+    case 'cancelled':
+    case 'canceled':
+      return '已取消';
+    default:
+      return '即将开始';
   }
 };
 
@@ -278,6 +322,7 @@ export default function EventCatalogPageClient() {
       ended: 0,
       cancelled: 0,
       verified: 0,
+      draft: 0,
     };
 
     items.forEach((item) => {
@@ -287,10 +332,24 @@ export default function EventCatalogPageClient() {
       else counts.upcoming += 1;
 
       if (item.isVerified) counts.verified += 1;
+      else counts.draft += 1;
     });
 
     return counts;
   }, [items]);
+
+  const visiblePages = useMemo(() => {
+    const totalPages = Math.max(1, pagination.totalPages);
+    const start = Math.max(1, Math.min(totalPages - 4, pagination.page - 2));
+    const end = Math.min(totalPages, start + 4);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [pagination.page, pagination.totalPages]);
+
+  const cacheSummary = useMemo(() => {
+    if (!cacheMeta) return '首次加载';
+    if (cacheMeta.isStale) return '缓存更新中';
+    return cacheMeta.source === 'cache' ? '缓存命中' : '实时刷新';
+  }, [cacheMeta]);
 
   const handleBulkBindOrganizer = async () => {
     if (!selectedOrganizer || selectedIds.length === 0) return;
@@ -342,93 +401,99 @@ export default function EventCatalogPageClient() {
     }
   };
 
+  const handleCopySingleId = async (id: string) => {
+    if (typeof window === 'undefined' || !navigator.clipboard?.writeText) return;
+    await navigator.clipboard.writeText(id);
+    setBulkNotice(`已复制活动 ID：${id}`);
+  };
+
   return (
     <AdminContentLayout
-      title="活动目录中心"
-      eyebrow="Admin / Content Workspace / Event Catalog"
-      description="统一查看活动目录、活动摘要、编辑入口与详情入口。目录层默认读取分页摘要与本地快照，进入编辑或详情时再加载更深的数据。"
+      title="活动目录"
+      eyebrow="Admin / Content / Events / Catalog"
+      description="集中查看、筛选和编辑活动。把主要操作收束到目录页主线里，减少无关说明的干扰。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回活动工作区
-          </Link>
           <button
             type="button"
             onClick={handleRefresh}
-            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+            className="inline-flex items-center gap-2 rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            手动刷新目录
+            <RefreshCw className="h-4 w-4" />
+            <span>刷新目录</span>
           </button>
-          <Link href="/admin/content/events/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-            新建活动
+          <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+            活动工作区
           </Link>
         </>
       }
     >
-      <section className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
-        <div className="admin-reference-card p-6">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Catalog Strategy</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录层优先轻量定位</h2>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {[
-              {
-                title: '分页摘要',
-                body: `单页固定 ${PAGE_SIZE} 条摘要，避免一次拉全量活动。`,
-                tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]',
-              },
-              {
-                title: '本地快照',
-                body: '优先读取 10 分钟本地快照，陈旧时再后台静默刷新。',
-                tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]',
-              },
-              {
-                title: '深层数据',
-                body: '只在进入详情或编辑时请求重数据，目录层保持轻量。',
-                tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]',
-              },
-            ].map((item) => (
-              <div key={item.title} className={`admin-reference-pastel-card p-4 ${item.tone}`}>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{item.title}</div>
-                <div className="mt-5 text-sm leading-6 text-[#24312d]">{item.body}</div>
+      <section className="admin-reference-card overflow-hidden p-5 lg:p-6">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-[#eff4f2] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-black/45">
+                  Event Catalog
+                </span>
+                <span className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm text-black/48">
+                  {cacheSummary}
+                </span>
+                {cacheMeta?.fetchedAt ? (
+                  <span className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm text-black/48">
+                    更新于 {formatDateTime(cacheMeta.fetchedAt)}
+                  </span>
+                ) : null}
               </div>
-            ))}
-          </div>
-        </div>
+              <p className="max-w-[44rem] text-[14px] leading-7 text-black/48">
+                搜索、筛选、状态判断和编辑入口都集中在这一页，尽量让主要操作一步直达。
+              </p>
+            </div>
 
-        <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-6">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Snapshot Meta</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录快照状态</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-black/55">
-            <p>当前页：{pagination.page} / {pagination.totalPages}</p>
-            <p>摘要总量：{pagination.total.toLocaleString()} 条</p>
-            <p>最新快照：{cacheMeta ? formatDateTime(cacheMeta.fetchedAt) : '尚未生成'}</p>
-            <p>刷新方式：{cacheMeta?.source === 'cache' ? '缓存命中' : '后台摘要刷新'}</p>
-            <p>快照状态：{cacheMeta?.isStale ? '已陈旧，后台会自动补刷新' : '新鲜可用'}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleSelectAllCurrentPage}
+                disabled={!items.length}
+                className="rounded-full border border-[#e8eceb] bg-white px-4 py-2.5 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {allCurrentPageSelected ? '取消全选' : '全选当前页'}
+              </button>
+              <Link
+                href="/admin/content/events/new"
+                className="rounded-full border border-[#e8eceb] bg-[#f8f9f8] px-5 py-2.5 text-sm font-semibold text-[#071110]"
+              >
+                导入活动
+              </Link>
+              <Link href="/admin/content/events/new" className="rounded-full bg-[#071110] px-5 py-2.5 text-sm font-semibold text-white">
+                新建活动
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
 
-      <section className="admin-reference-card p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <label className="space-y-2 xl:col-span-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-black/35">搜索关键词</span>
+          <form
+            onSubmit={handleSearchSubmit}
+            className="admin-reference-soft-card grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(200px,1.35fr)_116px_116px_116px_140px_86px_86px]"
+          >
+            <label className="flex items-center gap-3 rounded-full bg-white px-4 py-3">
+              <Search className="h-4 w-4 text-black/35" />
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="活动名 / 城市 / 主办方"
-                className="w-full rounded-full px-4 py-3 text-sm"
+                placeholder="搜索活动名、主办方、城市"
+                className="w-full border-0 bg-transparent px-0 py-0 text-sm shadow-none focus:shadow-none"
               />
             </label>
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-black/35">活动状态</span>
+
+            <label className="flex items-center gap-3 rounded-full bg-white px-4 py-3">
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">状态</span>
               <select
                 value={status}
                 onChange={(event) => {
                   setStatus(event.target.value);
                   setPage(1);
                 }}
-                className="w-full rounded-full px-4 py-3 text-sm"
+                className="w-full border-0 bg-transparent px-0 py-0 text-sm shadow-none focus:shadow-none"
               >
                 <option value="all">全部状态</option>
                 <option value="upcoming">即将开始</option>
@@ -437,348 +502,431 @@ export default function EventCatalogPageClient() {
                 <option value="cancelled">已取消</option>
               </select>
             </label>
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-black/35">城市</span>
+
+            <label className="flex items-center gap-3 rounded-full bg-white px-4 py-3">
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">类型</span>
+              <select
+                value={eventType}
+                onChange={(event) => {
+                  setEventType(event.target.value);
+                  setPage(1);
+                }}
+                className="w-full border-0 bg-transparent px-0 py-0 text-sm shadow-none focus:shadow-none"
+              >
+                <option value="all">全部类型</option>
+                <option value="电音节">电音节</option>
+                <option value="酒吧活动">酒吧活动</option>
+                <option value="露天活动">露天活动</option>
+                <option value="俱乐部派对">俱乐部派对</option>
+                <option value="仓库派对">仓库派对</option>
+                <option value="巡演专场">巡演专场</option>
+                <option value="其他">其他</option>
+              </select>
+            </label>
+
+            <label className="flex items-center gap-3 rounded-full bg-white px-4 py-3">
+              <MapPin className="h-4 w-4 text-black/35" />
               <input
                 value={cityInput}
                 onChange={(event) => setCityInput(event.target.value)}
-                placeholder="Shanghai"
-                className="w-full rounded-full px-4 py-3 text-sm"
+                placeholder="城市"
+                className="w-full border-0 bg-transparent px-0 py-0 text-sm shadow-none focus:shadow-none"
               />
             </label>
-            <label className="space-y-2 xl:col-span-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-black/35">国家 / 类型</span>
-              <div className="grid gap-3 md:grid-cols-2">
-                <input
-                  value={countryInput}
-                  onChange={(event) => setCountryInput(event.target.value)}
-                  placeholder="China"
-                  className="w-full rounded-full px-4 py-3 text-sm"
-                />
-                <select
-                  value={eventType}
-                  onChange={(event) => {
-                    setEventType(event.target.value);
-                    setPage(1);
-                  }}
-                  className="w-full rounded-full px-4 py-3 text-sm"
-                >
-                  <option value="all">全部类型</option>
-                  <option value="电音节">电音节</option>
-                  <option value="酒吧活动">酒吧活动</option>
-                  <option value="露天活动">露天活动</option>
-                  <option value="俱乐部派对">俱乐部派对</option>
-                  <option value="仓库派对">仓库派对</option>
-                  <option value="巡演专场">巡演专场</option>
-                  <option value="其他">其他</option>
-                </select>
-              </div>
+
+            <label className="flex items-center gap-3 rounded-full bg-white px-4 py-3">
+              <SlidersHorizontal className="h-4 w-4 text-black/35" />
+              <input
+                value={countryInput}
+                onChange={(event) => setCountryInput(event.target.value)}
+                placeholder="国家 / 地区"
+                className="w-full border-0 bg-transparent px-0 py-0 text-sm shadow-none focus:shadow-none"
+              />
             </label>
-            <button type="submit" className="min-w-[140px] rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-              搜索目录
+
+            <button type="submit" className="rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white">
+              搜索
             </button>
+
             <button
               type="button"
               onClick={handleReset}
-              className="min-w-[140px] rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+              className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]"
             >
-              清空筛选
+              重置
             </button>
           </form>
 
-          <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/50">
-            {isRefreshing ? '检测到缓存陈旧，正在后台更新当前页目录…' : '目录层默认采用 stale-while-revalidate 方式减轻请求压力。'}
-          </div>
-        </div>
-      </section>
-
-      <section className="admin-reference-card p-6">
-        <div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Page Summary</div>
-              <h2 className="mt-2 text-[20px] font-semibold tracking-[-0.03em] text-[#071110]">当前页管理概览</h2>
-            </div>
-            <button
-              type="button"
-              onClick={toggleSelectAllCurrentPage}
-              disabled={!items.length}
-              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {allCurrentPageSelected ? '取消全选当前页' : '全选当前页'}
-            </button>
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {[
-              { label: '即将开始', value: statusCounts.upcoming, tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
-              { label: '进行中', value: statusCounts.ongoing, tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
-              { label: '已结束', value: statusCounts.ended, tone: 'bg-[linear-gradient(180deg,#f5f5f7_0%,#ffffff_100%)]' },
-              { label: '已取消', value: statusCounts.cancelled, tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
-              { label: '已验证', value: statusCounts.verified, tone: 'bg-[linear-gradient(180deg,#eef3fb_0%,#ffffff_100%)]' },
+              {
+                label: '全部活动',
+                value: pagination.total,
+                note: `第 ${pagination.page} / ${pagination.totalPages} 页`,
+                tone: 'admin-studio-pastel-mint',
+              },
+              {
+                label: 'Live',
+                value: statusCounts.ongoing,
+                note: '当前进行中的活动',
+                tone: 'admin-reference-soft-card',
+              },
+              {
+                label: '/v1',
+                value: statusCounts.upcoming,
+                note: '即将开始的活动',
+                tone: 'admin-reference-soft-card',
+              },
+              {
+                label: 'Ready',
+                value: statusCounts.verified,
+                note: '已验证活动',
+                tone: 'admin-reference-soft-card',
+              },
+              {
+                label: 'Draft',
+                value: statusCounts.draft,
+                note: '待完善或待验证',
+                tone: 'admin-reference-soft-card',
+              },
             ].map((item) => (
-              <div key={item.label} className={`admin-reference-pastel-card p-4 text-sm ${item.tone}`}>
-                <div className="text-black/42">{item.label}</div>
-                <div className="mt-2 font-mono text-[24px] font-semibold text-[#071110]">{item.value}</div>
+              <div key={item.label} className={`${item.tone} px-5 py-4`}>
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">{item.label}</div>
+                <div className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#071110]">
+                  {item.value.toLocaleString()}
+                </div>
+                <div className="mt-1 text-sm text-black/46">{item.note}</div>
               </div>
             ))}
           </div>
-        </div>
-      </section>
 
-      <section className="admin-reference-dark-card p-6">
-        <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Bulk Actions</div>
-            <h2 className="mt-2 text-[20px] font-semibold tracking-[-0.03em] text-white">批量管理</h2>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-white/65">
-              <p>已选中 {selectedItems.length} 条活动，可复制活动 ID、活动名称或详情链接。</p>
-              <p>当前也支持直接批量指定主办方或批量清空主办方绑定，沿用统一后台已验证的绑定链路。</p>
-            </div>
-            <div className="mt-5 space-y-3">
-              <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.18em] text-white/45">批量指定主办方</span>
-                <input
-                  value={organizerQuery}
-                  onChange={(event) => setOrganizerQuery(event.target.value)}
-                  placeholder="搜索主办方名称"
-                  className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/45"
-                />
-              </label>
-
-              {selectedOrganizer ? (
-                <div className="rounded-[18px] border border-white/10 bg-white/8 px-4 py-3 text-sm text-white/78">
-                  当前选中主办方：{selectedOrganizer.name}
+          {selectedIds.length ? (
+            <section className="admin-reference-soft-card space-y-4 p-4">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-black/56">
+                  <span className="rounded-full bg-white px-4 py-2 font-semibold text-[#071110]">
+                    已选中 {selectedIds.length} 条活动
+                  </span>
+                  {bulkNotice ? <span className="text-[#2f4027]">{bulkNotice}</span> : null}
                 </div>
-              ) : null}
 
-              {organizerQuery.trim() ? (
-                <div className="rounded-[18px] border border-white/10 bg-white/8 p-3">
-                  {isSearchingOrganizers ? (
-                    <div className="text-sm text-white/55">主办方搜索中…</div>
-                  ) : organizerResults.length ? (
-                    <div className="space-y-2">
-                      {organizerResults.slice(0, 5).map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedOrganizer(item);
-                            setOrganizerQuery(item.name);
-                            setOrganizerResults([]);
-                          }}
-                          className="block w-full rounded-[18px] border border-white/10 bg-white/6 px-4 py-3 text-left"
-                        >
-                          <div className="text-sm font-semibold text-white">{item.name}</div>
-                          <div className="mt-1 text-xs text-white/45">
-                            {[item.country, item.city, item.tagline].filter(Boolean).join(' · ') || item.id}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-white/55">没有匹配的主办方结果。</div>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void handleBulkCopy('ids')}
-              disabled={!selectedItems.length}
-              className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-left text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              复制选中活动 ID
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkCopy('names')}
-              disabled={!selectedItems.length}
-              className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-left text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              复制选中活动名称
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkCopy('links')}
-              disabled={!selectedItems.length}
-              className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-left text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              复制选中活动详情链接
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkBindOrganizer()}
-              disabled={!selectedItems.length || !selectedOrganizer || isApplyingBulkBinding}
-              className="rounded-full bg-white px-4 py-3 text-left text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {isApplyingBulkBinding ? '执行中...' : '批量指定主办方'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkClearOrganizer()}
-              disabled={!selectedItems.length || isApplyingBulkBinding}
-              className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-left text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {isApplyingBulkBinding ? '执行中...' : '批量清空主办方'}
-            </button>
-            {bulkEditHref ? (
-              <Link href={bulkEditHref} className="rounded-full bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
-                进入选中活动编辑
-              </Link>
-            ) : (
-              <div className="rounded-[18px] border border-white/10 bg-white/8 px-4 py-3 text-sm text-white/45">
-                选中单条活动后可一跳进入编辑
-              </div>
-            )}
-            {bulkNotice ? <div className="md:col-span-2 text-sm text-white/78">{bulkNotice}</div> : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="admin-reference-card p-6">
-        {error ? (
-          <div className="rounded-[18px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-[#7a2d29]">
-            {error}
-          </div>
-        ) : null}
-
-        {isLoading ? (
-          <div className="py-20 text-center text-sm text-text-secondary">活动目录加载中…</div>
-        ) : items.length === 0 ? (
-          <div className="py-20 text-center text-sm text-text-secondary">当前筛选条件下还没有活动摘要。</div>
-        ) : (
-          <div className="space-y-4">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="grid gap-4 rounded-[28px] border border-[#e8eceb] bg-[#fcfcfb] p-5 lg:grid-cols-[172px_minmax(0,1fr)_230px]"
-              >
-                <div className="relative overflow-hidden rounded-[22px] border border-[#e8eceb] bg-[#f5f5f7]">
+                <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={() => toggleItemSelection(item.id)}
-                    className={`absolute left-3 top-3 z-10 rounded-full border px-3 py-1 text-xs font-semibold ${
-                      selectedIdSet.has(item.id)
-                        ? 'border-[#071110] bg-[#071110] text-white'
-                        : 'border-[#e8eceb] bg-white/92 text-[#071110]'
-                    }`}
+                    onClick={() => void handleBulkCopy('ids')}
+                    className="inline-flex items-center gap-2 rounded-full border border-[#e8eceb] bg-white px-4 py-2.5 text-sm font-semibold text-[#071110]"
                   >
-                    {selectedIdSet.has(item.id) ? '已选' : '选择'}
+                    <Copy className="h-4 w-4" />
+                    <span>复制 ID</span>
                   </button>
-                  {item.coverImageUrl ? (
-                    <Image
-                      src={item.coverImageUrl}
-                      alt={item.name}
-                      width={320}
-                      height={200}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full min-h-[120px] items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/45">
-                      暂无封面
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkCopy('links')}
+                    className="inline-flex items-center gap-2 rounded-full border border-[#e8eceb] bg-white px-4 py-2.5 text-sm font-semibold text-[#071110]"
+                  >
+                    <Link2 className="h-4 w-4" />
+                    <span>复制链接</span>
+                  </button>
+                  {bulkEditHref ? (
+                    <Link
+                      href={bulkEditHref}
+                      className="inline-flex items-center gap-2 rounded-full bg-[#071110] px-4 py-2.5 text-sm font-semibold text-white"
+                    >
+                      <CheckCheck className="h-4 w-4" />
+                      <span>编辑活动</span>
+                    </Link>
+                  ) : null}
                 </div>
+              </div>
 
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-3 py-1 text-xs ${resolveEventTone(item.status)}`}>
-                      {item.status || 'upcoming'}
-                    </span>
-                    <span className="admin-reference-chip">
-                      {item.eventType || '未标记类型'}
-                    </span>
-                    {item.isVerified ? (
-                      <span className="rounded-full border border-[#dceabf] bg-[#eef8d8] px-3 py-1 text-xs font-semibold text-[#2f4027]">
-                        已验证
-                      </span>
+              <details className="rounded-[22px] border border-[#e8eceb] bg-white px-4 py-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#071110]">
+                  <span>更多批量操作</span>
+                  <Ellipsis className="h-4 w-4 text-black/38" />
+                </summary>
+
+                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
+                  <div>
+                    <label className="flex items-center gap-3 rounded-full border border-[#e8eceb] bg-[#f8f9f8] px-4 py-3">
+                      <UserRoundPlus className="h-4 w-4 text-black/35" />
+                      <input
+                        value={organizerQuery}
+                        onChange={(event) => setOrganizerQuery(event.target.value)}
+                        placeholder="搜索并批量指定主办方"
+                        className="w-full border-0 bg-transparent px-0 py-0 text-sm shadow-none focus:shadow-none"
+                      />
+                    </label>
+
+                    {selectedOrganizer ? (
+                      <div className="mt-3 rounded-full border border-[#dceabf] bg-[#edf7f2] px-4 py-2.5 text-sm text-[#2f4027]">
+                        当前主办方：{selectedOrganizer.name}
+                      </div>
+                    ) : null}
+
+                    {organizerQuery.trim() ? (
+                      <div className="mt-3 space-y-2 rounded-[20px] border border-[#e8eceb] bg-[#f8f9f8] p-3">
+                        {isSearchingOrganizers ? (
+                          <div className="text-sm text-black/48">主办方搜索中…</div>
+                        ) : organizerResults.length ? (
+                          organizerResults.slice(0, 5).map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedOrganizer(item);
+                                setOrganizerQuery(item.name);
+                                setOrganizerResults([]);
+                              }}
+                              className="block w-full rounded-[18px] border border-[#e8eceb] bg-white px-4 py-3 text-left"
+                            >
+                              <div className="text-sm font-semibold text-[#071110]">{item.name}</div>
+                              <div className="mt-1 text-xs text-black/42">
+                                {[item.country, item.city, item.tagline].filter(Boolean).join(' · ') || item.id}
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-sm text-black/48">没有匹配的主办方结果。</div>
+                        )}
+                      </div>
                     ) : null}
                   </div>
 
-                  <h3 className="mt-3 text-2xl font-semibold text-[#071110]">{item.name}</h3>
-                  <p className="mt-2 text-sm leading-6 text-black/52">
-                    {item.wikiFestival?.name || item.organizerName || '未绑定正式主办方'} · {item.city || '未知城市'} / {item.country || '未知国家'}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkBindOrganizer()}
+                    disabled={!selectedItems.length || !selectedOrganizer || isApplyingBulkBinding}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#071110] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <UserRoundPlus className="h-4 w-4" />
+                    <span>{isApplyingBulkBinding ? '执行中...' : '批量指定主办方'}</span>
+                  </button>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-4">
-                    <div className="admin-reference-soft-card px-4 py-3 text-sm">
-                      <div className="text-black/42">活动日期</div>
-                      <div className="mt-1 font-semibold text-[#071110]">{formatDateRange(item)}</div>
-                    </div>
-                    <div className="admin-reference-soft-card px-4 py-3 text-sm">
-                      <div className="text-black/42">演出天数</div>
-                      <div className="mt-1 font-semibold text-[#071110]">{item.eventDays?.length ?? 0} 天</div>
-                    </div>
-                    <div className="admin-reference-soft-card px-4 py-3 text-sm">
-                      <div className="text-black/42">最近更新</div>
-                      <div className="mt-1 font-semibold text-[#071110]">{formatDateTime(item.updatedAt)}</div>
-                    </div>
-                    <div className="admin-reference-soft-card px-4 py-3 text-sm">
-                      <div className="text-black/42">时区</div>
-                      <div className="mt-1 font-semibold text-[#071110]">{item.timeZone || '未记录'}</div>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkClearOrganizer()}
+                    disabled={!selectedItems.length || isApplyingBulkBinding}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    <span>{isApplyingBulkBinding ? '执行中...' : '清空主办方'}</span>
+                  </button>
                 </div>
+              </details>
+            </section>
+          ) : null}
 
-                <div className="admin-reference-dark-card flex flex-col justify-between gap-3 p-4">
-                  <div className="text-sm leading-6 text-white/65">
-                    目录层只看摘要，编辑时再进入详情页拉取完整资料，避免列表态反复命中重查询。
-                  </div>
-                  <div className="grid gap-3">
-                    <Link href={`/admin/content/events/${item.id}/edit`} className="rounded-full bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
-                      编辑活动
-                    </Link>
-                    <Link href={`/events/${item.id}`} className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-center text-sm text-white">
-                      打开活动详情
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-6 flex flex-col gap-3 border-t border-white/5 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-black/48">
-            共 {pagination.total.toLocaleString()} 条摘要，当前显示第 {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} 条
-          </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              disabled={pagination.page <= 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              上一页
-            </button>
-            <button
-              type="button"
-              disabled={pagination.page >= pagination.totalPages}
-              onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="admin-reference-card p-6">
-        <div className="grid gap-3 lg:grid-cols-3">
-          {[
-            { title: '摘要加载', body: '活动目录保持低频摘要加载，适合集中查看与快速进入编辑。', tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
-            { title: '深层资料', body: '活动详情和深层资料只在真正进入详情或编辑时再拉取完整数据。', tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
-            { title: '外围能力', body: '活动绑定、Archive 与其他补充能力继续通过统一后台分区进入。', tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
-          ].map((item) => (
-            <div key={item.title} className={`admin-reference-pastel-card p-4 ${item.tone}`}>
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{item.title}</div>
-              <div className="mt-4 text-sm leading-6 text-[#24312d]">{item.body}</div>
+          {error ? (
+            <div className="rounded-[20px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-[#7a2d29]">
+              {error}
             </div>
-          ))}
+          ) : null}
+
+          <section className="space-y-3">
+            {isLoading ? (
+              <div className="admin-reference-soft-card py-20 text-center text-sm text-black/48">活动目录加载中…</div>
+            ) : items.length === 0 ? (
+              <div className="admin-reference-soft-card py-20 text-center text-sm text-black/48">
+                当前筛选条件下还没有活动。
+              </div>
+            ) : (
+              items.map((item) => (
+                <article
+                  key={item.id}
+                  className="admin-reference-soft-card grid gap-4 overflow-hidden p-4 lg:grid-cols-[180px_minmax(0,1fr)_236px]"
+                >
+                  <div className="relative overflow-hidden rounded-[22px] border border-[#e8eceb] bg-white">
+                    {item.coverImageUrl ? (
+                      <Image
+                        src={item.coverImageUrl}
+                        alt={item.name}
+                        width={320}
+                        height={220}
+                        className="h-full min-h-[136px] w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full min-h-[136px] items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/42">
+                        暂无封面
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => toggleItemSelection(item.id)}
+                      className={`absolute left-3 top-3 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        selectedIdSet.has(item.id)
+                          ? 'bg-[#071110] text-white'
+                          : 'border border-[#e8eceb] bg-white/92 text-[#071110]'
+                      }`}
+                    >
+                      {selectedIdSet.has(item.id) ? '已选中' : '选择'}
+                    </button>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${resolveEventTone(item.status)}`}>
+                        {resolveEventStatusLabel(item.status)}
+                      </span>
+                      {item.eventType ? <span className="admin-reference-chip">{item.eventType}</span> : null}
+                      {item.timeZone ? (
+                        <span className="rounded-full border border-[#e8eceb] bg-white px-3 py-1 text-xs font-semibold text-black/55">
+                          {item.timeZone}
+                        </span>
+                      ) : null}
+                      {item.isVerified ? (
+                        <span className="rounded-full border border-[#dceabf] bg-[#eef8d8] px-3 py-1 text-xs font-semibold text-[#2f4027]">
+                          Ready
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <h3 className="mt-4 truncate text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">
+                      {item.name}
+                    </h3>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-black/48">
+                      <span>
+                        {item.wikiFestival?.name || item.organizerName || '未绑定正式主办方'}
+                      </span>
+                      <span>
+                        {[item.city, item.country].filter(Boolean).join(', ') || '地点待补充'}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-black/35">
+                          <CalendarRange className="h-4 w-4" />
+                          <span>活动日期</span>
+                        </div>
+                        <div className="mt-2 text-sm font-semibold text-[#071110]">{formatDateRange(item)}</div>
+                      </div>
+
+                      <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">
+                          活动状态
+                        </div>
+                        <div className="mt-2 text-sm font-semibold text-[#071110]">
+                          {resolveEventStatusSummary(item.status)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-black/35">
+                          <Clock3 className="h-4 w-4" />
+                          <span>最近更新</span>
+                        </div>
+                        <div className="mt-2 text-sm font-semibold text-[#071110]">{formatDateTime(item.updatedAt)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col justify-between gap-4 rounded-[22px] border border-[#e8eceb] bg-white p-4">
+                    <div className="space-y-3 text-sm text-black/48">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">Event Days</div>
+                        <div className="mt-1 text-[18px] font-semibold text-[#071110]">
+                          {item.eventDays?.length ?? 0} 天
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">时区</div>
+                        <div className="mt-1 text-sm font-semibold text-[#071110]">{item.timeZone || '未记录'}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3">
+                      <Link
+                        href={`/events/${item.id}`}
+                        className="rounded-full border border-[#e8eceb] bg-[#f8f9f8] px-4 py-3 text-center text-sm font-semibold text-[#071110]"
+                      >
+                        查看详情
+                      </Link>
+                      <Link
+                        href={`/admin/content/events/${item.id}/edit`}
+                        className="rounded-full bg-[#071110] px-4 py-3 text-center text-sm font-semibold text-white"
+                      >
+                        编辑活动
+                      </Link>
+
+                      <details className="relative">
+                        <summary className="flex cursor-pointer list-none items-center justify-center rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]">
+                          <Ellipsis className="h-4 w-4" />
+                        </summary>
+                        <div className="absolute right-0 top-[calc(100%+10px)] z-20 grid min-w-[180px] gap-2 rounded-[20px] border border-[#e8eceb] bg-white p-3 shadow-[0_18px_42px_rgba(33,52,47,0.12)]">
+                          <button
+                            type="button"
+                            onClick={() => toggleItemSelection(item.id)}
+                            className="rounded-full bg-[#f8f9f8] px-4 py-2 text-left text-sm font-semibold text-[#071110]"
+                          >
+                            {selectedIdSet.has(item.id) ? '取消选中' : '选中活动'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopySingleId(item.id)}
+                            className="rounded-full bg-[#f8f9f8] px-4 py-2 text-left text-sm font-semibold text-[#071110]"
+                          >
+                            复制活动 ID
+                          </button>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+
+          <div className="flex flex-col gap-4 border-t border-[#ecefed] pt-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="text-sm text-black/48">
+              共 {pagination.total.toLocaleString()} 条活动，当前显示第{' '}
+              {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1}
+              {' - '}
+              {Math.min(pagination.page * pagination.limit, pagination.total)} 条
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={pagination.page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {visiblePages.map((pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-10 min-w-10 rounded-full px-3 text-sm font-semibold ${
+                      pageNumber === pagination.page
+                        ? 'bg-[#071110] text-white'
+                        : 'border border-[#e8eceb] bg-white text-[#071110]'
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  disabled={pagination.page >= pagination.totalPages}
+                  onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="rounded-full border border-[#e8eceb] bg-white px-4 py-2.5 text-sm text-black/48">
+                每页 {pagination.limit} 条
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </AdminContentLayout>

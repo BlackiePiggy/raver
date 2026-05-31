@@ -463,7 +463,7 @@ const renderLandingPage = (
       body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f2ea; color: #171717; }
       main { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 18px; }
       section { width: 100%; max-width: 460px; }
-      .art { width: 100%; aspect-ratio: 1 / .72; border-radius: 20px; background-size: cover; background-position: center; background-color: #1f2937; box-shadow: 0 18px 50px rgba(23,23,23,.16); margin-bottom: 24px; }
+      .art { width: 100%; aspect-ratio: 1 / 1; border-radius: 20px; background-size: cover; background-position: center; background-color: #1f2937; box-shadow: 0 18px 50px rgba(23,23,23,.16); margin-bottom: 24px; }
       .fallback { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 72px; font-weight: 800; background: linear-gradient(135deg, #171717, #475569); }
       h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.14; letter-spacing: 0; }
       p { margin: 0; color: #525252; line-height: 1.6; font-size: 16px; }

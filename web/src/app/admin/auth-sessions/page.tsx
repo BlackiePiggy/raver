@@ -160,7 +160,7 @@ export default function AuthSessionsAdminPage() {
         <section className="mx-auto max-w-4xl">
           <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">登录设备与会话</h1>
-            <p className="mt-3 text-sm text-text-secondary">请先登录后查看会话。</p>
+            <p className="mt-3 text-sm text-black/48">请先登录后查看会话。</p>
             <Link href="/login" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               去登录
             </Link>
@@ -179,47 +179,47 @@ export default function AuthSessionsAdminPage() {
       <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-text-secondary">Auth Sessions</p>
+            <p className="text-sm text-black/45">Auth Sessions</p>
             <h1 className="mt-1 text-3xl font-semibold">登录设备与会话</h1>
-            <p className="mt-2 text-sm text-text-secondary">查看当前账号的 Web Admin / iOS 登录会话，并撤销不再使用的设备。</p>
+            <p className="mt-2 text-sm text-black/48">查看当前账号的 Web Admin / iOS 登录会话，并撤销不再使用的设备。</p>
           </div>
           <button
             type="button"
             onClick={() => void loadSessions()}
             disabled={loading}
-            className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             {loading ? '刷新中...' : '刷新'}
           </button>
         </div>
 
-        {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
-        {notice && <div className="rounded-lg border border-accent-green/40 bg-accent-green/10 px-4 py-3 text-sm text-accent-green">{notice}</div>}
+        {error && <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#6a3530]">{error}</div>}
+        {notice && <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#2f4027]">{notice}</div>}
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">全部记录</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">全部记录</div>
             <div className="mt-2 text-2xl font-semibold">{summary.total}</div>
           </div>
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">有效会话</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">有效会话</div>
             <div className="mt-2 text-2xl font-semibold">{summary.active}</div>
           </div>
-          <div className="rounded-lg border border-border-secondary bg-bg-secondary p-4">
-            <div className="text-sm text-text-secondary">Web Admin</div>
+          <div className="admin-reference-soft-card p-4">
+            <div className="text-sm text-black/42">Web Admin</div>
             <div className="mt-2 text-2xl font-semibold">{summary.webAdmin}</div>
           </div>
         </div>
 
-        <section className="overflow-hidden rounded-lg border border-border-secondary bg-bg-secondary">
-          <div className="grid grid-cols-[1.2fr_0.7fr_1fr_1fr_120px] gap-3 border-b border-border-secondary px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+        <section className="admin-reference-card overflow-hidden">
+          <div className="grid grid-cols-[1.2fr_0.7fr_1fr_1fr_120px] gap-3 border-b border-[#e8eceb] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-black/42">
             <div>设备</div>
             <div>类型</div>
             <div>活跃时间</div>
             <div>过期时间</div>
             <div>操作</div>
           </div>
-          <div className="divide-y divide-border-secondary">
+          <div className="divide-y divide-[#e8eceb]">
             {items.map((item) => {
               const status = getStatus(item);
               const canRevoke = !item.revokedAt;
@@ -267,7 +267,7 @@ export default function AuthSessionsAdminPage() {
               );
             })}
             {items.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-text-secondary">
+              <div className="px-4 py-8 text-center text-sm text-black/48">
                 暂无会话记录
               </div>
             )}
@@ -275,17 +275,17 @@ export default function AuthSessionsAdminPage() {
         </section>
 
         {canManageUserSessions && (
-          <section className="space-y-4 rounded-lg border border-border-secondary bg-bg-secondary p-5">
+          <section className="admin-reference-card space-y-4 p-5">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-sm text-text-secondary">Admin Session Management</p>
+                <p className="text-sm text-black/45">Admin Session Management</p>
                 <h2 className="mt-1 text-xl font-semibold">用户会话检索与踢下线</h2>
               </div>
               <button
                 type="button"
                 onClick={() => void loadManagedSessions()}
                 disabled={managedLoading}
-                className="rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {managedLoading ? '查询中...' : '查询'}
               </button>
@@ -305,7 +305,7 @@ export default function AuthSessionsAdminPage() {
                 disabled={Boolean(searchUserId.trim())}
                 className="rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm disabled:opacity-50"
               />
-              <label className="flex items-center gap-2 rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm text-text-secondary">
+              <label className="flex items-center gap-2 rounded-md border border-border-secondary bg-bg-tertiary px-3 py-2 text-sm text-black/48">
                 <input
                   type="checkbox"
                   checked={includeRevoked}
@@ -316,10 +316,10 @@ export default function AuthSessionsAdminPage() {
               </label>
             </div>
 
-            {managedError && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{managedError}</div>}
+            {managedError && <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#6a3530]">{managedError}</div>}
 
-            <div className="overflow-hidden rounded-lg border border-border-secondary bg-bg-primary">
-              <div className="grid grid-cols-[1.1fr_1.2fr_0.7fr_1fr_1fr_120px] gap-3 border-b border-border-secondary px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            <div className="admin-reference-soft-card overflow-hidden">
+              <div className="grid grid-cols-[1.1fr_1.2fr_0.7fr_1fr_1fr_120px] gap-3 border-b border-[#e8eceb] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-black/42">
                 <div>用户</div>
                 <div>设备</div>
                 <div>类型</div>
@@ -327,7 +327,7 @@ export default function AuthSessionsAdminPage() {
                 <div>过期时间</div>
                 <div>操作</div>
               </div>
-              <div className="divide-y divide-border-secondary">
+              <div className="divide-y divide-[#e8eceb]">
                 {managedItems.map((item) => {
                   const status = getStatus(item);
                   const canRevoke = !item.revokedAt;
@@ -379,7 +379,7 @@ export default function AuthSessionsAdminPage() {
                   );
                 })}
                 {managedItems.length === 0 && (
-                  <div className="px-4 py-8 text-center text-sm text-text-secondary">
+                  <div className="px-4 py-8 text-center text-sm text-black/48">
                     输入用户 ID、邮箱、用户名或昵称后查询会话
                   </div>
                 )}

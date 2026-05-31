@@ -1,0 +1,91 @@
+'use client';
+
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import LabelStudioForm from '@/components/admin/LabelStudioForm';
+import {
+  createLabelStudioDraft,
+  hydrateLabelStudioDraftFromLabel,
+  labelStudioApi,
+  type LabelStudioCreateResult,
+  type LabelStudioDraft,
+} from '@/features/admin-content/label-studio';
+
+export default function AdminContentLabelEditPage() {
+  const params = useParams<{ id: string }>();
+  const labelId = typeof params?.id === 'string' ? params.id : '';
+  const [draft, setDraft] = useState<LabelStudioDraft>(() => createLabelStudioDraft());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!labelId) {
+      setError('缺少厂牌 ID');
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const label = await labelStudioApi.fetchLabel(labelId);
+        if (cancelled) return;
+        setDraft(hydrateLabelStudioDraftFromLabel(label));
+      } catch (loadError) {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : '加载厂牌失败');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [labelId]);
+
+  const handleSubmitResult = (result: LabelStudioCreateResult) => {
+    setNotice(`厂牌已保存：${result.label.name}`);
+  };
+
+  return (
+    <AdminContentLayout
+      title={draft.name || '编辑厂牌'}
+      description="编辑态会回填当前厂牌视觉、简介和外链信息，适合做持续修订与补全。"
+      actions={
+        <>
+          <Link href="/admin/content/labels" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+            返回厂牌工作区
+          </Link>
+          <Link href="/admin/content/labels/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+            新建厂牌
+          </Link>
+        </>
+      }
+    >
+      {notice ? (
+        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section>
+      ) : null}
+
+      {loading ? (
+        <section className="admin-studio-section p-6 text-sm text-black/48">正在加载厂牌详情...</section>
+      ) : error ? (
+        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">{error}</section>
+      ) : (
+        <LabelStudioForm
+          mode="edit"
+          labelId={labelId}
+          draft={draft}
+          setDraft={setDraft}
+          onSubmit={handleSubmitResult}
+          submitButtonText="保存厂牌"
+        />
+      )}
+    </AdminContentLayout>
+  );
+}

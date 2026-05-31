@@ -10732,14 +10732,29 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
     const skip = (page - 1) * limit;
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+    const verificationStatus =
+      typeof req.query.verificationStatus === 'string' ? req.query.verificationStatus.trim() : '';
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : 'followerCount';
     const forceRefresh = isTruthyQueryFlag(req.query.refresh);
+
+    const incompleteClause: Prisma.DJWhereInput = {
+      OR: [
+        { avatarUrl: null },
+        { bio: null },
+        { country: null },
+        { genres: { isEmpty: true } },
+      ],
+    };
+    const completeClause: Prisma.DJWhereInput = {
+      NOT: incompleteClause,
+    };
 
     const cacheKey = JSON.stringify({
       page,
       limit,
       search,
       country,
+      verificationStatus,
       sortBy,
     });
     const cached = !forceRefresh
@@ -10747,6 +10762,12 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
           items: unknown[];
           pagination: BFFPagination;
           generatedAt: string;
+          summary: {
+            total: number;
+            verified: number;
+            unverified: number;
+            incomplete: number;
+          };
         }>({
           namespace: 'dj-catalog-summary',
           key: cacheKey,
@@ -10766,6 +10787,7 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
               ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
               snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
             },
+            summary: cached.payload.summary,
           },
         },
         pagination: cached.payload.pagination,
@@ -10773,16 +10795,42 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
       return;
     }
 
-    const where: Prisma.DJWhereInput = {};
+    const baseWhere: Prisma.DJWhereInput = {};
     if (search) {
       const normalizedSearchVariants = Array.from(new Set([search, search.toLowerCase(), search.toUpperCase()]));
-      where.OR = [
+      baseWhere.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { aliases: { hasSome: normalizedSearchVariants } },
         { bio: { contains: search, mode: 'insensitive' } },
+        { genres: { hasSome: normalizedSearchVariants } },
       ];
     }
-    if (country) where.country = country;
+    if (country) baseWhere.country = country;
+
+    let where: Prisma.DJWhereInput = baseWhere;
+    if (verificationStatus === 'verified') {
+      where = {
+        AND: [baseWhere, { isVerified: true }, completeClause],
+      };
+    } else if (verificationStatus === 'unverified') {
+      where = {
+        AND: [baseWhere, { isVerified: false }, completeClause],
+      };
+    } else if (verificationStatus === 'incomplete') {
+      where = {
+        AND: [baseWhere, incompleteClause],
+      };
+    }
+
+    const verifiedWhere: Prisma.DJWhereInput = {
+      AND: [baseWhere, { isVerified: true }, completeClause],
+    };
+    const unverifiedWhere: Prisma.DJWhereInput = {
+      AND: [baseWhere, { isVerified: false }, completeClause],
+    };
+    const incompleteWhere: Prisma.DJWhereInput = {
+      AND: [baseWhere, incompleteClause],
+    };
 
     const orderBy: Prisma.DJOrderByWithRelationInput =
       sortBy === 'name'
@@ -10793,7 +10841,7 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
             ? { soundCloudFollowers: 'desc' }
             : { followerCount: 'desc' };
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, verifiedCount, unverifiedCount, incompleteCount] = await Promise.all([
       prisma.dJ.findMany({
         where,
         skip,
@@ -10807,6 +10855,8 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
           bannerUrl: true,
           country: true,
           bio: true,
+          aliases: true,
+          genres: true,
           followerCount: true,
           soundCloudFollowers: true,
           instagramUrl: true,
@@ -10818,6 +10868,9 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
         },
       }),
       prisma.dJ.count({ where }),
+      prisma.dJ.count({ where: verifiedWhere }),
+      prisma.dJ.count({ where: unverifiedWhere }),
+      prisma.dJ.count({ where: incompleteWhere }),
     ]);
 
     const pagination = {
@@ -10836,24 +10889,36 @@ router.get('/djs/catalog-summary', optionalAuth, async (req: Request, res: Respo
         items: rows,
         pagination,
         generatedAt,
+        summary: {
+          total: verifiedCount + unverifiedCount + incompleteCount,
+          verified: verifiedCount,
+          unverified: unverifiedCount,
+          incomplete: incompleteCount,
+        },
       },
     });
 
     res.json({
       data: {
         items: rows,
-        meta: {
-          cache: {
-            scope: 'memory',
-            hit: false,
-            stale: false,
-            generatedAt,
-            ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
-            snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
+          meta: {
+            cache: {
+              scope: 'memory',
+              hit: false,
+              stale: false,
+              generatedAt,
+              ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
+              snapshotVersion: ADMIN_DJ_CATALOG_SNAPSHOT_VERSION,
+            },
+            summary: {
+              total: verifiedCount + unverifiedCount + incompleteCount,
+              verified: verifiedCount,
+              unverified: unverifiedCount,
+              incomplete: incompleteCount,
+            },
           },
         },
-      },
-      pagination,
+        pagination,
     });
   } catch (error) {
     console.error('BFF web DJ catalog summary error:', error);
@@ -16690,6 +16755,136 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
     ok(res, created);
   } catch (error) {
     console.error('BFF web create learn label error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    if (!canBypassContentReview(viewerRole)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const labelId = String(req.params.id || '').trim();
+    if (!labelId) {
+      res.status(400).json({ error: 'Label ID is required' });
+      return;
+    }
+
+    const existing = await prisma.label.findUnique({
+      where: { id: labelId },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Label not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const hasField = (key: string): boolean => Object.prototype.hasOwnProperty.call(body, key);
+    const trimOrNull = (value: unknown): string | null => {
+      if (value === null) return null;
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    const nextName = hasField('name') ? trimOrNull(body.name) || '' : existing.name;
+    if (!nextName) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    const requestedSlug = hasField('slug') ? trimOrNull(body.slug) : null;
+    let nextSlug = existing.slug;
+    const shouldRegenerateSlug = hasField('slug')
+      ? Boolean(requestedSlug && requestedSlug !== existing.slug)
+      : nextName !== existing.name;
+    if (shouldRegenerateSlug) {
+      nextSlug = await uniqueLabelSlug(nextName, requestedSlug || undefined);
+    }
+
+    const updateData: Prisma.LabelUpdateInput = {
+      name: nextName,
+    };
+
+    if (nextSlug !== existing.slug) {
+      updateData.slug = nextSlug;
+      if (!hasField('profileSlug') && (!existing.profileSlug || existing.profileSlug === existing.slug)) {
+        updateData.profileSlug = nextSlug;
+      }
+      if (!hasField('profileUrl') && existing.profileUrl === `community://${existing.slug}`) {
+        updateData.profileUrl = `community://${nextSlug}`;
+      }
+    }
+
+    if (hasField('profileUrl')) {
+      updateData.profileUrl = trimOrNull(body.profileUrl) || `community://${nextSlug}`;
+    }
+    if (hasField('profileSlug')) {
+      updateData.profileSlug = trimOrNull(body.profileSlug);
+    }
+    if (hasField('logoUrl')) updateData.logoUrl = trimOrNull(body.logoUrl);
+    if (hasField('avatarUrl')) updateData.avatarUrl = trimOrNull(body.avatarUrl);
+    if (hasField('backgroundUrl')) updateData.backgroundUrl = trimOrNull(body.backgroundUrl);
+    if (hasField('nation')) updateData.nation = trimOrNull(body.nation);
+    if (hasField('country') && !hasField('nation')) updateData.nation = trimOrNull(body.country);
+    if (hasField('genresPreview')) updateData.genresPreview = trimOrNull(body.genresPreview);
+    if (hasField('latestReleaseListing')) updateData.latestReleaseListing = trimOrNull(body.latestReleaseListing);
+    if (hasField('locationPeriod')) updateData.locationPeriod = trimOrNull(body.locationPeriod);
+    if (hasField('introductionPreview')) updateData.introductionPreview = trimOrNull(body.introductionPreview);
+    if (hasField('introduction')) updateData.introduction = trimOrNull(body.introduction);
+    if (hasField('description') && !hasField('introduction')) updateData.introduction = trimOrNull(body.description);
+    if (hasField('generalContactEmail')) updateData.generalContactEmail = trimOrNull(body.generalContactEmail);
+    if (hasField('demoSubmissionUrl')) updateData.demoSubmissionUrl = trimOrNull(body.demoSubmissionUrl);
+    if (hasField('demoSubmissionDisplay')) updateData.demoSubmissionDisplay = trimOrNull(body.demoSubmissionDisplay);
+    if (hasField('facebookUrl')) updateData.facebookUrl = trimOrNull(body.facebookUrl);
+    if (hasField('soundcloudUrl')) updateData.soundcloudUrl = trimOrNull(body.soundcloudUrl);
+    if (hasField('musicPurchaseUrl')) updateData.musicPurchaseUrl = trimOrNull(body.musicPurchaseUrl);
+    if (hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = trimOrNull(body.officialWebsiteUrl);
+    if (hasField('officialWebsite') && !hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = trimOrNull(body.officialWebsite);
+    if (hasField('founderName')) updateData.founderName = trimOrNull(body.founderName);
+    if (hasField('foundedAt')) updateData.foundedAt = trimOrNull(body.foundedAt);
+    if (hasField('founderDjId')) {
+      const founderDjId = trimOrNull(body.founderDjId);
+      updateData.founderDj = founderDjId
+        ? { connect: { id: founderDjId } }
+        : { disconnect: true };
+    }
+    if (hasField('soundcloudFollowers')) {
+      const value = body.soundcloudFollowers;
+      updateData.soundcloudFollowers = value === null || value === '' ? null : Number(value);
+    }
+    if (hasField('likes')) {
+      const value = body.likes;
+      updateData.likes = value === null || value === '' ? null : Number(value);
+    }
+    if (hasField('genres')) {
+      updateData.genres = Array.isArray(body.genres)
+        ? body.genres.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+        : [];
+    }
+
+    const updated = await prisma.label.update({
+      where: { id: labelId },
+      data: updateData,
+    });
+
+    const founderDj = updated.founderDjId
+      ? await prisma.dJ.findUnique({ where: { id: updated.founderDjId } })
+      : null;
+
+    ok(res, {
+      ...updated,
+      founderDj,
+    });
+  } catch (error) {
+    console.error('BFF web update learn label error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
