@@ -101,18 +101,26 @@ const tests: TestCase[] = [
       draft.ticketCurrency = "cny";
       draft.ticketNotes = "Early bird before 23:00.";
       draft.officialWebsite = "https://example.com/future-rave";
-      draft.coverImage = {
-        remoteUrl: "https://cdn.example.com/events/future-rave/cover.jpg",
-        fileName: "cover.jpg",
-        usage: "cover",
-        origin: "persisted",
-      };
-      draft.lineupImage = {
-        remoteUrl: "https://cdn.example.com/events/future-rave/lineup.jpg",
-        fileName: "lineup.jpg",
-        usage: "lineup",
-        origin: "persisted",
-      };
+      draft.imageZones.cover = [
+        {
+          id: "cover_1",
+          remoteUrl: "https://cdn.example.com/events/future-rave/cover.jpg",
+          fileName: "cover.jpg",
+          usage: "cover",
+          origin: "persisted",
+          sortOrder: 1,
+        },
+      ];
+      draft.imageZones.lineup = [
+        {
+          id: "lineup_1",
+          remoteUrl: "https://cdn.example.com/events/future-rave/lineup.jpg",
+          fileName: "lineup.jpg",
+          usage: "lineup",
+          origin: "persisted",
+          sortOrder: 1,
+        },
+      ];
       draft.ticketTiers = [
         { id: "tier_1", name: "Early Bird", price: "199", currency: "cny" },
         { id: "tier_2", name: "Final Release", price: "299", currency: "cny" },

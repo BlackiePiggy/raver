@@ -3,9 +3,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, ReactNode, useMemo, useState } from 'react';
-import EventLocationPickerBridgeModal, {
-  type EventLocationBridgePoint,
-} from '@/components/admin/EventLocationPickerBridgeModal';
+import EventLocationPickerModal, {
+  type EventLocationPoint,
+  type EventLocationProvider,
+} from '@/components/admin/EventLocationPickerModal';
 import {
   createEmptyTicketTierDraft,
   createEmptyEventStudioTimetableSlotDraft,
@@ -19,8 +20,12 @@ import {
   type EventStudioAlignmentPreview,
   type EventStudioCreateResult,
   type EventStudioDraft,
+  type EventStudioEventDayDraft,
+  type EventStudioImageState,
+  type EventStudioImageUsage,
   type EventStudioOrganizer,
   type EventStudioValidationErrors,
+  type EventStudioWeekDraft,
 } from '@/features/admin-content/event-studio';
 
 const EVENT_TYPES = ['电音节', '酒吧活动', '露天活动', '俱乐部派对', '仓库派对', '巡演专场', '其他'];
@@ -30,18 +35,18 @@ const SCHEDULE_MODE_ITEMS: Array<{
   label: string;
   description: string;
 }> = [
-  { value: 'single_day', label: '单日', description: '适合一天内完成的活动。' },
-  { value: 'multi_day', label: '多日', description: '连续多天但仍视为同一活动周期。' },
-  { value: 'multi_week', label: '多周', description: '跨多个 week，会按 week + eventDay 结构提交。' },
+  { value: 'single_day', label: '单日', description: '只有 1 个活动日，适合单天活动。' },
+  { value: 'multi_day', label: '多日', description: '连续多天活动，自动生成一个连续日期范围。' },
+  { value: 'multi_week', label: '多周', description: '按周拆分多个日期段，适合巡回、周末节庆或分周活动。' },
 ];
 
 const EVENT_STUDIO_STEP_ITEMS = [
-  { key: 'media', eyebrow: 'Step 1', title: '媒体', description: '海报、封面与阵容图' },
-  { key: 'basic', eyebrow: 'Step 2', title: '信息', description: '活动基础资料、地点与时区' },
-  { key: 'time', eyebrow: 'Step 3', title: '周期', description: '日期范围、排期模式与日切' },
-  { key: 'timetable', eyebrow: 'Step 4', title: '时间表', description: '舞台、场次与演出时段' },
-  { key: 'lineup', eyebrow: 'Step 5', title: '阵容', description: '阵容艺人与对齐预览' },
-  { key: 'tickets', eyebrow: 'Step 6', title: '票务', description: '购票链接、票档与备注' },
+  { key: 'media', eyebrow: 'Step 1', title: '媒体', description: 'Poster、Cover、Lineup、Timetable 与相关图片' },
+  { key: 'basic', eyebrow: 'Step 2', title: '信息', description: '基础资料、地点、主办方与时区' },
+  { key: 'time', eyebrow: 'Step 3', title: '周期', description: '单日、多日、多周日期结构' },
+  { key: 'timetable', eyebrow: 'Step 4', title: '时间表', description: '活动日、舞台与演出时段' },
+  { key: 'lineup', eyebrow: 'Step 5', title: '阵容', description: 'DJ 列表与时间表对齐' },
+  { key: 'tickets', eyebrow: 'Step 6', title: '票务', description: '购票链接、票档与说明' },
   { key: 'review', eyebrow: 'Step 7', title: '检查', description: '核对摘要并提交' },
 ] as const;
 
@@ -57,6 +62,21 @@ const STEP_ERROR_KEYS: Record<EventStudioStepKey, Array<keyof EventStudioValidat
   review: ['name', 'city', 'country', 'detailAddress', 'timeZone', 'startDate', 'endDate', 'coverImage', 'ticketTiers', 'timetableSlots'],
 };
 
+const IMAGE_ZONE_CONFIG: Array<{
+  usage: EventStudioImageUsage;
+  title: string;
+  description: string;
+  hint: string;
+  emphasis: 'primary' | 'secondary';
+}> = [
+  { usage: 'poster', title: 'Poster', description: '活动主视觉，目录和详情页最优先。', hint: '建议上传海报主图。', emphasis: 'primary' },
+  { usage: 'cover', title: 'Cover', description: '封面横图，可作为活动详情头图。', hint: '适合横版头图。', emphasis: 'primary' },
+  { usage: 'lineup', title: 'Lineup', description: '阵容图，用于 lineup 识别和详情补充。', hint: '适合艺人阵容排版图。', emphasis: 'primary' },
+  { usage: 'timetable', title: 'Timetable', description: '时间表图，便于人工核对排期。', hint: '适合舞台排期长图。', emphasis: 'secondary' },
+  { usage: 'map', title: 'Map', description: '场地地图或区域导航图。', hint: '可上传场内导览图。', emphasis: 'secondary' },
+  { usage: 'other', title: 'Other', description: '其他视觉素材，如票务图或补充资料。', hint: '用于补充资料。', emphasis: 'secondary' },
+];
+
 const textInputClassName = 'admin-studio-input';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
 
@@ -70,6 +90,75 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
 
 const formatEventDayLabel = (day: EventStudioDraft['eventDays'][number]) =>
   `${day.label || day.eventDayId} · ${day.date}`;
+
+const normalizeMapProvider = (value?: string | null): EventLocationProvider | 'google' => {
+  if (value === 'amap' || value === 'mapkit' || value === 'mapbox' || value === 'geoapify' || value === 'google') {
+    return value;
+  }
+  return 'geoapify';
+};
+
+const normalizeProviderMetaForModal = (
+  value: NonNullable<EventStudioDraft['locationPoint']>['providerMeta'] | undefined
+) => {
+  if (!value) return null;
+  return {
+    ...(value.amap
+      ? {
+          amap: {
+            ...(value.amap.poiId ? { poiId: value.amap.poiId } : {}),
+            ...(value.amap.adcode ? { adcode: value.amap.adcode } : {}),
+          },
+        }
+      : {}),
+    ...(value.mapkit
+      ? {
+          mapkit: {
+            ...(value.mapkit.mapItemIdentifier ? { mapItemIdentifier: value.mapkit.mapItemIdentifier } : {}),
+          },
+        }
+      : {}),
+    ...(value.mapbox
+      ? {
+          mapbox: {
+            ...(value.mapbox.placeId ? { placeId: value.mapbox.placeId } : {}),
+            ...(value.mapbox.featureType ? { featureType: value.mapbox.featureType } : {}),
+          },
+        }
+      : {}),
+    ...(value.geoapify
+      ? {
+          geoapify: {
+            ...(value.geoapify.placeId ? { placeId: value.geoapify.placeId } : {}),
+            ...(value.geoapify.featureType ? { featureType: value.geoapify.featureType } : {}),
+          },
+        }
+      : {}),
+    ...(value.google
+      ? {
+          google: {
+            ...(value.google.placeId ? { placeId: value.google.placeId } : {}),
+            ...(value.google.types?.length ? { types: value.google.types.filter(Boolean) as string[] } : {}),
+          },
+        }
+      : {}),
+  };
+};
+
+const cloneImageZones = (zones: EventStudioDraft['imageZones']): EventStudioDraft['imageZones'] => ({
+  poster: [...zones.poster],
+  lineup: [...zones.lineup],
+  timetable: [...zones.timetable],
+  cover: [...zones.cover],
+  map: [...zones.map],
+  other: [...zones.other],
+});
+
+const normalizeZoneSortOrder = (items: EventStudioImageState[]) =>
+  [...items].map((item, index) => ({
+    ...item,
+    sortOrder: index + 1,
+  }));
 
 function Section({
   title,
@@ -196,10 +285,6 @@ export default function EventStudioForm({
   const [organizerItems, setOrganizerItems] = useState<EventStudioOrganizer[]>([]);
   const [organizerLoading, setOrganizerLoading] = useState(false);
   const [organizerError, setOrganizerError] = useState('');
-  const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingLineup, setUploadingLineup] = useState(false);
-  const [deletingCover, setDeletingCover] = useState(false);
-  const [deletingLineup, setDeletingLineup] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [alignmentPreviewLoading, setAlignmentPreviewLoading] = useState(false);
@@ -208,9 +293,19 @@ export default function EventStudioForm({
   const [conflictNotice, setConflictNotice] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [uploadingUsage, setUploadingUsage] = useState<EventStudioImageUsage | null>(null);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
+  const mediaCount = useMemo(
+    () => Object.values(draft.imageZones).reduce((sum, items) => sum + items.length, 0),
+    [draft.imageZones]
+  );
+  const entryVisualCount = useMemo(
+    () => draft.imageZones.poster.length + draft.imageZones.cover.length + draft.imageZones.lineup.length,
+    [draft.imageZones]
+  );
 
   const draftTitle = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull) || '活动资料编辑';
   const draftCity = firstFilledText(draft.city.zh, draft.city.en, draft.city.ja, draft.city.enFull) || '未填写城市';
@@ -224,13 +319,43 @@ export default function EventStudioForm({
       draft.detailAddress.enFull
     ) || '还没有地点地址';
 
-  const locationBridgeInitialPoint = useMemo<EventLocationBridgePoint | null>(() => {
+  const locationPointInitial = useMemo<EventLocationPoint | null>(() => {
+    if (draft.locationPoint) {
+        return {
+        provider: normalizeMapProvider(draft.locationPoint.provider),
+        sourceMode: draft.locationPoint.sourceMode || 'web-event-studio-v2',
+        providerPlaceId: draft.locationPoint.providerPlaceId || undefined,
+        poiId: draft.locationPoint.poiId || undefined,
+        adcode: draft.locationPoint.adcode || undefined,
+        location: {
+          lng: Number(draft.locationPoint.location?.lng),
+          lat: Number(draft.locationPoint.location?.lat),
+        },
+        nameI18n: {
+          zh: draft.locationPoint.nameI18n?.zh || '',
+          en: draft.locationPoint.nameI18n?.en || '',
+        },
+        addressI18n: {
+          zh: draft.locationPoint.addressI18n?.zh || '',
+          en: draft.locationPoint.addressI18n?.en || '',
+        },
+        formattedAddressI18n: {
+          zh: draft.locationPoint.formattedAddressI18n?.zh || '',
+          en: draft.locationPoint.formattedAddressI18n?.en || '',
+        },
+        city: draft.locationPoint.city || '',
+        district: draft.locationPoint.district || '',
+        province: draft.locationPoint.province || '',
+        countryCode: draft.locationPoint.countryCode || '',
+        providerMeta: normalizeProviderMetaForModal(draft.locationPoint.providerMeta),
+      };
+    }
     const latitude = Number(draft.latitude);
     const longitude = Number(draft.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-    return {
+      return {
       provider: 'geoapify',
-      sourceMode: 'web-event-studio-bridge',
+      sourceMode: 'web-event-studio-v2',
       location: { lng: longitude, lat: latitude },
       nameI18n: {
         zh: draft.pickedPlaceName,
@@ -245,14 +370,19 @@ export default function EventStudioForm({
         en: draft.pickedMapAddress || draft.detailAddress.en,
       },
       city: firstFilledText(draft.city.en, draft.city.zh),
+      district: '',
+      province: '',
+      countryCode: '',
+      providerMeta: null,
     };
   }, [
+    draft.locationPoint,
     draft.latitude,
     draft.longitude,
     draft.pickedPlaceName,
     draft.pickedMapAddress,
-    draft.detailAddress.en,
     draft.detailAddress.zh,
+    draft.detailAddress.en,
     draft.city.en,
     draft.city.zh,
   ]);
@@ -313,7 +443,7 @@ export default function EventStudioForm({
             ? ['startDate']
             : key === 'endDate'
               ? ['endDate']
-              : key === 'coverImage'
+              : key === 'imageZones'
                 ? ['coverImage']
                 : [],
       }
@@ -419,74 +549,83 @@ export default function EventStudioForm({
     }
   };
 
-  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: 'cover' | 'lineup') => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: EventStudioImageUsage) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
 
     try {
       setSubmitError(null);
-      if (usage === 'cover') {
-        setUploadingCover(true);
-      } else {
-        setUploadingLineup(true);
-      }
-      const uploaded = await eventStudioApi.uploadImage(file, {
-        usage,
-        draftId: draft.id,
-      });
-      updateDraft(
-        usage === 'cover' ? 'coverImage' : 'lineupImage',
-        {
-          remoteUrl: uploaded.url,
-          fileName: uploaded.fileName || file.name,
-          usage,
-          origin: 'draft-upload',
-        }
+      setUploadingUsage(usage);
+      const uploadedItems = await Promise.all(
+        files.map(async (file) => {
+          const uploaded = await eventStudioApi.uploadImage(file, {
+            usage,
+            draftId: draft.id,
+          });
+          return {
+            id: crypto.randomUUID(),
+            remoteUrl: uploaded.url,
+            fileName: uploaded.fileName || file.name,
+            usage,
+            origin: 'draft-upload' as const,
+            sortOrder: 0,
+          };
+        })
+      );
+
+      updateDraftState(
+        (current) => {
+          const nextZones = cloneImageZones(current.imageZones);
+          const currentItems = [...nextZones[usage]];
+          const appended = uploadedItems.map((item, index) => ({
+            ...item,
+            sortOrder: currentItems.length + index + 1,
+          }));
+          nextZones[usage] = normalizeZoneSortOrder([...currentItems, ...appended]);
+          return {
+            ...current,
+            imageZones: nextZones,
+          };
+        },
+        { clearErrorKeys: ['coverImage'] }
       );
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '图片上传失败');
     } finally {
-      if (usage === 'cover') {
-        setUploadingCover(false);
-      } else {
-        setUploadingLineup(false);
-      }
+      setUploadingUsage(null);
       event.target.value = '';
     }
   };
 
-  const handleImageRemove = async (usage: 'cover' | 'lineup') => {
-    const image = usage === 'cover' ? draft.coverImage : draft.lineupImage;
-    if (!image) return;
-
+  const handleImageRemove = async (usage: EventStudioImageUsage, image: EventStudioImageState) => {
     try {
       setSubmitError(null);
-      if (usage === 'cover') {
-        setDeletingCover(true);
-      } else {
-        setDeletingLineup(true);
-      }
-
+      setDeletingImageId(image.id);
       if (image.origin === 'draft-upload') {
         await eventStudioApi.deleteDraftImages({
           draftId: draft.id,
           urls: [image.remoteUrl],
         });
       }
-
-      updateDraft(usage === 'cover' ? 'coverImage' : 'lineupImage', null);
+      updateDraftState(
+        (current) => {
+          const nextZones = cloneImageZones(current.imageZones);
+          nextZones[usage] = normalizeZoneSortOrder(nextZones[usage].filter((currentImage) => currentImage.id !== image.id));
+          return {
+            ...current,
+            imageZones: nextZones,
+          };
+        },
+        { clearErrorKeys: ['coverImage'] }
+      );
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '图片移除失败');
     } finally {
-      if (usage === 'cover') {
-        setDeletingCover(false);
-      } else {
-        setDeletingLineup(false);
-      }
+      setDeletingImageId(null);
     }
   };
 
-  const handleLocationConfirm = (point: EventLocationBridgePoint) => {
+  const handleLocationConfirm = (point: EventLocationPoint) => {
     updateDraftState(
       (current) => {
         const currentDetail = firstFilledText(
@@ -514,6 +653,41 @@ export default function EventStudioForm({
           ...current,
           latitude: String(point.location.lat),
           longitude: String(point.location.lng),
+          locationPoint: {
+            provider: point.provider,
+            sourceMode: point.sourceMode,
+            providerPlaceId: point.providerPlaceId || null,
+            poiId: point.poiId || null,
+            adcode: point.adcode || null,
+            providerMeta: point.providerMeta || null,
+            location: {
+              lng: point.location.lng,
+              lat: point.location.lat,
+            },
+            nameI18n: {
+              zh: point.nameI18n?.zh || '',
+              en: point.nameI18n?.en || '',
+              ja: '',
+              enFull: '',
+            },
+            addressI18n: {
+              zh: point.addressI18n?.zh || '',
+              en: point.addressI18n?.en || '',
+              ja: '',
+              enFull: '',
+            },
+            formattedAddressI18n: {
+              zh: point.formattedAddressI18n?.zh || '',
+              en: point.formattedAddressI18n?.en || '',
+              ja: '',
+              enFull: '',
+            },
+            city: point.city || null,
+            district: point.district || null,
+            province: point.province || null,
+            countryCode: point.countryCode || null,
+            selectedAt: new Date().toISOString(),
+          },
           pickedPlaceName: point.nameI18n?.zh?.trim() || point.nameI18n?.en?.trim() || current.pickedPlaceName,
           pickedMapAddress: nextAddressZh || nextAddressEn || current.pickedMapAddress,
           detailAddress: {
@@ -536,6 +710,112 @@ export default function EventStudioForm({
       }
     );
     setShowLocationPicker(false);
+  };
+
+  const setSingleDayDate = (value: string) => {
+    updateDraftState(
+      (current) => ({
+        ...current,
+        startDate: value,
+        endDate: value,
+      }),
+      {
+        syncSchedule: true,
+        clearErrorKeys: ['startDate', 'endDate'],
+      }
+    );
+  };
+
+  const setScheduleMode = (value: EventStudioDraft['scheduleMode']) => {
+    updateDraftState(
+      (current) => {
+        if (value === current.scheduleMode) return current;
+        if (value === 'single_day') {
+          const nextDate = current.startDate || current.endDate || '';
+          return {
+            ...current,
+            scheduleMode: value,
+            startDate: nextDate,
+            endDate: nextDate,
+            weeks: [],
+          };
+        }
+        if (value === 'multi_day') {
+          return {
+            ...current,
+            scheduleMode: value,
+            weeks: [],
+          };
+        }
+        const seedStart = current.startDate || current.endDate || '';
+        const seedEnd = current.endDate || current.startDate || '';
+        const initialWeek: EventStudioWeekDraft = {
+          id: crypto.randomUUID(),
+          weekIndex: 1,
+          label: 'Week 1',
+          startDate: seedStart,
+          endDate: seedEnd,
+          sortOrder: 1,
+        };
+        return {
+          ...current,
+          scheduleMode: value,
+          weeks: current.weeks.length ? current.weeks : [initialWeek],
+        };
+      },
+      {
+        syncSchedule: true,
+        clearErrorKeys: ['startDate', 'endDate'],
+      }
+    );
+  };
+
+  const addWeekRange = () => {
+    updateDraftState(
+      (current) => {
+        const previous = current.weeks[current.weeks.length - 1];
+        const nextWeek: EventStudioWeekDraft = {
+          id: crypto.randomUUID(),
+          weekIndex: current.weeks.length + 1,
+          label: `Week ${current.weeks.length + 1}`,
+          startDate: previous?.endDate || current.endDate || current.startDate || '',
+          endDate: previous?.endDate || current.endDate || current.startDate || '',
+          sortOrder: current.weeks.length + 1,
+        };
+        return {
+          ...current,
+          weeks: [...current.weeks, nextWeek],
+        };
+      },
+      { syncSchedule: true, clearErrorKeys: ['startDate', 'endDate'] }
+    );
+  };
+
+  const updateWeekRange = (weekId: string, patch: Partial<EventStudioWeekDraft>) => {
+    updateDraftState(
+      (current) => ({
+        ...current,
+        weeks: current.weeks.map((week) =>
+          week.id === weekId
+            ? {
+                ...week,
+                ...patch,
+              }
+            : week
+        ),
+      }),
+      { syncSchedule: true, clearErrorKeys: ['startDate', 'endDate'] }
+    );
+  };
+
+  const removeWeekRange = (weekId: string) => {
+    updateDraftState(
+      (current) => ({
+        ...current,
+        weeks: current.weeks.filter((week) => week.id !== weekId),
+      }),
+      { syncSchedule: true, clearErrorKeys: ['startDate', 'endDate'] }
+    );
   };
 
   const handleAdvance = () => {
@@ -628,6 +908,70 @@ export default function EventStudioForm({
 
   const currentStepItem = EVENT_STUDIO_STEP_ITEMS[currentStep];
 
+  const renderMediaZone = (usage: EventStudioImageUsage) => {
+    const config = IMAGE_ZONE_CONFIG.find((item) => item.usage === usage);
+    if (!config) return null;
+    const items = draft.imageZones[usage];
+    const isPrimary = config.emphasis === 'primary';
+
+    return (
+      <div
+        key={usage}
+        className={isPrimary ? 'admin-reference-card p-4' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9] p-4'}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-[#071110]">{config.title}</div>
+            <div className="mt-1 text-sm leading-6 text-black/48">{config.description}</div>
+          </div>
+          <label className="admin-studio-button-secondary cursor-pointer px-3 py-2 text-xs">
+            {uploadingUsage === usage ? '上传中...' : '上传图片'}
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void handleImageUpload(event, usage)}
+            />
+          </label>
+        </div>
+
+        <div className="mt-4">
+          {items.length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {items.map((image, index) => (
+                <div key={image.id} className="overflow-hidden rounded-[22px] border border-[#e8eceb] bg-white">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-[#f2f3ef]">
+                    <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="800px" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
+                      <div className="mt-1 text-xs text-black/40">
+                        #{image.sortOrder} · {image.origin === 'persisted' ? '已存在' : '当前草稿上传'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleImageRemove(usage, image)}
+                      className="admin-studio-button-danger px-3 py-2 text-xs"
+                    >
+                      {deletingImageId === image.id ? '移除中...' : '移除'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-[180px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white text-sm text-black/42">
+              {config.hint}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-5">
       {conflictNotice ? (
@@ -643,28 +987,20 @@ export default function EventStudioForm({
           <div className="admin-studio-label">{mode === 'create' ? 'Event Studio' : 'Edit Session'}</div>
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">{draftTitle}</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
-            <SummaryStat
-              label="地点绑定"
-              value={draft.latitude && draft.longitude ? '已绑定地图点位' : '待选择'}
-              tone="mint"
-            />
+            <SummaryStat label="地点绑定" value={draft.locationPoint ? '已绑定地图点位' : '待选择'} tone="mint" />
             <SummaryStat label="排期结构" value={`${draft.weeks.length} 周 / ${draft.eventDays.length} 天`} tone="sand" />
-            <SummaryStat label="时间表条目" value={`${draft.timetableSlots.length} 条`} tone="rose" />
-            <SummaryStat
-              label="当前分页"
-              value={`${currentStep + 1}/${totalSteps} · ${currentStepItem.title}`}
-              tone="soft"
-            />
+            <SummaryStat label="媒体数量" value={`${mediaCount} 张`} tone="rose" />
+            <SummaryStat label="当前分页" value={`${currentStep + 1}/${totalSteps} · ${currentStepItem.title}`} tone="soft" />
           </div>
         </div>
 
         <div className="admin-studio-pastel-mint p-6">
           <div className="admin-studio-label">Submission</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">分页式创建流程</h2>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">iOS 对齐分页流程</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
             <p>当前 web 端创建与编辑流程已经按 iOS 的分页顺序组织：媒体、信息、周期、时间表、阵容、票务、检查。</p>
-            <p>地点选择改为直接桥接 `festival-viewer` 的地图选点能力，不再只靠手工填写经纬度。</p>
-            <p>活动创建和编辑都继续走当前正式接口，不改后端提交契约。</p>
+            <p>地图选点能力直接嵌入当前页面，保留多地图 provider 与原始 locationPoint 语义。</p>
+            <p>媒体页不再只支持两张图，而是按 Poster / Cover / Lineup / Timetable / Map / Other 分区上传。</p>
           </div>
         </div>
       </section>
@@ -672,94 +1008,28 @@ export default function EventStudioForm({
       <StepNavigation currentStep={currentStep} onSelect={goToStep} />
 
       {currentStep === 0 ? (
-        <Section title="媒体" description="第一步先处理封面、海报和阵容图，这样后续在检查页能直接看到完整的视觉预览。">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="admin-reference-card p-4">
-              <Field label="封面 / 海报" error={errors.coverImage}>
-                <div className="admin-reference-soft-card flex flex-col gap-3 border border-dashed p-4">
-                  {draft.coverImage?.remoteUrl ? (
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-border-secondary">
-                      <Image src={draft.coverImage.remoteUrl} alt="cover" fill className="object-cover" sizes="800px" />
-                    </div>
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center rounded-xl border border-[#e8eceb] bg-white text-sm text-black/42">
-                      还没有上传封面
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-black/48">{uploadingCover || deletingCover ? '处理中...' : '建议优先上传海报主图'}</span>
-                    <div className="flex items-center gap-2">
-                      {draft.coverImage ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleImageRemove('cover')}
-                          className="admin-studio-button-secondary px-3 py-2 text-xs"
-                        >
-                          移除
-                        </button>
-                      ) : null}
-                      <label className="admin-studio-button-secondary px-3 py-2 text-xs">
-                        上传
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => void handleImageUpload(event, 'cover')}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </Field>
-            </div>
-
-            <div className="admin-reference-card p-4">
-              <Field label="阵容图（可选）">
-                <div className="admin-reference-soft-card flex flex-col gap-3 border border-dashed p-4">
-                  {draft.lineupImage?.remoteUrl ? (
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-border-secondary">
-                      <Image src={draft.lineupImage.remoteUrl} alt="lineup" fill className="object-cover" sizes="800px" />
-                    </div>
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center rounded-xl border border-[#e8eceb] bg-white text-sm text-black/42">
-                      还没有上传阵容图
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-black/48">{uploadingLineup || deletingLineup ? '处理中...' : '可选，用于目录与详情页补充展示'}</span>
-                    <div className="flex items-center gap-2">
-                      {draft.lineupImage ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleImageRemove('lineup')}
-                          className="admin-studio-button-secondary px-3 py-2 text-xs"
-                        >
-                          移除
-                        </button>
-                      ) : null}
-                      <label className="admin-studio-button-secondary px-3 py-2 text-xs">
-                        上传
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(event) => void handleImageUpload(event, 'lineup')}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </Field>
-            </div>
+        <Section title="媒体" description="先把主视觉、封面、阵容图和排期图集中整理好。提交校验会要求 Poster / Lineup / Cover 至少有一张。">
+          <div className="grid gap-5 xl:grid-cols-2">
+            {IMAGE_ZONE_CONFIG.filter((item) => item.emphasis === 'primary').map((item) => renderMediaZone(item.usage))}
           </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-3">
+            {IMAGE_ZONE_CONFIG.filter((item) => item.emphasis === 'secondary').map((item) => renderMediaZone(item.usage))}
+          </div>
+
+          <div className="admin-reference-card mt-5 grid gap-3 p-4 md:grid-cols-3">
+            <SummaryStat label="入口视觉" value={`${entryVisualCount} 张`} tone="mint" />
+            <SummaryStat label="全部图片" value={`${mediaCount} 张`} tone="soft" />
+            <SummaryStat label="提交要求" value="Poster / Cover / Lineup 至少一张" tone="sand" />
+          </div>
+
+          {errors.coverImage ? <div className="text-xs text-[#6a3530]">{errors.coverImage}</div> : null}
         </Section>
       ) : null}
 
       {currentStep === 1 ? (
         <>
-          <Section title="活动信息" description="这一步集中填写活动名称、主办方、描述以及地点基础信息。地点部分已经接入 legacy 地图工具。">
+          <Section title="活动信息" description="这一步集中填写活动名称、主办方、描述以及地点基础信息。地点部分直接使用原生地图弹层。">
             <div className="grid gap-4 lg:grid-cols-2">
               <Field label="活动名称（中文）" error={errors.name}>
                 <input
@@ -908,6 +1178,11 @@ export default function EventStudioForm({
                           ? `${draft.latitude}, ${draft.longitude}`
                           : '还没有已绑定坐标'}
                       </div>
+                      {draft.locationPoint?.provider ? (
+                        <div className="mt-2 text-xs text-black/40">
+                          Provider: {draft.locationPoint.provider} · sourceMode: {draft.locationPoint.sourceMode || 'manual_search'}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -926,6 +1201,7 @@ export default function EventStudioForm({
                                 ...current,
                                 latitude: '',
                                 longitude: '',
+                                locationPoint: null,
                                 pickedPlaceName: '',
                                 pickedMapAddress: '',
                               }),
@@ -1080,12 +1356,12 @@ export default function EventStudioForm({
       ) : null}
 
       {currentStep === 2 ? (
-        <Section title="活动周期" description="这里决定活动的日期结构，提交时会同步生成 `weeks / eventDays`，供 timetable 和 lineup 共用。">
+        <Section title="活动周期" description="这里决定活动的日期结构，提交时会同步生成 weeks / eventDays，供 timetable 和 lineup 共用。">
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="排期模式">
               <select
                 value={draft.scheduleMode}
-                onChange={(event) => updateDraft('scheduleMode', event.target.value as EventStudioDraft['scheduleMode'])}
+                onChange={(event) => setScheduleMode(event.target.value as EventStudioDraft['scheduleMode'])}
                 className={textInputClassName}
               >
                 {SCHEDULE_MODE_ITEMS.map((item) => (
@@ -1106,22 +1382,39 @@ export default function EventStudioForm({
                 placeholder="默认 6"
               />
             </Field>
-            <Field label="开始日期" error={errors.startDate}>
-              <input
-                type="date"
-                value={draft.startDate}
-                onChange={(event) => updateDraft('startDate', event.target.value)}
-                className={textInputClassName}
-              />
-            </Field>
-            <Field label="结束日期" error={errors.endDate}>
-              <input
-                type="date"
-                value={draft.endDate}
-                onChange={(event) => updateDraft('endDate', event.target.value)}
-                className={textInputClassName}
-              />
-            </Field>
+
+            {draft.scheduleMode === 'single_day' ? (
+              <Field label="活动日期" error={errors.startDate || errors.endDate}>
+                <input
+                  type="date"
+                  value={draft.startDate}
+                  onChange={(event) => setSingleDayDate(event.target.value)}
+                  className={textInputClassName}
+                />
+              </Field>
+            ) : null}
+
+            {draft.scheduleMode === 'multi_day' ? (
+              <>
+                <Field label="开始日期" error={errors.startDate}>
+                  <input
+                    type="date"
+                    value={draft.startDate}
+                    onChange={(event) => updateDraft('startDate', event.target.value)}
+                    className={textInputClassName}
+                  />
+                </Field>
+                <Field label="结束日期" error={errors.endDate}>
+                  <input
+                    type="date"
+                    value={draft.endDate}
+                    onChange={(event) => updateDraft('endDate', event.target.value)}
+                    className={textInputClassName}
+                  />
+                </Field>
+              </>
+            ) : null}
+
             <Field label="官网链接">
               <input
                 value={draft.officialWebsite}
@@ -1131,6 +1424,62 @@ export default function EventStudioForm({
               />
             </Field>
           </div>
+
+          {draft.scheduleMode === 'multi_week' ? (
+            <div className="admin-reference-card mt-6 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-[#071110]">Week Ranges</div>
+                  <div className="mt-1 text-xs text-text-secondary">
+                    为每个活动周分别指定起止日期，系统会自动生成对应 eventDays。
+                  </div>
+                </div>
+                <button type="button" onClick={addWeekRange} className="admin-studio-button-primary px-4 py-3 text-sm">
+                  新增一周
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {draft.weeks.length ? (
+                  draft.weeks.map((week, index) => (
+                    <div key={week.id} className="grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.9fr_1fr_1fr_auto]">
+                      <input
+                        value={week.label}
+                        onChange={(event) => updateWeekRange(week.id, { label: event.target.value })}
+                        className={textInputClassName}
+                        placeholder={`Week ${index + 1}`}
+                      />
+                      <input
+                        type="date"
+                        value={week.startDate}
+                        onChange={(event) => updateWeekRange(week.id, { startDate: event.target.value })}
+                        className={textInputClassName}
+                      />
+                      <input
+                        type="date"
+                        value={week.endDate}
+                        onChange={(event) => updateWeekRange(week.id, { endDate: event.target.value })}
+                        className={textInputClassName}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeWeekRange(week.id)}
+                        className="admin-studio-button-danger px-4 py-3 text-sm"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="admin-reference-soft-card p-4 text-sm text-black/48">
+                    还没有周次。请至少添加 2 个 week range。
+                  </div>
+                )}
+              </div>
+
+              {errors.endDate ? <div className="mt-3 text-xs text-[#6a3530]">{errors.endDate}</div> : null}
+            </div>
+          ) : null}
 
           <div className="admin-reference-card mt-6 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1157,7 +1506,7 @@ export default function EventStudioForm({
                       </div>
                     ))
                   ) : (
-                    <div className="text-sm text-black/48">请先完成开始/结束日期设置。</div>
+                    <div className="text-sm text-black/48">请先完成日期设置。</div>
                   )}
                 </div>
               </div>
@@ -1365,7 +1714,7 @@ export default function EventStudioForm({
                   </div>
                 )}
 
-                {errors.timetableSlots ? <div className="text-xs text-red-300">{errors.timetableSlots}</div> : null}
+                {errors.timetableSlots ? <div className="text-xs text-[#6a3530]">{errors.timetableSlots}</div> : null}
               </div>
 
               <div className="space-y-4">
@@ -1697,7 +2046,7 @@ export default function EventStudioForm({
               ))}
             </div>
 
-            {errors.ticketTiers ? <div className="mt-3 text-xs text-red-300">{errors.ticketTiers}</div> : null}
+            {errors.ticketTiers ? <div className="mt-3 text-xs text-[#6a3530]">{errors.ticketTiers}</div> : null}
           </div>
         </Section>
       ) : null}
@@ -1739,28 +2088,22 @@ export default function EventStudioForm({
             <div className="space-y-4">
               <div className="admin-reference-card p-4">
                 <div className="text-sm font-semibold text-[#071110]">媒体预览</div>
-                <div className="mt-4 grid gap-4">
-                  <div className="rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-black/42">Cover</div>
-                    <div className="mt-3 relative aspect-[16/9] overflow-hidden rounded-[18px] border border-[#e8eceb] bg-white">
-                      {draft.coverImage?.remoteUrl ? (
-                        <Image src={draft.coverImage.remoteUrl} alt="cover preview" fill className="object-cover" sizes="900px" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-sm text-black/42">还没有上传封面</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-black/42">Lineup</div>
-                    <div className="mt-3 relative aspect-[16/9] overflow-hidden rounded-[18px] border border-[#e8eceb] bg-white">
-                      {draft.lineupImage?.remoteUrl ? (
-                        <Image src={draft.lineupImage.remoteUrl} alt="lineup preview" fill className="object-cover" sizes="900px" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-sm text-black/42">还没有上传阵容图</div>
-                      )}
-                    </div>
-                  </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  {IMAGE_ZONE_CONFIG.filter((item) => draft.imageZones[item.usage].length > 0).map((item) => {
+                    const firstImage = draft.imageZones[item.usage][0];
+                    return (
+                      <div key={item.usage} className="rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-black/42">{item.title}</div>
+                        <div className="mt-3 relative aspect-[16/9] overflow-hidden rounded-[18px] border border-[#e8eceb] bg-white">
+                          {firstImage ? (
+                            <Image src={firstImage.remoteUrl} alt={`${item.title} preview`} fill className="object-cover" sizes="900px" />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-sm text-black/42">还没有上传图片</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1810,7 +2153,7 @@ export default function EventStudioForm({
             <button
               type="button"
               onClick={() => void handleSubmit()}
-              disabled={submitting || uploadingCover || uploadingLineup || deletingCover || deletingLineup}
+              disabled={submitting || uploadingUsage !== null || deletingImageId !== null}
               className="admin-studio-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交活动' : '提交编辑')}
@@ -1819,9 +2162,10 @@ export default function EventStudioForm({
         </section>
       )}
 
-      <EventLocationPickerBridgeModal
+      <EventLocationPickerModal
         open={showLocationPicker}
-        initialPoint={locationBridgeInitialPoint}
+        initialPoint={locationPointInitial}
+        initialProvider={locationPointInitial?.provider === 'google' ? 'geoapify' : locationPointInitial?.provider}
         composedQuery={[draft.country.zh || draft.country.en, draft.city.zh || draft.city.en, draft.detailAddress.zh || draft.detailAddress.en]
           .filter(Boolean)
           .join(' ')

@@ -25,6 +25,8 @@ import {
   DJCatalogResponse,
   DJCatalogSummary,
 } from '@/features/admin-content/catalog/api';
+import { djStudioApi } from '@/features/admin-content/dj-studio/api';
+import type { DJStudioLoadedDJ } from '@/features/admin-content/dj-studio/types';
 import {
   buildAdminCatalogCacheKey,
   clearAdminCatalogCache,
@@ -100,6 +102,270 @@ const resolveTagPills = (item: DJCatalogItem): string[] => {
   return Array.from(new Set(tags)).slice(0, 2);
 };
 
+const firstFilledText = (...values: Array<string | null | undefined>): string => {
+  for (const value of values) {
+    const trimmed = String(value || '').trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+};
+
+const compactTextList = (value?: string[] | null): string[] =>
+  Array.isArray(value) ? value.map((item) => item.trim()).filter(Boolean) : [];
+
+const detailLinks = (detail: DJStudioLoadedDJ) =>
+  [
+    { label: 'Spotify', value: detail.spotifyUrl, id: detail.spotifyId },
+    { label: 'Instagram', value: detail.instagramUrl },
+    { label: 'SoundCloud', value: detail.soundcloudUrl, id: detail.soundcloudId },
+    { label: 'Apple Music', value: detail.appleMusicId ? `music.apple.com/artist/${detail.appleMusicId}` : null, id: detail.appleMusicId },
+    { label: 'Facebook', value: detail.facebookUrl },
+    { label: 'X / Twitter', value: detail.twitterUrl },
+    { label: 'YouTube', value: detail.youtubeUrl },
+    { label: 'Netease', value: detail.neteaseUrl },
+    { label: 'QQ Music', value: detail.qqMusicUrl },
+    { label: 'Website', value: detail.website },
+    { label: 'Other', value: detail.otherPlatformUrl },
+  ].filter((item) => item.value || item.id);
+
+function DJDetailOverlay({
+  item,
+  detail,
+  loading,
+  error,
+  onClose,
+}: {
+  item: DJCatalogItem | null;
+  detail: DJStudioLoadedDJ | null;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  const resolved = detail ?? null;
+  const state = resolveDJState(item);
+  const aliases = compactTextList(resolved?.aliases ?? item.aliases);
+  const genres = compactTextList(resolved?.genres ?? item.genres);
+  const countryDisplay = resolveCountryDisplay(resolved?.country ?? item.country);
+  const bioText = firstFilledText(
+    resolved?.bioI18n?.zh,
+    resolved?.bioI18n?.en,
+    resolved?.bio,
+    item.bio
+  );
+  const primaryName = firstFilledText(resolved?.nameI18n?.zh, resolved?.nameI18n?.en, resolved?.name, item.name) || item.name;
+  const secondaryName = firstFilledText(
+    resolved?.nameI18n?.en && resolved?.nameI18n?.en !== primaryName ? resolved.nameI18n.en : '',
+    resolved?.slug
+  );
+  const linkItems = resolved ? detailLinks(resolved) : [];
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div
+        className="relative max-h-[90vh] w-full max-w-[980px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+          aria-label="关闭 DJ 详情"
+        >
+          ×
+        </button>
+
+        <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[1.05fr_1.35fr]">
+          <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
+            <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
+              <div className="relative aspect-[1.2/1]">
+                {resolved?.bannerUrl || item.bannerUrl ? (
+                  <Image
+                    src={resolved?.bannerUrl || item.bannerUrl || ''}
+                    alt={primaryName}
+                    fill
+                    className="object-cover"
+                    sizes="900px"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-[#7b8794]">暂无 Banner</div>
+                )}
+              </div>
+            </div>
+
+            <div className="-mt-10 px-4">
+              <div className="flex items-end gap-4 rounded-[24px] border border-[#e8eceb] bg-white/96 p-4 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
+                <div className="flex h-[92px] w-[92px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] bg-[#f1f4f6]">
+                  {resolved?.avatarUrl || item.avatarUrl ? (
+                    <Image
+                      src={resolved?.avatarUrl || item.avatarUrl || ''}
+                      alt={primaryName}
+                      width={92}
+                      height={92}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-[#9aa1ad]">暂无头像</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">{primaryName}</div>
+                  {secondaryName ? <div className="mt-1 text-sm text-[#6b7280]">{secondaryName}</div> : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-[12px] font-semibold ${state.tone}`}>
+                      {state.label}
+                    </span>
+                    {countryDisplay.flag ? <span className="text-[18px] leading-none">{countryDisplay.flag}</span> : null}
+                    <span className="text-sm font-medium text-[#374151]">{countryDisplay.label}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">平台粉丝</div>
+                <div className="mt-2 text-xl font-semibold text-[#111827]">
+                  {formatFollowers(item.followerCount ?? item.soundCloudFollowers)}
+                </div>
+              </div>
+              <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Spotify 粉丝</div>
+                <div className="mt-2 text-xl font-semibold text-[#111827]">
+                  {formatFollowers(resolved?.spotifyFollowers ?? null)}
+                </div>
+              </div>
+              <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">曲目数</div>
+                <div className="mt-2 text-xl font-semibold text-[#111827]">
+                  {typeof resolved?.trackCount === 'number' ? resolved.trackCount.toLocaleString() : '未同步'}
+                </div>
+              </div>
+              <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">歌单数</div>
+                <div className="mt-2 text-xl font-semibold text-[#111827]">
+                  {typeof resolved?.playlistCount === 'number' ? resolved.playlistCount.toLocaleString() : '未同步'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">DJ Profile</div>
+                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">详细信息</div>
+              </div>
+              <Link
+                href={`/admin/content/djs/${item.id}/edit`}
+                className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
+              >
+                编辑 DJ
+              </Link>
+            </div>
+
+            {loading ? (
+              <div className="mt-6 rounded-[22px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
+                正在加载 DJ 完整信息...
+              </div>
+            ) : error ? (
+              <div className="mt-6 rounded-[22px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-[#7a2d29]">
+                {error}
+              </div>
+            ) : (
+              <div className="mt-6 space-y-5">
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">简介</div>
+                  <div className="mt-3 text-sm leading-7 text-[#4b5563]">
+                    {bioText || '暂无简介信息。'}
+                  </div>
+                </section>
+
+                <section className="grid gap-5 lg:grid-cols-2">
+                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="text-sm font-semibold text-[#111827]">基础资料</div>
+                    <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                      <div><span className="font-medium text-[#111827]">ID：</span>{resolved?.id || item.id}</div>
+                      <div><span className="font-medium text-[#111827]">Slug：</span>{resolved?.slug || '未设置'}</div>
+                      <div><span className="font-medium text-[#111827]">可编辑：</span>{resolved?.canEdit === false ? '否' : '是'}</div>
+                      <div><span className="font-medium text-[#111827]">最近同步：</span>{formatDateTime(item.lastSyncedAt)}</div>
+                      <div><span className="font-medium text-[#111827]">最近更新：</span>{formatDateTime(item.updatedAt)}</div>
+                      <div><span className="font-medium text-[#111827]">创建时间：</span>{formatDateTime(item.createdAt)}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                    <div className="text-sm font-semibold text-[#111827]">标签资料</div>
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Genres</div>
+                        <div className="flex flex-wrap gap-2">
+                          {genres.length ? genres.map((genre) => (
+                            <span key={genre} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                              {genre}
+                            </span>
+                          )) : <span className="text-sm text-[#6b7280]">暂无</span>}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Aliases</div>
+                        <div className="flex flex-wrap gap-2">
+                          {aliases.length ? aliases.map((alias) => (
+                            <span key={alias} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                              {alias}
+                            </span>
+                          )) : <span className="text-sm text-[#6b7280]">暂无</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">平台与外链</div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {linkItems.length ? linkItems.map((linkItem) => (
+                      <div key={linkItem.label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
+                        <div className="font-semibold text-[#111827]">{linkItem.label}</div>
+                        {linkItem.value ? (
+                          <div className="mt-1 break-all">{linkItem.value}</div>
+                        ) : null}
+                        {linkItem.id ? (
+                          <div className="mt-1 text-xs text-[#8b93a1]">ID: {linkItem.id}</div>
+                        ) : null}
+                      </div>
+                    )) : (
+                      <div className="text-sm text-[#6b7280]">暂无平台链接。</div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+                  <div className="text-sm font-semibold text-[#111827]">平台统计</div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ['Spotify Followers', formatFollowers(resolved?.spotifyFollowers ?? null)],
+                      ['SoundCloud Followers', formatFollowers(resolved?.soundCloudFollowers ?? null)],
+                      ['SoundCloud Favorites', typeof resolved?.soundCloudFavorites === 'number' ? resolved.soundCloudFavorites.toLocaleString() : '未同步'],
+                      ['Follower Count', formatFollowers(item.followerCount ?? null)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{label}</div>
+                        <div className="mt-2 text-lg font-semibold text-[#111827]">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ② 统计块 — 扁平横排，label上方，数字+百分比下方两端
 function StatBlock({
   label,
@@ -147,6 +413,11 @@ export default function DJCatalogPageClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [selectedDJ, setSelectedDJ] = useState<DJCatalogItem | null>(null);
+  const [selectedDJDetail, setSelectedDJDetail] = useState<DJStudioLoadedDJ | null>(null);
+  const [selectedDJError, setSelectedDJError] = useState('');
+  const [selectedDJLoading, setSelectedDJLoading] = useState(false);
+  const [detailCache, setDetailCache] = useState<Record<string, DJStudioLoadedDJ>>({});
 
   const filters = useMemo<DJCatalogFilters>(
     () => ({
@@ -227,6 +498,36 @@ export default function DJCatalogPageClient() {
     setSortBy('followerCount');
     setPage(1);
   };
+
+  const openDetailOverlay = useCallback(async (item: DJCatalogItem) => {
+    setSelectedDJ(item);
+    setSelectedDJError('');
+    const cached = detailCache[item.id];
+    if (cached) {
+      setSelectedDJDetail(cached);
+      setSelectedDJLoading(false);
+      return;
+    }
+
+    setSelectedDJDetail(null);
+    setSelectedDJLoading(true);
+    try {
+      const detail = await djStudioApi.fetchDJ(item.id);
+      setDetailCache((current) => ({ ...current, [item.id]: detail }));
+      setSelectedDJDetail(detail);
+    } catch (detailError) {
+      setSelectedDJError(detailError instanceof Error ? detailError.message : 'DJ 详情加载失败');
+    } finally {
+      setSelectedDJLoading(false);
+    }
+  }, [detailCache]);
+
+  const closeDetailOverlay = useCallback(() => {
+    setSelectedDJ(null);
+    setSelectedDJDetail(null);
+    setSelectedDJError('');
+    setSelectedDJLoading(false);
+  }, []);
 
   const handleExport = () => {
     if (typeof window === 'undefined' || !items.length) return;
@@ -463,7 +764,16 @@ export default function DJCatalogPageClient() {
                 return (
                   <article
                     key={item.id}
-                    className="px-5 py-3.5 lg:grid lg:grid-cols-[minmax(0,2.4fr)_1.2fr_0.9fr_1fr_1.2fr_1.2fr_140px] lg:items-center lg:gap-6"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void openDetailOverlay(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void openDetailOverlay(item);
+                      }
+                    }}
+                    className="cursor-pointer px-5 py-3.5 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:grid lg:grid-cols-[minmax(0,2.4fr)_1.2fr_0.9fr_1fr_1.2fr_1.2fr_140px] lg:items-center lg:gap-6"
                   >
                     {/* ④ DJ信息列：头像56×56，更紧凑 */}
                     <div className="min-w-0">
@@ -539,12 +849,14 @@ export default function DJCatalogPageClient() {
                     <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:justify-end">
                       <Link
                         href={`/admin/content/djs/${item.id}/edit`}
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex h-[36px] items-center rounded-[10px] border border-[#e8eceb] bg-white px-4 text-[13px] font-semibold text-[#111827]"
                       >
                         编辑
                       </Link>
                       <button
                         type="button"
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-[10px] border border-[#e8eceb] bg-white text-[#6b7280]"
                         aria-label="更多操作"
                       >
@@ -616,6 +928,14 @@ export default function DJCatalogPageClient() {
           </div>
         </section>
       </section>
+
+      <DJDetailOverlay
+        item={selectedDJ}
+        detail={selectedDJDetail}
+        loading={selectedDJLoading}
+        error={selectedDJError}
+        onClose={closeDetailOverlay}
+      />
     </AdminContentLayout>
   );
 }

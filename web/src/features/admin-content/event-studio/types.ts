@@ -26,15 +26,46 @@ export type EventStudioTimezoneLookupItem = {
   matchSource?: string;
 };
 
-export type EventStudioImageUsage = 'cover' | 'lineup';
+export type EventStudioImageUsage = 'poster' | 'lineup' | 'timetable' | 'cover' | 'map' | 'other';
 
 export type EventStudioLineupSyncMode = 'incremental_fill' | 'exact_align';
 
+export type EventStudioLocationProviderMeta = {
+  amap?: {
+    poiId?: string | null;
+    adcode?: string | null;
+  } | null;
+  mapkit?: {
+    mapItemIdentifier?: string | null;
+  } | null;
+  mapbox?: {
+    placeId?: string | null;
+    featureType?: string | null;
+  } | null;
+  geoapify?: {
+    placeId?: string | null;
+    featureType?: string | null;
+  } | null;
+  google?: {
+    placeId?: string | null;
+    types?: string[] | null;
+  } | null;
+} | null;
+
+export type EventStudioLocationPoint = EventContractSchemas['EventLocationPoint'] & {
+  adcode?: string | null;
+  providerMeta?: EventStudioLocationProviderMeta;
+  i18nPending?: boolean;
+  selectedAt?: string;
+};
+
 export type EventStudioImageState = {
+  id: string;
   remoteUrl: string;
   fileName: string;
   usage: EventStudioImageUsage;
   origin: 'draft-upload' | 'persisted';
+  sortOrder: number;
 };
 
 export type EventStudioTicketTierDraft = {
@@ -109,6 +140,7 @@ export type EventStudioDraft = {
   venueName: string;
   latitude: string;
   longitude: string;
+  locationPoint: EventStudioLocationPoint | null;
   pickedPlaceName: string;
   pickedMapAddress: string;
   timeZoneQuery: string;
@@ -120,8 +152,7 @@ export type EventStudioDraft = {
   ticketUrl: string;
   ticketCurrency: string;
   ticketNotes: string;
-  coverImage: EventStudioImageState | null;
-  lineupImage: EventStudioImageState | null;
+  imageZones: Record<EventStudioImageUsage, EventStudioImageState[]>;
   ticketTiers: EventStudioTicketTierDraft[];
   scheduleMode: EventStudioScheduleMode;
   weeks: EventStudioWeekDraft[];

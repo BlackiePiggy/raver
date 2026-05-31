@@ -1,6 +1,8 @@
 import {
   EventStudioDraft,
   EventStudioEventDayDraft,
+  EventStudioImageState,
+  EventStudioImageUsage,
   EventStudioLineupArtistDraft,
   EventStudioLoadedEvent,
   EventStudioLocalizedText,
@@ -29,6 +31,59 @@ const createTicketTier = (): EventStudioTicketTierDraft => ({
   price: '',
   currency: 'CNY',
 });
+
+const EVENT_STUDIO_IMAGE_USAGES: EventStudioImageUsage[] = ['poster', 'lineup', 'timetable', 'cover', 'map', 'other'];
+
+const createEmptyImageZones = (): Record<EventStudioImageUsage, EventStudioImageState[]> => ({
+  poster: [],
+  lineup: [],
+  timetable: [],
+  cover: [],
+  map: [],
+  other: [],
+});
+
+const normalizeImageZones = (
+  zones?: Partial<Record<EventStudioImageUsage, EventStudioImageState[] | null>> | null
+): Record<EventStudioImageUsage, EventStudioImageState[]> => {
+  const next = createEmptyImageZones();
+  EVENT_STUDIO_IMAGE_USAGES.forEach((usage) => {
+    const items = Array.isArray(zones?.[usage]) ? zones?.[usage] : [];
+    next[usage] = (items || []).map((item, index) => ({
+      ...item,
+      id: item.id || crypto.randomUUID(),
+      usage,
+      sortOrder: item.sortOrder || index + 1,
+    }));
+  });
+  return next;
+};
+
+const createImageState = (input: {
+  usage: EventStudioImageUsage;
+  remoteUrl: string;
+  fileName: string;
+  origin: 'draft-upload' | 'persisted';
+  sortOrder?: number;
+}): EventStudioImageState => ({
+  id: crypto.randomUUID(),
+  usage: input.usage,
+  remoteUrl: input.remoteUrl,
+  fileName: input.fileName,
+  origin: input.origin,
+  sortOrder: input.sortOrder || 1,
+});
+
+const classifyEventImageUsage = (type?: string | null, label?: string | null): EventStudioImageUsage => {
+  const normalizedType = String(type || '').trim().toLowerCase();
+  const normalizedLabel = String(label || '').trim().toUpperCase();
+  if (normalizedType === 'cover' || normalizedLabel.includes('COVER')) return 'cover';
+  if (normalizedType === 'luall' || normalizedType === 'lineup' || normalizedLabel.includes('LINE-UP')) return 'lineup';
+  if (normalizedType === 'tt' || normalizedType === 'timetable' || normalizedLabel.includes('TIMETABLE')) return 'timetable';
+  if (normalizedType === 'poster' || normalizedLabel.includes('POSTER')) return 'poster';
+  if (normalizedLabel.includes('MAP')) return 'map';
+  return 'other';
+};
 
 const defaultMemberNamesText = (members?: string[] | null, fallback?: string | null): string => {
   const normalizedMembers = Array.isArray(members)
@@ -323,6 +378,7 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
   venueName: '',
   latitude: '',
   longitude: '',
+  locationPoint: null,
   pickedPlaceName: '',
   pickedMapAddress: '',
   timeZoneQuery: '',
@@ -334,8 +390,7 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
   ticketUrl: '',
   ticketCurrency: 'CNY',
   ticketNotes: '',
-  coverImage: null,
-  lineupImage: null,
+  imageZones: createEmptyImageZones(),
   ticketTiers: [],
   scheduleMode: 'single_day',
   weeks: [],
@@ -361,14 +416,45 @@ const fromNullableLocalizedText = (
 export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent): EventStudioDraft => {
   const manualDetail = event.manualLocation?.detailAddressI18n;
   const locationAddress = event.locationPoint?.addressI18n;
-  const coverImageFromAssets = event.imageAssets?.find((item) => {
-    const normalizedType = String(item.type || '').toLowerCase();
-    return normalizedType === 'poster' || normalizedType === 'cover';
+  const hydratedImageZones = createEmptyImageZones();
+  (event.imageAssets ?? []).forEach((asset, index) => {
+    const url = String(asset.url || '').trim();
+    if (!url) return;
+    const usage = classifyEventImageUsage(asset.type, asset.label);
+    hydratedImageZones[usage].push(
+      createImageState({
+        usage,
+        remoteUrl: url,
+        fileName: asset.fileName || url.split('/').pop() || `${usage}-${index + 1}`,
+        origin: 'persisted',
+        sortOrder: asset.sort ?? asset.order ?? hydratedImageZones[usage].length + 1,
+      })
+    );
   });
-  const lineupImageFromAssets = event.imageAssets?.find((item) => {
-    const normalizedType = String(item.type || '').toLowerCase();
-    return normalizedType === 'luall' || normalizedType === 'lineup';
-  });
+
+  if (event.coverImageUrl && !hydratedImageZones.cover.some((item) => item.remoteUrl === event.coverImageUrl)) {
+    hydratedImageZones.cover.unshift(
+      createImageState({
+        usage: 'cover',
+        remoteUrl: event.coverImageUrl,
+        fileName: event.coverImageUrl.split('/').pop() || 'cover',
+        origin: 'persisted',
+        sortOrder: 1,
+      })
+    );
+  }
+
+  if (event.lineupImageUrl && !hydratedImageZones.lineup.some((item) => item.remoteUrl === event.lineupImageUrl)) {
+    hydratedImageZones.lineup.unshift(
+      createImageState({
+        usage: 'lineup',
+        remoteUrl: event.lineupImageUrl,
+        fileName: event.lineupImageUrl.split('/').pop() || 'lineup',
+        origin: 'persisted',
+        sortOrder: 1,
+      })
+    );
+  }
 
   const startDate = event.startDate?.slice(0, 10) ?? '';
   const endDate = event.endDate?.slice(0, 10) ?? '';
@@ -434,6 +520,23 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     venueName: '',
     latitude: event.latitude != null ? String(event.latitude) : '',
     longitude: event.longitude != null ? String(event.longitude) : '',
+    locationPoint: event.locationPoint
+      ? {
+          ...event.locationPoint,
+          adcode:
+            typeof event.locationPoint === 'object' &&
+            event.locationPoint &&
+            'adcode' in event.locationPoint
+              ? String((event.locationPoint as { adcode?: string | null }).adcode || '')
+              : null,
+          providerMeta:
+            typeof event.locationPoint === 'object' &&
+            event.locationPoint &&
+            'providerMeta' in event.locationPoint
+              ? ((event.locationPoint as { providerMeta?: NonNullable<EventStudioDraft['locationPoint']>['providerMeta'] }).providerMeta ?? null)
+              : null,
+        }
+      : null,
     pickedPlaceName: event.locationPoint?.nameI18n?.zh ?? event.locationPoint?.nameI18n?.en ?? '',
     pickedMapAddress: event.locationPoint?.addressI18n?.zh ?? event.locationPoint?.addressI18n?.en ?? '',
     timeZoneQuery: event.city ?? event.cityI18n?.en ?? event.cityI18n?.zh ?? '',
@@ -462,22 +565,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     ticketUrl: event.ticketUrl ?? '',
     ticketCurrency: event.ticketCurrency ?? 'CNY',
     ticketNotes: event.ticketNotes ?? '',
-    coverImage: event.coverImageUrl || coverImageFromAssets?.url
-      ? {
-          remoteUrl: event.coverImageUrl ?? coverImageFromAssets?.url ?? '',
-          fileName: event.coverImageUrl?.split('/').pop() || coverImageFromAssets?.fileName || 'cover',
-          usage: 'cover',
-          origin: 'persisted',
-        }
-      : null,
-    lineupImage: event.lineupImageUrl || lineupImageFromAssets?.url
-      ? {
-          remoteUrl: event.lineupImageUrl ?? lineupImageFromAssets?.url ?? '',
-          fileName: event.lineupImageUrl?.split('/').pop() || lineupImageFromAssets?.fileName || 'lineup',
-          usage: 'lineup',
-          origin: 'persisted',
-        }
-      : null,
+    imageZones: normalizeImageZones(hydratedImageZones),
     ticketTiers: (event.ticketTiers ?? []).map((tier) => ({
       id: tier.id || createTicketTier().id,
       name: tier.name,
@@ -521,11 +609,10 @@ export const syncEventStudioScheduleStructure = (
   const scheduleMode =
     draft.scheduleMode ||
     defaultScheduleMode(draft.startDate, draft.endDate);
-  const structure = buildEventStudioScheduleStructure(
-    scheduleMode,
-    draft.startDate,
-    draft.endDate
-  );
+  const structure =
+    scheduleMode === 'multi_week' && draft.weeks.length
+      ? buildEventStudioScheduleStructureFromWeeks(draft.weeks)
+      : buildEventStudioScheduleStructure(scheduleMode, draft.startDate, draft.endDate);
   const lineupState = syncEventStudioLineupState(draft, structure.eventDays);
 
   return {
@@ -534,5 +621,54 @@ export const syncEventStudioScheduleStructure = (
     weeks: structure.weeks,
     eventDays: structure.eventDays,
     ...lineupState,
+  };
+};
+
+export const buildEventStudioScheduleStructureFromWeeks = (
+  weeksInput: EventStudioWeekDraft[]
+): {
+  weeks: EventStudioWeekDraft[];
+  eventDays: EventStudioEventDayDraft[];
+} => {
+  const normalizedWeeks = [...weeksInput]
+    .map((week, index) => ({
+      ...week,
+      weekIndex: index + 1,
+      sortOrder: index + 1,
+      label: week.label || `Week ${index + 1}`,
+    }))
+    .filter((week) => parseDateOnly(week.startDate) && parseDateOnly(week.endDate) && week.endDate >= week.startDate);
+
+  const eventDays: EventStudioEventDayDraft[] = [];
+  let overallDayIndex = 1;
+
+  normalizedWeeks.forEach((week, index) => {
+    const weekStart = parseDateOnly(week.startDate);
+    const weekEnd = parseDateOnly(week.endDate);
+    if (!weekStart || !weekEnd) return;
+
+    let dayIndexInWeek = 1;
+    const dayCursor = new Date(weekStart);
+    while (dayCursor.getTime() <= weekEnd.getTime()) {
+      eventDays.push({
+        id: crypto.randomUUID(),
+        eventDayId: eventDayIdentifier('multi_week', index + 1, dayIndexInWeek, overallDayIndex),
+        weekIndex: index + 1,
+        dayIndexInWeek,
+        overallDayIndex,
+        label: `Week ${index + 1} Day ${dayIndexInWeek}`,
+        weekday: weekdayKey(dayCursor),
+        date: formatDateOnly(dayCursor),
+        sortOrder: overallDayIndex,
+      });
+      overallDayIndex += 1;
+      dayIndexInWeek += 1;
+      dayCursor.setDate(dayCursor.getDate() + 1);
+    }
+  });
+
+  return {
+    weeks: normalizedWeeks,
+    eventDays,
   };
 };

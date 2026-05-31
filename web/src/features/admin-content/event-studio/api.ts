@@ -92,7 +92,7 @@ export const eventStudioApi = {
   async uploadImage(
     file: File,
     options: {
-      usage: 'cover' | 'lineup';
+      usage: 'poster' | 'lineup' | 'timetable' | 'cover' | 'map' | 'other';
       draftId: string;
     }
   ): Promise<UploadImageResponse> {

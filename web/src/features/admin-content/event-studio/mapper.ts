@@ -1,6 +1,7 @@
 import {
   EventStudioCreateInput,
   EventStudioDraft,
+  EventStudioImageState,
   EventStudioLineupArtistDraft,
   EventStudioLocalizedText,
   EventStudioTimetableSlotDraft,
@@ -114,6 +115,27 @@ const normalizeMemberDjIds = (memberDjIds: Array<string | null>): Array<string |
   return normalized.some((item) => item !== null) ? normalized : [];
 };
 
+const firstImageInZone = (draft: EventStudioDraft, usage: EventStudioImageState['usage']): EventStudioImageState | null =>
+  [...(draft.imageZones[usage] || [])]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .find((item) => item.remoteUrl.trim()) || null;
+
+const cloneLocalizedTextOrUndefined = (value?: {
+  zh?: string | null;
+  en?: string | null;
+  ja?: string | null;
+  enFull?: string | null;
+} | null) => {
+  if (!value) return undefined;
+  const normalized = normalizedLocalizedText({
+    zh: value.zh ?? '',
+    en: value.en ?? '',
+    ja: value.ja ?? '',
+    enFull: value.enFull ?? '',
+  });
+  return normalized ?? undefined;
+};
+
 const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
 
 const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
@@ -175,37 +197,53 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
   const cityI18n = normalizedLocalizedText(draft.city);
   const countryI18n = normalizedLocalizedText(draft.country);
   const detailAddressI18n = normalizedLocalizedText(draft.detailAddress);
-  const coverUrl = trimOrNull(draft.coverImage?.remoteUrl);
-  const lineupUrl = trimOrNull(draft.lineupImage?.remoteUrl);
+  const posterImage = firstImageInZone(draft, 'poster');
+  const coverImage = firstImageInZone(draft, 'cover');
+  const lineupImage = firstImageInZone(draft, 'lineup');
+  const coverUrl = trimOrNull(posterImage?.remoteUrl || coverImage?.remoteUrl);
+  const lineupUrl = trimOrNull(lineupImage?.remoteUrl);
   const latitude = numericOrNull(draft.latitude);
   const longitude = numericOrNull(draft.longitude);
   const locationName = trimOrNull(draft.pickedPlaceName);
   const locationAddress = trimOrNull(draft.pickedMapAddress);
 
-  const imageAssets = [
-    draft.coverImage
-      ? {
-          url: draft.coverImage.remoteUrl,
-          type: 'poster',
-          label: 'POSTER',
-          sort: 0,
-          order: 1,
-          source: 'web-event-studio-v1',
-          fileName: draft.coverImage.fileName,
-        }
-      : null,
-    draft.lineupImage
-      ? {
-          url: draft.lineupImage.remoteUrl,
-          type: 'luall',
-          label: 'LINE-UP',
-          sort: 1,
-          order: 1,
-          source: 'web-event-studio-v1',
-          fileName: draft.lineupImage.fileName,
-        }
-      : null,
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const imageAssets = Object.entries(draft.imageZones).flatMap(([usage, items]) =>
+    [...items]
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((image, index) => {
+        const normalizedUsage = usage as EventStudioImageState['usage'];
+        const type =
+          normalizedUsage === 'lineup'
+            ? 'luall'
+            : normalizedUsage === 'timetable'
+              ? 'tt'
+              : normalizedUsage === 'cover'
+                ? 'cover'
+                : normalizedUsage === 'poster'
+                  ? 'poster'
+                  : 'other';
+        const label =
+          normalizedUsage === 'lineup'
+            ? 'LINE-UP'
+            : normalizedUsage === 'timetable'
+              ? 'TIMETABLE'
+              : normalizedUsage === 'cover'
+                ? 'COVER'
+                : normalizedUsage === 'poster'
+                  ? 'POSTER'
+                  : normalizedUsage.toUpperCase();
+        return {
+          url: image.remoteUrl,
+          type,
+          label,
+          sort: image.sortOrder || index + 1,
+          order: index + 1,
+          source: 'web-event-studio-v2',
+          fileName: image.fileName,
+        };
+      })
+      .filter((item) => item.url.trim())
+  );
 
   const manualLocation = detailAddressI18n
     ? {
@@ -217,29 +255,42 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
 
   const locationPoint = latitude !== null && longitude !== null
     ? {
-        provider: 'web-manual',
-        sourceMode: 'web-event-studio-v1',
+        provider: trimOrNull(draft.locationPoint?.provider) || 'mapkit',
+        sourceMode: trimOrNull(draft.locationPoint?.sourceMode) || 'web-event-studio-v2',
+        providerPlaceId: trimOrNull(draft.locationPoint?.providerPlaceId),
+        poiId: trimOrNull(draft.locationPoint?.poiId),
+        adcode: trimOrNull(draft.locationPoint?.adcode),
+        providerMeta: draft.locationPoint?.providerMeta ?? null,
         location: { lng: longitude, lat: latitude },
-        nameI18n: locationName
-          ? {
-              zh: locationName,
-              en: '',
-              ja: '',
-              enFull: '',
-            }
-          : undefined,
-        addressI18n: locationAddress
-          ? {
-              zh: locationAddress,
-              en: '',
-              ja: '',
-              enFull: '',
-            }
-          : detailAddressI18n ?? undefined,
-        formattedAddressI18n: detailAddressI18n
-          ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
-          : undefined,
-        city: trimOrNull(primaryText(draft.city)),
+        nameI18n:
+          cloneLocalizedTextOrUndefined(draft.locationPoint?.nameI18n) ||
+          (locationName
+            ? {
+                zh: locationName,
+                en: '',
+                ja: '',
+                enFull: '',
+              }
+            : undefined),
+        addressI18n:
+          cloneLocalizedTextOrUndefined(draft.locationPoint?.addressI18n) ||
+          (locationAddress
+            ? {
+                zh: locationAddress,
+                en: '',
+                ja: '',
+                enFull: '',
+              }
+            : detailAddressI18n ?? undefined),
+        formattedAddressI18n:
+          cloneLocalizedTextOrUndefined(draft.locationPoint?.formattedAddressI18n) ||
+          (detailAddressI18n
+            ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
+            : undefined),
+        city: trimOrNull(draft.locationPoint?.city) || trimOrNull(primaryText(draft.city)),
+        district: trimOrNull(draft.locationPoint?.district),
+        province: trimOrNull(draft.locationPoint?.province),
+        countryCode: trimOrNull(draft.locationPoint?.countryCode),
       }
     : null;
 
@@ -363,7 +414,7 @@ export const mapEventStudioDraftToUpdateInput = (draft: EventStudioDraft): Event
     clearLongitude: !hasLongitude,
     clearStageOrder: !createInput.stageOrder?.length,
     clearLineupSlots: !createInput.lineupSlots?.length,
-    coverImageUrl: draft.coverImage ? createInput.coverImageUrl : null,
-    lineupImageUrl: draft.lineupImage ? createInput.lineupImageUrl : null,
+    coverImageUrl: firstImageInZone(draft, 'poster') || firstImageInZone(draft, 'cover') ? createInput.coverImageUrl : null,
+    lineupImageUrl: firstImageInZone(draft, 'lineup') ? createInput.lineupImageUrl : null,
   };
 };

@@ -10,6 +10,10 @@ const firstFilledText = (...values: Array<string | undefined | null>): string =>
 
 export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioValidationErrors => {
   const errors: EventStudioValidationErrors = {};
+  const hasEntryVisual =
+    draft.imageZones.poster.some((item) => item.remoteUrl.trim()) ||
+    draft.imageZones.lineup.some((item) => item.remoteUrl.trim()) ||
+    draft.imageZones.cover.some((item) => item.remoteUrl.trim());
 
   if (!firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull)) {
     errors.name = '请至少填写一个活动名称';
@@ -43,6 +47,10 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     errors.endDate = '单日活动的开始和结束日期必须相同';
   }
 
+  if (draft.scheduleMode === 'single_day' && (!draft.startDate.trim() || !draft.endDate.trim())) {
+    errors.startDate = errors.startDate || '请选择活动日期';
+  }
+
   if (!draft.timeZoneSelection?.timezone?.trim()) {
     errors.timeZone = '请从候选列表中确认活动时区';
   }
@@ -51,8 +59,15 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     errors.endDate = '多周活动至少需要覆盖 2 个 week';
   }
 
-  if (!draft.coverImage?.remoteUrl?.trim()) {
-    errors.coverImage = '请至少上传一张封面或海报图片';
+  if (
+    draft.scheduleMode === 'multi_week' &&
+    draft.weeks.some((week) => !week.startDate.trim() || !week.endDate.trim() || week.endDate < week.startDate)
+  ) {
+    errors.endDate = '请完整填写每个周次的开始和结束日期，且结束日期不能早于开始日期';
+  }
+
+  if (!hasEntryVisual) {
+    errors.coverImage = '请至少上传 1 张 Poster、Lineup 或 Cover 图片';
   }
 
   const invalidTier = draft.ticketTiers.some((tier) => {
