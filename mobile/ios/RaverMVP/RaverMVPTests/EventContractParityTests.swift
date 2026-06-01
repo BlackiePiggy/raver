@@ -126,8 +126,8 @@ final class EventContractParityTests: XCTestCase {
         slot.eventDayId = "d1"
         slot.weekIndex = 1
         slot.dayIndexInWeek = 1
-        slot.overallDayIndex = 1
-        slot.dayIndex = 1
+        slot.overallDayIndex = 2
+        slot.dayIndex = 2
         slot.localDate = Self.date("2099-09-13", timeZoneID: "Asia/Shanghai")
         slot.actType = .solo
         slot.performerNames = ["Anyma"]

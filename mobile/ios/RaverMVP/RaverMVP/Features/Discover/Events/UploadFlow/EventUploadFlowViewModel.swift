@@ -2785,11 +2785,11 @@ final class EventUploadFlowViewModel: ObservableObject {
     }
 
     private func resolvedEventDay(for slot: EventUploadLineupSlotDraft) -> WebEventDay? {
-        if let byOverallDayIndex = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
-            return byOverallDayIndex
-        }
         if let byEventDayID = draft.eventDay(forID: slot.eventDayId) {
             return byEventDayID
+        }
+        if let byOverallDayIndex = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
+            return byOverallDayIndex
         }
         return draft.structuredEventDays.first
     }

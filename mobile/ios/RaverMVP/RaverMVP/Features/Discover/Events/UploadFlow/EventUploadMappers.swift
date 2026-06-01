@@ -427,10 +427,10 @@ enum EventUploadMappers {
         for slot: EventUploadLineupSlotDraft,
         in draft: EventUploadDraft
     ) -> WebEventDay? {
-        if let eventDay = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
+        if let eventDay = draft.eventDay(forID: slot.eventDayId) {
             return eventDay
         }
-        if let eventDay = draft.eventDay(forID: slot.eventDayId) {
+        if let eventDay = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
             return eventDay
         }
         return draft.structuredEventDays.first
