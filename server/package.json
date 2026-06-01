@@ -54,6 +54,7 @@
     "content-submissions:worker": "CONTENT_SUBMISSION_WORKER_LOOP=1 ts-node src/scripts/content-submission-processing-worker-run.ts",
     "content-submissions:status": "ts-node src/scripts/content-submission-processing-status.ts",
     "content-submissions:event-edit:diagnose": "ts-node src/scripts/content-submission-event-edit-diagnose.ts",
+    "content-submissions:event-submission:diagnose": "ts-node src/scripts/content-submission-event-submission-diagnose.ts",
     "content-submissions:event-edit:cleanup": "ts-node src/scripts/content-submission-event-edit-cleanup.ts",
     "notification:followed-dj-update:run": "ts-node src/scripts/notification-followed-dj-update-run.ts",
     "notification:followed-brand-update:run": "ts-node src/scripts/notification-followed-brand-update-run.ts",

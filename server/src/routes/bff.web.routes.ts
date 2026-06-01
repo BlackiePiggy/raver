@@ -817,6 +817,89 @@ const normalizeSubmittedEventLineupToTimetable = (payload: Record<string, unknow
   return normalizedPayload as unknown as Record<string, unknown>;
 };
 
+const normalizeEventSubmissionPayloadForMutation = async (
+  payload: Record<string, unknown>
+): Promise<Prisma.InputJsonObject> => {
+  let normalizedBasePayload = payload as Prisma.InputJsonObject;
+  const hasScheduleObject =
+    !!payload.schedule
+    && typeof payload.schedule === 'object'
+    && !Array.isArray(payload.schedule);
+  const hasWeeks = Array.isArray(payload.weeks);
+  const hasEventDays = Array.isArray(payload.eventDays);
+
+  if (!hasScheduleObject || !hasWeeks || !hasEventDays) {
+    const targetEventId = cleanSubmittedBrandText(payload.targetEventId)
+      || cleanSubmittedBrandText(payload.editTargetEventId);
+    if (targetEventId) {
+      const existing = await prisma.event.findUnique({
+        where: { id: targetEventId },
+        select: {
+          scheduleMode: true,
+          timeZone: true,
+          dayRolloverHour: true,
+          weeks: {
+            orderBy: [{ sortOrder: 'asc' }, { weekIndex: 'asc' }],
+            select: {
+              weekIndex: true,
+              label: true,
+              startDate: true,
+              endDate: true,
+              sortOrder: true,
+            },
+          },
+          eventDays: {
+            orderBy: [{ sortOrder: 'asc' }, { overallDayIndex: 'asc' }],
+            select: {
+              eventDayId: true,
+              weekIndex: true,
+              dayIndexInWeek: true,
+              overallDayIndex: true,
+              label: true,
+              weekday: true,
+              date: true,
+              sortOrder: true,
+            },
+          },
+        },
+      });
+
+      if (existing) {
+        const existingScheduleContext = buildSubmittedEventScheduleContextFromEvent(existing);
+        normalizedBasePayload = {
+          ...payload,
+          schedule: hasScheduleObject ? payload.schedule as Prisma.InputJsonValue : {
+            mode: existingScheduleContext.scheduleMode,
+            timeZone: existingScheduleContext.timeZone,
+            dayRolloverHour: existingScheduleContext.dayRolloverHour,
+          },
+          weeks: hasWeeks ? payload.weeks as Prisma.InputJsonValue : existingScheduleContext.weeks.map((week) => ({
+            weekIndex: week.weekIndex,
+            label: week.label ?? null,
+            startDate: week.startDate,
+            endDate: week.endDate,
+            sortOrder: week.sortOrder,
+          })) as unknown as Prisma.InputJsonValue,
+          eventDays: hasEventDays ? payload.eventDays as Prisma.InputJsonValue : existingScheduleContext.eventDays.map((day) => ({
+            eventDayId: day.eventDayId,
+            weekIndex: day.weekIndex,
+            dayIndexInWeek: day.dayIndexInWeek,
+            overallDayIndex: day.overallDayIndex,
+            label: day.label ?? null,
+            weekday: day.weekday ?? null,
+            date: day.date,
+            sortOrder: day.sortOrder,
+          })) as unknown as Prisma.InputJsonValue,
+        };
+      }
+    }
+  }
+
+  return normalizeSubmittedEventLineupToTimetable(
+    normalizedBasePayload as unknown as Record<string, unknown>
+  ) as unknown as Prisma.InputJsonObject;
+};
+
 const mapAlignedLineupArtistForPayload = (artist: {
   id?: string;
   djId: string | null;
@@ -847,7 +930,9 @@ const createPendingContentSubmission = async (input: {
   idempotencyKey?: string | null;
 }) => {
   const normalizedPayload =
-    input.entityType === 'brand'
+    input.entityType === 'event'
+      ? await normalizeEventSubmissionPayloadForMutation(input.payload)
+      : input.entityType === 'brand'
       ? normalizeBrandSubmissionPayload(input.payload as Prisma.InputJsonObject)
       : (input.payload as Prisma.InputJsonObject);
   const payloadWithSummary = attachContentSubmissionChangeSummary(
@@ -1070,9 +1155,10 @@ const createDirectEventApplySubmission = async (input: {
   payload: Record<string, unknown>;
   idempotencyKey?: string | null;
 }) => {
+  const normalizedPayload = await normalizeEventSubmissionPayloadForMutation(input.payload);
   const payloadWithSummary = attachContentSubmissionChangeSummary(
     'event',
-    input.payload as Prisma.InputJsonObject
+    normalizedPayload
   );
 
   return prisma.$transaction(async (tx) => {
