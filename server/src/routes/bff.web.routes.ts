@@ -9953,6 +9953,10 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
     return;
   } catch (error) {
     if (error instanceof EventSubmissionValidationError) {
+      console.warn('BFF web create event validation error:', {
+        message: error.message,
+        code: error.code,
+      });
       res.status(400).json({
         error: error.message,
         code: error.code,
@@ -10058,6 +10062,11 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
     acceptedSubmission(res, submission, '活动编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
   } catch (error) {
     if (error instanceof EventSubmissionValidationError) {
+      console.warn('BFF web update event validation error:', {
+        eventId: req.params.id as string,
+        message: error.message,
+        code: error.code,
+      });
       res.status(400).json({
         error: error.message,
         code: error.code,

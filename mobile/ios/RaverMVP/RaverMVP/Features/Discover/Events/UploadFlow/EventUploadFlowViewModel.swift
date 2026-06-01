@@ -343,8 +343,9 @@ final class EventUploadFlowViewModel: ObservableObject {
                 let eventDaySummary = draft.structuredEventDays
                     .map { "\($0.eventDayId):\(scheduleDebugDateText($0.date))" }
                     .joined(separator: ", ")
+                let timetableMismatchSummary = slotScheduleMismatchDebugSummary()
                 logScheduleDebug(
-                    "submit edit event=\(eventID) start=\(scheduleDebugDateText(draft.startDate)) end=\(scheduleDebugDateText(draft.endDate)) weeks=\(scheduleDebugWeekRangesText(draft.editableWeekRanges)) structuredMode=\(draft.structuredSchedule.mode) eventDays=\(eventDaySummary)"
+                    "submit edit event=\(eventID) start=\(scheduleDebugDateText(draft.startDate)) end=\(scheduleDebugDateText(draft.endDate)) weeks=\(scheduleDebugWeekRangesText(draft.editableWeekRanges)) structuredMode=\(draft.structuredSchedule.mode) eventDays=\(eventDaySummary) slotMismatches=\(timetableMismatchSummary)"
                 )
                 let result = try await webService.updateEvent(id: eventID, input: input)
                 draftStore.clear(mode: draft.mode, userID: userID)
@@ -2817,6 +2818,30 @@ final class EventUploadFlowViewModel: ObservableObject {
         ranges
             .map { "\(scheduleDebugDateText($0.startDate))->\(scheduleDebugDateText($0.endDate))" }
             .joined(separator: ", ")
+    }
+
+    private func slotScheduleMismatchDebugSummary() -> String {
+        let mismatches = draft.timetableSlots.compactMap { slot -> String? in
+            guard let resolved = resolvedEventDay(for: slot) else {
+                return "slot=\(slot.id.uuidString.prefix(6)) missingResolvedEventDay rawEventDayId=\(slot.eventDayId ?? "nil") rawOverall=\(slot.overallDayIndex)"
+            }
+
+            let rawLocalDate = slot.localDate.map(scheduleDebugDateText) ?? "nil"
+            let resolvedLocalDate = scheduleDebugDateText(resolved.date)
+            let hasMismatch =
+                slot.eventDayId != resolved.eventDayId
+                || slot.weekIndex != resolved.weekIndex
+                || slot.dayIndexInWeek != resolved.dayIndexInWeek
+                || slot.overallDayIndex != resolved.overallDayIndex
+                || rawLocalDate != resolvedLocalDate
+
+            guard hasMismatch else { return nil }
+
+            return "slot=\(slot.id.uuidString.prefix(6)) stage=\(slot.stageName) act=\(slot.performerNames.joined(separator: "/")) raw[eventDayId=\(slot.eventDayId ?? "nil"),week=\(slot.weekIndex),dayInWeek=\(slot.dayIndexInWeek),overall=\(slot.overallDayIndex),localDate=\(rawLocalDate)] resolved[eventDayId=\(resolved.eventDayId),week=\(resolved.weekIndex),dayInWeek=\(resolved.dayIndexInWeek),overall=\(resolved.overallDayIndex),localDate=\(resolvedLocalDate)]"
+        }
+
+        guard !mismatches.isEmpty else { return "none" }
+        return mismatches.joined(separator: " | ")
     }
 
     private func logScheduleDebug(_ message: String) {
