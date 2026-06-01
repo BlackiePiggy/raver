@@ -3671,7 +3671,7 @@ struct EventEditorView: View {
 #if DEBUG
     private func editorDebugDateText(_ date: Date?) -> String {
         guard let date else { return "nil" }
-        return date.eventArchiveDateText(in: eventTimeZone)
+        return date.eventArchiveDateText(in: eventCalendar.timeZone)
     }
 
     private func editorSlotScheduleMismatchDebugSummary(_ draft: EventUploadDraft) -> String {
@@ -3680,8 +3680,8 @@ struct EventEditorView: View {
                   let eventDay = draft.eventDay(forID: eventDayId) else {
                 return "slot=\(slot.id.uuidString.prefix(6)) unresolved[eventDayId=\(slot.eventDayId ?? "nil")]"
             }
-            let slotLocalDate = slot.localDate?.eventArchiveDateText(in: eventTimeZone) ?? "nil"
-            let eventDayDate = eventDay.date.eventArchiveDateText(in: eventTimeZone)
+            let slotLocalDate = slot.localDate?.eventArchiveDateText(in: eventCalendar.timeZone) ?? "nil"
+            let eventDayDate = eventDay.date.eventArchiveDateText(in: eventCalendar.timeZone)
             guard slotLocalDate != eventDayDate else { return nil }
             let act = slot.performerNames.joined(separator: "/")
             return "slot=\(slot.id.uuidString.prefix(6)) act=\(act) raw[eventDayId=\(eventDayId),localDate=\(slotLocalDate)] resolved[localDate=\(eventDayDate)]"
