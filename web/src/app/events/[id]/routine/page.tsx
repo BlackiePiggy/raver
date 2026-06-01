@@ -137,6 +137,7 @@ export default function EventRoutinePage() {
     const eventDaysById = new Map(sortedEventDays.map((day) => [day.eventDayId, day] as const));
     const eventDaysByWeekDay = new Map(sortedEventDays.map((day) => [`${day.weekIndex}-${day.dayIndexInWeek}`, day] as const));
     const eventDaysByOverall = new Map(sortedEventDays.map((day) => [day.overallDayIndex, day] as const));
+    const eventDaysByFestivalDayIndex = new Map(sortedEventDays.map((day) => [day.overallDayIndex, day] as const));
     const eventDaysByLocalDate = new Map(
       sortedEventDays
         .map((day) => [normalizeDateKey(day.date), day] as const)
@@ -155,6 +156,10 @@ export default function EventRoutinePage() {
       }
       if (slot.overallDayIndex) {
         const matched = eventDaysByOverall.get(slot.overallDayIndex);
+        if (matched) return matched;
+      }
+      if (slot.festivalDayIndex) {
+        const matched = eventDaysByFestivalDayIndex.get(slot.festivalDayIndex);
         if (matched) return matched;
       }
       const localDateKey = normalizeDateKey(slot.localDate);

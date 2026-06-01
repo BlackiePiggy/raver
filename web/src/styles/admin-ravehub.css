@@ -553,9 +553,74 @@
 
 .admin-event-stage-grid {
   display: grid;
-  grid-template-columns: 76px repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 76px repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   align-items: stretch;
+  min-width: max-content;
+}
+
+.admin-event-stage-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.admin-event-stage-order-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  border-radius: 24px;
+  background: rgba(248, 249, 247, 0.88);
+}
+
+.admin-event-stage-order-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-event-stage-order-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  border-radius: 999px;
+  background: white;
+  padding: 8px 10px 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #071110;
+  box-shadow: 0 8px 18px rgba(33, 52, 47, 0.05);
+}
+
+.admin-event-stage-order-chip b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(7, 17, 16, 0.06);
+  font-size: 11px;
+}
+
+.admin-event-stage-order-chip button {
+  border: 0;
+  background: rgba(7, 17, 16, 0.06);
+  color: #071110;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.admin-event-stage-order-chip button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .admin-event-time-axis {
@@ -573,6 +638,8 @@
 .admin-event-stage-column {
   display: flex;
   flex-direction: column;
+  width: 240px;
+  min-width: 240px;
   border: 1px solid rgba(232, 236, 235, 0.92);
   border-radius: 24px;
   background:
@@ -603,6 +670,7 @@
 .admin-event-stage-lane {
   position: relative;
   flex: 1;
+  min-height: 620px;
   padding: 14px;
   background: repeating-linear-gradient(
     180deg,
@@ -658,6 +726,11 @@
   text-align: left;
   box-shadow: 0 10px 22px rgba(33, 52, 47, 0.08);
   overflow: hidden;
+  transition: transform 120ms ease, box-shadow 120ms ease, outline-color 120ms ease;
+}
+
+.admin-event-slot-card:hover {
+  transform: translateY(-1px);
 }
 
 .admin-event-slot-card strong {
@@ -692,6 +765,57 @@
   outline: 2px solid #3aa66b;
   outline-offset: 0;
   box-shadow: 0 12px 26px rgba(58, 166, 107, 0.18);
+}
+
+.admin-event-slot-card.is-focused,
+.admin-event-slot-editor-card.is-focused {
+  outline: 2px solid rgba(61, 129, 255, 0.8);
+  outline-offset: 0;
+  box-shadow: 0 14px 28px rgba(61, 129, 255, 0.16);
+}
+
+.admin-event-slot-editor-group {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 249, 247, 0.93));
+  padding: 16px;
+}
+
+.admin-event-slot-editor-group + .admin-event-slot-editor-group {
+  margin-top: 16px;
+}
+
+.admin-event-slot-editor-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.admin-event-slot-editor-group-head span {
+  display: block;
+  font-size: 14px;
+  font-weight: 900;
+  color: #071110;
+}
+
+.admin-event-slot-editor-group-head b {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(7, 17, 16, 0.5);
+}
+
+.admin-event-slot-editor-group-head button {
+  border: 1px solid rgba(232, 236, 235, 0.92);
+  border-radius: 999px;
+  background: white;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #071110;
 }
 
 .admin-ravehub-shell .admin-event-workbench button {

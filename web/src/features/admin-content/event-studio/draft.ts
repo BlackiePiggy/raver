@@ -10,6 +10,7 @@ import {
   EventStudioTimetableSlotDraft,
   EventStudioWeekDraft,
 } from './types';
+import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 
 const EVENT_STUDIO_ACT_TYPES = ['solo', 'b2b', 'b3b'] as const;
 type EventStudioActType = (typeof EVENT_STUDIO_ACT_TYPES)[number];
@@ -281,6 +282,42 @@ const composeSlotDateTime = (date: string, time: string): string => {
   const normalizedTime = time.trim();
   if (!normalizedDate || !normalizedTime) return '';
   return `${normalizedDate}T${normalizedTime}:00`;
+};
+
+const isIsoInstantWithZone = (value?: string | null): boolean =>
+  Boolean(String(value || '').trim().match(/Z$|[+-]\d{2}:\d{2}$/));
+
+const timePartFromValueInTimeZone = (value?: string | null, timeZone?: string | null): string => {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^\d{2}:\d{2}$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}T\d{1,2}:\d{2}/.test(text) && !isIsoInstantWithZone(text)) {
+    return text.slice(11, 16);
+  }
+  return formatClockTimeInTimeZone(text, normalizeDisplayTimeZone(timeZone));
+};
+
+const datePartFromValueInTimeZone = (value?: string | null, timeZone?: string | null): string => {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}T\d{1,2}:\d{2}/.test(text) && !isIsoInstantWithZone(text)) {
+    return text.slice(0, 10);
+  }
+  return formatDateInputInTimeZone(text, normalizeDisplayTimeZone(timeZone));
+};
+
+const dateOffsetFromBaseDate = (baseDate: string, valueDate: string): number => {
+  const base = parseDateOnly(baseDate);
+  const value = parseDateOnly(valueDate);
+  if (!base || !value) return 0;
+  return Math.max(0, Math.round((value.getTime() - base.getTime()) / 86400000));
+};
+
+const dayOffsetFromValueInTimeZone = (baseDate: string, value?: string | null, timeZone?: string | null): number => {
+  const valueDate = datePartFromValueInTimeZone(value, timeZone);
+  if (!baseDate || !valueDate) return 0;
+  return dateOffsetFromBaseDate(baseDate, valueDate);
 };
 
 const normalizeSlotDayOffset = (value?: number | null): number => {
@@ -641,8 +678,13 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     : fallbackStructure.eventDays;
   const timetableSlotSource = firstNonEmptyArray(event.timetableSlots, event.lineupSlots);
   const hydratedTimetableSlots: EventStudioTimetableSlotDraft[] = [];
+  const eventTimeZone = normalizeDisplayTimeZone(event.schedule?.timeZone || event.timeZone);
   timetableSlotSource.forEach((slot, index) => {
-    const localDate = datePartFromIsoLike(slot.localDate) || '';
+    const slotWithOffsets = slot as { startDayOffset?: number | null; endDayOffset?: number | null };
+    const localDate =
+      datePartFromValueInTimeZone(slot.localDate, eventTimeZone) ||
+      datePartFromValueInTimeZone(slot.startTime, eventTimeZone) ||
+      '';
     const eventDayId = slot.eventDayId || '';
     const eventDay =
       hydratedEventDaysFromInput.find((day) => day.eventDayId === eventDayId) ||
@@ -668,10 +710,14 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
       memberNamesText: defaultMemberNamesText(slot.memberNames, slot.djName),
       stageName: String(slot.stageName || '').trim() || defaultStageName(index),
       sortOrder: slot.sortOrder ?? index + 1,
-      startTime: timePartFromIsoLike(slot.startTime),
-      endTime: timePartFromIsoLike(slot.endTime),
-      startDayOffset: dayOffsetFromIsoLike(slot.startTime),
-      endDayOffset: dayOffsetFromIsoLike(slot.endTime),
+      startTime: timePartFromValueInTimeZone(slot.startTime, eventTimeZone),
+      endTime: timePartFromValueInTimeZone(slot.endTime, eventTimeZone),
+      startDayOffset: Number.isFinite(Number(slotWithOffsets.startDayOffset))
+        ? normalizeSlotDayOffset(slotWithOffsets.startDayOffset)
+        : dayOffsetFromValueInTimeZone(eventDay.date, slot.startTime, eventTimeZone),
+      endDayOffset: Number.isFinite(Number(slotWithOffsets.endDayOffset))
+        ? normalizeSlotDayOffset(slotWithOffsets.endDayOffset)
+        : dayOffsetFromValueInTimeZone(eventDay.date, slot.endTime, eventTimeZone),
       actType: inferActType(
         (slot as { performerType?: string | null }).performerType,
         Math.max(

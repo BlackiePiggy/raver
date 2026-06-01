@@ -8,6 +8,7 @@ import EventLocationPickerModal, {
   type EventLocationProvider,
 } from '@/components/admin/EventLocationPickerModal';
 import EventStudioAIImportDock from '@/components/admin/EventStudioAIImportDock';
+import { formatClockTimeInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 import {
   createEmptyTicketTierDraft,
   createEmptyEventStudioTimetableSlotDraft,
@@ -560,6 +561,9 @@ export default function EventStudioForm({
   const [selectedTimetableDayId, setSelectedTimetableDayId] = useState('');
   const [timetableSelectionMode, setTimetableSelectionMode] = useState(false);
   const [selectedTimetableSlotIds, setSelectedTimetableSlotIds] = useState<string[]>([]);
+  const [focusedTimetableSlotId, setFocusedTimetableSlotId] = useState<string | null>(null);
+  const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
+  const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
@@ -789,6 +793,8 @@ export default function EventStudioForm({
   const updateLineupDraft = (updater: (current: EventStudioDraft) => EventStudioDraft) => {
     updateDraftState(updater);
   };
+
+  const eventDisplayTimeZone = normalizeDisplayTimeZone(draft.timeZoneSelection?.timezone || draft.timeZoneQuery);
 
   const getStepForErrors = (nextErrors: EventStudioValidationErrors): number => {
     for (let index = 0; index < EVENT_STUDIO_STEP_ITEMS.length; index += 1) {
@@ -1224,6 +1230,128 @@ export default function EventStudioForm({
     );
   };
 
+  const focusTimetableSlot = (slotId: string) => {
+    const slot = draft.timetableSlots.find((item) => item.id === slotId);
+    if (slot?.stageName) {
+      setSelectedTimetableStageFilter(stageKey(slot.stageName));
+    }
+    setFocusedTimetableSlotId(slotId);
+    if (typeof window === 'undefined') return;
+    window.setTimeout(() => {
+      document.getElementById(`timetable-slot-editor-${slotId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 60);
+  };
+
+  const handleTimetableSlotCardClick = (slotId: string) => {
+    if (timetableSelectionMode) {
+      toggleTimetableSlotSelection(slotId);
+      return;
+    }
+    focusTimetableSlot(slotId);
+  };
+
+  const moveStageOrder = (stage: string, direction: -1 | 1) => {
+    const normalizedStage = normalizeStageName(stage);
+    updateScheduleDerivedDraft((current) => {
+      const mergedStages = [...current.stageOrder];
+      if (!mergedStages.some((item) => stageKey(item) === stageKey(normalizedStage))) {
+        mergedStages.push(normalizedStage);
+      }
+      current.timetableSlots.forEach((slot) => {
+        const normalizedSlotStage = normalizeStageName(slot.stageName);
+        if (!mergedStages.some((item) => stageKey(item) === stageKey(normalizedSlotStage))) {
+          mergedStages.push(normalizedSlotStage);
+        }
+      });
+      const fromIndex = mergedStages.findIndex((item) => stageKey(item) === stageKey(normalizedStage));
+      const toIndex = fromIndex + direction;
+      if (fromIndex < 0 || toIndex < 0 || toIndex >= mergedStages.length) {
+        return current;
+      }
+      const nextStageOrder = [...mergedStages];
+      const [moved] = nextStageOrder.splice(fromIndex, 1);
+      nextStageOrder.splice(toIndex, 0, moved);
+      return {
+        ...current,
+        stageOrder: nextStageOrder,
+      };
+    });
+  };
+
+  const moveStageOrderBefore = (stage: string, targetStage: string) => {
+    const normalizedStage = normalizeStageName(stage);
+    const normalizedTargetStage = normalizeStageName(targetStage);
+    if (stageKey(normalizedStage) === stageKey(normalizedTargetStage)) return;
+    updateScheduleDerivedDraft((current) => {
+      const mergedStages = [...current.stageOrder];
+      const pushStage = (value: string) => {
+        const normalized = normalizeStageName(value);
+        if (!mergedStages.some((item) => stageKey(item) === stageKey(normalized))) {
+          mergedStages.push(normalized);
+        }
+      };
+      pushStage(normalizedStage);
+      pushStage(normalizedTargetStage);
+      current.timetableSlots.forEach((slot) => pushStage(slot.stageName));
+      const fromIndex = mergedStages.findIndex((item) => stageKey(item) === stageKey(normalizedStage));
+      const targetIndex = mergedStages.findIndex((item) => stageKey(item) === stageKey(normalizedTargetStage));
+      if (fromIndex < 0 || targetIndex < 0) return current;
+      const nextStageOrder = [...mergedStages];
+      const [moved] = nextStageOrder.splice(fromIndex, 1);
+      const adjustedTargetIndex = nextStageOrder.findIndex((item) => stageKey(item) === stageKey(normalizedTargetStage));
+      nextStageOrder.splice(adjustedTargetIndex < 0 ? nextStageOrder.length : adjustedTargetIndex, 0, moved);
+      return {
+        ...current,
+        stageOrder: nextStageOrder,
+      };
+    });
+  };
+
+  const addTimetableStage = () => {
+    updateScheduleDerivedDraft((current) => {
+      const nextIndex = current.stageOrder.length + 1;
+      let stageName = `Stage ${nextIndex}`;
+      let suffix = nextIndex;
+      while (current.stageOrder.some((stage) => stageKey(stage) === stageKey(stageName))) {
+        suffix += 1;
+        stageName = `Stage ${suffix}`;
+      }
+      return {
+        ...current,
+        stageOrder: [...current.stageOrder, stageName],
+      };
+    });
+  };
+
+  const addTimetableSlot = (stageName?: string) => {
+    updateScheduleDerivedDraft((current) => {
+      const filteredStage =
+        selectedTimetableStageFilter === 'all'
+          ? ''
+          : visibleStageOrder.find((stage) => stageKey(stage) === selectedTimetableStageFilter) || '';
+      const targetStage = normalizeStageName(stageName || filteredStage || visibleStageOrder[0] || current.stageOrder[0] || 'Main Stage');
+      return {
+        ...current,
+        stageOrder: current.stageOrder.some((stage) => stageKey(stage) === stageKey(targetStage))
+          ? current.stageOrder
+          : [...current.stageOrder, targetStage],
+        timetableSlots: [
+          ...current.timetableSlots,
+          createEmptyEventStudioTimetableSlotDraft(
+            current.eventDays.find((day) => day.eventDayId === selectedTimetableDay?.eventDayId) || current.eventDays[0],
+            targetStage
+          ),
+        ].map((slot, index) => ({
+          ...slot,
+          sortOrder: index + 1,
+        })),
+      };
+    });
+  };
+
   const moveSelectedTimetableSlotsToDay = (day: EventStudioEventDayDraft) => {
     if (!selectedTimetableSlotIds.length) return;
     updateScheduleDerivedDraft((current) => ({
@@ -1326,6 +1454,38 @@ export default function EventStudioForm({
     if (!result.length) result.push('Main Stage');
     return result;
   }, [draft.stageOrder, visibleTimetableSlots]);
+  const visibleTimetableSlotsByStage = useMemo(
+    () =>
+      visibleStageOrder.map((stage) => ({
+        stage,
+        slots: visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)),
+      })),
+    [visibleStageOrder, visibleTimetableSlots]
+  );
+  const filteredVisibleTimetableSlotsByStage = useMemo(() => {
+    if (selectedTimetableStageFilter === 'all') return visibleTimetableSlotsByStage;
+    return visibleTimetableSlotsByStage.filter(({ stage }) => stageKey(stage) === selectedTimetableStageFilter);
+  }, [selectedTimetableStageFilter, visibleTimetableSlotsByStage]);
+  const timetableEditorGroups = useMemo(() => {
+    const visibleIds = new Set(visibleTimetableSlots.map((slot) => slot.id));
+    return filteredVisibleTimetableSlotsByStage
+      .map(({ stage, slots }) => ({
+        stage,
+        slots: slots.filter((slot) => visibleIds.has(slot.id)),
+      }))
+      .filter((group) => group.slots.length > 0);
+  }, [filteredVisibleTimetableSlotsByStage, visibleTimetableSlots]);
+  const activeTimetableStageLabel =
+    selectedTimetableStageFilter === 'all'
+      ? '全部舞台'
+      : visibleStageOrder.find((stage) => stageKey(stage) === selectedTimetableStageFilter) || '当前舞台';
+  const formatTimetableSlotClock = (slot: EventStudioTimetableSlotDraft, field: 'startTime' | 'endTime') => {
+    const value = slot[field];
+    const extracted = extractTimeValue(value);
+    if (extracted) return extracted;
+    const formatted = formatClockTimeInTimeZone(value, eventDisplayTimeZone);
+    return formatted || '--:--';
+  };
   const lineupPreviewArtists = useMemo(() => {
     const source = draft.lineupArtists.length ? draft.lineupArtists : buildLineupArtistsFromTimetableSlots(draft.timetableSlots);
     return [...source].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -2061,21 +2221,7 @@ export default function EventStudioForm({
                 >
                   一键清理当前页
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateScheduleDerivedDraft((current) => {
-                      const stageName = `Stage ${current.stageOrder.length + 1}`;
-                      return {
-                        ...current,
-                        stageOrder: current.stageOrder.some((stage) => stageKey(stage) === stageKey(stageName))
-                          ? current.stageOrder
-                          : [...current.stageOrder, stageName],
-                      };
-                    })
-                  }
-                  className="admin-studio-button-secondary px-4 py-3 text-sm"
-                >
+                <button type="button" onClick={addTimetableStage} className="admin-studio-button-secondary px-4 py-3 text-sm">
                   添加舞台
                 </button>
                 {timetableSelectionMode ? (
@@ -2103,21 +2249,7 @@ export default function EventStudioForm({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() =>
-                    updateScheduleDerivedDraft((current) => ({
-                      ...current,
-                      timetableSlots: [
-                        ...current.timetableSlots,
-                        createEmptyEventStudioTimetableSlotDraft(
-                          current.eventDays.find((day) => day.eventDayId === selectedTimetableDay?.eventDayId) || current.eventDays[0],
-                          visibleStageOrder[0] || current.stageOrder[0] || 'Main Stage'
-                        ),
-                      ].map((slot, index) => ({
-                        ...slot,
-                        sortOrder: index + 1,
-                      })),
-                    }))
-                  }
+                  onClick={() => addTimetableSlot()}
                   disabled={!draft.eventDays.length}
                   className="admin-studio-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -2166,15 +2298,68 @@ export default function EventStudioForm({
               )}
             </div>
 
-            <div className="admin-event-stage-grid mt-6">
+            <div className="admin-event-stage-order-panel mt-6">
+              <div>
+                <div className="admin-studio-label">Stage Order</div>
+                <div className="mt-1 text-sm font-semibold text-[#071110]">舞台顺序</div>
+              </div>
+              <div className="admin-event-stage-order-list">
+                {visibleStageOrder.map((stage, index) => (
+                  <div
+                    key={stage}
+                    className="admin-event-stage-order-chip"
+                    draggable
+                    onDragStart={() => setDraggedTimetableStage(stage)}
+                    onDragEnd={() => setDraggedTimetableStage(null)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (!draggedTimetableStage) return;
+                      moveStageOrderBefore(draggedTimetableStage, stage);
+                      setDraggedTimetableStage(null);
+                    }}
+                  >
+                    <span>{stage}</span>
+                    <b>{visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)).length}</b>
+                    <button type="button" onClick={() => moveStageOrder(stage, -1)} disabled={index === 0}>
+                      ↑
+                    </button>
+                    <button type="button" onClick={() => moveStageOrder(stage, 1)} disabled={index === visibleStageOrder.length - 1}>
+                      ↓
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="admin-event-stage-filter-bar mt-4">
+              <button
+                type="button"
+                onClick={() => setSelectedTimetableStageFilter('all')}
+                className={selectedTimetableStageFilter === 'all' ? 'is-active' : ''}
+              >
+                全部舞台
+              </button>
+              {visibleStageOrder.map((stage) => (
+                <button
+                  key={stage}
+                  type="button"
+                  onClick={() => setSelectedTimetableStageFilter(stageKey(stage))}
+                  className={selectedTimetableStageFilter === stageKey(stage) ? 'is-active' : ''}
+                >
+                  {stage}
+                </button>
+              ))}
+              <span>当前：{activeTimetableStageLabel}</span>
+            </div>
+
+            <div className="admin-event-stage-scroll mt-6">
+              <div className="admin-event-stage-grid">
               <div className="admin-event-time-axis" style={{ minHeight: TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX }}>
                 {['12:00', '15:00', '18:00', '21:00', '00:00', '03:00', '06:00'].map((time) => (
                   <span key={time}>{time}</span>
                 ))}
               </div>
-              {visibleStageOrder.map((stage, stageIndex) => {
-                const stageSlots = visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage));
-                return (
+              {filteredVisibleTimetableSlotsByStage.map(({ stage, slots: stageSlots }, stageIndex) => (
                   <div key={stage} className="admin-event-stage-column">
                     <div className="admin-event-stage-heading">
                       <span>{stage}</span>
@@ -2186,15 +2371,15 @@ export default function EventStudioForm({
                           <button
                             key={slot.id}
                             type="button"
-                            onClick={() => timetableSelectionMode && toggleTimetableSlotSelection(slot.id)}
+                            onClick={() => handleTimetableSlotCardClick(slot.id)}
                             style={getSlotLayout(slot)}
-                            className={`admin-event-slot-card tone-${(stageIndex + index) % 4} ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''}`}
+                            className={`admin-event-slot-card tone-${(stageIndex + index) % 4} ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
                           >
                             <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/38">
-                              {extractTimeValue(slot.startTime) || '--:--'}
+                              {formatTimetableSlotClock(slot, 'startTime')}
                               {Number(slot.startDayOffset) > 0 ? ` +${Number(slot.startDayOffset)}` : ''}
                               {' - '}
-                              {extractTimeValue(slot.endTime) || '--:--'}
+                              {formatTimetableSlotClock(slot, 'endTime')}
                               {Number(slot.endDayOffset) > 0 ? ` +${Number(slot.endDayOffset)}` : ''}
                             </span>
                             <strong>
@@ -2213,21 +2398,7 @@ export default function EventStudioForm({
                           <span>当前日期暂无演出</span>
                           <button
                             type="button"
-                            onClick={() =>
-                              updateScheduleDerivedDraft((current) => ({
-                                ...current,
-                                timetableSlots: [
-                                  ...current.timetableSlots,
-                                  createEmptyEventStudioTimetableSlotDraft(
-                                    current.eventDays.find((day) => day.eventDayId === selectedTimetableDay?.eventDayId) || current.eventDays[0],
-                                    stage
-                                  ),
-                                ].map((slot, index) => ({
-                                  ...slot,
-                                  sortOrder: index + 1,
-                                })),
-                              }))
-                            }
+                            onClick={() => addTimetableSlot(stage)}
                             disabled={!draft.eventDays.length}
                           >
                             添加到此舞台
@@ -2236,14 +2407,15 @@ export default function EventStudioForm({
                       )}
                     </div>
                   </div>
-                );
-              })}
+              ))}
+              </div>
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.14em] text-black/40">
               <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#b9f1d0]" /> 正常时段</span>
               <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#f7d884]" /> 跨夜/待核对</span>
               <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#c9defa]" /> 已录入艺人</span>
+              <span className="inline-flex items-center gap-2">时间以活动当地时区 {eventDisplayTimeZone} 展示</span>
             </div>
 
             {errors.timetableSlots ? <div className="mt-4 text-xs text-[#6a3530]">{errors.timetableSlots}</div> : null}
@@ -2260,9 +2432,25 @@ export default function EventStudioForm({
             </div>
 
             <div className="mt-4 space-y-3">
-              {draft.timetableSlots.length ? (
-                draft.timetableSlots.map((slot) => (
-                  <div key={slot.id} className="grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-3">
+              {timetableEditorGroups.length ? (
+                timetableEditorGroups.map(({ stage, slots }) => (
+                  <div key={stage} className="admin-event-slot-editor-group">
+                    <div className="admin-event-slot-editor-group-head">
+                      <div>
+                        <span>{stage}</span>
+                        <b>{selectedTimetableDay?.label || selectedTimetableDay?.date || 'Current day'}</b>
+                      </div>
+                      <button type="button" onClick={() => addTimetableSlot(stage)} disabled={!draft.eventDays.length}>
+                        添加到此舞台
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {slots.map((slot) => (
+                  <div
+                    id={`timetable-slot-editor-${slot.id}`}
+                    key={slot.id}
+                    className={`admin-event-slot-editor-card grid gap-3 rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-3 ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
+                  >
                     <Field label="演出形式">
                       <select
                         value={normalizeActType(slot.actType)}
@@ -2479,10 +2667,13 @@ export default function EventStudioForm({
                       </button>
                     </div>
                   </div>
+                      ))}
+                    </div>
+                  </div>
                 ))
               ) : (
                 <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                  还没有时间表条目。先完成活动日期结构后，就可以开始录入演出时段。
+                  当前日期还没有时间表条目。先完成活动日期结构后，就可以开始录入演出时段。
                 </div>
               )}
             </div>
