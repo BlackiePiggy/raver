@@ -1606,6 +1606,7 @@ struct EventDetailView: View {
     @State private var bannerDismissToken = UUID()
     @State private var isInWidgetCountdownPool = false
     @State private var eventFavoriteID: String?
+    @State private var eventCheckinStatus: EventCheckinStatus?
     @State private var isTogglingMarkedEvent = false
     @State private var shareMorePresentation: EventCardSharePresentation?
     @State private var isShareMorePanelVisible = false
@@ -2305,11 +2306,11 @@ struct EventDetailView: View {
                             isLoadingOptions: isLoadingEventCheckinOptions,
                             initialSelectedDayIDs: selectedEventCheckinDayIDs,
                             initialSelectedDJIDsByDayID: selectedEventCheckinDJIDsByDayID,
-                            confirmButtonTitle: activeAttendanceCheckin == nil ? LT("确认打卡", "Confirm Check-in", "チェックインを確認") : LT("保存修改", "Save Changes", "変更を保存"),
-                            destructiveButtonTitle: activeAttendanceCheckin == nil ? nil : LT("取消打卡", "Cancel Check-in", "チェックインを取消"),
-                            onDelete: activeAttendanceCheckin == nil ? nil : {
+                            confirmButtonTitle: hasEventAttendanceCheckin ? LT("保存修改", "Save Changes", "変更を保存") : LT("确认打卡", "Confirm Check-in", "チェックインを確認"),
+                            destructiveButtonTitle: hasEventAttendanceCheckin ? LT("取消打卡", "Cancel Check-in", "チェックインを取消") : nil,
+                            onDelete: hasEventAttendanceCheckin ? {
                                 try await cancelEventCheckin()
-                            }
+                            } : nil
                         ) { selectionsByDayID in
                             selectedEventCheckinDayIDs = Set(selectionsByDayID.keys)
                             selectedEventCheckinDJIDsByDayID = selectionsByDayID
@@ -4726,7 +4727,7 @@ struct EventDetailView: View {
                             Task { await beginEventCheckinFlow(for: event) }
                         } label: {
                             eventHeroActionImageButton(
-                                title: activeAttendanceCheckin == nil ? LT("打卡", "Check-in", "チェックイン") : LT("编辑打卡", "Edit Check-in", "チェックインを編集"),
+                                title: hasEventAttendanceCheckin ? LT("编辑打卡", "Edit Check-in", "チェックインを編集") : LT("打卡", "Check-in", "チェックイン"),
                                 imageName: "Check",
                                 fill: RaverTheme.accent
                             )
@@ -6070,6 +6071,10 @@ struct EventDetailView: View {
             .first
     }
 
+    private var hasEventAttendanceCheckin: Bool {
+        activeAttendanceCheckin != nil || eventCheckinStatus?.hasCheckin == true
+    }
+
     private var legacyRelatedDJCheckins: [WebCheckin] {
         relatedEventCheckins
             .filter { $0.type == "dj" && $0.eventId == eventID }
@@ -6101,14 +6106,9 @@ struct EventDetailView: View {
                 guard hasSession else { return nil }
                 return try? await eventCheckinRepository.fetchEventFavoriteStatus(eventID: eventID)
             }()
-            async let checkinsTask: [WebCheckin] = {
-                guard hasSession else { return [] }
-                let checkins = try? await eventCheckinRepository.fetchMyEventTimelineCheckins(
-                    eventID: eventID,
-                    page: 1,
-                    limit: 200
-                )
-                return checkins ?? []
+            async let checkinStatusTask: EventCheckinStatus? = {
+                guard hasSession else { return nil }
+                return try? await eventCheckinRepository.fetchEventCheckinStatus(eventID: eventID)
             }()
 
             var loadedEvent = try await eventTask
@@ -6121,7 +6121,7 @@ struct EventDetailView: View {
                 }
             }
             let loadedFavoriteStatus = await favoriteStatusTask
-            let loadedCheckins = await checkinsTask
+            let loadedCheckinStatus = await checkinStatusTask
 
 #if DEBUG
             debugEventDetailPayload(source: "network", event: loadedEvent)
@@ -6129,7 +6129,8 @@ struct EventDetailView: View {
 
             event = loadedEvent
             invalidateLineupEntriesCache()
-            relatedEventCheckins = loadedCheckins
+            eventCheckinStatus = loadedCheckinStatus
+            relatedEventCheckins = []
             eventFavoriteID = loadedFavoriteStatus?.id ?? loadedEvent.favoriteId
             phase = .success
             bannerMessage = nil
@@ -6902,6 +6903,13 @@ struct EventDetailView: View {
         try await refreshRelatedEventCheckins()
         relatedEventCheckins = ([primaryCheckin] + relatedEventCheckins.filter { $0.id != primaryCheckin.id })
             .filter { $0.id == primaryCheckin.id || !shouldCleanupEventCheckin($0, keeping: primaryCheckin.id) }
+        eventCheckinStatus = EventCheckinStatus(
+            eventId: eventID,
+            hasCheckin: true,
+            checkinId: primaryCheckin.id,
+            attendedAt: primaryCheckin.attendedAt,
+            createdAt: primaryCheckin.createdAt
+        )
 
         showCheckinOperationSuccessBanner(
             message: didUpdateExisting ? LT("打卡信息已更新", "Check-in updated.", "チェックイン情報を更新しました。") : LT("活动打卡成功", "Event check-in successful.", "イベントチェックインに成功しました。")
@@ -6944,6 +6952,13 @@ struct EventDetailView: View {
         relatedEventCheckins.removeAll { checkin in
             checkin.id == activeAttendanceCheckin.id || shouldCleanupEventCheckin(checkin, keeping: nil)
         }
+        eventCheckinStatus = EventCheckinStatus(
+            eventId: eventID,
+            hasCheckin: false,
+            checkinId: nil,
+            attendedAt: nil,
+            createdAt: nil
+        )
         selectedEventCheckinDayIDs = []
         selectedEventCheckinDJIDsByDayID = [:]
         showCheckinOperationSuccessBanner(message: LT("已取消活动打卡", "Event check-in canceled.", "イベントチェックインを取消しました。"))

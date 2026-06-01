@@ -411,6 +411,47 @@ router.get('/me/checkins/timeline', optionalAuth, async (req: Request, res: Resp
   }
 });
 
+router.get('/me/checkins/events/:eventId/status', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const eventId = normalizeText(req.params.eventId);
+    if (!eventId) {
+      res.status(400).json({ error: 'Event id is required' });
+      return;
+    }
+
+    const checkin = await prisma.checkin.findFirst({
+      where: {
+        userId,
+        eventId,
+        type: 'event',
+        status: 'active',
+      },
+      orderBy: [{ attendedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        eventId: true,
+        attendedAt: true,
+        createdAt: true,
+      },
+    });
+
+    ok(res, {
+      eventId,
+      hasCheckin: Boolean(checkin),
+      checkinId: checkin?.id ?? null,
+      attendedAt: checkin?.attendedAt ?? null,
+      createdAt: checkin?.createdAt ?? null,
+    });
+  } catch (error) {
+    console.error('BFF v2 my event checkin status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/users/:id/checkins/timeline', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;

@@ -2311,6 +2311,30 @@ actor MockWebFeatureService: WebFeatureService {
         try await fetchUserCheckinsTimeline(userID: currentUser.id, page: page, limit: limit)
     }
 
+    func fetchEventCheckinStatus(eventID: String) async throws -> EventCheckinStatus {
+        let latest = checkins
+            .filter { item in
+                item.userId == currentUser.id
+                    && item.eventId == eventID
+                    && item.type == "event"
+                    && item.isEventAttendanceCheckin
+            }
+            .sorted { lhs, rhs in
+                if lhs.attendedAt == rhs.attendedAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.attendedAt > rhs.attendedAt
+            }
+            .first
+        return EventCheckinStatus(
+            eventId: eventID,
+            hasCheckin: latest != nil,
+            checkinId: latest?.id,
+            attendedAt: latest?.attendedAt,
+            createdAt: latest?.createdAt
+        )
+    }
+
     func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {
         let filtered = checkins
             .filter { $0.userId == userID && !$0.isMarkedCheckin && $0.type == "event" }

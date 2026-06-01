@@ -195,9 +195,9 @@ final class LiveWebFeatureService: WebFeatureService {
 
     func fetchEventSummary(id: String) async throws -> WebEvent {
 #if DEBUG
-        print("[EventDetailDebug] runtimeMode=\(AppConfig.runtimeMode.rawValue) bffBaseURL=\(AppConfig.bffBaseURL.absoluteString) requestPath=/v1/events/\(id)")
+        print("[EventDetailDebug] runtimeMode=\(AppConfig.runtimeMode.rawValue) bffBaseURL=\(AppConfig.bffBaseURL.absoluteString) requestPath=/v1/events/\(id)/summary")
 #endif
-        let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)", method: "GET")
+        let response: BFFEnvelope<WebEvent> = try await request(path: "/v1/events/\(id)/summary", method: "GET")
         return localizedEvent(response.data)
     }
 
@@ -1182,6 +1182,14 @@ final class LiveWebFeatureService: WebFeatureService {
             items: localizedMyCheckinsTimelineItems(response.data.items),
             pagination: response.pagination
         )
+    }
+
+    func fetchEventCheckinStatus(eventID: String) async throws -> EventCheckinStatus {
+        let response: BFFEnvelope<EventCheckinStatus> = try await request(
+            path: "/v2/me/checkins/events/\(eventID)/status",
+            method: "GET"
+        )
+        return response.data
     }
 
     func fetchUserCheckinsTimeline(userID: String, page: Int, limit: Int) async throws -> MyCheckinsTimelinePage {

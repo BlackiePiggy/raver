@@ -2182,6 +2182,105 @@ const selectEventDetailForWeb = {
   },
 } satisfies Prisma.EventSelect;
 
+const selectEventSummaryForIOS = {
+  id: true,
+  name: true,
+  nameI18n: true,
+  wikiFestivalId: true,
+  slug: true,
+  archiveFestivalId: true,
+  abbreviation: true,
+  description: true,
+  descriptionI18n: true,
+  coverImageUrl: true,
+  lineupImageUrl: true,
+  imageAssets: true,
+  referenceLinks: true,
+  socialLinks: true,
+  sourceProvider: true,
+  sourceEventUrl: true,
+  eventType: true,
+  organizerName: true,
+  venueName: true,
+  venueAddress: true,
+  city: true,
+  cityI18n: true,
+  country: true,
+  countryI18n: true,
+  manualLocation: true,
+  locationPoint: true,
+  latitude: true,
+  longitude: true,
+  startDate: true,
+  endDate: true,
+  scheduleMode: true,
+  timeZone: true,
+  startTime: true,
+  endTime: true,
+  dayRolloverHour: true,
+  ticketUrl: true,
+  ticketPriceMin: true,
+  ticketPriceMax: true,
+  ticketCurrency: true,
+  ticketNotes: true,
+  officialWebsite: true,
+  status: true,
+  isVerified: true,
+  revision: true,
+  createdAt: true,
+  updatedAt: true,
+  ticketTiers: {
+    orderBy: { sortOrder: 'asc' as const },
+  },
+  weeks: {
+    orderBy: [{ sortOrder: 'asc' as const }, { weekIndex: 'asc' as const }],
+    select: {
+      id: true,
+      weekIndex: true,
+      label: true,
+      startDate: true,
+      endDate: true,
+      sortOrder: true,
+    },
+  },
+  eventDays: {
+    orderBy: [{ sortOrder: 'asc' as const }, { overallDayIndex: 'asc' as const }],
+    select: {
+      id: true,
+      eventDayId: true,
+      weekIndex: true,
+      dayIndexInWeek: true,
+      overallDayIndex: true,
+      label: true,
+      weekday: true,
+      date: true,
+      sortOrder: true,
+    },
+  },
+  stages: {
+    orderBy: { sortOrder: 'asc' as const },
+    select: { name: true },
+  },
+  organizer: {
+    select: { id: true, username: true, displayName: true, avatarUrl: true },
+  },
+  wikiFestival: {
+    select: {
+      id: true,
+      name: true,
+      nameI18n: true,
+      abbreviation: true,
+      aliases: true,
+      country: true,
+      countryI18n: true,
+      city: true,
+      cityI18n: true,
+      avatarUrl: true,
+      backgroundUrl: true,
+    },
+  },
+} satisfies Prisma.EventSelect;
+
 const selectEventLineupForWeb = {
   canonicalArtists: {
     orderBy: { billingOrder: 'asc' as const },
@@ -9084,6 +9183,31 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     ok(res, mapEvent(rowWithFavorite, complianceUser));
   } catch (error) {
     console.error('BFF web event detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/:id/summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as BFFAuthRequest).user?.userId;
+    const eventId = req.params.id as string;
+    const row = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: selectEventSummaryForIOS,
+    });
+
+    if (!row) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const favoriteIdsByEventId = await resolveEventFavoriteIds(userId, [row.id]);
+    const rowWithFavorite = attachEventFavoriteState([row], favoriteIdsByEventId)[0];
+    const complianceUser = await resolveRegionalComplianceUser(userId);
+
+    ok(res, mapEvent(rowWithFavorite, complianceUser));
+  } catch (error) {
+    console.error('BFF iOS event summary error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

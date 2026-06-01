@@ -108,6 +108,7 @@ protocol EventDiscussionMediaRepository {
 protocol EventCheckinRepository {
     func fetchMyCheckins(page: Int, limit: Int, type: String?) async throws -> CheckinListPage
     func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage
+    func fetchEventCheckinStatus(eventID: String) async throws -> EventCheckinStatus
     func fetchMyEventTimelineCheckins(eventID: String, page: Int, limit: Int) async throws -> [WebCheckin]
     func createCheckin(input: CreateCheckinInput) async throws -> WebCheckin
     func updateCheckin(id: String, input: UpdateCheckinInput) async throws -> WebCheckin
@@ -356,6 +357,10 @@ struct EventCheckinRepositoryAdapter: EventCheckinRepository {
 
     func fetchMyCheckins(page: Int, limit: Int, type: String?, eventID: String?, djID: String?) async throws -> CheckinListPage {
         try await service.fetchMyCheckins(page: page, limit: limit, type: type, eventID: eventID, djID: djID)
+    }
+
+    func fetchEventCheckinStatus(eventID: String) async throws -> EventCheckinStatus {
+        try await service.fetchEventCheckinStatus(eventID: eventID)
     }
 
     func fetchMyEventTimelineCheckins(eventID: String, page: Int, limit: Int) async throws -> [WebCheckin] {

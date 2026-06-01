@@ -16,6 +16,7 @@ protocol WebFeatureService {
     func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage
     func fetchFavoriteEvents(page: Int, limit: Int) async throws -> EventListPage
     func fetchEventFavoriteStatus(eventID: String) async throws -> EventFavoriteStatus
+    func fetchEventCheckinStatus(eventID: String) async throws -> EventCheckinStatus
     func favoriteEvent(eventID: String) async throws -> EventFavoriteStatus
     func unfavoriteEvent(eventID: String) async throws
     // Legacy EventEditorView compatibility surface. New event flows should use generated EventAdmin* inputs.

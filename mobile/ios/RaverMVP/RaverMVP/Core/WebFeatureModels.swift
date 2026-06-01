@@ -40,6 +40,14 @@ struct EventFavoriteStatus: Codable, Hashable {
     var createdAt: Date?
 }
 
+struct EventCheckinStatus: Codable, Hashable {
+    var eventId: String
+    var hasCheckin: Bool
+    var checkinId: String?
+    var attendedAt: Date?
+    var createdAt: Date?
+}
+
 struct DJListPage: Codable {
     var items: [WebDJ]
     var pagination: BFFPagination?
