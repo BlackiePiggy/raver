@@ -111,6 +111,42 @@ final class EventContractParityTests: XCTestCase {
         XCTAssertEqual(input.value1.status, .upcoming)
     }
 
+    func testCreateInputNormalizesLineupSlotLocalDateFromLogicalEventDay() {
+        var draft = EventUploadDraft.create()
+        draft.timeZoneIdentifier = "Asia/Shanghai"
+        draft.applyScheduleMode(.multiDay)
+        draft.applyWeekRanges([
+            EventUploadWeekRangeDraft(
+                startDate: Self.date("2099-09-12", timeZoneID: "Asia/Shanghai"),
+                endDate: Self.date("2099-09-13", timeZoneID: "Asia/Shanghai")
+            )
+        ])
+
+        var slot = EventUploadLineupSlotDraft()
+        slot.eventDayId = "d1"
+        slot.weekIndex = 1
+        slot.dayIndexInWeek = 1
+        slot.overallDayIndex = 1
+        slot.dayIndex = 1
+        slot.localDate = Self.date("2099-09-13", timeZoneID: "Asia/Shanghai")
+        slot.actType = .solo
+        slot.performerNames = ["Anyma"]
+        slot.performerDJIDs = ["dj_anyma"]
+        slot.normalizePerformers()
+        slot.stageName = "Main Stage"
+        slot.startTime = Self.dateTime("2099-09-12 23:30", timeZoneID: "Asia/Shanghai")
+        slot.endTime = Self.dateTime("2099-09-13 01:00", timeZoneID: "Asia/Shanghai")
+        draft.timetableSlots = [slot]
+
+        let input = EventUploadMappers.createInput(from: draft)
+
+        XCTAssertEqual(input.value1.lineupSlots?.first?.eventDayId, "d1")
+        XCTAssertEqual(input.value1.lineupSlots?.first?.weekIndex, 1)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.dayIndexInWeek, 1)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.overallDayIndex, 1)
+        XCTAssertEqual(input.value1.lineupSlots?.first?.localDate, "2099-09-12")
+    }
+
     func testUpdateInputCarriesExplicitClearSemantics() {
         var draft = EventUploadDraft.create()
         draft.name = EventUploadLocalizedFields(zh: "活动清空测试", en: "Clear Semantics Event")

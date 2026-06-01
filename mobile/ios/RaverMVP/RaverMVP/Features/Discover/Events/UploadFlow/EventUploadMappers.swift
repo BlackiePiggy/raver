@@ -397,14 +397,15 @@ enum EventUploadMappers {
             guard !name.isEmpty else { return nil }
             let memberDJIDs = Array(slot.performerDJIDs.prefix(slot.actType.performerCount)).map { $0?.trimmed.eventUploadMapperNilIfBlank }
             let primaryDJID = memberDJIDs.compactMap { $0 }.first
+            let eventDay = resolvedEventDay(for: slot, in: draft)
             let baseInput = EventLineupSlotInput(
                 id: slot.canonicalSlotId,
                 lineupArtistId: nil,
-                eventDayId: slot.eventDayId,
-                weekIndex: slot.weekIndex,
-                dayIndexInWeek: slot.dayIndexInWeek,
-                overallDayIndex: slot.overallDayIndex,
-                localDate: slot.localDate,
+                eventDayId: eventDay?.eventDayId ?? slot.eventDayId,
+                weekIndex: eventDay?.weekIndex ?? slot.weekIndex,
+                dayIndexInWeek: eventDay?.dayIndexInWeek ?? slot.dayIndexInWeek,
+                overallDayIndex: eventDay?.overallDayIndex ?? slot.overallDayIndex,
+                localDate: eventDay?.date ?? slot.localDate,
                 djId: primaryDJID,
                 memberDjIds: memberDJIDs.contains(where: { $0 != nil }) ? memberDJIDs : nil,
                 memberNames: performerNames,
@@ -420,6 +421,19 @@ enum EventUploadMappers {
             return input
         }
         return timetableSlots.isEmpty ? nil : timetableSlots
+    }
+
+    private static func resolvedEventDay(
+        for slot: EventUploadLineupSlotDraft,
+        in draft: EventUploadDraft
+    ) -> WebEventDay? {
+        if let eventDay = draft.eventDay(forOverallDayIndex: max(slot.dayIndex, slot.overallDayIndex, 1)) {
+            return eventDay
+        }
+        if let eventDay = draft.eventDay(forID: slot.eventDayId) {
+            return eventDay
+        }
+        return draft.structuredEventDays.first
     }
 
     private static func artistIdentityKey(_ artist: EventLineupArtistInput) -> String {
