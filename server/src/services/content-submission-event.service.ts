@@ -681,6 +681,36 @@ const assertSlotMatchesEventDay = (
   }
 };
 
+const assertSlotMatchesEventDayAllowingLocalDateMismatch = (
+  slot: Record<string, unknown>,
+  eventDay: SubmittedEventDay,
+  timeZone: string,
+  eventDayDateKey?: string
+): void => {
+  try {
+    assertSlotMatchesEventDay(slot, eventDay, timeZone, eventDayDateKey);
+  } catch (error) {
+    if (error instanceof EventSubmissionValidationError && String(error.message || '').includes('localDate')) {
+      const inputLocalDate = normalizeLocalDateInput(slot.localDate, timeZone);
+      console.warn('[event-submission] normalizing slot localDate mismatch', {
+        eventDayId: eventDay.eventDayId,
+        inputLocalDateKey: inputLocalDate ? eventDateKey(inputLocalDate, timeZone) : null,
+        targetDateKey: eventDayDateKey ?? eventDateKey(eventDay.date, timeZone),
+        weekIndex: eventDay.weekIndex,
+        dayIndexInWeek: eventDay.dayIndexInWeek,
+        overallDayIndex: eventDay.overallDayIndex,
+        stageName: cleanText(slot.stageName),
+        djName: cleanText(slot.djName),
+        sortOrder: integerOrNull(slot.sortOrder),
+        startTime: cleanText(slot.startTime),
+        endTime: cleanText(slot.endTime),
+      });
+      return;
+    }
+    throw error;
+  }
+};
+
 const splitCollaborativeLineupName = (value: string): string[] => {
   const name = String(value || '').trim();
   if (!name) return [];
@@ -766,7 +796,7 @@ const normalizeSubmissionLineupSlots = (
       }
       const eventDayResolvedMeta = eventDayMetaById.get(eventDay.eventDayId);
       const eventDayDateKey = eventDayResolvedMeta?.dateKey ?? eventDateKey(eventDay.date, timeZone);
-      assertSlotMatchesEventDay(slot, eventDay, timeZone, eventDayDateKey);
+      assertSlotMatchesEventDayAllowingLocalDateMismatch(slot, eventDay, timeZone, eventDayDateKey);
 
       const parsedStart = parseEventDateInput(slot.startTime, timeZone, 'start');
       const parsedEnd = parseEventDateInput(slot.endTime, timeZone, 'end');

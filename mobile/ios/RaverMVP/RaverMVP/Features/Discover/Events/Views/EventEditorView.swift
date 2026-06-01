@@ -3636,6 +3636,19 @@ struct EventEditorView: View {
                     ticketTiers: ticketTierDrafts,
                     timetableSlots: timetableSlots
                 )
+#if DEBUG
+                let eventDaySummary = submissionDraft.structuredEventDays
+                    .map { "\($0.eventDayId):\(editorDebugDateText($0.date))" }
+                    .joined(separator: ", ")
+                let slotMismatchSummary = editorSlotScheduleMismatchDebugSummary(submissionDraft)
+                print(
+                    "[EventEditorScheduleDebug] submit edit event=\(event.id) " +
+                    "start=\(editorDebugDateText(submissionDraft.startDate)) " +
+                    "end=\(editorDebugDateText(submissionDraft.endDate)) " +
+                    "eventDays=\(eventDaySummary) " +
+                    "slotMismatches=\(slotMismatchSummary)"
+                )
+#endif
                 var updateInput = EventUploadMappers.updateInput(from: submissionDraft)
                 updateInput.value1.coverImageUrl = finalCover.nilIfEmpty
                 updateInput.value1.lineupImageUrl = finalLineup.nilIfEmpty
@@ -3654,6 +3667,28 @@ struct EventEditorView: View {
         errorMessage = nil
         saveSuccessMessage = message
     }
+
+#if DEBUG
+    private func editorDebugDateText(_ date: Date?) -> String {
+        guard let date else { return "nil" }
+        return date.eventArchiveDateText(in: eventTimeZone)
+    }
+
+    private func editorSlotScheduleMismatchDebugSummary(_ draft: EventUploadDraft) -> String {
+        let mismatches = draft.timetableSlots.compactMap { slot -> String? in
+            guard let eventDayId = slot.eventDayId,
+                  let eventDay = draft.eventDay(forID: eventDayId) else {
+                return "slot=\(slot.id.uuidString.prefix(6)) unresolved[eventDayId=\(slot.eventDayId ?? "nil")]"
+            }
+            let slotLocalDate = slot.localDate?.eventArchiveDateText(in: eventTimeZone) ?? "nil"
+            let eventDayDate = eventDay.date.eventArchiveDateText(in: eventTimeZone)
+            guard slotLocalDate != eventDayDate else { return nil }
+            let act = slot.performerNames.joined(separator: "/")
+            return "slot=\(slot.id.uuidString.prefix(6)) act=\(act) raw[eventDayId=\(eventDayId),localDate=\(slotLocalDate)] resolved[localDate=\(eventDayDate)]"
+        }
+        return mismatches.isEmpty ? "none" : mismatches.joined(separator: " | ")
+    }
+#endif
 
     private func buildManualLocationPayload(
         detailAddressZh: String?,
