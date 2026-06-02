@@ -265,23 +265,22 @@ struct EventUploadFlowView: View {
         return LT("已恢复上次未提交的新建活动草稿。", "Your previous unsent event draft was restored.", "未送信のイベント下書きを復元しました。")
     }
 
-    @ViewBuilder
-    private var content: some View {
+    private var content: AnyView {
         switch viewModel.draft.currentStep {
         case .media:
-            mediaStep
+            return AnyView(mediaStep)
         case .basic:
-            basicStep
+            return AnyView(basicStep)
         case .time:
-            timeStep
+            return AnyView(timeStep)
         case .timetable:
-            timetableStep
+            return AnyView(timetableStep)
         case .lineup:
-            lineupStep
+            return AnyView(lineupStep)
         case .tickets:
-            ticketsStep
+            return AnyView(ticketsStep)
         case .review:
-            reviewStep
+            return AnyView(reviewStep)
         }
     }
 
