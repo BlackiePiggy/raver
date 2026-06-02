@@ -3,6 +3,7 @@
   if (params.get('standalone') !== 'event-location-picker') return;
 
   const channel = String(params.get('channel') || '').trim();
+  const requestId = String(params.get('requestId') || '').trim();
   const requestKey = String(params.get('requestKey') || '').trim();
   const messageSource = 'raver:event-location-picker';
 
@@ -10,23 +11,31 @@
   let resolved = false;
 
   function postToOpener(type, payload = {}) {
-    if (!window.opener || window.opener.closed || !channel) return;
-    try {
-      window.opener.postMessage(
-        {
-          source: messageSource,
-          channel,
-          type,
-          ...payload,
-        },
-        window.location.origin
-      );
-    } catch (_error) {
-      // ignore cross-window post failures
+    const message = {
+      source: messageSource,
+      channel,
+      requestId,
+      type,
+      ...payload,
+    };
+    if (window.parent && window.parent !== window) {
+      try {
+        window.parent.postMessage(message, window.location.origin);
+      } catch (_error) {
+        // ignore parent post failures
+      }
+    }
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.postMessage(message, window.location.origin);
+      } catch (_error) {
+        // ignore opener post failures
+      }
     }
   }
 
   function closeStandaloneWindowSoon() {
+    if (window.parent && window.parent !== window) return;
     window.setTimeout(() => {
       try {
         window.close();
