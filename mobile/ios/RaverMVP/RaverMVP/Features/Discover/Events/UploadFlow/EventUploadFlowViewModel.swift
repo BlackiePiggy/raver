@@ -93,19 +93,21 @@ final class EventUploadFlowViewModel: ObservableObject {
         self.onDismiss = onDismiss
         var restoredDraft = false
         if let saved = draftStore.load(mode: mode, userID: userID) {
-            if let event, case .edit = mode, !Self.canRestoreEditDraft(saved, for: event) {
+            var restored = saved
+            restored.sanitizeForRestore()
+            if let event, case .edit = mode, !Self.canRestoreEditDraft(restored, for: event) {
                 draftStore.clear(mode: mode, userID: userID)
                 self.draft = .edit(event: event)
                 EventUploadAnalytics.track(
                     "event_upload_v2_stale_edit_draft_discarded",
                     properties: [
                         "mode": mode.storageKeyPart,
-                        "draftRevision": saved.incrementalBaseline?.eventRevision.map(String.init) ?? "nil",
+                        "draftRevision": restored.incrementalBaseline?.eventRevision.map(String.init) ?? "nil",
                         "eventRevision": event.revision.map(String.init) ?? "nil",
                     ]
                 )
             } else {
-                self.draft = saved
+                self.draft = restored
                 restoredDraft = true
             }
         } else if let event {

@@ -590,6 +590,58 @@ struct EventUploadDraft: Hashable, Codable {
         return draft
     }
 
+    mutating func sanitizeForRestore() {
+        let trimmedTimeZoneID = timeZoneIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedTimeZoneID.isEmpty || TimeZone(identifier: trimmedTimeZoneID) == nil {
+            timeZoneIdentifier = "Asia/Shanghai"
+        } else {
+            timeZoneIdentifier = trimmedTimeZoneID
+        }
+
+        dayRolloverHour = min(max(dayRolloverHour, 0), 23)
+        if ticket.currency.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ticket.currency = "CNY"
+        }
+
+        imageZones = Self.emptyImageZones().merging(imageZones) { _, restored in
+            restored.sorted { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+        }
+
+        canonicalWeeks = normalizedCanonicalWeeks()
+        weekRanges = normalizedRanges(weekRanges)
+        if weekRanges.isEmpty {
+            weekRanges = [EventUploadWeekRangeDraft(startDate: startDate, endDate: endDate)]
+        }
+
+        timetableSlots = timetableSlots.map { slot in
+            var next = slot
+            next.normalizePerformers()
+            return next
+        }
+        lineupOnlySlots = lineupOnlySlots.map { slot in
+            var next = slot
+            next.normalizePerformers()
+            return next
+        }
+
+        let normalizedStages = stageEntries.compactMap {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).eventUploadNilIfBlank
+        }
+        if normalizedStages.isEmpty {
+            let hydratedStages = timetableSlots.compactMap {
+                $0.stageName.trimmingCharacters(in: .whitespacesAndNewlines).eventUploadNilIfBlank
+            }
+            stageEntries = hydratedStages.isEmpty ? [] : Array(NSOrderedSet(array: hydratedStages)) as? [String] ?? hydratedStages
+        } else {
+            stageEntries = Array(NSOrderedSet(array: normalizedStages)) as? [String] ?? normalizedStages
+        }
+
+        rebuildStructuredScheduleBindings()
+    }
+
     var posterImages: [EventUploadImageDraft] {
         imageZones[.poster] ?? []
     }
@@ -1081,10 +1133,10 @@ struct EventUploadDraft: Hashable, Codable {
         let days = eventDays ?? structuredEventDays
         let formatter = Self.eventDayResolutionFormatter
         return (
-            byID: Dictionary(uniqueKeysWithValues: days.map { ($0.eventDayId, $0) }),
-            byWeekDay: Dictionary(uniqueKeysWithValues: days.map { ("\($0.weekIndex)-\($0.dayIndexInWeek)", $0) }),
-            byOverallDayIndex: Dictionary(uniqueKeysWithValues: days.map { ($0.overallDayIndex, $0) }),
-            byLocalDate: Dictionary(uniqueKeysWithValues: days.map { (formatter.string(from: $0.date), $0) })
+            byID: Self.firstValueDictionary(days.map { ($0.eventDayId, $0) }),
+            byWeekDay: Self.firstValueDictionary(days.map { ("\($0.weekIndex)-\($0.dayIndexInWeek)", $0) }),
+            byOverallDayIndex: Self.firstValueDictionary(days.map { ($0.overallDayIndex, $0) }),
+            byLocalDate: Self.firstValueDictionary(days.map { (formatter.string(from: $0.date), $0) })
         )
     }
 
@@ -1308,6 +1360,12 @@ struct EventUploadDraft: Hashable, Codable {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
+    }
+
+    private static func firstValueDictionary<Key: Hashable, Value>(_ pairs: [(Key, Value)]) -> [Key: Value] {
+        pairs.reduce(into: [:]) { result, pair in
+            result[pair.0] = result[pair.0] ?? pair.1
+        }
     }
 
     private static func weekdayDisplayName(for weekday: String) -> String {
