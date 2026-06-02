@@ -198,6 +198,20 @@ const isAbortLikeError = (error: unknown): boolean =>
       ? error.name === 'AbortError'
       : false;
 
+function OrderArrowIcon({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path
+        d={direction === 'left' ? 'M9.75 3.5L5.25 8l4.5 4.5' : 'M6.25 3.5L10.75 8l-4.5 4.5'}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function Section({
   title,
   description,
@@ -2000,14 +2014,14 @@ export default function EventStudioForm({
     return (
       <div
         key={usage}
-        className={isPrimary ? 'admin-reference-card p-4' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9] p-4'}
+        className={`min-h-[332px] ${isPrimary ? 'admin-reference-card' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9]'} p-4`}
       >
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-[#071110]">{config.title}</div>
-            <div className="mt-1 text-sm leading-6 text-black/48">{config.description}</div>
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#071110]">{config.title}</div>
+            <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-black/48">{config.description}</div>
           </div>
-          <label className="admin-studio-button-secondary cursor-pointer px-3 py-2 text-xs">
+          <label className="admin-studio-button-secondary shrink-0 cursor-pointer px-3 py-2 text-[11px]">
             {items.length ? 'Add More' : 'Choose Images'}
             <input
               type="file"
@@ -2020,61 +2034,65 @@ export default function EventStudioForm({
         </div>
 
         <div className="mt-4">
-          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-black/45">
+          <div className="mb-3 flex items-center justify-between gap-3 text-[11px] text-black/45">
             <span>{items.length} images</span>
             <span>{zoneUploadingCount ? `${zoneUploadingCount} uploading` : 'Up to 12 per pick'}</span>
           </div>
           {items.length ? (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="admin-shell-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
               {items.map((image, index) => (
-                <div key={image.id} className="overflow-hidden rounded-[22px] border border-[#e8eceb] bg-white">
-                  <div className="relative aspect-[4/3] overflow-hidden bg-[#f2f3ef]">
+                <div key={image.id} className="w-[168px] shrink-0 overflow-hidden rounded-[20px] border border-[#e8eceb] bg-white">
+                  <div className="relative h-[128px] overflow-hidden bg-[#f2f3ef]">
                     {imagePreviewUrl(image) ? (
                       image.remoteUrl.trim() ? (
-                        <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="800px" />
+                        <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="240px" />
                       ) : (
                         <img src={imagePreviewUrl(image)} alt={`${config.title}-${index + 1}`} className="h-full w-full object-cover" />
                       )
                     ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-black/35">No preview</div>
+                      <div className="flex h-full items-center justify-center text-[11px] text-black/35">No preview</div>
                     )}
                     {image.uploadState === 'uploading' ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-xs font-medium text-white">Uploading...</div>
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-[11px] font-medium text-white">Uploading...</div>
                     ) : null}
                     {image.uploadState === 'failed' ? (
-                      <div className="absolute right-3 top-3 rounded-full bg-[#fff4e6] px-2 py-1 text-[11px] font-semibold text-[#b25b00]">
+                      <div className="absolute right-2 top-2 rounded-full bg-[#fff4e6] px-2 py-1 text-[10px] font-semibold text-[#b25b00]">
                         Failed
                       </div>
                     ) : null}
                   </div>
-                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="space-y-2 px-3 py-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
-                      <div className="mt-1 text-xs text-black/40">
+                      <div className="truncate text-[11px] font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
+                      <div className="mt-1 truncate text-[10px] text-black/40">
                         #{image.sortOrder} · {imageStatusLabel(image)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleImageMove(usage, image.id, -1)}
-                        disabled={index === 0}
-                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Up
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleImageMove(usage, image.id, 1)}
-                        disabled={index === items.length - 1}
-                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Down
-                      </button>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleImageMove(usage, image.id, -1)}
+                          disabled={index === 0}
+                          aria-label="Move left"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#d6ddd7] text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <OrderArrowIcon direction="left" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleImageMove(usage, image.id, 1)}
+                          disabled={index === items.length - 1}
+                          aria-label="Move right"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#d6ddd7] text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <OrderArrowIcon direction="right" />
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => void handleImageRemove(usage, image)}
-                        className="admin-studio-button-danger px-3 py-2 text-xs"
+                        className="admin-studio-button-danger px-2.5 py-2 text-[10px]"
                       >
                         {deletingImageId === image.id ? 'Removing...' : 'Remove'}
                       </button>
@@ -2084,7 +2102,7 @@ export default function EventStudioForm({
               ))}
             </div>
           ) : (
-            <div className="flex min-h-[180px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white text-sm text-black/42">
+            <div className="flex min-h-[224px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white px-4 text-center text-[11px] leading-5 text-black/42">
               {config.hint}
             </div>
           )}
@@ -2128,12 +2146,8 @@ export default function EventStudioForm({
 
       {currentStep === 0 ? (
         <Section title="媒体" description="先把主视觉、封面、阵容图和排期图集中整理好。提交校验会要求 Poster / Lineup / Cover 至少有一张。">
-          <div className="grid gap-5 xl:grid-cols-2">
-            {IMAGE_ZONE_CONFIG.filter((item) => item.emphasis === 'primary').map((item) => renderMediaZone(item.usage))}
-          </div>
-
-          <div className="mt-5 grid gap-4 xl:grid-cols-3">
-            {IMAGE_ZONE_CONFIG.filter((item) => item.emphasis === 'secondary').map((item) => renderMediaZone(item.usage))}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {IMAGE_ZONE_CONFIG.map((item) => renderMediaZone(item.usage))}
           </div>
 
           <div className="admin-reference-card mt-5 grid gap-3 p-4 md:grid-cols-3">
