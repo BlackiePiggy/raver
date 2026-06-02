@@ -348,44 +348,19 @@ enum EventAdminContractBridge {
 
     private static func locationProviderMeta(
         from legacy: WebEventLocationProviderMeta?
-    ) -> EventAdminComponents.Schemas.EventLocationProviderMeta? {
+    ) -> EventAdminComponents.Schemas.EventLocationPoint.ProviderMetaPayload? {
         guard let legacy else { return nil }
-        let meta = EventAdminComponents.Schemas.EventLocationProviderMeta(
-            amap: legacy.amap.map {
-                .init(
-                    poiId: $0.poiId,
-                    adcode: $0.adcode
-                )
-            },
-            google: legacy.google.map {
-                .init(
-                    placeId: $0.placeId,
-                    types: $0.types
-                )
-            },
-            mapkit: legacy.mapkit.map {
-                .init(mapItemIdentifier: $0.mapItemIdentifier)
-            },
-            mapbox: legacy.mapbox.map {
-                .init(
-                    placeId: $0.placeId,
-                    featureType: $0.featureType
-                )
-            },
-            geoapify: legacy.geoapify.map {
-                .init(
-                    placeId: $0.placeId,
-                    featureType: $0.featureType
-                )
-            }
+        let hasValue = legacy.amap != nil
+            || legacy.google != nil
+            || legacy.mapkit != nil
+            || legacy.mapbox != nil
+            || legacy.geoapify != nil
+        guard hasValue else { return nil }
+        guard let data = try? JSONEncoder().encode(legacy) else { return nil }
+        return try? JSONDecoder().decode(
+            EventAdminComponents.Schemas.EventLocationPoint.ProviderMetaPayload.self,
+            from: data
         )
-
-        let hasValue = meta.amap != nil
-            || meta.google != nil
-            || meta.mapkit != nil
-            || meta.mapbox != nil
-            || meta.geoapify != nil
-        return hasValue ? meta : nil
     }
 
     private static func adminJsonValue(from value: ContentSubmissionJSONValue) -> OpenAPIValueContainer {

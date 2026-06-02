@@ -4048,44 +4048,11 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     private func legacyLocationProviderMeta(
-        from meta: EventAdminComponents.Schemas.EventLocationProviderMeta?
+        from meta: EventAdminComponents.Schemas.EventLocationPoint.ProviderMetaPayload?
     ) -> WebEventLocationProviderMeta? {
         guard let meta else { return nil }
-        let legacy = WebEventLocationProviderMeta(
-            amap: meta.amap.map {
-                .init(
-                    poiId: $0.poiId,
-                    adcode: $0.adcode
-                )
-            },
-            google: meta.google.map {
-                .init(
-                    placeId: $0.placeId,
-                    types: $0.types
-                )
-            },
-            mapkit: meta.mapkit.map {
-                .init(mapItemIdentifier: $0.mapItemIdentifier)
-            },
-            mapbox: meta.mapbox.map {
-                .init(
-                    placeId: $0.placeId,
-                    featureType: $0.featureType
-                )
-            },
-            geoapify: meta.geoapify.map {
-                .init(
-                    placeId: $0.placeId,
-                    featureType: $0.featureType
-                )
-            }
-        )
-        let hasValue = legacy.amap != nil
-            || legacy.google != nil
-            || legacy.mapkit != nil
-            || legacy.mapbox != nil
-            || legacy.geoapify != nil
-        return hasValue ? legacy : nil
+        guard let data = try? JSONEncoder().encode(meta) else { return nil }
+        return try? JSONDecoder().decode(WebEventLocationProviderMeta.self, from: data)
     }
 
     private func legacySchedule(

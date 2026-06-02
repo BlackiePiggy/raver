@@ -766,43 +766,19 @@ enum EventUploadMappers {
 
     private static func adminLocationProviderMeta(
         from meta: WebEventLocationProviderMeta?
-    ) -> EventAdminComponents.Schemas.EventLocationProviderMeta? {
+    ) -> EventAdminComponents.Schemas.EventLocationPoint.ProviderMetaPayload? {
         guard let meta else { return nil }
-        let payload = EventAdminComponents.Schemas.EventLocationProviderMeta(
-            amap: meta.amap.map {
-                .init(
-                    poiId: $0.poiId,
-                    adcode: $0.adcode
-                )
-            },
-            google: meta.google.map {
-                .init(
-                    placeId: $0.placeId,
-                    types: $0.types
-                )
-            },
-            mapkit: meta.mapkit.map {
-                .init(mapItemIdentifier: $0.mapItemIdentifier)
-            },
-            mapbox: meta.mapbox.map {
-                .init(
-                    placeId: $0.placeId,
-                    featureType: $0.featureType
-                )
-            },
-            geoapify: meta.geoapify.map {
-                .init(
-                    placeId: $0.placeId,
-                    featureType: $0.featureType
-                )
-            }
+        let hasValue = meta.amap != nil
+            || meta.google != nil
+            || meta.mapkit != nil
+            || meta.mapbox != nil
+            || meta.geoapify != nil
+        guard hasValue else { return nil }
+        guard let data = try? JSONEncoder().encode(meta) else { return nil }
+        return try? JSONDecoder().decode(
+            EventAdminComponents.Schemas.EventLocationPoint.ProviderMetaPayload.self,
+            from: data
         )
-        let hasValue = payload.amap != nil
-            || payload.google != nil
-            || payload.mapkit != nil
-            || payload.mapbox != nil
-            || payload.geoapify != nil
-        return hasValue ? payload : nil
     }
 
     private static func normalizedLocationPointWithRealProvenance(
