@@ -7333,7 +7333,7 @@ private struct LocalizedExpandableFieldSection: View {
     let isRequired: Bool
     let axis: Axis
     let includeEnglishFull: Bool
-    let showClearI18nAction: Bool = false
+    let showClearI18nAction: Bool
     @Binding var expanded: Bool
     let primaryPlaceholder: String
     let primaryBinding: Binding<String>
@@ -7343,7 +7343,41 @@ private struct LocalizedExpandableFieldSection: View {
     let englishFullBinding: Binding<String>?
     let extraCount: Int
     let preferredLanguage: EventUploadPreferredLanguage
-    let onClearI18n: (() -> Void)? = nil
+    let onClearI18n: (() -> Void)?
+
+    init(
+        title: String,
+        isRequired: Bool,
+        axis: Axis,
+        includeEnglishFull: Bool,
+        showClearI18nAction: Bool = false,
+        expanded: Binding<Bool>,
+        primaryPlaceholder: String,
+        primaryBinding: Binding<String>,
+        zhBinding: Binding<String>,
+        enBinding: Binding<String>,
+        jaBinding: Binding<String>,
+        englishFullBinding: Binding<String>?,
+        extraCount: Int,
+        preferredLanguage: EventUploadPreferredLanguage,
+        onClearI18n: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.isRequired = isRequired
+        self.axis = axis
+        self.includeEnglishFull = includeEnglishFull
+        self.showClearI18nAction = showClearI18nAction
+        self._expanded = expanded
+        self.primaryPlaceholder = primaryPlaceholder
+        self.primaryBinding = primaryBinding
+        self.zhBinding = zhBinding
+        self.enBinding = enBinding
+        self.jaBinding = jaBinding
+        self.englishFullBinding = englishFullBinding
+        self.extraCount = extraCount
+        self.preferredLanguage = preferredLanguage
+        self.onClearI18n = onClearI18n
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
