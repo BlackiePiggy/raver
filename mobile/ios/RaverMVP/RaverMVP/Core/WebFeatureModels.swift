@@ -528,11 +528,44 @@ struct WebEventLocationCoordinate: Codable, Hashable {
     var lat: Double
 }
 
+struct WebEventLocationProviderMetaAmap: Codable, Hashable {
+    var poiId: String? = nil
+    var adcode: String? = nil
+}
+
+struct WebEventLocationProviderMetaGoogle: Codable, Hashable {
+    var placeId: String? = nil
+    var types: [String]? = nil
+}
+
+struct WebEventLocationProviderMetaMapkit: Codable, Hashable {
+    var mapItemIdentifier: String? = nil
+}
+
+struct WebEventLocationProviderMetaMapbox: Codable, Hashable {
+    var placeId: String? = nil
+    var featureType: String? = nil
+}
+
+struct WebEventLocationProviderMetaGeoapify: Codable, Hashable {
+    var placeId: String? = nil
+    var featureType: String? = nil
+}
+
+struct WebEventLocationProviderMeta: Codable, Hashable {
+    var amap: WebEventLocationProviderMetaAmap? = nil
+    var google: WebEventLocationProviderMetaGoogle? = nil
+    var mapkit: WebEventLocationProviderMetaMapkit? = nil
+    var mapbox: WebEventLocationProviderMetaMapbox? = nil
+    var geoapify: WebEventLocationProviderMetaGeoapify? = nil
+}
+
 struct WebEventLocationPoint: Codable, Hashable {
     var provider: String? = nil
     var sourceMode: String? = nil
     var providerPlaceId: String? = nil
     var poiId: String? = nil
+    var adcode: String? = nil
     var location: WebEventLocationCoordinate? = nil
     var nameI18n: WebBiText? = nil
     var addressI18n: WebBiText? = nil
@@ -541,6 +574,7 @@ struct WebEventLocationPoint: Codable, Hashable {
     var district: String? = nil
     var province: String? = nil
     var countryCode: String? = nil
+    var providerMeta: WebEventLocationProviderMeta? = nil
 }
 
 struct WebEventManualLocation: Codable, Hashable {
@@ -666,7 +700,12 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var imageAssets: [WebEventImageAsset]? = nil
     var eventType: String?
     var organizerName: String?
+    var venueName: String? = nil
+    var venueAddress: String? = nil
     var sourceEventUrl: String? = nil
+    var sourceProvider: String? = nil
+    var referenceLinks: [String]? = nil
+    var socialLinks: ContentSubmissionJSONValue? = nil
     var city: String?
     var country: String?
     var manualLocation: WebEventManualLocation? = nil
@@ -772,7 +811,12 @@ struct CreateEventInput: Encodable {
     var description: String?
     var eventType: String? = nil
     var organizerName: String? = nil
+    var venueName: String? = nil
+    var venueAddress: String? = nil
     var sourceEventUrl: String? = nil
+    var sourceProvider: String? = nil
+    var referenceLinks: [String]? = nil
+    var socialLinks: ContentSubmissionJSONValue? = nil
     var city: String?
     var cityI18n: WebBiText? = nil
     var country: String?
@@ -819,7 +863,12 @@ struct CreateEventInput: Encodable {
         case description
         case eventType
         case organizerName
+        case venueName
+        case venueAddress
         case sourceEventUrl
+        case sourceProvider
+        case referenceLinks
+        case socialLinks
         case city
         case cityI18n
         case country
@@ -869,7 +918,12 @@ struct CreateEventInput: Encodable {
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(eventType, forKey: .eventType)
         try container.encodeIfPresent(organizerName, forKey: .organizerName)
+        try container.encodeIfPresent(venueName, forKey: .venueName)
+        try container.encodeIfPresent(venueAddress, forKey: .venueAddress)
         try container.encodeIfPresent(sourceEventUrl, forKey: .sourceEventUrl)
+        try container.encodeIfPresent(sourceProvider, forKey: .sourceProvider)
+        try container.encodeIfPresent(referenceLinks, forKey: .referenceLinks)
+        try container.encodeIfPresent(socialLinks, forKey: .socialLinks)
         try container.encodeIfPresent(city, forKey: .city)
         try container.encodeIfPresent(cityI18n, forKey: .cityI18n)
         try container.encodeIfPresent(country, forKey: .country)
@@ -1075,7 +1129,12 @@ struct UpdateEventInput: Encodable {
     var description: String?
     var eventType: String? = nil
     var organizerName: String? = nil
+    var venueName: String? = nil
+    var venueAddress: String? = nil
     var sourceEventUrl: String? = nil
+    var sourceProvider: String? = nil
+    var referenceLinks: [String]? = nil
+    var socialLinks: ContentSubmissionJSONValue? = nil
     var city: String?
     var cityI18n: WebBiText? = nil
     var country: String?
@@ -1120,6 +1179,7 @@ struct UpdateEventInput: Encodable {
     var clearLocationPoint: Bool = false
     var clearLatitude: Bool = false
     var clearLongitude: Bool = false
+    var clearSocialLinks: Bool = false
     var clearStageOrder: Bool = false
     var clearLineupSlots: Bool = false
 
@@ -1131,7 +1191,12 @@ struct UpdateEventInput: Encodable {
         case description
         case eventType
         case organizerName
+        case venueName
+        case venueAddress
         case sourceEventUrl
+        case sourceProvider
+        case referenceLinks
+        case socialLinks
         case city
         case cityI18n
         case country
@@ -1185,7 +1250,16 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(eventType, forKey: .eventType)
         try container.encodeIfPresent(organizerName, forKey: .organizerName)
+        try container.encodeIfPresent(venueName, forKey: .venueName)
+        try container.encodeIfPresent(venueAddress, forKey: .venueAddress)
         try container.encodeIfPresent(sourceEventUrl, forKey: .sourceEventUrl)
+        try container.encodeIfPresent(sourceProvider, forKey: .sourceProvider)
+        try container.encodeIfPresent(referenceLinks, forKey: .referenceLinks)
+        if clearSocialLinks {
+            try container.encodeNil(forKey: .socialLinks)
+        } else {
+            try container.encodeIfPresent(socialLinks, forKey: .socialLinks)
+        }
         try container.encodeIfPresent(city, forKey: .city)
         if clearCityI18n {
             try container.encodeNil(forKey: .cityI18n)

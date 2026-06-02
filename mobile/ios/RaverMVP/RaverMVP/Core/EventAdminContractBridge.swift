@@ -1,4 +1,5 @@
 import Foundation
+import OpenAPIRuntime
 import RaverEventAdminContract
 
 typealias EventAdminCreateInput = EventAdminCreateEventInput
@@ -20,6 +21,7 @@ enum EventAdminContractBridge {
                 clearLocationPoint: legacy.clearLocationPoint,
                 clearLatitude: legacy.clearLatitude,
                 clearLongitude: legacy.clearLongitude,
+                clearSocialLinks: legacy.clearSocialLinks,
                 clearStageOrder: legacy.clearStageOrder,
                 clearLineupSlots: legacy.clearLineupSlots
             )
@@ -36,7 +38,12 @@ enum EventAdminContractBridge {
             description: legacy.description,
             eventType: legacy.eventType,
             organizerName: legacy.organizerName,
+            venueName: legacy.venueName,
+            venueAddress: legacy.venueAddress,
             sourceEventUrl: legacy.sourceEventUrl,
+            sourceProvider: legacy.sourceProvider,
+            referenceLinks: legacy.referenceLinks,
+            socialLinks: legacy.socialLinks.map(adminJsonValue(from:)),
             city: legacy.city,
             cityI18n: localizedText(from: legacy.cityI18n),
             country: legacy.country,
@@ -87,7 +94,12 @@ enum EventAdminContractBridge {
             description: legacy.description,
             eventType: legacy.eventType,
             organizerName: legacy.organizerName,
+            venueName: legacy.venueName,
+            venueAddress: legacy.venueAddress,
             sourceEventUrl: legacy.sourceEventUrl,
+            sourceProvider: legacy.sourceProvider,
+            referenceLinks: legacy.referenceLinks,
+            socialLinks: legacy.socialLinks.map(adminJsonValue(from:)),
             city: legacy.city,
             cityI18n: localizedText(from: legacy.cityI18n),
             country: legacy.country,
@@ -149,11 +161,14 @@ enum EventAdminContractBridge {
 
     private static func locationPoint(from legacy: WebEventLocationPoint?) -> EventAdminComponents.Schemas.EventLocationPoint? {
         guard let legacy, let location = legacy.location else { return nil }
+        let provider = normalizedLocationProvider(from: legacy.provider) ?? .mapkit
+        let sourceMode = normalizedLocationSourceMode(from: legacy.sourceMode) ?? .legacyCoords
         return .init(
-            provider: legacy.provider ?? "",
-            sourceMode: legacy.sourceMode ?? "",
+            provider: provider,
+            sourceMode: sourceMode,
             providerPlaceId: legacy.providerPlaceId,
             poiId: legacy.poiId,
+            adcode: legacy.adcode,
             location: .init(lng: location.lng, lat: location.lat),
             nameI18n: localizedText(from: legacy.nameI18n),
             addressI18n: localizedText(from: legacy.addressI18n),
@@ -161,7 +176,8 @@ enum EventAdminContractBridge {
             city: legacy.city,
             district: legacy.district,
             province: legacy.province,
-            countryCode: legacy.countryCode
+            countryCode: legacy.countryCode,
+            providerMeta: locationProviderMeta(from: legacy.providerMeta)
         )
     }
 
@@ -235,8 +251,8 @@ enum EventAdminContractBridge {
                 djName: $0.djName,
                 stageName: $0.stageName,
                 sortOrder: $0.sortOrder,
-                startTime: $0.startTime?.iso8601FractionalString,
-                endTime: $0.endTime?.iso8601FractionalString
+                startTime: $0.startTime?.eventArchiveLocalDateTimeText(in: timeZone),
+                endTime: $0.endTime?.eventArchiveLocalDateTimeText(in: timeZone)
             )
         }
     }
@@ -291,13 +307,118 @@ enum EventAdminContractBridge {
         }
         return .init(rawValue: rawValue)
     }
-}
 
-private extension Date {
-    var iso8601FractionalString: String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter.string(from: self)
+    private static func normalizedLocationProvider(
+        from rawValue: String?
+    ) -> EventAdminComponents.Schemas.EventLocationProvider? {
+        guard let normalized = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !normalized.isEmpty else {
+            return nil
+        }
+        switch normalized {
+        case "apple-mapkit", "apple_mapkit":
+            return .mapkit
+        default:
+            return .init(rawValue: normalized)
+        }
+    }
+
+    private static func normalizedLocationSourceMode(
+        from rawValue: String?
+    ) -> EventAdminComponents.Schemas.EventLocationSourceMode? {
+        guard let normalized = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !normalized.isEmpty else {
+            return nil
+        }
+        switch normalized {
+        case "composed_search", "picker_search":
+            return .manualSearch
+        case "manual_pick", "manual_pin", "ios-event-upload-v2", "web-event-studio-v2":
+            return .pinDrag
+        case "server_normalized":
+            return .legacyCoords
+        default:
+            return .init(rawValue: normalized)
+        }
+    }
+
+    private static func locationProviderMeta(
+        from legacy: WebEventLocationProviderMeta?
+    ) -> EventAdminComponents.Schemas.EventLocationProviderMeta? {
+        guard let legacy else { return nil }
+        let meta = EventAdminComponents.Schemas.EventLocationProviderMeta(
+            amap: legacy.amap.map {
+                .init(
+                    poiId: $0.poiId,
+                    adcode: $0.adcode
+                )
+            },
+            google: legacy.google.map {
+                .init(
+                    placeId: $0.placeId,
+                    types: $0.types
+                )
+            },
+            mapkit: legacy.mapkit.map {
+                .init(mapItemIdentifier: $0.mapItemIdentifier)
+            },
+            mapbox: legacy.mapbox.map {
+                .init(
+                    placeId: $0.placeId,
+                    featureType: $0.featureType
+                )
+            },
+            geoapify: legacy.geoapify.map {
+                .init(
+                    placeId: $0.placeId,
+                    featureType: $0.featureType
+                )
+            }
+        )
+
+        let hasValue = meta.amap != nil
+            || meta.google != nil
+            || meta.mapkit != nil
+            || meta.mapbox != nil
+            || meta.geoapify != nil
+        return hasValue ? meta : nil
+    }
+
+    private static func adminJsonValue(from value: ContentSubmissionJSONValue) -> OpenAPIValueContainer {
+        switch value {
+        case .string(let text):
+            return OpenAPIValueContainer(stringLiteral: text)
+        case .number(let number):
+            return OpenAPIValueContainer(floatLiteral: number)
+        case .bool(let flag):
+            return OpenAPIValueContainer(booleanLiteral: flag)
+        case .object(let object):
+            return (try? OpenAPIValueContainer(unvalidatedValue: object.mapValues(jsonSendableValue(from:)))) ?? nil
+        case .array(let array):
+            return (try? OpenAPIValueContainer(unvalidatedValue: array.map(jsonSendableValue(from:)))) ?? nil
+        case .null:
+            return nil
+        }
+    }
+
+    private static func jsonSendableValue(from value: ContentSubmissionJSONValue) -> (any Sendable)? {
+        switch value {
+        case .string(let text):
+            return text
+        case .number(let number):
+            return number
+        case .bool(let flag):
+            return flag
+        case .object(let object):
+            return object.mapValues(jsonSendableValue(from:))
+        case .array(let array):
+            return array.map(jsonSendableValue(from:))
+        case .null:
+            return nil
+        }
     }
 }

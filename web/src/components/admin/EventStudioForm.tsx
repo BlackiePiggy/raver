@@ -63,12 +63,12 @@ type EventStudioStepKey = (typeof EVENT_STUDIO_STEP_ITEMS)[number]['key'];
 
 const STEP_ERROR_KEYS: Record<EventStudioStepKey, Array<keyof EventStudioValidationErrors>> = {
   media: ['coverImage'],
-  basic: ['name', 'city', 'country', 'detailAddress', 'timeZone'],
+  basic: ['name', 'city', 'country', 'detailAddress', 'timeZone', 'socialLinks'],
   time: ['startDate', 'endDate'],
   timetable: ['timetableSlots'],
   lineup: [],
-  tickets: ['ticketTiers'],
-  review: ['name', 'city', 'country', 'detailAddress', 'timeZone', 'startDate', 'endDate', 'coverImage', 'ticketTiers', 'timetableSlots'],
+  tickets: ['ticketUrl', 'ticketTiers'],
+  review: ['name', 'city', 'country', 'detailAddress', 'timeZone', 'startDate', 'endDate', 'ticketUrl', 'socialLinks', 'coverImage', 'ticketTiers', 'timetableSlots'],
 };
 
 const IMAGE_ZONE_CONFIG: Array<{
@@ -97,12 +97,30 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
   return '';
 };
 
+const collapseLocalizedTextForPlainValue = (
+  value: EventStudioDraft['city'] | EventStudioDraft['country']
+): EventStudioDraft['city'] => {
+  const zh = value.zh.trim();
+  const en = value.en.trim();
+  const ja = value.ja.trim();
+  const enFull = value.enFull.trim();
+  if (zh) return { zh, en: '', ja: '', enFull: '' };
+  if (en) return { zh: '', en, ja: '', enFull: '' };
+  if (ja) return { zh: '', en: '', ja, enFull: '' };
+  if (enFull) return { zh: '', en: enFull, ja: '', enFull: '' };
+  return { zh: '', en: '', ja: '', enFull: '' };
+};
+
 const formatEventDayLabel = (day: EventStudioDraft['eventDays'][number]) =>
   `${day.label || day.eventDayId} · ${day.date}`;
 
 const normalizeMapProvider = (value?: string | null): EventLocationProvider | 'google' => {
-  if (value === 'amap' || value === 'mapkit' || value === 'mapbox' || value === 'geoapify' || value === 'google') {
-    return value;
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'apple-mapkit' || normalized === 'apple_mapkit') {
+    return 'mapkit';
+  }
+  if (normalized === 'amap' || normalized === 'mapkit' || normalized === 'mapbox' || normalized === 'geoapify' || normalized === 'google') {
+    return normalized;
   }
   return 'geoapify';
 };
@@ -835,7 +853,7 @@ export default function EventStudioForm({
     if (draft.locationPoint) {
         return {
         provider: normalizeMapProvider(draft.locationPoint.provider),
-        sourceMode: draft.locationPoint.sourceMode || 'web-event-studio-v2',
+        sourceMode: draft.locationPoint.sourceMode || 'pin_drag',
         providerPlaceId: draft.locationPoint.providerPlaceId || undefined,
         poiId: draft.locationPoint.poiId || undefined,
         adcode: draft.locationPoint.adcode || undefined,
@@ -867,7 +885,7 @@ export default function EventStudioForm({
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
       return {
       provider: 'geoapify',
-      sourceMode: 'web-event-studio-v2',
+      sourceMode: 'pin_drag',
       location: { lng: longitude, lat: latitude },
       nameI18n: {
         zh: draft.pickedPlaceName,
@@ -964,9 +982,13 @@ export default function EventStudioForm({
             ? ['startDate']
             : key === 'endDate'
               ? ['endDate']
-              : key === 'imageZones'
-                ? ['coverImage']
-                : [],
+              : key === 'ticketUrl'
+                ? ['ticketUrl']
+                : key === 'socialLinksText'
+                  ? ['socialLinks']
+                  : key === 'imageZones'
+                    ? ['coverImage']
+                    : [],
       }
     );
   };
@@ -983,6 +1005,11 @@ export default function EventStudioForm({
           ...current[key],
           [locale]: value,
         },
+        ...(key === 'city'
+          ? { clearCityI18nIntent: false }
+          : key === 'country'
+            ? { clearCountryI18nIntent: false }
+            : {}),
       }),
       {
         clearErrorKeys:
@@ -1690,6 +1717,21 @@ export default function EventStudioForm({
     );
     setTimetableDJMatchLoadingKeys((current) =>
       Object.fromEntries(Object.entries(current).filter(([key]) => !isTargetKey(key)))
+    );
+  };
+
+  const clearLocalizedI18n = (key: 'city' | 'country') => {
+    updateDraftState(
+      (current) => ({
+        ...current,
+        [key]: collapseLocalizedTextForPlainValue(current[key]),
+        ...(key === 'city'
+          ? { clearCityI18nIntent: true }
+          : { clearCountryI18nIntent: true }),
+      }),
+      {
+        clearErrorKeys: key === 'city' ? ['city'] : ['country'],
+      }
     );
   };
 
@@ -2472,6 +2514,7 @@ export default function EventStudioForm({
                     className={textAreaClassName}
                     placeholder='[{"type":"instagram","url":"https://instagram.com/example"}]'
                   />
+                  {errors.socialLinks ? <div className="mt-2 text-xs text-[#6a3530]">{errors.socialLinks}</div> : null}
                 </Field>
               </div>
 
@@ -2646,6 +2689,15 @@ export default function EventStudioForm({
                       placeholder="Shanghai"
                     />
                   </Field>
+                  <div className="lg:col-span-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => clearLocalizedI18n('city')}
+                      className="admin-studio-button-secondary px-4 py-2 text-xs"
+                    >
+                      Remove city i18n
+                    </button>
+                  </div>
                   <Field label="国家（中文）" error={errors.country}>
                     <input
                       value={draft.country.zh}
@@ -2662,6 +2714,15 @@ export default function EventStudioForm({
                       placeholder="China"
                     />
                   </Field>
+                  <div className="lg:col-span-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => clearLocalizedI18n('country')}
+                      className="admin-studio-button-secondary px-4 py-2 text-xs"
+                    >
+                      Remove country i18n
+                    </button>
+                  </div>
                   <div className="lg:col-span-2">
                     <Field label="详细地址（中文）" error={errors.detailAddress}>
                       <textarea
@@ -3865,6 +3926,7 @@ export default function EventStudioForm({
                 className={textInputClassName}
                 placeholder="https://..."
               />
+              {errors.ticketUrl ? <div className="mt-2 text-xs text-[#6a3530]">{errors.ticketUrl}</div> : null}
             </Field>
             <Field label="票务币种">
               <input

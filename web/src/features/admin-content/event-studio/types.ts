@@ -172,7 +172,9 @@ export type EventStudioDraft = {
   referenceLinksText: string;
   socialLinksText: string;
   city: EventStudioLocalizedText;
+  clearCityI18nIntent: boolean;
   country: EventStudioLocalizedText;
+  clearCountryI18nIntent: boolean;
   detailAddress: EventStudioLocalizedText;
   venueName: string;
   venueAddress: string;
@@ -209,6 +211,8 @@ export type EventStudioValidationErrors = Partial<Record<
   | 'startDate'
   | 'endDate'
   | 'timeZone'
+  | 'ticketUrl'
+  | 'socialLinks'
   | 'coverImage'
   | 'ticketTiers'
   | 'timetableSlots',

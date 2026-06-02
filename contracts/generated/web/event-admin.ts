@@ -110,11 +110,48 @@ export interface components {
             /** Format: date-time */
             selectedAt: string;
         };
+        /**
+         * @description Canonical map/location provider identifier.
+         * @enum {string}
+         */
+        EventLocationProvider: "amap" | "google" | "mapkit" | "mapbox" | "geoapify";
+        /**
+         * @description Canonical location acquisition mode.
+         * @enum {string}
+         */
+        EventLocationSourceMode: "manual_search" | "pin_drag" | "map_poi_click" | "my_location" | "legacy_coords";
+        EventLocationProviderMetaAmap: {
+            poiId?: string | null;
+            adcode?: string | null;
+        };
+        EventLocationProviderMetaGoogle: {
+            placeId?: string | null;
+            types?: string[] | null;
+        };
+        EventLocationProviderMetaMapkit: {
+            mapItemIdentifier?: string | null;
+        };
+        EventLocationProviderMetaMapbox: {
+            placeId?: string | null;
+            featureType?: string | null;
+        };
+        EventLocationProviderMetaGeoapify: {
+            placeId?: string | null;
+            featureType?: string | null;
+        };
+        EventLocationProviderMeta: {
+            amap?: components["schemas"]["EventLocationProviderMetaAmap"] | null;
+            google?: components["schemas"]["EventLocationProviderMetaGoogle"] | null;
+            mapkit?: components["schemas"]["EventLocationProviderMetaMapkit"] | null;
+            mapbox?: components["schemas"]["EventLocationProviderMetaMapbox"] | null;
+            geoapify?: components["schemas"]["EventLocationProviderMetaGeoapify"] | null;
+        };
         EventLocationPoint: {
-            provider: string;
-            sourceMode: string;
+            provider: components["schemas"]["EventLocationProvider"];
+            sourceMode: components["schemas"]["EventLocationSourceMode"];
             providerPlaceId?: string | null;
             poiId?: string | null;
+            adcode?: string | null;
             location: components["schemas"]["EventLocationCoordinate"];
             nameI18n?: components["schemas"]["LocalizedText"];
             addressI18n?: components["schemas"]["LocalizedText"];
@@ -123,14 +160,18 @@ export interface components {
             district?: string | null;
             province?: string | null;
             countryCode?: string | null;
+            providerMeta?: components["schemas"]["EventLocationProviderMeta"] | null;
         };
         EventSchedule: {
             mode: components["schemas"]["EventScheduleMode"];
             timeZone: string;
             dayRolloverHour: number;
         };
+        /** @description Canonical structured week row. On write/update, week identity is keyed by weekIndex. */
         EventWeek: {
+            /** @description Legacy database identifier surfaced for hydration only. Ignored on write/update. */
             id?: string | null;
+            /** @description Stable canonical identity key for week rows on write/update. */
             weekIndex: number;
             label?: string | null;
             /** Format: date */
@@ -139,8 +180,11 @@ export interface components {
             endDate: string;
             sortOrder?: number | null;
         };
+        /** @description Canonical structured event-day row. On write/update, event-day identity is keyed by eventDayId. */
         EventDay: {
+            /** @description Legacy database identifier surfaced for hydration only. Ignored on write/update. */
             id?: string | null;
+            /** @description Stable canonical identity key for event-day rows on write/update. */
             eventDayId: string;
             weekIndex: number;
             dayIndexInWeek: number;
@@ -160,7 +204,9 @@ export interface components {
             source?: string | null;
             fileName?: string | null;
         };
+        /** @description Ticket tiers are replace-all on create/update. The collection is rewritten in submitted order or sortOrder; tier id is not a stable update key. */
         EventTicketTierInput: {
+            /** @description Ignored on write/update. Ticket tiers do not currently support stable per-row patch semantics. */
             id?: string | null;
             name: string;
             price: number;
@@ -189,9 +235,12 @@ export interface components {
             memberNames?: string[] | null;
             festivalDayIndex?: number | null;
             djName: string;
+            /** @description When omitted or blank, clients must fallback to the first explicit stageOrder entry; otherwise use Main Stage. */
             stageName?: string | null;
             sortOrder?: number | null;
+            /** @description Event-local logical datetime string without timezone, formatted as YYYY-MM-DDTHH:mm:ss. */
             startTime?: string | null;
+            /** @description Event-local logical datetime string without timezone, formatted as YYYY-MM-DDTHH:mm:ss. */
             endTime?: string | null;
         };
         EventMutationBase: {
@@ -225,7 +274,9 @@ export interface components {
             /** Format: date */
             endDate: string;
             schedule?: components["schemas"]["EventSchedule"];
+            /** @description Full structured schedule week collection, keyed by weekIndex on write/update. */
             weeks?: components["schemas"]["EventWeek"][] | null;
+            /** @description Full structured schedule event-day collection, keyed by eventDayId on write/update. */
             eventDays?: components["schemas"]["EventDay"][] | null;
             timeZone?: string | null;
             timeZoneCity?: string | null;
@@ -241,6 +292,7 @@ export interface components {
             coverImageUrl?: string | null;
             lineupImageUrl?: string | null;
             imageAssets?: components["schemas"]["EventImageAsset"][] | null;
+            /** @description Replace-all ticket tier collection on create/update. Tier row ids are ignored on write. */
             ticketTiers?: components["schemas"]["EventTicketTierInput"][] | null;
             lineupArtists?: components["schemas"]["EventLineupArtistInput"][] | null;
             lineupSlots?: components["schemas"]["EventLineupSlotInput"][] | null;
@@ -252,24 +304,26 @@ export interface components {
         };
         CreateEventInput: components["schemas"]["EventMutationBase"];
         UpdateEventInput: components["schemas"]["EventMutationBase"] & {
-            /** @description Explicitly clears cityI18n when true. */
-            clearCityI18n?: boolean;
-            /** @description Explicitly clears countryI18n when true. */
-            clearCountryI18n?: boolean;
-            /** @description Explicitly clears wikiFestivalId when true. */
-            clearWikiFestivalId?: boolean;
-            /** @description Explicitly clears manualLocation when true. */
-            clearManualLocation?: boolean;
-            /** @description Explicitly clears locationPoint when true. */
-            clearLocationPoint?: boolean;
-            /** @description Explicitly clears latitude when true. */
-            clearLatitude?: boolean;
-            /** @description Explicitly clears longitude when true. */
-            clearLongitude?: boolean;
-            /** @description Explicitly clears stageOrder when true. */
-            clearStageOrder?: boolean;
-            /** @description Explicitly clears lineupSlots when true. */
-            clearLineupSlots?: boolean;
+            /** @description Explicitly clears cityI18n when true. Must only be emitted from explicit user intent. */
+            clearCityI18n: boolean;
+            /** @description Explicitly clears countryI18n when true. Must only be emitted from explicit user intent. */
+            clearCountryI18n: boolean;
+            /** @description Explicitly clears wikiFestivalId when true. When false, wikiFestivalId must still be explicitly present in the update payload. */
+            clearWikiFestivalId: boolean;
+            /** @description Explicitly clears manualLocation when true. When false, manualLocation must still be explicitly present in the update payload. */
+            clearManualLocation: boolean;
+            /** @description Explicitly clears locationPoint when true. When false, locationPoint must still be explicitly present in the update payload. */
+            clearLocationPoint: boolean;
+            /** @description Explicitly clears latitude when true. When false, latitude must still be explicitly present in the update payload. */
+            clearLatitude: boolean;
+            /** @description Explicitly clears longitude when true. When false, longitude must still be explicitly present in the update payload. */
+            clearLongitude: boolean;
+            /** @description Explicitly clears socialLinks when true. When false, socialLinks must still be explicitly present in the update payload. */
+            clearSocialLinks: boolean;
+            /** @description Explicitly clears stageOrder when true. When false, stageOrder must still be explicitly present in the update payload. */
+            clearStageOrder: boolean;
+            /** @description Explicitly clears lineupSlots when true. When false, lineupSlots must still be explicitly present in the update payload. */
+            clearLineupSlots: boolean;
         };
         EventSummary: {
             id: string;

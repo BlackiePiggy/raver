@@ -1,4 +1,6 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
+import createCrossMidnightFixture from "../../../contracts/fixtures/event/golden/create-cross-midnight.json";
+import updateClearI18nFixture from "../../../contracts/fixtures/event/golden/update-clear-i18n.json";
 
 import {
   buildEventStudioScheduleStructure,
@@ -13,6 +15,9 @@ import {
   mapEventStudioDraftToCreateInput,
   mapEventStudioDraftToUpdateInput,
 } from "../../src/features/admin-content/event-studio/mapper";
+import {
+  validateEventStudioDraft,
+} from "../../src/features/admin-content/event-studio/validation";
 import {
   hydrateDJStudioDraftFromDJ,
 } from "../../src/features/admin-content/dj-studio/draft";
@@ -58,7 +63,7 @@ const timezoneSelection = {
   lat: 31.2304,
   lng: 121.4737,
   population: 24870895,
-  label: "Shanghai, China · Asia/Shanghai",
+  label: "Shanghai, China 路 Asia/Shanghai",
   matchSource: "contract-parity",
 } as const;
 
@@ -87,7 +92,7 @@ const tests: TestCase[] = [
     run: () => {
       let draft = createEventStudioDraft();
       draft.name = {
-        zh: "未来电音派对",
+        zh: "鏈潵鐢甸煶娲惧",
         en: "Future Rave",
         ja: "",
         enFull: "",
@@ -104,19 +109,19 @@ const tests: TestCase[] = [
       draft.referenceLinksText = "https://example.com/a\nhttps://example.com/b";
       draft.socialLinksText = '[{"type":"instagram","url":"https://instagram.com/future-rave"}]';
       draft.city = {
-        zh: "上海",
+        zh: "\u4e0a\u6d77",
         en: "Shanghai",
         ja: "",
         enFull: "",
       };
       draft.country = {
-        zh: "中国",
+        zh: "\u4e2d\u56fd",
         en: "China",
         ja: "",
         enFull: "China",
       };
       draft.detailAddress = {
-        zh: "徐汇滨江 88 号",
+        zh: "\u5f90\u6c47\u6ee8\u6c5f 88 \u53f7",
         en: "88 Xuhui Riverside",
         ja: "",
         enFull: "",
@@ -196,15 +201,16 @@ const tests: TestCase[] = [
 
       assert.deepEqual(payload.weeks?.map((week) => week.weekIndex), [1]);
       assert.deepEqual(payload.eventDays?.map((day) => day.eventDayId), ["d1", "d2"]);
+      assert.equal(payload.city, createCrossMidnightFixture.city);
+      assert.equal(payload.country, createCrossMidnightFixture.country);
       assert.equal(payload.venueName, "The Warehouse");
       assert.equal(payload.venueAddress, "88 Xuhui Riverside");
       assert.equal(payload.sourceProvider, "manual");
       assert.deepEqual(payload.referenceLinks, ["https://example.com/a", "https://example.com/b"]);
       assert.deepEqual(payload.socialLinks, [{ type: "instagram", url: "https://instagram.com/future-rave" }]);
-      assert.equal(payload.manualLocation?.formattedAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 88 号");
-      assert.equal(payload.manualLocation?.formattedAddressI18n?.en, "China · Shanghai · 88 Xuhui Riverside");
-      assert.equal(payload.locationPoint?.formattedAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 88 号");
-      assert.equal(payload.locationPoint?.formattedAddressI18n?.en, "China · Shanghai · 88 Xuhui Riverside");
+      assert.equal(payload.manualLocation?.formattedAddressI18n?.zh, "\u4e2d\u56fd \u00b7 \u4e0a\u6d77 \u00b7 \u5f90\u6c47\u6ee8\u6c5f 88 \u53f7");
+      assert.equal(payload.manualLocation?.formattedAddressI18n?.en, "China \u00b7 Shanghai \u00b7 88 Xuhui Riverside");
+      assert.equal(payload.locationPoint, undefined);
       assert.deepEqual(
         payload.ticketTiers?.map(({ name, price, currency, sortOrder }) => ({ name, price, currency, sortOrder })),
         [
@@ -223,9 +229,116 @@ const tests: TestCase[] = [
       assert.equal(payload.lineupSlots?.[0]?.startTime, "2099-09-12T23:30:00");
       assert.equal(payload.lineupSlots?.[0]?.endTime, "2099-09-13T01:00:00");
       assert.equal(payload.lineupSlots?.[0]?.djName, "Anyma B2B MRAK");
-      assert.equal((payload.lineupSlots?.[0] as { performerType?: string })?.performerType, "b2b");
       assert.equal(payload.lineupSyncMode, "exact_align");
       assert.equal(payload.status, "upcoming");
+      assert.deepEqual(
+        payload.weeks?.map(({ weekIndex, startDate, endDate, sortOrder }) => ({ weekIndex, startDate, endDate, sortOrder })),
+        createCrossMidnightFixture.weeks.map(({ weekIndex, startDate, endDate, sortOrder }) => ({ weekIndex, startDate, endDate, sortOrder }))
+      );
+      assert.deepEqual(
+        payload.eventDays?.map(({ eventDayId, weekIndex, dayIndexInWeek, overallDayIndex, date, sortOrder }) => ({
+          eventDayId,
+          weekIndex,
+          dayIndexInWeek,
+          overallDayIndex,
+          date,
+          sortOrder,
+        })),
+        createCrossMidnightFixture.eventDays.map(({ eventDayId, weekIndex, dayIndexInWeek, overallDayIndex, date, sortOrder }) => ({
+          eventDayId,
+          weekIndex,
+          dayIndexInWeek,
+          overallDayIndex,
+          date,
+          sortOrder,
+        }))
+      );
+      assert.deepEqual(payload.ticketTiers, createCrossMidnightFixture.ticketTiers);
+      assert.deepEqual(payload.stageOrder, createCrossMidnightFixture.stageOrder);
+      assert.deepEqual(
+        payload.lineupArtists?.map(({ djId, memberDjIds, memberNames, djName, sortOrder }) => ({
+          djId,
+          memberDjIds,
+          memberNames,
+          djName,
+          sortOrder,
+        })),
+        createCrossMidnightFixture.lineupArtists.map(({ djId, memberDjIds, memberNames, djName, sortOrder }) => ({
+          djId,
+          memberDjIds,
+          memberNames,
+          djName,
+          sortOrder,
+        }))
+      );
+      assert.deepEqual(
+        payload.lineupSlots?.map(({
+          lineupArtistId,
+          eventDayId,
+          weekIndex,
+          dayIndexInWeek,
+          overallDayIndex,
+          localDate,
+          djId,
+          memberDjIds,
+          memberNames,
+          festivalDayIndex,
+          djName,
+          stageName,
+          sortOrder,
+          startTime,
+          endTime,
+        }) => ({
+          lineupArtistId,
+          eventDayId,
+          weekIndex,
+          dayIndexInWeek,
+          overallDayIndex,
+          localDate,
+          djId,
+          memberDjIds,
+          memberNames,
+          festivalDayIndex,
+          djName,
+          stageName,
+          sortOrder,
+          startTime,
+          endTime,
+        })),
+        createCrossMidnightFixture.lineupSlots.map(({
+          lineupArtistId,
+          eventDayId,
+          weekIndex,
+          dayIndexInWeek,
+          overallDayIndex,
+          localDate,
+          djId,
+          memberDjIds,
+          memberNames,
+          festivalDayIndex,
+          djName,
+          stageName,
+          sortOrder,
+          startTime,
+          endTime,
+        }) => ({
+          lineupArtistId,
+          eventDayId,
+          weekIndex,
+          dayIndexInWeek,
+          overallDayIndex,
+          localDate,
+          djId,
+          memberDjIds,
+          memberNames,
+          festivalDayIndex,
+          djName,
+          stageName,
+          sortOrder,
+          startTime,
+          endTime,
+        }))
+      );
     },
   },
   {
@@ -233,19 +346,19 @@ const tests: TestCase[] = [
     run: () => {
       let draft = createEventStudioDraft();
       draft.name = {
-        zh: "活动清空测试",
+        zh: "娲诲姩娓呯┖娴嬭瘯",
         en: "Clear Semantics Event",
         ja: "",
         enFull: "",
       };
       draft.city = {
-        zh: "上海",
+        zh: "涓婃捣",
         en: "Shanghai",
         ja: "",
         enFull: "",
       };
       draft.country = {
-        zh: "中国",
+        zh: "涓浗",
         en: "China",
         ja: "",
         enFull: "China",
@@ -263,11 +376,69 @@ const tests: TestCase[] = [
       assert.equal(payload.clearLocationPoint, true);
       assert.equal(payload.clearLatitude, true);
       assert.equal(payload.clearLongitude, true);
+      assert.equal(payload.clearSocialLinks, true);
+      assert.equal(Object.prototype.hasOwnProperty.call(payload, "socialLinks"), true);
+      assert.equal(payload.socialLinks, null);
       assert.equal(payload.clearStageOrder, true);
       assert.equal(payload.clearLineupSlots, true);
       assert.equal(payload.coverImageUrl, null);
       assert.equal(payload.lineupImageUrl, null);
       assert.equal(payload.timeZoneProvince, "Shanghai");
+    },
+  },
+  {
+    name: "mapEventStudioDraftToUpdateInput only clears city/country i18n after explicit user intent",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name = {
+        zh: "\u6e05\u7a7a I18n \u6d3b\u52a8",
+        en: "Clear I18n Event",
+        ja: "",
+        enFull: "",
+      };
+      draft.city = {
+        zh: "上海",
+        en: "Shanghai",
+        ja: "シャンハイ",
+        enFull: "",
+      };
+      draft.country = {
+        zh: "中国",
+        en: "China",
+        ja: "中国",
+        enFull: "People's Republic of China",
+      };
+      draft.clearCityI18nIntent = true;
+      draft.clearCountryI18nIntent = true;
+      draft.description = "Update payload that explicitly removes city/country localized write objects while preserving plain strings.";
+      draft.eventType = "festival";
+      draft.organizerName = "Raver Crew";
+      draft.sourceEventUrl = "https://example.com/events/clear-i18n";
+      draft.sourceProvider = "manual";
+      draft.ticketCurrency = "CNY";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.startDate = "2099-10-03";
+      draft.endDate = "2099-10-03";
+
+      draft = syncEventStudioScheduleStructure(draft);
+      const payload = mapEventStudioDraftToUpdateInput(draft);
+
+      assert.equal(payload.city, "Shanghai");
+      assert.equal(payload.country, "China");
+      assert.equal(payload.cityI18n, undefined);
+      assert.equal(payload.countryI18n, undefined);
+      assert.equal(payload.clearCityI18n, true);
+      assert.equal(payload.clearCountryI18n, true);
+      assert.equal(payload.nameI18n?.en, updateClearI18nFixture.nameI18n.en);
+      assert.equal(payload.city, updateClearI18nFixture.city);
+      assert.equal(payload.country, updateClearI18nFixture.country);
+      assert.equal(payload.clearManualLocation, updateClearI18nFixture.clearManualLocation);
+      assert.equal(payload.clearLocationPoint, updateClearI18nFixture.clearLocationPoint);
+      assert.equal(payload.clearLatitude, updateClearI18nFixture.clearLatitude);
+      assert.equal(payload.clearLongitude, updateClearI18nFixture.clearLongitude);
+      assert.equal(payload.clearSocialLinks, updateClearI18nFixture.clearSocialLinks);
+      assert.equal(payload.clearStageOrder, updateClearI18nFixture.clearStageOrder);
+      assert.equal(payload.clearLineupSlots, updateClearI18nFixture.clearLineupSlots);
     },
   },
   {
@@ -373,7 +544,7 @@ const tests: TestCase[] = [
     name: "mapEventStudioDraftToCreateInput preserves explicit day offsets for cross-day timetable slots",
     run: () => {
       let draft = createEventStudioDraft();
-      draft.name.zh = "跨天测试";
+      draft.name.zh = "璺ㄥぉ娴嬭瘯";
       draft.name.en = "Cross Day Test";
       draft.city.zh = "Shanghai";
       draft.country.en = "China";
@@ -404,6 +575,119 @@ const tests: TestCase[] = [
 
       assert.equal(payload.lineupSlots?.[0]?.startTime, "2099-09-12T23:30:00");
       assert.equal(payload.lineupSlots?.[0]?.endTime, "2099-09-13T01:00:00");
+    },
+  },
+  {
+    name: "mapEventStudioDraftToCreateInput falls back unnamed slots to first explicit stage order entry",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name.en = "Stage Fallback Test";
+      draft.city.en = "Shanghai";
+      draft.country.en = "China";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.startDate = "2099-09-12";
+      draft.endDate = "2099-09-12";
+      draft.stageOrder = ["Warehouse", "Garden"];
+      draft = syncEventStudioScheduleStructure(draft);
+
+      const firstEventDay = draft.eventDays[0];
+      const slot = createEmptyEventStudioTimetableSlotDraft(firstEventDay, "");
+      slot.eventDayId = firstEventDay.eventDayId;
+      slot.weekIndex = firstEventDay.weekIndex;
+      slot.dayIndexInWeek = firstEventDay.dayIndexInWeek;
+      slot.overallDayIndex = firstEventDay.overallDayIndex;
+      slot.localDate = firstEventDay.date;
+      slot.djId = "dj_anyma";
+      slot.memberDjIds = ["dj_anyma"];
+      slot.memberNamesText = "Anyma";
+      slot.stageName = "";
+      slot.startTime = "21:00";
+      slot.endTime = "22:00";
+      draft.timetableSlots = [slot];
+      draft.lineupArtists = fillLineupArtistsFromTimetableSlots([], [slot]);
+
+      const payload = mapEventStudioDraftToCreateInput(draft);
+
+      assert.deepEqual(payload.stageOrder, ["Warehouse", "Garden"]);
+      assert.equal(payload.lineupSlots?.[0]?.stageName, "Warehouse");
+    },
+  },
+  {
+    name: "mapEventStudioDraftToCreateInput uses Main Stage fallback for all unnamed slots without explicit stage order",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name.en = "Main Stage Fallback Test";
+      draft.city.en = "Shanghai";
+      draft.country.en = "China";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.startDate = "2099-09-12";
+      draft.endDate = "2099-09-12";
+      draft = syncEventStudioScheduleStructure(draft);
+
+      const firstEventDay = draft.eventDays[0];
+      const firstSlot = createEmptyEventStudioTimetableSlotDraft(firstEventDay, "");
+      firstSlot.eventDayId = firstEventDay.eventDayId;
+      firstSlot.weekIndex = firstEventDay.weekIndex;
+      firstSlot.dayIndexInWeek = firstEventDay.dayIndexInWeek;
+      firstSlot.overallDayIndex = firstEventDay.overallDayIndex;
+      firstSlot.localDate = firstEventDay.date;
+      firstSlot.djId = "dj_anyma";
+      firstSlot.memberDjIds = ["dj_anyma"];
+      firstSlot.memberNamesText = "Anyma";
+      firstSlot.stageName = "";
+      firstSlot.startTime = "21:00";
+      firstSlot.endTime = "22:00";
+
+      const secondSlot = createEmptyEventStudioTimetableSlotDraft(firstEventDay, "");
+      secondSlot.eventDayId = firstEventDay.eventDayId;
+      secondSlot.weekIndex = firstEventDay.weekIndex;
+      secondSlot.dayIndexInWeek = firstEventDay.dayIndexInWeek;
+      secondSlot.overallDayIndex = firstEventDay.overallDayIndex;
+      secondSlot.localDate = firstEventDay.date;
+      secondSlot.djId = "dj_mrak";
+      secondSlot.memberDjIds = ["dj_mrak"];
+      secondSlot.memberNamesText = "MRAK";
+      secondSlot.stageName = "";
+      secondSlot.startTime = "22:00";
+      secondSlot.endTime = "23:00";
+      secondSlot.sortOrder = 2;
+
+      draft.timetableSlots = [firstSlot, secondSlot];
+      draft.lineupArtists = fillLineupArtistsFromTimetableSlots([], [firstSlot, secondSlot]);
+
+      const payload = mapEventStudioDraftToCreateInput(draft);
+
+      assert.deepEqual(payload.stageOrder, ["Main Stage"]);
+      assert.equal(payload.lineupSlots?.[0]?.stageName, "Main Stage");
+      assert.equal(payload.lineupSlots?.[1]?.stageName, "Main Stage");
+    },
+  },
+  {
+    name: "validateEventStudioDraft rejects invalid socialLinks JSON",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name.en = "Validation Test";
+      draft.city.en = "Shanghai";
+      draft.country.en = "China";
+      draft.detailAddress.en = "88 Xuhui Riverside";
+      draft.startDate = "2099-09-12";
+      draft.endDate = "2099-09-12";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.socialLinksText = "{broken-json";
+      draft.imageZones.cover = [
+        {
+          id: "cover_1",
+          remoteUrl: "https://cdn.example.com/events/future-rave/cover.jpg",
+          fileName: "cover.jpg",
+          usage: "cover",
+          origin: "persisted-event",
+          sortOrder: 1,
+        },
+      ];
+
+      const errors = validateEventStudioDraft(draft);
+
+      assert.equal(errors.socialLinks, "Social Links JSON must be valid JSON.");
     },
   },
   {

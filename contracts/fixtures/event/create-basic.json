@@ -32,9 +32,11 @@
     "selectedAt": "2026-05-30T12:00:00.000Z"
   },
   "locationPoint": {
-    "provider": "manual",
-    "sourceMode": "manual_pick",
-    "providerPlaceId": "manual-shanghai-riverside",
+    "provider": "amap",
+    "sourceMode": "pin_drag",
+    "providerPlaceId": null,
+    "poiId": "B0FFG1AMPLE",
+    "adcode": "310104",
     "location": {
       "lng": 121.4542,
       "lat": 31.1891
@@ -49,7 +51,13 @@
     },
     "city": "Shanghai",
     "province": "Shanghai",
-    "countryCode": "CN"
+    "countryCode": "CN",
+    "providerMeta": {
+      "amap": {
+        "poiId": "B0FFG1AMPLE",
+        "adcode": "310104"
+      }
+    }
   },
   "latitude": 31.1891,
   "longitude": 121.4542,

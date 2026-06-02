@@ -18,6 +18,7 @@ const REQUIRED_CLEAR_FLAGS = [
   'clearLocationPoint',
   'clearLatitude',
   'clearLongitude',
+  'clearSocialLinks',
   'clearStageOrder',
   'clearLineupSlots',
 ] as const;
@@ -105,6 +106,9 @@ const ensureNoClearConflict = (body: EventAdminBody): void => {
   if (ensureBooleanFlag(body, 'clearLongitude') && body.longitude !== null && body.longitude !== undefined) {
     throw new EventAdminContractGuardrailError('clearLongitude=true conflicts with longitude payload');
   }
+  if (ensureBooleanFlag(body, 'clearSocialLinks') && hasMeaningfulValue(body.socialLinks)) {
+    throw new EventAdminContractGuardrailError('clearSocialLinks=true conflicts with socialLinks payload');
+  }
   if (ensureBooleanFlag(body, 'clearStageOrder') && Array.isArray(body.stageOrder) && body.stageOrder.length > 0) {
     throw new EventAdminContractGuardrailError('clearStageOrder=true conflicts with stageOrder payload');
   }
@@ -140,6 +144,7 @@ export const validateEventAdminContractPayload = (
     ensureExplicitFieldOrClear(body, 'locationPoint', 'clearLocationPoint');
     ensureExplicitFieldOrClear(body, 'latitude', 'clearLatitude');
     ensureExplicitFieldOrClear(body, 'longitude', 'clearLongitude');
+    ensureExplicitFieldOrClear(body, 'socialLinks', 'clearSocialLinks');
     ensureExplicitFieldOrClear(body, 'stageOrder', 'clearStageOrder');
     ensureExplicitFieldOrClear(body, 'lineupSlots', 'clearLineupSlots');
     ensureNoClearConflict(body);

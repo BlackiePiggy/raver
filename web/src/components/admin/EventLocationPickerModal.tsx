@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type EventLocationProvider = 'amap' | 'mapkit' | 'mapbox' | 'geoapify';
+export type EventLocationSourceMode =
+  | 'manual_search'
+  | 'pin_drag'
+  | 'map_poi_click'
+  | 'my_location'
+  | 'legacy_coords';
 
 export type EventLocationProviderMeta = {
   amap?: {
@@ -28,7 +34,7 @@ export type EventLocationProviderMeta = {
 
 export type EventLocationPoint = {
   provider: EventLocationProvider | 'google';
-  sourceMode: string;
+  sourceMode: EventLocationSourceMode;
   providerPlaceId?: string;
   poiId?: string;
   adcode?: string;

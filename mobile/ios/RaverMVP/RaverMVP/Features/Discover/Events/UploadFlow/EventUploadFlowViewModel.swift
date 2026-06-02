@@ -648,6 +648,7 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     func updateLocalizedField(_ keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>, value: String) {
         draft[keyPath: keyPath].setCurrentValue(value, preferredLanguage: draft.preferredLanguage)
+        resetLocalizedClearIntent(for: keyPath)
         draft.dirty = true
         saveDraft()
     }
@@ -658,6 +659,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         value: String
     ) {
         draft[keyPath: keyPath].setValue(value, for: language)
+        resetLocalizedClearIntent(for: keyPath)
         draft.dirty = true
         saveDraft()
     }
@@ -667,8 +669,47 @@ final class EventUploadFlowViewModel: ObservableObject {
         value: String
     ) {
         draft[keyPath: keyPath].enFull = value
+        resetLocalizedClearIntent(for: keyPath)
         draft.dirty = true
         saveDraft()
+    }
+
+    func clearLocalizedI18n(
+        _ keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>,
+        includeEnglishFull: Bool = false
+    ) {
+        let current = draft[keyPath: keyPath]
+        let preserved: EventUploadLocalizedFields
+        if !current.zh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            preserved = EventUploadLocalizedFields(zh: current.zh.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else if !current.en.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            preserved = EventUploadLocalizedFields(en: current.en.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else if !current.ja.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            preserved = EventUploadLocalizedFields(ja: current.ja.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else if includeEnglishFull && !current.enFull.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            preserved = EventUploadLocalizedFields(en: current.enFull.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else {
+            preserved = EventUploadLocalizedFields()
+        }
+        draft[keyPath: keyPath] = preserved
+        setLocalizedClearIntent(true, for: keyPath)
+        draft.dirty = true
+        saveDraft()
+    }
+
+    private func resetLocalizedClearIntent(for keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>) {
+        setLocalizedClearIntent(false, for: keyPath)
+    }
+
+    private func setLocalizedClearIntent(
+        _ value: Bool,
+        for keyPath: WritableKeyPath<EventUploadDraft, EventUploadLocalizedFields>
+    ) {
+        if keyPath == \.city {
+            draft.clearCityI18nIntent = value
+        } else if keyPath == \.country {
+            draft.clearCountryI18nIntent = value
+        }
     }
 
     func updateEventType(_ value: String) {
@@ -771,8 +812,38 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
+    func updateSourceProvider(_ value: String) {
+        draft.sourceProvider = value
+        draft.dirty = true
+        saveDraft()
+    }
+
     func updateOfficialWebsite(_ value: String) {
         draft.officialWebsite = value
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateVenueName(_ value: String) {
+        draft.venueName = value
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateVenueAddress(_ value: String) {
+        draft.venueAddress = value
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateReferenceLinksText(_ value: String) {
+        draft.referenceLinksText = value
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func updateSocialLinksText(_ value: String) {
+        draft.socialLinksText = value
         draft.dirty = true
         saveDraft()
     }
@@ -1526,6 +1597,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.longitude = result.longitude
         draft.pickedMapAddress = result.displayAddress
         draft.pickedPlaceName = result.placeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        draft.locationPoint = nil
 
         let language = draft.preferredLanguage
         if let city = result.city?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty,
@@ -1547,6 +1619,7 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.longitude = nil
         draft.pickedMapAddress = ""
         draft.pickedPlaceName = ""
+        draft.locationPoint = nil
         draft.dirty = true
         saveDraft()
     }
@@ -1554,6 +1627,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     func updateCoordinate(_ keyPath: WritableKeyPath<EventUploadDraft, Double?>, rawValue: String) {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         draft[keyPath: keyPath] = trimmed.isEmpty ? nil : Double(trimmed)
+        draft.locationPoint = nil
         draft.dirty = true
         saveDraft()
     }

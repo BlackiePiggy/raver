@@ -1,4 +1,5 @@
 import Foundation
+import OpenAPIRuntime
 import RaverEventAdminContract
 
 enum EventUploadMappers {
@@ -33,11 +34,13 @@ enum EventUploadMappers {
         from draft: EventUploadDraft,
         lineupSyncMode: EventLineupSyncMode = .incrementalFill
     ) -> EventAdminCreateInput {
-        .init(
+        let parsedSocialLinks = socialLinksPayload(from: draft.socialLinksText)
+        return .init(
             value1: mutationBase(
                 from: draft,
                 lineupSyncMode: lineupSyncMode,
-                includeTimeZoneSelectionMetadata: true
+                includeTimeZoneSelectionMetadata: true,
+                parsedSocialLinks: parsedSocialLinks
             )
         )
     }
@@ -46,21 +49,24 @@ enum EventUploadMappers {
         from draft: EventUploadDraft,
         lineupSyncMode: EventLineupSyncMode = .incrementalFill
     ) -> EventAdminUpdateInput {
+        let parsedSocialLinks = socialLinksPayload(from: draft.socialLinksText)
         let base = mutationBase(
             from: draft,
             lineupSyncMode: lineupSyncMode,
-            includeTimeZoneSelectionMetadata: draft.selectedTimeZoneLookup?.matchSource != "event-edit-hydrate"
+            includeTimeZoneSelectionMetadata: draft.selectedTimeZoneLookup?.matchSource != "event-edit-hydrate",
+            parsedSocialLinks: parsedSocialLinks
         )
         return .init(
             value1: base,
             value2: .init(
-                clearCityI18n: false,
-                clearCountryI18n: false,
+                clearCityI18n: draft.clearCityI18nIntent,
+                clearCountryI18n: draft.clearCountryI18nIntent,
                 clearWikiFestivalId: base.wikiFestivalId == nil,
                 clearManualLocation: base.manualLocation == nil,
                 clearLocationPoint: base.locationPoint == nil,
                 clearLatitude: base.latitude == nil,
                 clearLongitude: base.longitude == nil,
+                clearSocialLinks: shouldClearSocialLinks(parsedSocialLinks),
                 clearStageOrder: base.stageOrder == nil,
                 clearLineupSlots: base.lineupSlots == nil
             )
@@ -74,15 +80,16 @@ enum EventUploadMappers {
     private static func mutationBase(
         from draft: EventUploadDraft,
         lineupSyncMode: EventLineupSyncMode,
-        includeTimeZoneSelectionMetadata: Bool
+        includeTimeZoneSelectionMetadata: Bool,
+        parsedSocialLinks: ParsedOpenAPIValue = .omitted
     ) -> EventAdminComponents.Schemas.EventMutationBase {
         let language = draft.preferredLanguage
         let name = draft.name.primaryValue(preferredLanguage: language).trimmed
         let description = draft.description.trimmed.eventUploadMapperNilIfBlank
-        let city = draft.city.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
-        let country = draft.country.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
-        let cityI18n = localizedText(from: draft.city, language: language)
-        let countryI18n = localizedText(from: draft.country, language: language)
+        let city = canonicalLocationText(from: draft.city)?.trimmed.eventUploadMapperNilIfBlank
+        let country = canonicalLocationText(from: draft.country, preferEnglishFull: true)?.trimmed.eventUploadMapperNilIfBlank
+        let cityI18n = draft.clearCityI18nIntent ? nil : localizedText(from: draft.city, language: language)
+        let countryI18n = draft.clearCountryI18nIntent ? nil : localizedText(from: draft.country, language: language)
         let address = draft.detailAddress.primaryValue(preferredLanguage: language).trimmed.eventUploadMapperNilIfBlank
         let addressI18n = localizedText(from: draft.detailAddress, language: language)
         let timeZone = draft.timeZoneIdentifier.trimmed.eventUploadMapperNilIfBlank ?? "Asia/Shanghai"
@@ -101,7 +108,12 @@ enum EventUploadMappers {
             description: description,
             eventType: EventTypeOption.submissionValue(for: draft.eventType),
             organizerName: draft.organizerName.trimmed.eventUploadMapperNilIfBlank,
+            venueName: draft.venueName.trimmed.eventUploadMapperNilIfBlank,
+            venueAddress: draft.venueAddress.trimmed.eventUploadMapperNilIfBlank,
             sourceEventUrl: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
+            sourceProvider: draft.sourceProvider.trimmed.eventUploadMapperNilIfBlank,
+            referenceLinks: referenceLinks(from: draft.referenceLinksText),
+            socialLinks: socialLinksValue(from: parsedSocialLinks),
             city: city,
             cityI18n: adminLocalizedText(from: cityI18n),
             country: country,
@@ -167,6 +179,48 @@ enum EventUploadMappers {
             .first
     }
 
+    private static func referenceLinks(from rawValue: String) -> [String] {
+        let links = rawValue
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return links
+    }
+
+    private enum ParsedOpenAPIValue {
+        case omitted
+        case value(OpenAPIValueContainer)
+        case invalid
+    }
+
+    private static func socialLinksPayload(from rawValue: String) -> ParsedOpenAPIValue {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .omitted }
+        guard let data = trimmed.data(using: .utf8),
+              let value = try? JSONDecoder().decode(OpenAPIValueContainer.self, from: data) else {
+            return .invalid
+        }
+        return .value(value)
+    }
+
+    private static func socialLinksValue(from parsed: ParsedOpenAPIValue) -> OpenAPIValueContainer? {
+        switch parsed {
+        case .value(let value):
+            return value
+        case .omitted, .invalid:
+            return nil
+        }
+    }
+
+    private static func shouldClearSocialLinks(_ parsed: ParsedOpenAPIValue) -> Bool {
+        switch parsed {
+        case .omitted:
+            return true
+        case .value, .invalid:
+            return false
+        }
+    }
+
     private static func localizedText(from fields: EventUploadLocalizedFields, language: EventUploadPreferredLanguage) -> WebBiText? {
         let en = fields.en.trimmed
         let zh = fields.zh.trimmed
@@ -183,6 +237,20 @@ enum EventUploadMappers {
             enFull: enFull
         )
         return text
+    }
+
+    private static func canonicalLocationText(
+        from fields: EventUploadLocalizedFields,
+        preferEnglishFull: Bool = false
+    ) -> String? {
+        let en = fields.en.trimmed.eventUploadMapperNilIfBlank
+        let zh = fields.zh.trimmed.eventUploadMapperNilIfBlank
+        let ja = fields.ja.trimmed.eventUploadMapperNilIfBlank
+        let enFull = fields.enFull.trimmed.eventUploadMapperNilIfBlank
+        if preferEnglishFull {
+            return en ?? enFull ?? zh ?? ja
+        }
+        return en ?? zh ?? ja ?? enFull
     }
 
     private static func manualLocation(
@@ -233,20 +301,44 @@ enum EventUploadMappers {
         country: String?,
         countryI18n: WebBiText?
     ) -> WebEventLocationPoint? {
-        guard let latitude = draft.latitude, let longitude = draft.longitude else { return nil }
-        let mapAddress = draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank
-        let addressText = mapAddress
-            .map { localizedSingleText($0, language: draft.preferredLanguage) }
-            ?? addressI18n.flatMap(normalizedLocalizedAddress)
-            ?? address
-                .map { $0.trimmed }
-                .flatMap { $0.eventUploadMapperNilIfBlank }
-                .map { localizedSingleText($0, language: draft.preferredLanguage) }
-        let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank
-            .map { localizedSingleText($0, language: draft.preferredLanguage) }
-        let formatted = addressText.map {
-            formattedAddress(
-                detailAddressI18n: $0,
+        guard let point = normalizedLocationPointWithRealProvenance(from: draft.locationPoint),
+              let latitude = draft.latitude,
+              let longitude = draft.longitude else {
+            return nil
+        }
+        var next = point
+        next.location = WebEventLocationCoordinate(lng: longitude, lat: latitude)
+
+        if let mapAddress = draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank {
+            let localizedMapAddress = localizedSingleText(mapAddress, language: draft.preferredLanguage)
+            next.addressI18n = localizedMapAddress
+            next.formattedAddressI18n = formattedAddress(
+                detailAddressI18n: localizedMapAddress,
+                cityI18n: cityI18n ?? city.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                },
+                countryI18n: countryI18n ?? country.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                }
+            )
+        } else if let localizedAddress = addressI18n.flatMap(normalizedLocalizedAddress) {
+            next.addressI18n = localizedAddress
+            next.formattedAddressI18n = formattedAddress(
+                detailAddressI18n: localizedAddress,
+                cityI18n: cityI18n ?? city.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                },
+                countryI18n: countryI18n ?? country.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                }
+            )
+        } else if let fallbackAddress = address?
+            .trimmed
+            .eventUploadMapperNilIfBlank
+            .map({ localizedSingleText($0, language: draft.preferredLanguage) }) {
+            next.addressI18n = fallbackAddress
+            next.formattedAddressI18n = formattedAddress(
+                detailAddressI18n: fallbackAddress,
                 cityI18n: cityI18n ?? city.map {
                     localizedSingleText($0, language: draft.preferredLanguage)
                 },
@@ -255,15 +347,16 @@ enum EventUploadMappers {
                 }
             )
         }
-        return WebEventLocationPoint(
-            provider: "apple-mapkit",
-            sourceMode: "ios-event-upload-v2",
-            location: WebEventLocationCoordinate(lng: longitude, lat: latitude),
-            nameI18n: placeName,
-            addressI18n: addressText,
-            formattedAddressI18n: formatted,
-            city: city
-        )
+
+        if let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank {
+            next.nameI18n = localizedSingleText(placeName, language: draft.preferredLanguage)
+        }
+
+        if let city = city?.trimmed.eventUploadMapperNilIfBlank {
+            next.city = city
+        }
+
+        return next
     }
 
     private static func formattedAddress(
@@ -330,15 +423,14 @@ enum EventUploadMappers {
     }
 
     private static func normalizedStages(from draft: EventUploadDraft) -> [String]? {
-        let values = draft.stageEntries.enumerated().map { index, stage in
-            let trimmed = stage.trimmed
-            return trimmed.isEmpty ? defaultStageName(at: index) : trimmed
-        }
+        let values = draft.stageEntries
+            .map { $0.trimmed }
+            .filter { !$0.isEmpty }
         return values.isEmpty ? nil : values
     }
 
-    private static func defaultStageName(at index: Int) -> String {
-        index == 0 ? "Main Stage" : "Stage \(index + 1)"
+    private static func defaultStageName(stageOrder: [String]?) -> String {
+        stageOrder?.first?.trimmed.eventUploadMapperNilIfBlank ?? "Main Stage"
     }
 
     private static func ticketTierInputs(from ticket: EventUploadTicketDraft) -> [EventTicketTierInput]? {
@@ -381,6 +473,7 @@ enum EventUploadMappers {
     }
 
     private static func lineupSlotInputs(from draft: EventUploadDraft) -> [EventLineupSlotInput]? {
+        let normalizedStageOrder = normalizedStages(from: draft)
         var lineupArtistIDByKey: [String: String] = [:]
         for artist in lineupArtistInputs(from: draft) ?? [] {
             guard let id = artist.id?.trimmed.eventUploadMapperNilIfBlank else { continue }
@@ -411,7 +504,7 @@ enum EventUploadMappers {
                 memberNames: performerNames,
                 festivalDayIndex: nil,
                 djName: name,
-                stageName: slot.stageName.trimmed.eventUploadMapperNilIfBlank ?? defaultStageName(at: 0),
+                stageName: slot.stageName.trimmed.eventUploadMapperNilIfBlank ?? defaultStageName(stageOrder: normalizedStageOrder),
                 sortOrder: index + 1,
                 startTime: slot.startTime,
                 endTime: normalizedLineupEndTime(start: slot.startTime, end: slot.endTime)
@@ -492,11 +585,14 @@ enum EventUploadMappers {
         from point: WebEventLocationPoint?
     ) -> EventAdminComponents.Schemas.EventLocationPoint? {
         guard let point, let location = point.location else { return nil }
+        let provider = normalizedLocationProvider(from: point.provider) ?? .mapkit
+        let sourceMode = normalizedLocationSourceMode(from: point.sourceMode) ?? .pinDrag
         return .init(
-            provider: point.provider ?? "",
-            sourceMode: point.sourceMode ?? "",
+            provider: provider,
+            sourceMode: sourceMode,
             providerPlaceId: point.providerPlaceId,
             poiId: point.poiId,
+            adcode: point.adcode,
             location: .init(lng: location.lng, lat: location.lat),
             nameI18n: adminLocalizedText(from: point.nameI18n),
             addressI18n: adminLocalizedText(from: point.addressI18n),
@@ -504,7 +600,8 @@ enum EventUploadMappers {
             city: point.city,
             district: point.district,
             province: point.province,
-            countryCode: point.countryCode
+            countryCode: point.countryCode,
+            providerMeta: adminLocationProviderMeta(from: point.providerMeta)
         )
     }
 
@@ -623,10 +720,156 @@ enum EventUploadMappers {
                 djName: $0.djName,
                 stageName: $0.stageName,
                 sortOrder: $0.sortOrder,
-                startTime: $0.startTime?.eventUploadISO8601FractionalString,
-                endTime: $0.endTime?.eventUploadISO8601FractionalString
+                startTime: $0.startTime?.eventArchiveLocalDateTimeText(in: timeZone),
+                endTime: $0.endTime?.eventArchiveLocalDateTimeText(in: timeZone)
             )
         }
+    }
+
+    private static func normalizedLocationProvider(
+        from rawValue: String?
+    ) -> EventAdminComponents.Schemas.EventLocationProvider? {
+        guard let normalized = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !normalized.isEmpty else {
+            return nil
+        }
+        switch normalized {
+        case "apple-mapkit", "apple_mapkit":
+            return .mapkit
+        default:
+            return .init(rawValue: normalized)
+        }
+    }
+
+    private static func normalizedLocationSourceMode(
+        from rawValue: String?
+    ) -> EventAdminComponents.Schemas.EventLocationSourceMode? {
+        guard let normalized = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !normalized.isEmpty else {
+            return nil
+        }
+        switch normalized {
+        case "composed_search", "picker_search":
+            return .manualSearch
+        case "manual_pick", "manual_pin", "ios-event-upload-v2", "web-event-studio-v2":
+            return .pinDrag
+        case "server_normalized":
+            return .legacyCoords
+        default:
+            return .init(rawValue: normalized)
+        }
+    }
+
+    private static func adminLocationProviderMeta(
+        from meta: WebEventLocationProviderMeta?
+    ) -> EventAdminComponents.Schemas.EventLocationProviderMeta? {
+        guard let meta else { return nil }
+        let payload = EventAdminComponents.Schemas.EventLocationProviderMeta(
+            amap: meta.amap.map {
+                .init(
+                    poiId: $0.poiId,
+                    adcode: $0.adcode
+                )
+            },
+            google: meta.google.map {
+                .init(
+                    placeId: $0.placeId,
+                    types: $0.types
+                )
+            },
+            mapkit: meta.mapkit.map {
+                .init(mapItemIdentifier: $0.mapItemIdentifier)
+            },
+            mapbox: meta.mapbox.map {
+                .init(
+                    placeId: $0.placeId,
+                    featureType: $0.featureType
+                )
+            },
+            geoapify: meta.geoapify.map {
+                .init(
+                    placeId: $0.placeId,
+                    featureType: $0.featureType
+                )
+            }
+        )
+        let hasValue = payload.amap != nil
+            || payload.google != nil
+            || payload.mapkit != nil
+            || payload.mapbox != nil
+            || payload.geoapify != nil
+        return hasValue ? payload : nil
+    }
+
+    private static func normalizedLocationPointWithRealProvenance(
+        from point: WebEventLocationPoint?
+    ) -> WebEventLocationPoint? {
+        guard var point else { return nil }
+        let providerPlaceId = point.providerPlaceId?.trimmed.eventUploadMapperNilIfBlank
+        let poiId = point.poiId?.trimmed.eventUploadMapperNilIfBlank
+        let adcode = point.adcode?.trimmed.eventUploadMapperNilIfBlank
+        let providerMeta = normalizedProviderMeta(point.providerMeta)
+        let hasProvenance = providerPlaceId != nil
+            || poiId != nil
+            || adcode != nil
+            || providerMeta != nil
+        guard hasProvenance else { return nil }
+
+        point.providerPlaceId = providerPlaceId
+        point.poiId = poiId
+        point.adcode = adcode
+        point.providerMeta = providerMeta
+        return point
+    }
+
+    private static func normalizedProviderMeta(
+        _ meta: WebEventLocationProviderMeta?
+    ) -> WebEventLocationProviderMeta? {
+        guard let meta else { return nil }
+        let normalized = WebEventLocationProviderMeta(
+            amap: {
+                let poiId = meta.amap?.poiId?.trimmed.eventUploadMapperNilIfBlank
+                let adcode = meta.amap?.adcode?.trimmed.eventUploadMapperNilIfBlank
+                guard poiId != nil || adcode != nil else { return nil }
+                return .init(poiId: poiId, adcode: adcode)
+            }(),
+            google: {
+                let placeId = meta.google?.placeId?.trimmed.eventUploadMapperNilIfBlank
+                let types = meta.google?.types?
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                guard placeId != nil || (types?.isEmpty == false) else { return nil }
+                return .init(placeId: placeId, types: types)
+            }(),
+            mapkit: {
+                let mapItemIdentifier = meta.mapkit?.mapItemIdentifier?.trimmed.eventUploadMapperNilIfBlank
+                guard mapItemIdentifier != nil else { return nil }
+                return .init(mapItemIdentifier: mapItemIdentifier)
+            }(),
+            mapbox: {
+                let placeId = meta.mapbox?.placeId?.trimmed.eventUploadMapperNilIfBlank
+                let featureType = meta.mapbox?.featureType?.trimmed.eventUploadMapperNilIfBlank
+                guard placeId != nil || featureType != nil else { return nil }
+                return .init(placeId: placeId, featureType: featureType)
+            }(),
+            geoapify: {
+                let placeId = meta.geoapify?.placeId?.trimmed.eventUploadMapperNilIfBlank
+                let featureType = meta.geoapify?.featureType?.trimmed.eventUploadMapperNilIfBlank
+                guard placeId != nil || featureType != nil else { return nil }
+                return .init(placeId: placeId, featureType: featureType)
+            }()
+        )
+
+        let hasValue = normalized.amap != nil
+            || normalized.google != nil
+            || normalized.mapkit != nil
+            || normalized.mapbox != nil
+            || normalized.geoapify != nil
+        return hasValue ? normalized : nil
     }
 }
 
@@ -637,14 +880,5 @@ private extension String {
 
     var eventUploadMapperNilIfBlank: String? {
         trimmed.isEmpty ? nil : trimmed
-    }
-}
-
-private extension Date {
-    var eventUploadISO8601FractionalString: String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter.string(from: self)
     }
 }

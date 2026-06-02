@@ -329,6 +329,106 @@ components:
         selectedAt:
           type: string
           format: date-time
+    EventLocationProvider:
+      type: string
+      description: Canonical map/location provider identifier.
+      enum:
+        - amap
+        - google
+        - mapkit
+        - mapbox
+        - geoapify
+    EventLocationSourceMode:
+      type: string
+      description: Canonical location acquisition mode.
+      enum:
+        - manual_search
+        - pin_drag
+        - map_poi_click
+        - my_location
+        - legacy_coords
+    EventLocationProviderMetaAmap:
+      type: object
+      additionalProperties: false
+      properties:
+        poiId:
+          type:
+            - string
+            - 'null'
+        adcode:
+          type:
+            - string
+            - 'null'
+    EventLocationProviderMetaGoogle:
+      type: object
+      additionalProperties: false
+      properties:
+        placeId:
+          type:
+            - string
+            - 'null'
+        types:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+    EventLocationProviderMetaMapkit:
+      type: object
+      additionalProperties: false
+      properties:
+        mapItemIdentifier:
+          type:
+            - string
+            - 'null'
+    EventLocationProviderMetaMapbox:
+      type: object
+      additionalProperties: false
+      properties:
+        placeId:
+          type:
+            - string
+            - 'null'
+        featureType:
+          type:
+            - string
+            - 'null'
+    EventLocationProviderMetaGeoapify:
+      type: object
+      additionalProperties: false
+      properties:
+        placeId:
+          type:
+            - string
+            - 'null'
+        featureType:
+          type:
+            - string
+            - 'null'
+    EventLocationProviderMeta:
+      type: object
+      additionalProperties: false
+      properties:
+        amap:
+          allOf:
+            - $ref: '#/components/schemas/EventLocationProviderMetaAmap'
+          nullable: true
+        google:
+          allOf:
+            - $ref: '#/components/schemas/EventLocationProviderMetaGoogle'
+          nullable: true
+        mapkit:
+          allOf:
+            - $ref: '#/components/schemas/EventLocationProviderMetaMapkit'
+          nullable: true
+        mapbox:
+          allOf:
+            - $ref: '#/components/schemas/EventLocationProviderMetaMapbox'
+          nullable: true
+        geoapify:
+          allOf:
+            - $ref: '#/components/schemas/EventLocationProviderMetaGeoapify'
+          nullable: true
     EventLocationPoint:
       type: object
       additionalProperties: false
@@ -338,14 +438,18 @@ components:
         - location
       properties:
         provider:
-          type: string
+          $ref: '#/components/schemas/EventLocationProvider'
         sourceMode:
-          type: string
+          $ref: '#/components/schemas/EventLocationSourceMode'
         providerPlaceId:
           type:
             - string
             - 'null'
         poiId:
+          type:
+            - string
+            - 'null'
+        adcode:
           type:
             - string
             - 'null'
@@ -376,6 +480,10 @@ components:
           type:
             - string
             - 'null'
+        providerMeta:
+          allOf:
+            - $ref: '#/components/schemas/EventLocationProviderMeta'
+          nullable: true
     EventSchedule:
       type: object
       additionalProperties: false
@@ -392,6 +500,7 @@ components:
           type: integer
     EventWeek:
       type: object
+      description: Canonical structured week row. On write/update, week identity is keyed by weekIndex.
       additionalProperties: false
       required:
         - weekIndex
@@ -402,8 +511,10 @@ components:
           type:
             - string
             - 'null'
+          description: Legacy database identifier surfaced for hydration only. Ignored on write/update.
         weekIndex:
           type: integer
+          description: Stable canonical identity key for week rows on write/update.
         label:
           type:
             - string
@@ -420,6 +531,7 @@ components:
             - 'null'
     EventDay:
       type: object
+      description: Canonical structured event-day row. On write/update, event-day identity is keyed by eventDayId.
       additionalProperties: false
       required:
         - eventDayId
@@ -432,8 +544,10 @@ components:
           type:
             - string
             - 'null'
+          description: Legacy database identifier surfaced for hydration only. Ignored on write/update.
         eventDayId:
           type: string
+          description: Stable canonical identity key for event-day rows on write/update.
         weekIndex:
           type: integer
         dayIndexInWeek:
@@ -489,6 +603,7 @@ components:
             - 'null'
     EventTicketTierInput:
       type: object
+      description: Ticket tiers are replace-all on create/update. The collection is rewritten in submitted order or sortOrder; tier id is not a stable update key.
       additionalProperties: false
       required:
         - name
@@ -498,6 +613,7 @@ components:
           type:
             - string
             - 'null'
+          description: Ignored on write/update. Ticket tiers do not currently support stable per-row patch semantics.
         name:
           type: string
         price:
@@ -607,6 +723,7 @@ components:
           type:
             - string
             - 'null'
+          description: When omitted or blank, clients must fallback to the first explicit stageOrder entry; otherwise use Main Stage.
         sortOrder:
           type:
             - integer
@@ -615,10 +732,12 @@ components:
           type:
             - string
             - 'null'
+          description: Event-local logical datetime string without timezone, formatted as YYYY-MM-DDTHH:mm:ss.
         endTime:
           type:
             - string
             - 'null'
+          description: Event-local logical datetime string without timezone, formatted as YYYY-MM-DDTHH:mm:ss.
     EventMutationBase:
       type: object
       additionalProperties: false
@@ -733,12 +852,14 @@ components:
           type:
             - array
             - 'null'
+          description: Full structured schedule week collection, keyed by weekIndex on write/update.
           items:
             $ref: '#/components/schemas/EventWeek'
         eventDays:
           type:
             - array
             - 'null'
+          description: Full structured schedule event-day collection, keyed by eventDayId on write/update.
           items:
             $ref: '#/components/schemas/EventDay'
         timeZone:
@@ -805,6 +926,7 @@ components:
           type:
             - array
             - 'null'
+          description: Replace-all ticket tier collection on create/update. Tier row ids are ignored on write.
           items:
             $ref: '#/components/schemas/EventTicketTierInput'
         lineupArtists:
@@ -850,35 +972,55 @@ components:
       allOf:
         - $ref: '#/components/schemas/EventMutationBase'
         - type: object
+          description: >
+            Event updates use full-state semantics for destructive fields. Every clear flag below must be sent on
+            update. For `wikiFestivalId`, `manualLocation`, `locationPoint`, `latitude`, `longitude`, `socialLinks`,
+            `stageOrder`, and `lineupSlots`, clients must either send the field explicitly or set the corresponding
+            clear flag to true. `clearCityI18n` and `clearCountryI18n` are destructive-only flags and must only be
+            emitted from explicit user intent.
           additionalProperties: false
+          required:
+            - clearCityI18n
+            - clearCountryI18n
+            - clearWikiFestivalId
+            - clearManualLocation
+            - clearLocationPoint
+            - clearLatitude
+            - clearLongitude
+            - clearSocialLinks
+            - clearStageOrder
+            - clearLineupSlots
           properties:
             clearCityI18n:
               type: boolean
-              description: Explicitly clears cityI18n when true.
+              description: Explicitly clears cityI18n when true. Must only be emitted from explicit user intent.
             clearCountryI18n:
               type: boolean
-              description: Explicitly clears countryI18n when true.
+              description: Explicitly clears countryI18n when true. Must only be emitted from explicit user intent.
             clearWikiFestivalId:
               type: boolean
-              description: Explicitly clears wikiFestivalId when true.
+              description: Explicitly clears wikiFestivalId when true. When false, wikiFestivalId must still be explicitly present in the update payload.
             clearManualLocation:
               type: boolean
-              description: Explicitly clears manualLocation when true.
+              description: Explicitly clears manualLocation when true. When false, manualLocation must still be explicitly present in the update payload.
             clearLocationPoint:
               type: boolean
-              description: Explicitly clears locationPoint when true.
+              description: Explicitly clears locationPoint when true. When false, locationPoint must still be explicitly present in the update payload.
             clearLatitude:
               type: boolean
-              description: Explicitly clears latitude when true.
+              description: Explicitly clears latitude when true. When false, latitude must still be explicitly present in the update payload.
             clearLongitude:
               type: boolean
-              description: Explicitly clears longitude when true.
+              description: Explicitly clears longitude when true. When false, longitude must still be explicitly present in the update payload.
+            clearSocialLinks:
+              type: boolean
+              description: Explicitly clears socialLinks when true. When false, socialLinks must still be explicitly present in the update payload.
             clearStageOrder:
               type: boolean
-              description: Explicitly clears stageOrder when true.
+              description: Explicitly clears stageOrder when true. When false, stageOrder must still be explicitly present in the update payload.
             clearLineupSlots:
               type: boolean
-              description: Explicitly clears lineupSlots when true.
+              description: Explicitly clears lineupSlots when true. When false, lineupSlots must still be explicitly present in the update payload.
     EventSummary:
       type: object
       additionalProperties: false

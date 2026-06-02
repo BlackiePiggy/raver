@@ -480,6 +480,15 @@ extension Date {
         return formatter.string(from: self)
     }
 
+    func eventArchiveLocalDateTimeText(in timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return formatter.string(from: self)
+    }
+
     func normalizedEventArchiveDate(in timeZone: TimeZone) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone

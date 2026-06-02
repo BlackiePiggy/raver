@@ -1,0 +1,121 @@
+{
+  "name": "Neon Port",
+  "nameI18n": {
+    "en": "Neon Port",
+    "zh": "\u9713\u8679\u7801\u5934"
+  },
+  "wikiFestivalId": null,
+  "abbreviation": null,
+  "description": "Single-day event authored from a POI-backed map pick.",
+  "eventType": "club",
+  "organizerName": "Raver Crew",
+  "venueName": "Riverside Warehouse",
+  "venueAddress": "88 Xuhui Riverside",
+  "sourceEventUrl": "https://example.com/events/neon-port",
+  "sourceProvider": "map-picker",
+  "referenceLinks": [
+    "https://example.com/events/neon-port"
+  ],
+  "socialLinks": null,
+  "city": "Shanghai",
+  "cityI18n": {
+    "en": "Shanghai",
+    "zh": "\u4e0a\u6d77"
+  },
+  "country": "China",
+  "countryI18n": {
+    "en": "China",
+    "zh": "\u4e2d\u56fd",
+    "enFull": "China"
+  },
+  "manualLocation": {
+    "detailAddressI18n": {
+      "en": "88 Xuhui Riverside",
+      "zh": "\u5f90\u6c47\u6ee8\u6c5f 88 \u53f7"
+    },
+    "formattedAddressI18n": {
+      "en": "China \u00b7 Shanghai \u00b7 88 Xuhui Riverside",
+      "zh": "\u4e2d\u56fd \u00b7 \u4e0a\u6d77 \u00b7 \u5f90\u6c47\u6ee8\u6c5f 88 \u53f7"
+    },
+    "selectedAt": "2099-09-01T00:00:00.000Z"
+  },
+  "locationPoint": {
+    "provider": "amap",
+    "sourceMode": "map_poi_click",
+    "providerPlaceId": null,
+    "poiId": "B0FFG1AMPLE",
+    "adcode": "310104",
+    "location": {
+      "lng": 121.4542,
+      "lat": 31.1891
+    },
+    "nameI18n": {
+      "en": "Riverside Warehouse",
+      "zh": "\u6ee8\u6c5f\u4ed3\u5e93"
+    },
+    "formattedAddressI18n": {
+      "en": "China \u00b7 Shanghai \u00b7 Riverside Warehouse",
+      "zh": "\u4e2d\u56fd \u00b7 \u4e0a\u6d77 \u00b7 \u6ee8\u6c5f\u4ed3\u5e93"
+    },
+    "city": "Shanghai",
+    "province": "Shanghai",
+    "countryCode": "CN",
+    "providerMeta": {
+      "amap": {
+        "poiId": "B0FFG1AMPLE",
+        "adcode": "310104"
+      }
+    }
+  },
+  "latitude": 31.1891,
+  "longitude": 121.4542,
+  "ticketUrl": null,
+  "ticketCurrency": "CNY",
+  "ticketNotes": null,
+  "officialWebsite": null,
+  "startDate": "2099-09-19",
+  "endDate": "2099-09-19",
+  "schedule": {
+    "mode": "single_day",
+    "timeZone": "Asia/Shanghai",
+    "dayRolloverHour": 6
+  },
+  "weeks": [
+    {
+      "weekIndex": 1,
+      "label": "Week 1",
+      "startDate": "2099-09-19",
+      "endDate": "2099-09-19",
+      "sortOrder": 1
+    }
+  ],
+  "eventDays": [
+    {
+      "eventDayId": "d1",
+      "weekIndex": 1,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 1,
+      "label": "Day 1",
+      "weekday": "saturday",
+      "date": "2099-09-19",
+      "sortOrder": 1
+    }
+  ],
+  "timeZone": "Asia/Shanghai",
+  "timeZoneCity": "Shanghai",
+  "timeZoneProvince": "Shanghai",
+  "timeZoneCountry": "China",
+  "timeZoneStateAnsi": "SH",
+  "timeZoneLat": 31.2304,
+  "timeZoneLng": 121.4737,
+  "dayRolloverHour": 6,
+  "coverImageUrl": null,
+  "lineupImageUrl": null,
+  "imageAssets": null,
+  "ticketTiers": null,
+  "stageOrder": null,
+  "lineupArtists": null,
+  "lineupSlots": null,
+  "lineupSyncMode": "incremental_fill",
+  "status": "upcoming"
+}

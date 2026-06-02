@@ -7,10 +7,17 @@ import {
   EventStudioTimetableSlotDraft,
   EventStudioUpdateInput,
 } from './types';
+import type { components as EventContractComponents } from '../../../../../contracts/generated/web/event-admin';
 import {
   eventStudioLineupArtistIdentityKey,
   eventStudioTimetableSlotIdentityKey,
 } from './draft';
+import { formatDateInputInTimeZone } from '@/lib/timezone';
+
+type EventLocationProvider = EventContractComponents['schemas']['EventLocationProvider'];
+type EventLocationSourceMode = EventContractComponents['schemas']['EventLocationSourceMode'];
+type EventLocationProviderMeta = EventContractComponents['schemas']['EventLocationProviderMeta'];
+type EventStudioLocationProviderMetaInput = NonNullable<NonNullable<EventStudioDraft['locationPoint']>['providerMeta']>;
 
 const trimOrNull = (value?: string | null): string | null => {
   const trimmed = String(value || '').trim();
@@ -42,6 +49,105 @@ const numericOrNull = (value?: string | null): number | null => {
   if (!trimmed) return null;
   const numeric = Number(trimmed);
   return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeLocationProvider = (value?: string | null): EventLocationProvider | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'apple-mapkit' || normalized === 'apple_mapkit') return 'mapkit';
+  if (normalized === 'amap' || normalized === 'google' || normalized === 'mapkit' || normalized === 'mapbox' || normalized === 'geoapify') {
+    return normalized;
+  }
+  return null;
+};
+
+const normalizeLocationSourceMode = (value?: string | null): EventLocationSourceMode | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'composed_search' || normalized === 'picker_search') return 'manual_search';
+  if (
+    normalized === 'manual_pick'
+    || normalized === 'manual_pin'
+    || normalized === 'ios-event-upload-v2'
+    || normalized === 'web-event-studio-v2'
+  ) {
+    return 'pin_drag';
+  }
+  if (
+    normalized === 'manual_search'
+    || normalized === 'pin_drag'
+    || normalized === 'map_poi_click'
+    || normalized === 'my_location'
+    || normalized === 'legacy_coords'
+  ) {
+    return normalized;
+  }
+  return null;
+};
+
+const normalizeLocationProviderMeta = (
+  value: EventStudioLocationProviderMetaInput | null
+): EventLocationProviderMeta | null => {
+  if (!value) return null;
+  const next: EventLocationProviderMeta = {};
+
+  const amapPoiId = trimOrNull(value.amap?.poiId);
+  const amapAdcode = trimOrNull(value.amap?.adcode);
+  if (amapPoiId || amapAdcode) {
+    next.amap = {
+      poiId: amapPoiId,
+      adcode: amapAdcode,
+    };
+  }
+
+  const googlePlaceId = trimOrNull(value.google?.placeId);
+  const googleTypes = value.google?.types?.map((item: string | null | undefined) => String(item || '').trim()).filter(Boolean) || null;
+  if (googlePlaceId || (googleTypes && googleTypes.length)) {
+    next.google = {
+      placeId: googlePlaceId,
+      types: googleTypes && googleTypes.length ? googleTypes : null,
+    };
+  }
+
+  const mapkitIdentifier = trimOrNull(value.mapkit?.mapItemIdentifier);
+  if (mapkitIdentifier) {
+    next.mapkit = {
+      mapItemIdentifier: mapkitIdentifier,
+    };
+  }
+
+  const mapboxPlaceId = trimOrNull(value.mapbox?.placeId);
+  const mapboxFeatureType = trimOrNull(value.mapbox?.featureType);
+  if (mapboxPlaceId || mapboxFeatureType) {
+    next.mapbox = {
+      placeId: mapboxPlaceId,
+      featureType: mapboxFeatureType,
+    };
+  }
+
+  const geoapifyPlaceId = trimOrNull(value.geoapify?.placeId);
+  const geoapifyFeatureType = trimOrNull(value.geoapify?.featureType);
+  if (geoapifyPlaceId || geoapifyFeatureType) {
+    next.geoapify = {
+      placeId: geoapifyPlaceId,
+      featureType: geoapifyFeatureType,
+    };
+  }
+
+  return Object.keys(next).length ? next : null;
+};
+
+const inferLocationProviderFromMeta = (
+  meta: EventLocationProviderMeta | null,
+  adcode: string | null,
+  poiId: string | null
+): EventLocationProvider | null => {
+  if (meta?.amap || adcode || poiId) return 'amap';
+  if (meta?.google) return 'google';
+  if (meta?.mapkit) return 'mapkit';
+  if (meta?.mapbox) return 'mapbox';
+  if (meta?.geoapify) return 'geoapify';
+  return null;
 };
 
 const nextDateText = (value: string): string => {
@@ -83,6 +189,20 @@ const normalizedLocalizedText = (value: EventStudioLocalizedText): EventStudioLo
 
 const primaryText = (value: EventStudioLocalizedText): string =>
   value.zh.trim() || value.en.trim() || value.ja.trim() || value.enFull.trim();
+
+const canonicalLocationText = (
+  value: EventStudioLocalizedText,
+  options?: { preferEnglishFull?: boolean }
+): string => {
+  const en = value.en.trim();
+  const zh = value.zh.trim();
+  const ja = value.ja.trim();
+  const enFull = value.enFull.trim();
+  if (options?.preferEnglishFull) {
+    return en || enFull || zh || ja;
+  }
+  return en || zh || ja || enFull;
+};
 
 const normalizedAddressText = (value: EventStudioLocalizedText): EventStudioLocalizedText => ({
   zh: value.zh.trim(),
@@ -128,9 +248,10 @@ const joinLocalizedAddress = (
 
 const resolveVisualStatus = (
   startDate: string,
-  endDate: string
+  endDate: string,
+  timeZone?: string | null
 ): 'upcoming' | 'ongoing' | 'ended' => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatDateInputInTimeZone(new Date(), timeZone);
   if (endDate < today) return 'ended';
   if (startDate > today) return 'upcoming';
   return 'ongoing';
@@ -194,7 +315,76 @@ const cloneLocalizedTextOrUndefined = (value?: {
   return normalized ?? undefined;
 };
 
-const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
+const hasLocationProviderMeta = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value as Record<string, unknown>).some((providerMeta) => {
+    if (!providerMeta || typeof providerMeta !== 'object' || Array.isArray(providerMeta)) return false;
+    return Object.values(providerMeta as Record<string, unknown>).some((fieldValue) => {
+      if (Array.isArray(fieldValue)) return fieldValue.some((item) => String(item || '').trim());
+      return String(fieldValue || '').trim().length > 0;
+    });
+  });
+};
+
+const hasLocationPointProvenance = (input: {
+  providerPlaceId: string | null;
+  poiId: string | null;
+  adcode: string | null;
+  providerMeta: EventLocationProviderMeta | null;
+}): boolean =>
+  Boolean(
+    input.providerPlaceId
+    || input.poiId
+    || input.adcode
+    || hasLocationProviderMeta(input.providerMeta)
+  );
+
+const fallbackStageName = (stageOrder: string[]): string => stageOrder[0] || 'Main Stage';
+const defaultTicketTierName = (index: number): string => `Tier ${index + 1}`;
+
+const hasStageSlotContent = (slot: EventStudioTimetableSlotDraft): boolean =>
+  [
+    slot.memberNamesText,
+    slot.djId,
+    slot.stageName,
+    slot.startTime,
+    slot.endTime,
+  ].some((value) => String(value || '').trim().length > 0);
+
+const normalizeStageOrderForPayload = (
+  explicitStageOrder: string[],
+  timetableSlots: EventStudioTimetableSlotDraft[]
+): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  let hasBlankStageSlot = false;
+  const pushStage = (value?: string | null) => {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(trimmed);
+  };
+
+  explicitStageOrder.forEach(pushStage);
+  timetableSlots.forEach((slot) => {
+    const normalizedStageName = trimOrNull(slot.stageName);
+    if (normalizedStageName) {
+      pushStage(normalizedStageName);
+      return;
+    }
+    if (hasStageSlotContent(slot)) {
+      hasBlankStageSlot = true;
+    }
+  });
+
+  if (!result.length && hasBlankStageSlot) {
+    result.push('Main Stage');
+  }
+
+  return result;
+};
 
 const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   const performerCount = actTypePerformerCount(artist.actType);
@@ -219,12 +409,13 @@ const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
 const lineupSlotPayload = (
   slot: EventStudioTimetableSlotDraft,
   index: number,
-  lineupArtistIdByKey: Map<string, string>
+  lineupArtistIdByKey: Map<string, string>,
+  stageOrder: string[]
 ) => {
   const performerCount = actTypePerformerCount(slot.actType);
   const memberNames = splitMemberNamesText(slot.memberNamesText).slice(0, performerCount);
   const normalizedDjId = trimOrNull(slot.djId);
-  const normalizedStageName = trimOrNull(slot.stageName) || defaultStageName(index);
+  const normalizedStageName = trimOrNull(slot.stageName) || fallbackStageName(stageOrder);
   if (!memberNames.length && !normalizedDjId) return null;
   if (!slot.eventDayId.trim() || !slot.localDate.trim() || !slot.startTime.trim() || !slot.endTime.trim()) return null;
 
@@ -257,14 +448,13 @@ const lineupSlotPayload = (
     sortOrder: slot.sortOrder,
     startTime: normalizedStartTime,
     endTime: composeSlotDateTime(normalizedEndDate, slot.endTime),
-    performerType: normalizeActType(slot.actType),
   };
 };
 
 export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): EventStudioCreateInput => {
   const nameI18n = normalizedLocalizedText(draft.name);
-  const cityI18n = normalizedLocalizedText(draft.city);
-  const countryI18n = normalizedLocalizedText(draft.country);
+  const cityI18n = draft.clearCityI18nIntent ? null : normalizedLocalizedText(draft.city);
+  const countryI18n = draft.clearCountryI18nIntent ? null : normalizedLocalizedText(draft.country);
   const detailAddressI18n = normalizedLocalizedText(draft.detailAddress);
   const posterImage = firstImageInZone(draft, 'poster');
   const coverImage = firstImageInZone(draft, 'cover');
@@ -275,6 +465,26 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
   const longitude = numericOrNull(draft.longitude);
   const locationName = trimOrNull(draft.pickedPlaceName);
   const locationAddress = trimOrNull(draft.pickedMapAddress);
+  const locationProviderMeta = normalizeLocationProviderMeta(draft.locationPoint?.providerMeta ?? null);
+  const locationProvider =
+    normalizeLocationProvider(draft.locationPoint?.provider)
+    || inferLocationProviderFromMeta(locationProviderMeta, trimOrNull(draft.locationPoint?.adcode), trimOrNull(draft.locationPoint?.poiId));
+  const locationSourceMode =
+    normalizeLocationSourceMode(draft.locationPoint?.sourceMode)
+    || (locationProviderMeta || trimOrNull(draft.locationPoint?.providerPlaceId) || trimOrNull(draft.locationPoint?.poiId)
+      ? 'manual_search'
+      : locationProvider
+        ? 'legacy_coords'
+        : null);
+  const locationProviderPlaceId = trimOrNull(draft.locationPoint?.providerPlaceId);
+  const locationPoiId = trimOrNull(draft.locationPoint?.poiId);
+  const locationAdcode = trimOrNull(draft.locationPoint?.adcode);
+  const hasRealLocationPointProvenance = hasLocationPointProvenance({
+    providerPlaceId: locationProviderPlaceId,
+    poiId: locationPoiId,
+    adcode: locationAdcode,
+    providerMeta: locationProviderMeta,
+  });
 
   const imageAssets = Object.entries(draft.imageZones).flatMap(([usage, items]) =>
     [...items]
@@ -322,14 +532,18 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
       }
     : null;
 
-  const locationPoint = latitude !== null && longitude !== null
+  const locationPoint: EventStudioCreateInput['locationPoint'] | null = latitude !== null
+    && longitude !== null
+    && hasRealLocationPointProvenance
+    && locationProvider
+    && locationSourceMode
     ? {
-        provider: trimOrNull(draft.locationPoint?.provider) || 'mapkit',
-        sourceMode: trimOrNull(draft.locationPoint?.sourceMode) || 'web-event-studio-v2',
-        providerPlaceId: trimOrNull(draft.locationPoint?.providerPlaceId),
-        poiId: trimOrNull(draft.locationPoint?.poiId),
-        adcode: trimOrNull(draft.locationPoint?.adcode),
-        providerMeta: draft.locationPoint?.providerMeta ?? null,
+        provider: locationProvider,
+        sourceMode: locationSourceMode,
+        providerPlaceId: locationProviderPlaceId,
+        poiId: locationPoiId,
+        adcode: locationAdcode,
+        providerMeta: locationProviderMeta,
         location: { lng: longitude, lat: latitude },
         nameI18n:
           cloneLocalizedTextOrUndefined(draft.locationPoint?.nameI18n) ||
@@ -365,9 +579,9 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
 
   const ticketTiers = draft.ticketTiers
     .map((tier, index) => {
-      const name = tier.name.trim();
+      const name = tier.name.trim() || defaultTicketTierName(index);
       const price = Number(tier.price);
-      if (!name || !Number.isFinite(price)) return null;
+      if (!Number.isFinite(price)) return null;
       return {
         name,
         price,
@@ -406,9 +620,10 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     date: day.date,
     sortOrder: day.sortOrder,
   }));
-  const stageOrder = draft.stageOrder
+  const explicitStageOrder = draft.stageOrder
     .map((stage) => stage.trim())
     .filter(Boolean);
+  const stageOrder = normalizeStageOrderForPayload(explicitStageOrder, draft.timetableSlots);
   const lineupArtistIdByKey = new Map<string, string>();
   draft.lineupArtists.forEach((artist) => {
     const key = eventStudioLineupArtistIdentityKey(artist);
@@ -421,7 +636,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     .map(lineupArtistPayload)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const lineupSlots = draft.timetableSlots
-    .map((slot, index) => lineupSlotPayload(slot, index, lineupArtistIdByKey))
+    .map((slot, index) => lineupSlotPayload(slot, index, lineupArtistIdByKey, stageOrder))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return {
@@ -438,9 +653,9 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     sourceProvider: trimOrNull(draft.sourceProvider),
     referenceLinks: splitLines(draft.referenceLinksText),
     socialLinks: parseJsonTextOrNull(draft.socialLinksText),
-    city: trimOrNull(primaryText(draft.city)),
+    city: trimOrNull(canonicalLocationText(draft.city)),
     cityI18n: cityI18n ?? undefined,
-    country: trimOrNull(primaryText(draft.country)),
+    country: trimOrNull(canonicalLocationText(draft.country, { preferEnglishFull: true })),
     countryI18n: countryI18n ?? undefined,
     manualLocation: manualLocation ?? undefined,
     locationPoint: locationPoint ?? undefined,
@@ -471,32 +686,39 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     lineupArtists: lineupArtists.length ? lineupArtists : null,
     lineupSlots: lineupSlots.length ? lineupSlots : null,
     lineupSyncMode: draft.lineupSyncMode,
-    status: resolveVisualStatus(draft.startDate, draft.endDate),
+    status: resolveVisualStatus(draft.startDate, draft.endDate, draft.timeZoneSelection?.timezone),
   };
 };
 
 export const mapEventStudioDraftToUpdateInput = (draft: EventStudioDraft): EventStudioUpdateInput => {
   const createInput = mapEventStudioDraftToCreateInput(draft);
-  const hasCityI18n = Boolean(createInput.cityI18n);
-  const hasCountryI18n = Boolean(createInput.countryI18n);
   const hasManualLocation = Boolean(createInput.manualLocation);
   const hasLocationPoint = Boolean(createInput.locationPoint);
   const hasLatitude = createInput.latitude !== null && createInput.latitude !== undefined;
   const hasLongitude = createInput.longitude !== null && createInput.longitude !== undefined;
   const hasWikiFestivalId = Boolean(createInput.wikiFestivalId);
+  const hasSocialLinksText = draft.socialLinksText.trim().length > 0;
+  const includeTimeZoneSelectionMetadata = draft.timeZoneSelection?.matchSource !== 'event-edit-hydrate';
 
   return {
     ...createInput,
-    clearCityI18n: !hasCityI18n,
-    clearCountryI18n: !hasCountryI18n,
+    clearCityI18n: draft.clearCityI18nIntent,
+    clearCountryI18n: draft.clearCountryI18nIntent,
     clearWikiFestivalId: !hasWikiFestivalId,
     clearManualLocation: !hasManualLocation,
     clearLocationPoint: !hasLocationPoint,
     clearLatitude: !hasLatitude,
     clearLongitude: !hasLongitude,
+    clearSocialLinks: !hasSocialLinksText,
     clearStageOrder: !createInput.stageOrder?.length,
     clearLineupSlots: !createInput.lineupSlots?.length,
     coverImageUrl: firstImageInZone(draft, 'poster') || firstImageInZone(draft, 'cover') ? createInput.coverImageUrl : null,
     lineupImageUrl: firstImageInZone(draft, 'lineup') ? createInput.lineupImageUrl : null,
+    timeZoneCity: includeTimeZoneSelectionMetadata ? createInput.timeZoneCity : null,
+    timeZoneProvince: includeTimeZoneSelectionMetadata ? createInput.timeZoneProvince : null,
+    timeZoneCountry: includeTimeZoneSelectionMetadata ? createInput.timeZoneCountry : null,
+    timeZoneStateAnsi: includeTimeZoneSelectionMetadata ? createInput.timeZoneStateAnsi : null,
+    timeZoneLat: includeTimeZoneSelectionMetadata ? createInput.timeZoneLat : null,
+    timeZoneLng: includeTimeZoneSelectionMetadata ? createInput.timeZoneLng : null,
   };
 };

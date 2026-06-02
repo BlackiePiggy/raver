@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useMemo, useRef, useState } from 'react';
 import {
   eventStudioApi,
+  normalizeEventStudioDateInput,
   syncEventStudioScheduleStructure,
   type EventStudioDraft,
   type EventStudioImageState,
@@ -223,8 +224,6 @@ const dayOffsetFromClockText = (value: unknown): number => {
   return Number.isFinite(hour) && hour >= 24 ? 1 : 0;
 };
 
-const normalizeDateOnly = (value: string): string => value.trim().slice(0, 10);
-
 const normalizePerformerIds = (ids: unknown, count: number): Array<string | null> => {
   const source = Array.isArray(ids) ? ids : [];
   return Array.from({ length: count }, (_, index) => {
@@ -255,14 +254,14 @@ const normalizeDJLookupKey = (value: string): string =>
     .toLocaleLowerCase()
     .replace(/\s+/g, ' ');
 
-const normalizeWeekRanges = (raw: unknown): EventStudioWeekDraft[] => {
+const normalizeWeekRanges = (raw: unknown, timeZone?: string): EventStudioWeekDraft[] => {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item, index) => {
       if (!item || typeof item !== 'object') return null;
       const record = item as Record<string, unknown>;
-      const startDate = safeString(record.startDate ?? record.start_date);
-      const endDate = safeString(record.endDate ?? record.end_date);
+      const startDate = normalizeEventStudioDateInput(safeString(record.startDate ?? record.start_date), timeZone);
+      const endDate = normalizeEventStudioDateInput(safeString(record.endDate ?? record.end_date), timeZone);
       if (!startDate || !endDate) return null;
       return {
         id: crypto.randomUUID(),
@@ -313,7 +312,8 @@ const parsePosterEditableResult = (
 ): EventStudioAIPosterEditableResult => {
   const schedule = raw.schedule && typeof raw.schedule === 'object' ? (raw.schedule as Record<string, any>) : {};
   const ticketInfo = raw.ticketInfo && typeof raw.ticketInfo === 'object' ? (raw.ticketInfo as Record<string, any>) : {};
-  const posterWeeks = normalizeWeekRanges(schedule.weekRanges ?? schedule.week_ranges);
+  const resolvedTimeZone = safeString(raw.timeZone?.ianaName || raw.timeZone?.iana_name || draft.timeZoneSelection?.timezone);
+  const posterWeeks = normalizeWeekRanges(schedule.weekRanges ?? schedule.week_ranges, resolvedTimeZone);
   const ticketTiers = Array.isArray(ticketInfo.tiers)
     ? ticketInfo.tiers
         .map((item: any, index: number) => ({
@@ -362,7 +362,7 @@ const parsePosterEditableResult = (
       : draft.referenceLinksText,
     socialLinksText:
       raw.socialLinks || raw.social_links ? JSON.stringify(raw.socialLinks || raw.social_links, null, 2) : draft.socialLinksText,
-    timeZoneIdentifier: safeString(raw.timeZone?.ianaName || raw.timeZone?.iana_name || draft.timeZoneSelection?.timezone),
+    timeZoneIdentifier: resolvedTimeZone,
     timeZoneDisplayName: safeString(raw.timeZone?.displayName || raw.timeZone?.display_name),
     selectedTimeZoneLookup: null,
     timeZoneSearchQuery: firstFilledText(
@@ -373,8 +373,8 @@ const parsePosterEditableResult = (
       draft.city.en,
       draft.city.zh
     ),
-    startDate: safeString(schedule.startDate || schedule.start_date || draft.startDate),
-    endDate: safeString(schedule.endDate || schedule.end_date || draft.endDate),
+    startDate: normalizeEventStudioDateInput(safeString(schedule.startDate || schedule.start_date || draft.startDate), resolvedTimeZone),
+    endDate: normalizeEventStudioDateInput(safeString(schedule.endDate || schedule.end_date || draft.endDate), resolvedTimeZone),
     scheduleMode: normalizeScheduleMode(schedule.scheduleMode || schedule.schedule_mode || draft.scheduleMode),
     weekRanges: posterWeeks.length ? posterWeeks : draft.weeks,
     ticketUrl: safeString(ticketInfo.ticketUrl || ticketInfo.ticket_url || draft.ticketUrl),
@@ -445,7 +445,10 @@ const parseTimetableEditableSlots = (
                       .map((slot: any, index: number) => {
                         const eventDayRef = day?.eventDayRef || day?.event_day_ref || {};
                         const requestedEventDayId = safeString(eventDayRef.eventDayId || eventDayRef.event_day_id);
-                        const requestedDate = normalizeDateOnly(safeString(eventDayRef.date || day?.dateText || day?.date || ''));
+                        const requestedDate = normalizeEventStudioDateInput(
+                          safeString(eventDayRef.date || day?.dateText || day?.date || ''),
+                          draft.timeZoneSelection?.timezone
+                        );
                         const requestedOverallDayIndex = safeNumber(eventDayRef.overallDayIndex || eventDayRef.overall_day_index);
                         const resolvedEventDay =
                           draft.eventDays.find((item) => item.eventDayId === requestedEventDayId) ||

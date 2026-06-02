@@ -469,6 +469,7 @@ struct EventUploadFlowView: View {
                 isRequired: true,
                 axis: .horizontal,
                 includeEnglishFull: false,
+                showClearI18nAction: true,
                 expanded: localizedExpansionBinding(for: "city"),
                 primaryPlaceholder: localizedPrimaryFieldPlaceholder(for: LT("城市", "City", "都市")),
                 primaryBinding: localizedBinding(\.city),
@@ -477,7 +478,8 @@ struct EventUploadFlowView: View {
                 jaBinding: localizedBinding(\.city, language: .ja),
                 englishFullBinding: nil,
                 extraCount: viewModel.draft.city.secondaryValueCount(excluding: viewModel.draft.preferredLanguage),
-                preferredLanguage: viewModel.draft.preferredLanguage
+                preferredLanguage: viewModel.draft.preferredLanguage,
+                onClearI18n: { viewModel.clearLocalizedI18n(\.city) }
             )
 
             LocalizedExpandableFieldSection(
@@ -485,6 +487,7 @@ struct EventUploadFlowView: View {
                 isRequired: true,
                 axis: .horizontal,
                 includeEnglishFull: true,
+                showClearI18nAction: true,
                 expanded: localizedExpansionBinding(for: "country"),
                 primaryPlaceholder: localizedPrimaryFieldPlaceholder(for: LT("国家", "Country", "国")),
                 primaryBinding: localizedBinding(\.country),
@@ -493,7 +496,8 @@ struct EventUploadFlowView: View {
                 jaBinding: localizedBinding(\.country, language: .ja),
                 englishFullBinding: localizedEnglishFullBinding(\.country),
                 extraCount: viewModel.draft.country.secondaryValueCount(excluding: viewModel.draft.preferredLanguage, includeEnglishFull: true),
-                preferredLanguage: viewModel.draft.preferredLanguage
+                preferredLanguage: viewModel.draft.preferredLanguage,
+                onClearI18n: { viewModel.clearLocalizedI18n(\.country, includeEnglishFull: true) }
             )
 
             LocalizedExpandableFieldSection(
@@ -581,6 +585,34 @@ struct EventUploadFlowView: View {
             uploadTextField(
                 title: LT("官网链接", "Official Website", "公式サイト"),
                 text: officialWebsiteBinding
+            )
+
+            uploadTextField(
+                title: LT("鏉ユ簮骞冲彴", "Source Provider", "鏉ユ簮骞冲彴"),
+                text: sourceProviderBinding
+            )
+
+            uploadTextField(
+                title: LT("鍦哄湴鍚嶇О", "Venue Name", "浼氬牬鍚?),
+                text: venueNameBinding
+            )
+
+            uploadTextField(
+                title: LT("鍦哄湴鍦板潃", "Venue Address", "浼氬牬浣忔墍"),
+                text: venueAddressBinding,
+                axis: .vertical
+            )
+
+            uploadTextField(
+                title: LT("鍙傝€冮摼鎺?锛堟瘡琛屼竴鏉★級", "Reference Links (one per line)", "鍙傜収銉兂銈紙1琛屼竴浠讹級"),
+                text: referenceLinksTextBinding,
+                axis: .vertical
+            )
+
+            uploadTextField(
+                title: LT("绀句氦閾炬帴 JSON锛堝彲閫夛級", "Social Links JSON", "SNS銉兂銈紙JSON锛?),
+                text: socialLinksTextBinding,
+                axis: .vertical
             )
 
         }
@@ -2718,6 +2750,46 @@ struct EventUploadFlowView: View {
             viewModel.draft.officialWebsite
         } set: { value in
             viewModel.updateOfficialWebsite(value)
+        }
+    }
+
+    private var sourceProviderBinding: Binding<String> {
+        Binding {
+            viewModel.draft.sourceProvider
+        } set: { value in
+            viewModel.updateSourceProvider(value)
+        }
+    }
+
+    private var venueNameBinding: Binding<String> {
+        Binding {
+            viewModel.draft.venueName
+        } set: { value in
+            viewModel.updateVenueName(value)
+        }
+    }
+
+    private var venueAddressBinding: Binding<String> {
+        Binding {
+            viewModel.draft.venueAddress
+        } set: { value in
+            viewModel.updateVenueAddress(value)
+        }
+    }
+
+    private var referenceLinksTextBinding: Binding<String> {
+        Binding {
+            viewModel.draft.referenceLinksText
+        } set: { value in
+            viewModel.updateReferenceLinksText(value)
+        }
+    }
+
+    private var socialLinksTextBinding: Binding<String> {
+        Binding {
+            viewModel.draft.socialLinksText
+        } set: { value in
+            viewModel.updateSocialLinksText(value)
         }
     }
 
@@ -7209,6 +7281,7 @@ private struct LocalizedExpandableFieldSection: View {
     let isRequired: Bool
     let axis: Axis
     let includeEnglishFull: Bool
+    let showClearI18nAction: Bool = false
     @Binding var expanded: Bool
     let primaryPlaceholder: String
     let primaryBinding: Binding<String>
@@ -7218,6 +7291,7 @@ private struct LocalizedExpandableFieldSection: View {
     let englishFullBinding: Binding<String>?
     let extraCount: Int
     let preferredLanguage: EventUploadPreferredLanguage
+    let onClearI18n: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -7251,6 +7325,15 @@ private struct LocalizedExpandableFieldSection: View {
                     )
                 }
                 .buttonStyle(.plain)
+                if showClearI18nAction, let onClearI18n {
+                    Button(role: .destructive) {
+                        onClearI18n()
+                    } label: {
+                        Text("Remove i18n")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             TextField(primaryPlaceholder, text: primaryBinding, axis: axis)

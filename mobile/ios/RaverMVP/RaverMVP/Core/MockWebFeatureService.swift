@@ -4027,10 +4027,11 @@ actor MockWebFeatureService: WebFeatureService {
     ) -> WebEventLocationPoint? {
         guard let point else { return nil }
         return WebEventLocationPoint(
-            provider: point.provider,
-            sourceMode: point.sourceMode,
+            provider: point.provider.rawValue,
+            sourceMode: point.sourceMode.rawValue,
             providerPlaceId: point.providerPlaceId,
             poiId: point.poiId,
+            adcode: point.adcode,
             location: .init(
                 lng: point.location.lng,
                 lat: point.location.lat
@@ -4041,8 +4042,50 @@ actor MockWebFeatureService: WebFeatureService {
             city: point.city,
             district: point.district,
             province: point.province,
-            countryCode: point.countryCode
+            countryCode: point.countryCode,
+            providerMeta: legacyLocationProviderMeta(from: point.providerMeta)
         )
+    }
+
+    private func legacyLocationProviderMeta(
+        from meta: EventAdminComponents.Schemas.EventLocationProviderMeta?
+    ) -> WebEventLocationProviderMeta? {
+        guard let meta else { return nil }
+        let legacy = WebEventLocationProviderMeta(
+            amap: meta.amap.map {
+                .init(
+                    poiId: $0.poiId,
+                    adcode: $0.adcode
+                )
+            },
+            google: meta.google.map {
+                .init(
+                    placeId: $0.placeId,
+                    types: $0.types
+                )
+            },
+            mapkit: meta.mapkit.map {
+                .init(mapItemIdentifier: $0.mapItemIdentifier)
+            },
+            mapbox: meta.mapbox.map {
+                .init(
+                    placeId: $0.placeId,
+                    featureType: $0.featureType
+                )
+            },
+            geoapify: meta.geoapify.map {
+                .init(
+                    placeId: $0.placeId,
+                    featureType: $0.featureType
+                )
+            }
+        )
+        let hasValue = legacy.amap != nil
+            || legacy.google != nil
+            || legacy.mapkit != nil
+            || legacy.mapbox != nil
+            || legacy.geoapify != nil
+        return hasValue ? legacy : nil
     }
 
     private func legacySchedule(

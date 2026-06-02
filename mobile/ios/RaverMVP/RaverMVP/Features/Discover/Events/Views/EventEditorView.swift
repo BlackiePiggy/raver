@@ -1222,6 +1222,12 @@ struct EventEditorView: View {
     @State private var detailAddressZh = ""
     @State private var detailAddressEn = ""
     @State private var ticketUrl = ""
+    @State private var sourceURL = ""
+    @State private var sourceProvider = ""
+    @State private var venueName = ""
+    @State private var venueAddress = ""
+    @State private var referenceLinksText = ""
+    @State private var socialLinksText = ""
     @State private var officialWebsite = ""
     @State private var ticketCurrency = "CNY"
     @State private var ticketNotes = ""
@@ -1230,6 +1236,7 @@ struct EventEditorView: View {
     @State private var pickedLongitude: Double?
     @State private var pickedMapAddress = ""
     @State private var pickedPlaceName = ""
+    @State private var locationPointDraft: WebEventLocationPoint?
     @State private var showLocationPicker = false
     @State private var startDate = EventEditorView.normalizedStartOfDay(Date())
     @State private var endDate = EventEditorView.normalizedStartOfDay(Date())
@@ -1331,6 +1338,22 @@ struct EventEditorView: View {
                         .autocorrectionDisabled(true)
 
                     TextField(LT("票务备注（可选）", "票务备注（可选）", "チケット備考（任意）"), text: $ticketNotes, axis: .vertical)
+
+                    TextField(LT("鍘熸枃閾炬帴锛堝彲閫夛級", "Source URL (optional)", "鍘熸枃URL锛堜换鎰忥級"), text: $sourceURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+
+                    TextField(LT("鏉ユ簮骞冲彴锛堝彲閫夛級", "Source Provider (optional)", "鏉ユ簮骞冲彴锛堜换鎰忥級"), text: $sourceProvider)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+
+                    TextField(LT("鍦哄湴鍚嶇О锛堝彲閫夛級", "Venue Name (optional)", "浼氬牬鍚嶇О锛堜换鎰忥級"), text: $venueName)
+
+                    TextField(LT("鍦哄湴鍦板潃锛堝彲閫夛級", "Venue Address (optional)", "浼氬牬鍦板潃锛堜换鎰忥級"), text: $venueAddress, axis: .vertical)
+
+                    TextField(LT("鍙傝€冮摼鎺ワ紙姣忚涓€鏉★級", "Reference Links (one per line)", "鍙傜収銉兂銈紙1琛屼竴浠讹級"), text: $referenceLinksText, axis: .vertical)
+
+                    TextField(LT("绀句氦閾炬帴 JSON锛堝彲閫夛級", "Social Links JSON (optional)", "SNS銉兂銈紙JSON锛変换鎰?"), text: $socialLinksText, axis: .vertical)
 
                     if ticketTierDrafts.isEmpty {
                         Text(LT("暂无票档，点击下方按钮添加。", "暂无票档，点击下方按钮添加。", "チケット区分はまだありません。下のボタンから追加してください。"))
@@ -1728,6 +1751,7 @@ struct EventEditorView: View {
                     pickedLongitude = result.longitude
                     pickedMapAddress = result.displayAddress
                     pickedPlaceName = result.placeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    locationPointDraft = nil
 
                     if !result.displayAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         if detailAddressZh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -3281,6 +3305,12 @@ struct EventEditorView: View {
         detailAddressZh = resolvedAddressZh
         detailAddressEn = resolvedAddressEn
         ticketUrl = event.ticketUrl ?? ""
+        sourceURL = event.sourceEventUrl ?? ""
+        sourceProvider = event.sourceProvider ?? ""
+        venueName = event.venueName ?? ""
+        venueAddress = event.venueAddress ?? ""
+        referenceLinksText = (event.referenceLinks ?? []).joined(separator: "\n")
+        socialLinksText = event.socialLinks?.prettyJSONString ?? ""
         officialWebsite = event.officialWebsite ?? ""
         ticketCurrency = event.ticketCurrency?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "CNY"
         ticketNotes = event.ticketNotes ?? ""
@@ -3301,6 +3331,7 @@ struct EventEditorView: View {
         pickedPlaceName = event.locationPoint?.nameI18n?.text(for: language)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? ""
+        locationPointDraft = event.locationPoint
         eventTimeZoneIdentifier = event.timeZone?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? Self.defaultEventTimeZoneID
         timeZoneSearchQuery = event.city ?? ""
         if let city = event.city?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
@@ -3746,8 +3777,8 @@ struct EventEditorView: View {
             .joined(separator: " · ")
             .nilIfEmpty
         return WebEventLocationPoint(
-            provider: "apple_mapkit",
-            sourceMode: "manual_pin",
+            provider: "mapkit",
+            sourceMode: "pin_drag",
             providerPlaceId: nil,
             poiId: nil,
             location: WebEventLocationCoordinate(lng: lng, lat: lat),
@@ -4863,6 +4894,12 @@ struct EventEditorView: View {
         draft.city = EventUploadLocalizedFields(zh: cityZh, en: cityEn)
         draft.country = EventUploadLocalizedFields(zh: countryZh, en: countryEn, enFull: countryEnFull)
         draft.detailAddress = EventUploadLocalizedFields(zh: detailAddressZh, en: detailAddressEn)
+        draft.sourceURL = sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.sourceProvider = sourceProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.venueName = venueName.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.venueAddress = venueAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.referenceLinksText = referenceLinksText.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.socialLinksText = socialLinksText.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.officialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.startDate = normalizedEventStartDate
         draft.endDate = normalizedEventEndDate
@@ -4875,6 +4912,7 @@ struct EventEditorView: View {
         draft.longitude = pickedLongitude
         draft.pickedMapAddress = pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.pickedPlaceName = pickedPlaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.locationPoint = locationPointDraft
         draft.stageEntries = normalizedStageEntries
         draft.lineupOnlySlots = EventLineupDraftDerivation.lineupOnlySlots(from: timetableSlots)
         draft.timetableSlots = timetableSlots
@@ -5010,6 +5048,18 @@ struct EventEditorView: View {
         return formatter.string(from: date)
     }
 
+}
+
+private extension ContentSubmissionJSONValue {
+    var prettyJSONString: String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(self),
+              let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return text
+    }
 }
 
 struct EventLocationPickerResult {

@@ -368,10 +368,17 @@ struct EventUploadDraft: Hashable, Codable {
     var eventType = ""
     var organizerFestivalID: String?
     var organizerName = ""
+    var venueName = ""
+    var venueAddress = ""
     var sourceURL = ""
+    var sourceProvider = ""
+    var referenceLinksText = ""
+    var socialLinksText = ""
     var officialWebsite = ""
     var city = EventUploadLocalizedFields()
+    var clearCityI18nIntent = false
     var country = EventUploadLocalizedFields()
+    var clearCountryI18nIntent = false
     var detailAddress = EventUploadLocalizedFields()
     var startDate = Date()
     var endDate = Date()
@@ -389,6 +396,7 @@ struct EventUploadDraft: Hashable, Codable {
     var longitude: Double?
     var pickedMapAddress = ""
     var pickedPlaceName = ""
+    var locationPoint: WebEventLocationPoint? = nil
     var stageEntries: [String] = []
     var timetableSlots: [EventUploadLineupSlotDraft] = []
     var lineupOnlySlots: [EventUploadLineupOnlySlotDraft] = []
@@ -420,7 +428,12 @@ struct EventUploadDraft: Hashable, Codable {
             ?? event.wikiFestival?.name
             ?? event.organizerName
             ?? ""
+        draft.venueName = event.venueName ?? ""
+        draft.venueAddress = event.venueAddress ?? ""
         draft.sourceURL = event.sourceEventUrl ?? ""
+        draft.sourceProvider = event.sourceProvider ?? ""
+        draft.referenceLinksText = (event.referenceLinks ?? []).joined(separator: "\n")
+        draft.socialLinksText = event.socialLinks?.prettyJSONString ?? ""
         draft.officialWebsite = event.officialWebsite ?? ""
         draft.city = EventUploadLocalizedFields(
             zh: event.cityI18n?.zh ?? "",
@@ -538,6 +551,7 @@ struct EventUploadDraft: Hashable, Codable {
             ?? event.locationPoint?.addressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
             ?? ""
         draft.pickedPlaceName = event.locationPoint?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? ""
+        draft.locationPoint = event.locationPoint
         let hydratedTicketTiers = event.ticketTiers
             .sorted { $0.sortOrder < $1.sortOrder }
             .map { tier in
@@ -1307,6 +1321,18 @@ struct EventUploadDraft: Hashable, Codable {
         case "sunday": return "Sunday"
         default: return weekday.capitalized
         }
+    }
+}
+
+private extension ContentSubmissionJSONValue {
+    var prettyJSONString: String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(self),
+              let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return text
     }
 }
 

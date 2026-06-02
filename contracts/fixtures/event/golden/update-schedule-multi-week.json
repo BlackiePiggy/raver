@@ -1,0 +1,191 @@
+{
+  "name": "Segmented Festival",
+  "nameI18n": {
+    "en": "Segmented Festival",
+    "zh": "\u5206\u6bb5\u97f3\u4e50\u8282"
+  },
+  "wikiFestivalId": "fest_segmented",
+  "abbreviation": "SEG",
+  "description": "Update payload for multi-week schedule semantics with canonical week and event-day identities.",
+  "eventType": "festival",
+  "organizerName": "Raver Crew",
+  "venueName": "Harbor Grounds",
+  "venueAddress": "1 Harbor Avenue",
+  "sourceEventUrl": "https://example.com/events/segmented",
+  "sourceProvider": "manual",
+  "referenceLinks": [
+    "https://example.com/events/segmented"
+  ],
+  "socialLinks": null,
+  "city": "Shanghai",
+  "cityI18n": {
+    "en": "Shanghai",
+    "zh": "\u4e0a\u6d77"
+  },
+  "country": "China",
+  "countryI18n": {
+    "en": "China",
+    "zh": "\u4e2d\u56fd",
+    "enFull": "China"
+  },
+  "manualLocation": null,
+  "locationPoint": null,
+  "latitude": null,
+  "longitude": null,
+  "ticketUrl": null,
+  "ticketCurrency": "CNY",
+  "ticketNotes": null,
+  "officialWebsite": "https://example.com/segmented",
+  "startDate": "2099-07-17",
+  "endDate": "2099-07-26",
+  "schedule": {
+    "mode": "multi_week",
+    "timeZone": "Asia/Shanghai",
+    "dayRolloverHour": 6
+  },
+  "weeks": [
+    {
+      "weekIndex": 1,
+      "label": "Week 1",
+      "startDate": "2099-07-17",
+      "endDate": "2099-07-23",
+      "sortOrder": 1
+    },
+    {
+      "weekIndex": 2,
+      "label": "Week 2",
+      "startDate": "2099-07-24",
+      "endDate": "2099-07-26",
+      "sortOrder": 2
+    }
+  ],
+  "eventDays": [
+    {
+      "eventDayId": "w1d1",
+      "weekIndex": 1,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 1,
+      "label": "Week 1 Day 1",
+      "weekday": "friday",
+      "date": "2099-07-17",
+      "sortOrder": 1
+    },
+    {
+      "eventDayId": "w1d2",
+      "weekIndex": 1,
+      "dayIndexInWeek": 2,
+      "overallDayIndex": 2,
+      "label": "Week 1 Day 2",
+      "weekday": "saturday",
+      "date": "2099-07-18",
+      "sortOrder": 2
+    },
+    {
+      "eventDayId": "w1d3",
+      "weekIndex": 1,
+      "dayIndexInWeek": 3,
+      "overallDayIndex": 3,
+      "label": "Week 1 Day 3",
+      "weekday": "sunday",
+      "date": "2099-07-19",
+      "sortOrder": 3
+    },
+    {
+      "eventDayId": "w1d4",
+      "weekIndex": 1,
+      "dayIndexInWeek": 4,
+      "overallDayIndex": 4,
+      "label": "Week 1 Day 4",
+      "weekday": "monday",
+      "date": "2099-07-20",
+      "sortOrder": 4
+    },
+    {
+      "eventDayId": "w1d5",
+      "weekIndex": 1,
+      "dayIndexInWeek": 5,
+      "overallDayIndex": 5,
+      "label": "Week 1 Day 5",
+      "weekday": "tuesday",
+      "date": "2099-07-21",
+      "sortOrder": 5
+    },
+    {
+      "eventDayId": "w1d6",
+      "weekIndex": 1,
+      "dayIndexInWeek": 6,
+      "overallDayIndex": 6,
+      "label": "Week 1 Day 6",
+      "weekday": "wednesday",
+      "date": "2099-07-22",
+      "sortOrder": 6
+    },
+    {
+      "eventDayId": "w1d7",
+      "weekIndex": 1,
+      "dayIndexInWeek": 7,
+      "overallDayIndex": 7,
+      "label": "Week 1 Day 7",
+      "weekday": "thursday",
+      "date": "2099-07-23",
+      "sortOrder": 7
+    },
+    {
+      "eventDayId": "w2d1",
+      "weekIndex": 2,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 8,
+      "label": "Week 2 Day 1",
+      "weekday": "friday",
+      "date": "2099-07-24",
+      "sortOrder": 8
+    },
+    {
+      "eventDayId": "w2d2",
+      "weekIndex": 2,
+      "dayIndexInWeek": 2,
+      "overallDayIndex": 9,
+      "label": "Week 2 Day 2",
+      "weekday": "saturday",
+      "date": "2099-07-25",
+      "sortOrder": 9
+    },
+    {
+      "eventDayId": "w2d3",
+      "weekIndex": 2,
+      "dayIndexInWeek": 3,
+      "overallDayIndex": 10,
+      "label": "Week 2 Day 3",
+      "weekday": "sunday",
+      "date": "2099-07-26",
+      "sortOrder": 10
+    }
+  ],
+  "timeZone": "Asia/Shanghai",
+  "timeZoneCity": "Shanghai",
+  "timeZoneProvince": "Shanghai",
+  "timeZoneCountry": "China",
+  "timeZoneStateAnsi": "SH",
+  "timeZoneLat": 31.2304,
+  "timeZoneLng": 121.4737,
+  "dayRolloverHour": 6,
+  "coverImageUrl": null,
+  "lineupImageUrl": null,
+  "imageAssets": null,
+  "ticketTiers": null,
+  "stageOrder": null,
+  "lineupArtists": null,
+  "lineupSlots": null,
+  "lineupSyncMode": "incremental_fill",
+  "status": "upcoming",
+  "clearCityI18n": false,
+  "clearCountryI18n": false,
+  "clearWikiFestivalId": false,
+  "clearManualLocation": true,
+  "clearLocationPoint": true,
+  "clearLatitude": true,
+  "clearLongitude": true,
+  "clearSocialLinks": true,
+  "clearStageOrder": true,
+  "clearLineupSlots": true
+}

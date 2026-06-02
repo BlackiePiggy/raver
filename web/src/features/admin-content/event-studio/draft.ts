@@ -164,14 +164,18 @@ export const eventStudioTimetableSlotIdentityKey = (slot: Pick<
     memberNamesText: slot.memberNamesText,
   });
 
-const defaultStageName = (index: number): string => (index === 0 ? 'Main Stage' : `Stage ${index + 1}`);
+const defaultStageName = (): string => 'Main Stage';
 
 const normalizeStageOrder = (stageOrder?: string[] | null, slots?: Array<{ stageName?: string | null }> | null): string[] => {
   const seen = new Set<string>();
   const result: string[] = [];
+  let hasBlankSlot = false;
   const pushValue = (value?: string | null) => {
     const trimmed = String(value || '').trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      hasBlankSlot = true;
+      return;
+    }
     const key = trimmed.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
@@ -179,7 +183,10 @@ const normalizeStageOrder = (stageOrder?: string[] | null, slots?: Array<{ stage
   };
 
   (stageOrder ?? []).forEach(pushValue);
-  (slots ?? []).forEach((slot, index) => pushValue(slot.stageName || defaultStageName(index)));
+  (slots ?? []).forEach((slot) => pushValue(slot.stageName));
+  if (!result.length && hasBlankSlot) {
+    pushValue(defaultStageName());
+  }
   return result;
 };
 
@@ -315,6 +322,9 @@ const datePartFromValueInTimeZone = (value?: string | null, timeZone?: string | 
   }
   return formatDateInputInTimeZone(text, normalizeDisplayTimeZone(timeZone));
 };
+
+export const normalizeEventStudioDateInput = (value?: string | null, timeZone?: string | null): string =>
+  datePartFromValueInTimeZone(value, timeZone);
 
 const dateOffsetFromBaseDate = (baseDate: string, valueDate: string): number => {
   const base = parseDateOnly(baseDate);
@@ -571,7 +581,9 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
   referenceLinksText: '',
   socialLinksText: '',
   city: emptyLocalizedText(),
+  clearCityI18nIntent: false,
   country: emptyLocalizedText(),
+  clearCountryI18nIntent: false,
   detailAddress: emptyLocalizedText(),
   venueName: '',
   venueAddress: '',
@@ -615,6 +627,14 @@ const fromNullableLocalizedText = (
 export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent): EventStudioDraft => {
   const manualDetail = event.manualLocation?.detailAddressI18n;
   const locationAddress = event.locationPoint?.addressI18n;
+  const formattedLocationAddress = event.locationPoint?.formattedAddressI18n;
+  const legacyTicketPriceSource = event as EventStudioLoadedEvent & {
+    ticketPriceMin?: number | null;
+    ticketPriceMax?: number | null;
+  };
+  const legacyTicketPriceBounds = [legacyTicketPriceSource.ticketPriceMin, legacyTicketPriceSource.ticketPriceMax]
+    .map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : null))
+    .filter((value): value is number => value !== null);
   const socialLinksText = event.socialLinks == null
     ? ''
     : JSON.stringify(event.socialLinks, null, 2);
@@ -658,8 +678,9 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     );
   }
 
-  const startDate = event.startDate?.slice(0, 10) ?? '';
-  const endDate = event.endDate?.slice(0, 10) ?? '';
+  const eventTimeZone = normalizeDisplayTimeZone(event.schedule?.timeZone || event.timeZone);
+  const startDate = normalizeEventStudioDateInput(event.startDate, eventTimeZone);
+  const endDate = normalizeEventStudioDateInput(event.endDate, eventTimeZone);
   const scheduleMode =
     (event.schedule?.mode as EventStudioDraft['scheduleMode'] | undefined) ??
     (event.weeks && event.weeks.length > 1
@@ -681,13 +702,12 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         overallDayIndex: day.overallDayIndex,
         label: day.label ?? '',
         weekday: day.weekday ?? '',
-        date: day.date.slice(0, 10),
+        date: normalizeEventStudioDateInput(day.date, eventTimeZone),
         sortOrder: day.sortOrder ?? day.overallDayIndex,
       }))
     : fallbackStructure.eventDays;
   const timetableSlotSource = firstNonEmptyArray(event.timetableSlots, event.lineupSlots);
   const hydratedTimetableSlots: EventStudioTimetableSlotDraft[] = [];
-  const eventTimeZone = normalizeDisplayTimeZone(event.schedule?.timeZone || event.timeZone);
   timetableSlotSource.forEach((slot, index) => {
     const slotWithOffsets = slot as { startDayOffset?: number | null; endDayOffset?: number | null };
     const localDate =
@@ -717,7 +737,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
       djId: slot.djId || '',
       memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
       memberNamesText: defaultMemberNamesText(slot.memberNames, slot.djName),
-      stageName: String(slot.stageName || '').trim() || defaultStageName(index),
+      stageName: String(slot.stageName || '').trim(),
       sortOrder: slot.sortOrder ?? index + 1,
       startTime: timePartFromValueInTimeZone(slot.startTime, eventTimeZone),
       endTime: timePartFromValueInTimeZone(slot.endTime, eventTimeZone),
@@ -737,11 +757,16 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
       ),
     });
   });
+  const hydratedStageOrder = normalizeStageOrder(event.stageOrder, hydratedTimetableSlots);
+  const hydratedStageFallback = hydratedStageOrder[0] || defaultStageName();
+  const normalizedHydratedTimetableSlots = hydratedTimetableSlots.map((slot) => ({
+    ...slot,
+    stageName: slot.stageName || hydratedStageFallback,
+  }));
   const hydratedLineupArtistsFromInput = buildLineupArtistsFromInput(event.lineupArtists ?? null);
   const hydratedLineupArtists = hydratedLineupArtistsFromInput.length
     ? hydratedLineupArtistsFromInput
-    : buildLineupArtistsFromTimetableSlots(hydratedTimetableSlots);
-  const hydratedStageOrder = normalizeStageOrder(event.stageOrder, hydratedTimetableSlots);
+    : buildLineupArtistsFromTimetableSlots(normalizedHydratedTimetableSlots);
 
   return {
     id: crypto.randomUUID(),
@@ -756,7 +781,9 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     referenceLinksText: (event.referenceLinks ?? []).join('\n'),
     socialLinksText,
     city: fromNullableLocalizedText(event.cityI18n, event.city ?? ''),
+    clearCityI18nIntent: false,
     country: fromNullableLocalizedText(event.countryI18n, event.country ?? ''),
+    clearCountryI18nIntent: false,
     detailAddress: fromNullableLocalizedText(manualDetail || locationAddress, ''),
     venueName: event.venueName ?? '',
     venueAddress: event.venueAddress ?? '',
@@ -780,7 +807,12 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         }
       : null,
     pickedPlaceName: event.locationPoint?.nameI18n?.zh ?? event.locationPoint?.nameI18n?.en ?? '',
-    pickedMapAddress: event.locationPoint?.addressI18n?.zh ?? event.locationPoint?.addressI18n?.en ?? '',
+    pickedMapAddress:
+      formattedLocationAddress?.zh ??
+      formattedLocationAddress?.en ??
+      event.locationPoint?.addressI18n?.zh ??
+      event.locationPoint?.addressI18n?.en ??
+      '',
     timeZoneQuery: event.city ?? event.cityI18n?.en ?? event.cityI18n?.zh ?? '',
     timeZoneSelection: event.timeZone
       ? {
@@ -808,20 +840,29 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     ticketCurrency: event.ticketCurrency ?? 'CNY',
     ticketNotes: event.ticketNotes ?? '',
     imageZones: normalizeImageZones(hydratedImageZones),
-    ticketTiers: (event.ticketTiers ?? []).map((tier) => ({
-      id: tier.id || createTicketTier().id,
-      name: tier.name,
-      price: tier.price != null ? String(tier.price) : '',
-      currency: tier.currency || event.ticketCurrency || 'CNY',
-    })),
+    ticketTiers: (event.ticketTiers?.length
+      ? [...event.ticketTiers]
+        .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+        .map((tier) => ({
+          id: tier.id || createTicketTier().id,
+          name: tier.name,
+          price: tier.price != null ? String(tier.price) : '',
+          currency: tier.currency || event.ticketCurrency || 'CNY',
+        }))
+      : legacyTicketPriceBounds.map((price) => ({
+          id: createTicketTier().id,
+          name: '',
+          price: String(price),
+          currency: event.ticketCurrency || 'CNY',
+        }))),
     scheduleMode,
     weeks: (event.weeks ?? []).length
       ? (event.weeks ?? []).map((week) => ({
           id: week.id || crypto.randomUUID(),
           weekIndex: week.weekIndex,
           label: week.label ?? normalizeWeekLabel(week.weekIndex, scheduleMode),
-          startDate: week.startDate.slice(0, 10),
-          endDate: week.endDate.slice(0, 10),
+          startDate: normalizeEventStudioDateInput(week.startDate, eventTimeZone),
+          endDate: normalizeEventStudioDateInput(week.endDate, eventTimeZone),
           sortOrder: week.sortOrder ?? week.weekIndex,
         }))
       : fallbackStructure.weeks,
@@ -829,7 +870,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     stageOrder: hydratedStageOrder,
     lineupSyncMode: (event.lineupArtists?.length ? 'incremental_fill' : 'exact_align'),
     lineupArtists: hydratedLineupArtists,
-    timetableSlots: hydratedTimetableSlots,
+    timetableSlots: normalizedHydratedTimetableSlots,
   };
 };
 

@@ -1,0 +1,92 @@
+{
+  "name": "Clear Location Event",
+  "nameI18n": {
+    "en": "Clear Location Event",
+    "zh": "\u6e05\u7a7a\u5730\u70b9\u6d3b\u52a8"
+  },
+  "wikiFestivalId": null,
+  "abbreviation": null,
+  "description": "Update payload that explicitly clears all location-bearing fields.",
+  "eventType": "festival",
+  "organizerName": "Raver Crew",
+  "venueName": null,
+  "venueAddress": null,
+  "sourceEventUrl": "https://example.com/events/clear-location",
+  "sourceProvider": "manual",
+  "referenceLinks": null,
+  "socialLinks": null,
+  "city": "Shanghai",
+  "cityI18n": {
+    "en": "Shanghai",
+    "zh": "\u4e0a\u6d77"
+  },
+  "country": "China",
+  "countryI18n": {
+    "en": "China",
+    "zh": "\u4e2d\u56fd",
+    "enFull": "China"
+  },
+  "manualLocation": null,
+  "locationPoint": null,
+  "latitude": null,
+  "longitude": null,
+  "ticketUrl": null,
+  "ticketCurrency": "CNY",
+  "ticketNotes": null,
+  "officialWebsite": null,
+  "startDate": "2099-10-03",
+  "endDate": "2099-10-03",
+  "schedule": {
+    "mode": "single_day",
+    "timeZone": "Asia/Shanghai",
+    "dayRolloverHour": 6
+  },
+  "weeks": [
+    {
+      "weekIndex": 1,
+      "label": "Week 1",
+      "startDate": "2099-10-03",
+      "endDate": "2099-10-03",
+      "sortOrder": 1
+    }
+  ],
+  "eventDays": [
+    {
+      "eventDayId": "d1",
+      "weekIndex": 1,
+      "dayIndexInWeek": 1,
+      "overallDayIndex": 1,
+      "label": "Day 1",
+      "weekday": "sunday",
+      "date": "2099-10-03",
+      "sortOrder": 1
+    }
+  ],
+  "timeZone": "Asia/Shanghai",
+  "timeZoneCity": "Shanghai",
+  "timeZoneProvince": "Shanghai",
+  "timeZoneCountry": "China",
+  "timeZoneStateAnsi": "SH",
+  "timeZoneLat": 31.2304,
+  "timeZoneLng": 121.4737,
+  "dayRolloverHour": 6,
+  "coverImageUrl": null,
+  "lineupImageUrl": null,
+  "imageAssets": null,
+  "ticketTiers": null,
+  "stageOrder": null,
+  "lineupArtists": null,
+  "lineupSlots": null,
+  "lineupSyncMode": "incremental_fill",
+  "status": "upcoming",
+  "clearCityI18n": false,
+  "clearCountryI18n": false,
+  "clearWikiFestivalId": true,
+  "clearManualLocation": true,
+  "clearLocationPoint": true,
+  "clearLatitude": true,
+  "clearLongitude": true,
+  "clearSocialLinks": true,
+  "clearStageOrder": true,
+  "clearLineupSlots": true
+}

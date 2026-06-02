@@ -395,6 +395,66 @@ const normalizeOptionalTriTextJson = (value: unknown): Prisma.InputJsonValue | u
   if (enFull) out.enFull = enFull;
   return Object.keys(out).length ? (out as Prisma.InputJsonValue) : undefined;
 };
+
+const hasOwn = (body: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(body, key);
+
+const normalizeOptionalNullableTextField = (
+  body: Record<string, unknown>,
+  key: string
+): string | null | undefined => {
+  if (!hasOwn(body, key)) return undefined;
+  const text = normalizeTrimmedText(body[key]);
+  return text || null;
+};
+
+const normalizeOptionalStringArrayField = (
+  body: Record<string, unknown>,
+  key: string
+): string[] | undefined => {
+  if (!hasOwn(body, key)) return undefined;
+  const value = body[key];
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[\n,]/)
+      : [];
+  return Array.from(new Set(source.map((item) => normalizeTrimmedText(item)).filter(Boolean)));
+};
+
+const normalizeOptionalJsonField = (
+  body: Record<string, unknown>,
+  key: string
+): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined => {
+  if (!hasOwn(body, key)) return undefined;
+  const value = body[key];
+  if (value == null) return Prisma.JsonNull;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return Prisma.JsonNull;
+    try {
+      return JSON.parse(trimmed) as Prisma.InputJsonValue;
+    } catch {
+      return Prisma.JsonNull;
+    }
+  }
+  return value as Prisma.InputJsonValue;
+};
+
+const normalizeStageOrder = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of value) {
+    const text = normalizeTrimmedText(item);
+    if (!text) continue;
+    const key = text.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(text);
+  }
+  return result;
+};
 const normalizeDayRolloverHour = (value: unknown, fallback = 6): number => {
   const numeric = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(numeric)) return fallback;
@@ -891,17 +951,13 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
 
     validateEventAdminContractPayload(req.body, 'create');
 
+    const requestBody = req.body as Record<string, unknown>;
     const {
       name,
       slug,
-      description,
       coverImageUrl,
       lineupImageUrl,
-      eventType,
-      organizerName,
-      city,
       cityI18n,
-      country,
       countryI18n,
       manualLocation,
       locationPoint,
@@ -913,16 +969,29 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       startTime,
       endTime,
       dayRolloverHour,
-      ticketUrl,
       ticketPriceMin,
       ticketPriceMax,
-      ticketCurrency,
-      ticketNotes,
       ticketTiers,
-      officialWebsite,
       lineupSlots,
       status,
     } = req.body;
+    const wikiFestivalId = normalizeOptionalNullableTextField(requestBody, 'wikiFestivalId');
+    const description = normalizeOptionalNullableTextField(requestBody, 'description');
+    const eventType = normalizeOptionalNullableTextField(requestBody, 'eventType');
+    const organizerName = normalizeOptionalNullableTextField(requestBody, 'organizerName');
+    const venueName = normalizeOptionalNullableTextField(requestBody, 'venueName');
+    const venueAddress = normalizeOptionalNullableTextField(requestBody, 'venueAddress');
+    const sourceEventUrl = normalizeOptionalNullableTextField(requestBody, 'sourceEventUrl');
+    const sourceProvider = normalizeOptionalNullableTextField(requestBody, 'sourceProvider');
+    const city = normalizeOptionalNullableTextField(requestBody, 'city');
+    const country = normalizeOptionalNullableTextField(requestBody, 'country');
+    const ticketUrl = normalizeOptionalNullableTextField(requestBody, 'ticketUrl');
+    const ticketCurrency = normalizeOptionalNullableTextField(requestBody, 'ticketCurrency');
+    const ticketNotes = normalizeOptionalNullableTextField(requestBody, 'ticketNotes');
+    const normalizedOfficialWebsite = normalizeOptionalNullableTextField(requestBody, 'officialWebsite');
+    const referenceLinks = normalizeOptionalStringArrayField(requestBody, 'referenceLinks');
+    const socialLinks = normalizeOptionalJsonField(requestBody, 'socialLinks');
+    const stageOrder = normalizeStageOrder(requestBody.stageOrder);
 
     if (!name || !startDate || !endDate) {
       res.status(400).json({ error: 'Name, startDate, and endDate are required' });
@@ -963,7 +1032,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
 
     const normalizedTicketTiers = normalizeTicketTiers(ticketTiers);
     const normalizedTimeZone = normalizeEventTimeZone(timeZone);
-    const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(req.body as Record<string, unknown>, normalizedTimeZone);
+    const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(requestBody, normalizedTimeZone);
     if (submittedTimeZoneSelectionError) {
       res.status(400).json({ error: submittedTimeZoneSelectionError });
       return;
@@ -1004,18 +1073,25 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       const created = await tx.event.create({
         data: {
           organizerId: userId,
+          wikiFestivalId: wikiFestivalId ?? undefined,
           name,
           slug: desiredSlug,
-          description,
+          description: description ?? undefined,
           nameI18n: normalizedNameI18n,
           descriptionI18n: normalizedDescriptionI18n,
           coverImageUrl,
           lineupImageUrl,
-          eventType,
-          organizerName,
-          city,
+          eventType: eventType ?? undefined,
+          organizerName: organizerName ?? undefined,
+          venueName: venueName ?? undefined,
+          venueAddress: venueAddress ?? undefined,
+          referenceLinks: referenceLinks ?? undefined,
+          socialLinks: socialLinks ?? undefined,
+          sourceProvider: sourceProvider ?? undefined,
+          sourceEventUrl: sourceEventUrl ?? undefined,
+          city: city ?? undefined,
           cityI18n: normalizedCityI18n,
-          country,
+          country: country ?? undefined,
           countryI18n: normalizedCountryI18n,
           manualLocation,
           locationPoint,
@@ -1028,11 +1104,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           endTime: normalizedEndTime,
           dayRolloverHour: normalizedDayRolloverHour,
           status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof status === 'string' ? status : null),
-          ticketUrl,
+          ticketUrl: ticketUrl ?? undefined,
           ticketPriceMin: toNumberOrNull(ticketPriceMin),
           ticketPriceMax: toNumberOrNull(ticketPriceMax),
-          ticketCurrency,
-          ticketNotes,
+          ticketCurrency: ticketCurrency ?? undefined,
+          ticketNotes: ticketNotes ?? undefined,
           ticketTiers: normalizedTicketTiers.length
             ? {
                 create: normalizedTicketTiers.map((tier, index) => ({
@@ -1043,7 +1119,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
                 })),
               }
             : undefined,
-          officialWebsite,
+          officialWebsite: normalizedOfficialWebsite ?? undefined,
         },
       });
       await syncStructuredEventSchedule(tx, created.id, scheduleContext);
@@ -1051,7 +1127,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         tx,
         created.id,
         normalizedSlots,
-        normalizedLineupArtists
+        normalizedLineupArtists,
+        stageOrder
       );
       return tx.event.findUniqueOrThrow({
         where: { id: created.id },
@@ -1101,14 +1178,9 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const {
       name,
       slug,
-      description,
       coverImageUrl,
       lineupImageUrl,
-      eventType,
-      organizerName,
-      city,
       cityI18n,
-      country,
       countryI18n,
       manualLocation,
       locationPoint,
@@ -1120,19 +1192,42 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       startTime,
       endTime,
       dayRolloverHour,
-      ticketUrl,
       ticketPriceMin,
       ticketPriceMax,
-      ticketCurrency,
-      ticketNotes,
       ticketTiers,
-      officialWebsite,
       lineupSlots,
       status,
     } = req.body;
     const requestBody = req.body as Record<string, unknown>;
-    const hasCoverImageUrl = Object.prototype.hasOwnProperty.call(requestBody, 'coverImageUrl');
-    const hasLineupImageUrl = Object.prototype.hasOwnProperty.call(requestBody, 'lineupImageUrl');
+    const hasCoverImageUrl = hasOwn(requestBody, 'coverImageUrl');
+    const hasLineupImageUrl = hasOwn(requestBody, 'lineupImageUrl');
+    const clearCityI18n = requestBody.clearCityI18n === true;
+    const clearCountryI18n = requestBody.clearCountryI18n === true;
+    const clearWikiFestivalId = requestBody.clearWikiFestivalId === true;
+    const clearManualLocation = requestBody.clearManualLocation === true;
+    const clearLocationPoint = requestBody.clearLocationPoint === true;
+    const clearLatitude = requestBody.clearLatitude === true;
+    const clearLongitude = requestBody.clearLongitude === true;
+    const clearStageOrder = requestBody.clearStageOrder === true;
+    const clearLineupSlots = requestBody.clearLineupSlots === true;
+    const clearSocialLinks = requestBody.clearSocialLinks === true;
+    const wikiFestivalId = normalizeOptionalNullableTextField(requestBody, 'wikiFestivalId');
+    const description = normalizeOptionalNullableTextField(requestBody, 'description');
+    const eventType = normalizeOptionalNullableTextField(requestBody, 'eventType');
+    const organizerName = normalizeOptionalNullableTextField(requestBody, 'organizerName');
+    const venueName = normalizeOptionalNullableTextField(requestBody, 'venueName');
+    const venueAddress = normalizeOptionalNullableTextField(requestBody, 'venueAddress');
+    const sourceEventUrl = normalizeOptionalNullableTextField(requestBody, 'sourceEventUrl');
+    const sourceProvider = normalizeOptionalNullableTextField(requestBody, 'sourceProvider');
+    const city = normalizeOptionalNullableTextField(requestBody, 'city');
+    const country = normalizeOptionalNullableTextField(requestBody, 'country');
+    const ticketUrl = normalizeOptionalNullableTextField(requestBody, 'ticketUrl');
+    const ticketCurrency = normalizeOptionalNullableTextField(requestBody, 'ticketCurrency');
+    const ticketNotes = normalizeOptionalNullableTextField(requestBody, 'ticketNotes');
+    const normalizedOfficialWebsite = normalizeOptionalNullableTextField(requestBody, 'officialWebsite');
+    const referenceLinks = normalizeOptionalStringArrayField(requestBody, 'referenceLinks');
+    const socialLinks = normalizeOptionalJsonField(requestBody, 'socialLinks');
+    const stageOrder = clearStageOrder ? [] : normalizeStageOrder(requestBody.stageOrder);
 
     const existing = await prisma.event.findUnique({
       where: { id: id as string },
@@ -1165,7 +1260,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       ? normalizeEventTimeZone(timeZone, existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE)
       : normalizeEventTimeZone(existing.timeZone ?? DEFAULT_EVENT_TIME_ZONE);
     if (timeZone !== undefined) {
-      const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(req.body as Record<string, unknown>, nextTimeZone);
+      const submittedTimeZoneSelectionError = validateSubmittedEventTimezoneSelection(requestBody, nextTimeZone);
       if (submittedTimeZoneSelectionError) {
         res.status(400).json({ error: submittedTimeZoneSelectionError });
         return;
@@ -1255,7 +1350,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       !Array.isArray(lineupSlots)
       && (startDate !== undefined || dayRolloverHour !== undefined || timeZone !== undefined)
       && (await loadCanonicalEventLineupSnapshot(prisma, id as string)).slots.length > 0;
-    const shouldSyncLineupArtists = Array.isArray(req.body.lineupArtists) || Array.isArray(lineupSlots);
+    const shouldSyncLineupArtists =
+      Array.isArray(req.body.lineupArtists)
+      || Array.isArray(lineupSlots)
+      || Array.isArray(requestBody.stageOrder)
+      || clearLineupSlots
+      || clearStageOrder;
     const normalizedNameI18n = normalizeOptionalTriTextJson(req.body.nameI18n);
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
@@ -1267,6 +1367,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         data: {
           name: name ?? undefined,
           slug: slug ?? undefined,
+          wikiFestivalId: clearWikiFestivalId ? null : wikiFestivalId,
           description: description ?? undefined,
           nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
           descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
@@ -1274,14 +1375,28 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           lineupImageUrl: hasLineupImageUrl ? (typeof lineupImageUrl === 'string' && lineupImageUrl.trim() ? lineupImageUrl.trim() : null) : undefined,
           eventType: eventType ?? undefined,
           organizerName: organizerName ?? undefined,
+          venueName: venueName,
+          venueAddress: venueAddress,
+          referenceLinks: referenceLinks !== undefined ? referenceLinks : undefined,
+          socialLinks: clearSocialLinks ? Prisma.JsonNull : socialLinks,
+          sourceProvider: sourceProvider,
+          sourceEventUrl: sourceEventUrl,
           city: city ?? undefined,
-          cityI18n: cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
+          cityI18n: clearCityI18n ? Prisma.DbNull : cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
           country: country ?? undefined,
-          countryI18n: countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
-          manualLocation: manualLocation ?? undefined,
-          locationPoint: locationPoint ?? undefined,
-          latitude: latitude !== undefined ? toNumberOrNull(latitude) : undefined,
-          longitude: longitude !== undefined ? toNumberOrNull(longitude) : undefined,
+          countryI18n: clearCountryI18n ? Prisma.DbNull : countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
+          manualLocation: clearManualLocation
+            ? Prisma.JsonNull
+            : hasOwn(requestBody, 'manualLocation')
+              ? ((manualLocation as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+              : undefined,
+          locationPoint: clearLocationPoint
+            ? Prisma.JsonNull
+            : hasOwn(requestBody, 'locationPoint')
+              ? ((locationPoint as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+              : undefined,
+          latitude: clearLatitude ? null : hasOwn(requestBody, 'latitude') ? toNumberOrNull(latitude) : undefined,
+          longitude: clearLongitude ? null : hasOwn(requestBody, 'longitude') ? toNumberOrNull(longitude) : undefined,
           startDate: startDate ? nextStartDate ?? undefined : undefined,
           endDate: endDate ? nextEndDate ?? undefined : undefined,
           timeZone: timeZone !== undefined ? nextTimeZone : undefined,
@@ -1304,7 +1419,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
                 })),
               }
             : undefined,
-          officialWebsite: officialWebsite ?? undefined,
+          officialWebsite: normalizedOfficialWebsite ?? undefined,
           status: resolveEventStatus(
             effectiveStartDate,
             effectiveEndDate,
@@ -1319,7 +1434,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           tx,
           id as string,
           normalizedSlots,
-          normalizedLineupArtists
+          normalizedLineupArtists,
+          stageOrder
         );
       }
     });

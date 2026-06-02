@@ -140,6 +140,18 @@ enum EventUploadValidation {
            URL(string: draft.ticket.ticketURL) == nil {
             issues.append(.init(step: .tickets, message: LT("请填写有效的购票链接。", "Enter a valid ticket URL.", "有効なチケットURLを入力してください。")))
         }
+        let socialLinksText = draft.socialLinksText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !socialLinksText.isEmpty,
+           socialLinksText.data(using: .utf8).flatMap({ try? JSONSerialization.jsonObject(with: $0) }) == nil {
+            issues.append(.init(
+                step: .basic,
+                message: LT(
+                    "绀句氦閾炬帴 JSON 鏍煎紡涓嶆纭紝璇锋鏌ュ悗鍐嶆彁浜ゃ€?",
+                    "Social Links JSON is invalid. Please fix it before submitting.",
+                    "SNS銉兂銈紙JSON锛変笉姝ｇ‘銇с仚銆傞€佷俊鍓嶃伀淇銇椼仸銇忋仩銇曘亜銆?"
+                )
+            ))
+        }
         for (index, tier) in draft.ticket.tiers.enumerated() {
             let price = tier.price.trimmingCharacters(in: .whitespacesAndNewlines)
             let name = tier.name.trimmingCharacters(in: .whitespacesAndNewlines)

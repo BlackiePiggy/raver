@@ -1443,18 +1443,42 @@ const asEventLocationObject = (value: unknown): Record<string, unknown> | null =
 };
 
 const EVENT_LOCATION_PROVIDERS = new Set(['amap', 'google', 'mapkit', 'mapbox', 'geoapify']);
+const EVENT_LOCATION_PROVIDER_ALIASES = new Map([
+  ['apple-mapkit', 'mapkit'],
+  ['apple_mapkit', 'mapkit'],
+]);
+const EVENT_LOCATION_SOURCE_MODES = new Set([
+  'manual_search',
+  'pin_drag',
+  'map_poi_click',
+  'my_location',
+  'legacy_coords',
+]);
+const EVENT_LOCATION_SOURCE_MODE_ALIASES = new Map([
+  ['composed_search', 'manual_search'],
+  ['picker_search', 'manual_search'],
+  ['manual_pick', 'pin_drag'],
+  ['manual_pin', 'pin_drag'],
+  ['ios-event-upload-v2', 'pin_drag'],
+  ['web-event-studio-v2', 'pin_drag'],
+  ['server_normalized', 'legacy_coords'],
+]);
 
 const normalizeEventLocationProvider = (value: unknown, fallback = 'amap'): string => {
-  const preferred = normalizeEventText(value).toLowerCase();
+  const preferredRaw = normalizeEventText(value).toLowerCase();
+  const preferred = EVENT_LOCATION_PROVIDER_ALIASES.get(preferredRaw) || preferredRaw;
   if (EVENT_LOCATION_PROVIDERS.has(preferred)) return preferred;
-  const fb = normalizeEventText(fallback).toLowerCase();
+  const fbRaw = normalizeEventText(fallback).toLowerCase();
+  const fb = EVENT_LOCATION_PROVIDER_ALIASES.get(fbRaw) || fbRaw;
   return EVENT_LOCATION_PROVIDERS.has(fb) ? fb : 'amap';
 };
 
 const normalizeEventLocationSourceMode = (value: unknown, fallback = 'manual_search'): string => {
-  const text = normalizeEventText(value);
-  if (!text) return fallback;
-  return text.slice(0, 64);
+  const textRaw = normalizeEventText(value).toLowerCase();
+  if (!textRaw) return fallback;
+  const text = EVENT_LOCATION_SOURCE_MODE_ALIASES.get(textRaw) || textRaw;
+  if (EVENT_LOCATION_SOURCE_MODES.has(text)) return text;
+  return EVENT_LOCATION_SOURCE_MODES.has(fallback) ? fallback : 'manual_search';
 };
 
 const normalizeEventLocationStringArray = (value: unknown): string[] => {
