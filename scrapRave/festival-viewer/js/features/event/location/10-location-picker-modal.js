@@ -144,14 +144,16 @@ function eventLocationCallCloseModal(...args) {
 }
 
 function eventLocationRemoveAnchorMarker() {
-  if (!eventLocationMap || !eventLocationAnchorMarker) return;
-  eventLocationMap.remove(eventLocationAnchorMarker);
+  if (!eventLocationAnchorMarker) return;
+  if (eventLocationMap && typeof eventLocationMap.remove === 'function') {
+    eventLocationMap.remove(eventLocationAnchorMarker);
+  }
   eventLocationAnchorMarker = null;
 }
 
 function eventLocationUpdateAnchorMarker(point) {
   const p = normalizeEventLocationPoint(point);
-  if (!p || !eventLocationMap || !window.AMap) return;
+  if (!p || !eventLocationMap || !window.AMap || typeof eventLocationMap.add !== 'function') return;
   const pos = [p.location.lng, p.location.lat];
   if (!eventLocationAnchorMarker) {
     eventLocationAnchorMarker = new window.AMap.Marker({
@@ -314,14 +316,16 @@ function eventLocationOpenPoiPhotoLightbox(startIdx = 0) {
 }
 
 function eventLocationRemovePoiMarker() {
-  if (!eventLocationMap || !eventLocationPoiMarker) return;
-  eventLocationMap.remove(eventLocationPoiMarker);
+  if (!eventLocationPoiMarker) return;
+  if (eventLocationMap && typeof eventLocationMap.remove === 'function') {
+    eventLocationMap.remove(eventLocationPoiMarker);
+  }
   eventLocationPoiMarker = null;
 }
 
 function eventLocationUpdatePoiMarker(point) {
   const p = normalizeEventLocationPoint(point);
-  if (!p || !eventLocationMap || !window.AMap) return;
+  if (!p || !eventLocationMap || !window.AMap || typeof eventLocationMap.add !== 'function') return;
   const pos = [p.location.lng, p.location.lat];
   if (!eventLocationPoiMarker) {
     eventLocationPoiMarker = new window.AMap.Marker({
@@ -731,7 +735,7 @@ async function eventLocationLocateMe() {
   try {
     const current = await amapLocateCurrentPosition();
     eventLocationCallSetPin(current, true);
-    if (eventLocationMap) {
+    if (eventLocationMap && typeof eventLocationMap.add === 'function') {
       if (!eventLocationMyMarker) {
         eventLocationMyMarker = new window.AMap.Marker({
           position: [current.location.lng, current.location.lat],

@@ -2563,6 +2563,9 @@ export default function EventStudioForm({
                       <div className="mt-2 text-sm leading-6 text-black/52">
                         {detailAddressDisplay}
                       </div>
+                      <div className="mt-2 text-xs text-black/38">
+                        地图选点将通过独立的 legacy `festival-viewer` 窗口完成，确认后自动回填当前表单。
+                      </div>
                       <div className="mt-2 text-xs text-black/40">
                         {draft.latitude && draft.longitude
                           ? `${draft.latitude}, ${draft.longitude}`
@@ -2580,7 +2583,7 @@ export default function EventStudioForm({
                         onClick={() => setShowLocationPicker(true)}
                         className="admin-studio-button-primary px-4 py-3 text-sm"
                       >
-                        {draft.latitude && draft.longitude ? '重新地图选点' : '地图选点'}
+                        {draft.latitude && draft.longitude ? '在独立窗口重新选点' : '在独立窗口选点'}
                       </button>
                       {(draft.latitude || draft.longitude || draft.pickedMapAddress || draft.pickedPlaceName) ? (
                         <button
