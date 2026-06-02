@@ -82,6 +82,67 @@ function eventLocationIsViewMode() {
   return String(eventLocationPickerState?.mode || '').trim() === 'view';
 }
 
+function eventLocationCallRuntime(name, fallback, args = []) {
+  const runtimeHost = typeof globalThis === 'object' ? globalThis : null;
+  const runtimeFn = runtimeHost ? runtimeHost[name] : null;
+  if (typeof runtimeFn === 'function' && runtimeFn !== fallback) {
+    return runtimeFn.apply(runtimeHost, args);
+  }
+  return fallback.apply(runtimeHost, args);
+}
+
+function eventLocationCallRemoveAnchorMarker(...args) {
+  return eventLocationCallRuntime('eventLocationRemoveAnchorMarker', eventLocationRemoveAnchorMarker, args);
+}
+
+function eventLocationCallUpdateAnchorMarker(...args) {
+  return eventLocationCallRuntime('eventLocationUpdateAnchorMarker', eventLocationUpdateAnchorMarker, args);
+}
+
+function eventLocationCallSyncPinMarkerMode(...args) {
+  return eventLocationCallRuntime('eventLocationSyncPinMarkerMode', eventLocationSyncPinMarkerMode, args);
+}
+
+function eventLocationCallRemovePoiMarker(...args) {
+  return eventLocationCallRuntime('eventLocationRemovePoiMarker', eventLocationRemovePoiMarker, args);
+}
+
+function eventLocationCallUpdatePoiMarker(...args) {
+  return eventLocationCallRuntime('eventLocationUpdatePoiMarker', eventLocationUpdatePoiMarker, args);
+}
+
+function eventLocationCallLoadViewAnchorDetails(...args) {
+  return eventLocationCallRuntime('eventLocationLoadViewAnchorDetailsIntoPanel', eventLocationLoadViewAnchorDetailsIntoPanel, args);
+}
+
+function eventLocationCallLoadPoiDetails(...args) {
+  return eventLocationCallRuntime('eventLocationLoadPoiDetailsIntoPanel', eventLocationLoadPoiDetailsIntoPanel, args);
+}
+
+function eventLocationCallSetPin(...args) {
+  return eventLocationCallRuntime('eventLocationSetPin', eventLocationSetPin, args);
+}
+
+function eventLocationCallResolveByPoint(...args) {
+  return eventLocationCallRuntime('eventLocationResolveByPoint', eventLocationResolveByPoint, args);
+}
+
+function eventLocationCallSearchByKeyword(...args) {
+  return eventLocationCallRuntime('eventLocationSearchByKeyword', eventLocationSearchByKeyword, args);
+}
+
+function eventLocationCallLocateMe(...args) {
+  return eventLocationCallRuntime('eventLocationLocateMe', eventLocationLocateMe, args);
+}
+
+function eventLocationCallEnsureMapReady(...args) {
+  return eventLocationCallRuntime('ensureEventLocationMapReady', ensureEventLocationMapReady, args);
+}
+
+function eventLocationCallCloseModal(...args) {
+  return eventLocationCallRuntime('closeEventLocationPickerModal', closeEventLocationPickerModal, args);
+}
+
 function eventLocationRemoveAnchorMarker() {
   if (!eventLocationMap || !eventLocationAnchorMarker) return;
   eventLocationMap.remove(eventLocationAnchorMarker);
@@ -113,10 +174,10 @@ function eventLocationSetViewAnchorPoint(point) {
   const p = normalizeEventLocationPoint(point);
   eventLocationViewAnchorPoint = p;
   if (!p) {
-    eventLocationRemoveAnchorMarker();
+    eventLocationCallRemoveAnchorMarker();
     return null;
   }
-  eventLocationUpdateAnchorMarker(p);
+  eventLocationCallUpdateAnchorMarker(p);
   return p;
 }
 
@@ -469,10 +530,10 @@ async function eventLocationPreviewPoint(point, options = {}) {
   const merged = eventLocationUpsertCandidate(p, { prepend }) || p;
   eventLocationPickerState.previewPoint = merged;
   eventLocationRenderCandidates();
-  eventLocationSetPin(merged, withPan);
-  eventLocationUpdatePoiMarker(merged);
+  eventLocationCallSetPin(merged, withPan);
+  eventLocationCallUpdatePoiMarker(merged);
   if (loadDetail) {
-    await eventLocationLoadPoiDetailsIntoPanel(merged);
+    await eventLocationCallLoadPoiDetails(merged);
   } else {
     eventLocationShowPoiPanel(merged, {});
   }
@@ -509,7 +570,7 @@ function eventLocationRenderCandidates() {
     candidates.innerHTML = '<div class="event-location-candidate-empty">暂无候选地点</div>';
     eventLocationPickerState.selectedCandidateIdx = -1;
     eventLocationHidePoiPanel();
-    eventLocationRemovePoiMarker();
+    eventLocationCallRemovePoiMarker();
     return;
   }
   const selected = normalizeEventLocationPoint(eventLocationPickerState.selectedPoint);
@@ -659,7 +720,7 @@ async function eventLocationSearchByKeyword(sourceMode = 'manual_search') {
   eventLocationRenderCandidates();
   if (rows.length) {
     await eventLocationPreviewPoint(rows[0], { withPan: true, loadDetail: true, prepend: true });
-    await eventLocationResolveByPoint(rows[0], sourceMode, { keepFirstPoint: true });
+    await eventLocationCallResolveByPoint(rows[0], sourceMode, { keepFirstPoint: true });
   } else {
     eventLocationSetStatus('未找到可用地点，请换关键词或拖动地图 Pin', true);
   }
@@ -669,7 +730,7 @@ async function eventLocationLocateMe() {
   eventLocationSetStatus('正在获取当前位置...', false);
   try {
     const current = await amapLocateCurrentPosition();
-    eventLocationSetPin(current, true);
+    eventLocationCallSetPin(current, true);
     if (eventLocationMap) {
       if (!eventLocationMyMarker) {
         eventLocationMyMarker = new window.AMap.Marker({
@@ -690,7 +751,7 @@ async function eventLocationLocateMe() {
     eventLocationUpsertCandidate(current, { prepend: true });
     eventLocationPickerState.previewPoint = current;
     await eventLocationPreviewPoint(current, { withPan: true, loadDetail: true, prepend: true });
-    await eventLocationResolveByPoint(current, 'my_location', { keepFirstPoint: true });
+    await eventLocationCallResolveByPoint(current, 'my_location', { keepFirstPoint: true });
   } catch (error) {
     eventLocationSetStatus(String(error?.message || '定位失败'), true);
   }
@@ -783,7 +844,7 @@ async function ensureEventLocationMapReady(initialPoint = null) {
     });
   }
   eventLocationMap.resize();
-  eventLocationSyncPinMarkerMode();
+  eventLocationCallSyncPinMarkerMode();
   if (initialPoint && initialPoint.location) {
     eventLocationSetPin(initialPoint, true);
   }
@@ -801,9 +862,9 @@ function closeEventLocationPickerModal() {
   eventLocationSetViewAnchorPoint(null);
   eventLocationSyncViewUi();
   eventLocationHidePoiPanel();
-  eventLocationRemovePoiMarker();
+  eventLocationCallRemovePoiMarker();
   eventLocationPickerState.open = false;
-  eventLocationSyncPinMarkerMode();
+  eventLocationCallSyncPinMarkerMode();
   eventLocationPickerState.onConfirm = null;
   eventLocationPickerState.panelEl = null;
   eventLocationPickerState.fest = null;
@@ -822,7 +883,7 @@ function closeEventLocationPickerModal() {
 function handleEventLocationPickerOverlayClick(event) {
   const { overlay } = eventLocationModalEls();
   if (!overlay) return;
-  if (event?.target === overlay) closeEventLocationPickerModal();
+  if (event?.target === overlay) eventLocationCallCloseModal();
 }
 
 function bindEventLocationModalActions() {
@@ -830,13 +891,13 @@ function bindEventLocationModalActions() {
   if (!els.overlay || els.overlay.dataset.bound === '1') return;
   els.overlay.dataset.bound = '1';
   if (els.searchBtn) {
-    els.searchBtn.onclick = () => { eventLocationSearchByKeyword('manual_search'); };
+    els.searchBtn.onclick = () => { eventLocationCallSearchByKeyword('manual_search'); };
   }
   if (els.searchInput) {
     els.searchInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      eventLocationSearchByKeyword('manual_search');
+      eventLocationCallSearchByKeyword('manual_search');
     });
   }
   if (els.fillZhBtn) {
@@ -869,7 +930,7 @@ function bindEventLocationModalActions() {
   }
   if (els.myPosBtn) {
     els.myPosBtn.onclick = () => {
-      eventLocationLocateMe();
+      eventLocationCallLocateMe();
     };
   }
   if (els.returnAnchorBtn) {
@@ -880,12 +941,12 @@ function bindEventLocationModalActions() {
         eventLocationSetStatus('当前活动尚未绑定活动场地', true);
         return;
       }
-      eventLocationSetPin(anchor, true);
+      eventLocationCallSetPin(anchor, true);
       eventLocationSetStatus('已回到活动场地', false);
     };
   }
   if (els.cancelBtn) {
-    els.cancelBtn.onclick = () => closeEventLocationPickerModal();
+    els.cancelBtn.onclick = () => eventLocationCallCloseModal();
   }
   if (els.poiPanelClose) {
     els.poiPanelClose.onclick = () => {
@@ -944,7 +1005,7 @@ function bindEventLocationModalActions() {
         if (typeof eventLocationPickerState.onConfirm === 'function') {
           eventLocationPickerState.onConfirm(finalPoint);
         }
-        closeEventLocationPickerModal();
+        eventLocationCallCloseModal();
       } catch (error) {
         eventLocationSetStatus(String(error?.message || '地点绑定失败，请重试'), true);
       } finally {
@@ -1011,7 +1072,7 @@ async function openEventLocationPickerModal(options = {}) {
   eventLocationPickerState.candidates = mode === 'view' ? [] : (initialPoint ? [initialPoint] : []);
   eventLocationSetViewAnchorPoint(mode === 'view' ? initialPoint : null);
   eventLocationSyncViewUi();
-  eventLocationSyncPinMarkerMode();
+  eventLocationCallSyncPinMarkerMode();
   if (els.title) {
     const providerLabel = typeof getEventLocationProviderLabel === 'function'
       ? getEventLocationProviderLabel(provider)
@@ -1037,8 +1098,8 @@ async function openEventLocationPickerModal(options = {}) {
   if (els.candidates) els.candidates.style.display = mode === 'view' ? 'none' : '';
   els.overlay.classList.add('open');
 
-  await ensureEventLocationMapReady(initialPoint);
-  eventLocationSyncPinMarkerMode();
+  await eventLocationCallEnsureMapReady(initialPoint);
+  eventLocationCallSyncPinMarkerMode();
   if (mode !== 'view') eventLocationRenderCandidates();
   eventLocationSetStatus(mode === 'view' ? '可拖动地图浏览，并可随时回到活动场地' : '可搜索地点、拖动 Pin 并确认绑定', false);
 
@@ -1046,28 +1107,28 @@ async function openEventLocationPickerModal(options = {}) {
     if (initialPoint) {
       eventLocationSetViewAnchorPoint(initialPoint);
       eventLocationSyncViewUi();
-      eventLocationSetPin(initialPoint, true);
-      eventLocationRemovePoiMarker();
+      eventLocationCallSetPin(initialPoint, true);
+      eventLocationCallRemovePoiMarker();
       eventLocationPickerState.selectedPoint = initialPoint;
       eventLocationPickerState.previewPoint = initialPoint;
-      await eventLocationLoadViewAnchorDetailsIntoPanel();
+      await eventLocationCallLoadViewAnchorDetails();
       return;
     }
     eventLocationSetViewAnchorPoint(null);
     eventLocationSyncViewUi();
     eventLocationHidePoiPanel();
-    eventLocationRemovePoiMarker();
+    eventLocationCallRemovePoiMarker();
     eventLocationSetStatus('当前活动尚未绑定定位地点', true);
     return;
   }
 
   if (initialPoint) {
-    await eventLocationResolveByPoint(initialPoint, initialPoint.sourceMode || 'manual_search', { keepFirstPoint: true });
+    await eventLocationCallResolveByPoint(initialPoint, initialPoint.sourceMode || 'manual_search', { keepFirstPoint: true });
     return;
   }
   const center = eventLocationMap?.getCenter?.();
   if (center) {
-    await eventLocationResolveByPoint(
+    await eventLocationCallResolveByPoint(
       {
         provider,
         sourceMode: 'pin_drag',
