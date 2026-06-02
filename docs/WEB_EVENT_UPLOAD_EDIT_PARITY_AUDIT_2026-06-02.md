@@ -139,6 +139,9 @@ web 当前这一块还不算完全闭环，所以必须最高优先级补齐：
 - [x] `web`: `pnpm build`
 - [x] web parity test fixture 已同步新的 `EventStudioImageOrigin` 语义
 - [x] direct apply / pending submission / update apply 三条 event media 归属链路已补齐
+- [x] web create/edit 提交后已切换为独立结果页，并按 iOS 的 create/edit × created/submitted 四种结果语义展示
+- [x] 已移除 web 端全局 step 本地记忆；活动编辑页重新从第一页进入，避免误落到 timetable
+- [x] web Event Studio Step 4 的 timetable 主视图已改为 legacy timetable 风格分栏/平铺展示，不再强制贴合时间轴；下方精细编辑与提交数据模型保持不变
 
 ---
 
@@ -1003,4 +1006,47 @@ web/src/features/admin-content/event-studio/
 
 **把 iOS 现在的语义当基线，冻结 contract 主干，web 新增一层 session-driven orchestration shell，逐步补齐草稿、校验、冲突、AI 导入和测试矩阵。**
 
+---
+
+## AI Import / Coze Progress Update (2026-06-02)
+
+Priority goal for this round: make the web Event Studio Coze flow follow the same core semantics as iOS for `recognize -> review editable result -> apply into draft`, without changing the current iOS chain.
+
+- [x] Replaced the old single-job state in `web/src/components/admin/EventStudioAIImportDock.tsx` with a task-based state model
+- [x] Poster import now follows async job creation, polling, editable result review, timezone resolution, and apply
+- [x] Lineup import now supports multiple selected images, concurrent jobs, incremental result append, exact DJ matching, and manual DJ binding
+- [x] Timetable import now supports multiple selected images, concurrent jobs, incremental result append, exact DJ matching, manual DJ binding, and unresolved event-day blocking before apply
+- [x] Web DJ manual search now uses the BFF DJ search endpoint instead of the old aggregator shortcut
+- [x] Web DJ auto-match now uses `/v1/djs/match-exact`, matching the iOS exact-match semantics
+- [x] Web Coze entry buttons are now mounted on the matching `Basics / Timetable / Lineup` steps and styled with the same gradient-button direction as iOS
+- [x] `pnpm build` in `web/` passes after this refactor
+
+Remaining parity / hardening gaps:
+
+- [ ] Poster editable result can still be aligned further with iOS for deeper ticket tier and metadata editing details
+- [ ] AI import session persistence is still missing on web, so refresh recovery is not yet at iOS draft level
+- [ ] Automated smoke / contract coverage for poster, lineup, and timetable AI import flows is still missing
+- [ ] Per-task retry / richer task governance is still a web gap compared with the more mature iOS workflow shell
+- [ ] Real manual smoke verification is still needed for web create and web edit flows against live BFF responses
+
 这条路风险最低，也最容易长期商用。
+---
+
+## Media Page Progress Update (2026-06-02)
+
+Highest-priority media-page parity work completed in this round:
+
+- [x] Web event media page now creates local pending image items before remote upload, matching the iOS "pick first, upload immediately after" behavior direction
+- [x] Each selected image now uploads independently instead of using one `Promise.all` batch gate, so partial success no longer hides already-uploaded files from the draft state
+- [x] Web media items now carry per-image lifecycle state compatible with the iOS semantics: `pending-local`, `uploading`, `failed`, `uploaded`
+- [x] Web submit now retries pending/failed local media before the final create/edit request, matching the iOS submit-time fallback upload behavior
+- [x] Web media delete now aborts in-flight upload work, removes the local pending item immediately, and still best-effort cleans up owned remote media when applicable
+- [x] Web media page now supports explicit per-image reordering controls, aligning with the iOS move-up / move-down behavior
+- [x] Web AI import candidate image selection is now filtered to remote-ready images only, preventing pending/failed local-only media from leaking into the Coze import path
+- [x] `web/` production build passes after the media-page parity refactor
+
+Remaining media-page gap versus full iOS workflow parity:
+
+- [ ] Web still does not persist pending local image files across refresh/reopen the way the iOS local draft store does
+- [ ] Web currently uses browser `<img>` for local blob previews; behavior is correct, but the preview implementation is still more web-specific than iOS
+- [ ] Real manual smoke is still needed for: create event upload/remove/submit and edit event upload/remove/submit against live OSS + BFF

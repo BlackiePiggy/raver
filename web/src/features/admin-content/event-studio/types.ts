@@ -78,9 +78,12 @@ export type EventStudioLocationPoint = EventContractSchemas['EventLocationPoint'
 };
 
 export type EventStudioImageOrigin =
+  | 'pending-local'
   | 'draft-upload'
   | 'event-upload'
   | 'persisted-event';
+
+export type EventStudioImageUploadState = 'pending' | 'uploading' | 'failed' | 'uploaded';
 
 export type EventStudioImageState = {
   id: string;
@@ -89,6 +92,10 @@ export type EventStudioImageState = {
   usage: EventStudioImageUsage;
   origin: EventStudioImageOrigin;
   sortOrder: number;
+  mimeType?: string | null;
+  localPreviewUrl?: string | null;
+  localFile?: File | null;
+  uploadState?: EventStudioImageUploadState;
 };
 
 export type EventStudioTicketTierDraft = {

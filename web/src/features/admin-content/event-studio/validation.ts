@@ -1,4 +1,4 @@
-import { EventStudioDraft, EventStudioValidationErrors } from './types';
+import { EventStudioDraft, EventStudioImageState, EventStudioValidationErrors } from './types';
 
 const firstFilledText = (...values: Array<string | undefined | null>): string => {
   for (const value of values) {
@@ -15,10 +15,12 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     b2b: 2,
     b3b: 3,
   };
+  const hasVisualItem = (item: EventStudioImageState) =>
+    item.remoteUrl.trim().length > 0 || Boolean(item.localFile) || Boolean(item.localPreviewUrl?.trim());
   const hasEntryVisual =
-    draft.imageZones.poster.some((item) => item.remoteUrl.trim()) ||
-    draft.imageZones.lineup.some((item) => item.remoteUrl.trim()) ||
-    draft.imageZones.cover.some((item) => item.remoteUrl.trim());
+    draft.imageZones.poster.some(hasVisualItem) ||
+    draft.imageZones.lineup.some(hasVisualItem) ||
+    draft.imageZones.cover.some(hasVisualItem);
 
   if (!firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull)) {
     errors.name = '请至少填写一个活动名称';

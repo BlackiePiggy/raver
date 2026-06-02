@@ -37,6 +37,28 @@ type CreateImportJobInput = {
   context?: Record<string, unknown>;
 };
 
+type EventStudioDJSearchResult = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  country?: string | null;
+  avatarUrl?: string | null;
+  avatarOriginalUrl?: string | null;
+  avatarMediumUrl?: string | null;
+  avatarSmallUrl?: string | null;
+};
+
+type EventStudioExactMatchResult = {
+  query: string;
+  djId: string;
+  name: string;
+  aliases?: string[] | null;
+  avatarUrl?: string | null;
+  avatarOriginalUrl?: string | null;
+  avatarMediumUrl?: string | null;
+  avatarSmallUrl?: string | null;
+};
+
 type EventEnvelope = EventContractSchemas['EventEnvelope'];
 type EventDetailEnvelope = EventContractSchemas['EventDetailEnvelope'];
 type EventSubmissionAcceptedEnvelope = EventContractSchemas['EventSubmissionAcceptedEnvelope'];
@@ -114,6 +136,7 @@ export const eventStudioApi = {
       usage: 'poster' | 'lineup' | 'timetable' | 'cover' | 'map' | 'other';
       draftId?: string;
       eventId?: string;
+      signal?: AbortSignal;
     }
   ): Promise<UploadImageResponse> {
     const formData = new FormData();
@@ -131,6 +154,7 @@ export const eventStudioApi = {
       method: 'POST',
       body: formData,
       headers: {},
+      signal: options.signal,
     });
 
     if (!response.ok) {
@@ -246,5 +270,40 @@ export const eventStudioApi = {
       }
     );
     return payload.data;
+  },
+
+  async searchDJs(query: string): Promise<EventStudioDJSearchResult[]> {
+    const search = query.trim();
+    if (!search) return [];
+    const searchParams = new URLSearchParams({
+      page: '1',
+      limit: '8',
+      search,
+      sortBy: 'relevance',
+    });
+    const payload = await authenticatedJsonFetch<{ data?: { items?: EventStudioDJSearchResult[] } }>(
+      getApiUrl(`/v1/djs?${searchParams.toString()}`)
+    );
+    return Array.isArray(payload.data?.items) ? payload.data.items : [];
+  },
+
+  async matchExactDJs(names: string[]): Promise<EventStudioExactMatchResult[]> {
+    const normalizedNames = Array.from(
+      new Set(
+        names
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 200)
+      )
+    );
+    if (!normalizedNames.length) return [];
+    const payload = await authenticatedJsonFetch<{ data?: { matches?: EventStudioExactMatchResult[] } }>(
+      getApiUrl('/v1/djs/match-exact'),
+      {
+        method: 'POST',
+        body: JSON.stringify({ names: normalizedNames }),
+      }
+    );
+    return Array.isArray(payload.data?.matches) ? payload.data.matches : [];
   },
 };

@@ -73,6 +73,10 @@ const normalizeImageZones = (
       id: item.id || crypto.randomUUID(),
       usage,
       sortOrder: item.sortOrder || index + 1,
+      mimeType: item.mimeType || null,
+      localPreviewUrl: item.localPreviewUrl || null,
+      localFile: item.localFile || null,
+      uploadState: item.uploadState || (item.remoteUrl?.trim() ? 'uploaded' : 'pending'),
     }));
   });
   return next;
@@ -91,6 +95,10 @@ const createImageState = (input: {
   fileName: input.fileName,
   origin: input.origin,
   sortOrder: input.sortOrder || 1,
+  mimeType: null,
+  localPreviewUrl: null,
+  localFile: null,
+  uploadState: input.remoteUrl.trim() ? 'uploaded' : 'pending',
 });
 
 const classifyEventImageUsage = (type?: string | null, label?: string | null): EventStudioImageUsage => {

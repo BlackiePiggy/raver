@@ -1,28 +1,42 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import EventStudioForm from '@/components/admin/EventStudioForm';
 import {
+  buildEventStudioSubmitResultHref,
   createEventStudioDraft,
   type EventStudioCreateResult,
   type EventStudioDraft,
 } from '@/features/admin-content/event-studio';
 
 export default function AdminContentEventCreatePage() {
+  const router = useRouter();
   const [draft, setDraft] = useState<EventStudioDraft>(() => createEventStudioDraft());
-  const [submitNotice, setSubmitNotice] = useState<string | null>(null);
-  const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
 
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
-      setSubmitNotice(`活动已直接创建成功：${result.event.name}`);
-      setSubmitResultLink(`/admin/content/events/${result.event.id}/edit`);
+      router.replace(
+        buildEventStudioSubmitResultHref({
+          flow: 'create',
+          outcome: 'created',
+          eventId: result.event.id,
+          eventName: result.event.name,
+        })
+      );
       return;
     }
-    setSubmitNotice(result.payload.message || '活动任务已提交，当前正在处理中，尚未等同于已直接入库。');
-    setSubmitResultLink('/admin/content/reviews/submissions');
+
+    router.replace(
+      buildEventStudioSubmitResultHref({
+        flow: 'create',
+        outcome: 'submitted',
+        submissionId: result.payload.submission.id,
+        message: result.payload.message,
+      })
+    );
   };
 
   return (
@@ -43,19 +57,6 @@ export default function AdminContentEventCreatePage() {
         </>
       }
     >
-      {submitNotice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
-          <div>{submitNotice}</div>
-          {submitResultLink ? (
-            <div className="mt-3">
-              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
-                继续进入结果页面
-              </Link>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       <EventStudioForm mode="create" draft={draft} setDraft={setDraft} onSubmit={handleSubmitResult} />
     </AdminContentLayout>
   );

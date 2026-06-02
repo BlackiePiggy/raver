@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChangeEvent, CSSProperties, ReactNode, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
@@ -27,6 +27,7 @@ import {
   type EventStudioCreateResult,
   type EventStudioDraft,
   type EventStudioEventDayDraft,
+  type EventStudioImageOrigin,
   type EventStudioImageState,
   type EventStudioImageUsage,
   type EventStudioLineupArtistDraft,
@@ -168,6 +169,35 @@ const normalizeZoneSortOrder = (items: EventStudioImageState[]) =>
     sortOrder: index + 1,
   }));
 
+const MAX_MEDIA_SELECTION_COUNT = 12;
+
+const imageHasVisibleAsset = (image: EventStudioImageState): boolean =>
+  image.remoteUrl.trim().length > 0 || Boolean(image.localPreviewUrl?.trim());
+
+const imagePreviewUrl = (image: EventStudioImageState): string =>
+  image.remoteUrl.trim() || image.localPreviewUrl?.trim() || '';
+
+const imageOriginLabel = (origin: EventStudioImageOrigin): string => {
+  if (origin === 'persisted-event') return '活动已存在资源';
+  if (origin === 'event-upload') return '当前编辑上传';
+  if (origin === 'draft-upload') return '当前草稿上传';
+  return '本地待上传';
+};
+
+const imageStatusLabel = (image: EventStudioImageState): string => {
+  if (image.uploadState === 'uploading') return '上传中';
+  if (image.uploadState === 'failed') return '上传失败，提交前会重试';
+  if (image.uploadState === 'pending') return '等待上传';
+  return imageOriginLabel(image.origin);
+};
+
+const isAbortLikeError = (error: unknown): boolean =>
+  error instanceof DOMException
+    ? error.name === 'AbortError'
+    : error instanceof Error
+      ? error.name === 'AbortError'
+      : false;
+
 function Section({
   title,
   description,
@@ -292,6 +322,109 @@ function StudioTopbar({
   onSubmit: () => void;
   submitButtonText?: string;
 }) {
+  /* const renderMediaZone = (usage: EventStudioImageUsage) => {
+    const config = IMAGE_ZONE_CONFIG.find((item) => item.usage === usage);
+    if (!config) return null;
+    const items = draft.imageZones[usage];
+    const isPrimary = config.emphasis === 'primary';
+    const zoneUploadingCount = items.filter((item) => item.uploadState === 'uploading').length;
+
+    return (
+      <div
+        key={usage}
+        className={isPrimary ? 'admin-reference-card p-4' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9] p-4'}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-[#071110]">{config.title}</div>
+            <div className="mt-1 text-sm leading-6 text-black/48">{config.description}</div>
+          </div>
+          <label className="admin-studio-button-secondary cursor-pointer px-3 py-2 text-xs">
+            {items.length ? 'Add More' : 'Choose Images'}
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void handleImageUpload(event, usage)}
+            />
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-black/45">
+            <span>{items.length} images</span>
+            <span>{zoneUploadingCount ? `${zoneUploadingCount} uploading` : 'Up to 12 per pick'}</span>
+          </div>
+          {items.length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {items.map((image, index) => (
+                <div key={image.id} className="overflow-hidden rounded-[22px] border border-[#e8eceb] bg-white">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-[#f2f3ef]">
+                    {imagePreviewUrl(image) ? (
+                      image.remoteUrl.trim() ? (
+                        <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="800px" />
+                      ) : (
+                        <img src={imagePreviewUrl(image)} alt={`${config.title}-${index + 1}`} className="h-full w-full object-cover" />
+                      )
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-black/35">No preview</div>
+                    )}
+                    {image.uploadState === 'uploading' ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-xs font-medium text-white">Uploading...</div>
+                    ) : null}
+                    {image.uploadState === 'failed' ? (
+                      <div className="absolute right-3 top-3 rounded-full bg-[#fff4e6] px-2 py-1 text-[11px] font-semibold text-[#b25b00]">
+                        Failed
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
+                      <div className="mt-1 text-xs text-black/40">
+                        #{image.sortOrder} · {imageStatusLabel(image)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleImageMove(usage, image.id, -1)}
+                        disabled={index === 0}
+                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleImageMove(usage, image.id, 1)}
+                        disabled={index === items.length - 1}
+                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleImageRemove(usage, image)}
+                        className="admin-studio-button-danger px-3 py-2 text-xs"
+                      >
+                        {deletingImageId === image.id ? 'Removing...' : 'Remove'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-[180px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white text-sm text-black/42">
+              {config.hint}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }; */
+
   return (
     <section className="admin-event-workbench-topbar">
       <div className="min-w-0">
@@ -412,8 +545,6 @@ function LineupArtistPill({
   );
 }
 
-const EVENT_STUDIO_STEP_STORAGE_KEY = 'raver-event-studio-step';
-
 const normalizeStageName = (value?: string | null): string => String(value || 'Main Stage').trim() || 'Main Stage';
 
 const stageKey = (value?: string | null): string => normalizeStageName(value).toLowerCase();
@@ -494,33 +625,10 @@ const extractTimeValue = (value: string): string => {
   return `${looseMatch[1].padStart(2, '0')}:${looseMatch[2]}`;
 };
 
-const TIMETABLE_BOARD_START_MINUTES = 12 * 60;
-const TIMETABLE_BOARD_END_MINUTES = 30 * 60;
-const TIMETABLE_ROW_HEIGHT_MINUTES = 60;
-const TIMETABLE_ROW_HEIGHT_PX = 64;
-const TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX =
-  ((TIMETABLE_BOARD_END_MINUTES - TIMETABLE_BOARD_START_MINUTES) / TIMETABLE_ROW_HEIGHT_MINUTES) * TIMETABLE_ROW_HEIGHT_PX;
-
 const minutesFromTime = (value: string): number | null => {
   const match = extractTimeValue(value).match(/^(\d{2}):(\d{2})$/);
   if (!match) return null;
   return Number(match[1]) * 60 + Number(match[2]);
-};
-
-const getSlotLayout = (slot: EventStudioTimetableSlotDraft): CSSProperties => {
-  const startOffset = Math.max(0, Math.floor(Number(slot.startDayOffset) || 0));
-  const endOffset = Math.max(startOffset, Math.floor(Number(slot.endDayOffset) || 0));
-  const start = (minutesFromTime(slot.startTime) ?? 18 * 60) + startOffset * 24 * 60;
-  const endRaw = (minutesFromTime(slot.endTime) ?? start + 60) + endOffset * 24 * 60;
-  const end = endRaw <= start ? endRaw + 24 * 60 : endRaw;
-  const visibleStart = Math.max(start, TIMETABLE_BOARD_START_MINUTES);
-  const visibleEnd = Math.min(Math.max(end, visibleStart + 30), TIMETABLE_BOARD_END_MINUTES);
-  const top = ((visibleStart - TIMETABLE_BOARD_START_MINUTES) / TIMETABLE_ROW_HEIGHT_MINUTES) * TIMETABLE_ROW_HEIGHT_PX;
-  const height = Math.max(32, ((visibleEnd - visibleStart) / TIMETABLE_ROW_HEIGHT_MINUTES) * TIMETABLE_ROW_HEIGHT_PX);
-  return {
-    top: `${top}px`,
-    height: `${height}px`,
-  };
 };
 
 type EventStudioFormProps = {
@@ -564,6 +672,9 @@ export default function EventStudioForm({
   const [focusedTimetableSlotId, setFocusedTimetableSlotId] = useState<string | null>(null);
   const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
   const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
+  const draftRef = useRef(draft);
+  const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
+  const objectUrlsRef = useRef<Set<string>>(new Set());
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
@@ -573,6 +684,22 @@ export default function EventStudioForm({
   );
   const entryVisualCount = useMemo(
     () => draft.imageZones.poster.length + draft.imageZones.cover.length + draft.imageZones.lineup.length,
+    [draft.imageZones]
+  );
+  const uploadingImageCount = useMemo(
+    () =>
+      Object.values(draft.imageZones).reduce(
+        (sum, items) => sum + items.filter((item) => item.uploadState === 'uploading').length,
+        0
+      ),
+    [draft.imageZones]
+  );
+  const failedImageCount = useMemo(
+    () =>
+      Object.values(draft.imageZones).reduce(
+        (sum, items) => sum + items.filter((item) => item.uploadState === 'failed').length,
+        0
+      ),
     [draft.imageZones]
   );
 
@@ -589,17 +716,21 @@ export default function EventStudioForm({
     ) || '还没有地点地址';
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const savedStep = Number(window.localStorage.getItem(EVENT_STUDIO_STEP_STORAGE_KEY));
-    if (Number.isFinite(savedStep)) {
-      setCurrentStep(Math.max(0, Math.min(savedStep, totalSteps - 1)));
-    }
-  }, [totalSteps]);
+    draftRef.current = draft;
+  }, [draft]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(EVENT_STUDIO_STEP_STORAGE_KEY, String(currentStep));
-  }, [currentStep]);
+    const uploadTasks = uploadTasksRef.current;
+    const objectUrls = objectUrlsRef.current;
+    return () => {
+      uploadTasks.forEach(({ controller }) => controller.abort());
+      uploadTasks.clear();
+      objectUrls.forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+      objectUrls.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!draft.eventDays.length) {
@@ -859,7 +990,7 @@ export default function EventStudioForm({
     }
   };
 
-  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: EventStudioImageUsage) => {
+  const _legacyHandleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: EventStudioImageUsage) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
 
@@ -909,7 +1040,7 @@ export default function EventStudioForm({
     }
   };
 
-  const handleImageRemove = async (usage: EventStudioImageUsage, image: EventStudioImageState) => {
+  const _legacyHandleImageRemove = async (usage: EventStudioImageUsage, image: EventStudioImageState) => {
     try {
       setSubmitError(null);
       setDeletingImageId(image.id);
@@ -937,6 +1068,245 @@ export default function EventStudioForm({
       );
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '图片移除失败');
+    } finally {
+      setDeletingImageId(null);
+    }
+  };
+
+  const revokeObjectUrl = (url?: string | null) => {
+    const normalized = String(url || '').trim();
+    if (!normalized || !objectUrlsRef.current.has(normalized)) return;
+    URL.revokeObjectURL(normalized);
+    objectUrlsRef.current.delete(normalized);
+  };
+
+  const uploadedImageOrigin: EventStudioImageOrigin = mode === 'edit' && eventId ? 'event-upload' : 'draft-upload';
+
+  const deleteUploadedImageByUrlIfNeeded = async (image: Pick<EventStudioImageState, 'origin' | 'remoteUrl'>) => {
+    const remoteUrl = image.remoteUrl.trim();
+    if (!remoteUrl) return;
+    if (image.origin === 'draft-upload') {
+      await eventStudioApi.deleteImages({
+        draftId: draftRef.current.id,
+        urls: [remoteUrl],
+      });
+      return;
+    }
+    if (image.origin === 'event-upload' && mode === 'edit' && eventId) {
+      await eventStudioApi.deleteImages({
+        eventId,
+        urls: [remoteUrl],
+      });
+    }
+  };
+
+  const markImageUploadState = (usage: EventStudioImageUsage, imageId: string, uploadState: EventStudioImageState['uploadState']) => {
+    updateDraftState((current) => {
+      const nextZones = cloneImageZones(current.imageZones);
+      nextZones[usage] = nextZones[usage].map((image) =>
+        image.id === imageId
+          ? {
+              ...image,
+              uploadState,
+            }
+          : image
+      );
+      return {
+        ...current,
+        imageZones: nextZones,
+      };
+    });
+  };
+
+  const startImmediateImageUpload = (usage: EventStudioImageUsage, image: EventStudioImageState) => {
+    const localFile = image.localFile;
+    if (!localFile) return Promise.resolve();
+
+    uploadTasksRef.current.get(image.id)?.controller.abort();
+    markImageUploadState(usage, image.id, 'uploading');
+    const controller = new AbortController();
+
+    const uploadPromise = (async () => {
+      try {
+        const uploaded = await eventStudioApi.uploadImage(localFile, {
+          usage,
+          ...(mode === 'edit' && eventId ? { eventId } : { draftId: draftRef.current.id }),
+          signal: controller.signal,
+        });
+
+        let removedBeforePersist = false;
+        let previousPreviewUrl: string | null = null;
+        updateDraftState((current) => {
+          const nextZones = cloneImageZones(current.imageZones);
+          const currentItems = [...nextZones[usage]];
+          const imageIndex = currentItems.findIndex((item) => item.id === image.id);
+          if (imageIndex < 0) {
+            removedBeforePersist = true;
+            return current;
+          }
+          previousPreviewUrl = currentItems[imageIndex].localPreviewUrl || null;
+          currentItems[imageIndex] = {
+            ...currentItems[imageIndex],
+            remoteUrl: uploaded.url,
+            fileName: uploaded.fileName || currentItems[imageIndex].fileName,
+            origin: uploadedImageOrigin,
+            uploadState: 'uploaded',
+            localFile: null,
+            localPreviewUrl: null,
+          };
+          nextZones[usage] = currentItems;
+          return {
+            ...current,
+            imageZones: nextZones,
+          };
+        });
+
+        if (removedBeforePersist) {
+          await deleteUploadedImageByUrlIfNeeded({
+            origin: uploadedImageOrigin,
+            remoteUrl: uploaded.url,
+          });
+          return;
+        }
+
+        revokeObjectUrl(previousPreviewUrl);
+      } catch (error) {
+        if (isAbortLikeError(error)) return;
+        markImageUploadState(usage, image.id, 'failed');
+        setSubmitError(error instanceof Error ? error.message : '鍥剧墖涓婁紶澶辫触');
+      } finally {
+        uploadTasksRef.current.delete(image.id);
+      }
+    })();
+
+    uploadTasksRef.current.set(image.id, {
+      promise: uploadPromise,
+      controller,
+    });
+    return uploadPromise;
+  };
+
+  const waitForOutstandingImageUploads = async () => {
+    const tasks = Array.from(uploadTasksRef.current.values()).map((entry) => entry.promise);
+    if (!tasks.length) return;
+    await Promise.allSettled(tasks);
+  };
+
+  const uploadPendingImagesIfNeeded = async () => {
+    await waitForOutstandingImageUploads();
+
+    for (const [usage, items] of Object.entries(draftRef.current.imageZones) as Array<[EventStudioImageUsage, EventStudioImageState[]]>) {
+      for (const image of items) {
+        if (image.remoteUrl.trim()) continue;
+        if (!image.localFile) {
+          throw new Error('Some images are still pending upload, but the local file is no longer available. Remove and upload them again.');
+        }
+        await startImmediateImageUpload(usage, image);
+      }
+    }
+
+    await waitForOutstandingImageUploads();
+
+    const failedImage = Object.values(draftRef.current.imageZones)
+      .flat()
+      .find((image) => image.uploadState === 'failed' || !image.remoteUrl.trim());
+    if (failedImage) {
+      throw new Error('Some images still failed to upload. Retry or remove them before submitting.');
+    }
+  };
+
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: EventStudioImageUsage) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (!selectedFiles.length) return;
+
+    const files = selectedFiles.slice(0, MAX_MEDIA_SELECTION_COUNT);
+    if (selectedFiles.length > MAX_MEDIA_SELECTION_COUNT) {
+      setConflictNotice(`涓€娆℃渶澶氶€夋嫨 ${MAX_MEDIA_SELECTION_COUNT} 寮犲浘鐗囷紝宸叉寜鍓?${MAX_MEDIA_SELECTION_COUNT} 寮犲鐞嗐€?`);
+    }
+
+    setSubmitError(null);
+    const pendingItems: EventStudioImageState[] = files.map((file, index) => {
+      const previewUrl = URL.createObjectURL(file);
+      objectUrlsRef.current.add(previewUrl);
+      return {
+        id: crypto.randomUUID(),
+        remoteUrl: '',
+        fileName: file.name,
+        usage,
+        origin: 'pending-local',
+        sortOrder: index + 1,
+        mimeType: file.type || null,
+        localPreviewUrl: previewUrl,
+        localFile: file,
+        uploadState: 'pending',
+      };
+    });
+
+    updateDraftState(
+      (current) => {
+        const nextZones = cloneImageZones(current.imageZones);
+        const currentItems = [...nextZones[usage]];
+        nextZones[usage] = normalizeZoneSortOrder([...currentItems, ...pendingItems]);
+        return {
+          ...current,
+          imageZones: nextZones,
+        };
+      },
+      { clearErrorKeys: ['coverImage'] }
+    );
+
+    pendingItems.forEach((item) => {
+      void startImmediateImageUpload(usage, item);
+    });
+    event.target.value = '';
+  };
+
+  const handleImageMove = (usage: EventStudioImageUsage, imageId: string, direction: number) => {
+    updateDraftState((current) => {
+      const nextZones = cloneImageZones(current.imageZones);
+      const currentItems = [...nextZones[usage]];
+      const currentIndex = currentItems.findIndex((item) => item.id === imageId);
+      const nextIndex = currentIndex + direction;
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= currentItems.length) {
+        return current;
+      }
+      [currentItems[currentIndex], currentItems[nextIndex]] = [currentItems[nextIndex], currentItems[currentIndex]];
+      nextZones[usage] = normalizeZoneSortOrder(currentItems);
+      return {
+        ...current,
+        imageZones: nextZones,
+      };
+    });
+  };
+
+  const handleImageRemove = async (usage: EventStudioImageUsage, image: EventStudioImageState) => {
+    const uploadTask = uploadTasksRef.current.get(image.id);
+    if (uploadTask) {
+      uploadTask.controller.abort();
+      uploadTasksRef.current.delete(image.id);
+    }
+
+    try {
+      setSubmitError(null);
+      setDeletingImageId(image.id);
+      updateDraftState(
+        (current) => {
+          const nextZones = cloneImageZones(current.imageZones);
+          nextZones[usage] = normalizeZoneSortOrder(nextZones[usage].filter((currentImage) => currentImage.id !== image.id));
+          return {
+            ...current,
+            imageZones: nextZones,
+          };
+        },
+        { clearErrorKeys: ['coverImage'] }
+      );
+      revokeObjectUrl(image.localPreviewUrl);
+
+      if (image.origin !== 'persisted-event') {
+        await deleteUploadedImageByUrlIfNeeded(image);
+      }
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '鍥剧墖绉婚櫎澶辫触');
     } finally {
       setDeletingImageId(null);
     }
@@ -1161,10 +1531,11 @@ export default function EventStudioForm({
 
     try {
       setSubmitting(true);
+      await uploadPendingImagesIfNeeded();
       const result =
         mode === 'edit' && eventId
-          ? await eventStudioApi.updateEvent(eventId, mapEventStudioDraftToUpdateInput(draft))
-          : await eventStudioApi.createEvent(mapEventStudioDraftToCreateInput(draft));
+          ? await eventStudioApi.updateEvent(eventId, mapEventStudioDraftToUpdateInput(draftRef.current))
+          : await eventStudioApi.createEvent(mapEventStudioDraftToCreateInput(draftRef.current));
       setAlignmentPreview(null);
       onSubmit(result);
     } catch (error) {
@@ -1437,6 +1808,14 @@ export default function EventStudioForm({
   );
   const visibleTimetableDays = timetableDaysInSelectedWeek.length ? timetableDaysInSelectedWeek : draft.eventDays;
   const visibleTimetableSlots = useMemo(() => {
+    const timetableSortValue = (slot: EventStudioTimetableSlotDraft) => {
+      const startMinutes = minutesFromTime(slot.startTime);
+      if (startMinutes === null) return Number.MAX_SAFE_INTEGER;
+      const startOffset = Math.max(0, Math.floor(Number(slot.startDayOffset) || 0));
+      if (startOffset > 0) return startMinutes + startOffset * 24 * 60;
+      const rolloverMinutes = Math.max(0, Math.min(23, Number(draft.dayRolloverHour) || 6)) * 60;
+      return startMinutes < rolloverMinutes ? startMinutes + 24 * 60 : startMinutes;
+    };
     if (!selectedTimetableDay) return draft.timetableSlots;
     return draft.timetableSlots
       .filter((slot) =>
@@ -1444,8 +1823,8 @@ export default function EventStudioForm({
         slot.localDate === selectedTimetableDay.date ||
         slot.overallDayIndex === selectedTimetableDay.overallDayIndex
       )
-      .sort((a, b) => (minutesFromTime(a.startTime) ?? 9999) - (minutesFromTime(b.startTime) ?? 9999) || a.sortOrder - b.sortOrder);
-  }, [draft.timetableSlots, selectedTimetableDay]);
+      .sort((a, b) => timetableSortValue(a) - timetableSortValue(b) || a.sortOrder - b.sortOrder);
+  }, [draft.dayRolloverHour, draft.timetableSlots, selectedTimetableDay]);
   const visibleStageOrder = useMemo(() => {
     const seen = new Set<string>();
     const result: string[] = [];
@@ -1482,6 +1861,8 @@ export default function EventStudioForm({
       }))
       .filter((group) => group.slots.length > 0);
   }, [filteredVisibleTimetableSlotsByStage, visibleTimetableSlots]);
+  const shouldUseLegacyStageColumns = filteredVisibleTimetableSlotsByStage.length > 1;
+  const shouldUseLegacyScrollableColumns = filteredVisibleTimetableSlotsByStage.length >= 4;
   const activeTimetableStageLabel =
     selectedTimetableStageFilter === 'all'
       ? '全部舞台'
@@ -1492,6 +1873,16 @@ export default function EventStudioForm({
     if (extracted) return extracted;
     const formatted = formatClockTimeInTimeZone(value, eventDisplayTimeZone);
     return formatted || '--:--';
+  };
+  const formatTimetableSlotRange = (slot: EventStudioTimetableSlotDraft) => {
+    const start = formatTimetableSlotClock(slot, 'startTime');
+    const end = formatTimetableSlotClock(slot, 'endTime');
+    const startOffset = Math.max(0, Math.floor(Number(slot.startDayOffset) || 0));
+    const endOffset = Math.max(0, Math.floor(Number(slot.endDayOffset) || 0));
+    const startLabel = startOffset > 0 ? `+${startOffset} ${start}` : start;
+    const endLabel = endOffset > 0 ? `+${endOffset} ${end}` : end;
+    if (start === '--:--' && end === '--:--') return 'No time';
+    return `${startLabel} - ${endLabel}`;
   };
   const lineupPreviewArtists = useMemo(() => {
     const source = draft.lineupArtists.length ? draft.lineupArtists : buildLineupArtistsFromTimetableSlots(draft.timetableSlots);
@@ -1534,11 +1925,12 @@ export default function EventStudioForm({
     }));
   };
 
-  const renderMediaZone = (usage: EventStudioImageUsage) => {
+  const _legacyRenderMediaZone = (usage: EventStudioImageUsage) => {
     const config = IMAGE_ZONE_CONFIG.find((item) => item.usage === usage);
     if (!config) return null;
     const items = draft.imageZones[usage];
     const isPrimary = config.emphasis === 'primary';
+    const zoneUploadingCount = items.filter((item) => item.uploadState === 'uploading').length;
 
     return (
       <div
@@ -1598,6 +1990,109 @@ export default function EventStudioForm({
     );
   };
 
+  const renderMediaZone = (usage: EventStudioImageUsage) => {
+    const config = IMAGE_ZONE_CONFIG.find((item) => item.usage === usage);
+    if (!config) return null;
+    const items = draft.imageZones[usage];
+    const isPrimary = config.emphasis === 'primary';
+    const zoneUploadingCount = items.filter((item) => item.uploadState === 'uploading').length;
+
+    return (
+      <div
+        key={usage}
+        className={isPrimary ? 'admin-reference-card p-4' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9] p-4'}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-[#071110]">{config.title}</div>
+            <div className="mt-1 text-sm leading-6 text-black/48">{config.description}</div>
+          </div>
+          <label className="admin-studio-button-secondary cursor-pointer px-3 py-2 text-xs">
+            {items.length ? 'Add More' : 'Choose Images'}
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void handleImageUpload(event, usage)}
+            />
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-black/45">
+            <span>{items.length} images</span>
+            <span>{zoneUploadingCount ? `${zoneUploadingCount} uploading` : 'Up to 12 per pick'}</span>
+          </div>
+          {items.length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {items.map((image, index) => (
+                <div key={image.id} className="overflow-hidden rounded-[22px] border border-[#e8eceb] bg-white">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-[#f2f3ef]">
+                    {imagePreviewUrl(image) ? (
+                      image.remoteUrl.trim() ? (
+                        <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="800px" />
+                      ) : (
+                        <img src={imagePreviewUrl(image)} alt={`${config.title}-${index + 1}`} className="h-full w-full object-cover" />
+                      )
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-black/35">No preview</div>
+                    )}
+                    {image.uploadState === 'uploading' ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-xs font-medium text-white">Uploading...</div>
+                    ) : null}
+                    {image.uploadState === 'failed' ? (
+                      <div className="absolute right-3 top-3 rounded-full bg-[#fff4e6] px-2 py-1 text-[11px] font-semibold text-[#b25b00]">
+                        Failed
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
+                      <div className="mt-1 text-xs text-black/40">
+                        #{image.sortOrder} · {imageStatusLabel(image)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleImageMove(usage, image.id, -1)}
+                        disabled={index === 0}
+                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleImageMove(usage, image.id, 1)}
+                        disabled={index === items.length - 1}
+                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleImageRemove(usage, image)}
+                        className="admin-studio-button-danger px-3 py-2 text-xs"
+                      >
+                        {deletingImageId === image.id ? 'Removing...' : 'Remove'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-[180px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white text-sm text-black/42">
+              {config.hint}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="admin-event-workbench space-y-5">
       <StudioTopbar
@@ -1606,7 +2101,7 @@ export default function EventStudioForm({
         currentStepItem={currentStepItem}
         canSubmit={canSubmit}
         submitting={submitting}
-        uploading={uploadingUsage !== null || deletingImageId !== null}
+        uploading={uploadingImageCount > 0 || deletingImageId !== null}
         onCancel={handleCancelFlow}
         onSaveDraft={handleSaveDraft}
         onSubmit={() => void handleSubmit()}
@@ -1619,6 +2114,12 @@ export default function EventStudioForm({
 
       {submitError ? (
         <section className="admin-studio-pastel-rose p-4 text-sm text-[#6a3530]">{submitError}</section>
+      ) : null}
+
+      {failedImageCount > 0 ? (
+        <section className="admin-studio-pastel-sand p-4 text-sm text-[#604a1b]">
+          有 {failedImageCount} 张图片上传失败。你可以继续提交，系统会在提交前按 iOS 语义再重试一次。
+        </section>
       ) : null}
 
       <div className="admin-event-workbench-shell">
@@ -1660,6 +2161,9 @@ export default function EventStudioForm({
       {currentStep === 1 ? (
         <>
           <Section title="活动信息" description="这一步集中填写活动名称、主办方、描述以及地点基础信息。地点部分直接使用原生地图弹层。">
+            <div className="mb-5">
+              <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="poster" onOpenStep={() => setCurrentStep(1)} />
+            </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Field label="活动名称（中文）" error={errors.name}>
                 <input
@@ -2204,13 +2708,16 @@ export default function EventStudioForm({
 
       {currentStep === 3 ? (
         <Section title="时间表" description="按 iOS 的活动日、舞台和演出时段组织，主视图优先展示可视化排期板。">
+          <div className="mb-5">
+            <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="timetable" onOpenStep={() => setCurrentStep(3)} />
+          </div>
           <div className="admin-event-timetable-board">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="admin-studio-label">Timetable Board</div>
                 <h3 className="mt-2 text-2xl font-black tracking-[-0.045em] text-[#071110]">舞台排期</h3>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-black/48">
-                  先在这里看整体结构，再用下方条目做精确编辑。时间轴按 12:00 到次日 06:00 呈现。
+                  先在这里看整体结构，再用下方条目做精确编辑。这里改为按照 legacy timetable 的舞台分栏方式展示，不再强制贴合时间轴。
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -2360,69 +2867,98 @@ export default function EventStudioForm({
             </div>
 
             <div className="admin-event-stage-scroll mt-6">
-              <div className="admin-event-stage-grid">
-              <div className="admin-event-time-axis" style={{ minHeight: TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX }}>
-                {['12:00', '15:00', '18:00', '21:00', '00:00', '03:00', '06:00'].map((time) => (
-                  <span key={time}>{time}</span>
-                ))}
-              </div>
-              {filteredVisibleTimetableSlotsByStage.map(({ stage, slots: stageSlots }, stageIndex) => (
-                  <div key={stage} className="admin-event-stage-column">
-                    <div className="admin-event-stage-heading">
-                      <span>{stage}</span>
-                      <b>{stageSlots.length} Sets</b>
-                    </div>
-                    <div className="admin-event-stage-lane" style={{ minHeight: TIMETABLE_STAGE_LANE_MIN_HEIGHT_PX }}>
-                      {stageSlots.length ? (
-                        stageSlots.map((slot, index) => (
-                          <button
-                            key={slot.id}
-                            type="button"
-                            onClick={() => handleTimetableSlotCardClick(slot.id)}
-                            style={getSlotLayout(slot)}
-                            className={`admin-event-slot-card tone-${(stageIndex + index) % 4} ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
-                          >
-                            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/38">
-                              {formatTimetableSlotClock(slot, 'startTime')}
-                              {Number(slot.startDayOffset) > 0 ? ` +${Number(slot.startDayOffset)}` : ''}
-                              {' - '}
-                              {formatTimetableSlotClock(slot, 'endTime')}
-                              {Number(slot.endDayOffset) > 0 ? ` +${Number(slot.endDayOffset)}` : ''}
-                            </span>
-                            <strong>
-                              {slot.memberNamesText || slot.djId || '未填写艺人'}
-                              <span className="ml-2 text-[10px] uppercase tracking-[0.14em] text-black/30">
-                                {normalizeActType(slot.actType)}
+              {shouldUseLegacyStageColumns ? (
+                <div
+                  className={`admin-event-legacy-stages-wrap ${shouldUseLegacyScrollableColumns ? 'is-scrollable' : ''}`}
+                  style={
+                    shouldUseLegacyScrollableColumns
+                      ? undefined
+                      : { gridTemplateColumns: `repeat(${Math.max(1, filteredVisibleTimetableSlotsByStage.length)}, minmax(0, 1fr))` }
+                  }
+                >
+                  {filteredVisibleTimetableSlotsByStage.map(({ stage, slots: stageSlots }) => (
+                    <div key={stage} className="admin-event-legacy-stage-col">
+                      <div className="admin-event-legacy-stage-head">
+                        <span>{stage}</span>
+                        <b>{stageSlots.length} Sets</b>
+                      </div>
+                      <div className="admin-event-legacy-slot-list">
+                        {stageSlots.length ? (
+                          stageSlots.map((slot) => (
+                            <button
+                              key={slot.id}
+                              type="button"
+                              onClick={() => handleTimetableSlotCardClick(slot.id)}
+                              className={`admin-event-legacy-slot ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
+                            >
+                              <span className="admin-event-legacy-slot-time">{formatTimetableSlotRange(slot)}</span>
+                              <strong className="admin-event-legacy-slot-title">
+                                {slot.memberNamesText || slot.djId || '未填写艺人'}
+                              </strong>
+                              <span className="admin-event-legacy-slot-meta">
+                                <span>{normalizeActType(slot.actType)}</span>
+                                <span>{slot.localDate || selectedTimetableDay?.date || '未设置日期'}</span>
                               </span>
-                            </strong>
-                            <small>
-                              {selectedTimetableDay?.label || slot.localDate || '未选择活动日'} · {normalizeStageName(slot.stageName)}
-                            </small>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="admin-event-stage-empty">
-                          <span>当前日期暂无演出</span>
-                          <button
-                            type="button"
-                            onClick={() => addTimetableSlot(stage)}
-                            disabled={!draft.eventDays.length}
-                          >
-                            添加到此舞台
-                          </button>
-                        </div>
-                      )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="admin-event-legacy-empty">
+                            <span>当前日期暂无演出</span>
+                            <button
+                              type="button"
+                              onClick={() => addTimetableSlot(stage)}
+                              disabled={!draft.eventDays.length}
+                            >
+                              添加到此舞台
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-              ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="admin-event-legacy-flat-list">
+                  {filteredVisibleTimetableSlotsByStage.flatMap(({ stage, slots: stageSlots }) =>
+                    stageSlots.map((slot) => (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        onClick={() => handleTimetableSlotCardClick(slot.id)}
+                        className={`admin-event-legacy-slot admin-event-legacy-flat-slot ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
+                      >
+                        <span className="admin-event-legacy-slot-time">{formatTimetableSlotRange(slot)}</span>
+                        <strong className="admin-event-legacy-slot-title">
+                          {slot.memberNamesText || slot.djId || '未填写艺人'}
+                        </strong>
+                        <span className="admin-event-legacy-slot-meta">
+                          <span>{stage}</span>
+                          <span>{normalizeActType(slot.actType)}</span>
+                          <span>{slot.localDate || selectedTimetableDay?.date || '未设置日期'}</span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                  {!filteredVisibleTimetableSlotsByStage.some(({ slots }) => slots.length) ? (
+                    <div className="admin-event-legacy-empty">
+                      <span>当前筛选下暂无演出</span>
+                      <button
+                        type="button"
+                        onClick={() => addTimetableSlot(filteredVisibleTimetableSlotsByStage[0]?.stage)}
+                        disabled={!draft.eventDays.length}
+                      >
+                        新增时间段
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
-
+            
             <div className="mt-5 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.14em] text-black/40">
-              <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#b9f1d0]" /> 正常时段</span>
-              <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#f7d884]" /> 跨夜/待核对</span>
-              <span className="inline-flex items-center gap-2"><i className="size-3 rounded-full bg-[#c9defa]" /> 已录入艺人</span>
-              <span className="inline-flex items-center gap-2">时间以活动当地时区 {eventDisplayTimeZone} 展示</span>
+              <span>当前视图：{activeTimetableStageLabel}</span>
+              <span>显示时区：{eventDisplayTimeZone}</span>
+              <span>展示方式：Legacy timetable columns</span>
             </div>
 
             {errors.timetableSlots ? <div className="mt-4 text-xs text-[#6a3530]">{errors.timetableSlots}</div> : null}
@@ -2690,6 +3226,9 @@ export default function EventStudioForm({
 
       {currentStep === 4 ? (
         <Section title="阵容" description="先读取已有阵容，再允许直接修改；如果需要，也能从时间表一键同步补齐。">
+          <div className="mb-5">
+            <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="lineup" onOpenStep={() => setCurrentStep(4)} />
+          </div>
           <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
             <div className="space-y-4">
               <div className="admin-studio-section p-4">
@@ -3156,8 +3695,12 @@ export default function EventStudioForm({
                       <div key={item.usage} className="rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4">
                         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-black/42">{item.title}</div>
                         <div className="mt-3 relative aspect-[16/9] overflow-hidden rounded-[18px] border border-[#e8eceb] bg-white">
-                          {firstImage ? (
-                            <Image src={firstImage.remoteUrl} alt={`${item.title} preview`} fill className="object-cover" sizes="900px" />
+                          {firstImage && imagePreviewUrl(firstImage) ? (
+                            firstImage.remoteUrl.trim() ? (
+                              <Image src={firstImage.remoteUrl} alt={`${item.title} preview`} fill className="object-cover" sizes="900px" />
+                            ) : (
+                              <img src={imagePreviewUrl(firstImage)} alt={`${item.title} preview`} className="h-full w-full object-cover" />
+                            )
                           ) : (
                             <div className="flex h-full items-center justify-center text-sm text-black/42">还没有上传图片</div>
                           )}
@@ -3214,7 +3757,7 @@ export default function EventStudioForm({
             <button
               type="button"
               onClick={() => void handleSubmit()}
-              disabled={submitting || uploadingUsage !== null || deletingImageId !== null}
+              disabled={submitting || deletingImageId !== null}
               className="admin-studio-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交活动' : '提交编辑')}

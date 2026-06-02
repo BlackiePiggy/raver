@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import EventStudioForm from '@/components/admin/EventStudioForm';
 import {
+  buildEventStudioSubmitResultHref,
   createEventStudioDraft,
   eventStudioApi,
   hydrateEventStudioDraftFromEvent,
@@ -15,12 +16,11 @@ import {
 
 export default function AdminContentEventEditPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const eventId = typeof params?.id === 'string' ? params.id : '';
   const [draft, setDraft] = useState<EventStudioDraft>(() => createEventStudioDraft());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [resultLink, setResultLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (!eventId) {
@@ -57,12 +57,26 @@ export default function AdminContentEventEditPage() {
 
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
-      setNotice(`活动已直接更新成功：${result.event.name}`);
-      setResultLink(`/admin/content/events/${result.event.id}/edit`);
+      router.replace(
+        buildEventStudioSubmitResultHref({
+          flow: 'edit',
+          outcome: 'created',
+          eventId: result.event.id,
+          eventName: result.event.name,
+        })
+      );
       return;
     }
-    setNotice(result.payload.message || '活动编辑任务已提交，当前正在处理中，尚未等同于已直接入库。');
-    setResultLink('/admin/content/reviews/submissions');
+
+    router.replace(
+      buildEventStudioSubmitResultHref({
+        flow: 'edit',
+        outcome: 'submitted',
+        eventId,
+        submissionId: result.payload.submission.id,
+        message: result.payload.message,
+      })
+    );
   };
 
   return (
@@ -83,27 +97,10 @@ export default function AdminContentEventEditPage() {
         </>
       }
     >
-      {notice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
-          <div>{notice}</div>
-          {resultLink ? (
-            <div className="mt-3">
-              <Link href={resultLink} className="font-semibold text-[#071110] hover:underline">
-                继续进入结果页面
-              </Link>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       {loading ? (
-        <section className="admin-studio-section p-6 text-sm text-black/48">
-          正在加载活动详情并回填编辑表单...
-        </section>
+        <section className="admin-studio-section p-6 text-sm text-black/48">正在加载活动详情并回填编辑表单...</section>
       ) : error ? (
-        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">
-          {error}
-        </section>
+        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">{error}</section>
       ) : (
         <EventStudioForm
           mode="edit"
