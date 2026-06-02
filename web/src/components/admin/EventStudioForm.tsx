@@ -866,18 +866,20 @@ export default function EventStudioForm({
     try {
       setSubmitError(null);
       setUploadingUsage(usage);
-      const uploadedItems = await Promise.all(
+      const uploadedItems: EventStudioImageState[] = await Promise.all(
         files.map(async (file) => {
           const uploaded = await eventStudioApi.uploadImage(file, {
             usage,
-            draftId: draft.id,
+            ...(mode === 'edit' && eventId
+              ? { eventId }
+              : { draftId: draft.id }),
           });
           return {
             id: crypto.randomUUID(),
             remoteUrl: uploaded.url,
             fileName: uploaded.fileName || file.name,
             usage,
-            origin: 'draft-upload' as const,
+            origin: mode === 'edit' && eventId ? 'event-upload' : 'draft-upload',
             sortOrder: 0,
           };
         })
@@ -887,7 +889,7 @@ export default function EventStudioForm({
         (current) => {
           const nextZones = cloneImageZones(current.imageZones);
           const currentItems = [...nextZones[usage]];
-          const appended = uploadedItems.map((item, index) => ({
+          const appended: EventStudioImageState[] = uploadedItems.map((item, index) => ({
             ...item,
             sortOrder: currentItems.length + index + 1,
           }));
@@ -912,8 +914,13 @@ export default function EventStudioForm({
       setSubmitError(null);
       setDeletingImageId(image.id);
       if (image.origin === 'draft-upload') {
-        await eventStudioApi.deleteDraftImages({
+        await eventStudioApi.deleteImages({
           draftId: draft.id,
+          urls: [image.remoteUrl],
+        });
+      } else if (image.origin === 'event-upload' && mode === 'edit' && eventId) {
+        await eventStudioApi.deleteImages({
+          eventId,
           urls: [image.remoteUrl],
         });
       }
@@ -1567,7 +1574,7 @@ export default function EventStudioForm({
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
                       <div className="mt-1 text-xs text-black/40">
-                        #{image.sortOrder} · {image.origin === 'persisted' ? '已存在' : '当前草稿上传'}
+                        #{image.sortOrder} · {image.origin === 'persisted-event' ? '活动已存在资源' : image.origin === 'event-upload' ? '当前编辑上传' : '当前草稿上传'}
                       </div>
                     </div>
                     <button

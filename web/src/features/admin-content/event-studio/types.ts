@@ -77,12 +77,17 @@ export type EventStudioLocationPoint = EventContractSchemas['EventLocationPoint'
   selectedAt?: string;
 };
 
+export type EventStudioImageOrigin =
+  | 'draft-upload'
+  | 'event-upload'
+  | 'persisted-event';
+
 export type EventStudioImageState = {
   id: string;
   remoteUrl: string;
   fileName: string;
   usage: EventStudioImageUsage;
-  origin: 'draft-upload' | 'persisted';
+  origin: EventStudioImageOrigin;
   sortOrder: number;
 };
 

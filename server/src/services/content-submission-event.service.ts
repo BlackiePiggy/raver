@@ -574,6 +574,109 @@ const hasRequiredEventPrimaryImageAsset = (assets: Prisma.InputJsonValue[]): boo
     return type === 'other' && (label.includes('POSTER') || fileName.startsWith('poster'));
   });
 
+const collectEventSubmissionMediaUrls = (
+  payload: Prisma.JsonObject | Prisma.InputJsonObject | Record<string, unknown>
+): string[] => {
+  const coverImageUrl = cleanText((payload as Record<string, unknown>).coverImageUrl);
+  const lineupImageUrl = cleanText((payload as Record<string, unknown>).lineupImageUrl);
+  const imageAssets = eventImageAssetsFromPayload((payload as Record<string, unknown>).imageAssets);
+  const assetUrls = imageAssets
+    .map((asset) => {
+      if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return null;
+      return cleanText((asset as Record<string, unknown>).url);
+    })
+    .filter((item): item is string => Boolean(item));
+
+  return Array.from(new Set([coverImageUrl, lineupImageUrl, ...assetUrls].filter((item): item is string => Boolean(item))));
+};
+
+const extractReferencedEventMediaUrls = (value: {
+  coverImageUrl?: string | null;
+  lineupImageUrl?: string | null;
+  imageAssets?: unknown;
+}): Set<string> => {
+  const urls = new Set<string>();
+  const pushValue = (input: unknown) => {
+    const normalized = cleanText(input)?.toLowerCase();
+    if (normalized) urls.add(normalized);
+  };
+
+  pushValue(value.coverImageUrl);
+  pushValue(value.lineupImageUrl);
+  eventImageAssetsFromPayload(value.imageAssets).forEach((asset) => {
+    if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return;
+    pushValue((asset as Record<string, unknown>).url);
+  });
+
+  return urls;
+};
+
+const markEventMediaDeletedByUrls = async (
+  tx: Prisma.TransactionClient,
+  urls: string[]
+): Promise<void> => {
+  const normalized = Array.from(new Set(urls.map((item) => cleanText(item)).filter((item): item is string => Boolean(item))));
+  if (!normalized.length) return;
+
+  await tx.mediaAsset.updateMany({
+    where: {
+      url: { in: normalized },
+      status: { in: ['active', 'replaced'] },
+    },
+    data: {
+      status: 'deleted',
+      deletedAt: new Date(),
+      purgeNextRunAt: new Date(),
+    },
+  });
+};
+
+export const bindEventDraftMediaToSubmission = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  submissionId: string
+): Promise<void> => {
+  const urls = collectEventSubmissionMediaUrls(payload);
+  if (!urls.length) return;
+
+  await db.mediaAsset.updateMany({
+    where: {
+      ownerType: 'event-draft',
+      uploadedById: submitterId,
+      url: { in: urls },
+      status: 'active',
+    },
+    data: {
+      ownerType: 'content-submission',
+      ownerId: submissionId,
+    },
+  });
+};
+
+export const rebindEventSubmissionMediaToEvent = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  payload: Prisma.JsonObject,
+  submissionId: string,
+  eventId: string
+): Promise<void> => {
+  const urls = collectEventSubmissionMediaUrls(payload);
+  if (!urls.length) return;
+
+  await db.mediaAsset.updateMany({
+    where: {
+      ownerType: 'content-submission',
+      ownerId: submissionId,
+      url: { in: urls },
+      status: 'active',
+    },
+    data: {
+      ownerType: 'event',
+      ownerId: eventId,
+    },
+  });
+};
+
 const eventTicketTiersFromPayload = (value: unknown, fallbackCurrency?: string): Prisma.EventTicketTierCreateWithoutEventInput[] => {
   if (!Array.isArray(value)) return [];
   const tiers: Prisma.EventTicketTierCreateWithoutEventInput[] = [];
@@ -1532,6 +1635,15 @@ const applyEventCoreUpdate = async (
   targetEventId: string,
   input: NormalizedEventSubmissionWriteInput
 ): Promise<void> => {
+  const existing = await tx.event.findUnique({
+    where: { id: targetEventId },
+    select: {
+      coverImageUrl: true,
+      lineupImageUrl: true,
+      imageAssets: true,
+    },
+  });
+
   await tx.event.update({
     where: { id: targetEventId },
     data: {
@@ -1544,6 +1656,17 @@ const applyEventCoreUpdate = async (
     },
   });
   await syncStructuredEventSchedule(tx, targetEventId, input.scheduleContext);
+
+  if (existing) {
+    const previousUrls = extractReferencedEventMediaUrls(existing);
+    const nextUrls = extractReferencedEventMediaUrls({
+      coverImageUrl: input.eventData.coverImageUrl as string | null | undefined,
+      lineupImageUrl: input.eventData.lineupImageUrl as string | null | undefined,
+      imageAssets: input.eventData.imageAssets,
+    });
+    const removedUrls = Array.from(previousUrls).filter((url) => !nextUrls.has(url));
+    await markEventMediaDeletedByUrls(tx, removedUrls);
+  }
 };
 
 const applyEventCoreCreate = async (
@@ -1631,6 +1754,9 @@ export async function createOrUpdateEventFromSubmission(
 
     await runEventSubmissionTransaction(db, async (tx) => {
       await applyEventCoreUpdate(tx, input.targetEventId as string, input);
+      if (options.submissionId) {
+        await rebindEventSubmissionMediaToEvent(tx, payload, options.submissionId, input.targetEventId as string);
+      }
       if (!options.skipCanonicalApply) {
         await applyEventCanonicalSubmissionState(tx, input.targetEventId as string, payload, input.scheduleContext);
       }
@@ -1648,6 +1774,7 @@ export async function createOrUpdateEventFromSubmission(
   const created = await runEventSubmissionTransaction(db, async (tx) => {
     const created = await applyEventCoreCreate(tx, submitterId, slug, input);
     if (options.submissionId) {
+      await rebindEventSubmissionMediaToEvent(tx, payload, options.submissionId, created.id);
       await tx.contentSubmission.update({
         where: { id: options.submissionId },
         data: {

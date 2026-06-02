@@ -17,18 +17,18 @@ export default function AdminContentEventCreatePage() {
 
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
-      setSubmitNotice(`活动已创建成功：${result.event.name}`);
+      setSubmitNotice(`活动已直接创建成功：${result.event.name}`);
       setSubmitResultLink(`/admin/content/events/${result.event.id}/edit`);
       return;
     }
-    setSubmitNotice(result.payload.message || '活动已进入审核队列');
+    setSubmitNotice(result.payload.message || '活动任务已提交，当前正在处理中，尚未等同于已直接入库。');
     setSubmitResultLink('/admin/content/reviews/submissions');
   };
 
   return (
     <AdminContentLayout
       title="新建活动"
-      description="在统一后台内完成活动资料创建、主办方绑定、时区确认、时间表录入和素材上传。当前页面已经作为正式的活动创建入口使用。"
+      description="在统一后台内完成活动资料创建、主办方绑定、时区确认、时间表录入和素材上传。"
       actions={
         <>
           <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">

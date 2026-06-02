@@ -57,11 +57,11 @@ export default function AdminContentEventEditPage() {
 
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
-      setNotice(`活动编辑已提交成功：${result.event.name}`);
+      setNotice(`活动已直接更新成功：${result.event.name}`);
       setResultLink(`/admin/content/events/${result.event.id}/edit`);
       return;
     }
-    setNotice(result.payload.message || '编辑提交已进入审核队列');
+    setNotice(result.payload.message || '活动编辑任务已提交，当前正在处理中，尚未等同于已直接入库。');
     setResultLink('/admin/content/reviews/submissions');
   };
 
@@ -105,7 +105,14 @@ export default function AdminContentEventEditPage() {
           {error}
         </section>
       ) : (
-        <EventStudioForm mode="edit" eventId={eventId} draft={draft} setDraft={setDraft} onSubmit={handleSubmitResult} submitButtonText="提交活动编辑" />
+        <EventStudioForm
+          mode="edit"
+          eventId={eventId}
+          draft={draft}
+          setDraft={setDraft}
+          onSubmit={handleSubmitResult}
+          submitButtonText="提交活动编辑"
+        />
       )}
     </AdminContentLayout>
   );

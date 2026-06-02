@@ -112,13 +112,20 @@ export const eventStudioApi = {
     file: File,
     options: {
       usage: 'poster' | 'lineup' | 'timetable' | 'cover' | 'map' | 'other';
-      draftId: string;
+      draftId?: string;
+      eventId?: string;
     }
   ): Promise<UploadImageResponse> {
     const formData = new FormData();
     formData.append('image', file);
     formData.append('usage', options.usage);
-    formData.append('draftId', options.draftId);
+    if (options.eventId?.trim()) {
+      formData.append('eventId', options.eventId.trim());
+    } else if (options.draftId?.trim()) {
+      formData.append('draftId', options.draftId.trim());
+    } else {
+      throw new Error('eventId or draftId is required for event image upload');
+    }
 
     const response = await authenticatedFetch(getApiUrl('/v1/events/upload-image'), {
       method: 'POST',
@@ -134,10 +141,14 @@ export const eventStudioApi = {
     return response.json();
   },
 
-  async deleteDraftImages(input: { draftId: string; urls: string[] }): Promise<void> {
+  async deleteImages(input: { draftId?: string; eventId?: string; urls: string[] }): Promise<void> {
     await authenticatedJsonFetch<{ success: true }>(getApiUrl('/v1/events/delete-images'), {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        draftId: input.draftId?.trim() || undefined,
+        eventId: input.eventId?.trim() || undefined,
+        urls: input.urls,
+      }),
     });
   },
 

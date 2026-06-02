@@ -140,7 +140,7 @@ const tests: TestCase[] = [
           remoteUrl: "https://cdn.example.com/events/future-rave/cover.jpg",
           fileName: "cover.jpg",
           usage: "cover",
-          origin: "persisted",
+          origin: "persisted-event",
           sortOrder: 1,
         },
       ];
@@ -150,7 +150,7 @@ const tests: TestCase[] = [
           remoteUrl: "https://cdn.example.com/events/future-rave/lineup.jpg",
           fileName: "lineup.jpg",
           usage: "lineup",
-          origin: "persisted",
+          origin: "persisted-event",
           sortOrder: 1,
         },
       ];

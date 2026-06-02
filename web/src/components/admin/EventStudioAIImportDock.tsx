@@ -1092,7 +1092,7 @@ export default function EventStudioAIImportDock({
                       <div className="px-4 py-3">
                         <div className="truncate text-sm font-medium text-[#071110]">{image.fileName}</div>
                         <div className="mt-1 text-xs text-black/40">
-                          {image.origin === 'persisted' ? '已存在' : '当前草稿上传'}
+                          {image.origin === 'persisted-event' ? '活动已存在资源' : image.origin === 'event-upload' ? '当前编辑上传' : '当前草稿上传'}
                         </div>
                       </div>
                     </button>

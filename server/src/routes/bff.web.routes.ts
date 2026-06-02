@@ -83,6 +83,7 @@ import {
   ActiveEventEditSubmissionError,
   assertNoActiveEventEditSubmission,
   autoAlignEventLineupToTimetablePayload,
+  bindEventDraftMediaToSubmission,
   buildSubmittedEventScheduleContextFromEvent,
   buildAlignedLineupArtistsFromTimetablePayload,
   createOrUpdateEventFromSubmission,
@@ -994,6 +995,13 @@ const createPendingContentSubmission = async (input: {
         payloadWithSummary as Prisma.JsonObject,
         input.submitterId
       );
+    } else if (input.entityType === 'event') {
+      await bindEventDraftMediaToSubmission(
+        tx,
+        payloadWithSummary as Prisma.JsonObject,
+        input.submitterId,
+        submission.id
+      );
     }
 
     return submission;
@@ -1205,6 +1213,13 @@ const createDirectEventApplySubmission = async (input: {
         changeNote: 'Direct apply submission',
       },
     });
+
+    await bindEventDraftMediaToSubmission(
+      tx,
+      payloadWithSummary as Prisma.JsonObject,
+      input.submitterId,
+      submission.id
+    );
 
     return { submission, payload: payloadWithSummary, reused: false };
   });

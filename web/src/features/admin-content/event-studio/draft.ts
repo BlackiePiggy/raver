@@ -1,6 +1,7 @@
 import {
   EventStudioDraft,
   EventStudioEventDayDraft,
+  EventStudioImageOrigin,
   EventStudioImageState,
   EventStudioImageUsage,
   EventStudioLineupArtistDraft,
@@ -81,7 +82,7 @@ const createImageState = (input: {
   usage: EventStudioImageUsage;
   remoteUrl: string;
   fileName: string;
-  origin: 'draft-upload' | 'persisted';
+  origin: EventStudioImageOrigin;
   sortOrder?: number;
 }): EventStudioImageState => ({
   id: crypto.randomUUID(),
@@ -619,7 +620,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         usage,
         remoteUrl: url,
         fileName: asset.fileName || url.split('/').pop() || `${usage}-${index + 1}`,
-        origin: 'persisted',
+        origin: 'persisted-event',
         sortOrder: asset.sort ?? asset.order ?? hydratedImageZones[usage].length + 1,
       })
     );
@@ -631,7 +632,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         usage: 'cover',
         remoteUrl: event.coverImageUrl,
         fileName: event.coverImageUrl.split('/').pop() || 'cover',
-        origin: 'persisted',
+        origin: 'persisted-event',
         sortOrder: 1,
       })
     );
@@ -643,7 +644,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
         usage: 'lineup',
         remoteUrl: event.lineupImageUrl,
         fileName: event.lineupImageUrl.split('/').pop() || 'lineup',
-        origin: 'persisted',
+        origin: 'persisted-event',
         sortOrder: 1,
       })
     );
