@@ -591,6 +591,7 @@ struct EventUploadFlowView: View {
                 title: LT("鏉ユ簮骞冲彴", "Source Provider", "鏉ユ簮骞冲彴"),
                 text: sourceProviderBinding
             )
+/*
 
             uploadTextField(
                 title: LT("鍦哄湴鍚嶇О", "Venue Name", "浼氬牬鍚?),
@@ -611,6 +612,57 @@ struct EventUploadFlowView: View {
 
             uploadTextField(
                 title: LT("绀句氦閾炬帴 JSON锛堝彲閫夛級", "Social Links JSON", "SNS銉兂銈紙JSON锛?),
+                text: socialLinksTextBinding,
+                axis: .vertical
+            )
+
+*/
+/*
+
+            uploadTextField(
+                title: LT("场地名称", "Venue Name", "会場名"),
+                text: venueNameBinding
+            )
+
+            uploadTextField(
+                title: LT("场地地址", "Venue Address", "会場住所"),
+                text: venueAddressBinding,
+                axis: .vertical
+            )
+
+            uploadTextField(
+                title: LT("参考链接（每行一条）", "Reference Links (one per line)", "参考リンク（1行に1件）"),
+                text: referenceLinksTextBinding,
+                axis: .vertical
+            )
+
+            uploadTextField(
+                title: LT("社交链接 JSON（可选）", "Social Links JSON", "SNSリンク（JSON・任意）"),
+                text: socialLinksTextBinding,
+                axis: .vertical
+            )
+
+*/
+
+            uploadTextField(
+                title: LT("Venue Name", "Venue Name", "Venue Name"),
+                text: venueNameBinding
+            )
+
+            uploadTextField(
+                title: LT("Venue Address", "Venue Address", "Venue Address"),
+                text: venueAddressBinding,
+                axis: .vertical
+            )
+
+            uploadTextField(
+                title: LT("Reference Links (one per line)", "Reference Links (one per line)", "Reference Links (one per line)"),
+                text: referenceLinksTextBinding,
+                axis: .vertical
+            )
+
+            uploadTextField(
+                title: LT("Social Links JSON", "Social Links JSON", "Social Links JSON"),
                 text: socialLinksTextBinding,
                 axis: .vertical
             )
