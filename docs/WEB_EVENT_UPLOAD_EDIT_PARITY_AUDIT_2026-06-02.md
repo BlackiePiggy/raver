@@ -1050,3 +1050,13 @@ Remaining media-page gap versus full iOS workflow parity:
 - [ ] Web still does not persist pending local image files across refresh/reopen the way the iOS local draft store does
 - [ ] Web currently uses browser `<img>` for local blob previews; behavior is correct, but the preview implementation is still more web-specific than iOS
 - [ ] Real manual smoke is still needed for: create event upload/remove/submit and edit event upload/remove/submit against live OSS + BFF
+
+## Location Picker Legacy Dependency Progress Update (2026-06-02)
+
+- [x] Web event location picker static asset chain no longer depends on external `festivalViewerOrigin`
+- [x] `festival-viewer` map/location scripts are now served directly by `web`
+- [x] `country-codes-iso3166.js` is now served directly by `web`
+- [x] `/api/viewer/runtime-config` is now served directly by `web`
+- [x] Legacy compat endpoint `/api/coze/normalize-event-location` is now handled directly by `web`
+- [x] Legacy compat endpoint `/api/raver/events/:id/update` is now handled directly by `web`
+- [ ] Remaining legacy rewrite endpoints outside the event-location flow still need a separate migration plan if we want to retire the full legacy viewer service

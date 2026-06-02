@@ -44,27 +44,15 @@ const nextConfig = {
         destination: `${backendOrigin}/poster/:path*`,
       },
       {
-        source: '/admin/festival-viewer.html',
-        destination: `${festivalViewerOrigin}/festival-viewer.html`,
+        source: '/api/raver/events/:eventId/update',
+        destination: `${backendOrigin}/v1/events/:eventId`,
       },
       {
-        source: '/admin/festival-viewer/:path*',
-        destination: `${festivalViewerOrigin}/festival-viewer/:path*`,
-      },
-      {
-        source: '/admin/country-codes-iso3166.js',
-        destination: `${festivalViewerOrigin}/country-codes-iso3166.js`,
-      },
-      {
-        source: '/api/raver/:path*',
+        source: '/api/raver/:path((?!events/[^/]+/update$).*)',
         destination: `${festivalViewerOrigin}/api/raver/:path*`,
       },
       {
-        source: '/api/viewer/:path*',
-        destination: `${festivalViewerOrigin}/api/viewer/:path*`,
-      },
-      {
-        source: '/api/coze/:path*',
+        source: '/api/coze/:path((?!normalize-event-location$).*)',
         destination: `${festivalViewerOrigin}/api/coze/:path*`,
       },
       {

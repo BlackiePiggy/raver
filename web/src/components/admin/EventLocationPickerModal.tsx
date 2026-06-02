@@ -123,24 +123,24 @@ const PROVIDER_ITEMS: Array<{ value: EventLocationProvider; label: string }> = [
 
 const EVENT_LOCATION_SCRIPT_CHAIN = [
   '/admin/country-codes-iso3166.js',
-  '/festival-viewer/js/core/00-state-and-api.js',
-  '/festival-viewer/js/core/helpers/00-festival-core-utils.js',
-  '/festival-viewer/js/core/archive/00-asset-mapping.js',
-  '/festival-viewer/js/core/bootstrap/00-lightbox-core.js',
-  '/festival-viewer/js/core/map/00-amap-loader.js',
-  '/festival-viewer/js/core/map/10-amap-services.js',
-  '/festival-viewer/js/core/map/20-map-provider.js',
-  '/festival-viewer/js/core/map/20-mapkit-loader.js',
-  '/festival-viewer/js/core/map/30-mapkit-services.js',
-  '/festival-viewer/js/core/map/40-mapbox-loader.js',
-  '/festival-viewer/js/core/map/50-mapbox-services.js',
-  '/festival-viewer/js/core/map/60-geoapify-loader.js',
-  '/festival-viewer/js/core/map/70-geoapify-services.js',
-  '/festival-viewer/js/features/event/location/00-location-state.js',
-  '/festival-viewer/js/features/event/location/10-location-picker-modal.js',
-  '/festival-viewer/js/features/event/location/15-location-picker-provider-bridge.js',
-  '/festival-viewer/js/features/event/location/25-location-manual-and-reuse-modal.js',
-  '/festival-viewer/js/features/event/location/20-location-bind-and-sync.js',
+  '/admin/festival-viewer/js/core/00-state-and-api.js',
+  '/admin/festival-viewer/js/core/helpers/00-festival-core-utils.js',
+  '/admin/festival-viewer/js/core/archive/00-asset-mapping.js',
+  '/admin/festival-viewer/js/core/bootstrap/00-lightbox-core.js',
+  '/admin/festival-viewer/js/core/map/00-amap-loader.js',
+  '/admin/festival-viewer/js/core/map/10-amap-services.js',
+  '/admin/festival-viewer/js/core/map/20-map-provider.js',
+  '/admin/festival-viewer/js/core/map/20-mapkit-loader.js',
+  '/admin/festival-viewer/js/core/map/30-mapkit-services.js',
+  '/admin/festival-viewer/js/core/map/40-mapbox-loader.js',
+  '/admin/festival-viewer/js/core/map/50-mapbox-services.js',
+  '/admin/festival-viewer/js/core/map/60-geoapify-loader.js',
+  '/admin/festival-viewer/js/core/map/70-geoapify-services.js',
+  '/admin/festival-viewer/js/features/event/location/00-location-state.js',
+  '/admin/festival-viewer/js/features/event/location/10-location-picker-modal.js',
+  '/admin/festival-viewer/js/features/event/location/15-location-picker-provider-bridge.js',
+  '/admin/festival-viewer/js/features/event/location/25-location-manual-and-reuse-modal.js',
+  '/admin/festival-viewer/js/features/event/location/20-location-bind-and-sync.js',
 ] as const;
 
 let runtimeBootPromise: Promise<EventLocationRuntime> | null = null;
@@ -306,7 +306,6 @@ export default function EventLocationPickerModal({
 
     const overlay = root.querySelector<HTMLElement>('#event-location-picker-overlay');
     const modal = root.querySelector<HTMLElement>('#event-location-picker-modal');
-    const mapEl = root.querySelector<HTMLElement>('#event-location-picker-map');
     const searchInput = root.querySelector<HTMLInputElement>('#event-location-picker-search-input');
     const searchBtn = root.querySelector<HTMLButtonElement>('#event-location-picker-search-btn');
     const fillZhBtn = root.querySelector<HTMLButtonElement>('#event-location-picker-fill-zh-btn');
@@ -316,21 +315,24 @@ export default function EventLocationPickerModal({
     const cancelBtn = root.querySelector<HTMLButtonElement>('#event-location-picker-cancel-btn');
     const statusEl = root.querySelector<HTMLElement>('#event-location-picker-status');
 
-    if (!overlay || !modal || !mapEl || !searchInput || !searchBtn || !fillZhBtn || !fillEnBtn || !myPosBtn || !confirmBtn || !cancelBtn) {
+    if (!overlay || !modal || !searchInput || !searchBtn || !fillZhBtn || !fillEnBtn || !myPosBtn || !confirmBtn || !cancelBtn) {
       setRuntimeError('地图弹层节点初始化失败');
       return;
     }
 
-    overlay.style.display = 'block';
+    overlay.classList.add('open');
+    overlay.style.display = 'flex';
     overlay.style.position = 'relative';
     overlay.style.inset = 'auto';
+    overlay.style.padding = '0';
     overlay.style.background = 'transparent';
+    overlay.style.backdropFilter = 'none';
     modal.style.width = '100%';
     modal.style.maxWidth = 'none';
     modal.style.margin = '0';
     modal.style.borderRadius = '28px';
-    mapEl.replaceWith(mapWrap);
     mapWrap.id = 'event-location-picker-map';
+    mapWrap.classList.add('event-location-picker-map-canvas');
     searchInput.value = search;
 
     const syncSelected = () => {
@@ -390,6 +392,7 @@ export default function EventLocationPickerModal({
 
     return () => {
       window.clearInterval(pollId);
+      overlay.classList.remove('open');
       runtime.closeEventLocationPickerModal?.();
     };
   }, [
@@ -408,7 +411,7 @@ export default function EventLocationPickerModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4">
+    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4">
       <div className="flex h-[88vh] w-full max-w-[1420px] overflow-hidden rounded-[32px] border border-white/70 bg-[#f6f3ea] shadow-[0_30px_120px_rgba(7,17,16,0.24)]">
         <aside className="hidden w-[320px] border-r border-black/8 bg-[linear-gradient(180deg,#f7f0df_0%,#fbf8ef_100%)] p-6 lg:flex lg:flex-col">
           <div className="admin-studio-label">Location Picker</div>
@@ -459,7 +462,7 @@ export default function EventLocationPickerModal({
           </div>
         </aside>
 
-        <div className="relative flex-1 bg-white p-4">
+        <div className="event-location-picker-stage relative flex-1 bg-white p-4">
           <button
             type="button"
             onClick={onClose}
@@ -501,7 +504,7 @@ export default function EventLocationPickerModal({
                   </button>
                 </div>
                 <div className="event-location-picker-map-wrap">
-                  <div ref={mapWrapRef} className="h-full w-full rounded-[20px]" />
+                  <div id="event-location-picker-map" ref={mapWrapRef} className="event-location-picker-map-canvas h-full w-full rounded-[20px]" />
                   <aside id="event-location-poi-panel" className="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
                     <div className="event-location-poi-panel-head">
                       <span>POI 信息</span>
