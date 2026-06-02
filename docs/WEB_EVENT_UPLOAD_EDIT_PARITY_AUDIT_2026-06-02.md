@@ -1060,3 +1060,40 @@ Remaining media-page gap versus full iOS workflow parity:
 - [x] Legacy compat endpoint `/api/coze/normalize-event-location` is now handled directly by `web`
 - [x] Legacy compat endpoint `/api/raver/events/:id/update` is now handled directly by `web`
 - [ ] Remaining legacy rewrite endpoints outside the event-location flow still need a separate migration plan if we want to retire the full legacy viewer service
+
+## Legacy API Migration Progress Update (2026-06-02)
+
+Current goal for this round: keep pulling legacy `festivalViewerOrigin` API dependencies into `web`, but do it in a way that does not change the working iOS chain.
+
+- [x] Added local `web` route for `/api/coze/translate-festival`
+- [x] Added local `web` route for `/api/coze/translate-dj-fields`
+- [x] Added local compat catch-all route for `/api/raver/[...path]`
+- [x] Mapped legacy viewer semantics inside `web` compat route:
+  - `POST .../update` -> `PATCH /v1/...`
+  - `POST .../delete` -> `DELETE /v1/...`
+  - all other supported paths -> `/v1/...`
+- [x] Added local fallback handling for legacy `/api/raver/events/years`
+- [x] Fixed rewrite precedence so local App Router compat routes are matched before the generic `/api/:path*` backend proxy
+- [x] Added explicit upstream timeout protection for compat proxy calls so dead backend connections fail as controlled `502/504` responses instead of hanging
+- [x] Verified on a fresh local `web` dev instance that:
+  - `/api/coze/translate-festival` is handled by `web`
+  - `/api/coze/translate-dj-fields` is handled by `web`
+  - `/api/raver/events/years` is handled by `web` compat route
+  - `/api/raver/events/:id/update` is handled by `web` compat route
+
+Still intentionally left on legacy for now:
+
+- [ ] `/api/coze/recognize`
+- [ ] `/api/coze/poster-info`
+- [ ] `/api/raver/djs/translate-bilingual`
+- [ ] `/api/raver/djs/translate-bilingual/start`
+- [ ] `/api/raver/djs/translate-bilingual/progress`
+- [ ] `/api/raver/djs/translate-bilingual/result`
+- [ ] `/api/raver/djs/translate-bilingual/stop`
+
+Next recommended migration order:
+
+- [ ] Move `/api/coze/recognize` into `web`
+- [ ] Move `/api/coze/poster-info` into `web`
+- [ ] Move DJ bilingual batch translation endpoints into `web`
+- [ ] Re-scan legacy viewer runtime after each step to confirm no remaining `festivalViewerOrigin` dependency for active Event Studio flows
