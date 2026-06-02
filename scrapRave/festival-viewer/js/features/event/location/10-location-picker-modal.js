@@ -1,4 +1,15 @@
 // Event location picker modal (AMap)
+var escapeHtml = typeof globalThis.escapeHtml === 'function'
+  ? globalThis.escapeHtml.bind(globalThis)
+  : function (str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
 let eventLocationMap = null;
 let eventLocationPinMarker = null;
 let eventLocationMyMarker = null;
