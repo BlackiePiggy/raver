@@ -259,6 +259,7 @@ export type EventStudioOrganizer = {
   backgroundUrl?: string | null;
 };
 
+export type EventStudioOverview = EventContractSchemas['EventOverview'];
 export type EventStudioLoadedEvent = EventContractSchemas['EventDetail'];
 export type EventStudioCreateInput = EventContractSchemas['CreateEventInput'];
 export type EventStudioUpdateInput = EventContractSchemas['UpdateEventInput'];

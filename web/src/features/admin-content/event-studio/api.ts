@@ -10,6 +10,7 @@ import {
   EventStudioImportJobKind,
   EventStudioImportJobSnapshot,
   EventStudioLoadedEvent,
+  EventStudioOverview,
   EventStudioOrganizer,
   EventStudioSubmissionAcceptedPayload,
   EventStudioTimezoneLookupItem,
@@ -60,6 +61,7 @@ type EventStudioExactMatchResult = {
 };
 
 type EventEnvelope = EventContractSchemas['EventEnvelope'];
+type EventOverviewEnvelope = EventContractSchemas['EventOverviewEnvelope'];
 type EventDetailEnvelope = EventContractSchemas['EventDetailEnvelope'];
 type EventSubmissionAcceptedEnvelope = EventContractSchemas['EventSubmissionAcceptedEnvelope'];
 type EventAlignmentPreviewEnvelope = EventContractSchemas['EventAlignmentPreviewEnvelope'];
@@ -226,6 +228,11 @@ export const eventStudioApi = {
 
   async fetchEvent(id: string): Promise<EventStudioLoadedEvent> {
     const payload = await authenticatedJsonFetch<EventDetailEnvelope>(getApiUrl(`/v1/events/${id}`));
+    return payload.data;
+  },
+
+  async fetchEventOverview(id: string): Promise<EventStudioOverview> {
+    const payload = await authenticatedJsonFetch<EventOverviewEnvelope>(getApiUrl(`/v1/events/${id}/summary`));
     return payload.data;
   },
 

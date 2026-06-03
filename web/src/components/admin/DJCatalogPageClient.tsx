@@ -1566,12 +1566,15 @@ export default function DJCatalogPageClient() {
                     </div>
 
                     {/* ⑦ 操作按钮 — 更小，描边风格 */}
-                    <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:justify-end">
+                    <div
+                      className="relative mt-3 flex items-center gap-2 lg:mt-0 lg:justify-end"
+                      ref={menuOpenDJId === item.id ? actionMenuRef : null}
+                    >
                       <Link
                         href={`/admin/content/djs/${item.id}/edit`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setMenuOpenDJId((current) => (current === item.id ? null : item.id));
+                          setMenuOpenDJId(null);
                         }}
                         className="inline-flex h-[36px] items-center rounded-[10px] border border-[#e8eceb] bg-white px-4 text-[13px] font-semibold text-[#111827]"
                       >
@@ -1579,12 +1582,29 @@ export default function DJCatalogPageClient() {
                       </Link>
                       <button
                         type="button"
-                        onClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuOpenDJId((current) => (current === item.id ? null : item.id));
+                        }}
                         className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-[10px] border border-[#e8eceb] bg-white text-[#6b7280]"
                         aria-label="更多操作"
                       >
                         <Ellipsis className="h-4 w-4" />
                       </button>
+                      {menuOpenDJId === item.id ? (
+                        <div
+                          className="absolute right-0 top-[44px] z-20 min-w-[140px] rounded-[16px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => requestDeleteDJ(item)}
+                            className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
+                          >
+                            删除 DJ
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </article>
                 );

@@ -600,8 +600,16 @@ export default function AdminContentLabelsPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="relative ml-auto shrink-0" ref={menuOpenLabelId === item.id ? actionMenuRef : null}>
-                        <button
+                      <div className="ml-auto flex shrink-0 items-start gap-2">
+                        <Link
+                          href={`/admin/content/labels/${item.id}/edit`}
+                          onClick={(event) => event.stopPropagation()}
+                          className="inline-flex h-9 items-center rounded-full border border-[#e8eceb] bg-white px-3.5 text-sm font-semibold text-[#111827]"
+                        >
+                          编辑
+                        </Link>
+                        <div className="relative" ref={menuOpenLabelId === item.id ? actionMenuRef : null}>
+                          <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -626,6 +634,7 @@ export default function AdminContentLabelsPage() {
                             </button>
                           </div>
                         ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>

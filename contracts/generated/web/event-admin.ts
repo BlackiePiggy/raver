@@ -38,6 +38,29 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{eventId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get event overview
+         * @description Returns the lightweight event overview payload used for summary/overview surfaces.
+         *     This payload intentionally excludes the heavy lineup and timetable collections so
+         *     clients can render media, schedule summary, ticket summary, and base metadata
+         *     without loading full event detail.
+         */
+        get: operations["getEventOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         /**
          * Update event
          * @description Updates an event using full payload semantics.
@@ -339,6 +362,73 @@ export interface components {
             status?: string | null;
         };
         /**
+         * @description Lightweight event overview shape used by summary/overview surfaces.
+         *     This payload is intentionally lighter than EventDetail and excludes the heavy
+         *     lineup/timetable collections, while still carrying the fields needed for
+         *     overview, media, schedule summary, and ticket summary rendering.
+         */
+        EventOverview: {
+            id: string;
+            favoriteId?: string | null;
+            isFavorited?: boolean;
+            name: string;
+            nameI18n?: components["schemas"]["LocalizedText"];
+            wikiFestivalId?: string | null;
+            archiveFestivalId?: string | null;
+            slug: string;
+            abbreviation?: string | null;
+            description?: string | null;
+            descriptionI18n?: components["schemas"]["LocalizedText"];
+            countryI18n?: components["schemas"]["LocalizedText"];
+            cityI18n?: components["schemas"]["LocalizedText"];
+            cardImageUrl?: string | null;
+            coverImageUrl?: string | null;
+            lineupImageUrl?: string | null;
+            imageAssets?: components["schemas"]["EventImageAsset"][] | null;
+            referenceLinks?: string[] | null;
+            socialLinks?: unknown;
+            sourceProvider?: string | null;
+            sourceEventUrl?: string | null;
+            eventType?: string | null;
+            organizerName?: string | null;
+            venueName?: string | null;
+            venueAddress?: string | null;
+            city?: string | null;
+            country?: string | null;
+            manualLocation?: components["schemas"]["EventManualLocation"];
+            locationPoint?: components["schemas"]["EventLocationPoint"];
+            latitude?: number | null;
+            longitude?: number | null;
+            /** Format: date-time */
+            startDate: string;
+            /** Format: date-time */
+            endDate: string;
+            schedule?: components["schemas"]["EventSchedule"];
+            weeks?: components["schemas"]["EventWeek"][] | null;
+            eventDays?: components["schemas"]["EventDay"][] | null;
+            timeZone?: string | null;
+            startTime?: string | null;
+            endTime?: string | null;
+            dayRolloverHour?: number | null;
+            stageOrder?: string[] | null;
+            ticketUrl?: string | null;
+            ticketPriceMin?: number | null;
+            ticketPriceMax?: number | null;
+            ticketCurrency?: string | null;
+            ticketNotes?: string | null;
+            officialWebsite?: string | null;
+            status?: string | null;
+            isVerified?: boolean | null;
+            revision?: number | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            ticketTiers?: components["schemas"]["EventTicketTierInput"][] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * @description Full Event detail shape used by Event Studio load/edit.
          *     First-stage contract keeps this permissive for backward compatibility while request contracts are tightened first.
          */
@@ -427,6 +517,9 @@ export interface components {
         };
         EventDetailEnvelope: {
             data: components["schemas"]["EventDetail"];
+        };
+        EventOverviewEnvelope: {
+            data: components["schemas"]["EventOverview"];
         };
         EventSubmissionAcceptedEnvelope: {
             data: components["schemas"]["EventSubmissionAccepted"];
@@ -532,6 +625,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventDetailEnvelope"];
+                };
+            };
+            /** @description Event not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericApiError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericApiError"];
+                };
+            };
+        };
+    };
+    getEventOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: components["parameters"]["EventId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event overview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventOverviewEnvelope"];
                 };
             };
             /** @description Event not found */

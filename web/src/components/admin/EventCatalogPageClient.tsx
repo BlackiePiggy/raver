@@ -31,7 +31,7 @@ import {
   writeAdminCatalogCache,
 } from '@/features/admin-content/catalog/cache';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
-import type { EventStudioLoadedEvent } from '@/features/admin-content/event-studio/types';
+import type { EventStudioLoadedEvent, EventStudioOverview } from '@/features/admin-content/event-studio/types';
 import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 
 const PAGE_SIZE = 10;
@@ -270,17 +270,25 @@ const formatActTypeLabel = (value?: string | null): string => {
 
 function EventDetailOverlay({
   item,
+  overview,
   detail,
+  overviewLoading,
   loading,
+  overviewError,
   error,
   onClose,
+  onRequestLoadOverview,
   onRequestLoadDetail,
 }: {
   item: EventCatalogItem | null;
+  overview: EventStudioOverview | null;
   detail: EventStudioLoadedEvent | null;
+  overviewLoading: boolean;
   loading: boolean;
+  overviewError: string;
   error: string;
   onClose: () => void;
+  onRequestLoadOverview: () => void | Promise<void>;
   onRequestLoadDetail: () => void | Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<EventDetailTabKey>('overview');
@@ -293,6 +301,11 @@ function EventDetailOverlay({
     setActiveTab('overview');
     setPreviewAssetIndex(null);
   }, [item]);
+
+  useEffect(() => {
+    if (!item || overview || overviewLoading || overviewError) return;
+    void onRequestLoadOverview();
+  }, [item, onRequestLoadOverview, overview, overviewError, overviewLoading]);
 
   useEffect(() => {
     if (!item) return;
@@ -317,7 +330,8 @@ function EventDetailOverlay({
     eventDays: [],
   } as EventCatalogItem);
 
-  const resolved = detail ?? null;
+  const resolved = detail ?? overview ?? null;
+  const detailedResolved = detail ?? null;
   const state = resolveEventStatus(safeItem);
   const primaryName =
     firstFilledText(resolved?.nameI18n?.zh, resolved?.nameI18n?.en, resolved?.name, safeItem.name) || safeItem.name;
@@ -325,10 +339,23 @@ function EventDetailOverlay({
   const imageAssets = sortedByOrder(resolved?.imageAssets);
   const posterAsset = imageAssets.find((asset) => ['poster', 'cover'].includes(String(asset.type || '').toLowerCase()));
   const heroImage = resolved?.coverImageUrl || posterAsset?.url || safeItem.coverImageUrl || resolved?.lineupImageUrl || '';
+  const displayImageAssets = imageAssets.length
+    ? imageAssets
+    : heroImage
+      ? [
+          {
+            url: heroImage,
+            type: 'cover',
+            label: 'Cover',
+            fileName: 'cover',
+            sortOrder: 1,
+          },
+        ]
+      : [];
   const weeks = sortedByOrder(resolved?.weeks);
   const eventDays = sortedByOrder(resolved?.eventDays);
-  const lineupArtists = sortedByOrder(resolved?.lineupArtists);
-  const timetableSlots = sortedByOrder(resolved?.timetableSlots ?? resolved?.lineupSlots);
+  const lineupArtists = sortedByOrder(detailedResolved?.lineupArtists);
+  const timetableSlots = sortedByOrder(detailedResolved?.timetableSlots ?? detailedResolved?.lineupSlots);
   const ticketTiers = sortedByOrder(resolved?.ticketTiers);
   const stageOrder = compactStringList(resolved?.stageOrder);
   const cityCountry = [resolved?.city ?? safeItem.city, resolved?.country ?? safeItem.country].filter(Boolean).join(', ');
@@ -417,7 +444,7 @@ function EventDetailOverlay({
   if (!visibleStageOrder.length) {
     visibleStageOrder.push('Main Stage');
   }
-  const previewAssets: OverlayImageViewerAsset[] = imageAssets.map((asset) => ({
+  const previewAssets: OverlayImageViewerAsset[] = displayImageAssets.map((asset) => ({
     url: asset.url,
     alt: asset.label || asset.type || 'event asset',
     title: asset.label || asset.fileName || 'Asset',
@@ -431,6 +458,26 @@ function EventDetailOverlay({
 
   let tabContent: React.ReactNode = null;
   if (activeTab === 'overview') {
+    if (overviewLoading && !resolved) {
+      tabContent = (
+        <div className="rounded-[24px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
+          正在加载 Overview...
+        </div>
+      );
+    } else if (overviewError && !resolved) {
+      tabContent = (
+        <div className="rounded-[24px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-[#7a2d29]">
+          <div>{overviewError}</div>
+          <button
+            type="button"
+            onClick={() => void onRequestLoadOverview()}
+            className="mt-3 inline-flex h-[38px] items-center rounded-full border border-red-200 bg-white px-4 text-sm font-semibold text-[#7a2d29]"
+          >
+            重试加载
+          </button>
+        </div>
+      );
+    } else {
     tabContent = (
       <div className="space-y-5">
         <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
@@ -491,10 +538,10 @@ function EventDetailOverlay({
         <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-semibold text-[#111827]">Media Assets</div>
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{imageAssets.length} assets</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{displayImageAssets.length} assets</div>
           </div>
           <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-3">
-            {imageAssets.map((asset, index) => (
+            {displayImageAssets.map((asset, index) => (
               <button
                 key={`${asset.url}-${index}`}
                 type="button"
@@ -510,11 +557,12 @@ function EventDetailOverlay({
                 </div>
               </button>
             ))}
-            {!imageAssets.length ? <div className="text-sm text-[#6b7280]">No media assets.</div> : null}
+            {!displayImageAssets.length ? <div className="text-sm text-[#6b7280]">No media assets.</div> : null}
           </div>
         </section>
       </div>
     );
+    }
   } else if (loading && !resolved) {
     tabContent = (
       <div className="rounded-[24px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
@@ -1039,14 +1087,19 @@ export default function EventCatalogPageClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<EventCatalogItem | null>(null);
+  const [selectedEventOverview, setSelectedEventOverview] = useState<EventStudioOverview | null>(null);
   const [selectedEventDetail, setSelectedEventDetail] = useState<EventStudioLoadedEvent | null>(null);
+  const [selectedEventOverviewError, setSelectedEventOverviewError] = useState('');
   const [selectedEventError, setSelectedEventError] = useState('');
+  const [selectedEventOverviewLoading, setSelectedEventOverviewLoading] = useState(false);
   const [selectedEventLoading, setSelectedEventLoading] = useState(false);
+  const [overviewCache, setOverviewCache] = useState<Record<string, EventStudioOverview>>({});
   const [detailCache, setDetailCache] = useState<Record<string, EventStudioLoadedEvent>>({});
   const [menuOpenEventId, setMenuOpenEventId] = useState<string | null>(null);
   const [pendingDeleteEvent, setPendingDeleteEvent] = useState<EventCatalogItem | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const overviewRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
 
   const filters = useMemo<EventCatalogFilters>(
@@ -1171,9 +1224,19 @@ export default function EventCatalogPageClient() {
 
   const openDetailOverlay = useCallback((item: EventCatalogItem) => {
     setMenuOpenEventId(null);
+    overviewRequestRef.current += 1;
     detailRequestRef.current += 1;
     setSelectedEvent(item);
+    setSelectedEventOverviewError('');
     setSelectedEventError('');
+    const cachedOverview = overviewCache[item.id];
+    if (cachedOverview) {
+      setSelectedEventOverview(cachedOverview);
+      setSelectedEventOverviewLoading(false);
+    } else {
+      setSelectedEventOverview(null);
+      setSelectedEventOverviewLoading(false);
+    }
     const cached = detailCache[item.id];
     if (cached) {
       setSelectedEventDetail(cached);
@@ -1183,7 +1246,38 @@ export default function EventCatalogPageClient() {
 
     setSelectedEventDetail(null);
     setSelectedEventLoading(false);
-  }, [detailCache]);
+  }, [detailCache, overviewCache]);
+
+  const loadSelectedEventOverview = useCallback(async () => {
+    if (!selectedEvent) return;
+
+    const cached = overviewCache[selectedEvent.id];
+    if (cached) {
+      setSelectedEventOverview(cached);
+      setSelectedEventOverviewError('');
+      setSelectedEventOverviewLoading(false);
+      return;
+    }
+
+    const requestId = overviewRequestRef.current + 1;
+    overviewRequestRef.current = requestId;
+    const selectedEventId = selectedEvent.id;
+    setSelectedEventOverviewLoading(true);
+    setSelectedEventOverviewError('');
+
+    try {
+      const overview = await eventStudioApi.fetchEventOverview(selectedEventId);
+      if (overviewRequestRef.current !== requestId) return;
+      setOverviewCache((current) => ({ ...current, [selectedEventId]: overview }));
+      setSelectedEventOverview(overview);
+    } catch (overviewLoadError) {
+      if (overviewRequestRef.current !== requestId) return;
+      setSelectedEventOverviewError(overviewLoadError instanceof Error ? overviewLoadError.message : '活动概览加载失败');
+    } finally {
+      if (overviewRequestRef.current !== requestId) return;
+      setSelectedEventOverviewLoading(false);
+    }
+  }, [overviewCache, selectedEvent]);
 
   const loadSelectedEventDetail = useCallback(async () => {
     if (!selectedEvent) return;
@@ -1218,10 +1312,14 @@ export default function EventCatalogPageClient() {
 
   const closeDetailOverlay = useCallback(() => {
     setMenuOpenEventId(null);
+    overviewRequestRef.current += 1;
     detailRequestRef.current += 1;
     setSelectedEvent(null);
+    setSelectedEventOverview(null);
     setSelectedEventDetail(null);
+    setSelectedEventOverviewError('');
     setSelectedEventError('');
+    setSelectedEventOverviewLoading(false);
     setSelectedEventLoading(false);
   }, []);
 
@@ -1245,6 +1343,11 @@ export default function EventCatalogPageClient() {
         closeDetailOverlay();
       }
       setPendingDeleteEvent(null);
+      setOverviewCache((current) => {
+        const next = { ...current };
+        delete next[eventId];
+        return next;
+      });
       setDetailCache((current) => {
         const next = { ...current };
         delete next[eventId];
@@ -1610,10 +1713,14 @@ export default function EventCatalogPageClient() {
         </section>
       <EventDetailOverlay
         item={selectedEvent}
+        overview={selectedEventOverview}
         detail={selectedEventDetail}
+        overviewLoading={selectedEventOverviewLoading}
         loading={selectedEventLoading}
+        overviewError={selectedEventOverviewError}
         error={selectedEventError}
         onClose={closeDetailOverlay}
+        onRequestLoadOverview={loadSelectedEventOverview}
         onRequestLoadDetail={loadSelectedEventDetail}
       />
       {pendingDeleteEvent ? (

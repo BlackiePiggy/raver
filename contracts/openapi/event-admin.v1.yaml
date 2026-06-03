@@ -98,6 +98,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenericApiError'
+  /events/{eventId}/summary:
+    get:
+      tags:
+        - Event Admin
+      summary: Get event overview
+      operationId: getEventOverview
+      description: |
+        Returns the lightweight event overview payload used for summary/overview surfaces.
+        This payload intentionally excludes the heavy lineup and timetable collections so
+        clients can render media, schedule summary, ticket summary, and base metadata
+        without loading full event detail.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Event overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOverviewEnvelope'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericApiError'
     patch:
       tags:
         - Event Admin
@@ -1059,6 +1093,228 @@ components:
           type:
             - string
             - 'null'
+    EventOverview:
+      type: object
+      additionalProperties: true
+      description: |
+        Lightweight event overview shape used by summary/overview surfaces.
+        This payload is intentionally lighter than EventDetail and excludes the heavy
+        lineup/timetable collections, while still carrying the fields needed for
+        overview, media, schedule summary, and ticket summary rendering.
+      required:
+        - id
+        - name
+        - slug
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+        favoriteId:
+          type:
+            - string
+            - 'null'
+        isFavorited:
+          type: boolean
+        name:
+          type: string
+        nameI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        wikiFestivalId:
+          type:
+            - string
+            - 'null'
+        archiveFestivalId:
+          type:
+            - string
+            - 'null'
+        slug:
+          type: string
+        abbreviation:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        descriptionI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        countryI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        cityI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
+        cardImageUrl:
+          type:
+            - string
+            - 'null'
+        coverImageUrl:
+          type:
+            - string
+            - 'null'
+        lineupImageUrl:
+          type:
+            - string
+            - 'null'
+        imageAssets:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventImageAsset'
+        referenceLinks:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        socialLinks:
+          nullable: true
+        sourceProvider:
+          type:
+            - string
+            - 'null'
+        sourceEventUrl:
+          type:
+            - string
+            - 'null'
+        eventType:
+          type:
+            - string
+            - 'null'
+        organizerName:
+          type:
+            - string
+            - 'null'
+        venueName:
+          type:
+            - string
+            - 'null'
+        venueAddress:
+          type:
+            - string
+            - 'null'
+        city:
+          type:
+            - string
+            - 'null'
+        country:
+          type:
+            - string
+            - 'null'
+        manualLocation:
+          $ref: '#/components/schemas/EventManualLocation'
+          nullable: true
+        locationPoint:
+          $ref: '#/components/schemas/EventLocationPoint'
+          nullable: true
+        latitude:
+          type:
+            - number
+            - 'null'
+        longitude:
+          type:
+            - number
+            - 'null'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        schedule:
+          $ref: '#/components/schemas/EventSchedule'
+          nullable: true
+        weeks:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventWeek'
+        eventDays:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventDay'
+        timeZone:
+          type:
+            - string
+            - 'null'
+        startTime:
+          type:
+            - string
+            - 'null'
+        endTime:
+          type:
+            - string
+            - 'null'
+        dayRolloverHour:
+          type:
+            - integer
+            - 'null'
+        stageOrder:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+        ticketUrl:
+          type:
+            - string
+            - 'null'
+        ticketPriceMin:
+          type:
+            - number
+            - 'null'
+        ticketPriceMax:
+          type:
+            - number
+            - 'null'
+        ticketCurrency:
+          type:
+            - string
+            - 'null'
+        ticketNotes:
+          type:
+            - string
+            - 'null'
+        officialWebsite:
+          type:
+            - string
+            - 'null'
+        status:
+          type:
+            - string
+            - 'null'
+        isVerified:
+          type:
+            - boolean
+            - 'null'
+        revision:
+          type:
+            - integer
+            - 'null'
+        createdAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        updatedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        ticketTiers:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/EventTicketTierInput'
     EventDetail:
       type: object
       additionalProperties: true
@@ -1352,6 +1608,14 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/EventDetail'
+    EventOverviewEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/EventOverview'
     EventSubmissionAcceptedEnvelope:
       type: object
       additionalProperties: false

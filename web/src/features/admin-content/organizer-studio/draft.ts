@@ -47,9 +47,9 @@ export const createOrganizerStudioDraft = (initialName = ''): OrganizerStudioDra
 
 const fromNullableLocalizedText = (
   value?: OrganizerStudioLocalizedText | null,
-  fallback = ''
+  fallback?: string | null
 ): OrganizerStudioLocalizedText => ({
-  zh: value?.zh ?? fallback,
+  zh: value?.zh ?? String(fallback || ''),
   en: value?.en ?? '',
   ja: value?.ja ?? '',
   enFull: value?.enFull ?? '',
@@ -57,18 +57,40 @@ const fromNullableLocalizedText = (
 
 const normalizeUrl = (value?: string | null): string => String(value || '').trim();
 
+const normalizeStringArray = (value?: Array<string | null> | null): string[] =>
+  Array.isArray(value)
+    ? value
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    : [];
+
+const normalizeLinks = (
+  value?: Array<{ title?: string | null; icon?: string | null; url?: string | null }> | null
+): Array<{ title: string; icon: string; url: string }> =>
+  Array.isArray(value)
+    ? value.map((item) => ({
+        title: String(item?.title || '').trim(),
+        icon: String(item?.icon || 'link').trim() || 'link',
+        url: String(item?.url || '').trim(),
+      }))
+    : [];
+
 export const hydrateOrganizerStudioDraftFromOrganizer = (
   organizer: OrganizerStudioLoadedOrganizer
 ): OrganizerStudioDraft => {
-  const avatarImageFromAssets = organizer.imageAssets?.find((item) => {
+  const aliases = normalizeStringArray(organizer.aliases);
+  const links = normalizeLinks(organizer.links);
+  const imageAssets = Array.isArray(organizer.imageAssets) ? organizer.imageAssets : [];
+
+  const avatarImageFromAssets = imageAssets.find((item) => {
     const normalizedType = String(item.type || '').toLowerCase();
     return normalizedType === 'avatar';
   });
-  const backgroundImageFromAssets = organizer.imageAssets?.find((item) => {
+  const backgroundImageFromAssets = imageAssets.find((item) => {
     const normalizedType = String(item.type || '').toLowerCase();
     return normalizedType === 'background';
   });
-  const proofImages = (organizer.imageAssets ?? [])
+  const proofImages = imageAssets
     .filter((item) => String(item.type || '').toLowerCase() === 'proof')
     .map((item) => ({
       remoteUrl: item.url,
@@ -94,7 +116,7 @@ export const hydrateOrganizerStudioDraftFromOrganizer = (
     id: crypto.randomUUID(),
     name: fromNullableLocalizedText(organizer.nameI18n, organizer.name),
     abbreviation: organizer.abbreviation ?? '',
-    aliasesText: organizer.aliases.join('\n'),
+    aliasesText: aliases.join('\n'),
     country: fromNullableLocalizedText(organizer.countryI18n, organizer.country),
     city: fromNullableLocalizedText(organizer.cityI18n, organizer.city),
     foundedYear: organizer.foundedYear ?? '',
@@ -110,7 +132,7 @@ export const hydrateOrganizerStudioDraftFromOrganizer = (
     twitter: organizer.twitterUrl ?? '',
     youtube: organizer.youtubeUrl ?? '',
     tiktok: organizer.tiktokUrl ?? '',
-    extraLinks: (organizer.links ?? [])
+    extraLinks: links
       .filter((item) => !canonicalLinks.has(normalizeUrl(item.url)))
       .map((item) => ({
         id: crypto.randomUUID(),

@@ -90,10 +90,10 @@ export type OrganizerStudioLoadedOrganizer = {
   nameI18n?: OrganizerStudioLocalizedText | null;
   revision?: number | null;
   abbreviation?: string | null;
-  aliases: string[];
-  country: string;
+  aliases?: string[] | null;
+  country?: string | null;
   countryI18n?: OrganizerStudioLocalizedText | null;
-  city: string;
+  city?: string | null;
   cityI18n?: OrganizerStudioLocalizedText | null;
   foundedYear?: string | null;
   frequency?: string | null;
@@ -118,7 +118,7 @@ export type OrganizerStudioLoadedOrganizer = {
     source?: string | null;
     fileName?: string | null;
   }> | null;
-  links: OrganizerStudioLinkPayload[];
+  links?: OrganizerStudioLinkPayload[] | null;
   contributors?: Array<{
     id: string;
     username: string;
