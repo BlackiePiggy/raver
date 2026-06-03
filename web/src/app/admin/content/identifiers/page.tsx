@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 import {
   identifierAdminApi,
   type UnreleasedTrackItem,
@@ -184,11 +185,19 @@ export default function AdminIdentifiersPage() {
 
         <section className="admin-reference-card p-5">
           <div className="flex flex-wrap items-center gap-3">
-            <input
-              className="admin-reference-soft-card min-w-[260px] flex-1 px-4 py-3 text-sm"
-              placeholder="搜索曲名 / 艺人 / set / contributor"
+            <AdminSearchField
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={setSearch}
+              placeholder="搜索曲名 / 艺人 / set / contributor"
+              size="md"
+              className="min-w-[260px] flex-1"
+              submitLabel={loading ? '加载中...' : '搜索'}
+              onSubmit={() => void load(1)}
+              onClear={() => {
+                setSearch('');
+                void load(1);
+              }}
+              disabled={loading}
             />
             <select
               className="admin-reference-soft-card px-4 py-3 text-sm"
@@ -199,14 +208,6 @@ export default function AdminIdentifiersPage() {
               <option value="default_track">默认轨道</option>
               <option value="tracklist_track">用户 Tracklist</option>
             </select>
-            <button
-              type="button"
-              className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
-              disabled={loading}
-              onClick={() => void load(1)}
-            >
-              {loading ? '加载中...' : '搜索'}
-            </button>
           </div>
         </section>
 

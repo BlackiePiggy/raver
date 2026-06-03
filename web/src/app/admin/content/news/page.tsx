@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import { djStudioApi } from '@/features/admin-content/dj-studio/api';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
@@ -560,7 +561,7 @@ export default function AdminContentNewsPage() {
   return (
     <AdminContentLayout
       title="News Workspace"
-      description="创建、编辑并维护资讯内容，详情 overlay 与新的对象绑定展示保持一致。"
+      description=""
       actions={
         <>
           <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
@@ -573,74 +574,75 @@ export default function AdminContentNewsPage() {
       }
     >
       <section className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-4">
-          {[
-            { label: 'News Studio', value: 'Live', note: '创建与编辑流程可用', tone: 'bg-[#dff4a8]' },
-            { label: 'Default Sort', value: 'Newest', note: '默认按发布时间从晚到早', tone: 'bg-[#f3e5a8]' },
-            { label: 'Filters', value: '3', note: '搜索、来源、分类联动', tone: 'bg-[#f7c4c0]' },
-            { label: 'Page Size', value: String(PAGE_SIZE), note: '标准页码分页', tone: 'bg-[#dbeefe]' },
-          ].map((card) => (
-            <div key={card.label} className={`admin-reference-pastel-card p-5 ${card.tone}`}>
-              <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">{card.label}</div>
-              <div className="mt-4 text-[34px] font-semibold tracking-[-0.04em] text-[#1a1a1a]">{card.value}</div>
-              <div className="mt-2 text-[13px] text-black/55">{card.note}</div>
-            </div>
-          ))}
-        </div>
-
         <section className="admin-reference-card p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">Latest News</div>
               <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">最新资讯</h2>
             </div>
-            <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[760px] lg:flex-row">
-              <input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  resetPaging();
-                }}
-                className="admin-studio-input lg:flex-1"
-                placeholder="搜索标题、来源或摘要"
-              />
-              <input
-                value={sourceFilter}
-                onChange={(event) => {
-                  setSourceFilter(event.target.value);
-                  resetPaging();
-                }}
-                className="admin-studio-input lg:w-[180px]"
-                placeholder="来源筛选"
-              />
-              <select
-                value={categoryFilter}
-                onChange={(event) => {
-                  setCategoryFilter(event.target.value);
-                  resetPaging();
-                }}
-                className="admin-studio-input lg:w-[170px]"
-              >
-                {NEWS_CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value || 'all'} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={sortOrder}
-                onChange={(event) => {
-                  setSortOrder(event.target.value as 'newest' | 'oldest');
-                  resetPaging();
-                }}
-                className="admin-studio-input lg:w-[210px]"
-              >
-                {NEWS_SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+            <div className="grid w-full gap-3 lg:min-w-[920px] lg:grid-cols-[minmax(260px,1.35fr)_minmax(220px,0.78fr)_minmax(220px,0.78fr)_minmax(240px,0.85fr)]">
+              <label className="block">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-black/38">Search</div>
+                <AdminSearchField
+                  value={query}
+                  onChange={(value) => {
+                    setQuery(value);
+                    resetPaging();
+                  }}
+                  placeholder="搜索标题、来源或摘要"
+                  size="md"
+                  className="w-full"
+                  onClear={() => {
+                    setQuery('');
+                    resetPaging();
+                  }}
+                />
+              </label>
+              <label className="block">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-black/38">Source</div>
+                <input
+                  value={sourceFilter}
+                  onChange={(event) => {
+                    setSourceFilter(event.target.value);
+                    resetPaging();
+                  }}
+                  className="admin-studio-input w-full"
+                  placeholder="按来源筛选"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-black/38">Category</div>
+                <select
+                  value={categoryFilter}
+                  onChange={(event) => {
+                    setCategoryFilter(event.target.value);
+                    resetPaging();
+                  }}
+                  className="admin-studio-input w-full"
+                >
+                  {NEWS_CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value || 'all'} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-black/38">Sort</div>
+                <select
+                  value={sortOrder}
+                  onChange={(event) => {
+                    setSortOrder(event.target.value as 'newest' | 'oldest');
+                    resetPaging();
+                  }}
+                  className="admin-studio-input w-full"
+                >
+                  {NEWS_SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
 

@@ -11,11 +11,11 @@ import {
   ChevronRight,
   Ellipsis,
   List,
-  Search,
   SlidersHorizontal,
   Upload,
   Users2,
 } from 'lucide-react';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
@@ -1396,15 +1396,20 @@ export default function EventCatalogPageClient() {
         <section className="rounded-[28px] border border-[#edf0f2] bg-white px-6 py-5 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
           <form onSubmit={handleSearchSubmit} className="flex flex-wrap gap-3">
             {/* 搜索框 — ① h-[54px] */}
-            <label className="flex h-[54px] min-w-[240px] flex-[1.45_1_280px] items-center gap-3 rounded-[18px] border border-[#eceff1] bg-white px-5 text-[#111827]">
-              <Search className="h-5 w-5 shrink-0 text-[#9ca3af]" />
-              <input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="搜索活动名称、主办方、城市..."
-                className="w-full border-0 bg-transparent px-0 py-0 text-[15px] font-medium text-[#111827] outline-none placeholder:text-[#9ca3af]"
-              />
-            </label>
+            <AdminSearchField
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="搜索活动名称、主办方、城市..."
+              size="lg"
+              className="min-w-[240px] flex-[1.45_1_280px]"
+              submitLabel="搜索"
+              submitButtonType="submit"
+              onClear={() => {
+                setSearchInput('');
+                setSearch('');
+                setPage(1);
+              }}
+            />
 
             {/* 全部状态 */}
             <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">

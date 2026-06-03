@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import { labelStudioApi, type LabelStudioLoadedLabel } from '@/features/admin-content/label-studio';
 
@@ -503,23 +504,23 @@ export default function AdminContentLabelsPage() {
               <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">Label Directory</h2>
             </div>
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <input
+              <div className="min-w-0 flex-1">
+                <AdminSearchField
                   value={inputValue}
-                  onChange={(event) => setInputValue(event.target.value)}
-                  className="admin-studio-input min-w-0 flex-1"
+                  onChange={setInputValue}
                   placeholder="Search label name"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
+                  size="md"
+                  submitLabel="Search"
+                  onSubmit={() => {
                     setPage(1);
                     setSearch(inputValue.trim());
                   }}
-                  className="admin-studio-button-secondary shrink-0 px-5 py-3 text-sm"
-                >
-                  Search
-                </button>
+                  onClear={() => {
+                    setInputValue('');
+                    setPage(1);
+                    setSearch('');
+                  }}
+                />
               </div>
               <div className="flex flex-wrap items-end gap-3">
                 <div>

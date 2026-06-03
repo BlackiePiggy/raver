@@ -14,10 +14,10 @@ import {
   Headphones,
   Plus,
   RefreshCw,
-  Search,
   Upload,
 } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
   adminCatalogApi,
@@ -1338,15 +1338,20 @@ export default function DJCatalogPageClient() {
       <section className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <form onSubmit={handleSearchSubmit} className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <label className="flex h-[44px] min-w-[220px] flex-[1.5_1_280px] items-center gap-3 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[#111827]">
-              <input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="搜索 DJ 名称、国家、标签..."
-                className="w-full border-0 bg-transparent px-0 py-0 text-[14px] font-medium outline-none placeholder:text-[#9aa1ad]"
-              />
-              <Search className="h-4 w-4 shrink-0 text-[#9aa1ad]" />
-            </label>
+            <AdminSearchField
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="搜索 DJ 名称、国家、标签..."
+              size="sm"
+              className="min-w-[220px] flex-[1.5_1_280px]"
+              submitLabel="搜索"
+              submitButtonType="submit"
+              onClear={() => {
+                setSearchInput('');
+                setSearch('');
+                setPage(1);
+              }}
+            />
 
             <label className="relative flex h-[44px] min-w-[160px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
               <span>

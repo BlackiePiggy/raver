@@ -110,6 +110,8 @@ export default function AdminGenresPage() {
   const [notice, setNotice] = useState('');
   const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
   const [exampleValue, setExampleValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
+  const [spotifyTrackURL, setSpotifyTrackURL] = useState('');
+  const [wikipediaURL, setWikipediaURL] = useState('');
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldKey | null>(null);
   const [keyArtistDrafts, setKeyArtistDrafts] = useState<KeyArtistDraft[]>([]);
 
@@ -152,6 +154,8 @@ export default function AdminGenresPage() {
     if (!selectedNode) return;
     setDescriptionValue(normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || ''));
     setExampleValue(normalizeLocalizedValue(selectedNode.exampleI18n, selectedNode.example || ''));
+    setSpotifyTrackURL(selectedNode.spotifyTrackURL || '');
+    setWikipediaURL(selectedNode.wikipediaURL || '');
     setKeyArtistDrafts(
       (selectedNode.keyArtistBindings.length
         ? selectedNode.keyArtistBindings
@@ -184,6 +188,8 @@ export default function AdminGenresPage() {
         descriptionI18n: descriptionValue,
         example: exampleValue.zh,
         exampleI18n: exampleValue,
+        spotifyTrackURL: spotifyTrackURL.trim() || null,
+        wikipediaURL: wikipediaURL.trim() || null,
       });
       await genreAdminApi.updateKeyArtists(selectedNode.id, {
         keyArtists: keyArtistDrafts.map((item) => item.name.trim()).filter(Boolean),
@@ -381,6 +387,27 @@ export default function AdminGenresPage() {
                       {exampleValue.zh || 'No example yet.'}
                     </div>
                   </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <label className="block">
+                    <div className="mb-2 text-sm font-semibold text-[#111827]">Spotify Track URL</div>
+                    <input
+                      className="admin-studio-input"
+                      placeholder="Spotify track URL"
+                      value={spotifyTrackURL}
+                      onChange={(event) => setSpotifyTrackURL(event.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <div className="mb-2 text-sm font-semibold text-[#111827]">Wikipedia URL</div>
+                    <input
+                      className="admin-studio-input"
+                      placeholder="Wikipedia URL"
+                      value={wikipediaURL}
+                      onChange={(event) => setWikipediaURL(event.target.value)}
+                    />
+                  </label>
                 </div>
 
                 <div className="admin-reference-soft-card p-4">

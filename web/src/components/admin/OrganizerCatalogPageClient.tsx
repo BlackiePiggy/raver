@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
   organizerCatalogApi,
@@ -865,19 +866,20 @@ export default function OrganizerCatalogPageClient() {
 
       <section className="overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white p-5 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_auto_auto]">
+          <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_auto]">
             <label className="space-y-2">
               <span className="text-xs uppercase tracking-[0.2em] text-black/35">搜索关键词</span>
-              <input
+              <AdminSearchField
                 value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
+                onChange={setSearchInput}
                 placeholder="主办方名称 / 别名 / 城市 / 国家 / 官方链接"
-                className="w-full rounded-full px-4 py-3 text-sm"
+                size="md"
+                className="w-full"
+                submitLabel="搜索目录"
+                submitButtonType="submit"
+                onClear={handleReset}
               />
             </label>
-            <button type="submit" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-              搜索目录
-            </button>
             <button
               type="button"
               onClick={handleReset}

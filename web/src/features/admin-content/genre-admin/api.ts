@@ -66,6 +66,8 @@ export const genreAdminApi = {
       descriptionI18n?: Record<string, string> | null;
       example?: string | null;
       exampleI18n?: Record<string, string> | null;
+      spotifyTrackURL?: string | null;
+      wikipediaURL?: string | null;
     }
   ): Promise<GenreAdminNode> {
     const payload = await authenticatedJsonFetch<Envelope<GenreAdminNode>>(getApiUrl(`/v1/learn/genres/${encodeURIComponent(id)}/content`), {

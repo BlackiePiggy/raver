@@ -16315,32 +16315,77 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
     const body = req.body as Record<string, unknown>;
     const genre = await prisma.genre.findUnique({
       where: { id: genreId },
-      select: { id: true, description: true, example: true },
+      select: {
+        id: true,
+        description: true,
+        example: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
+      },
     });
     if (!genre) {
       res.status(404).json({ error: 'Genre not found' });
       return;
     }
 
-    const description = normalizeGenreEditableText(body.description);
-    const example = normalizeGenreEditableText(body.example);
-    const descriptionI18n = normalizeTriTextPayload(body.descriptionI18n, description ?? genre.description ?? '');
-    const exampleI18n = normalizeTriTextPayload(body.exampleI18n, example ?? genre.example ?? '');
+    const hasDescriptionField = Object.prototype.hasOwnProperty.call(body, 'description');
+    const hasDescriptionI18nField = Object.prototype.hasOwnProperty.call(body, 'descriptionI18n');
+    const hasExampleField = Object.prototype.hasOwnProperty.call(body, 'example');
+    const hasExampleI18nField = Object.prototype.hasOwnProperty.call(body, 'exampleI18n');
+    const hasSpotifyTrackField = Object.prototype.hasOwnProperty.call(body, 'spotifyTrackURL');
+    const hasWikipediaField = Object.prototype.hasOwnProperty.call(body, 'wikipediaURL');
+
+    const nextDescription = hasDescriptionField
+      ? normalizeGenreEditableText(body.description)
+      : (genre.description ?? null);
+    const nextExample = hasExampleField
+      ? normalizeGenreEditableText(body.example)
+      : (genre.example ?? null);
+    const nextSpotifyTrackUrl = hasSpotifyTrackField
+      ? normalizeGenreEditableText(body.spotifyTrackURL)
+      : (genre.spotifyTrackUrl ?? null);
+    const nextWikipediaUrl = hasWikipediaField
+      ? normalizeGenreEditableText(body.wikipediaURL)
+      : (genre.wikipediaUrl ?? null);
+
+    const descriptionI18n = hasDescriptionField || hasDescriptionI18nField
+      ? normalizeTriTextPayload(body.descriptionI18n, nextDescription ?? '')
+      : undefined;
+    const exampleI18n = hasExampleField || hasExampleI18nField
+      ? normalizeTriTextPayload(body.exampleI18n, nextExample ?? '')
+      : undefined;
+
+    const updateData: Prisma.GenreUpdateInput = {};
+    if (hasDescriptionField || hasDescriptionI18nField) {
+      updateData.description = nextDescription;
+      updateData.descriptionI18n = descriptionI18n
+        ? (descriptionI18n as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull;
+    }
+    if (hasExampleField || hasExampleI18nField) {
+      updateData.example = nextExample;
+      updateData.exampleI18n = exampleI18n
+        ? (exampleI18n as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull;
+    }
+    if (hasSpotifyTrackField) {
+      updateData.spotifyTrackUrl = nextSpotifyTrackUrl;
+    }
+    if (hasWikipediaField) {
+      updateData.wikipediaUrl = nextWikipediaUrl;
+    }
 
     const updated = await prisma.genre.update({
       where: { id: genreId },
-      data: {
-        description,
-        example,
-        descriptionI18n: descriptionI18n ? (descriptionI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
-        exampleI18n: exampleI18n ? (exampleI18n as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
-      },
+      data: updateData,
       select: {
         id: true,
         description: true,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
       },
     });
 
@@ -16350,6 +16395,8 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
       descriptionI18n: resolveTriTextWithFallback(updated.descriptionI18n ?? null, updated.description ?? ''),
       example: updated.example ?? '',
       exampleI18n: resolveTriTextWithFallback(updated.exampleI18n ?? null, updated.example ?? ''),
+      spotifyTrackURL: updated.spotifyTrackUrl ?? '',
+      wikipediaURL: updated.wikipediaUrl ?? '',
     });
   } catch (error) {
     console.error('BFF web update genre content error:', error);
