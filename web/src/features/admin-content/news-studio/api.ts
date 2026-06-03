@@ -9,16 +9,24 @@ import {
 type NewsListResponse = {
   items: NewsStudioLoadedArticle[];
   nextCursor: string | null;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 };
 
 export type NewsStudioListSort = 'newest' | 'oldest';
 
 export type NewsStudioListFilters = {
+  page?: number;
   cursor?: string | null;
   limit?: number;
   category?: string;
   source?: string;
   sort?: NewsStudioListSort;
+  query?: string;
 };
 
 type NewsStudioImageUploadResponse = {
@@ -49,9 +57,13 @@ export const newsStudioApi = {
       limit: String(filters?.limit ?? 12),
       sort: filters?.sort === 'oldest' ? 'oldest' : 'newest',
     });
+    if (typeof filters?.page === 'number' && Number.isFinite(filters.page)) {
+      params.set('page', String(filters.page));
+    }
     if (filters?.cursor) params.set('cursor', filters.cursor);
     if (filters?.category?.trim()) params.set('category', filters.category.trim());
     if (filters?.source?.trim()) params.set('source', filters.source.trim());
+    if (filters?.query?.trim()) params.set('query', filters.query.trim());
     return authenticatedJsonFetch<NewsListResponse>(getApiUrl(`/v1/news?${params.toString()}`));
   },
 

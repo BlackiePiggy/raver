@@ -108,7 +108,6 @@ export default function AdminGenresPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [newNodeDraft, setNewNodeDraft] = useState({ name: '', parentId: '' });
   const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
   const [exampleValue, setExampleValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldKey | null>(null);
@@ -172,28 +171,6 @@ export default function AdminGenresPage() {
       else next.add(id);
       return next;
     });
-  };
-
-  const handleCreateNode = async () => {
-    setSaving(true);
-    setError('');
-    setNotice('');
-    try {
-      const created = await genreAdminApi.createNode({
-        name: newNodeDraft.name,
-        parentId: newNodeDraft.parentId || null,
-      });
-      setNotice(`Created genre node: ${created.name}`);
-      setNewNodeDraft({ name: '', parentId: '' });
-      await loadTree(created.id);
-      if (created.parentId) {
-        setExpandedIds((current) => new Set(current).add(created.parentId!));
-      }
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to create genre node.');
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleSaveContent = async () => {
@@ -292,9 +269,14 @@ export default function AdminGenresPage() {
       title="Genre Management"
       description="Manage hierarchical genre nodes, multilingual descriptions, and reusable DJ bindings for key artists."
       actions={
-        <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-          Back to Content Console
-        </Link>
+        <>
+          <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
+            Back to Content Console
+          </Link>
+          <Link href="/admin/content/genres/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+            New Genre
+          </Link>
+        </>
       }
     >
       <section className="space-y-5">
@@ -310,31 +292,6 @@ export default function AdminGenresPage() {
               </div>
               <button type="button" className="rounded-full border border-[#d7ded9] px-4 py-2 text-sm" onClick={handleAutoMatch} disabled={saving}>
                 Auto-match Key Artists
-              </button>
-            </div>
-
-            <div className="mt-4 admin-reference-soft-card p-4">
-              <div className="text-sm font-semibold text-[#111827]">Create Node</div>
-              <input
-                className="mt-3 w-full rounded-[16px] border border-[#e8eceb] bg-white px-3 py-2 text-sm"
-                placeholder="Genre name"
-                value={newNodeDraft.name}
-                onChange={(event) => setNewNodeDraft((prev) => ({ ...prev, name: event.target.value }))}
-              />
-              <select
-                className="mt-3 w-full rounded-[16px] border border-[#e8eceb] bg-white px-3 py-2 text-sm"
-                value={newNodeDraft.parentId}
-                onChange={(event) => setNewNodeDraft((prev) => ({ ...prev, parentId: event.target.value }))}
-              >
-                <option value="">Create as root node</option>
-                {flatNodes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.path}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="mt-3 rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white" disabled={saving} onClick={handleCreateNode}>
-                Create Node
               </button>
             </div>
 

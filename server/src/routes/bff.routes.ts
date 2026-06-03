@@ -1649,6 +1649,12 @@ const normalizeLimit = (value: unknown, fallback = 20, max = 50): number => {
   return Math.max(1, Math.min(max, Math.floor(parsed)));
 };
 
+const normalizePage = (value: unknown, fallback = 1): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.floor(parsed));
+};
+
 const parseCursorDate = (cursor: unknown): Date | null => {
   if (typeof cursor !== 'string' || !cursor.trim()) return null;
   const date = new Date(cursor);
@@ -7268,6 +7274,7 @@ router.get('/news', optionalAuth, async (req: Request, res: Response): Promise<v
     const authReq = req as BFFAuthRequest;
     const viewerId = authReq.user?.userId;
     const limit = normalizeLimit(req.query.limit, 20, 50);
+    const page = normalizePage(req.query.page, 1);
     const cursorDate = parseCursorDate(req.query.cursor);
     const category =
       typeof req.query.category === 'string' && req.query.category.trim()
@@ -7281,7 +7288,55 @@ router.get('/news', optionalAuth, async (req: Request, res: Response): Promise<v
       typeof req.query.sort === 'string' && req.query.sort.trim().toLowerCase() === 'oldest'
         ? 'oldest'
         : 'newest';
+    const query =
+      typeof req.query.query === 'string' && req.query.query.trim()
+        ? req.query.query.trim()
+        : '';
     const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
+    const where = {
+      visibility: 'public' as const,
+      authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
+      ...(category ? { category } : {}),
+      ...(source ? { source: { equals: source, mode: 'insensitive' as const } } : {}),
+      ...(query
+        ? {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' as const } },
+              { summary: { contains: query, mode: 'insensitive' as const } },
+              { source: { contains: query, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    if ('page' in req.query) {
+      const [total, rows] = await Promise.all([
+        prisma.newsArticle.count({ where }),
+        prisma.newsArticle.findMany({
+          where,
+          include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
+          orderBy:
+            sort === 'oldest'
+              ? [{ publishedAt: 'asc' }, { id: 'asc' }]
+              : [{ publishedAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+      ]);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      res.json({
+        items: rows.map(mapNewsArticle),
+        nextCursor: null,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+        },
+      });
+      return;
+    }
+
     const publishedAtCursorFilter =
       cursorDate
         ? sort === 'oldest'
@@ -7290,10 +7345,7 @@ router.get('/news', optionalAuth, async (req: Request, res: Response): Promise<v
         : {};
     const rows = await prisma.newsArticle.findMany({
       where: {
-        visibility: 'public',
-        authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
-        ...(category ? { category } : {}),
-        ...(source ? { source: { equals: source, mode: 'insensitive' as const } } : {}),
+        ...where,
         ...publishedAtCursorFilter,
       },
       include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },

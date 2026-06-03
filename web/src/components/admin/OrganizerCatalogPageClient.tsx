@@ -342,14 +342,22 @@ function OrganizerDetailOverlay({
         className="relative max-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
-          aria-label="关闭主办方详情"
-        >
-          脳
-        </button>
+        <div className="absolute right-6 top-6 z-10 flex items-center gap-2">
+          <Link
+            href={`/admin/content/organizers/${item.id}/edit`}
+            className="inline-flex h-10 items-center rounded-full bg-[#071110] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]"
+          >
+            编辑主办方
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+            aria-label="关闭主办方详情"
+          >
+            ×
+          </button>
+        </div>
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
@@ -408,17 +416,11 @@ function OrganizerDetailOverlay({
           </div>
 
           <div className="p-6">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 pr-[184px]">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">Organizer Profile</div>
                 <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">主办方详情</div>
               </div>
-              <Link
-                href={`/admin/content/organizers/${item.id}/edit`}
-                className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
-              >
-                编辑主办方
-              </Link>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-2 rounded-[24px] border border-[#e8eceb] bg-white/70 p-2">

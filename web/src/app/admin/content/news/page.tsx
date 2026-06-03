@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Ellipsis } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import { djStudioApi } from '@/features/admin-content/dj-studio/api';
@@ -24,6 +24,15 @@ const NEWS_SORT_OPTIONS = [
   { value: 'newest', label: '发布时间从晚到早' },
   { value: 'oldest', label: '发布时间从早到晚' },
 ] as const;
+
+const PAGE_SIZE = 12;
+
+const buildVisiblePages = (page: number, totalPages: number): number[] => {
+  const safeTotalPages = Math.max(1, totalPages);
+  const start = Math.max(1, Math.min(safeTotalPages - 4, page - 2));
+  const end = Math.min(safeTotalPages, start + 4);
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+};
 
 const formatDateTime = (value?: string | null): string => {
   if (!value) return '未记录';
@@ -295,14 +304,22 @@ function NewsDetailOverlay({
         className="relative max-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
-          aria-label="Close news detail"
-        >
-          关
-        </button>
+        <div className="absolute right-6 top-6 z-10 flex items-center gap-2">
+          <Link
+            href={`/admin/content/news/${item.id}/edit`}
+            className="inline-flex h-10 items-center rounded-full bg-[#071110] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]"
+          >
+            编辑资讯
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+            aria-label="Close news detail"
+          >
+            ×
+          </button>
+        </div>
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
@@ -360,17 +377,11 @@ function NewsDetailOverlay({
           </div>
 
           <div className="p-6">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 pr-[162px]">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">News Profile</div>
                 <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">资讯详情</div>
               </div>
-              <Link
-                href={`/admin/content/news/${item.id}/edit`}
-                className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
-              >
-                编辑资讯
-              </Link>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-2 rounded-[24px] border border-[#e8eceb] bg-white/70 p-2">
@@ -406,9 +417,9 @@ function NewsDetailOverlay({
 
 export default function AdminContentNewsPage() {
   const [items, setItems] = useState<NewsStudioLoadedArticle[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [cursorStack, setCursorStack] = useState<Array<string | null>>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
@@ -432,15 +443,17 @@ export default function AdminContentNewsPage() {
         setLoading(true);
         setError(null);
         const response = await newsStudioApi.listNews({
-          cursor,
-          limit: 12,
+          page,
+          limit: PAGE_SIZE,
           category: categoryFilter || undefined,
           source: sourceFilter || undefined,
           sort: sortOrder,
+          query: query || undefined,
         });
         if (cancelled) return;
         setItems(response.items);
-        setNextCursor(response.nextCursor);
+        setTotal(response.pagination?.total ?? response.items.length);
+        setTotalPages(response.pagination?.totalPages ?? 1);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '资讯列表加载失败。');
@@ -452,7 +465,7 @@ export default function AdminContentNewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [categoryFilter, cursor, sortOrder, sourceFilter]);
+  }, [categoryFilter, page, query, sortOrder, sourceFilter]);
 
   useEffect(() => {
     if (!menuOpenNewsId) return;
@@ -477,17 +490,11 @@ export default function AdminContentNewsPage() {
     };
   }, [menuOpenNewsId]);
 
-  const filteredItems = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    if (!keyword) return items;
-    return items.filter((item) => [item.title, item.source, item.summary].join(' ').toLowerCase().includes(keyword));
-  }, [items, query]);
-
   const resetPaging = () => {
-    setCursor(null);
-    setCursorStack([]);
-    setNextCursor(null);
+    setPage(1);
   };
+
+  const visiblePages = useMemo(() => buildVisiblePages(page, totalPages), [page, totalPages]);
 
   const openDetailOverlay = async (item: NewsStudioLoadedArticle) => {
     setMenuOpenNewsId(null);
@@ -533,6 +540,7 @@ export default function AdminContentNewsPage() {
       setDeletingNewsId(articleId);
       await newsStudioApi.deleteNews(articleId);
       setItems((current) => current.filter((item) => item.id !== articleId));
+      setTotal((current) => Math.max(0, current - 1));
       if (selectedNews?.id === articleId) {
         closeDetailOverlay();
       }
@@ -570,7 +578,7 @@ export default function AdminContentNewsPage() {
             { label: 'News Studio', value: 'Live', note: '创建与编辑流程可用', tone: 'bg-[#dff4a8]' },
             { label: 'Default Sort', value: 'Newest', note: '默认按发布时间从晚到早', tone: 'bg-[#f3e5a8]' },
             { label: 'Filters', value: '3', note: '搜索、来源、分类联动', tone: 'bg-[#f7c4c0]' },
-            { label: 'Page Size', value: '12', note: '基于 cursor 的分页', tone: 'bg-[#dbeefe]' },
+            { label: 'Page Size', value: String(PAGE_SIZE), note: '标准页码分页', tone: 'bg-[#dbeefe]' },
           ].map((card) => (
             <div key={card.label} className={`admin-reference-pastel-card p-5 ${card.tone}`}>
               <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">{card.label}</div>
@@ -589,7 +597,10 @@ export default function AdminContentNewsPage() {
             <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[760px] lg:flex-row">
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  resetPaging();
+                }}
                 className="admin-studio-input lg:flex-1"
                 placeholder="搜索标题、来源或摘要"
               />
@@ -639,7 +650,7 @@ export default function AdminContentNewsPage() {
             <div className="admin-studio-pastel-rose mt-6 p-4 text-sm text-[#6a3530]">{error}</div>
           ) : (
             <div className="mt-6 space-y-3">
-              {filteredItems.map((item) => (
+              {items.map((item) => (
                 <div
                   key={item.id}
                   role="button"
@@ -721,39 +732,66 @@ export default function AdminContentNewsPage() {
                 </div>
               ))}
 
-              {!filteredItems.length ? (
+              {!items.length ? (
                 <div className="admin-reference-soft-card p-6 text-sm text-black/48">当前筛选条件下没有匹配的资讯。</div>
               ) : null}
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                if (!cursorStack.length) return;
-                const nextStack = [...cursorStack];
-                const previousCursor = nextStack.pop() ?? null;
-                setCursorStack(nextStack);
-                setCursor(previousCursor);
-              }}
-              disabled={!cursorStack.length}
-              className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
-            >
-              上一页
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!nextCursor) return;
-                setCursorStack((current) => [...current, cursor]);
-                setCursor(nextCursor);
-              }}
-              disabled={!nextCursor}
-              className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
-            >
-              下一页
-            </button>
+          <div className="mt-6 flex flex-col gap-4 border-t border-[#edf0f2] pt-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="text-[14px] font-medium text-[#6b7280]">
+              共 {total.toLocaleString()} 条，当前第 {page} / {Math.max(1, totalPages)} 页
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#9ca3af] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              {visiblePages.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  onClick={() => setPage(pageNumber)}
+                  className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3.5 text-[15px] font-semibold ${
+                    pageNumber === page ? 'bg-[#071110] text-white' : 'text-[#111827]'
+                  }`}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+
+              {totalPages > visiblePages[visiblePages.length - 1] ? (
+                <>
+                  <span className="px-1 text-[18px] text-[#9ca3af]">...</span>
+                  <button
+                    type="button"
+                    onClick={() => setPage(totalPages)}
+                    className="inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3.5 text-[15px] font-semibold text-[#111827]"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              ) : null}
+
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-[14px] border border-[#e8ecef] bg-white px-5 py-2.5 text-[14px] font-semibold text-[#111827]">
+              <span>{PAGE_SIZE} 条 / 页</span>
+            </div>
           </div>
         </section>
       </section>
