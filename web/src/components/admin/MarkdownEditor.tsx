@@ -8,6 +8,8 @@ type MarkdownEditorProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   minHeightClassName?: string;
+  gridClassName?: string;
+  scrollablePanels?: boolean;
   error?: string;
   textareaRef?: Ref<HTMLTextAreaElement>;
 };
@@ -168,6 +170,8 @@ export default function MarkdownEditor({
   onChange,
   placeholder,
   minHeightClassName = 'min-h-[360px]',
+  gridClassName,
+  scrollablePanels = false,
   error,
   textareaRef,
 }: MarkdownEditorProps) {
@@ -180,21 +184,29 @@ export default function MarkdownEditor({
         <div className="text-xs text-black/45">支持标题、列表、引用、链接、图片与代码块</div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className={gridClassName || 'grid gap-4 xl:grid-cols-2'}>
         <textarea
           ref={textareaRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className={`admin-studio-textarea ${minHeightClassName}`}
+          className={`admin-studio-textarea ${minHeightClassName} ${
+            scrollablePanels ? 'resize-none overflow-y-auto' : ''
+          }`}
           placeholder={placeholder}
         />
 
-        <div className={`overflow-hidden rounded-[24px] border border-[#e8eceb] bg-white ${minHeightClassName}`}>
+        <div
+          className={`overflow-hidden rounded-[24px] border border-[#e8eceb] bg-white ${
+            scrollablePanels ? `flex flex-col ${minHeightClassName}` : minHeightClassName
+          }`}
+        >
           <div className="border-b border-[#edf0f2] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">
             Preview
           </div>
           <div
-            className="prose prose-sm max-w-none px-5 py-4 text-[#111827] prose-headings:text-[#111827] prose-p:text-[#374151] prose-a:text-[#0f766e] prose-strong:text-[#111827] prose-code:text-[#7c2d12] prose-pre:bg-[#0f172a] prose-pre:text-white prose-blockquote:text-[#4b5563] prose-img:rounded-[16px]"
+            className={`prose prose-sm max-w-none px-5 py-4 text-[#111827] prose-headings:text-[#111827] prose-p:text-[#374151] prose-a:text-[#0f766e] prose-strong:text-[#111827] prose-code:text-[#7c2d12] prose-pre:bg-[#0f172a] prose-pre:text-white prose-blockquote:text-[#4b5563] prose-img:rounded-[16px] ${
+              scrollablePanels ? 'min-h-0 flex-1 overflow-y-auto' : ''
+            }`}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         </div>

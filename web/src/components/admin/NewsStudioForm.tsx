@@ -431,41 +431,57 @@ export default function NewsStudioForm({
               className={textInputClassName}
             />
           </Field>
-          <div className="lg:col-span-2">
-            <Field label="原始链接">
-              <input
-                value={draft.link}
-                onChange={(event) => updateDraft('link', event.target.value)}
-                className={textInputClassName}
-                placeholder="https://..."
-              />
-            </Field>
-          </div>
         </div>
       </Section>
 
-      <Section title="摘要与正文" description="延续 legacy 资讯编辑器的 Markdown 工作流，左侧编辑，右侧实时预览。">
-        <div className="grid gap-5">
-          <Field label="封面图 URL">
-            <input
-              value={draft.coverImageUrl}
-              onChange={(event) => updateDraft('coverImageUrl', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://..."
-            />
-          </Field>
+      <Section title="摘要与正文" description="先完成摘要、原始链接和封面信息，再进入正文工作区。Markdown 原文与渲染结果并排独占，并限制高度为固定容器内滚动。">
+        <div className="space-y-5">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+            <Field label="摘要">
+              <textarea
+                value={draft.summary}
+                onChange={(event) => updateDraft('summary', event.target.value)}
+                className={`${textAreaClassName} min-h-[148px]`}
+                placeholder="写一个适合列表展示的摘要"
+              />
+            </Field>
 
-          <div className="grid gap-5 xl:grid-cols-[0.72fr_1.28fr]">
-            <div className="space-y-4">
-              <Field label="摘要">
-                <textarea
-                  value={draft.summary}
-                  onChange={(event) => updateDraft('summary', event.target.value)}
-                  className={textAreaClassName}
-                  placeholder="写一个适合列表展示的摘要"
+            <div className="grid gap-4">
+              <Field label="原始链接">
+                <input
+                  value={draft.link}
+                  onChange={(event) => updateDraft('link', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="https://..."
                 />
               </Field>
+              <Field label="封面图 URL">
+                <input
+                  value={draft.coverImageUrl}
+                  onChange={(event) => updateDraft('coverImageUrl', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="https://..."
+                />
+              </Field>
+            </div>
+          </div>
 
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)]">
+            <div className="admin-reference-card p-4">
+              <MarkdownEditor
+                label="正文内容"
+                value={draft.body}
+                onChange={updateBody}
+                placeholder="填写资讯正文，支持 Markdown"
+                error={errors.body}
+                textareaRef={bodyTextareaRef}
+                minHeightClassName="h-[560px]"
+                scrollablePanels
+                gridClassName="grid gap-4 xl:grid-cols-2"
+              />
+            </div>
+
+            <div className="space-y-4">
               <div className="admin-reference-card p-4">
                 <div className="admin-studio-label">封面预览</div>
                 <div className="mt-4 overflow-hidden rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8]">
@@ -517,7 +533,7 @@ export default function NewsStudioForm({
                   </div>
                 ) : null}
 
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
                   {resourceUrls.length ? (
                     resourceUrls.map((url) => {
                       const isCover = draft.coverImageUrl.trim() === url;
@@ -594,15 +610,6 @@ export default function NewsStudioForm({
                 </div>
               </div>
             </div>
-
-            <MarkdownEditor
-              label="正文内容"
-              value={draft.body}
-              onChange={updateBody}
-              placeholder="填写资讯正文，支持 Markdown"
-              error={errors.body}
-              textareaRef={bodyTextareaRef}
-            />
           </div>
         </div>
       </Section>
