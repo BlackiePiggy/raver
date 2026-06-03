@@ -5,16 +5,18 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import EntityBindingField from '@/components/admin/EntityBindingField';
+import type { EntityBindingValue } from '@/components/admin/EntityBindingSearch';
 import {
   eventOrganizerBindingApi,
-  EventOrganizerBindingCatalogItem,
+  type EventOrganizerBindingCatalogItem,
 } from '@/features/admin-content/event-organizer-binding/api';
-import { EventStudioOrganizer } from '@/features/admin-content/event-studio/types';
+import type { EventStudioOrganizer } from '@/features/admin-content/event-studio/types';
 
 const PAGE_SIZE = 24;
 
 const formatDateTime = (value?: string | null): string => {
-  if (!value) return '未记录';
+  if (!value) return 'Not recorded';
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -37,7 +39,7 @@ const buildUnboundClusterKey = (item: EventOrganizerBindingCatalogItem): string 
   if (organizerName) return organizerName;
 
   const name = String(item.name || '').trim();
-  if (!name) return '未命名活动';
+  if (!name) return 'Unnamed event';
   const normalized = name
     .replace(/\d{4}.*/g, '')
     .replace(/\([^)]*\)/g, '')
@@ -48,6 +50,13 @@ const buildUnboundClusterKey = (item: EventOrganizerBindingCatalogItem): string 
   const tokens = normalized.split(/\s+/).filter(Boolean);
   return tokens.slice(0, 3).join(' ');
 };
+
+const organizerToBindingValue = (organizer: EventStudioOrganizer): EntityBindingValue => ({
+  id: organizer.id,
+  name: organizer.name,
+  subtitle: [organizer.city, organizer.country].filter(Boolean).join(', ') || organizer.tagline || null,
+  imageUrl: organizer.avatarUrl || organizer.backgroundUrl || null,
+});
 
 export default function EventOrganizerBindingPageClient() {
   const searchParams = useSearchParams();
@@ -61,14 +70,14 @@ export default function EventOrganizerBindingPageClient() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedOrganizer, setSelectedOrganizer] = useState<EventStudioOrganizer | null>(null);
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
-  const [organizerQuery, setOrganizerQuery] = useState('');
-  const [organizerResults, setOrganizerResults] = useState<EventStudioOrganizer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSearchingOrganizers, setIsSearchingOrganizers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [cacheMessage, setCacheMessage] = useState('目录摘要由服务端缓存层承接，适合低频绑定管理。');
+  const [cacheMessage, setCacheMessage] = useState(
+    'Catalog summary is served from the server cache layer and is suitable for low-frequency binding work.'
+  );
+
   const preselectedOrganizerId = searchParams.get('organizerId')?.trim() || '';
   const preselectedOrganizerName = searchParams.get('organizerName')?.trim() || '';
 
@@ -80,7 +89,13 @@ export default function EventOrganizerBindingPageClient() {
     () => items.filter((item) => selectedEventIds.includes(item.id)),
     [items, selectedEventIds]
   );
+  const selectedOrganizerBinding = useMemo<EntityBindingValue[]>(
+    () => (selectedOrganizer ? [organizerToBindingValue(selectedOrganizer)] : []),
+    [selectedOrganizer]
+  );
+  const organizerSeedQuery = selectedOrganizer?.name || preselectedOrganizerName;
   const allVisibleSelected = items.length > 0 && items.every((item) => selectedEventIds.includes(item.id));
+
   const unboundClusters = useMemo(() => {
     const map = new Map<string, EventOrganizerBindingCatalogItem[]>();
     items
@@ -93,10 +108,7 @@ export default function EventOrganizerBindingPageClient() {
       });
 
     return Array.from(map.entries())
-      .map(([label, rows]) => ({
-        label,
-        rows,
-      }))
+      .map(([label, rows]) => ({ label, rows }))
       .sort((left, right) => right.rows.length - left.rows.length)
       .slice(0, 8);
   }, [items]);
@@ -115,19 +127,22 @@ export default function EventOrganizerBindingPageClient() {
       setTotal(response.pagination.total);
       setCacheMessage(
         response.cache?.hit
-          ? '当前页已命中服务端目录缓存，适合持续低频管理。'
-          : '当前页已从摘要层刷新，避免直接命中全量重查询。'
+          ? 'This page hit the catalog cache and is ready for continuous low-frequency binding work.'
+          : 'This page was refreshed from the summary layer instead of running a heavy full scan.'
       );
+
       if (!selectedEventId && response.items[0]) {
         setSelectedEventId(response.items[0].id);
       }
       if (selectedEventId && !response.items.some((item) => item.id === selectedEventId)) {
         setSelectedEventId(response.items[0]?.id ?? null);
       }
-      setSelectedEventIds((current) => current.filter((eventId) => response.items.some((item) => item.id === eventId)));
+      setSelectedEventIds((current) =>
+        current.filter((eventId) => response.items.some((item) => item.id === eventId))
+      );
       setError('');
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '活动绑定目录加载失败');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to load event binding catalog.');
     } finally {
       setIsLoading(false);
     }
@@ -136,28 +151,6 @@ export default function EventOrganizerBindingPageClient() {
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
-
-  useEffect(() => {
-    const query = organizerQuery.trim();
-    if (!query) {
-      setOrganizerResults([]);
-      return;
-    }
-
-    const timer = window.setTimeout(async () => {
-      try {
-        setIsSearchingOrganizers(true);
-        const results = await eventOrganizerBindingApi.searchOrganizers(query);
-        setOrganizerResults(results);
-      } catch {
-        setOrganizerResults([]);
-      } finally {
-        setIsSearchingOrganizers(false);
-      }
-    }, 280);
-
-    return () => window.clearTimeout(timer);
-  }, [organizerQuery]);
 
   useEffect(() => {
     if (!preselectedOrganizerId || !preselectedOrganizerName) return;
@@ -172,16 +165,7 @@ export default function EventOrganizerBindingPageClient() {
         tagline: '',
       };
     });
-    setOrganizerQuery((current) => current || preselectedOrganizerName);
   }, [preselectedOrganizerId, preselectedOrganizerName]);
-
-  useEffect(() => {
-    if (!preselectedOrganizerId || organizerResults.length === 0) return;
-    const matched = organizerResults.find((item) => item.id === preselectedOrganizerId);
-    if (matched) {
-      setSelectedOrganizer((current) => (current?.id === matched.id ? current : matched));
-    }
-  }, [organizerResults, preselectedOrganizerId]);
 
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -200,10 +184,10 @@ export default function EventOrganizerBindingPageClient() {
         organizerId: selectedOrganizer.id,
         organizerName: selectedOrganizer.name,
       });
-      setSuccessMessage(`已将「${selectedEvent.name}」绑定到主办方「${selectedOrganizer.name}」`);
+      setSuccessMessage(`Bound "${selectedEvent.name}" to organizer "${selectedOrganizer.name}".`);
       await loadEvents();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '活动绑定失败');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to bind organizer.');
     } finally {
       setIsSubmitting(false);
     }
@@ -218,12 +202,10 @@ export default function EventOrganizerBindingPageClient() {
       await eventOrganizerBindingApi.clearOrganizer({
         eventId: selectedEvent.id,
       });
-      setSelectedOrganizer(null);
-      setOrganizerQuery('');
-      setSuccessMessage(`已清空「${selectedEvent.name}」当前绑定的主办方关系`);
+      setSuccessMessage(`Cleared current organizer binding for "${selectedEvent.name}".`);
       await loadEvents();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '清空主办方绑定失败');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to clear organizer binding.');
     } finally {
       setIsSubmitting(false);
     }
@@ -231,9 +213,7 @@ export default function EventOrganizerBindingPageClient() {
 
   const toggleEventSelection = (eventId: string) => {
     setSelectedEventIds((current) =>
-      current.includes(eventId)
-        ? current.filter((item) => item !== eventId)
-        : [...current, eventId]
+      current.includes(eventId) ? current.filter((item) => item !== eventId) : [...current, eventId]
     );
   };
 
@@ -262,12 +242,12 @@ export default function EventOrganizerBindingPageClient() {
       });
       setSuccessMessage(
         result.failureCount > 0
-          ? `批量绑定完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条。`
-          : `批量绑定完成：成功 ${result.successCount} 条。`
+          ? `Batch binding finished: ${result.successCount} succeeded, ${result.failureCount} failed.`
+          : `Batch binding finished: ${result.successCount} succeeded.`
       );
       await loadEvents();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '批量绑定失败');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to batch bind organizer.');
     } finally {
       setIsSubmitting(false);
     }
@@ -282,16 +262,14 @@ export default function EventOrganizerBindingPageClient() {
       const result = await eventOrganizerBindingApi.clearOrganizerBatch({
         eventIds: selectedEventIds,
       });
-      setSelectedOrganizer(null);
-      setOrganizerQuery('');
       setSuccessMessage(
         result.failureCount > 0
-          ? `批量清空完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条。`
-          : `批量清空完成：成功 ${result.successCount} 条。`
+          ? `Batch clear finished: ${result.successCount} succeeded, ${result.failureCount} failed.`
+          : `Batch clear finished: ${result.successCount} succeeded.`
       );
       await loadEvents();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '批量清空失败');
+      setError(nextError instanceof Error ? nextError.message : 'Failed to batch clear organizer binding.');
     } finally {
       setIsSubmitting(false);
     }
@@ -299,22 +277,22 @@ export default function EventOrganizerBindingPageClient() {
 
   return (
     <AdminContentLayout
-      title="活动 ↔ 主办方绑定中心"
+      title="Event Organizer Binding Center"
       eyebrow="Admin / Content Workspace / Organizer Binding"
-      description="这一页把 Festival Viewer 里最常用的 Event ↔ Brand 关系维护迁回统一后台。左侧用低频目录摘要选活动，右侧集中完成主办方搜索、绑定、清空与编辑跳转。"
+      description="Use one shared binding workflow to link events to canonical organizer records, both one by one and in batches."
       actions={
         <>
           <Link href="/admin/content/organizers" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回主办方工作区
+            Back to Organizers
           </Link>
           <Link href="/admin/content/organizers/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            主办方目录中心
+            Organizer Catalog
           </Link>
           <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            活动目录中心
+            Event Catalog
           </Link>
           <Link href="/admin/content/organizers/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-            新建主办方
+            New Organizer
           </Link>
         </>
       }
@@ -322,12 +300,12 @@ export default function EventOrganizerBindingPageClient() {
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="admin-reference-card p-6">
           <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Binding Strategy</div>
-          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">低频目录 + 关系面板</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">Summary catalog + shared binding field</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             {[
-              '左侧活动目录只看摘要卡片，不直接加载完整活动详情',
-              '右侧只在真正绑定时拉取完整活动并提交标准化 update payload',
-              '先把高频关系维护回迁，当前已经补到批量绑定第一版',
+              'The left side stays lightweight and only loads event summaries.',
+              'The right side handles canonical organizer selection and mutation.',
+              'Single-event and batch-event flows now share the same organizer picker.',
             ].map((item) => (
               <div key={item} className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm leading-6 text-[#24312d]">
                 {item}
@@ -338,11 +316,11 @@ export default function EventOrganizerBindingPageClient() {
 
         <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)] p-6">
           <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Cache Status</div>
-          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">摘要层说明</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-[#071110]">Summary layer status</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
             <p>{cacheMessage}</p>
-            <p>当前页：{page} / {totalPages}</p>
-            <p>可管理活动：{total.toLocaleString()} 条</p>
+            <p>Page: {page} / {totalPages}</p>
+            <p>Manageable events: {total.toLocaleString()}</p>
           </div>
         </div>
       </section>
@@ -351,20 +329,20 @@ export default function EventOrganizerBindingPageClient() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-sm text-black/42">Unbound Clusters</div>
-            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">未匹配聚类视图</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">Unbound event clusters</h2>
             <p className="mt-3 text-sm leading-6 text-black/48">
-              把当前页还没绑定正式主办方的活动按主办方文案或活动名关键词聚类，方便运营集中勾选后再做批量绑定。
+              Group unbound records by organizer text or event name keywords so operations can select and bind them in batches.
             </p>
           </div>
           <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
-            当前页未绑定活动：{items.filter((item) => !item.wikiFestivalId).length} 条
+            Unbound events on this page: {items.filter((item) => !item.wikiFestivalId).length}
           </div>
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {unboundClusters.length === 0 ? (
             <div className="admin-reference-soft-card px-4 py-6 text-sm text-black/48">
-              当前页没有待治理的未匹配活动。
+              No unbound events in the current page scope.
             </div>
           ) : (
             unboundClusters.map((cluster) => (
@@ -372,14 +350,14 @@ export default function EventOrganizerBindingPageClient() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-[#071110]">{cluster.label}</div>
-                    <div className="mt-1 text-xs text-black/42">{cluster.rows.length} 条待绑定活动</div>
+                    <div className="mt-1 text-xs text-black/42">{cluster.rows.length} candidate events</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => selectCluster(cluster.rows.map((item) => item.id))}
                     className="rounded-full border border-[#e8eceb] bg-white px-3 py-2 text-xs font-semibold text-[#071110]"
                   >
-                    选中这一组
+                    Select Cluster
                   </button>
                 </div>
 
@@ -393,7 +371,7 @@ export default function EventOrganizerBindingPageClient() {
                     >
                       <div className="text-sm font-medium text-[#071110]">{row.name}</div>
                       <div className="mt-1 text-xs leading-5 text-black/48">
-                        {row.city || '未知城市'} / {row.country || '未知国家'} · {formatDateRange(row.startDate, row.endDate)}
+                        {row.city || 'Unknown city'} / {row.country || 'Unknown country'} · {formatDateRange(row.startDate, row.endDate)}
                       </div>
                     </button>
                   ))}
@@ -409,16 +387,16 @@ export default function EventOrganizerBindingPageClient() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.7fr)_220px_auto]">
               <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.2em] text-black/35">搜索活动</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-black/35">Search Events</span>
                 <input
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="活动名 / 城市 / 主办方"
+                  placeholder="Event / city / organizer"
                   className="w-full rounded-full px-4 py-3 text-sm"
                 />
               </label>
               <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.2em] text-black/35">活动状态</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-black/35">Status</span>
                 <select
                   value={status}
                   onChange={(event) => {
@@ -427,15 +405,15 @@ export default function EventOrganizerBindingPageClient() {
                   }}
                   className="w-full rounded-full px-4 py-3 text-sm"
                 >
-                  <option value="all">全部状态</option>
-                  <option value="upcoming">即将开始</option>
-                  <option value="ongoing">进行中</option>
-                  <option value="ended">已结束</option>
-                  <option value="cancelled">已取消</option>
+                  <option value="all">All</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="ongoing">Ongoing</option>
+                  <option value="ended">Ended</option>
+                  <option value="cancelled">Cancelled</option>
                 </select>
               </label>
               <button type="submit" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-                检索活动
+                Search
               </button>
             </form>
             <div className="flex flex-wrap gap-3">
@@ -444,19 +422,19 @@ export default function EventOrganizerBindingPageClient() {
                 onClick={toggleSelectAllVisible}
                 className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]"
               >
-                {allVisibleSelected ? '取消全选当前页' : '全选当前页'}
+                {allVisibleSelected ? 'Clear Page Selection' : 'Select Current Page'}
               </button>
               <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
-                已选 {selectedEventIds.length} 条
+                Selected: {selectedEventIds.length}
               </div>
             </div>
           </div>
 
           <div className="mt-5">
             {isLoading ? (
-              <div className="py-20 text-center text-sm text-black/48">活动摘要加载中…</div>
+              <div className="py-20 text-center text-sm text-black/48">Loading event summaries...</div>
             ) : items.length === 0 ? (
-              <div className="py-20 text-center text-sm text-black/48">当前筛选下没有活动可供绑定。</div>
+              <div className="py-20 text-center text-sm text-black/48">No events match the current filter.</div>
             ) : (
               <div className="space-y-4">
                 {items.map((item) => {
@@ -465,9 +443,7 @@ export default function EventOrganizerBindingPageClient() {
                     <div
                       key={item.id}
                       className={`grid gap-4 rounded-[24px] border p-4 transition-colors lg:grid-cols-[32px_120px_minmax(0,1fr)] ${
-                        selected
-                          ? 'border-[#dceabf] bg-[#edf7f2]'
-                          : 'border-[#e8eceb] bg-[#f8f9f8]'
+                        selected ? 'border-[#dceabf] bg-[#edf7f2]' : 'border-[#e8eceb] bg-[#f8f9f8]'
                       }`}
                     >
                       <label className="flex items-start pt-1">
@@ -489,7 +465,7 @@ export default function EventOrganizerBindingPageClient() {
                           />
                         ) : (
                           <div className="flex h-full min-h-[100px] items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/42">
-                            暂无封面
+                            No cover
                           </div>
                         )}
                       </div>
@@ -498,38 +474,32 @@ export default function EventOrganizerBindingPageClient() {
                         type="button"
                         onClick={() => {
                           setSelectedEventId(item.id);
-                          setSelectedOrganizer(null);
-                          setOrganizerQuery('');
                           setSuccessMessage('');
                         }}
                         className="min-w-0 text-left"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="admin-reference-chip">
-                            {item.eventType || '未标记类型'}
-                          </span>
-                          <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">
-                            {item.status || 'unknown'}
-                          </span>
+                          <span className="admin-reference-chip">{item.eventType || 'Unlabeled type'}</span>
+                          <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">{item.status || 'unknown'}</span>
                           {item.wikiFestivalId ? (
                             <span className="rounded-full border border-[#dceabf] bg-[#eef8d8] px-3 py-1 text-xs font-semibold text-[#2f4027]">
-                              已绑定主办方
+                              Bound
                             </span>
                           ) : (
                             <span className="rounded-full border border-[#eadfbe] bg-[#f6edd7] px-3 py-1 text-xs font-semibold text-[#604a1b]">
-                              待绑定
+                              Unbound
                             </span>
                           )}
                         </div>
 
                         <h3 className="mt-3 truncate text-xl font-semibold text-[#071110]">{item.name}</h3>
                         <p className="mt-2 text-sm leading-6 text-black/48">
-                          {item.city || '未知城市'} / {item.country || '未知国家'} · {formatDateRange(item.startDate, item.endDate)}
+                          {item.city || 'Unknown city'} / {item.country || 'Unknown country'} · {formatDateRange(item.startDate, item.endDate)}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-black/48">
-                          当前主办方：{item.wikiFestival?.name || item.organizerName || '尚未绑定正式主办方'}
+                          Current organizer: {item.wikiFestival?.name || item.organizerName || 'Not bound yet'}
                         </p>
-                        <p className="mt-2 text-xs text-black/38">最近更新：{formatDateTime(item.updatedAt)}</p>
+                        <p className="mt-2 text-xs text-black/38">Updated: {formatDateTime(item.updatedAt)}</p>
                       </button>
                     </div>
                   );
@@ -539,9 +509,7 @@ export default function EventOrganizerBindingPageClient() {
           </div>
 
           <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-6">
-            <div className="text-sm text-black/48">
-              共 {total.toLocaleString()} 条活动摘要
-            </div>
+            <div className="text-sm text-black/48">Total summaries: {total.toLocaleString()}</div>
             <div className="flex gap-3">
               <button
                 type="button"
@@ -549,7 +517,7 @@ export default function EventOrganizerBindingPageClient() {
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                上一页
+                Previous
               </button>
               <button
                 type="button"
@@ -557,7 +525,7 @@ export default function EventOrganizerBindingPageClient() {
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                下一页
+                Next
               </button>
             </div>
           </div>
@@ -566,69 +534,46 @@ export default function EventOrganizerBindingPageClient() {
         <div className="space-y-5">
           <section className="admin-reference-dark-card p-6">
             <div className="text-sm text-white/45">Binding Panel</div>
-            <h2 className="mt-2 text-2xl font-semibold text-white">当前活动关系面板</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Current binding panel</h2>
 
             {selectedEvent ? (
               <div className="mt-5 space-y-4">
                 <div className="rounded-[22px] border border-white/10 bg-white/8 p-4">
-                  <div className="text-sm text-white/45">当前活动</div>
+                  <div className="text-sm text-white/45">Current event</div>
                   <div className="mt-1 text-xl font-semibold text-white">{selectedEvent.name}</div>
                   <div className="mt-2 text-sm leading-6 text-white/62">
-                    当前绑定：
-                    {selectedEvent.wikiFestival?.name || selectedEvent.organizerName || '尚未绑定正式主办方'}
+                    Current organizer: {selectedEvent.wikiFestival?.name || selectedEvent.organizerName || 'Not bound yet'}
                   </div>
                 </div>
 
-                <label className="space-y-2">
-                  <span className="text-xs uppercase tracking-[0.2em] text-white/45">搜索主办方</span>
-                  <input
-                    value={organizerQuery}
-                    onChange={(event) => {
-                      setOrganizerQuery(event.target.value);
+                <div className="[&_.admin-reference-soft-card]:border-white/10 [&_.admin-reference-soft-card]:bg-white/8 [&_.admin-reference-soft-card]:text-white [&_.text-black\\/38]:text-white/45 [&_.text-black\\/45]:text-white/60 [&_.text-black\\/48]:text-white/55 [&_.text-\\[\\#111827\\]]:text-white [&_.border-\\[\\#e8eceb\\]]:border-white/10 [&_.bg-white]:bg-white [&_.text-\\[\\#8b3a3a\\]]:text-\\[\\#8b3a3a\\]">
+                  <EntityBindingField
+                    kind="festival"
+                    mode="single"
+                    seedQuery={organizerSeedQuery}
+                    items={selectedOrganizerBinding}
+                    disabled={isSubmitting}
+                    title="Target organizer"
+                    emptyLabel="Search and choose one canonical organizer record."
+                    onAdd={(value) => {
+                      setSelectedOrganizer({
+                        id: value.id,
+                        name: value.name,
+                        aliases: [],
+                        country: '',
+                        city: '',
+                        tagline: value.subtitle || '',
+                        avatarUrl: value.imageUrl || null,
+                        backgroundUrl: value.imageUrl || null,
+                      });
+                      setSuccessMessage('');
+                    }}
+                    onRemove={() => {
                       setSelectedOrganizer(null);
                       setSuccessMessage('');
                     }}
-                    placeholder="输入主办方名 / alias / 城市"
-                    className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white placeholder:text-white/35"
                   />
-                </label>
-
-                <div className="rounded-[22px] border border-white/10 bg-white/8 p-3">
-                  {isSearchingOrganizers ? (
-                    <div className="text-sm text-white/55">正在搜索主办方…</div>
-                  ) : organizerResults.length === 0 ? (
-                    <div className="text-sm text-white/55">输入关键词后会在正式主办方库中检索候选。</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {organizerResults.map((organizer) => {
-                        const active = organizer.id === selectedOrganizer?.id;
-                        return (
-                          <button
-                            key={organizer.id}
-                            type="button"
-                            onClick={() => setSelectedOrganizer(organizer)}
-                            className={`w-full rounded-[20px] border px-4 py-3 text-left transition-colors ${
-                              active
-                                ? 'border-white/20 bg-white/14'
-                                : 'border-white/10 bg-white/6'
-                            }`}
-                          >
-                            <div className="text-sm font-semibold text-white">{organizer.name}</div>
-                            <div className="mt-1 text-xs leading-5 text-white/45">
-                              {organizer.city || '未知城市'} / {organizer.country || '未知国家'}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
-
-                {selectedOrganizer ? (
-                  <div className="rounded-[22px] border border-white/10 bg-white/10 p-4 text-sm leading-6 text-white">
-                    即将绑定到：{selectedOrganizer.name}
-                  </div>
-                ) : null}
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
@@ -637,7 +582,7 @@ export default function EventOrganizerBindingPageClient() {
                     onClick={handleBind}
                     className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    绑定到所选主办方
+                    Bind Selected Organizer
                   </button>
                   <button
                     type="button"
@@ -645,15 +590,15 @@ export default function EventOrganizerBindingPageClient() {
                     onClick={handleClear}
                     className="rounded-full border border-white/10 bg-white/8 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    清空当前绑定
+                    Clear Current Binding
                   </button>
                 </div>
 
                 <div className="rounded-[22px] border border-white/10 bg-white/8 p-4">
-                  <div className="text-sm font-semibold text-white">批量操作</div>
+                  <div className="text-sm font-semibold text-white">Batch Actions</div>
                   <div className="mt-2 text-sm leading-6 text-white/58">
-                    当前已选 {selectedEventIds.length} 条活动
-                    {selectedEvents.length > 0 ? `，其中本页可见 ${selectedEvents.length} 条` : ''}
+                    Selected events: {selectedEventIds.length}
+                    {selectedEvents.length > 0 ? `, visible on this page: ${selectedEvents.length}` : ''}
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <button
@@ -662,7 +607,7 @@ export default function EventOrganizerBindingPageClient() {
                       onClick={handleBatchBind}
                       className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      批量绑定到所选主办方
+                      Batch Bind
                     </button>
                     <button
                       type="button"
@@ -670,13 +615,13 @@ export default function EventOrganizerBindingPageClient() {
                       onClick={handleBatchClear}
                       className="rounded-full border border-white/10 bg-white/8 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      批量清空绑定
+                      Batch Clear
                     </button>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="mt-5 text-sm text-white/55">先从左侧选择一个活动。</div>
+              <div className="mt-5 text-sm text-white/55">Select an event from the left first.</div>
             )}
           </section>
 
@@ -694,18 +639,14 @@ export default function EventOrganizerBindingPageClient() {
 
           <section className="admin-reference-soft-card p-6">
             <div className="text-sm text-black/42">Migration Note</div>
-            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">迁移边界</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-[#071110]">Current scope</h2>
             <div className="mt-4 space-y-3 text-sm leading-6 text-black/48">
-              <p>这一步已经补到批量绑定和未匹配聚类第一版，先解决日常“找活动、绑主办方、清关系、批量改关系”的后台高频动作。</p>
-              <p>现在也支持从主办方目录中心带着预选主办方直接进入绑定面板，目录定位和关系治理已经能够在统一后台内部连续完成。</p>
-            </div>
-            <div className="mt-4 grid gap-3">
-              <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]">
-                返回活动目录中心
-              </Link>
-              <Link href="/admin/content/organizers/catalog" className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-sm font-semibold text-[#071110]">
-                返回主办方目录中心
-              </Link>
+              <p>
+                This page now uses the same shared binding field abstraction as rankings, genres, and ratings.
+              </p>
+              <p>
+                The single-event and batch-event organizer flows remain intact; only the organizer selection layer was unified.
+              </p>
             </div>
           </section>
         </div>

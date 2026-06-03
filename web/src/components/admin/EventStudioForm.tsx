@@ -1,9 +1,11 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Languages, Pencil, Plus, Trash2, X } from 'lucide-react';
+import EntityBindingField from '@/components/admin/EntityBindingField';
+import type { EntityBindingValue } from '@/components/admin/EntityBindingSearch';
 import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
@@ -33,7 +35,6 @@ import {
   type EventStudioImageUsage,
   type EventStudioLineupArtistDraft,
   type EventStudioLocalizedText,
-  type EventStudioOrganizer,
   type EventStudioTimetableSlotDraft,
   type EventStudioValidationErrors,
   type EventStudioWeekDraft,
@@ -671,12 +672,6 @@ const splitPerformerNames = (value: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const normalizeDJLookupKey = (value: string): string =>
-  value
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/\s+/g, ' ');
-
 const getTimetableSlotPerformerNames = (slot: EventStudioTimetableSlotDraft): string[] => {
   const performerCount = actTypePerformerCount(slot.actType);
   const names = splitPerformerNames(slot.memberNamesText);
@@ -817,9 +812,6 @@ type EventStudioFormProps = {
   submitButtonText?: string;
 };
 
-type TimetableEditorDJSearchResult = Awaited<ReturnType<typeof eventStudioApi.searchDJs>>[number];
-type TimetableEditorExactMatchResult = Awaited<ReturnType<typeof eventStudioApi.matchExactDJs>>[number];
-
 export default function EventStudioForm({
   mode,
   eventId,
@@ -832,9 +824,6 @@ export default function EventStudioForm({
   const [timezoneItems, setTimezoneItems] = useState<Array<NonNullable<EventStudioDraft['timeZoneSelection']>>>([]);
   const [timezoneLoading, setTimezoneLoading] = useState(false);
   const [timezoneError, setTimezoneError] = useState('');
-  const [organizerItems, setOrganizerItems] = useState<EventStudioOrganizer[]>([]);
-  const [organizerLoading, setOrganizerLoading] = useState(false);
-  const [organizerError, setOrganizerError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldOverlayState | null>(null);
@@ -859,12 +848,20 @@ export default function EventStudioForm({
   const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
   const [activeLineupArtistEditorId, setActiveLineupArtistEditorId] = useState<string | null>(null);
   const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
-  const [timetableDJSearchResults, setTimetableDJSearchResults] = useState<Record<string, TimetableEditorDJSearchResult[]>>({});
-  const [timetableDJSearchLoadingKeys, setTimetableDJSearchLoadingKeys] = useState<Record<string, boolean>>({});
-  const [timetableDJMatchLoadingKeys, setTimetableDJMatchLoadingKeys] = useState<Record<string, boolean>>({});
   const draftRef = useRef(draft);
   const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  const organizerBindingItems = useMemo<EntityBindingValue[]>(() => {
+    if (!draft.organizerFestivalId.trim()) return [];
+    return [
+      {
+        id: draft.organizerFestivalId.trim(),
+        name: draft.organizerName.trim() || draft.organizerFestivalId.trim(),
+        subtitle: null,
+        imageUrl: null,
+      },
+    ];
+  }, [draft.organizerFestivalId, draft.organizerName]);
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
@@ -944,15 +941,6 @@ export default function EventStudioForm({
     setConfirmedTimetableSlotIds((current) => current.filter((id) => validIds.has(id)));
     setSelectedTimetableSlotIds((current) => current.filter((id) => validIds.has(id)));
     setFocusedTimetableSlotId((current) => (current && validIds.has(current) ? current : null));
-    setTimetableDJSearchResults((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => validIds.has(key.split('::')[0] || '')))
-    );
-    setTimetableDJSearchLoadingKeys((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => validIds.has(key.split('::')[0] || '')))
-    );
-    setTimetableDJMatchLoadingKeys((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => validIds.has(key.split('::')[0] || '')))
-    );
   }, [draft.timetableSlots]);
 
   useEffect(() => {
@@ -1201,6 +1189,23 @@ export default function EventStudioForm({
     });
   };
 
+  const buildLineupPerformerBindingItems = (
+    artist: EventStudioLineupArtistDraft,
+    performerIndex: number
+  ): EntityBindingValue[] => {
+    const boundDjId = getLineupArtistBoundDjId(artist, performerIndex);
+    if (!boundDjId) return [];
+    const performerName = getLineupArtistPerformerNames(artist)[performerIndex] || boundDjId;
+    return [
+      {
+        id: boundDjId,
+        name: performerName,
+        subtitle: boundDjId,
+        imageUrl: null,
+      },
+    ];
+  };
+
   const materializeEditableLineupArtists = (current: EventStudioDraft): EventStudioLineupArtistDraft[] => {
     if (current.lineupArtists.length) return current.lineupArtists;
     return buildLineupArtistsFromTimetableSlots(current.timetableSlots).map((artist, index) => ({
@@ -1299,30 +1304,6 @@ export default function EventStudioForm({
       setTimezoneError(error instanceof Error ? error.message : '搜索城市时区失败');
     } finally {
       setTimezoneLoading(false);
-    }
-  };
-
-  const searchOrganizers = async () => {
-    const query = draft.organizerName.trim();
-    if (!query) {
-      setOrganizerError('请先输入主办方名称');
-      setOrganizerItems([]);
-      return;
-    }
-
-    try {
-      setOrganizerLoading(true);
-      setOrganizerError('');
-      const items = await eventStudioApi.searchOrganizers(query);
-      setOrganizerItems(items);
-      if (!items.length) {
-        setOrganizerError('没有找到匹配主办方，当前将继续保留手动名称');
-      }
-    } catch (error) {
-      setOrganizerItems([]);
-      setOrganizerError(error instanceof Error ? error.message : '搜索主办方失败');
-    } finally {
-      setOrganizerLoading(false);
     }
   };
 
@@ -1931,22 +1912,6 @@ export default function EventStudioForm({
     }));
   };
 
-  const timetableDJSearchKey = (slotId: string, performerIndex: number) => `${slotId}::${performerIndex}`;
-
-  const clearTimetableDJSearchState = (slotId: string, performerIndex?: number) => {
-    const isTargetKey = (key: string) =>
-      performerIndex === undefined ? key.startsWith(`${slotId}::`) : key === timetableDJSearchKey(slotId, performerIndex);
-    setTimetableDJSearchResults((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => !isTargetKey(key)))
-    );
-    setTimetableDJSearchLoadingKeys((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => !isTargetKey(key)))
-    );
-    setTimetableDJMatchLoadingKeys((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => !isTargetKey(key)))
-    );
-  };
-
   const clearLocalizedI18n = (key: 'city' | 'country') => {
     updateDraftState(
       (current) => ({
@@ -2005,67 +1970,6 @@ export default function EventStudioForm({
     );
   };
 
-  const bindTimetableSlotDJ = (slotId: string, performerIndex: number, dj: TimetableEditorDJSearchResult | TimetableEditorExactMatchResult) => {
-    updateTimetableSlotPerformerBinding(slotId, performerIndex, { djId: 'djId' in dj ? dj.djId : dj.id });
-    clearTimetableDJSearchState(slotId, performerIndex);
-  };
-
-  const clearTimetableSlotDJBinding = (slotId: string, performerIndex: number) => {
-    updateTimetableSlotPerformerBinding(slotId, performerIndex, { djId: null });
-    clearTimetableDJSearchState(slotId, performerIndex);
-  };
-
-  const searchTimetableSlotDJ = async (slotId: string, performerIndex: number, query: string) => {
-    const key = timetableDJSearchKey(slotId, performerIndex);
-    const trimmed = query.trim();
-    if (!trimmed) {
-      clearTimetableDJSearchState(slotId, performerIndex);
-      return;
-    }
-    setTimetableDJSearchLoadingKeys((current) => ({ ...current, [key]: true }));
-    try {
-      const items = await eventStudioApi.searchDJs(trimmed);
-      setTimetableDJSearchResults((current) => ({
-        ...current,
-        [key]: items.filter((item) => Boolean(item.id)),
-      }));
-    } catch {
-      setTimetableDJSearchResults((current) => ({ ...current, [key]: [] }));
-    } finally {
-      setTimetableDJSearchLoadingKeys((current) => ({ ...current, [key]: false }));
-    }
-  };
-
-  const quickMatchTimetableSlotDJ = async (slot: EventStudioTimetableSlotDraft, performerIndex: number) => {
-    const performerName = getTimetableSlotPerformerNames(slot)[performerIndex] || '';
-    const key = timetableDJSearchKey(slot.id, performerIndex);
-    const trimmed = performerName.trim();
-    if (!trimmed) {
-      clearTimetableDJSearchState(slot.id, performerIndex);
-      return;
-    }
-    setTimetableDJMatchLoadingKeys((current) => ({ ...current, [key]: true }));
-    try {
-      const matches = await eventStudioApi.matchExactDJs([trimmed]);
-      const lookup = new Map<string, TimetableEditorExactMatchResult>();
-      for (const match of matches) {
-        lookup.set(normalizeDJLookupKey(match.query), match);
-        lookup.set(normalizeDJLookupKey(match.name), match);
-        for (const alias of match.aliases || []) {
-          lookup.set(normalizeDJLookupKey(alias), match);
-        }
-      }
-      const exact = lookup.get(normalizeDJLookupKey(trimmed));
-      if (exact) {
-        bindTimetableSlotDJ(slot.id, performerIndex, exact);
-        return;
-      }
-      await searchTimetableSlotDJ(slot.id, performerIndex, trimmed);
-    } finally {
-      setTimetableDJMatchLoadingKeys((current) => ({ ...current, [key]: false }));
-    }
-  };
-
   const canConfirmTimetableSlot = (slot: EventStudioTimetableSlotDraft): boolean => {
     if (!slot.eventDayId || !slot.stageName.trim() || !slot.startTime || !slot.endTime) return false;
     const performerNames = getTimetableSlotPerformerNames(slot);
@@ -2075,7 +1979,6 @@ export default function EventStudioForm({
   const confirmTimetableSlot = (slot: EventStudioTimetableSlotDraft) => {
     if (!canConfirmTimetableSlot(slot)) return;
     setConfirmedTimetableSlotIds((current) => (current.includes(slot.id) ? current : [...current, slot.id]));
-    clearTimetableDJSearchState(slot.id);
     if (focusedTimetableSlotId === slot.id) {
       setFocusedTimetableSlotId(null);
     }
@@ -2767,11 +2670,8 @@ export default function EventStudioForm({
                           }))
                         }
                         className={textInputClassName}
-                        placeholder="输入主办方名称后可搜索绑定"
+                        placeholder="输入主办方名称，或作为手动主办方文本保留"
                       />
-                      <button type="button" onClick={() => void searchOrganizers()} className="admin-studio-button-secondary">
-                        {organizerLoading ? '搜索中...' : '搜索主办方'}
-                      </button>
                       <Link
                         href={
                           draft.organizerName.trim()
@@ -2784,36 +2684,28 @@ export default function EventStudioForm({
                       </Link>
                     </div>
 
+                    <EntityBindingField
+                      kind="festival"
+                      mode="single"
+                      seedQuery={draft.organizerName}
+                      items={organizerBindingItems}
+                      title="Bound organizer"
+                      emptyLabel="Search and bind one organizer from the library."
+                      onAdd={(value) => {
+                        updateDraft('organizerFestivalId', value.id);
+                        updateDraft('organizerName', value.name);
+                      }}
+                      onRemove={() => {
+                        updateDraft('organizerFestivalId', '');
+                      }}
+                    />
+
                     {draft.organizerFestivalId ? (
                       <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] px-4 py-3 text-sm text-[#2f4027]">
                         已绑定主办方 ID：{draft.organizerFestivalId}
                       </div>
                     ) : null}
 
-                    {organizerError ? <div className="text-xs text-text-secondary">{organizerError}</div> : null}
-
-                    {organizerItems.length ? (
-                      <div className="grid gap-2">
-                        {organizerItems.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => {
-                              updateDraft('organizerFestivalId', item.id);
-                              updateDraft('organizerName', item.name);
-                              setOrganizerItems([]);
-                              setOrganizerError('');
-                            }}
-                            className="admin-reference-soft-card px-4 py-3 text-left text-sm"
-                          >
-                            <div className="font-semibold text-[#071110]">{item.name}</div>
-                            <div className="mt-1 text-xs text-black/42">
-                              {[item.country, item.city, item.tagline].filter(Boolean).join(' · ') || item.id}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
                   </div>
                 </Field>
               </div>
@@ -3644,11 +3536,7 @@ export default function EventStudioForm({
 
                                 <div className="lg:col-span-3 grid gap-3">
                                   {Array.from({ length: performerCount }).map((_, performerIndex) => {
-                                    const searchKey = timetableDJSearchKey(slot.id, performerIndex);
                                     const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
-                                    const candidateItems = timetableDJSearchResults[searchKey] || [];
-                                    const isSearchingCandidates = Boolean(timetableDJSearchLoadingKeys[searchKey]);
-                                    const isMatchingByName = Boolean(timetableDJMatchLoadingKeys[searchKey]);
                                     return (
                                       <div key={`${slot.id}-member-${performerIndex}`} className="admin-event-slot-binding-panel">
                                         <div className="admin-event-slot-binding-panel-head">
@@ -3656,15 +3544,6 @@ export default function EventStudioForm({
                                             <span>{normalizeActType(slot.actType) === 'solo' ? 'DJ / 艺人名称' : `成员 ${performerIndex + 1}`}</span>
                                             <b>{boundDjId ? `已绑定 ${boundDjId}` : '尚未绑定库内 DJ'}</b>
                                           </div>
-                                          {boundDjId ? (
-                                            <button
-                                              type="button"
-                                              onClick={() => clearTimetableSlotDJBinding(slot.id, performerIndex)}
-                                              className="admin-studio-button-secondary px-3 py-2 text-xs"
-                                            >
-                                              清除绑定
-                                            </button>
-                                          ) : null}
                                         </div>
                                         <div className="admin-event-slot-binding-row">
                                           <input
@@ -3682,41 +3561,32 @@ export default function EventStudioForm({
                                             className={textInputClassName}
                                             placeholder={normalizeActType(slot.actType) === 'solo' ? '输入艺人名称' : `成员 ${performerIndex + 1}`}
                                           />
-                                          <button
-                                            type="button"
-                                            onClick={() => void quickMatchTimetableSlotDJ(slot, performerIndex)}
-                                            disabled={!performerNames[performerIndex]?.trim() || isMatchingByName}
-                                            className="admin-studio-button-secondary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                                          >
-                                            {isMatchingByName ? '匹配中...' : '按名称匹配'}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => void searchTimetableSlotDJ(slot.id, performerIndex, performerNames[performerIndex] || '')}
-                                            disabled={!performerNames[performerIndex]?.trim() || isSearchingCandidates}
-                                            className="admin-studio-button-secondary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                                          >
-                                            {isSearchingCandidates ? '搜索中...' : '搜索候选'}
-                                          </button>
                                         </div>
-                                        <div className={`admin-event-slot-binding-inline-status ${boundDjId ? 'is-bound' : 'is-empty'}`}>
-                                          {boundDjId ? `已绑定库内 DJ · ${boundDjId}` : '未绑定库内 DJ'}
-                                        </div>
-                                        {candidateItems.length ? (
-                                          <div className="admin-event-slot-binding-results">
-                                            {candidateItems.map((item) => (
-                                              <button
-                                                key={item.id}
-                                                type="button"
-                                                onClick={() => bindTimetableSlotDJ(slot.id, performerIndex, item)}
-                                                className="admin-event-slot-binding-result"
-                                              >
-                                                <strong>{item.name}</strong>
-                                                <span>{[item.country, item.slug, item.id].filter(Boolean).join(' · ')}</span>
-                                              </button>
-                                            ))}
-                                          </div>
-                                        ) : null}
+                                        <EntityBindingField
+                                          kind="dj"
+                                          mode="single"
+                                          seedQuery={performerNames[performerIndex] || ''}
+                                          items={
+                                            boundDjId
+                                              ? [
+                                                  {
+                                                    id: boundDjId,
+                                                    name: performerNames[performerIndex] || boundDjId,
+                                                    subtitle: boundDjId,
+                                                    imageUrl: null,
+                                                  },
+                                                ]
+                                              : []
+                                          }
+                                          title="Bound DJ"
+                                          emptyLabel="Search and bind one DJ from the library."
+                                          onAdd={(value) =>
+                                            updateTimetableSlotPerformerBinding(slot.id, performerIndex, {
+                                              djId: value.id,
+                                            })
+                                          }
+                                          onRemove={() => updateTimetableSlotPerformerBinding(slot.id, performerIndex, { djId: null })}
+                                        />
                                       </div>
                                     );
                                   })}
@@ -4105,12 +3975,16 @@ export default function EventStudioForm({
                               </div>
                               <div className="grid gap-2">
                                 {Array.from({ length: performerCount }).map((_, performerIndex) => (
-                                  <input
-                                    key={`${artist.id}-dj-${performerIndex}`}
-                                    value={getLineupArtistBoundDjId(artist, performerIndex)}
-                                    onChange={(event) => updateLineupArtistPerformerBinding(artist.id, performerIndex, event.target.value)}
-                                    className={textInputClassName}
-                                    placeholder={normalizeActType(artist.actType) === 'solo' ? 'DJ ID（可选）' : `成员 ${performerIndex + 1} DJ ID`}
+                                  <EntityBindingField
+                                    key={`${artist.id}-binding-${performerIndex}`}
+                                    kind="dj"
+                                    mode="single"
+                                    seedQuery={performerNames[performerIndex] || ''}
+                                    items={buildLineupPerformerBindingItems(artist, performerIndex)}
+                                    title={normalizeActType(artist.actType) === 'solo' ? 'Bound DJ' : `Member ${performerIndex + 1} binding`}
+                                    emptyLabel="Search and bind one DJ from the library."
+                                    onAdd={(value) => updateLineupArtistPerformerBinding(artist.id, performerIndex, value.id)}
+                                    onRemove={() => updateLineupArtistPerformerBinding(artist.id, performerIndex, '')}
                                   />
                                 ))}
                               </div>

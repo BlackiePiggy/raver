@@ -26,8 +26,28 @@ export type RankingBoardDetailEntry = {
   name: string;
   entityId: string | null;
   delta: number | null;
-  dj: Record<string, unknown> | null;
-  festival: Record<string, unknown> | null;
+  dj: RankingBoundDJ | null;
+  festival: RankingBoundFestival | null;
+};
+
+export type RankingBoundDJ = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  followerCount?: number | null;
+  country?: string | null;
+};
+
+export type RankingBoundFestival = {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  backgroundUrl?: string | null;
+  country?: string | null;
+  city?: string | null;
+  tagline?: string | null;
 };
 
 export type RankingBoardDetail = {
@@ -59,6 +79,10 @@ export type RankingBoardInput = {
 export type RankingYearUpsertInput = {
   importText?: string;
   entries?: RankingBoardEntry[];
+};
+
+export type RankingBindingUpdateInput = {
+  entityId: string | null;
 };
 
 type Envelope<T> = {
@@ -110,6 +134,24 @@ export const rankingAdminApi = {
       getApiUrl(`/v1/learn/rankings/${encodeURIComponent(boardId)}/years/${encodeURIComponent(String(year))}/upsert`),
       {
         method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
+    return payload.data;
+  },
+
+  async updateEntryBinding(
+    boardId: string,
+    year: number,
+    rank: number,
+    input: RankingBindingUpdateInput
+  ): Promise<RankingBoardDetailEntry> {
+    const payload = await authenticatedJsonFetch<Envelope<RankingBoardDetailEntry>>(
+      getApiUrl(
+        `/v1/learn/rankings/${encodeURIComponent(boardId)}/years/${encodeURIComponent(String(year))}/entries/${encodeURIComponent(String(rank))}/binding`
+      ),
+      {
+        method: 'PATCH',
         body: JSON.stringify(input),
       }
     );

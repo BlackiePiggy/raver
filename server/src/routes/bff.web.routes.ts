@@ -17978,6 +17978,107 @@ router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (
   }
 });
 
+router.patch('/learn/rankings/:boardId/years/:year/entries/:rank/binding', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const year = Number(req.params.year);
+    const rank = Number(req.params.rank);
+    if (!Number.isFinite(year) || !Number.isFinite(rank)) {
+      res.status(400).json({ error: 'year or rank is invalid' });
+      return;
+    }
+
+    const rankingYear = await prisma.rankingYear.findUnique({
+      where: {
+        boardId_year: {
+          boardId,
+          year: Math.floor(year),
+        },
+      },
+      include: {
+        board: true,
+      },
+    });
+    if (!rankingYear) {
+      res.status(404).json({ error: 'Ranking year not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const entityId = typeof body.entityId === 'string' && body.entityId.trim() ? body.entityId.trim() : null;
+
+    const updated = await prisma.rankingEntry.update({
+      where: {
+        rankingYearId_rank: {
+          rankingYearId: rankingYear.id,
+          rank: Math.floor(rank),
+        },
+      },
+      data: { entityId },
+    });
+
+    let dj: Record<string, unknown> | null = null;
+    let festival: Record<string, unknown> | null = null;
+
+    if (rankingYear.board.entityType === 'dj' && entityId) {
+      const matchedDJ = await prisma.dJ.findUnique({
+        where: { id: entityId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          avatarUrl: true,
+          bannerUrl: true,
+          followerCount: true,
+          country: true,
+        },
+      });
+      if (matchedDJ) {
+        dj = matchedDJ;
+      }
+      await syncDJHonorsForDJIds([entityId]);
+    }
+
+    if (rankingYear.board.entityType === 'festival' && entityId) {
+      const matchedFestival = await prisma.wikiFestival.findUnique({
+        where: { id: entityId },
+        select: {
+          id: true,
+          name: true,
+          avatarUrl: true,
+          backgroundUrl: true,
+          country: true,
+          city: true,
+          tagline: true,
+        },
+      });
+      if (matchedFestival) {
+        festival = matchedFestival;
+      }
+    }
+
+    ok(res, {
+      rank: updated.rank,
+      name: updated.name,
+      entityId: updated.entityId || null,
+      delta: null,
+      dj,
+      festival,
+    });
+  } catch (error) {
+    console.error('BFF web ranking binding update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/admin/identifiers/organizers', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -18321,6 +18422,378 @@ router.patch('/admin/identifiers/ranking-entries/:boardId/:year/:rank', optional
     });
   } catch (error) {
     console.error('BFF web identifier ranking entry update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/admin/identifiers/unreleased-tracks', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const sourceType = typeof req.query.sourceType === 'string' ? req.query.sourceType.trim() : 'all';
+
+    const trackWhere: Prisma.TrackWhereInput = {
+      status: 'id',
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { artist: { contains: search, mode: 'insensitive' } },
+              { set: { title: { contains: search, mode: 'insensitive' } } },
+              { set: { eventName: { contains: search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+
+    const tracklistTrackWhere: Prisma.TracklistTrackWhereInput = {
+      status: 'id',
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { artist: { contains: search, mode: 'insensitive' } },
+              { tracklist: { title: { contains: search, mode: 'insensitive' } } },
+              { tracklist: { set: { title: { contains: search, mode: 'insensitive' } } } },
+              { tracklist: { uploader: { displayName: { contains: search, mode: 'insensitive' } } } },
+              { tracklist: { uploader: { username: { contains: search, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [defaultTracks, tracklistTracks] = await Promise.all([
+      sourceType === 'tracklist_track'
+        ? Promise.resolve([])
+        : prisma.track.findMany({
+            where: trackWhere,
+            include: {
+              set: {
+                include: {
+                  dj: {
+                    select: { id: true, name: true },
+                  },
+                  artists: {
+                    orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+                    include: {
+                      dj: {
+                        select: { id: true, name: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+          }),
+      sourceType === 'default_track'
+        ? Promise.resolve([])
+        : prisma.tracklistTrack.findMany({
+            where: tracklistTrackWhere,
+            include: {
+              tracklist: {
+                include: {
+                  uploader: {
+                    select: {
+                      id: true,
+                      username: true,
+                      displayName: true,
+                    },
+                  },
+                  set: {
+                    include: {
+                      dj: {
+                        select: { id: true, name: true },
+                      },
+                      artists: {
+                        orderBy: [{ artistOrder: 'asc' }, { createdAt: 'asc' }],
+                        include: {
+                          dj: {
+                            select: { id: true, name: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+          }),
+    ]);
+
+    const defaultItems = defaultTracks.map((item) => {
+      const setArtists = Array.isArray(item.set?.artists) ? item.set.artists : [];
+      const djDisplayName =
+        setArtists
+          .map((artist) => artist.dj?.name || artist.artistNameSnapshot)
+          .filter(Boolean)
+          .join(' b2b ')
+        || item.set?.dj?.name
+        || item.set?.title
+        || 'Unknown DJ';
+
+      return {
+        rowId: `track:${item.id}`,
+        sourceType: 'default_track',
+        setId: item.setId,
+        setTitle: item.set?.title || '',
+        setSlug: item.set?.slug || '',
+        setRecordedAt: item.set?.recordedAt?.toISOString?.() || null,
+        djDisplayName,
+        tracklistId: null,
+        tracklistTitle: null,
+        contributorName: null,
+        position: item.position,
+        startTime: item.startTime,
+        endTime: item.endTime ?? null,
+        title: item.title,
+        artist: item.artist,
+        status: item.status,
+        label: item.label ?? null,
+        releaseYear: item.releaseYear ?? null,
+        spotifyUrl: item.spotifyUrl ?? null,
+        spotifyId: item.spotifyId ?? null,
+        spotifyUri: item.spotifyUri ?? null,
+        appleMusicUrl: item.appleMusicUrl ?? null,
+        youtubeMusicUrl: item.youtubeMusicUrl ?? null,
+        soundcloudUrl: item.soundcloudUrl ?? null,
+        beatportUrl: item.beatportUrl ?? null,
+        neteaseUrl: item.neteaseUrl ?? null,
+        neteaseId: item.neteaseId ?? null,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      };
+    });
+
+    const tracklistItems = tracklistTracks.map((item) => {
+      const setArtists = Array.isArray(item.tracklist?.set?.artists) ? item.tracklist.set.artists : [];
+      const contributorName =
+        item.tracklist?.uploader?.displayName
+        || item.tracklist?.uploader?.username
+        || null;
+      const djDisplayName =
+        setArtists
+          .map((artist) => artist.dj?.name || artist.artistNameSnapshot)
+          .filter(Boolean)
+          .join(' b2b ')
+        || item.tracklist?.set?.dj?.name
+        || item.tracklist?.set?.title
+        || 'Unknown DJ';
+
+      return {
+        rowId: `tracklist:${item.id}`,
+        sourceType: 'tracklist_track',
+        setId: item.tracklist?.setId || '',
+        setTitle: item.tracklist?.set?.title || '',
+        setSlug: item.tracklist?.set?.slug || '',
+        setRecordedAt: item.tracklist?.set?.recordedAt?.toISOString?.() || null,
+        djDisplayName,
+        tracklistId: item.tracklistId,
+        tracklistTitle: item.tracklist?.title || null,
+        contributorName,
+        position: item.position,
+        startTime: item.startTime,
+        endTime: item.endTime ?? null,
+        title: item.title,
+        artist: item.artist,
+        status: item.status,
+        label: item.label ?? null,
+        releaseYear: item.releaseYear ?? null,
+        spotifyUrl: item.spotifyUrl ?? null,
+        spotifyId: item.spotifyId ?? null,
+        spotifyUri: item.spotifyUri ?? null,
+        appleMusicUrl: item.appleMusicUrl ?? null,
+        youtubeMusicUrl: item.youtubeMusicUrl ?? null,
+        soundcloudUrl: item.soundcloudUrl ?? null,
+        beatportUrl: item.beatportUrl ?? null,
+        neteaseUrl: item.neteaseUrl ?? null,
+        neteaseId: item.neteaseId ?? null,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      };
+    });
+
+    const merged = [...defaultItems, ...tracklistItems]
+      .sort((a, b) => {
+        const aTime = new Date(a.updatedAt).getTime();
+        const bTime = new Date(b.updatedAt).getTime();
+        return bTime - aTime;
+      });
+
+    const start = (page - 1) * limit;
+    const paged = merged.slice(start, start + limit);
+
+    ok(res, { items: paged }, {
+      page,
+      limit,
+      total: merged.length,
+      totalPages: Math.ceil(merged.length / limit) || 1,
+    });
+  } catch (error) {
+    console.error('BFF web unreleased tracks list error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/admin/identifiers/unreleased-tracks/:rowId', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const rowId = String(req.params.rowId || '');
+    const [sourceType, sourceId] = rowId.split(':');
+    if (!sourceType || !sourceId) {
+      res.status(400).json({ error: 'rowId is invalid' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const nextStatus = typeof body.status === 'string' ? body.status.trim() : undefined;
+    if (nextStatus && !['released', 'id', 'remix', 'edit'].includes(nextStatus)) {
+      res.status(400).json({ error: 'status is invalid' });
+      return;
+    }
+    const releaseYear = body.releaseYear === null || body.releaseYear === ''
+      ? null
+      : Number(body.releaseYear);
+    if (body.releaseYear !== undefined && body.releaseYear !== null && body.releaseYear !== '' && !Number.isFinite(releaseYear)) {
+      res.status(400).json({ error: 'releaseYear is invalid' });
+      return;
+    }
+
+    const baseData = {
+      ...(Object.prototype.hasOwnProperty.call(body, 'title') ? { title: String(body.title || '').trim() } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'artist') ? { artist: String(body.artist || '').trim() } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'status') ? { status: nextStatus || 'id' } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'label')
+        ? { label: typeof body.label === 'string' && body.label.trim() ? body.label.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'releaseYear') ? { releaseYear: releaseYear === null ? null : Math.floor(releaseYear) } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'spotifyUrl')
+        ? { spotifyUrl: typeof body.spotifyUrl === 'string' && body.spotifyUrl.trim() ? body.spotifyUrl.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'spotifyId')
+        ? { spotifyId: typeof body.spotifyId === 'string' && body.spotifyId.trim() ? body.spotifyId.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'spotifyUri')
+        ? { spotifyUri: typeof body.spotifyUri === 'string' && body.spotifyUri.trim() ? body.spotifyUri.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'appleMusicUrl')
+        ? { appleMusicUrl: typeof body.appleMusicUrl === 'string' && body.appleMusicUrl.trim() ? body.appleMusicUrl.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'youtubeMusicUrl')
+        ? { youtubeMusicUrl: typeof body.youtubeMusicUrl === 'string' && body.youtubeMusicUrl.trim() ? body.youtubeMusicUrl.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'soundcloudUrl')
+        ? { soundcloudUrl: typeof body.soundcloudUrl === 'string' && body.soundcloudUrl.trim() ? body.soundcloudUrl.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'beatportUrl')
+        ? { beatportUrl: typeof body.beatportUrl === 'string' && body.beatportUrl.trim() ? body.beatportUrl.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'neteaseUrl')
+        ? { neteaseUrl: typeof body.neteaseUrl === 'string' && body.neteaseUrl.trim() ? body.neteaseUrl.trim() : null }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'neteaseId')
+        ? { neteaseId: typeof body.neteaseId === 'string' && body.neteaseId.trim() ? body.neteaseId.trim() : null }
+        : {}),
+    };
+
+    if (sourceType === 'track') {
+      const updated = await prisma.track.update({
+        where: { id: sourceId },
+        data: baseData,
+      });
+      ok(res, {
+        rowId,
+        sourceType: 'default_track',
+        setId: updated.setId,
+        setTitle: '',
+        setSlug: '',
+        setRecordedAt: null,
+        djDisplayName: '',
+        tracklistId: null,
+        tracklistTitle: null,
+        contributorName: null,
+        position: updated.position,
+        startTime: updated.startTime,
+        endTime: updated.endTime ?? null,
+        title: updated.title,
+        artist: updated.artist,
+        status: updated.status,
+        label: updated.label ?? null,
+        releaseYear: updated.releaseYear ?? null,
+        spotifyUrl: updated.spotifyUrl ?? null,
+        spotifyId: updated.spotifyId ?? null,
+        spotifyUri: updated.spotifyUri ?? null,
+        appleMusicUrl: updated.appleMusicUrl ?? null,
+        youtubeMusicUrl: updated.youtubeMusicUrl ?? null,
+        soundcloudUrl: updated.soundcloudUrl ?? null,
+        beatportUrl: updated.beatportUrl ?? null,
+        neteaseUrl: updated.neteaseUrl ?? null,
+        neteaseId: updated.neteaseId ?? null,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      });
+      return;
+    }
+
+    if (sourceType === 'tracklist') {
+      const updated = await prisma.tracklistTrack.update({
+        where: { id: sourceId },
+        data: baseData,
+      });
+      ok(res, {
+        rowId,
+        sourceType: 'tracklist_track',
+        setId: '',
+        setTitle: '',
+        setSlug: '',
+        setRecordedAt: null,
+        djDisplayName: '',
+        tracklistId: updated.tracklistId,
+        tracklistTitle: null,
+        contributorName: null,
+        position: updated.position,
+        startTime: updated.startTime,
+        endTime: updated.endTime ?? null,
+        title: updated.title,
+        artist: updated.artist,
+        status: updated.status,
+        label: updated.label ?? null,
+        releaseYear: updated.releaseYear ?? null,
+        spotifyUrl: updated.spotifyUrl ?? null,
+        spotifyId: updated.spotifyId ?? null,
+        spotifyUri: updated.spotifyUri ?? null,
+        appleMusicUrl: updated.appleMusicUrl ?? null,
+        youtubeMusicUrl: updated.youtubeMusicUrl ?? null,
+        soundcloudUrl: updated.soundcloudUrl ?? null,
+        beatportUrl: updated.beatportUrl ?? null,
+        neteaseUrl: updated.neteaseUrl ?? null,
+        neteaseId: updated.neteaseId ?? null,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      });
+      return;
+    }
+
+    res.status(400).json({ error: 'rowId source type is invalid' });
+  } catch (error) {
+    console.error('BFF web unreleased track update error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

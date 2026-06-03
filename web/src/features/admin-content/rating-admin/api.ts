@@ -11,7 +11,13 @@ export type RatingUnit = {
   imageUrl?: string | null;
   createdAt?: string;
   updatedAt?: string;
-  linkedDJs?: Array<Record<string, unknown>>;
+  linkedDJs?: Array<{
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    bannerUrl?: string | null;
+    country?: string | null;
+  }>;
   averageScore?: number | null;
   commentCount?: number;
 };

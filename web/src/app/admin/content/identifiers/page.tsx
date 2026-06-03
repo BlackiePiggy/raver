@@ -1,100 +1,139 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import {
   identifierAdminApi,
-  type IdentifierLabelItem,
-  type IdentifierOrganizerItem,
-  type IdentifierRankingEntryItem,
+  type UnreleasedTrackItem,
+  type UnreleasedTrackSourceType,
+  type UnreleasedTrackUpdateInput,
 } from '@/features/admin-content/identifier-admin';
 
-type IdentifierTab = 'organizers' | 'labels' | 'rankings';
+const PAGE_SIZE = 20;
+
+type EditDraftMap = Record<string, UnreleasedTrackUpdateInput>;
+
+const sourceTypeLabel: Record<UnreleasedTrackSourceType, string> = {
+  default_track: '默认轨道',
+  tracklist_track: '用户 Tracklist',
+};
+
+const formatSeconds = (value: number): string => {
+  const total = Math.max(0, Math.floor(value));
+  const hour = Math.floor(total / 3600);
+  const minute = Math.floor((total % 3600) / 60);
+  const second = total % 60;
+  if (hour > 0) {
+    return `${hour}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+  }
+  return `${minute}:${String(second).padStart(2, '0')}`;
+};
+
+const buildDraftFromItem = (item: UnreleasedTrackItem): UnreleasedTrackUpdateInput => ({
+  title: item.title,
+  artist: item.artist,
+  status: item.status,
+  label: item.label || '',
+  releaseYear: item.releaseYear,
+  spotifyUrl: item.spotifyUrl || '',
+  spotifyId: item.spotifyId || '',
+  spotifyUri: item.spotifyUri || '',
+  appleMusicUrl: item.appleMusicUrl || '',
+  youtubeMusicUrl: item.youtubeMusicUrl || '',
+  soundcloudUrl: item.soundcloudUrl || '',
+  beatportUrl: item.beatportUrl || '',
+  neteaseUrl: item.neteaseUrl || '',
+  neteaseId: item.neteaseId || '',
+});
 
 export default function AdminIdentifiersPage() {
-  const [tab, setTab] = useState<IdentifierTab>('organizers');
+  const [items, setItems] = useState<UnreleasedTrackItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
-  const [organizers, setOrganizers] = useState<IdentifierOrganizerItem[]>([]);
-  const [labels, setLabels] = useState<IdentifierLabelItem[]>([]);
-  const [rankingEntries, setRankingEntries] = useState<IdentifierRankingEntryItem[]>([]);
+  const [sourceType, setSourceType] = useState<'all' | UnreleasedTrackSourceType>('all');
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [drafts, setDrafts] = useState<EditDraftMap>({});
 
-  const load = async () => {
+  const hasItems = items.length > 0;
+
+  const load = async (nextPage = page) => {
     setLoading(true);
     setError('');
     try {
-      if (tab === 'organizers') {
-        const payload = await identifierAdminApi.listOrganizers(search);
-        setOrganizers(payload.items);
-      } else if (tab === 'labels') {
-        const payload = await identifierAdminApi.listLabels(search);
-        setLabels(payload.items);
-      } else {
-        const payload = await identifierAdminApi.listRankingEntries(search);
-        setRankingEntries(payload.items);
-      }
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '加载 ID 管理数据失败');
+      const payload = await identifierAdminApi.listUnreleasedTracks({
+        search,
+        sourceType,
+        page: nextPage,
+        limit: PAGE_SIZE,
+      });
+      setItems(payload.items);
+      setPage(payload.pagination.page);
+      setTotal(payload.pagination.total);
+      setTotalPages(payload.pagination.totalPages);
+      setDrafts(
+        Object.fromEntries(payload.items.map((item) => [item.rowId, buildDraftFromItem(item)]))
+      );
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '加载未发布歌曲 ID 列表失败。');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void load();
-  }, [tab]);
+    void load(1);
+  }, [sourceType]);
 
-  const saveOrganizer = async (item: IdentifierOrganizerItem, nextValue: string) => {
-    const key = `organizer-${item.id}`;
-    setSavingKey(key);
-    setError('');
-    setNotice('');
-    try {
-      await identifierAdminApi.updateOrganizer(item.id, {
-        sourceRowId: nextValue.trim() ? Number(nextValue) : null,
-      });
-      setNotice(`已更新主办方 ${item.name} 的 sourceRowId`);
-      await load();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '更新主办方标识失败');
-    } finally {
-      setSavingKey('');
-    }
+  const summary = useMemo(() => {
+    const defaultCount = items.filter((item) => item.sourceType === 'default_track').length;
+    const tracklistCount = items.filter((item) => item.sourceType === 'tracklist_track').length;
+    return { defaultCount, tracklistCount };
+  }, [items]);
+
+  const updateDraft = (rowId: string, patch: Partial<UnreleasedTrackUpdateInput>) => {
+    setDrafts((current) => ({
+      ...current,
+      [rowId]: {
+        ...current[rowId],
+        ...patch,
+      },
+    }));
   };
 
-  const saveLabel = async (item: IdentifierLabelItem, next: { slug: string; profileSlug: string; profileUrl: string }) => {
-    const key = `label-${item.id}`;
-    setSavingKey(key);
+  const handleSave = async (item: UnreleasedTrackItem) => {
+    const draft = drafts[item.rowId];
+    if (!draft) return;
+    setSavingKey(item.rowId);
     setError('');
     setNotice('');
     try {
-      await identifierAdminApi.updateLabel(item.id, next);
-      setNotice(`已更新厂牌 ${item.name} 的标识字段`);
-      await load();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '更新厂牌标识失败');
-    } finally {
-      setSavingKey('');
-    }
-  };
-
-  const saveRankingEntry = async (item: IdentifierRankingEntryItem, entityId: string) => {
-    const key = `ranking-${item.boardId}-${item.year}-${item.rank}`;
-    setSavingKey(key);
-    setError('');
-    setNotice('');
-    try {
-      await identifierAdminApi.updateRankingEntry(item.boardId, item.year, item.rank, {
-        entityId: entityId.trim() || null,
+      await identifierAdminApi.updateUnreleasedTrack(item.rowId, {
+        ...draft,
+        label: typeof draft.label === 'string' ? draft.label.trim() || null : draft.label,
+        spotifyUrl: typeof draft.spotifyUrl === 'string' ? draft.spotifyUrl.trim() || null : draft.spotifyUrl,
+        spotifyId: typeof draft.spotifyId === 'string' ? draft.spotifyId.trim() || null : draft.spotifyId,
+        spotifyUri: typeof draft.spotifyUri === 'string' ? draft.spotifyUri.trim() || null : draft.spotifyUri,
+        appleMusicUrl:
+          typeof draft.appleMusicUrl === 'string' ? draft.appleMusicUrl.trim() || null : draft.appleMusicUrl,
+        youtubeMusicUrl:
+          typeof draft.youtubeMusicUrl === 'string' ? draft.youtubeMusicUrl.trim() || null : draft.youtubeMusicUrl,
+        soundcloudUrl:
+          typeof draft.soundcloudUrl === 'string' ? draft.soundcloudUrl.trim() || null : draft.soundcloudUrl,
+        beatportUrl:
+          typeof draft.beatportUrl === 'string' ? draft.beatportUrl.trim() || null : draft.beatportUrl,
+        neteaseUrl: typeof draft.neteaseUrl === 'string' ? draft.neteaseUrl.trim() || null : draft.neteaseUrl,
+        neteaseId: typeof draft.neteaseId === 'string' ? draft.neteaseId.trim() || null : draft.neteaseId,
       });
-      setNotice(`已更新 ${item.boardTitle} ${item.year} #${item.rank} 的 entityId`);
-      await load();
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '更新榜单条目标识失败');
+      setNotice(`已更新未发布曲目：${item.artist} - ${item.title}`);
+      await load(page);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '保存未发布曲目失败。');
     } finally {
       setSavingKey('');
     }
@@ -103,119 +142,250 @@ export default function AdminIdentifiersPage() {
   return (
     <AdminContentLayout
       title="ID 管理"
-      description="统一维护主办方、厂牌与榜单条目的关键标识字段，优先解决 sourceRowId、slug、profile 与 entityId 的对齐问题。"
+      description="统一管理未发布歌曲条目。这里的 ID 指 track / tracklist 中标记为 unreleased ID 的曲目，而不是实体 identifier。"
       actions={
-        <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
+        <Link
+          href="/admin/content"
+          className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]"
+        >
           返回内容控制台
         </Link>
       }
     >
       <section className="space-y-5">
-        {error ? <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4 text-sm text-[#6a3530]">{error}</div> : null}
-        {notice ? <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4 text-sm text-[#2f4027]">{notice}</div> : null}
-        <section className="admin-reference-card p-5">
-          <div className="flex flex-wrap items-center gap-3">
-            {[
-              ['organizers', '主办方 sourceRowId'],
-              ['labels', '厂牌 slug / profile'],
-              ['rankings', '榜单 entityId'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTab(value as IdentifierTab)}
-                className={`rounded-full px-4 py-2 text-sm ${tab === value ? 'bg-[#071110] text-white' : 'border border-[#e8eceb] bg-white text-[#18211f]'}`}
-              >
-                {label}
-              </button>
-            ))}
-            <div className="ml-auto flex items-center gap-3">
-              <input className="admin-reference-soft-card px-4 py-2 text-sm" placeholder="搜索名称 / ID" value={search} onChange={(event) => setSearch(event.target.value)} />
-              <button type="button" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white" onClick={() => void load()} disabled={loading}>
-                {loading ? '加载中...' : '搜索'}
-              </button>
-            </div>
+        {error ? (
+          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4 text-sm text-[#6a3530]">
+            {error}
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4 text-sm text-[#2f4027]">
+            {notice}
+          </div>
+        ) : null}
+
+        <section className="grid gap-4 md:grid-cols-3">
+          <div className="admin-reference-pastel-card bg-[#eaf4ff] p-4">
+            <div className="text-xs uppercase tracking-[0.14em] text-black/38">Total</div>
+            <div className="mt-3 text-3xl font-semibold text-[#111827]">{total}</div>
+            <div className="mt-2 text-sm text-black/48">当前筛选下的未发布条目总数</div>
+          </div>
+          <div className="admin-reference-pastel-card bg-[#edf7f2] p-4">
+            <div className="text-xs uppercase tracking-[0.14em] text-black/38">Default Track</div>
+            <div className="mt-3 text-3xl font-semibold text-[#111827]">{summary.defaultCount}</div>
+            <div className="mt-2 text-sm text-black/48">当前页默认轨道来源</div>
+          </div>
+          <div className="admin-reference-pastel-card bg-[#fff3df] p-4">
+            <div className="text-xs uppercase tracking-[0.14em] text-black/38">Tracklist Track</div>
+            <div className="mt-3 text-3xl font-semibold text-[#111827]">{summary.tracklistCount}</div>
+            <div className="mt-2 text-sm text-black/48">当前页用户 Tracklist 来源</div>
           </div>
         </section>
 
-        {tab === 'organizers' ? (
-          <section className="admin-reference-card overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1.2fr)_200px_240px] gap-0 border-b border-[#eef1ee] bg-[#fafbf9] px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-black/42">
-              <div>主办方</div>
-              <div>sourceRowId</div>
-              <div>操作</div>
-            </div>
-            {organizers.map((item) => {
-              let nextValue = String(item.sourceRowId ?? '');
-              return (
-                <div key={item.id} className="grid grid-cols-[minmax(0,1.2fr)_200px_240px] items-center gap-0 border-b border-[#f1f3f2] px-5 py-4">
-                  <div>
-                    <div className="text-sm font-semibold text-[#111827]">{item.name}</div>
-                    <div className="mt-1 text-xs text-black/45">{item.id}</div>
-                  </div>
-                  <input className="rounded-[14px] border border-[#e8eceb] bg-white px-3 py-2 text-sm" defaultValue={nextValue} onChange={(event) => { nextValue = event.target.value; }} />
-                  <div>
-                    <button type="button" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white" disabled={savingKey === `organizer-${item.id}`} onClick={() => void saveOrganizer(item, nextValue)}>
-                      {savingKey === `organizer-${item.id}` ? '保存中...' : '保存'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {!organizers.length ? <div className="p-5 text-sm text-black/48">{loading ? '加载中...' : '暂无主办方数据。'}</div> : null}
-          </section>
-        ) : null}
+        <section className="admin-reference-card p-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              className="admin-reference-soft-card min-w-[260px] flex-1 px-4 py-3 text-sm"
+              placeholder="搜索曲名 / 艺人 / set / contributor"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="admin-reference-soft-card px-4 py-3 text-sm"
+              value={sourceType}
+              onChange={(event) => setSourceType(event.target.value as 'all' | UnreleasedTrackSourceType)}
+            >
+              <option value="all">全部来源</option>
+              <option value="default_track">默认轨道</option>
+              <option value="tracklist_track">用户 Tracklist</option>
+            </select>
+            <button
+              type="button"
+              className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
+              disabled={loading}
+              onClick={() => void load(1)}
+            >
+              {loading ? '加载中...' : '搜索'}
+            </button>
+          </div>
+        </section>
 
-        {tab === 'labels' ? (
-          <section className="space-y-4">
-            {labels.map((item) => {
-              let nextSlug = item.slug;
-              let nextProfileSlug = item.profileSlug ?? '';
-              let nextProfileUrl = item.profileUrl;
-              return (
-                <div key={item.id} className="admin-reference-card p-5">
-                  <div className="text-[16px] font-semibold text-[#111827]">{item.name}</div>
-                  <div className="mt-1 text-xs text-black/45">{item.id}</div>
-                  <div className="mt-4 grid gap-3 xl:grid-cols-3">
-                    <input className="admin-reference-soft-card px-4 py-3 text-sm" defaultValue={item.slug} placeholder="slug" onChange={(event) => { nextSlug = event.target.value; }} />
-                    <input className="admin-reference-soft-card px-4 py-3 text-sm" defaultValue={item.profileSlug ?? ''} placeholder="profileSlug" onChange={(event) => { nextProfileSlug = event.target.value; }} />
-                    <input className="admin-reference-soft-card px-4 py-3 text-sm" defaultValue={item.profileUrl} placeholder="profileUrl" onChange={(event) => { nextProfileUrl = event.target.value; }} />
+        <section className="space-y-4">
+          {items.map((item) => {
+            const draft = drafts[item.rowId] || buildDraftFromItem(item);
+            const rowSaving = savingKey === item.rowId;
+            return (
+              <div key={item.rowId} className="admin-reference-card p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="admin-reference-chip">{sourceTypeLabel[item.sourceType]}</span>
+                      <span className="admin-reference-chip">{draft.status || item.status}</span>
+                      <span className="text-base font-semibold text-[#111827]">
+                        {item.artist} - {item.title}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-sm text-black/52">
+                      Set: {item.setTitle} · DJ: {item.djDisplayName} · 位置 #{item.position} · {formatSeconds(item.startTime)}
+                      {item.endTime !== null ? ` - ${formatSeconds(item.endTime)}` : ''}
+                    </div>
+                    <div className="mt-1 text-xs text-black/45">
+                      {item.tracklistId
+                        ? `Tracklist: ${item.tracklistTitle || item.tracklistId}`
+                        : '来源：默认轨道'}
+                      {item.contributorName ? ` · Contributor: ${item.contributorName}` : ''}
+                    </div>
+                    <div className="mt-1 text-xs text-black/38">rowId: {item.rowId}</div>
                   </div>
-                  <button type="button" className="mt-4 rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white" disabled={savingKey === `label-${item.id}`} onClick={() => void saveLabel(item, { slug: nextSlug, profileSlug: nextProfileSlug, profileUrl: nextProfileUrl })}>
-                    {savingKey === `label-${item.id}` ? '保存中...' : '保存厂牌标识'}
+
+                  <button
+                    type="button"
+                    className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white"
+                    disabled={rowSaving}
+                    onClick={() => void handleSave(item)}
+                  >
+                    {rowSaving ? '保存中...' : '保存'}
                   </button>
                 </div>
-              );
-            })}
-            {!labels.length ? <div className="admin-reference-soft-card p-5 text-sm text-black/48">{loading ? '加载中...' : '暂无厂牌数据。'}</div> : null}
-          </section>
-        ) : null}
 
-        {tab === 'rankings' ? (
-          <section className="space-y-4">
-            {rankingEntries.map((item) => {
-              let nextEntityId = item.entityId ?? '';
-              return (
-                <div key={`${item.boardId}-${item.year}-${item.rank}`} className="admin-reference-card p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[16px] font-semibold text-[#111827]">{item.boardTitle} · {item.year} · #{item.rank}</div>
-                      <div className="mt-1 text-sm text-black/52">{item.name}</div>
-                    </div>
-                    <span className="admin-reference-chip">{item.entityType}</span>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <input className="admin-reference-soft-card min-w-[320px] flex-1 px-4 py-3 text-sm" defaultValue={item.entityId ?? ''} placeholder="entityId" onChange={(event) => { nextEntityId = event.target.value; }} />
-                    <button type="button" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white" disabled={savingKey === `ranking-${item.boardId}-${item.year}-${item.rank}`} onClick={() => void saveRankingEntry(item, nextEntityId)}>
-                      {savingKey === `ranking-${item.boardId}-${item.year}-${item.rank}` ? '保存中...' : '保存 entityId'}
-                    </button>
-                  </div>
+                <div className="mt-4 grid gap-3 xl:grid-cols-4">
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.artist || ''}
+                    placeholder="艺人"
+                    onChange={(event) => updateDraft(item.rowId, { artist: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.title || ''}
+                    placeholder="曲名"
+                    onChange={(event) => updateDraft(item.rowId, { title: event.target.value })}
+                  />
+                  <select
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.status || item.status}
+                    onChange={(event) =>
+                      updateDraft(item.rowId, {
+                        status: event.target.value as UnreleasedTrackItem['status'],
+                      })
+                    }
+                  >
+                    <option value="id">id / unreleased</option>
+                    <option value="released">released</option>
+                    <option value="remix">remix</option>
+                    <option value="edit">edit</option>
+                  </select>
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.label || ''}
+                    placeholder="Label"
+                    onChange={(event) => updateDraft(item.rowId, { label: event.target.value })}
+                  />
                 </div>
-              );
-            })}
-            {!rankingEntries.length ? <div className="admin-reference-soft-card p-5 text-sm text-black/48">{loading ? '加载中...' : '暂无榜单条目数据。'}</div> : null}
-          </section>
-        ) : null}
+
+                <div className="mt-3 grid gap-3 xl:grid-cols-4">
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.releaseYear ?? ''}
+                    placeholder="Release Year"
+                    onChange={(event) =>
+                      updateDraft(item.rowId, {
+                        releaseYear: event.target.value ? Number(event.target.value) : null,
+                      })
+                    }
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.spotifyId || ''}
+                    placeholder="Spotify ID"
+                    onChange={(event) => updateDraft(item.rowId, { spotifyId: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.neteaseId || ''}
+                    placeholder="Netease ID"
+                    onChange={(event) => updateDraft(item.rowId, { neteaseId: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.spotifyUri || ''}
+                    placeholder="Spotify URI"
+                    onChange={(event) => updateDraft(item.rowId, { spotifyUri: event.target.value })}
+                  />
+                </div>
+
+                <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.spotifyUrl || ''}
+                    placeholder="Spotify URL"
+                    onChange={(event) => updateDraft(item.rowId, { spotifyUrl: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.appleMusicUrl || ''}
+                    placeholder="Apple Music URL"
+                    onChange={(event) => updateDraft(item.rowId, { appleMusicUrl: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.youtubeMusicUrl || ''}
+                    placeholder="YouTube Music URL"
+                    onChange={(event) => updateDraft(item.rowId, { youtubeMusicUrl: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.soundcloudUrl || ''}
+                    placeholder="SoundCloud URL"
+                    onChange={(event) => updateDraft(item.rowId, { soundcloudUrl: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.beatportUrl || ''}
+                    placeholder="Beatport URL"
+                    onChange={(event) => updateDraft(item.rowId, { beatportUrl: event.target.value })}
+                  />
+                  <input
+                    className="admin-reference-soft-card px-4 py-3 text-sm"
+                    value={draft.neteaseUrl || ''}
+                    placeholder="Netease URL"
+                    onChange={(event) => updateDraft(item.rowId, { neteaseUrl: event.target.value })}
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {!hasItems ? (
+            <div className="admin-reference-soft-card p-5 text-sm text-black/48">
+              {loading ? '加载中...' : '当前没有符合条件的未发布歌曲条目。'}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="admin-reference-card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div className="text-sm text-black/52">
+            共 {total} 条，当前第 {page} / {totalPages} 页
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm text-[#18211f]"
+              disabled={page <= 1 || loading}
+              onClick={() => void load(page - 1)}
+            >
+              上一页
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm text-[#18211f]"
+              disabled={page >= totalPages || loading}
+              onClick={() => void load(page + 1)}
+            >
+              下一页
+            </button>
+          </div>
+        </section>
       </section>
     </AdminContentLayout>
   );
