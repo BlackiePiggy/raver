@@ -1,12 +1,57 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import { labelStudioApi, type LabelStudioLoadedLabel } from '@/features/admin-content/label-studio';
 
 const formatNumber = (value?: number | null): string =>
-  typeof value === 'number' && Number.isFinite(value) ? new Intl.NumberFormat('zh-CN').format(value) : '未同步';
+  typeof value === 'number' && Number.isFinite(value) ? new Intl.NumberFormat('zh-CN').format(value) : 'Not synced';
+
+type LabelDetailTabKey = 'overview' | 'links' | 'genres';
+type LabelDirectorySortKey =
+  | 'followersDesc'
+  | 'likesDesc'
+  | 'nameAsc'
+  | 'nameDesc'
+  | 'nationAsc'
+  | 'nationDesc'
+  | 'latestReleaseDesc'
+  | 'latestReleaseAsc'
+  | 'createdAtDesc'
+  | 'createdAtAsc';
+
+const LABEL_DIRECTORY_SORT_OPTIONS: Array<{
+  value: LabelDirectorySortKey;
+  label: string;
+  sortBy: 'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt';
+  order: 'asc' | 'desc';
+}> = [
+  { value: 'followersDesc', label: 'Followers High to Low', sortBy: 'soundcloudFollowers', order: 'desc' },
+  { value: 'likesDesc', label: 'Likes High to Low', sortBy: 'likes', order: 'desc' },
+  { value: 'createdAtDesc', label: 'Newest Added', sortBy: 'createdAt', order: 'desc' },
+  { value: 'createdAtAsc', label: 'Oldest Added', sortBy: 'createdAt', order: 'asc' },
+  { value: 'latestReleaseDesc', label: 'Latest Release Z to A', sortBy: 'latestRelease', order: 'desc' },
+  { value: 'latestReleaseAsc', label: 'Latest Release A to Z', sortBy: 'latestRelease', order: 'asc' },
+  { value: 'nameAsc', label: 'Name A-Z', sortBy: 'name', order: 'asc' },
+  { value: 'nameDesc', label: 'Name Z-A', sortBy: 'name', order: 'desc' },
+  { value: 'nationAsc', label: 'Country A-Z', sortBy: 'nation', order: 'asc' },
+  { value: 'nationDesc', label: 'Country Z-A', sortBy: 'nation', order: 'desc' },
+];
+
+const LABEL_DETAIL_TABS: Array<{ key: LabelDetailTabKey; label: string }> = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'links', label: 'Links' },
+  { key: 'genres', label: 'Genres' },
+];
+
+const renderDetailText = (label: string, value?: string | null) => (
+  <div>
+    <span className="font-medium text-[#111827]">{label}: </span>
+    {value && value.trim() ? value : 'Not set'}
+  </div>
+);
 
 function LabelDetailOverlay({
   item,
@@ -21,34 +66,133 @@ function LabelDetailOverlay({
   error: string;
   onClose: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<LabelDetailTabKey>('overview');
+
+  useEffect(() => {
+    setActiveTab('overview');
+  }, [item?.id]);
+
   if (!item) return null;
 
   const resolved = detail ?? item;
   const heroImage = resolved.backgroundUrl || resolved.avatarUrl || resolved.logoUrl || '';
+  const linkItems = [
+    { label: 'Official', value: resolved.officialWebsiteUrl },
+    { label: 'Facebook', value: resolved.facebookUrl },
+    { label: 'SoundCloud', value: resolved.soundcloudUrl },
+    { label: 'Purchase', value: resolved.musicPurchaseUrl },
+    { label: 'Contact', value: resolved.generalContactEmail },
+    { label: 'Demo', value: resolved.demoSubmissionDisplay || resolved.demoSubmissionUrl },
+  ];
+
+  let tabContent: React.ReactNode = null;
+  if (loading) {
+    tabContent = (
+      <div className="rounded-[22px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
+        Loading full label details...
+      </div>
+    );
+  } else if (error) {
+    tabContent = (
+      <div className="rounded-[22px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-[#7a2d29]">
+        {error}
+      </div>
+    );
+  } else if (activeTab === 'overview') {
+    tabContent = (
+      <div className="space-y-5">
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="text-sm font-semibold text-[#111827]">Introduction</div>
+          <div className="mt-3 text-sm leading-7 text-[#4b5563]">
+            {resolved.introduction || resolved.introductionPreview || 'No introduction available.'}
+          </div>
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-2">
+          <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+            <div className="text-sm font-semibold text-[#111827]">Identity</div>
+            <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+              {renderDetailText('ID', resolved.id)}
+              {renderDetailText('Slug', resolved.slug)}
+              {renderDetailText('Nation', resolved.nation)}
+              {renderDetailText('Founded', resolved.foundedAt)}
+              {renderDetailText('Founder', resolved.founderName)}
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+            <div className="text-sm font-semibold text-[#111827]">Release Context</div>
+            <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+              {renderDetailText('Location Period', resolved.locationPeriod)}
+              {renderDetailText('Latest Release', resolved.latestReleaseListing)}
+              {renderDetailText('Profile URL', resolved.profileUrl)}
+              {renderDetailText('Profile Slug', resolved.profileSlug)}
+              {renderDetailText('Founder DJ ID', resolved.founderDjId)}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  } else if (activeTab === 'links') {
+    tabContent = (
+      <div className="grid gap-5 lg:grid-cols-2">
+        {linkItems.map((entry) => (
+          <section key={entry.label} className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+            <div className="text-sm font-semibold text-[#111827]">{entry.label}</div>
+            <div className="mt-3 break-all text-sm leading-7 text-[#4b5563]">{entry.value || 'Not set'}</div>
+          </section>
+        ))}
+      </div>
+    );
+  } else {
+    tabContent = (
+      <div className="space-y-5">
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="text-sm font-semibold text-[#111827]">Genres</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {resolved.genres.length ? (
+              resolved.genres.map((genre) => (
+                <span key={genre} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                  {genre}
+                </span>
+              ))
+            ) : (
+              <div className="text-sm text-[#6b7280]">No genres attached.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="text-sm font-semibold text-[#111827]">Genre Preview</div>
+          <div className="mt-3 text-sm leading-7 text-[#4b5563]">{resolved.genresPreview || 'No preview text.'}</div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div
-        className="relative max-h-[90vh] w-full max-w-[1040px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
+        className="relative max-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
-          aria-label="关闭厂牌详情"
+          aria-label="Close label detail"
         >
-          ×
+          脳
         </button>
 
-        <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[1.05fr_1.45fr]">
+        <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
             <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
               {heroImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={heroImage} alt={resolved.name} className="aspect-[1.25/1] w-full object-cover" />
               ) : (
-                <div className="flex aspect-[1.25/1] items-center justify-center text-sm text-[#7b8794]">暂无主视觉</div>
+                <div className="flex aspect-[1.25/1] items-center justify-center text-sm text-[#7b8794]">No visual available</div>
               )}
             </div>
 
@@ -63,18 +207,29 @@ function LabelDetailOverlay({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               {[
                 ['Followers', formatNumber(resolved.soundcloudFollowers)],
                 ['Likes', formatNumber(resolved.likes)],
                 ['Genres', resolved.genres.length.toLocaleString()],
-                ['Founder', resolved.founderName || '未设置'],
+                ['Founder', resolved.founderName || 'Not set'],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{label}</div>
-                  <div className="mt-2 text-xl font-semibold text-[#111827]">{value}</div>
+                  <div className="mt-2 text-base font-semibold text-[#111827]">{value}</div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#e8eceb] bg-white p-5">
+              <div className="text-sm font-semibold text-[#111827]">Basic Info</div>
+              <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                {renderDetailText('ID', resolved.id)}
+                {renderDetailText('Slug', resolved.slug)}
+                {renderDetailText('Nation', resolved.nation)}
+                {renderDetailText('Profile URL', resolved.profileUrl)}
+                {renderDetailText('Founded', resolved.foundedAt)}
+              </div>
             </div>
           </div>
 
@@ -82,71 +237,34 @@ function LabelDetailOverlay({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">Label Profile</div>
-                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">详细信息</div>
+                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">Label Detail</div>
               </div>
               <Link
                 href={`/admin/content/labels/${item.id}/edit`}
                 className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
               >
-                编辑厂牌
+                Edit Label
               </Link>
             </div>
 
-            {loading ? (
-              <div className="mt-6 rounded-[22px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
-                正在加载厂牌完整信息...
-              </div>
-            ) : error ? (
-              <div className="mt-6 rounded-[22px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-[#7a2d29]">
-                {error}
-              </div>
-            ) : (
-              <div className="mt-6 space-y-5">
-                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                  <div className="text-sm font-semibold text-[#111827]">简介</div>
-                  <div className="mt-3 text-sm leading-7 text-[#4b5563]">
-                    {resolved.introduction || resolved.introductionPreview || '暂无厂牌简介。'}
-                  </div>
-                </section>
+            <div className="mt-6 flex flex-wrap gap-2 rounded-[24px] border border-[#e8eceb] bg-white/70 p-2">
+              {LABEL_DETAIL_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`inline-flex h-[42px] items-center rounded-full px-4 text-sm font-semibold transition ${
+                    activeTab === tab.key
+                      ? 'bg-[#071110] text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]'
+                      : 'text-[#6b7280] hover:bg-white'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-                <section className="grid gap-5 lg:grid-cols-2">
-                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                    <div className="text-sm font-semibold text-[#111827]">基础资料</div>
-                    <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
-                      <div><span className="font-medium text-[#111827]">ID: </span>{resolved.id}</div>
-                      <div><span className="font-medium text-[#111827]">Slug: </span>{resolved.slug}</div>
-                      <div><span className="font-medium text-[#111827]">Profile Slug: </span>{resolved.profileSlug || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Profile URL: </span>{resolved.profileUrl || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Founded: </span>{resolved.foundedAt || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Founder DJ ID: </span>{resolved.founderDjId || '未设置'}</div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                    <div className="text-sm font-semibold text-[#111827]">链接与联系</div>
-                    <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
-                      <div><span className="font-medium text-[#111827]">Official: </span>{resolved.officialWebsiteUrl || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Facebook: </span>{resolved.facebookUrl || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">SoundCloud: </span>{resolved.soundcloudUrl || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Purchase: </span>{resolved.musicPurchaseUrl || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Contact: </span>{resolved.generalContactEmail || '未设置'}</div>
-                      <div><span className="font-medium text-[#111827]">Demo: </span>{resolved.demoSubmissionDisplay || resolved.demoSubmissionUrl || '未设置'}</div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                  <div className="text-sm font-semibold text-[#111827]">Genres</div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {resolved.genres.length ? resolved.genres.map((genre) => (
-                      <span key={genre} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
-                        {genre}
-                      </span>
-                    )) : <div className="text-sm text-[#6b7280]">暂无 genres。</div>}
-                  </div>
-                </section>
-              </div>
-            )}
+            <div className="mt-6">{tabContent}</div>
           </div>
         </div>
       </div>
@@ -160,6 +278,7 @@ export default function AdminContentLabelsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [inputValue, setInputValue] = useState('');
+  const [sortBy, setSortBy] = useState<LabelDirectorySortKey>('followersDesc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<LabelStudioLoadedLabel | null>(null);
@@ -168,19 +287,30 @@ export default function AdminContentLabelsPage() {
   const [selectedLabelError, setSelectedLabelError] = useState('');
   const [detailCache, setDetailCache] = useState<Record<string, LabelStudioLoadedLabel>>({});
 
+  const activeSortOption = useMemo(
+    () => LABEL_DIRECTORY_SORT_OPTIONS.find((item) => item.value === sortBy) ?? LABEL_DIRECTORY_SORT_OPTIONS[0],
+    [sortBy]
+  );
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await labelStudioApi.listLabels(page, 12, search);
+        const response = await labelStudioApi.listLabels(
+          page,
+          12,
+          search,
+          activeSortOption.sortBy,
+          activeSortOption.order
+        );
         if (cancelled) return;
         setItems(response.items);
         setTotalPages(response.pagination.totalPages || 1);
       } catch (loadError) {
         if (cancelled) return;
-        setError(loadError instanceof Error ? loadError.message : '加载厂牌失败');
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load labels.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -189,7 +319,7 @@ export default function AdminContentLabelsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, search]);
+  }, [activeSortOption.order, activeSortOption.sortBy, page, search]);
 
   const openDetailOverlay = async (item: LabelStudioLoadedLabel) => {
     setSelectedLabel(item);
@@ -208,7 +338,7 @@ export default function AdminContentLabelsPage() {
       setDetailCache((current) => ({ ...current, [item.id]: detail }));
       setSelectedLabelDetail(detail);
     } catch (detailError) {
-      setSelectedLabelError(detailError instanceof Error ? detailError.message : '厂牌详情加载失败');
+      setSelectedLabelError(detailError instanceof Error ? detailError.message : 'Failed to load label detail.');
     } finally {
       setSelectedLabelLoading(false);
     }
@@ -221,123 +351,182 @@ export default function AdminContentLabelsPage() {
     setSelectedLabelError('');
   };
 
+  const visiblePages = useMemo(() => {
+    const cappedTotal = Math.max(1, totalPages);
+    const start = Math.max(1, Math.min(cappedTotal - 4, page - 2));
+    const end = Math.min(cappedTotal, start + 4);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [page, totalPages]);
+
   return (
     <AdminContentLayout
-      title="厂牌工作区"
-      description="厂牌资料、视觉链接和官方渠道现在已经可以直接在网页后台中创建与编辑，并采用更接近参考后台的内容优先排版。"
+      title="Label Workspace"
+      description="Manage label metadata, channel links, and profile assets with the same detail overlay structure used by events."
       actions={
         <>
           <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回内容控制台
+            Back to Content
           </Link>
           <Link href="/admin/content/labels/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-            新建厂牌
+            New Label
           </Link>
         </>
       }
     >
       <section className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-4">
-          {[
-            { label: 'Label Studio', value: 'Live', note: '创建 / 编辑已接入', tone: 'bg-[#dff4a8]' },
-            { label: 'Visual Mode', value: 'URL', note: '视觉先走 URL 模式', tone: 'bg-[#f3e5a8]' },
-            { label: 'Paging', value: `${page}/${totalPages}`, note: '标准页码', tone: 'bg-[#f7c4c0]' },
-            { label: 'Results', value: String(items.length), note: '当前页数据', tone: 'bg-[#dbeefe]' },
-          ].map((item) => (
-            <div key={item.label} className={`admin-reference-pastel-card p-5 ${item.tone}`}>
-              <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">{item.label}</div>
-              <div className="mt-4 text-[34px] font-semibold tracking-[-0.04em] text-[#1a1a1a]">{item.value}</div>
-              <div className="mt-2 text-[13px] text-black/55">{item.note}</div>
-            </div>
-          ))}
-        </div>
-
         <section className="admin-reference-card p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
               <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">Label Directory</div>
-              <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">厂牌目录</h2>
+              <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">Label Directory</h2>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <input
-                value={inputValue}
-                onChange={(event) => setInputValue(event.target.value)}
-                className="admin-studio-input w-[260px]"
-                placeholder="搜索厂牌名称"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setPage(1);
-                  setSearch(inputValue.trim());
-                }}
-                className="admin-studio-button-secondary px-5 py-3 text-sm"
-              >
-                搜索
-              </button>
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <input
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  className="admin-studio-input min-w-0 flex-1"
+                  placeholder="Search label name"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPage(1);
+                    setSearch(inputValue.trim());
+                  }}
+                  className="admin-studio-button-secondary shrink-0 px-5 py-3 text-sm"
+                >
+                  Search
+                </button>
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Sort</div>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => {
+                      setPage(1);
+                      setSortBy(event.target.value as typeof sortBy);
+                    }}
+                    className="admin-studio-input min-w-[220px]"
+                  >
+                    {LABEL_DIRECTORY_SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f2] pb-4 text-sm text-black/48">
+            <div>
+              Current page: {page} / {totalPages}
+            </div>
+            <div>{items.length} records on this page</div>
+          </div>
+
           {loading ? (
-            <div className="mt-6 text-sm text-black/48">正在加载厂牌目录...</div>
+            <div className="mt-6 text-sm text-black/48">Loading label directory...</div>
           ) : error ? (
             <div className="admin-studio-pastel-rose mt-6 p-4 text-sm text-[#6a3530]">{error}</div>
           ) : (
-            <div className="mt-6 grid gap-4 xl:grid-cols-2">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => void openDetailOverlay(item)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      void openDetailOverlay(item);
-                    }
-                  }}
-                  className="admin-reference-soft-card cursor-pointer p-5 transition-colors hover:bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd]"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap gap-2">
-                        {item.nation ? <span className="admin-reference-chip">{item.nation}</span> : null}
-                        {item.genresPreview ? <span className="admin-reference-chip">{item.genresPreview}</span> : null}
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {items.map((item) => {
+                const avatarImage = item.avatarUrl || item.logoUrl || item.backgroundUrl || null;
+                const topGenres = item.genres.slice(0, 3);
+                return (
+                  <div
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void openDetailOverlay(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void openDetailOverlay(item);
+                      }
+                    }}
+                    className="admin-reference-soft-card cursor-pointer p-3.5 transition-colors hover:bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd]"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-[16px] border border-[#e8eceb] bg-[#eef1ef]">
+                        {avatarImage ? (
+                          <Image src={avatarImage} alt={item.name} fill className="object-cover" sizes="72px" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-black/35">
+                            {item.name.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
                       </div>
-                      <h3 className="mt-4 text-xl font-semibold tracking-[-0.02em] text-[#071110]">{item.name}</h3>
-                      <p className="mt-2 line-clamp-3 text-sm leading-7 text-black/48">
-                        {item.introductionPreview || item.introduction || '暂无厂牌简介'}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-[16px] font-semibold tracking-[-0.02em] text-[#071110]">{item.name}</h3>
+                          {item.nation ? <div className="mt-1 text-xs font-medium text-black/42">{item.nation}</div> : null}
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {topGenres.length ? (
+                              topGenres.map((genre) => (
+                                <span key={`${item.id}-${genre}`} className="admin-reference-chip">
+                                  {genre}
+                                </span>
+                              ))
+                            ) : item.genresPreview ? (
+                              <span className="admin-reference-chip">{item.genresPreview}</span>
+                            ) : (
+                              <span className="text-xs text-black/38">No style tags yet</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <Link
-                      href={`/admin/content/labels/${item.id}/edit`}
-                      onClick={(event) => event.stopPropagation()}
-                      className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
-                    >
-                      编辑厂牌
-                    </Link>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               disabled={page <= 1}
-              className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
+              className="admin-studio-button-secondary px-4 py-2 text-sm disabled:opacity-50"
             >
-              上一页
+              Previous
             </button>
+            {visiblePages.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                onClick={() => setPage(pageNumber)}
+                className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm font-semibold ${
+                  pageNumber === page ? 'bg-[#071110] text-white' : 'border border-[#e8eceb] bg-white text-[#111827]'
+                }`}
+              >
+                {pageNumber}
+              </button>
+            ))}
+            {totalPages > visiblePages[visiblePages.length - 1] ? (
+              <>
+                <span className="px-1 text-sm text-black/35">...</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  className="inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-sm font-semibold text-[#111827]"
+                >
+                  {totalPages}
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               disabled={page >= totalPages}
-              className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
+              className="admin-studio-button-secondary px-4 py-2 text-sm disabled:opacity-50"
             >
-              下一页
+              Next
             </button>
           </div>
         </section>

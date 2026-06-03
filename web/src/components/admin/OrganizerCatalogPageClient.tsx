@@ -135,31 +135,6 @@ const mergeById = <T extends { id: string }>(items: T[]): T[] => {
   });
 };
 
-function TabButton({
-  active,
-  label,
-  helper,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  helper: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`shrink-0 rounded-full px-4 py-2 text-left transition ${
-        active ? 'bg-[#071110] text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]' : 'text-[#6b7280] hover:bg-white'
-      }`}
-    >
-      <span className="block text-sm font-semibold leading-none">{label}</span>
-      <span className={`mt-1 block text-[11px] leading-none ${active ? 'text-white/70' : 'text-[#9aa1ad]'}`}>{helper}</span>
-    </button>
-  );
-}
-
 function EmptyTabState({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-[22px] border border-dashed border-[#d8dfdc] bg-white/70 px-5 py-8 text-center">
@@ -323,7 +298,7 @@ function OrganizerDetailOverlay({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div
-        className="relative max-h-[90vh] w-full max-w-[1040px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
+        className="relative max-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
         <button
@@ -335,7 +310,7 @@ function OrganizerDetailOverlay({
           ×
         </button>
 
-        <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[1.05fr_1.45fr]">
+        <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
             <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
               <div className="relative aspect-[1.25/1]">
@@ -359,7 +334,7 @@ function OrganizerDetailOverlay({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               {[
                 ['Aliases', aliases.length],
                 ['Links', links.length],
@@ -371,6 +346,17 @@ function OrganizerDetailOverlay({
                   <div className="mt-2 text-xl font-semibold text-[#111827]">{String(value)}</div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#e8eceb] bg-white p-5">
+              <div className="text-sm font-semibold text-[#111827]">Basic Info</div>
+              <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                <div><span className="font-medium text-[#111827]">ID: </span>{resolved?.id || item.id}</div>
+                <div><span className="font-medium text-[#111827]">City: </span>{resolved?.city || item.city || 'Not set'}</div>
+                <div><span className="font-medium text-[#111827]">Country: </span>{resolved?.country || item.country || 'Not set'}</div>
+                <div><span className="font-medium text-[#111827]">Updated At: </span>{formatDateTime(item.updatedAt)}</div>
+                <div><span className="font-medium text-[#111827]">Created At: </span>{formatDateTime(item.createdAt)}</div>
+              </div>
             </div>
           </div>
 
@@ -388,15 +374,20 @@ function OrganizerDetailOverlay({
               </Link>
             </div>
 
-            <div className="mt-5 flex gap-2 overflow-x-auto rounded-full border border-[#e8eceb] bg-white/70 p-1">
+            <div className="mt-6 flex flex-wrap gap-2 rounded-[24px] border border-[#e8eceb] bg-white/70 p-2">
               {ORGANIZER_TABS.map((tab) => (
-                <TabButton
+                <button
                   key={tab.key}
-                  active={activeTab === tab.key}
-                  label={tab.label}
-                  helper={tab.helper}
+                  type="button"
                   onClick={() => setActiveTab(tab.key)}
-                />
+                  className={`inline-flex h-[42px] items-center rounded-full px-4 text-sm font-semibold transition ${
+                    activeTab === tab.key
+                      ? 'bg-[#071110] text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]'
+                      : 'text-[#6b7280] hover:bg-white'
+                  }`}
+                >
+                  {tab.label}
+                </button>
               ))}
             </div>
 

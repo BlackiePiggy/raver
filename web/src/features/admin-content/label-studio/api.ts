@@ -15,10 +15,18 @@ type LabelListEnvelope = {
 };
 
 export const labelStudioApi = {
-  async listLabels(page = 1, limit = 12, search = ''): Promise<LabelStudioListResponse> {
+  async listLabels(
+    page = 1,
+    limit = 12,
+    search = '',
+    sortBy: 'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt' = 'soundcloudFollowers',
+    order: 'asc' | 'desc' = 'desc'
+  ): Promise<LabelStudioListResponse> {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(limit),
+      sortBy,
+      order,
     });
     if (search.trim()) params.set('search', search.trim());
     const payload = await authenticatedJsonFetch<LabelListEnvelope>(

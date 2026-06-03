@@ -17,8 +17,8 @@ export type DJStudioImageState = {
 export type DJStudioDraft = {
   id: string;
   name: DJStudioLocalizedText;
-  aliasesText: string;
-  genresText: string;
+  aliases: string[];
+  genres: string[];
   bio: DJStudioLocalizedText;
   country: DJStudioLocalizedText;
   avatarImage: DJStudioImageState | null;

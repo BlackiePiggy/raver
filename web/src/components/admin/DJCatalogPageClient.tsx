@@ -484,7 +484,7 @@ function DJDetailOverlay({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div
-        className="relative max-h-[90vh] w-full max-w-[980px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
+        className="relative max-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
         <button
@@ -496,7 +496,7 @@ function DJDetailOverlay({
           ×
         </button>
 
-        <div className="grid max-h-[90vh] overflow-y-auto lg:grid-cols-[1.05fr_1.35fr]">
+        <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
             <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
               <div className="relative aspect-[1.2/1]">
@@ -543,7 +543,7 @@ function DJDetailOverlay({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">平台粉丝</div>
                 <div className="mt-2 text-xl font-semibold text-[#111827]">
@@ -569,6 +569,17 @@ function DJDetailOverlay({
                 </div>
               </div>
             </div>
+
+            <div className="mt-5 rounded-[22px] border border-[#e8eceb] bg-white p-5">
+              <div className="text-sm font-semibold text-[#111827]">Basic Info</div>
+              <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
+                {detailText('ID', resolved?.id || item.id)}
+                {detailText('Country', countryDisplay.label)}
+                {detailText('Slug', resolved?.slug)}
+                {detailText('Updated At', formatDateTime(item.updatedAt))}
+                {detailText('Created At', formatDateTime(item.createdAt))}
+              </div>
+            </div>
           </div>
 
           <div className="p-6">
@@ -585,22 +596,19 @@ function DJDetailOverlay({
               </Link>
             </div>
 
-            <div className="mt-5 flex gap-2 overflow-x-auto rounded-full border border-[#e8eceb] bg-white/70 p-1">
+            <div className="mt-6 flex flex-wrap gap-2 rounded-[24px] border border-[#e8eceb] bg-white/70 p-2">
               {DJ_DETAIL_TABS.map((tab) => (
                 <button
                   key={tab.key}
                   type="button"
                   onClick={() => setActiveTab(tab.key)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-left transition ${
+                  className={`inline-flex h-[42px] items-center rounded-full px-4 text-sm font-semibold transition ${
                     activeTab === tab.key
                       ? 'bg-[#071110] text-white shadow-[0_8px_20px_rgba(7,17,16,0.16)]'
                       : 'text-[#6b7280] hover:bg-white'
                   }`}
                 >
-                  <span className="block text-sm font-semibold leading-none">{tab.label}</span>
-                  <span className={`mt-1 block text-[11px] leading-none ${activeTab === tab.key ? 'text-white/70' : 'text-[#9aa1ad]'}`}>
-                    {tab.helper}
-                  </span>
+                  {tab.label}
                 </button>
               ))}
             </div>

@@ -25,9 +25,8 @@ const normalizedLocalizedText = (
   return next.zh || next.en || next.ja || next.enFull ? next : null;
 };
 
-const splitLines = (value: string): string[] => {
+const normalizeStringArray = (value: string[]): string[] => {
   const items = value
-    .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
   return Array.from(new Set(items));
@@ -44,8 +43,8 @@ export const mapDJStudioDraftToCreateInput = (draft: DJStudioDraft): DJStudioCre
   name: primaryText(draft.name),
   nameI18n: normalizedLocalizedText(draft.name),
   spotifyId: trimOrNull(draft.spotifyId),
-  aliases: splitLines(draft.aliasesText),
-  genres: splitLines(draft.genresText),
+  aliases: normalizeStringArray(draft.aliases),
+  genres: normalizeStringArray(draft.genres),
   bio: trimOrNull(primaryText(draft.bio)),
   bioI18n: normalizedLocalizedText(draft.bio),
   country: trimOrNull(primaryText(draft.country)),
@@ -76,8 +75,8 @@ export const mapDJStudioDraftToCreateInput = (draft: DJStudioDraft): DJStudioCre
 export const mapDJStudioDraftToUpdateInput = (draft: DJStudioDraft): DJStudioUpdateInput => ({
   name: trimOrNull(primaryText(draft.name)),
   nameI18n: normalizedLocalizedText(draft.name),
-  aliases: splitLines(draft.aliasesText),
-  genres: splitLines(draft.genresText),
+  aliases: normalizeStringArray(draft.aliases),
+  genres: normalizeStringArray(draft.genres),
   bio: trimOrNull(primaryText(draft.bio)),
   bioI18n: normalizedLocalizedText(draft.bio),
   avatarUrl: trimOrNull(draft.avatarImage?.remoteUrl),

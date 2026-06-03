@@ -813,7 +813,7 @@ const tests: TestCase[] = [
 
       const draft = hydrateDJStudioDraftFromDJ(dj);
       assert.equal(draft.name.zh, "Anyma");
-      assert.equal(draft.aliasesText, "Matteo\nAnyma Project");
+      assert.deepEqual(draft.aliases, ["Matteo", "Anyma Project"]);
       assert.equal(draft.avatarImage?.remoteUrl, "https://cdn.example.com/dj/avatar.jpg");
       assert.equal(draft.bannerImage?.remoteUrl, "https://cdn.example.com/dj/banner.jpg");
       assert.equal(draft.spotifyId, "spotify_anyma");

@@ -31,6 +31,7 @@ import {
 } from '@/features/admin-content/catalog/cache';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import type { EventStudioLoadedEvent } from '@/features/admin-content/event-studio/types';
+import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 
 const PAGE_SIZE = 10;
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -160,6 +161,59 @@ const formatMaybeDate = (value?: string | null): string => {
   }).format(new Date(value));
 };
 
+const ISO_DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_WALL_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{1,2}:\d{2}/;
+const ISO_INSTANT_ZONE_PATTERN = /Z$|[+-]\d{2}:\d{2}$/;
+
+const formatLogicalDateInEventTimeZone = (
+  value?: string | null,
+  timeZone?: string | null,
+  fallback = '未设置'
+): string => {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  if (ISO_DATE_ONLY_PATTERN.test(text)) return text;
+  if (ISO_WALL_TIME_PATTERN.test(text) && !ISO_INSTANT_ZONE_PATTERN.test(text)) return text.slice(0, 10);
+  return formatDateInputInTimeZone(text, normalizeDisplayTimeZone(timeZone)) || fallback;
+};
+
+const formatDateRangeInEventTimeZone = (
+  item: Pick<EventCatalogItem, 'startDate' | 'endDate'>,
+  timeZone?: string | null
+): string => `${formatLogicalDateInEventTimeZone(item.startDate, timeZone)} - ${formatLogicalDateInEventTimeZone(item.endDate, timeZone)}`;
+
+const formatDateTimeInEventTimeZone = (
+  value?: string | null,
+  timeZone?: string | null,
+  fallback = '未记录'
+): string => {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  if (ISO_DATE_ONLY_PATTERN.test(text)) return text;
+  if (ISO_WALL_TIME_PATTERN.test(text) && !ISO_INSTANT_ZONE_PATTERN.test(text)) {
+    return `${text.slice(0, 10)} ${text.slice(11, 16)}`;
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: normalizeDisplayTimeZone(timeZone),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+};
+
+const formatClockTimeInEventTimeZone = (value?: string | null, timeZone?: string | null): string => {
+  const text = String(value || '').trim();
+  if (!text) return '--:--';
+  if (/^\d{2}:\d{2}$/.test(text)) return text;
+  if (ISO_WALL_TIME_PATTERN.test(text) && !ISO_INSTANT_ZONE_PATTERN.test(text)) return text.slice(11, 16);
+  return formatClockTimeInTimeZone(text, normalizeDisplayTimeZone(timeZone)) || '--:--';
+};
+
 const detailText = (label: string, value?: string | number | null) => (
   <div>
     <span className="font-medium text-[#111827]">{label}: </span>
@@ -167,15 +221,51 @@ const detailText = (label: string, value?: string | number | null) => (
   </div>
 );
 
-type EventDetailTabKey = 'overview' | 'schedule' | 'lineup' | 'tickets' | 'media';
+type EventDetailTabKey = 'overview' | 'lineup' | 'timetable' | 'tickets' | 'schedule' | 'media';
 
 const EVENT_DETAIL_TABS: Array<{ key: EventDetailTabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
-  { key: 'schedule', label: 'Schedule' },
   { key: 'lineup', label: 'Lineup' },
+  { key: 'timetable', label: 'Timetable' },
   { key: 'tickets', label: 'Tickets' },
-  { key: 'media', label: 'Media' },
 ];
+
+const countDateSpanDays = (start?: string | null, end?: string | null): number => {
+  if (!start || !end) return 0;
+  const startTime = new Date(start).getTime();
+  const endTime = new Date(end).getTime();
+  if (Number.isNaN(startTime) || Number.isNaN(endTime) || endTime < startTime) return 0;
+  return Math.floor((endTime - startTime) / (24 * 60 * 60 * 1000)) + 1;
+};
+
+const extractClockText = (value?: string | null): string => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '--:--';
+  const match = trimmed.match(/(\d{1,2}:\d{2})/);
+  if (!match) return '--:--';
+  const [hours, minutes] = match[1].split(':');
+  return `${hours.padStart(2, '0')}:${minutes}`;
+};
+
+const clockToMinutes = (value?: string | null): number => {
+  const clock = extractClockText(value);
+  if (clock === '--:--') return Number.MAX_SAFE_INTEGER;
+  const [hours, minutes] = clock.split(':').map((item) => Number(item));
+  return hours * 60 + minutes;
+};
+
+const normalizeStageName = (value?: string | null): string => {
+  const trimmed = String(value || '').trim();
+  return trimmed || 'Main Stage';
+};
+
+const stageKey = (value?: string | null): string => normalizeStageName(value).toLowerCase();
+
+const formatActTypeLabel = (value?: string | null): string => {
+  if (value === 'b2b') return 'B2B';
+  if (value === 'b3b') return 'B3B';
+  return 'Solo';
+};
 
 function EventDetailOverlay({
   item,
@@ -194,6 +284,8 @@ function EventDetailOverlay({
 }) {
   const [activeTab, setActiveTab] = useState<EventDetailTabKey>('overview');
   const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
+  const [selectedTimetableWeekIndex, setSelectedTimetableWeekIndex] = useState(1);
+  const [selectedTimetableDayId, setSelectedTimetableDayId] = useState('');
 
   useEffect(() => {
     if (!item) return;
@@ -208,27 +300,127 @@ function EventDetailOverlay({
     void onRequestLoadDetail();
   }, [activeTab, detail, error, item, loading, onRequestLoadDetail]);
 
-  if (!item) return null;
+  const safeItem = item ?? ({
+    id: '',
+    name: '',
+    slug: '',
+    startDate: '',
+    endDate: '',
+    updatedAt: '',
+    city: '',
+    country: '',
+    status: 'ended',
+    timeZone: '',
+    eventType: '',
+    organizerName: '',
+    eventDays: [],
+  } as EventCatalogItem);
 
   const resolved = detail ?? null;
-  const state = resolveEventStatus(item);
+  const state = resolveEventStatus(safeItem);
   const primaryName =
-    firstFilledText(resolved?.nameI18n?.zh, resolved?.nameI18n?.en, resolved?.name, item.name) || item.name;
+    firstFilledText(resolved?.nameI18n?.zh, resolved?.nameI18n?.en, resolved?.name, safeItem.name) || safeItem.name;
   const description = firstFilledText(resolved?.description);
   const imageAssets = sortedByOrder(resolved?.imageAssets);
   const posterAsset = imageAssets.find((asset) => ['poster', 'cover'].includes(String(asset.type || '').toLowerCase()));
-  const heroImage = resolved?.coverImageUrl || posterAsset?.url || item.coverImageUrl || resolved?.lineupImageUrl || '';
+  const heroImage = resolved?.coverImageUrl || posterAsset?.url || safeItem.coverImageUrl || resolved?.lineupImageUrl || '';
   const weeks = sortedByOrder(resolved?.weeks);
   const eventDays = sortedByOrder(resolved?.eventDays);
   const lineupArtists = sortedByOrder(resolved?.lineupArtists);
   const timetableSlots = sortedByOrder(resolved?.timetableSlots ?? resolved?.lineupSlots);
   const ticketTiers = sortedByOrder(resolved?.ticketTiers);
   const stageOrder = compactStringList(resolved?.stageOrder);
-  const cityCountry = [resolved?.city ?? item.city, resolved?.country ?? item.country].filter(Boolean).join(', ');
-  const timeZone = resolved?.schedule?.timeZone || resolved?.timeZone || item.timeZone || '未设置';
-  const eventTypeLabel = resolved?.eventType || item.eventType || '未设置';
-  const organizerLabel = resolved?.organizerName || item.wikiFestival?.name || item.organizerName || '未绑定主办方';
+  const cityCountry = [resolved?.city ?? safeItem.city, resolved?.country ?? safeItem.country].filter(Boolean).join(', ');
+  const timeZone = resolved?.schedule?.timeZone || resolved?.timeZone || safeItem.timeZone || '未设置';
+  const eventTypeLabel = resolved?.eventType || safeItem.eventType || '未设置';
+  const organizerLabel = resolved?.organizerName || safeItem.wikiFestival?.name || safeItem.organizerName || '未绑定主办方';
   const activePreviewAsset = previewAssetIndex !== null ? imageAssets[previewAssetIndex] : null;
+  const scheduleCards =
+    weeks.length > 1
+      ? weeks.map((week, index) => ({
+          title: week.label || `Week ${week.weekIndex ?? index + 1}`,
+          range: `${formatLogicalDateInEventTimeZone(week.startDate, timeZone)} - ${formatLogicalDateInEventTimeZone(week.endDate, timeZone)}`,
+          daysLabel: `${eventDays.filter((day) => (day.weekIndex ?? 1) === (week.weekIndex ?? index + 1)).length || countDateSpanDays(week.startDate, week.endDate)} days`,
+        }))
+      : [
+          {
+            title:
+              (eventDays.length || safeItem.eventDays?.length || countDateSpanDays(safeItem.startDate, safeItem.endDate) || 1) > 1
+                ? 'Date Span'
+                : 'Event Date',
+            range: `${formatLogicalDateInEventTimeZone(eventDays[0]?.date || safeItem.startDate, timeZone)} - ${formatLogicalDateInEventTimeZone(eventDays[eventDays.length - 1]?.date || safeItem.endDate, timeZone)}`,
+            daysLabel: `${eventDays.length || safeItem.eventDays?.length || countDateSpanDays(safeItem.startDate, safeItem.endDate) || 1} days`,
+          },
+        ];
+  const timetableWeeks = useMemo(
+    () =>
+      weeks.length
+        ? weeks
+        : eventDays.length
+          ? [
+              {
+                weekIndex: eventDays[0]?.weekIndex ?? 1,
+                label: 'Week 1',
+                startDate: eventDays[0]?.date || safeItem.startDate,
+                endDate: eventDays[eventDays.length - 1]?.date || safeItem.endDate,
+              },
+            ]
+          : [],
+    [eventDays, safeItem.endDate, safeItem.startDate, weeks]
+  );
+
+  useEffect(() => {
+    const firstWeekIndex = timetableWeeks[0]?.weekIndex ?? eventDays[0]?.weekIndex ?? 1;
+    const hasCurrentWeek = timetableWeeks.some((week) => (week.weekIndex ?? 1) === selectedTimetableWeekIndex);
+    if (!hasCurrentWeek) {
+      setSelectedTimetableWeekIndex(firstWeekIndex);
+    }
+
+    const firstDayInWeek =
+      eventDays.find((day) => day.weekIndex === (hasCurrentWeek ? selectedTimetableWeekIndex : firstWeekIndex)) || eventDays[0];
+    const hasCurrentDay = eventDays.some((day) => day.eventDayId === selectedTimetableDayId);
+    if (!hasCurrentDay) {
+      setSelectedTimetableDayId(firstDayInWeek?.eventDayId || '');
+    }
+  }, [eventDays, selectedTimetableDayId, selectedTimetableWeekIndex, timetableWeeks]);
+
+  if (!item) return null;
+
+  const selectedTimetableDay =
+    eventDays.find((day) => day.eventDayId === selectedTimetableDayId) ||
+    eventDays.find((day) => day.weekIndex === selectedTimetableWeekIndex) ||
+    eventDays[0] ||
+    null;
+  const visibleTimetableDays = eventDays.filter((day) =>
+    timetableWeeks.length > 1 ? day.weekIndex === selectedTimetableWeekIndex : true
+  );
+  const visibleTimetableSlots = [...timetableSlots]
+    .filter((slot) =>
+      selectedTimetableDay
+        ? slot.eventDayId === selectedTimetableDay.eventDayId ||
+          slot.localDate === selectedTimetableDay.date ||
+          slot.overallDayIndex === selectedTimetableDay.overallDayIndex
+        : true
+    )
+    .sort((left, right) => {
+      const leftMinutes =
+        clockToMinutes(left.startTime) + Math.max(0, Number((left as { startDayOffset?: number | null }).startDayOffset) || 0) * 24 * 60;
+      const rightMinutes =
+        clockToMinutes(right.startTime) + Math.max(0, Number((right as { startDayOffset?: number | null }).startDayOffset) || 0) * 24 * 60;
+      const adjustedLeft = leftMinutes < 6 * 60 ? leftMinutes + 24 * 60 : leftMinutes;
+      const adjustedRight = rightMinutes < 6 * 60 ? rightMinutes + 24 * 60 : rightMinutes;
+      return adjustedLeft - adjustedRight;
+    });
+  const visibleStageOrder = Array.from(
+    new Set([...stageOrder.map(normalizeStageName), ...visibleTimetableSlots.map((slot) => normalizeStageName(slot.stageName))])
+  );
+  if (!visibleStageOrder.length) {
+    visibleStageOrder.push('Main Stage');
+  }
+  const timetableStageColumns = visibleStageOrder.map((stage) => ({
+    stage,
+    slots: visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)),
+  }));
 
   let tabContent: React.ReactNode = null;
   if (activeTab === 'overview') {
@@ -257,17 +449,61 @@ function EventDetailOverlay({
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Date Range</div>
-                <div className="mt-2 text-sm font-semibold text-[#111827]">{formatDateRange(item)}</div>
+                <div className="mt-2 text-sm font-semibold text-[#111827]">{formatDateRangeInEventTimeZone(safeItem, timeZone)}</div>
               </div>
               <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Event Days</div>
-                <div className="mt-2 text-sm font-semibold text-[#111827]">{(item.eventDays?.length ?? 0).toLocaleString()}</div>
+                <div className="mt-2 text-sm font-semibold text-[#111827]">
+                  {(eventDays.length || safeItem.eventDays?.length || countDateSpanDays(safeItem.startDate, safeItem.endDate) || 1).toLocaleString()}
+                </div>
               </div>
               <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 sm:col-span-2">
                 <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Location</div>
                 <div className="mt-2 text-sm font-semibold text-[#111827]">{formatLocation(item)}</div>
               </div>
             </div>
+          </div>
+        </section>
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-[#111827]">Date Distribution</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">
+              {scheduleCards.length > 1 ? `${scheduleCards.length} weeks` : scheduleCards[0]?.daysLabel}
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {scheduleCards.map((card) => (
+              <div key={`${card.title}-${card.range}`} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
+                <div className="text-sm font-semibold text-[#111827]">{card.title}</div>
+                <div className="mt-2 text-sm text-[#4b5563]">{card.range}</div>
+                <div className="mt-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#8a919d]">{card.daysLabel}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-[#111827]">Media Assets</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{imageAssets.length} assets</div>
+          </div>
+          <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-3">
+            {imageAssets.map((asset, index) => (
+              <button
+                key={`${asset.url}-${index}`}
+                type="button"
+                onClick={() => setPreviewAssetIndex(index)}
+                className="overflow-hidden rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] text-left transition hover:bg-white"
+              >
+                <div className="relative h-[112px] w-full bg-[#eef1f3]">
+                  <Image src={asset.url} alt={asset.label || asset.type || 'event asset'} fill className="object-cover" sizes="220px" />
+                </div>
+                <div className="space-y-1 px-3 py-2">
+                  <div className="truncate text-xs font-semibold text-[#111827]">{asset.label || asset.fileName || 'Asset'}</div>
+                  <div className="truncate text-[11px] text-[#6b7280]">{asset.type || 'unknown type'}</div>
+                </div>
+              </button>
+            ))}
+            {!imageAssets.length ? <div className="text-sm text-[#6b7280]">No media assets.</div> : null}
           </div>
         </section>
       </div>
@@ -304,13 +540,13 @@ function EventDetailOverlay({
           {weeks.map((week) => (
             <div key={`${week.weekIndex}-${week.startDate}`} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
               <div className="font-semibold text-[#111827]">{week.label || `Week ${week.weekIndex}`}</div>
-              <div className="mt-1">{formatMaybeDate(week.startDate)} - {formatMaybeDate(week.endDate)}</div>
+              <div className="mt-1">{formatLogicalDateInEventTimeZone(week.startDate, timeZone)} - {formatLogicalDateInEventTimeZone(week.endDate, timeZone)}</div>
             </div>
           ))}
           {eventDays.map((day) => (
             <div key={day.eventDayId} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
               <div className="font-semibold text-[#111827]">{day.label || `Day ${day.overallDayIndex}`}</div>
-              <div className="mt-1">{formatMaybeDate(day.date)} {day.weekday ? `· ${day.weekday}` : ''}</div>
+              <div className="mt-1">{formatLogicalDateInEventTimeZone(day.date, timeZone)} {day.weekday ? `· ${day.weekday}` : ''}</div>
             </div>
           ))}
           {!weeks.length && !eventDays.length ? <div className="text-sm text-[#6b7280]">暂无 weeks / eventDays。</div> : null}
@@ -318,6 +554,141 @@ function EventDetailOverlay({
       </section>
     );
   } else if (activeTab === 'lineup') {
+    tabContent = (
+      <div className="space-y-5">
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-[#111827]">Lineup Artists</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{lineupArtists.length} artists</div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {lineupArtists.map((artist, index) => (
+              <span key={artist.id || `${artist.djName}-${index}`} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                {artist.djName || compactStringList(artist.memberNames).join(' / ') || 'Unnamed'}
+              </span>
+            ))}
+            {!lineupArtists.length ? <span className="text-sm text-[#6b7280]">No lineup artists.</span> : null}
+          </div>
+        </section>
+        <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
+          <div className="text-sm font-semibold text-[#111827]">Stage Order</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {stageOrder.map((stage) => (
+              <span key={stage} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
+                {stage}
+              </span>
+            ))}
+            {!stageOrder.length ? <span className="text-sm text-[#6b7280]">No explicit stage order.</span> : null}
+          </div>
+        </section>
+      </div>
+    );
+  } else if (activeTab === 'timetable') {
+    tabContent = (
+      <section className="space-y-5">
+        <div className="admin-event-timetable-board">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-[#111827]">Timetable</div>
+              <div className="mt-1 text-xs uppercase tracking-[0.12em] text-[#8a919d]">
+                {visibleStageOrder.length} stages · {visibleTimetableSlots.length} slots
+              </div>
+            </div>
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8a919d]">{timeZone}</div>
+          </div>
+
+          {timetableWeeks.length > 1 ? (
+            <div className="mt-4 flex flex-wrap gap-3">
+              {timetableWeeks.map((week) => (
+                <button
+                  key={`${week.weekIndex}-${week.startDate}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTimetableWeekIndex(week.weekIndex ?? 1);
+                    const nextDay = eventDays.find((day) => day.weekIndex === (week.weekIndex ?? 1));
+                    if (nextDay) setSelectedTimetableDayId(nextDay.eventDayId);
+                  }}
+                  className={`admin-event-timetable-tab ${(week.weekIndex ?? 1) === selectedTimetableWeekIndex ? 'is-active' : ''}`}
+                >
+                  <span>{week.label || `Week ${week.weekIndex ?? 1}`}</span>
+                  <b>
+                    {formatLogicalDateInEventTimeZone(week.startDate, timeZone)} - {formatLogicalDateInEventTimeZone(week.endDate, timeZone)} · {eventDays.filter((day) => day.weekIndex === (week.weekIndex ?? 1)).length} days
+                  </b>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {visibleTimetableDays.length > 1 ? (
+            <div className="mt-4 flex flex-wrap gap-3">
+              {visibleTimetableDays.map((day) => (
+                <button
+                  key={day.eventDayId}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTimetableWeekIndex(day.weekIndex);
+                    setSelectedTimetableDayId(day.eventDayId);
+                  }}
+                  className={`admin-event-day-tab ${day.eventDayId === selectedTimetableDay?.eventDayId ? 'is-active' : ''}`}
+                >
+                  <span>{day.label || `Day ${day.overallDayIndex}`}</span>
+                  <b>{formatLogicalDateInEventTimeZone(day.date, timeZone)}</b>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-5">
+            <div
+              className={`admin-event-legacy-stages-wrap ${timetableStageColumns.length >= 4 ? 'is-scrollable' : ''}`}
+              style={timetableStageColumns.length < 4 ? { gridTemplateColumns: `repeat(${Math.max(1, timetableStageColumns.length)}, minmax(0, 1fr))` } : undefined}
+            >
+              {timetableStageColumns.map(({ stage, slots }) => (
+                <div key={stage} className="admin-event-legacy-stage-col">
+                  <div className="admin-event-legacy-stage-head">
+                    <span>{stage}</span>
+                    <b>{slots.length} slots</b>
+                  </div>
+                  <div className="admin-event-legacy-slot-list">
+                    {slots.length ? (
+                      slots.map((slot, index) => (
+                        <div key={slot.id || `${stage}-${slot.localDate}-${index}`} className="admin-event-legacy-slot is-confirmed">
+                          <span className="admin-event-legacy-slot-time">{`${formatClockTimeInEventTimeZone(slot.startTime, timeZone)} - ${formatClockTimeInEventTimeZone(slot.endTime, timeZone)}`}</span>
+                          <strong className="admin-event-legacy-slot-title">
+                            <span className="admin-event-legacy-slot-performers">
+                              {(slot.djName
+                                ? [{ key: `${slot.djName}-${index}`, label: slot.djName, isBound: Boolean((slot as { djId?: string | null }).djId) }]
+                                : compactStringList(slot.memberNames).map((name, performerIndex) => ({
+                                    key: `${name}-${performerIndex}`,
+                                    label: name,
+                                    isBound: Boolean((slot as { memberDjIds?: Array<string | null> | null }).memberDjIds?.[performerIndex]),
+                                  }))
+                              ).map((performer) => (
+                                <span key={performer.key} className="admin-event-legacy-slot-performer">
+                                  <span className="admin-event-legacy-slot-performer-name">{performer.label || 'Unnamed'}</span>
+                                  {performer.isBound ? <span className="admin-event-legacy-slot-bound-badge">Bound DJ</span> : null}
+                                </span>
+                              ))}
+                            </span>
+                          </strong>
+                          <span className="admin-event-legacy-slot-meta">
+                            <span>{formatActTypeLabel((slot as { actType?: string | null }).actType)}</span>
+                            <span>{formatLogicalDateInEventTimeZone(slot.localDate || selectedTimetableDay?.date, timeZone, 'No date')}</span>
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-5 text-sm text-[#6b7280]">No timetable slots on this stage for the current day.</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  } else if ((activeTab as string) === 'lineup_legacy') {
     tabContent = (
       <div className="space-y-5">
         <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
@@ -480,11 +851,11 @@ function EventDetailOverlay({
               <div className="text-sm font-semibold text-[#111827]">基础信息</div>
               <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
                 {detailText('ID', item.id)}
-                {detailText('开始日期', formatMaybeDate(item.startDate))}
-                {detailText('结束日期', formatMaybeDate(item.endDate))}
+                {detailText('开始日期', formatLogicalDateInEventTimeZone(item.startDate, timeZone))}
+                {detailText('结束日期', formatLogicalDateInEventTimeZone(item.endDate, timeZone))}
                 {detailText('Organizer', organizerLabel)}
                 {detailText('Location', cityCountry || formatLocation(item))}
-                {detailText('Updated At', formatDateTime(item.updatedAt))}
+                {detailText('Updated At', formatDateTimeInEventTimeZone(item.updatedAt, timeZone))}
               </div>
             </div>
           </div>
@@ -533,9 +904,15 @@ function EventDetailOverlay({
         </div>
 
         {activePreviewAsset ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6" onClick={() => setPreviewAssetIndex(null)}>
+          <div
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-6"
+            onClick={(event) => {
+              event.stopPropagation();
+              setPreviewAssetIndex(null);
+            }}
+          >
             <div
-              className="relative w-full max-w-[980px] overflow-hidden rounded-[28px] border border-white/10 bg-[#101414] shadow-[0_30px_120px_rgba(0,0,0,0.45)]"
+              className="relative flex h-full w-full max-w-[1440px] overflow-hidden rounded-[28px] border border-white/10 bg-[#101414] shadow-[0_30px_120px_rgba(0,0,0,0.45)]"
               onClick={(event) => event.stopPropagation()}
             >
               <button
@@ -546,17 +923,17 @@ function EventDetailOverlay({
               >
                 ×
               </button>
-              <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="grid h-full w-full gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
                 <div className="relative min-h-[480px] bg-black">
                   <Image
                     src={activePreviewAsset.url}
                     alt={activePreviewAsset.label || activePreviewAsset.type || 'event asset preview'}
                     fill
                     className="object-contain"
-                    sizes="1200px"
+                    sizes="1600px"
                   />
                 </div>
-                <div className="space-y-3 bg-[#111827] p-5 text-white">
+                <div className="space-y-3 overflow-y-auto bg-[#111827] p-6 text-white">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-white/45">Media Detail</div>
                   <div className="text-lg font-semibold">{activePreviewAsset.label || activePreviewAsset.fileName || 'Asset'}</div>
                   <div className="text-sm text-white/70">{activePreviewAsset.type || 'unknown type'}</div>
@@ -976,12 +1353,6 @@ export default function EventCatalogPageClient() {
             <div className="pl-7">
               <StatCard label="已取消" value={statusCounts.cancelled} dotClassName="bg-[#ef4444]" />
             </div>
-          </div>
-          <div className="mt-4 grid gap-2 rounded-[22px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563] md:grid-cols-2 xl:grid-cols-4">
-            <div><span className="font-semibold text-[#111827]">即将开始</span>：后端状态为 `upcoming` 的活动。</div>
-            <div><span className="font-semibold text-[#111827]">正在进行</span>：后端状态为 `ongoing` 的活动。</div>
-            <div><span className="font-semibold text-[#111827]">已结束</span>：后端状态为 `ended`，以及未命中其他三态时按已结束显示的活动。</div>
-            <div><span className="font-semibold text-[#111827]">已取消</span>：后端状态为 `cancelled` 的活动。</div>
           </div>
         </section>
 

@@ -24,8 +24,8 @@ const fromNullableLocalizedText = (
 export const createDJStudioDraft = (initialName = ''): DJStudioDraft => ({
   id: crypto.randomUUID(),
   name: emptyLocalizedText(initialName),
-  aliasesText: '',
-  genresText: '',
+  aliases: [''],
+  genres: [''],
   bio: emptyLocalizedText(),
   country: emptyLocalizedText(),
   avatarImage: null,
@@ -54,8 +54,8 @@ export const createDJStudioDraft = (initialName = ''): DJStudioDraft => ({
 export const hydrateDJStudioDraftFromDJ = (dj: DJStudioLoadedDJ): DJStudioDraft => ({
   id: crypto.randomUUID(),
   name: fromNullableLocalizedText(dj.nameI18n, dj.name),
-  aliasesText: (dj.aliases ?? []).join('\n'),
-  genresText: (dj.genres ?? []).join('\n'),
+  aliases: (dj.aliases ?? []).length ? [...(dj.aliases ?? [])] : [''],
+  genres: (dj.genres ?? []).length ? [...(dj.genres ?? [])] : [''],
   bio: fromNullableLocalizedText(dj.bioI18n, dj.bio ?? ''),
   country: fromNullableLocalizedText(dj.countryI18n, dj.country ?? ''),
   avatarImage: dj.avatarUrl

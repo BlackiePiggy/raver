@@ -1379,8 +1379,8 @@ export default function ReviewSubmissionsPageClient() {
             <div className="py-24 text-center text-sm text-black/48">请选择左侧的一条提交查看详情。</div>
           ) : (
             <div className="space-y-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+                <div className="admin-reference-soft-card p-5">
                   <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Submission Detail</div>
                   <h2 className="mt-2 text-3xl font-semibold text-[#071110]">{selectedDetail.title}</h2>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-black/45">
@@ -1390,7 +1390,41 @@ export default function ReviewSubmissionsPageClient() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="admin-reference-card grid gap-3 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Review Actions</div>
+                      <div className="mt-2 text-2xl font-semibold text-[#071110]">Quick Review</div>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        canReview ? 'bg-[#e8f6ec] text-[#24613a]' : 'bg-[#f3f4f6] text-[#6b7280]'
+                      }`}
+                    >
+                      {canReview ? 'Reviewable' : 'Completed'}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <button
+                      type="button"
+                      disabled={!canReview || submittingDecision}
+                      onClick={() => void handleDecision('approved')}
+                      className="rounded-full bg-[#2f7d4a] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(47,125,74,0.22)] transition-colors hover:bg-[#286b3f] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canReview || submittingDecision}
+                      onClick={() => void handleDecision('rejected')}
+                      className="rounded-full bg-[#b63a3a] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(182,58,58,0.2)] transition-colors hover:bg-[#9f3030] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Reject
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                   {detailEditLink ? (
                     <Link href={detailEditLink} className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]">
                       打开实体编辑页
@@ -1431,7 +1465,7 @@ export default function ReviewSubmissionsPageClient() {
                 </div>
               ) : null}
 
-              <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
                 <div className="admin-reference-dark-card p-5">
                   <div className="text-sm text-white/45">Review Decision</div>
                   <h3 className="mt-2 text-2xl font-semibold text-white">基础审核动作</h3>
@@ -1503,23 +1537,8 @@ export default function ReviewSubmissionsPageClient() {
                     />
                   </label>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      disabled={!canReview || submittingDecision}
-                      onClick={() => void handleDecision('approved')}
-                      className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      审核通过
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!canReview || submittingDecision}
-                      onClick={() => void handleDecision('rejected')}
-                      className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      拒绝提交
-                    </button>
+                  <div className="mt-4 rounded-[20px] border border-white/10 bg-white/6 px-4 py-3 text-sm leading-6 text-white/60">
+                    Use the top-right action card to submit approve or reject. Keep this area for reason templates and reviewer notes.
                   </div>
                 </div>
 
@@ -1656,6 +1675,7 @@ export default function ReviewSubmissionsPageClient() {
                   ))}
                 </div>
               </div>
+            </div>
             </div>
           )}
         </section>
