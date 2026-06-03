@@ -574,12 +574,8 @@ export default function AdminContentNewsPage() {
       }
     >
       <section className="space-y-5">
-        <section className="admin-reference-card p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">最新资讯</h2>
-            </div>
-            <div className="grid w-full gap-3 lg:min-w-[920px] lg:grid-cols-[minmax(260px,1.35fr)_minmax(220px,0.78fr)_minmax(220px,0.78fr)_minmax(240px,0.85fr)]">
+        <section className="rounded-[28px] border border-[#edf0f2] bg-white p-6 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
+          <div className="grid w-full gap-3 lg:min-w-[920px] lg:grid-cols-[minmax(260px,1.35fr)_minmax(220px,0.78fr)_minmax(220px,0.78fr)_minmax(240px,0.85fr)]">
               <label className="block">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-black/38">Search</div>
                 <AdminSearchField
@@ -643,7 +639,6 @@ export default function AdminContentNewsPage() {
                   ))}
                 </select>
               </label>
-            </div>
           </div>
 
           {loading ? (
@@ -651,9 +646,9 @@ export default function AdminContentNewsPage() {
           ) : error ? (
             <div className="admin-studio-pastel-rose mt-6 p-4 text-sm text-[#6a3530]">{error}</div>
           ) : (
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white">
               {items.map((item) => (
-                <div
+                <article
                   key={item.id}
                   role="button"
                   tabIndex={0}
@@ -664,14 +659,14 @@ export default function AdminContentNewsPage() {
                       void openDetailOverlay(item);
                     }
                   }}
-                  className="admin-reference-soft-card cursor-pointer p-3 transition-colors hover:bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd]"
+                  className="flex cursor-pointer flex-col gap-4 px-6 py-5 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-6"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-[18px] border border-[#e8eceb] bg-[#eef1f0]">
+                  <div className="flex min-w-0 flex-1 gap-4">
+                    <div className="relative h-[110px] w-[180px] shrink-0 overflow-hidden rounded-[16px] bg-[#f3f5f7]">
                       {item.coverImageURL ? (
-                        <Image src={item.coverImageURL} alt={item.title} fill className="object-cover" sizes="120px" />
+                        <Image src={item.coverImageURL} alt={item.title} fill className="object-cover" sizes="180px" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-black/25">
+                        <div className="flex h-full w-full items-center justify-center text-sm text-[#9ca3af]">
                           NEWS
                         </div>
                       )}
@@ -686,19 +681,19 @@ export default function AdminContentNewsPage() {
                         <div className="hidden text-[11px] text-black/36 md:block">{formatDateTime(item.publishedAt)}</div>
                       </div>
 
-                      <h3 className="mt-2 truncate text-[17px] font-semibold tracking-[-0.02em] text-[#071110]">
+                      <h3 className="mt-2 truncate text-[20px] font-semibold tracking-[-0.025em] text-[#111827]">
                         {item.title}
                       </h3>
-                      <p className="mt-1 line-clamp-2 text-[13px] leading-6 text-black/50">
+                      <p className="mt-2.5 line-clamp-2 text-[13px] leading-6 text-[#7d8592]">
                         {item.summary || item.body || '暂无摘要。'}
                       </p>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-2 self-start">
+                    <div className="flex shrink-0 items-center gap-2.5 self-start lg:self-center">
                       <Link
                         href={`/admin/content/news/${item.id}/edit`}
                         onClick={(event) => event.stopPropagation()}
-                        className="rounded-full bg-[#071110] px-4 py-2.5 text-sm font-semibold text-white"
+                        className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#071110] px-6 text-[14px] font-semibold text-white shadow-[0_6px_16px_rgba(7,17,16,0.15)]"
                       >
                         编辑
                       </Link>
@@ -709,14 +704,14 @@ export default function AdminContentNewsPage() {
                             event.stopPropagation();
                             setMenuOpenNewsId((current) => (current === item.id ? null : item.id));
                           }}
-                          className="inline-flex h-[40px] w-[40px] items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+                          className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white text-[#111827]"
                           aria-label="More actions"
                         >
-                          <Ellipsis className="h-4 w-4" />
+                          <Ellipsis className="h-5 w-5" />
                         </button>
                         {menuOpenNewsId === item.id ? (
                           <div
-                            className="absolute right-0 top-[48px] z-20 min-w-[140px] rounded-[16px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                            className="absolute right-0 top-[52px] z-20 min-w-[148px] rounded-[18px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
                             onClick={(event) => event.stopPropagation()}
                           >
                             <button
@@ -731,11 +726,11 @@ export default function AdminContentNewsPage() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </article>
               ))}
 
               {!items.length ? (
-                <div className="admin-reference-soft-card p-6 text-sm text-black/48">当前筛选条件下没有匹配的资讯。</div>
+                <div className="px-6 py-20 text-center text-sm text-black/48">当前筛选条件下没有匹配的资讯。</div>
               ) : null}
             </div>
           )}
