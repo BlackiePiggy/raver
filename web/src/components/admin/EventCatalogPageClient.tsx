@@ -17,6 +17,7 @@ import {
   Users2,
 } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
   adminCatalogApi,
   AdminCatalogPagination,
@@ -334,7 +335,6 @@ function EventDetailOverlay({
   const timeZone = resolved?.schedule?.timeZone || resolved?.timeZone || safeItem.timeZone || '未设置';
   const eventTypeLabel = resolved?.eventType || safeItem.eventType || '未设置';
   const organizerLabel = resolved?.organizerName || safeItem.wikiFestival?.name || safeItem.organizerName || '未绑定主办方';
-  const activePreviewAsset = previewAssetIndex !== null ? imageAssets[previewAssetIndex] : null;
   const scheduleCards =
     weeks.length > 1
       ? weeks.map((week, index) => ({
@@ -417,6 +417,13 @@ function EventDetailOverlay({
   if (!visibleStageOrder.length) {
     visibleStageOrder.push('Main Stage');
   }
+  const previewAssets: OverlayImageViewerAsset[] = imageAssets.map((asset) => ({
+    url: asset.url,
+    alt: asset.label || asset.type || 'event asset',
+    title: asset.label || asset.fileName || 'Asset',
+    subtitle: asset.type || 'unknown type',
+    fileName: asset.fileName || undefined,
+  }));
   const timetableStageColumns = visibleStageOrder.map((stage) => ({
     stage,
     slots: visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)),
@@ -598,7 +605,8 @@ function EventDetailOverlay({
           </div>
 
           {timetableWeeks.length > 1 ? (
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 overflow-x-auto pb-2">
+              <div className="flex min-w-max gap-3">
               {timetableWeeks.map((week) => (
                 <button
                   key={`${week.weekIndex}-${week.startDate}`}
@@ -616,11 +624,13 @@ function EventDetailOverlay({
                   </b>
                 </button>
               ))}
+              </div>
             </div>
           ) : null}
 
           {visibleTimetableDays.length > 1 ? (
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 overflow-x-auto pb-2">
+              <div className="flex min-w-max gap-3">
               {visibleTimetableDays.map((day) => (
                 <button
                   key={day.eventDayId}
@@ -635,10 +645,11 @@ function EventDetailOverlay({
                   <b>{formatLogicalDateInEventTimeZone(day.date, timeZone)}</b>
                 </button>
               ))}
+              </div>
             </div>
           ) : null}
 
-          <div className="mt-5">
+          <div className="mt-5 overflow-x-auto pb-2">
             <div
               className={`admin-event-legacy-stages-wrap ${timetableStageColumns.length >= 4 ? 'is-scrollable' : ''}`}
               style={timetableStageColumns.length < 4 ? { gridTemplateColumns: `repeat(${Math.max(1, timetableStageColumns.length)}, minmax(0, 1fr))` } : undefined}
@@ -903,18 +914,48 @@ function EventDetailOverlay({
           </div>
         </div>
 
-        {activePreviewAsset ? (
+        <OverlayImageViewer
+          assets={previewAssets}
+          activeIndex={previewAssetIndex}
+          onClose={() => setPreviewAssetIndex(null)}
+          onChange={setPreviewAssetIndex}
+        />
+        {/*
           <div
-            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-6"
-            onClick={(event) => {
-              event.stopPropagation();
-              setPreviewAssetIndex(null);
-            }}
-          >
             <div
               className="relative flex h-full w-full max-w-[1440px] overflow-hidden rounded-[28px] border border-white/10 bg-[#101414] shadow-[0_30px_120px_rgba(0,0,0,0.45)]"
               onClick={(event) => event.stopPropagation()}
             >
+              {hasPreviewCarousel ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPreviewAssetIndex((current) => {
+                        if (current === null) return current;
+                        return current === 0 ? imageAssets.length - 1 : current - 1;
+                      })
+                    }
+                    className="absolute left-4 top-1/2 z-10 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white transition hover:bg-black/60"
+                    aria-label="Previous media asset"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPreviewAssetIndex((current) => {
+                        if (current === null) return current;
+                        return current === imageAssets.length - 1 ? 0 : current + 1;
+                      })
+                    }
+                    className="absolute right-[316px] top-1/2 z-10 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white transition hover:bg-black/60"
+                    aria-label="Next media asset"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setPreviewAssetIndex(null)}
@@ -938,12 +979,17 @@ function EventDetailOverlay({
                   <div className="text-lg font-semibold">{activePreviewAsset.label || activePreviewAsset.fileName || 'Asset'}</div>
                   <div className="text-sm text-white/70">{activePreviewAsset.type || 'unknown type'}</div>
                   {activePreviewAsset.fileName ? <div className="break-all text-sm text-white/70">{activePreviewAsset.fileName}</div> : null}
+                  {hasPreviewCarousel ? (
+                    <div className="rounded-[18px] border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                      {previewAssetIndex !== null ? `${previewAssetIndex + 1} / ${imageAssets.length}` : null}
+                    </div>
+                  ) : null}
                   <div className="pt-2 text-xs text-white/45">单击图片外部区域可关闭预览。</div>
                 </div>
               </div>
             </div>
           </div>
-        ) : null}
+        */}
       </div>
     </div>
   );

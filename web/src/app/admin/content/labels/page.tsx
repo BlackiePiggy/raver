@@ -2,8 +2,10 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import { labelStudioApi, type LabelStudioLoadedLabel } from '@/features/admin-content/label-studio';
 
 const formatNumber = (value?: number | null): string =>
@@ -67,15 +69,41 @@ function LabelDetailOverlay({
   onClose: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<LabelDetailTabKey>('overview');
+  const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveTab('overview');
+    setPreviewAssetIndex(null);
   }, [item?.id]);
 
   if (!item) return null;
 
   const resolved = detail ?? item;
-  const heroImage = resolved.backgroundUrl || resolved.avatarUrl || resolved.logoUrl || '';
+  const bannerImage = resolved.backgroundUrl || '';
+  const avatarImage = resolved.avatarUrl || resolved.logoUrl || '';
+  const heroImage = bannerImage || avatarImage || '';
+  const previewAssets: OverlayImageViewerAsset[] = [
+    ...(bannerImage
+      ? [
+          {
+            url: bannerImage,
+            alt: `${resolved.name} banner`,
+            title: 'Banner',
+            subtitle: 'Label banner',
+          },
+        ]
+      : []),
+    ...(avatarImage
+      ? [
+          {
+            url: avatarImage,
+            alt: `${resolved.name} avatar`,
+            title: 'Avatar',
+            subtitle: 'Label avatar',
+          },
+        ]
+      : []),
+  ];
   const linkItems = [
     { label: 'Official', value: resolved.officialWebsiteUrl },
     { label: 'Facebook', value: resolved.facebookUrl },
@@ -187,23 +215,52 @@ function LabelDetailOverlay({
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
-            <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
+            <button
+              type="button"
+              onClick={() => {
+                if (previewAssets.length) setPreviewAssetIndex(0);
+              }}
+              className="block w-full overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9] text-left"
+            >
               {heroImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={heroImage} alt={resolved.name} className="aspect-[1.25/1] w-full object-cover" />
+                <div className="relative aspect-[1.25/1] w-full">
+                  <Image src={heroImage} alt={resolved.name} fill className="object-cover" sizes="900px" />
+                </div>
               ) : (
                 <div className="flex aspect-[1.25/1] items-center justify-center text-sm text-[#7b8794]">No visual available</div>
               )}
-            </div>
+            </button>
 
             <div className="-mt-10 px-4">
-              <div className="rounded-[24px] border border-[#e8eceb] bg-white/96 p-5 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
-                <div className="flex flex-wrap gap-2">
+              <div className="flex items-end gap-4 rounded-[24px] border border-[#e8eceb] bg-white/96 p-5 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const avatarIndex = previewAssets.findIndex((asset) => asset.url === avatarImage);
+                    if (avatarIndex >= 0) setPreviewAssetIndex(avatarIndex);
+                  }}
+                  className="flex h-[92px] w-[92px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] bg-[#f1f4f6]"
+                >
+                  {avatarImage ? (
+                    <Image
+                      src={avatarImage}
+                      alt={resolved.name}
+                      width={92}
+                      height={92}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-[#9aa1ad]">No avatar</span>
+                  )}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap gap-2">
                   {resolved.nation ? <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">{resolved.nation}</span> : null}
                   {resolved.genresPreview ? <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">{resolved.genresPreview}</span> : null}
+                  </div>
+                  <div className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{resolved.name}</div>
+                  <div className="mt-2 text-sm font-medium text-[#6b7280]">{resolved.locationPeriod || resolved.slug}</div>
                 </div>
-                <div className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{resolved.name}</div>
-                <div className="mt-2 text-sm font-medium text-[#6b7280]">{resolved.locationPeriod || resolved.slug}</div>
               </div>
             </div>
 
@@ -268,6 +325,12 @@ function LabelDetailOverlay({
           </div>
         </div>
       </div>
+      <OverlayImageViewer
+        assets={previewAssets}
+        activeIndex={previewAssetIndex}
+        onClose={() => setPreviewAssetIndex(null)}
+        onChange={setPreviewAssetIndex}
+      />
     </div>
   );
 }
@@ -286,6 +349,10 @@ export default function AdminContentLabelsPage() {
   const [selectedLabelLoading, setSelectedLabelLoading] = useState(false);
   const [selectedLabelError, setSelectedLabelError] = useState('');
   const [detailCache, setDetailCache] = useState<Record<string, LabelStudioLoadedLabel>>({});
+  const [menuOpenLabelId, setMenuOpenLabelId] = useState<string | null>(null);
+  const [pendingDeleteLabel, setPendingDeleteLabel] = useState<LabelStudioLoadedLabel | null>(null);
+  const [deletingLabelId, setDeletingLabelId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   const activeSortOption = useMemo(
     () => LABEL_DIRECTORY_SORT_OPTIONS.find((item) => item.value === sortBy) ?? LABEL_DIRECTORY_SORT_OPTIONS[0],
@@ -321,7 +388,31 @@ export default function AdminContentLabelsPage() {
     };
   }, [activeSortOption.order, activeSortOption.sortBy, page, search]);
 
+  useEffect(() => {
+    if (!menuOpenLabelId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!actionMenuRef.current) return;
+      if (event.target instanceof Node && actionMenuRef.current.contains(event.target)) return;
+      setMenuOpenLabelId(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpenLabelId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenLabelId]);
+
   const openDetailOverlay = async (item: LabelStudioLoadedLabel) => {
+    setMenuOpenLabelId(null);
     setSelectedLabel(item);
     setSelectedLabelError('');
     const cached = detailCache[item.id];
@@ -345,10 +436,39 @@ export default function AdminContentLabelsPage() {
   };
 
   const closeDetailOverlay = () => {
+    setMenuOpenLabelId(null);
     setSelectedLabel(null);
     setSelectedLabelDetail(null);
     setSelectedLabelLoading(false);
     setSelectedLabelError('');
+  };
+
+  const requestDeleteLabel = (item: LabelStudioLoadedLabel) => {
+    setMenuOpenLabelId(null);
+    setPendingDeleteLabel(item);
+  };
+
+  const confirmDeleteLabel = async () => {
+    if (!pendingDeleteLabel) return;
+    const labelId = pendingDeleteLabel.id;
+    try {
+      setDeletingLabelId(labelId);
+      await labelStudioApi.deleteLabel(labelId);
+      setItems((current) => current.filter((item) => item.id !== labelId));
+      if (selectedLabel?.id === labelId) {
+        closeDetailOverlay();
+      }
+      setPendingDeleteLabel(null);
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[labelId];
+        return next;
+      });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除厂牌失败，请稍后重试。');
+    } finally {
+      setDeletingLabelId(null);
+    }
   };
 
   const visiblePages = useMemo(() => {
@@ -480,6 +600,33 @@ export default function AdminContentLabelsPage() {
                           </div>
                         </div>
                       </div>
+                      <div className="relative ml-auto shrink-0" ref={menuOpenLabelId === item.id ? actionMenuRef : null}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setMenuOpenLabelId((current) => (current === item.id ? null : item.id));
+                          }}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+                          aria-label="More actions"
+                        >
+                          <Ellipsis className="h-4 w-4" />
+                        </button>
+                        {menuOpenLabelId === item.id ? (
+                          <div
+                            className="absolute right-0 top-[44px] z-20 min-w-[140px] rounded-[16px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => requestDeleteLabel(item)}
+                              className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
+                            >
+                              删除厂牌
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 );
@@ -539,6 +686,39 @@ export default function AdminContentLabelsPage() {
         error={selectedLabelError}
         onClose={closeDetailOverlay}
       />
+      {pendingDeleteLabel ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" onClick={() => setPendingDeleteLabel(null)}>
+          <div
+            className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">删除厂牌</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这个厂牌吗？</div>
+            <p className="mt-3 text-sm leading-6 text-[#6b7280]">
+              {pendingDeleteLabel.name}
+              <br />
+              删除后将无法恢复，请再次确认这是你要执行的操作。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteLabel(null)}
+                className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteLabel()}
+                disabled={deletingLabelId === pendingDeleteLabel.id}
+                className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingLabelId === pendingDeleteLabel.id ? '删除中...' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminContentLayout>
   );
 }

@@ -131,6 +131,15 @@ export const organizerStudioApi = {
     return { kind: 'created', organizer };
   },
 
+  async deleteOrganizer(id: string): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(
+      getApiUrl(`/v1/learn/festivals/${id}`),
+      {
+        method: 'DELETE',
+      }
+    );
+  },
+
   async fetchOrganizer(id: string): Promise<OrganizerStudioLoadedOrganizer> {
     return authenticatedJsonFetch<OrganizerStudioLoadedOrganizer>(
       getApiUrl(`/v1/learn/festivals/${id}`)

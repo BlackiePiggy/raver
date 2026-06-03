@@ -77,4 +77,10 @@ export const labelStudioApi = {
       },
     };
   },
+
+  async deleteLabel(id: string): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(getApiUrl(`/v1/learn/labels/${id}`), {
+      method: 'DELETE',
+    });
+  },
 };

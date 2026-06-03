@@ -15812,6 +15812,66 @@ const normalizeGenreKeyArtistsInput = (value: unknown): string[] => {
   return out;
 };
 
+const parseGenreSortOrder = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.floor(parsed);
+};
+
+const uniqueGenreSlug = async (name: string, requestedSlug?: string, excludeId?: string | null): Promise<string> => {
+  const base = slugify(requestedSlug || name) || `genre-${Date.now()}`;
+  let candidate = base;
+  let seq = 1;
+  while (true) {
+    const existing = await prisma.genre.findUnique({
+      where: { slug: candidate },
+      select: { id: true },
+    });
+    if (!existing || (excludeId && existing.id === excludeId)) {
+      return candidate;
+    }
+    seq += 1;
+    candidate = `${base}-${seq}`;
+  }
+};
+
+const buildGenrePath = (parentPath: string | null, slug: string): string =>
+  parentPath ? `${parentPath}/${slug}` : slug;
+
+const updateGenreSubtreePaths = async (
+  tx: Prisma.TransactionClient,
+  genreId: string,
+  nextPath: string
+): Promise<void> => {
+  const children = await tx.genre.findMany({
+    where: { parentId: genreId },
+    select: { id: true, slug: true },
+  });
+
+  for (const child of children) {
+    const childPath = buildGenrePath(nextPath, child.slug);
+    await tx.genre.update({
+      where: { id: child.id },
+      data: { path: childPath },
+    });
+    await updateGenreSubtreePaths(tx, child.id, childPath);
+  }
+};
+
+const ensureGenreDeleteSafe = async (genreId: string): Promise<void> => {
+  const [childCount, bindingCount] = await Promise.all([
+    prisma.genre.count({ where: { parentId: genreId } }),
+    prisma.dJGenreBinding.count({ where: { genreId } }),
+  ]);
+  if (childCount > 0) {
+    throw new Error('请先删除或移动子流派节点');
+  }
+  if (bindingCount > 0) {
+    throw new Error('该流派仍然绑定了 DJ，不能直接删除');
+  }
+};
+
 const selectGenreDJLite = {
   id: true,
   name: true,
@@ -16346,6 +16406,240 @@ router.post('/learn/genres/key-artists/auto-match', optionalAuth, async (_req: R
   } catch (error) {
     console.error('BFF web auto match genre key artists error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/genres/admin/nodes', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+    const parentId = typeof body.parentId === 'string' && body.parentId.trim() ? body.parentId.trim() : null;
+    const parent = parentId
+      ? await prisma.genre.findUnique({
+          where: { id: parentId },
+          select: { id: true, path: true },
+        })
+      : null;
+    if (parentId && !parent) {
+      res.status(404).json({ error: 'Parent genre not found' });
+      return;
+    }
+
+    const slug = await uniqueGenreSlug(name, typeof body.slug === 'string' ? body.slug.trim() : undefined);
+    const path = buildGenrePath(parent?.path ?? null, slug);
+    const siblingCount = await prisma.genre.count({ where: { parentId } });
+    const sortOrder = parseGenreSortOrder(body.sortOrder) ?? siblingCount;
+
+    const created = await prisma.genre.create({
+      data: {
+        name,
+        slug,
+        path,
+        parentId,
+        sortOrder,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        path: true,
+        description: true,
+        descriptionI18n: true,
+        example: true,
+        exampleI18n: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
+        keyArtists: true,
+        keyArtistBindings: true,
+        parentId: true,
+        sortOrder: true,
+      },
+    });
+
+    ok(res, {
+      id: created.id,
+      name: created.name,
+      slug: created.slug,
+      path: created.path,
+      description: created.description ?? '',
+      descriptionI18n: resolveTriTextWithFallback(created.descriptionI18n ?? null, created.description ?? ''),
+      example: created.example ?? '',
+      exampleI18n: resolveTriTextWithFallback(created.exampleI18n ?? null, created.example ?? ''),
+      spotifyTrackURL: created.spotifyTrackUrl ?? '',
+      wikipediaURL: created.wikipediaUrl ?? '',
+      keyArtists: created.keyArtists,
+      keyArtistBindings: normalizeGenreKeyArtistBindings(created.keyArtists, created.keyArtistBindings),
+      parentId: created.parentId,
+      sortOrder: created.sortOrder,
+    });
+  } catch (error) {
+    console.error('BFF web create genre node error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Internal server error' });
+  }
+});
+
+router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const genreId = req.params.id as string;
+    const existing = await prisma.genre.findUnique({
+      where: { id: genreId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        path: true,
+        parentId: true,
+        sortOrder: true,
+        description: true,
+        descriptionI18n: true,
+        example: true,
+        exampleI18n: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
+        keyArtists: true,
+        keyArtistBindings: true,
+      },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Genre not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const nextName = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : existing.name;
+    const hasParentField = Object.prototype.hasOwnProperty.call(body, 'parentId');
+    const nextParentId = hasParentField
+      ? (typeof body.parentId === 'string' && body.parentId.trim() ? body.parentId.trim() : null)
+      : existing.parentId;
+    if (nextParentId === existing.id) {
+      res.status(400).json({ error: 'parentId cannot point to self' });
+      return;
+    }
+
+    const parent = nextParentId
+      ? await prisma.genre.findUnique({
+          where: { id: nextParentId },
+          select: { id: true, path: true },
+        })
+      : null;
+    if (nextParentId && !parent) {
+      res.status(404).json({ error: 'Parent genre not found' });
+      return;
+    }
+    if (parent && (parent.path === existing.path || parent.path.startsWith(`${existing.path}/`))) {
+      res.status(400).json({ error: '不能把父节点移动到自己的子树下' });
+      return;
+    }
+
+    const nextSlug = Object.prototype.hasOwnProperty.call(body, 'slug') || nextName !== existing.name
+      ? await uniqueGenreSlug(nextName, typeof body.slug === 'string' ? body.slug.trim() : undefined, existing.id)
+      : existing.slug;
+    const nextSortOrder = Object.prototype.hasOwnProperty.call(body, 'sortOrder')
+      ? (parseGenreSortOrder(body.sortOrder) ?? existing.sortOrder)
+      : existing.sortOrder;
+    const nextPath = buildGenrePath(parent?.path ?? null, nextSlug);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.genre.update({
+        where: { id: existing.id },
+        data: {
+          name: nextName,
+          slug: nextSlug,
+          parentId: nextParentId,
+          sortOrder: nextSortOrder,
+          path: nextPath,
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          path: true,
+          description: true,
+          descriptionI18n: true,
+          example: true,
+          exampleI18n: true,
+          spotifyTrackUrl: true,
+          wikipediaUrl: true,
+          keyArtists: true,
+          keyArtistBindings: true,
+          parentId: true,
+          sortOrder: true,
+        },
+      });
+      if (row.path !== existing.path) {
+        await updateGenreSubtreePaths(tx, row.id, row.path);
+      }
+      return row;
+    });
+
+    ok(res, {
+      id: updated.id,
+      name: updated.name,
+      slug: updated.slug,
+      path: updated.path,
+      description: updated.description ?? '',
+      descriptionI18n: resolveTriTextWithFallback(updated.descriptionI18n ?? null, updated.description ?? ''),
+      example: updated.example ?? '',
+      exampleI18n: resolveTriTextWithFallback(updated.exampleI18n ?? null, updated.example ?? ''),
+      spotifyTrackURL: updated.spotifyTrackUrl ?? '',
+      wikipediaURL: updated.wikipediaUrl ?? '',
+      keyArtists: updated.keyArtists,
+      keyArtistBindings: normalizeGenreKeyArtistBindings(updated.keyArtists, updated.keyArtistBindings),
+      parentId: updated.parentId,
+      sortOrder: updated.sortOrder,
+    });
+  } catch (error) {
+    console.error('BFF web update genre node error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Internal server error' });
+  }
+});
+
+router.delete('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const genreId = req.params.id as string;
+    const existing = await prisma.genre.findUnique({
+      where: { id: genreId },
+      select: { id: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Genre not found' });
+      return;
+    }
+
+    await ensureGenreDeleteSafe(genreId);
+    await prisma.genre.delete({ where: { id: genreId } });
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete genre node error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Internal server error' });
   }
 });
 
@@ -17210,6 +17504,58 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
   }
 });
 
+router.delete('/learn/labels/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    const viewerRole = authReq.user?.role ?? null;
+
+    if (!canBypassContentReview(viewerRole)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const labelId = String(req.params.id || '').trim();
+    if (!labelId) {
+      res.status(400).json({ error: 'Label ID is required' });
+      return;
+    }
+
+    const target = await prisma.label.findUnique({
+      where: { id: labelId },
+      select: {
+        id: true,
+        logoUrl: true,
+        avatarUrl: true,
+        backgroundUrl: true,
+      },
+    });
+    if (!target) {
+      res.status(404).json({ error: 'Label not found' });
+      return;
+    }
+
+    const urlsToDelete = [
+      target.logoUrl,
+      target.avatarUrl,
+      target.backgroundUrl,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    await prisma.label.delete({ where: { id: labelId } });
+    for (const url of urlsToDelete) {
+      await mediaAssetService.markDeletedByUrl(url);
+      await deleteSingleWikiBrandOssObjectIfOwned(url, labelId);
+    }
+    await deleteWikiBrandOssFolder(labelId);
+
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete learn label error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/learn/rankings', async (_req: Request, res: Response): Promise<void> => {
   try {
     const boards = await loadRankingBoardsFromDB();
@@ -17628,6 +17974,353 @@ router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (
     });
   } catch (error) {
     console.error('BFF web upsert ranking year error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/admin/identifiers/organizers', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const where: Prisma.WikiFestivalWhereInput = {
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { country: { contains: search, mode: 'insensitive' } },
+              { city: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      prisma.wikiFestival.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          sourceRowId: true,
+          country: true,
+          city: true,
+        },
+      }),
+      prisma.wikiFestival.count({ where }),
+    ]);
+
+    ok(res, { items }, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (error) {
+    console.error('BFF web identifier organizers list error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/admin/identifiers/organizers/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const id = req.params.id as string;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const sourceRowId = body.sourceRowId === null || body.sourceRowId === ''
+      ? null
+      : normalizeWikiFestivalInteger(body.sourceRowId);
+    if (body.sourceRowId !== null && body.sourceRowId !== '' && sourceRowId === null) {
+      res.status(400).json({ error: 'sourceRowId must be an integer' });
+      return;
+    }
+
+    const updated = await prisma.wikiFestival.update({
+      where: { id },
+      data: { sourceRowId },
+      select: {
+        id: true,
+        name: true,
+        sourceRowId: true,
+        country: true,
+        city: true,
+      },
+    });
+
+    ok(res, updated);
+  } catch (error) {
+    console.error('BFF web identifier organizer update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/admin/identifiers/labels', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 20, 100);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const where: Prisma.LabelWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { slug: { contains: search, mode: 'insensitive' } },
+            { profileSlug: { contains: search, mode: 'insensitive' } },
+            { profileUrl: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
+
+    const [items, total] = await Promise.all([
+      prisma.label.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          profileSlug: true,
+          profileUrl: true,
+          nation: true,
+        },
+      }),
+      prisma.label.count({ where }),
+    ]);
+
+    ok(res, { items }, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (error) {
+    console.error('BFF web identifier labels list error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/admin/identifiers/labels/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const id = req.params.id as string;
+    const existing = await prisma.label.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        profileSlug: true,
+        profileUrl: true,
+        nation: true,
+      },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Label not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const hasSlug = Object.prototype.hasOwnProperty.call(body, 'slug');
+    const hasProfileSlug = Object.prototype.hasOwnProperty.call(body, 'profileSlug');
+    const hasProfileUrl = Object.prototype.hasOwnProperty.call(body, 'profileUrl');
+    const requestedSlug = hasSlug && typeof body.slug === 'string' ? body.slug.trim() : existing.slug;
+    const nextSlug = hasSlug ? await uniqueLabelSlug(existing.name, requestedSlug) : existing.slug;
+    const nextProfileSlug = hasProfileSlug
+      ? (typeof body.profileSlug === 'string' && body.profileSlug.trim() ? body.profileSlug.trim() : null)
+      : existing.profileSlug;
+    const nextProfileUrl = hasProfileUrl
+      ? (typeof body.profileUrl === 'string' && body.profileUrl.trim() ? body.profileUrl.trim() : `community://${nextSlug}`)
+      : existing.profileUrl;
+
+    const updated = await prisma.label.update({
+      where: { id },
+      data: {
+        slug: nextSlug,
+        profileSlug: nextProfileSlug,
+        profileUrl: nextProfileUrl,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        profileSlug: true,
+        profileUrl: true,
+        nation: true,
+      },
+    });
+
+    ok(res, updated);
+  } catch (error) {
+    console.error('BFF web identifier label update error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/admin/identifiers/ranking-entries', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const page = normalizePage(req.query.page, 1);
+    const limit = normalizeLimit(req.query.limit, 50, 100);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const where: Prisma.RankingEntryWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { entityId: { contains: search, mode: 'insensitive' } },
+            { rankingYear: { board: { title: { contains: search, mode: 'insensitive' } } } },
+          ],
+        }
+      : {};
+
+    const [rows, total] = await Promise.all([
+      prisma.rankingEntry.findMany({
+        where,
+        include: {
+          rankingYear: {
+            include: {
+              board: true,
+            },
+          },
+        },
+        orderBy: [
+          { rankingYear: { updatedAt: 'desc' } },
+          { rank: 'asc' },
+        ],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.rankingEntry.count({ where }),
+    ]);
+
+    ok(res, {
+      items: rows.map((row) => ({
+        boardId: row.rankingYear.boardId,
+        boardTitle: row.rankingYear.board.title,
+        entityType: row.rankingYear.board.entityType === 'festival' ? 'festival' : 'dj',
+        year: row.rankingYear.year,
+        rank: row.rank,
+        name: row.name,
+        entityId: row.entityId || null,
+      })),
+    }, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    });
+  } catch (error) {
+    console.error('BFF web identifier ranking entries list error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/admin/identifiers/ranking-entries/:boardId/:year/:rank', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+    if (!canBypassContentReview(authReq.user?.role ?? null)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const year = Number(req.params.year);
+    const rank = Number(req.params.rank);
+    if (!Number.isFinite(year) || !Number.isFinite(rank)) {
+      res.status(400).json({ error: 'year or rank is invalid' });
+      return;
+    }
+
+    const yearRow = await prisma.rankingYear.findUnique({
+      where: {
+        boardId_year: {
+          boardId,
+          year: Math.floor(year),
+        },
+      },
+      include: {
+        board: true,
+      },
+    });
+    if (!yearRow) {
+      res.status(404).json({ error: 'Ranking year not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const entityId = typeof body.entityId === 'string' && body.entityId.trim() ? body.entityId.trim() : null;
+
+    const updated = await prisma.rankingEntry.update({
+      where: {
+        rankingYearId_rank: {
+          rankingYearId: yearRow.id,
+          rank: Math.floor(rank),
+        },
+      },
+      data: {
+        entityId,
+      },
+    });
+
+    if (yearRow.board.entityType === 'dj') {
+      await syncDJHonorsForDJIds(
+        [updated.entityId].filter((item): item is string => Boolean(item))
+      );
+    }
+
+    ok(res, {
+      boardId,
+      boardTitle: yearRow.board.title,
+      entityType: yearRow.board.entityType === 'festival' ? 'festival' : 'dj',
+      year: yearRow.year,
+      rank: updated.rank,
+      name: updated.name,
+      entityId: updated.entityId || null,
+    });
+  } catch (error) {
+    console.error('BFF web identifier ranking entry update error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

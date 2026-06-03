@@ -1,8 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import { newsStudioApi, type NewsStudioLoadedArticle } from '@/features/admin-content/news-studio';
 
 const formatDateTime = (value?: string | null): string => {
@@ -45,15 +48,27 @@ function NewsDetailOverlay({
   onClose: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<NewsDetailTabKey>('overview');
+  const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveTab('overview');
+    setPreviewAssetIndex(null);
   }, [item?.id]);
 
   if (!item) return null;
 
   const resolved = detail ?? item;
   const coverImage = resolved.coverImageURL || item.coverImageURL || '';
+  const previewAssets: OverlayImageViewerAsset[] = coverImage
+    ? [
+        {
+          url: coverImage,
+          alt: resolved.title,
+          title: 'Cover Image',
+          subtitle: resolved.category || resolved.source || 'News asset',
+        },
+      ]
+    : [];
   const bindingGroups = [
     { label: 'DJs', items: resolved.boundDjIDs },
     { label: 'Brands', items: resolved.boundBrandIDs },
@@ -159,14 +174,21 @@ function NewsDetailOverlay({
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
-            <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
+            <button
+              type="button"
+              onClick={() => {
+                if (previewAssets.length) setPreviewAssetIndex(0);
+              }}
+              className="block w-full overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9] text-left"
+            >
               {coverImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={coverImage} alt={resolved.title} className="aspect-[1.25/1] w-full object-cover" />
+                <div className="relative aspect-[1.25/1] w-full">
+                  <Image src={coverImage} alt={resolved.title} fill className="object-cover" sizes="900px" />
+                </div>
               ) : (
                 <div className="flex aspect-[1.25/1] items-center justify-center text-sm text-[#7b8794]">No cover image</div>
               )}
-            </div>
+            </button>
 
             <div className="-mt-10 px-4">
               <div className="rounded-[24px] border border-[#e8eceb] bg-white/96 p-5 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
@@ -239,6 +261,12 @@ function NewsDetailOverlay({
             <div className="mt-6">{tabContent}</div>
           </div>
         </div>
+        <OverlayImageViewer
+          assets={previewAssets}
+          activeIndex={previewAssetIndex}
+          onClose={() => setPreviewAssetIndex(null)}
+          onChange={setPreviewAssetIndex}
+        />
       </div>
     </div>
   );
@@ -257,6 +285,10 @@ export default function AdminContentNewsPage() {
   const [selectedNewsLoading, setSelectedNewsLoading] = useState(false);
   const [selectedNewsError, setSelectedNewsError] = useState('');
   const [detailCache, setDetailCache] = useState<Record<string, NewsStudioLoadedArticle>>({});
+  const [menuOpenNewsId, setMenuOpenNewsId] = useState<string | null>(null);
+  const [pendingDeleteNews, setPendingDeleteNews] = useState<NewsStudioLoadedArticle | null>(null);
+  const [deletingNewsId, setDeletingNewsId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,6 +313,29 @@ export default function AdminContentNewsPage() {
     };
   }, [cursor]);
 
+  useEffect(() => {
+    if (!menuOpenNewsId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!actionMenuRef.current) return;
+      if (event.target instanceof Node && actionMenuRef.current.contains(event.target)) return;
+      setMenuOpenNewsId(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpenNewsId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenNewsId]);
+
   const filteredItems = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return items;
@@ -288,6 +343,7 @@ export default function AdminContentNewsPage() {
   }, [items, query]);
 
   const openDetailOverlay = async (item: NewsStudioLoadedArticle) => {
+    setMenuOpenNewsId(null);
     setSelectedNews(item);
     setSelectedNewsError('');
     const cached = detailCache[item.id];
@@ -311,10 +367,39 @@ export default function AdminContentNewsPage() {
   };
 
   const closeDetailOverlay = () => {
+    setMenuOpenNewsId(null);
     setSelectedNews(null);
     setSelectedNewsDetail(null);
     setSelectedNewsLoading(false);
     setSelectedNewsError('');
+  };
+
+  const requestDeleteNews = (item: NewsStudioLoadedArticle) => {
+    setMenuOpenNewsId(null);
+    setPendingDeleteNews(item);
+  };
+
+  const confirmDeleteNews = async () => {
+    if (!pendingDeleteNews) return;
+    const articleId = pendingDeleteNews.id;
+    try {
+      setDeletingNewsId(articleId);
+      await newsStudioApi.deleteNews(articleId);
+      setItems((current) => current.filter((item) => item.id !== articleId));
+      if (selectedNews?.id === articleId) {
+        closeDetailOverlay();
+      }
+      setPendingDeleteNews(null);
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[articleId];
+        return next;
+      });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除资讯失败，请稍后重试。');
+    } finally {
+      setDeletingNewsId(null);
+    }
   };
 
   return (
@@ -392,13 +477,42 @@ export default function AdminContentNewsPage() {
                       <p className="mt-2 line-clamp-2 text-sm leading-7 text-black/48">{item.summary || item.body || 'No summary available.'}</p>
                       <div className="mt-3 text-xs text-black/38">Published {formatDateTime(item.publishedAt)}</div>
                     </div>
-                    <Link
-                      href={`/admin/content/news/${item.id}/edit`}
-                      onClick={(event) => event.stopPropagation()}
-                      className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
-                    >
-                      Edit
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/admin/content/news/${item.id}/edit`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
+                      >
+                        Edit
+                      </Link>
+                      <div className="relative" ref={menuOpenNewsId === item.id ? actionMenuRef : null}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setMenuOpenNewsId((current) => (current === item.id ? null : item.id));
+                          }}
+                          className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+                          aria-label="More actions"
+                        >
+                          <Ellipsis className="h-4 w-4" />
+                        </button>
+                        {menuOpenNewsId === item.id ? (
+                          <div
+                            className="absolute right-0 top-[52px] z-20 min-w-[140px] rounded-[16px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => requestDeleteNews(item)}
+                              className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
+                            >
+                              Delete Article
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -445,6 +559,39 @@ export default function AdminContentNewsPage() {
         error={selectedNewsError}
         onClose={closeDetailOverlay}
       />
+      {pendingDeleteNews ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" onClick={() => setPendingDeleteNews(null)}>
+          <div
+            className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">删除资讯</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这篇资讯吗？</div>
+            <p className="mt-3 text-sm leading-6 text-[#6b7280]">
+              {pendingDeleteNews.title}
+              <br />
+              删除后将无法恢复，请再次确认这是你要执行的操作。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteNews(null)}
+                className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteNews()}
+                disabled={deletingNewsId === pendingDeleteNews.id}
+                className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingNewsId === pendingDeleteNews.id ? '删除中...' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminContentLayout>
   );
 }

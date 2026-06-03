@@ -396,6 +396,21 @@ const createProfileModerationJob = async (
   });
 };
 
+type BFFPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+const ok = <T>(res: Response, data: T, pagination?: BFFPagination): void => {
+  if (pagination) {
+    res.json({ data, pagination });
+    return;
+  }
+  res.json({ data });
+};
+
 const extractPostMediaOssKey = (raw: string): string | null => {
   const value = raw.trim();
   if (!value) return null;
@@ -459,6 +474,13 @@ const deletePostMediaFromOss = async (imageUrls: string[]): Promise<{ deletedKey
     }
   });
   return { deletedKeys, failedKeys };
+};
+
+const deleteSingleFeedNewsOssObjectIfOwned = async (url: string | null | undefined): Promise<void> => {
+  if (!postMediaOssClient || !url) return;
+  const key = extractPostMediaOssKey(url);
+  if (!key) return;
+  await postMediaOssClient.delete(key).catch(() => undefined);
 };
 
 interface BFFAuthRequest extends Request {
@@ -7441,6 +7463,52 @@ router.patch('/news/:id', optionalAuth, async (req: Request, res: Response): Pro
     res.json(mapNewsArticle(updated));
   } catch (error) {
     console.error('BFF update news article error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/news/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const viewerRole = authReq.user?.role ?? null;
+    const articleId = String(req.params.id || '').trim();
+    if (!articleId) {
+      res.status(400).json({ error: 'article id is required' });
+      return;
+    }
+
+    const existing = await prisma.newsArticle.findUnique({
+      where: { id: articleId },
+      select: {
+        id: true,
+        authorId: true,
+        coverImageUrl: true,
+      },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'News article not found' });
+      return;
+    }
+
+    const canDelete = viewerRole === 'admin' || existing.authorId === userId;
+    if (!canDelete) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    await prisma.newsArticle.delete({ where: { id: articleId } });
+
+    if (existing.coverImageUrl) {
+      await mediaAssetService.markDeletedByUrl(existing.coverImageUrl);
+      await deleteSingleFeedNewsOssObjectIfOwned(existing.coverImageUrl);
+    }
+
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF delete news article error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

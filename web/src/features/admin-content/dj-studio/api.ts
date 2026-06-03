@@ -142,6 +142,12 @@ export const djStudioApi = {
     };
   },
 
+  async deleteDJ(id: string): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(getApiUrl(`/v1/djs/${id}`), {
+      method: 'DELETE',
+    });
+  },
+
   async fetchDJ(id: string): Promise<DJStudioLoadedDJ> {
     return authenticatedJsonFetch<DJStudioLoadedDJ>(getApiUrl(`/v1/djs/${id}`));
   },

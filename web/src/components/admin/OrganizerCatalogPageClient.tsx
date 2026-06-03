@@ -1,10 +1,11 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
   organizerCatalogApi,
   OrganizerCatalogItem,
@@ -82,7 +83,7 @@ const createOrganizerPostsState = (): OrganizerPostsState => ({
 const ORGANIZER_TABS: Array<{ key: OrganizerTabKey; label: string; helper: string }> = [
   { key: 'info', label: 'Info', helper: '信息' },
   { key: 'events', label: 'Events', helper: '活动' },
-  { key: 'posts', label: 'Posts', helper: '动态' },
+  { key: 'posts', label: 'Posts', helper: '资讯' },
 ];
 
 const formatDateTime = (value?: string | null): string => {
@@ -126,6 +127,13 @@ const formatDateOnly = (value?: string | null): string => {
 const hasNextPage = (pagination: OrganizerStudioPagination): boolean =>
   pagination.page < Math.max(1, pagination.totalPages);
 
+const buildVisiblePages = (page: number, totalPages: number): number[] => {
+  const safeTotalPages = Math.max(1, totalPages);
+  const start = Math.max(1, Math.min(safeTotalPages - 4, page - 2));
+  const end = Math.min(safeTotalPages, start + 4);
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+};
+
 const mergeById = <T extends { id: string }>(items: T[]): T[] => {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -161,7 +169,7 @@ function LoadMoreButton({
       disabled={loading}
       className="mt-4 inline-flex h-10 items-center rounded-full border border-[#d8dfdc] bg-white px-5 text-sm font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-50"
     >
-      {loading ? '加载中...' : '加载更多'}
+      {loading ? '鍔犺浇涓?..' : '鍔犺浇鏇村'}
     </button>
   );
 }
@@ -182,11 +190,13 @@ function OrganizerDetailOverlay({
   const [activeTab, setActiveTab] = useState<OrganizerTabKey>('info');
   const [eventsState, setEventsState] = useState<OrganizerEventsState>(() => createOrganizerEventsState());
   const [postsState, setPostsState] = useState<OrganizerPostsState>(() => createOrganizerPostsState());
+  const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveTab('info');
     setEventsState(createOrganizerEventsState());
     setPostsState(createOrganizerPostsState());
+    setPreviewAssetIndex(null);
   }, [item?.id]);
 
   const loadEvents = useCallback(async (pageToLoad = 1, section?: 'upcoming' | 'ended') => {
@@ -210,12 +220,13 @@ function OrganizerDetailOverlay({
         const next = { ...current };
         sections.forEach((key) => {
           const page = feed[key];
-          const merged = pageToLoad === 1 ? page.items : mergeById([...next[key].items, ...page.items]);
           next[key] = {
             ...next[key],
-            items: key === 'upcoming'
-              ? merged.sort((left, right) => new Date(left.startDate || 0).getTime() - new Date(right.startDate || 0).getTime())
-              : merged.sort((left, right) => new Date(right.startDate || 0).getTime() - new Date(left.startDate || 0).getTime()),
+            items: [...page.items].sort((left, right) =>
+              key === 'upcoming'
+                ? new Date(left.startDate || 0).getTime() - new Date(right.startDate || 0).getTime()
+                : new Date(right.startDate || 0).getTime() - new Date(left.startDate || 0).getTime()
+            ),
             pagination: page.pagination,
             loading: false,
             loaded: true,
@@ -224,7 +235,7 @@ function OrganizerDetailOverlay({
         return next;
       });
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : '活动加载失败';
+      const message = nextError instanceof Error ? nextError.message : '娲诲姩鍔犺浇澶辫触';
       setEventsState((current) => {
         const next = { ...current };
         sections.forEach((key) => {
@@ -252,7 +263,7 @@ function OrganizerDetailOverlay({
         ...current,
         loading: false,
         loaded: true,
-        error: nextError instanceof Error ? nextError.message : '动态加载失败',
+        error: nextError instanceof Error ? nextError.message : '资讯加载失败',
       }));
     }
   }, [item?.id]);
@@ -294,6 +305,36 @@ function OrganizerDetailOverlay({
   const links = resolved?.links || [];
   const aliases = compactList(resolved?.aliases);
   const contributors = compactList(resolved?.aliases);
+  const previewAssets: OverlayImageViewerAsset[] = [
+    ...(resolved?.backgroundUrl || item.backgroundUrl
+      ? [
+          {
+            url: resolved?.backgroundUrl || item.backgroundUrl || '',
+            alt: `${primaryName} banner`,
+            title: 'Banner',
+            subtitle: 'Organizer background',
+          },
+        ]
+      : []),
+    ...(resolved?.avatarUrl || item.avatarUrl
+      ? [
+          {
+            url: resolved?.avatarUrl || item.avatarUrl || '',
+            alt: `${primaryName} avatar`,
+            title: 'Avatar',
+            subtitle: 'Organizer avatar',
+          },
+        ]
+      : []),
+    ...imageAssets
+      .filter((asset) => asset.url)
+      .map((asset) => ({
+        url: asset.url,
+        alt: asset.label || asset.fileName || asset.type || primaryName,
+        title: asset.label || asset.fileName || asset.type || 'Asset',
+        subtitle: asset.type || 'Organizer asset',
+      })),
+  ];
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
@@ -307,12 +348,18 @@ function OrganizerDetailOverlay({
           className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
           aria-label="关闭主办方详情"
         >
-          ×
+          脳
         </button>
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
-            <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
+            <button
+              type="button"
+              onClick={() => {
+                if (previewAssets.length) setPreviewAssetIndex(0);
+              }}
+              className="block w-full overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9] text-left"
+            >
               <div className="relative aspect-[1.25/1]">
                 {heroImage ? (
                   <Image src={heroImage} alt={primaryName} fill className="object-cover" sizes="900px" />
@@ -320,13 +367,13 @@ function OrganizerDetailOverlay({
                   <div className="flex h-full items-center justify-center text-sm text-[#7b8794]">暂无主视觉</div>
                 )}
               </div>
-            </div>
+            </button>
 
             <div className="-mt-10 px-4">
               <div className="rounded-[24px] border border-[#e8eceb] bg-white/96 p-5 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
                 <div className="text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{primaryName}</div>
                 <div className="mt-2 text-sm font-medium text-[#6b7280]">
-                  {resolved?.city || item.city || '城市待补充'} · {resolved?.country || item.country || '国家待补充'}
+                  {resolved?.city || item.city || '城市待补充'} 路 {resolved?.country || item.country || '国家待补充'}
                 </div>
                 {resolved?.tagline || item.tagline ? (
                   <div className="mt-3 text-sm leading-6 text-[#4b5563]">{resolved?.tagline || item.tagline}</div>
@@ -464,6 +511,7 @@ function OrganizerDetailOverlay({
                     {(['upcoming', 'ended'] as const).map((section) => {
                       const sectionState = eventsState[section];
                       const title = section === 'upcoming' ? '即将开始 / 进行中' : '历史活动';
+                      const sectionVisiblePages = buildVisiblePages(sectionState.pagination.page, sectionState.pagination.totalPages);
                       return (
                         <section key={section} className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                           <div className="flex items-center justify-between gap-3">
@@ -477,7 +525,7 @@ function OrganizerDetailOverlay({
                           </div>
                           {sectionState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{sectionState.error}</div> : null}
                           {sectionState.loading && !sectionState.items.length ? (
-                            <div className="mt-4 text-sm text-[#6b7280]">正在加载活动...</div>
+                            <div className="mt-4 text-sm text-[#6b7280]">姝ｅ湪鍔犺浇娲诲姩...</div>
                           ) : sectionState.items.length ? (
                             <div className="mt-4 space-y-3">
                               {sectionState.items.map((eventItem) => (
@@ -493,7 +541,7 @@ function OrganizerDetailOverlay({
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <div className="truncate text-sm font-semibold text-[#111827]">{eventItem.name}</div>
-                                    <div className="mt-1 text-xs text-[#6b7280]">{formatDateOnly(eventItem.startDate)} · {[eventItem.city, eventItem.country].filter(Boolean).join(', ') || '地点未设置'}</div>
+                                    <div className="mt-1 text-xs text-[#6b7280]">{formatDateOnly(eventItem.startDate)} 路 {[eventItem.city, eventItem.country].filter(Boolean).join(', ') || '地点未设置'}</div>
                                     <div className="mt-2 flex flex-wrap gap-2">
                                       {eventItem.status ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.status}</span> : null}
                                       {eventItem.eventType ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.eventType}</span> : null}
@@ -504,14 +552,47 @@ function OrganizerDetailOverlay({
                             </div>
                           ) : (
                             <div className="mt-4">
-                              <EmptyTabState title="暂无活动" description="这个分组下还没有主办方相关活动。" />
+                              <EmptyTabState title="暂无活动" description="这个分组下还没有与该主办方关联的活动。" />
                             </div>
                           )}
-                          <LoadMoreButton
-                            disabled={!hasNextPage(sectionState.pagination)}
-                            loading={sectionState.loading}
-                            onClick={() => void loadEvents(sectionState.pagination.page + 1, section)}
-                          />
+                          <div className="mt-4 flex flex-col gap-3 border-t border-[#edf0f2] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-xs text-[#8b93a1]">
+                              第 {sectionState.pagination.page} / {Math.max(1, sectionState.pagination.totalPages)} 页 · 共 {sectionState.pagination.total} 场活动
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={sectionState.loading || sectionState.pagination.page <= 1}
+                                onClick={() => void loadEvents(sectionState.pagination.page - 1, section)}
+                                className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-xs font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Prev
+                              </button>
+                              {sectionVisiblePages.map((pageNumber) => (
+                                <button
+                                  key={`${section}-${pageNumber}`}
+                                  type="button"
+                                  disabled={sectionState.loading}
+                                  onClick={() => void loadEvents(pageNumber, section)}
+                                  className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-xs font-semibold ${
+                                    pageNumber === sectionState.pagination.page
+                                      ? 'bg-[#071110] text-white'
+                                      : 'border border-[#e8eceb] bg-white text-[#111827]'
+                                  }`}
+                                >
+                                  {pageNumber}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                disabled={sectionState.loading || sectionState.pagination.page >= Math.max(1, sectionState.pagination.totalPages)}
+                                onClick={() => void loadEvents(sectionState.pagination.page + 1, section)}
+                                className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-xs font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
                         </section>
                       );
                     })}
@@ -522,13 +603,13 @@ function OrganizerDetailOverlay({
                   <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-[#111827]">相关动态</div>
+                        <div className="text-sm font-semibold text-[#111827]">相关资讯</div>
                         <div className="mt-1 text-xs text-[#9aa1ad]">对应 iOS Posts 页</div>
                       </div>
                     </div>
                     {postsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{postsState.error}</div> : null}
                     {postsState.loading && !postsState.items.length ? (
-                      <div className="mt-4 text-sm text-[#6b7280]">正在加载动态...</div>
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载资讯...</div>
                     ) : postsState.items.length ? (
                       <div className="mt-4 space-y-3">
                         {postsState.items.map((article) => {
@@ -544,7 +625,7 @@ function OrganizerDetailOverlay({
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="line-clamp-2 text-sm font-semibold text-[#111827]">{article.title}</div>
-                                <div className="mt-1 text-xs text-[#6b7280]">{article.source || 'Raver'} · {formatDateOnly(article.publishedAt)}</div>
+                                <div className="mt-1 text-xs text-[#6b7280]">{article.source || 'Raver'} 路 {formatDateOnly(article.publishedAt)}</div>
                                 {article.summary ? <div className="mt-2 line-clamp-2 text-xs leading-5 text-[#6b7280]">{article.summary}</div> : null}
                               </div>
                             </Link>
@@ -553,7 +634,7 @@ function OrganizerDetailOverlay({
                       </div>
                     ) : (
                       <div className="mt-4">
-                        <EmptyTabState title="暂无相关动态" description="还没有与该主办方绑定的新闻内容。" />
+                        <EmptyTabState title="暂无相关资讯" description="还没有与该主办方绑定的资讯内容。" />
                       </div>
                     )}
                     <LoadMoreButton
@@ -567,6 +648,12 @@ function OrganizerDetailOverlay({
             )}
           </div>
         </div>
+        <OverlayImageViewer
+          assets={previewAssets}
+          activeIndex={previewAssetIndex}
+          onClose={() => setPreviewAssetIndex(null)}
+          onChange={setPreviewAssetIndex}
+        />
       </div>
     </div>
   );
@@ -585,6 +672,10 @@ export default function OrganizerCatalogPageClient() {
   const [selectedOrganizerError, setSelectedOrganizerError] = useState('');
   const [selectedOrganizerLoading, setSelectedOrganizerLoading] = useState(false);
   const [detailCache, setDetailCache] = useState<Record<string, OrganizerStudioLoadedOrganizer>>({});
+  const [menuOpenOrganizerId, setMenuOpenOrganizerId] = useState<string | null>(null);
+  const [pendingDeleteOrganizer, setPendingDeleteOrganizer] = useState<OrganizerCatalogItem | null>(null);
+  const [deletingOrganizerId, setDeletingOrganizerId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   const loadCatalog = useCallback(async () => {
     try {
@@ -598,7 +689,7 @@ export default function OrganizerCatalogPageClient() {
       setItems(response.items);
       setPagination(response.pagination);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '主办方目录加载失败');
+      setError(nextError instanceof Error ? nextError.message : '主办方目录加载失败，请稍后重试。');
     } finally {
       setIsLoading(false);
     }
@@ -607,6 +698,29 @@ export default function OrganizerCatalogPageClient() {
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  useEffect(() => {
+    if (!menuOpenOrganizerId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!actionMenuRef.current) return;
+      if (event.target instanceof Node && actionMenuRef.current.contains(event.target)) return;
+      setMenuOpenOrganizerId(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpenOrganizerId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenOrganizerId]);
 
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -621,6 +735,7 @@ export default function OrganizerCatalogPageClient() {
   };
 
   const openDetailOverlay = useCallback(async (item: OrganizerCatalogItem) => {
+    setMenuOpenOrganizerId(null);
     setSelectedOrganizer(item);
     setSelectedOrganizerError('');
     const cached = detailCache[item.id];
@@ -637,18 +752,51 @@ export default function OrganizerCatalogPageClient() {
       setDetailCache((current) => ({ ...current, [item.id]: detail }));
       setSelectedOrganizerDetail(detail);
     } catch (detailError) {
-      setSelectedOrganizerError(detailError instanceof Error ? detailError.message : '主办方详情加载失败');
+      setSelectedOrganizerError(detailError instanceof Error ? detailError.message : '主办方详情加载失败，请稍后重试。');
     } finally {
       setSelectedOrganizerLoading(false);
     }
   }, [detailCache]);
 
   const closeDetailOverlay = useCallback(() => {
+    setMenuOpenOrganizerId(null);
     setSelectedOrganizer(null);
     setSelectedOrganizerDetail(null);
     setSelectedOrganizerError('');
     setSelectedOrganizerLoading(false);
   }, []);
+
+  const requestDeleteOrganizer = useCallback((item: OrganizerCatalogItem) => {
+    setMenuOpenOrganizerId(null);
+    setPendingDeleteOrganizer(item);
+  }, []);
+
+  const confirmDeleteOrganizer = useCallback(async () => {
+    if (!pendingDeleteOrganizer) return;
+    const organizerId = pendingDeleteOrganizer.id;
+    try {
+      setDeletingOrganizerId(organizerId);
+      await organizerStudioApi.deleteOrganizer(organizerId);
+      setItems((current) => current.filter((item) => item.id !== organizerId));
+      setPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+      }));
+      if (selectedOrganizer?.id === organizerId) {
+        closeDetailOverlay();
+      }
+      setPendingDeleteOrganizer(null);
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[organizerId];
+        return next;
+      });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除主办方失败，请稍后重试。');
+    } finally {
+      setDeletingOrganizerId(null);
+    }
+  }, [closeDetailOverlay, pendingDeleteOrganizer, selectedOrganizer]);
 
   const totalPages = Math.max(1, pagination.totalPages);
   const visiblePages = useMemo(() => {
@@ -661,7 +809,7 @@ export default function OrganizerCatalogPageClient() {
     <AdminContentLayout
       title="主办方目录中心"
       eyebrow="Admin / Content Workspace / Organizer Catalog"
-      description="统一查看主办方目录、资料摘要、绑定入口与编辑入口。目录层保持轻量检索，进入编辑或绑定时再进入更深的操作流。"
+      description="统一查看主办方目录、资料摘要、绑定入口与编辑入口。目录层保持轻量检索，深入修改时再进入详细页面。"
       actions={
         <>
           <Link href="/admin/content/organizers" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
@@ -686,13 +834,13 @@ export default function OrganizerCatalogPageClient() {
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录、编辑、绑定统一入口</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {[
-              { title: '目录定位', body: '目录层优先承接名称、地区、视觉和链接的全量定位能力。', tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
-              { title: '编辑主链路', body: '进入编辑页后继续沿用已落地的 Organizer Studio create / edit 主链路。', tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
-              { title: '绑定中心', body: '活动绑定关系继续通过统一后台活动绑定中心处理。', tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
-            ].map((item) => (
-              <div key={item.title} className={`admin-reference-pastel-card p-3.5 ${item.tone}`}>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{item.title}</div>
-                <div className="mt-3 text-sm leading-6 text-[#24312d]">{item.body}</div>
+              { title: '目录定位', body: '优先承接名称、地区、视觉和链接的全量检索定位能力。', tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
+              { title: '编辑主链路', body: '进入编辑页后继续沿用既有 Organizer Studio 的创建与编辑链路。', tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
+              { title: '绑定中心', body: '活动绑定关系继续通过后台统一绑定中心处理。', tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
+            ].map((card) => (
+              <div key={card.title} className={`admin-reference-pastel-card p-3.5 ${card.tone}`}>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{card.title}</div>
+                <div className="mt-3 text-sm leading-6 text-[#24312d]">{card.body}</div>
               </div>
             ))}
           </div>
@@ -735,7 +883,7 @@ export default function OrganizerCatalogPageClient() {
           </form>
 
           <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm leading-6 text-black/50 xl:max-w-[360px]">
-            当前目录中心直接对齐 `/v1/learn/festivals`，不再依赖旧 Brand 页面做查找入口。
+            当前目录中心直接对齐 `/v1/learn/festivals`，不再依赖旧 Brand 页面作为查找入口。
           </div>
         </div>
       </section>
@@ -767,62 +915,62 @@ export default function OrganizerCatalogPageClient() {
                       void openDetailOverlay(item);
                     }
                   }}
-                  className="flex cursor-pointer flex-col gap-4 px-6 py-5 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-5"
+                  className="flex cursor-pointer flex-col gap-3 px-6 py-4 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-4"
                 >
                   <div className="flex min-w-0 flex-1 gap-4">
-                    <div className="relative h-[104px] w-[104px] shrink-0 overflow-hidden rounded-[18px] bg-[#f3f5f7]">
-                    {visualUrl ? (
-                      <Image
-                        src={visualUrl}
-                        alt={item.name}
-                        width={104}
-                        height={104}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/45">
-                        暂无主视觉
+                    <div className="relative h-[92px] w-[92px] shrink-0 overflow-hidden rounded-[16px] bg-[#f3f5f7]">
+                      {visualUrl ? (
+                        <Image
+                          src={visualUrl}
+                          alt={item.name}
+                          width={104}
+                          height={104}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/45">
+                          暂无主视觉
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="admin-reference-chip">{item.country || '未知国家'}</span>
+                        {item.city ? <span className="admin-reference-chip">{item.city}</span> : null}
                       </div>
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="admin-reference-chip">{item.country || '未知国家'}</span>
-                      {item.city ? <span className="admin-reference-chip">{item.city}</span> : null}
-                    </div>
-                    <h3 className="mt-2 truncate text-[20px] font-semibold tracking-[-0.025em] text-[#071110]">{item.name}</h3>
-                    <p className="mt-1 truncate text-[13px] font-medium text-[#6b7280]">
-                      {item.city || '未知城市'} / {item.country || '未知国家'}
-                      {item.abbreviation ? ` · ${item.abbreviation}` : ''}
-                      {typeof item.revision === 'number' ? ` · rev ${item.revision}` : ''}
-                    </p>
-                    {item.tagline ? <p className="mt-2 line-clamp-1 text-[13px] leading-6 text-black/55">{item.tagline}</p> : null}
-                    {item.aliases?.length ? (
-                      <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-black/48">别名：{item.aliases.slice(0, 4).join('、')}</p>
-                    ) : null}
-                    <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] font-medium text-[#7d8592]">
-                      <span>更新于 {formatDateTime(item.updatedAt)}</span>
-                      <span>创建于 {formatDateTime(item.createdAt)}</span>
+                      <h3 className="mt-1.5 truncate text-[18px] font-semibold tracking-[-0.025em] text-[#071110]">{item.name}</h3>
+                      <p className="mt-1 truncate text-[12px] font-medium text-[#6b7280]">
+                        {item.city || '未知城市'} / {item.country || '未知国家'}
+                        {item.abbreviation ? ` 路 ${item.abbreviation}` : ''}
+                        {typeof item.revision === 'number' ? ` 路 rev ${item.revision}` : ''}
+                      </p>
+                      {item.tagline ? <p className="mt-1.5 line-clamp-1 text-[12px] leading-5 text-black/55">{item.tagline}</p> : null}
+                      {item.aliases?.length ? (
+                        <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-black/48">别名：{item.aliases.slice(0, 4).join('、')}</p>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-[#7d8592]">
+                        <span>更新于 {formatDateTime(item.updatedAt)}</span>
+                        <span>创建于 {formatDateTime(item.createdAt)}</span>
+                      </div>
                     </div>
                   </div>
-                  </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:w-[240px] lg:justify-end">
-                    <div className="rounded-[12px] bg-[#f4f5f7] px-3 py-2 text-[12px] leading-5 text-[#6b7280]">
+                  <div className="flex shrink-0 items-center gap-2 overflow-x-auto lg:w-auto lg:max-w-[560px] lg:justify-end">
+                    <div className="shrink-0 rounded-[12px] bg-[#f4f5f7] px-3 py-2 text-[11px] leading-4 text-[#6b7280]">
                       目录中心承接查找和跳转，深入资料处理继续进入编辑与绑定工作流。
                     </div>
                     <Link
                       href={`/admin/content/organizers/${item.id}/edit`}
                       onClick={(event) => event.stopPropagation()}
-                      className="inline-flex h-[40px] items-center justify-center rounded-full bg-[#071110] px-4 text-center text-sm font-semibold text-white"
+                      className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full bg-[#071110] px-4 text-center text-sm font-semibold text-white"
                     >
                       编辑主办方
                     </Link>
                     <Link
                       href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`}
                       onClick={(event) => event.stopPropagation()}
-                      className="inline-flex h-[40px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
+                      className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
                     >
                       打开绑定中心
                     </Link>
@@ -832,15 +980,42 @@ export default function OrganizerCatalogPageClient() {
                         target="_blank"
                         rel="noreferrer"
                         onClick={(event) => event.stopPropagation()}
-                        className="inline-flex h-[40px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
+                        className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
                       >
                         官方链接
                       </a>
                     ) : (
-                      <div className="rounded-full border border-[#e7ebef] bg-white px-4 py-2.5 text-center text-sm text-black/42">
+                      <div className="shrink-0 rounded-full border border-[#e7ebef] bg-white px-4 py-2 text-center text-sm text-black/42">
                         暂无官方链接
                       </div>
                     )}
+                    <div className="relative" ref={menuOpenOrganizerId === item.id ? actionMenuRef : null}>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuOpenOrganizerId((current) => (current === item.id ? null : item.id));
+                        }}
+                        className="inline-flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full border border-[#e7ebef] bg-white text-[#111827]"
+                        aria-label="更多操作"
+                      >
+                        <Ellipsis className="h-4 w-4" />
+                      </button>
+                      {menuOpenOrganizerId === item.id ? (
+                        <div
+                          className="absolute right-0 top-[48px] z-20 min-w-[148px] rounded-[18px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => requestDeleteOrganizer(item)}
+                            className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
+                          >
+                            删除主办方
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </article>
               );
@@ -912,6 +1087,39 @@ export default function OrganizerCatalogPageClient() {
         error={selectedOrganizerError}
         onClose={closeDetailOverlay}
       />
+      {pendingDeleteOrganizer ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" onClick={() => setPendingDeleteOrganizer(null)}>
+          <div
+            className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">删除主办方</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这个主办方吗？</div>
+            <p className="mt-3 text-sm leading-6 text-[#6b7280]">
+              {pendingDeleteOrganizer.name}
+              <br />
+              删除后将无法恢复，请再次确认这是你要执行的操作。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteOrganizer(null)}
+                className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteOrganizer()}
+                disabled={deletingOrganizerId === pendingDeleteOrganizer.id}
+                className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingOrganizerId === pendingDeleteOrganizer.id ? '删除中...' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminContentLayout>
   );
 }

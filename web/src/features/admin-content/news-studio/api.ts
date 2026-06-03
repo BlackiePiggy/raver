@@ -51,4 +51,10 @@ export const newsStudioApi = {
       },
     };
   },
+
+  async deleteNews(id: string): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(getApiUrl(`/v1/news/${id}`), {
+      method: 'DELETE',
+    });
+  },
 };

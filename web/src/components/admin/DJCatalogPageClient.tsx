@@ -3,7 +3,7 @@
 import { getCountryCode, getEmojiFlag } from 'countries-list';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronLeft,
@@ -17,6 +17,7 @@ import {
   Upload,
 } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
   adminCatalogApi,
   AdminCatalogPagination,
@@ -228,6 +229,13 @@ const detailLinks = (detail: DJStudioLoadedDJ) =>
 const hasNextPage = (pagination: DJStudioPagination): boolean =>
   pagination.page < Math.max(1, pagination.totalPages);
 
+const buildVisiblePages = (page: number, totalPages: number): number[] => {
+  const safeTotalPages = Math.max(1, totalPages);
+  const start = Math.max(1, Math.min(safeTotalPages - 4, page - 2));
+  const end = Math.min(safeTotalPages, start + 4);
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+};
+
 const mergeById = <T extends { id: string }>(items: T[]): T[] => {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -289,6 +297,7 @@ function DJDetailOverlay({
   onClose: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<DJDetailTabKey>('intro');
+  const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
   const [setsState, setSetsState] = useState(() => createRelatedState<DJStudioRelatedSet>(RELATED_PAGE_SIZE.sets));
   const [eventsState, setEventsState] = useState<DJEventSectionsState>(() => createEventSectionsState());
   const [ratingsState, setRatingsState] = useState(() => createRelatedState<DJStudioRatingUnit>(RELATED_PAGE_SIZE.ratings));
@@ -296,6 +305,7 @@ function DJDetailOverlay({
 
   useEffect(() => {
     setActiveTab('intro');
+    setPreviewAssetIndex(null);
     setSetsState(createRelatedState<DJStudioRelatedSet>(RELATED_PAGE_SIZE.sets));
     setEventsState(createEventSectionsState());
     setRatingsState(createRelatedState<DJStudioRatingUnit>(RELATED_PAGE_SIZE.ratings));
@@ -349,11 +359,11 @@ function DJDetailOverlay({
       setEventsState((current) => {
         const next = { ...current };
         results.forEach(({ key, page }) => {
-          const sortedItems = key === 'upcoming'
-            ? mergeById(pageToLoad === 1 ? page.items : [...next[key].items, ...page.items])
-                .sort((left, right) => new Date(left.startDate || 0).getTime() - new Date(right.startDate || 0).getTime())
-            : mergeById(pageToLoad === 1 ? page.items : [...next[key].items, ...page.items])
-                .sort((left, right) => new Date(right.startDate || 0).getTime() - new Date(left.startDate || 0).getTime());
+          const sortedItems = [...page.items].sort((left, right) =>
+            key === 'upcoming'
+              ? new Date(left.startDate || 0).getTime() - new Date(right.startDate || 0).getTime()
+              : new Date(right.startDate || 0).getTime() - new Date(left.startDate || 0).getTime()
+          );
           next[key] = {
             ...next[key],
             items: sortedItems,
@@ -472,6 +482,28 @@ function DJDetailOverlay({
     resolved?.slug
   );
   const linkItems = resolved ? detailLinks(resolved) : [];
+  const previewAssets: OverlayImageViewerAsset[] = [
+    ...(resolved?.bannerUrl || item.bannerUrl
+      ? [
+          {
+            url: resolved?.bannerUrl || item.bannerUrl || '',
+            alt: `${primaryName} banner`,
+            title: 'Banner',
+            subtitle: 'DJ banner',
+          },
+        ]
+      : []),
+    ...(resolved?.avatarUrl || item.avatarUrl
+      ? [
+          {
+            url: resolved?.avatarUrl || item.avatarUrl || '',
+            alt: `${primaryName} avatar`,
+            title: 'Avatar',
+            subtitle: 'DJ avatar',
+          },
+        ]
+      : []),
+  ];
   const contributors: Array<{
     id: string;
     username?: string | null;
@@ -498,7 +530,13 @@ function DJDetailOverlay({
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
-            <div className="overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9]">
+            <button
+              type="button"
+              onClick={() => {
+                if (previewAssets.length) setPreviewAssetIndex(0);
+              }}
+              className="block w-full overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9] text-left"
+            >
               <div className="relative aspect-[1.2/1]">
                 {resolved?.bannerUrl || item.bannerUrl ? (
                   <Image
@@ -512,11 +550,18 @@ function DJDetailOverlay({
                   <div className="flex h-full items-center justify-center text-sm text-[#7b8794]">暂无 Banner</div>
                 )}
               </div>
-            </div>
+            </button>
 
             <div className="-mt-10 px-4">
               <div className="flex items-end gap-4 rounded-[24px] border border-[#e8eceb] bg-white/96 p-4 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
-                <div className="flex h-[92px] w-[92px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] bg-[#f1f4f6]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const avatarIndex = previewAssets.findIndex((asset) => asset.url === (resolved?.avatarUrl || item.avatarUrl || ''));
+                    if (avatarIndex >= 0) setPreviewAssetIndex(avatarIndex);
+                  }}
+                  className="flex h-[92px] w-[92px] shrink-0 items-center justify-center overflow-hidden rounded-[22px] bg-[#f1f4f6]"
+                >
                   {resolved?.avatarUrl || item.avatarUrl ? (
                     <Image
                       src={resolved?.avatarUrl || item.avatarUrl || ''}
@@ -528,7 +573,7 @@ function DJDetailOverlay({
                   ) : (
                     <span className="text-xs text-[#9aa1ad]">暂无头像</span>
                   )}
-                </div>
+                </button>
                 <div className="min-w-0 flex-1">
                   <div className="text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">{primaryName}</div>
                   {secondaryName ? <div className="mt-1 text-sm text-[#6b7280]">{secondaryName}</div> : null}
@@ -733,6 +778,7 @@ function DJDetailOverlay({
                     {(['upcoming', 'ended'] as const).map((section) => {
                       const sectionState = eventsState[section];
                       const title = section === 'upcoming' ? '即将开始 / 进行中' : '历史活动';
+                      const sectionVisiblePages = buildVisiblePages(sectionState.pagination.page, sectionState.pagination.totalPages);
                       return (
                         <section key={section} className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                           <div className="flex items-center justify-between gap-3">
@@ -776,11 +822,44 @@ function DJDetailOverlay({
                               <EmptyTabState title="暂无活动" description="这个分组下还没有绑定到该 DJ 的活动。" />
                             </div>
                           )}
-                          <LoadMoreButton
-                            disabled={!hasNextPage(sectionState.pagination)}
-                            loading={sectionState.loading}
-                            onClick={() => void loadEvents(sectionState.pagination.page + 1, section)}
-                          />
+                          <div className="mt-4 flex flex-col gap-3 border-t border-[#edf0f2] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-xs text-[#8b93a1]">
+                              Page {sectionState.pagination.page} / {Math.max(1, sectionState.pagination.totalPages)} 路 Total {sectionState.pagination.total} events
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={sectionState.loading || sectionState.pagination.page <= 1}
+                                onClick={() => void loadEvents(sectionState.pagination.page - 1, section)}
+                                className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-xs font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Prev
+                              </button>
+                              {sectionVisiblePages.map((pageNumber) => (
+                                <button
+                                  key={`${section}-${pageNumber}`}
+                                  type="button"
+                                  disabled={sectionState.loading}
+                                  onClick={() => void loadEvents(pageNumber, section)}
+                                  className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-xs font-semibold ${
+                                    pageNumber === sectionState.pagination.page
+                                      ? 'bg-[#071110] text-white'
+                                      : 'border border-[#e8eceb] bg-white text-[#111827]'
+                                  }`}
+                                >
+                                  {pageNumber}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                disabled={sectionState.loading || sectionState.pagination.page >= Math.max(1, sectionState.pagination.totalPages)}
+                                onClick={() => void loadEvents(sectionState.pagination.page + 1, section)}
+                                className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-xs font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
                         </section>
                       );
                     })}
@@ -935,6 +1014,12 @@ function DJDetailOverlay({
             )}
           </div>
         </div>
+        <OverlayImageViewer
+          assets={previewAssets}
+          activeIndex={previewAssetIndex}
+          onClose={() => setPreviewAssetIndex(null)}
+          onChange={setPreviewAssetIndex}
+        />
       </div>
     </div>
   );
@@ -992,6 +1077,10 @@ export default function DJCatalogPageClient() {
   const [selectedDJError, setSelectedDJError] = useState('');
   const [selectedDJLoading, setSelectedDJLoading] = useState(false);
   const [detailCache, setDetailCache] = useState<Record<string, DJStudioLoadedDJ>>({});
+  const [menuOpenDJId, setMenuOpenDJId] = useState<string | null>(null);
+  const [pendingDeleteDJ, setPendingDeleteDJ] = useState<DJCatalogItem | null>(null);
+  const [deletingDJId, setDeletingDJId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   const filters = useMemo<DJCatalogFilters>(
     () => ({
@@ -1053,6 +1142,29 @@ export default function DJCatalogPageClient() {
     void loadCatalog();
   }, [loadCatalog]);
 
+  useEffect(() => {
+    if (!menuOpenDJId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!actionMenuRef.current) return;
+      if (event.target instanceof Node && actionMenuRef.current.contains(event.target)) return;
+      setMenuOpenDJId(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpenDJId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenDJId]);
+
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPage(1);
@@ -1074,6 +1186,7 @@ export default function DJCatalogPageClient() {
   };
 
   const openDetailOverlay = useCallback(async (item: DJCatalogItem) => {
+    setMenuOpenDJId(null);
     setSelectedDJ(item);
     setSelectedDJError('');
     const cached = detailCache[item.id];
@@ -1097,11 +1210,44 @@ export default function DJCatalogPageClient() {
   }, [detailCache]);
 
   const closeDetailOverlay = useCallback(() => {
+    setMenuOpenDJId(null);
     setSelectedDJ(null);
     setSelectedDJDetail(null);
     setSelectedDJError('');
     setSelectedDJLoading(false);
   }, []);
+
+  const requestDeleteDJ = useCallback((item: DJCatalogItem) => {
+    setMenuOpenDJId(null);
+    setPendingDeleteDJ(item);
+  }, []);
+
+  const confirmDeleteDJ = useCallback(async () => {
+    if (!pendingDeleteDJ) return;
+    const djId = pendingDeleteDJ.id;
+    try {
+      setDeletingDJId(djId);
+      await djStudioApi.deleteDJ(djId);
+      setItems((current) => current.filter((item) => item.id !== djId));
+      setPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+      }));
+      if (selectedDJ?.id === djId) {
+        closeDetailOverlay();
+      }
+      setPendingDeleteDJ(null);
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[djId];
+        return next;
+      });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除 DJ 失败');
+    } finally {
+      setDeletingDJId(null);
+    }
+  }, [closeDetailOverlay, pendingDeleteDJ, selectedDJ]);
 
   const handleExport = () => {
     if (typeof window === 'undefined' || !items.length) return;
@@ -1423,7 +1569,10 @@ export default function DJCatalogPageClient() {
                     <div className="mt-3 flex items-center gap-2 lg:mt-0 lg:justify-end">
                       <Link
                         href={`/admin/content/djs/${item.id}/edit`}
-                        onClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuOpenDJId((current) => (current === item.id ? null : item.id));
+                        }}
                         className="inline-flex h-[36px] items-center rounded-[10px] border border-[#e8eceb] bg-white px-4 text-[13px] font-semibold text-[#111827]"
                       >
                         编辑
@@ -1510,6 +1659,39 @@ export default function DJCatalogPageClient() {
         error={selectedDJError}
         onClose={closeDetailOverlay}
       />
+      {pendingDeleteDJ ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" onClick={() => setPendingDeleteDJ(null)}>
+          <div
+            className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">Delete DJ</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这个 DJ？</div>
+            <p className="mt-3 text-sm leading-6 text-[#6b7280]">
+              {pendingDeleteDJ.name}
+              <br />
+              删除后将无法恢复，请再次确认这是你要执行的操作。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteDJ(null)}
+                className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteDJ()}
+                disabled={deletingDJId === pendingDeleteDJ.id}
+                className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingDJId === pendingDeleteDJ.id ? '删除中...' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminContentLayout>
   );
 }
