@@ -23,11 +23,11 @@ export default function AdminContentNewsCreatePage() {
   return (
     <AdminContentLayout
       title="新建资讯"
-      description="按照新的后台 Studio 流程创建资讯内容，正文区域作为最主要的操作区，关联实体作为辅助配置区。"
+      description="按照新的后台 Studio 流程创建资讯内容，正文区域作为主要操作区，关联实体作为辅助配置区。"
       actions={
         <>
           <Link href="/admin/content/news" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回资讯工作区
+            返回资讯目录
           </Link>
           <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回内容控制台

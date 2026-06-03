@@ -60,7 +60,7 @@ export default function AdminContentLabelEditPage() {
       actions={
         <>
           <Link href="/admin/content/labels" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回厂牌工作区
+            返回厂牌目录
           </Link>
           <Link href="/admin/content/labels/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建厂牌
@@ -68,9 +68,7 @@ export default function AdminContentLabelEditPage() {
         </>
       }
     >
-      {notice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section>
-      ) : null}
+      {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
 
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">正在加载厂牌详情...</section>

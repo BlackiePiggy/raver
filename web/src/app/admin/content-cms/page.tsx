@@ -30,7 +30,7 @@ export default function AdminContentCmsPage() {
 
   if (isLoading) {
     return (
-      <AdminAppShell title="正在进入内容后台" description="同步当前登录态并准备跳转到统一内容工作区。">
+      <AdminAppShell title="正在进入内容后台" description="同步当前登录态并准备跳转到统一内容控制台。">
         <div className="admin-shell-panel p-8 text-sm text-black/55">加载中...</div>
       </AdminAppShell>
     );
@@ -38,7 +38,7 @@ export default function AdminContentCmsPage() {
 
   if (!user) {
     return (
-      <AdminAppShell title="内容后台需要登录" description="请先登录后访问统一内容工作区。">
+      <AdminAppShell title="内容后台需要登录" description="请先登录后访问统一内容控制台。">
         <div className="admin-shell-panel p-8">
           <p className="text-lg font-semibold text-[#071110]">请先登录后访问内容后台。</p>
           <Link href="/login" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
@@ -51,8 +51,8 @@ export default function AdminContentCmsPage() {
 
   if (!policy.canAccessContentCms) {
     return (
-      <AdminAppShell title="当前账号无权限访问" description="你的角色暂时不能进入内容后台。">
-        <div className="admin-shell-panel p-8 text-lg font-semibold text-[#071110]">当前账号无权限访问内容后台。</div>
+      <AdminAppShell title="当前账号无权访问" description="你的角色暂时不能进入内容后台。">
+        <div className="admin-shell-panel p-8 text-lg font-semibold text-[#071110]">当前账号无权访问内容后台。</div>
       </AdminAppShell>
     );
   }
@@ -61,7 +61,7 @@ export default function AdminContentCmsPage() {
     <AdminAppShell
       title="正在进入统一内容后台"
       eyebrow="Raver Admin / Content CMS"
-      description="正在同步当前登录态，并跳转到新的 Web 内容工作区。Festival Viewer 会作为迁移期旧工具继续保留在工作区内。"
+      description="正在同步当前登录态，并跳转到新的 Web 内容控制台。Festival Viewer 会作为迁移期旧工具继续保留在 legacy tools 中。"
     >
       <section className="mx-auto max-w-4xl space-y-5">
         <div>
@@ -96,13 +96,11 @@ export default function AdminContentCmsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-[#071110]">{redirecting ? '跳转中...' : '准备跳转'}</h2>
-              <p className="mt-1 text-sm text-black/50">
-                如果没有自动跳转，可以手动打开统一内容后台或迁移期旧工具。
-              </p>
+              <p className="mt-1 text-sm text-black/50">如果没有自动跳转，可以手动打开统一内容控制台或 legacy tools。</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Link href="/admin/content" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white">
-                打开统一内容后台
+                打开统一内容控制台
               </Link>
               <Link href="/admin/content/legacy-tools" className="rounded-full border border-white/50 bg-white/50 px-4 py-2 text-sm text-[#071110]">
                 打开旧工具桥接

@@ -16,9 +16,7 @@ import {
 export default function AdminContentOrganizerEditPage() {
   const params = useParams<{ id: string }>();
   const organizerId = typeof params?.id === 'string' ? params.id : '';
-  const [draft, setDraft] = useState<OrganizerStudioDraft>(() =>
-    createOrganizerStudioDraft()
-  );
+  const [draft, setDraft] = useState<OrganizerStudioDraft>(() => createOrganizerStudioDraft());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,10 +53,7 @@ export default function AdminContentOrganizerEditPage() {
     };
   }, [organizerId]);
 
-  const pageTitle = useMemo(
-    () => draft.name.zh || draft.name.en || '编辑主办方',
-    [draft.name.en, draft.name.zh]
-  );
+  const pageTitle = useMemo(() => draft.name.zh || draft.name.en || '编辑主办方', [draft.name.en, draft.name.zh]);
 
   const handleSubmitResult = (result: OrganizerStudioCreateResult) => {
     if (result.kind === 'created') {
@@ -77,16 +72,16 @@ export default function AdminContentOrganizerEditPage() {
       actions={
         <>
           <Link
-            href="/admin/content/organizers"
+            href="/admin/content/organizers/catalog"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            返回主办方工作区
+            返回主办方目录
           </Link>
           <Link
-            href="/admin/content/events"
+            href="/admin/content/events/catalog"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            打开活动工作区
+            打开活动目录
           </Link>
         </>
       }
@@ -105,13 +100,9 @@ export default function AdminContentOrganizerEditPage() {
       ) : null}
 
       {loading ? (
-        <section className="admin-studio-section p-6 text-sm text-black/48">
-          正在加载主办方详情并回填编辑表单...
-        </section>
+        <section className="admin-studio-section p-6 text-sm text-black/48">正在加载主办方详情并回填编辑表单...</section>
       ) : error ? (
-        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">
-          {error}
-        </section>
+        <section className="admin-studio-pastel-rose p-6 text-sm text-[#6a3530]">{error}</section>
       ) : (
         <OrganizerStudioForm
           mode="edit"

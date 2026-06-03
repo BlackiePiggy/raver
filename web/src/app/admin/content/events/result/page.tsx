@@ -36,17 +36,17 @@ function EventResultContent() {
   return (
     <AdminContentLayout
       title={content.title}
-      description="提交结果会和 iOS 端一样进入独立结果页，明确区分已经直接入库成功与仍在处理中的提交任务。"
+      description="提交结果页和 iOS 一样使用独立结果页，明确区分已直接入库成功与仍在处理中、等待审核的提交任务。"
       actions={
         <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-          返回活动工作区
+          返回活动目录
         </Link>
       }
     >
       <section className="admin-studio-section px-6 py-10">
         <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
           <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#edf7f2]">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#071110] text-3xl font-bold text-white">✓</div>
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#071110] text-3xl font-bold text-white">OK</div>
           </div>
 
           <h2 className="mt-8 text-3xl font-black tracking-[-0.05em] text-[#071110]">{content.title}</h2>

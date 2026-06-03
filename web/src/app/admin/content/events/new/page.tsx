@@ -42,11 +42,11 @@ export default function AdminContentEventCreatePage() {
   return (
     <AdminContentLayout
       title="新建活动"
-      description="在统一后台内完成活动资料创建、主办方绑定、时区确认、时间表录入和素材上传。"
+      description="在统一内容控制台内完成活动资料创建、主办方绑定、时区确认、时间表录入和素材上传。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回活动工作区
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+            返回活动目录
           </Link>
           <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             活动目录中心

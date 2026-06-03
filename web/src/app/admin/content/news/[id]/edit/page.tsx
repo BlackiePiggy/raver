@@ -61,7 +61,7 @@ export default function AdminContentNewsEditPage() {
       actions={
         <>
           <Link href="/admin/content/news" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回资讯工作区
+            返回资讯目录
           </Link>
           <Link href="/admin/content/news/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建资讯
@@ -69,9 +69,7 @@ export default function AdminContentNewsEditPage() {
         </>
       }
     >
-      {notice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section>
-      ) : null}
+      {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
 
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">正在加载资讯详情...</section>

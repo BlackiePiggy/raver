@@ -53,7 +53,7 @@ export default function AdminContentEventEditPage() {
     };
   }, [eventId]);
 
-  const pageTitle = useMemo(() => (draft.name.zh || draft.name.en || '编辑活动'), [draft.name.en, draft.name.zh]);
+  const pageTitle = useMemo(() => draft.name.zh || draft.name.en || '编辑活动', [draft.name.en, draft.name.zh]);
 
   const handleSubmitResult = (result: EventStudioCreateResult) => {
     if (result.kind === 'created') {
@@ -82,11 +82,11 @@ export default function AdminContentEventEditPage() {
   return (
     <AdminContentLayout
       title={pageTitle}
-      description="统一后台中的活动编辑页会直接加载正式活动资料，支持结构化活动日、时间表、图片替换与主办方绑定更新。"
+      description="统一内容控制台中的活动编辑页会直接加载正式活动资料，支持结构化活动日、时间表、图片替换与主办方绑定更新。"
       actions={
         <>
-          <Link href="/admin/content/events" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回活动工作区
+          <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+            返回活动目录
           </Link>
           <Link href="/admin/content/events/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             活动目录中心

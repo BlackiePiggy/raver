@@ -75,10 +75,10 @@ export default function DJStudioEditPageClient() {
       actions={
         <>
           <Link
-            href="/admin/content/djs"
+            href="/admin/content/djs/catalog"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            返回 DJ 工作区
+            返回 DJ 目录
           </Link>
           <Link
             href="/admin/content/djs/catalog"

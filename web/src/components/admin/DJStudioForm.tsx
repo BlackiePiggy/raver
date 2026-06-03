@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import Image from 'next/image';
@@ -16,9 +16,9 @@ import {
 } from '@/features/admin-content/dj-studio';
 
 const DJ_STUDIO_STEPS = [
-  { key: 'profile', eyebrow: 'Step 1', title: '资料', description: '身份、多语言、图片、别名和 Genres' },
-  { key: 'links', eyebrow: 'Step 2', title: '平台', description: '官方链接、平台 ID 和统计' },
-  { key: 'review', eyebrow: 'Step 3', title: '检查', description: '最终核对并提交' },
+  { key: 'profile', eyebrow: 'Step 1', title: '璧勬枡', description: '韬唤銆佸璇█銆佸浘鐗囥€佸埆鍚嶅拰 Genres' },
+  { key: 'links', eyebrow: 'Step 2', title: '骞冲彴', description: '瀹樻柟閾炬帴銆佸钩鍙?ID 鍜岀粺璁? },
+  { key: 'review', eyebrow: 'Step 3', title: '妫€鏌?, description: '鏈€缁堟牳瀵瑰苟鎻愪氦' },
 ] as const;
 
 type DJStudioStepKey = (typeof DJ_STUDIO_STEPS)[number]['key'];
@@ -156,7 +156,7 @@ function ImageDropZone({
         <p className="text-sm font-medium text-[#071110]">{label}</p>
         {previewUrl && onRemove ? (
           <button type="button" onClick={onRemove} className="text-xs text-black/48">
-            移除
+            绉婚櫎
           </button>
         ) : null}
       </div>
@@ -164,11 +164,11 @@ function ImageDropZone({
         {previewUrl ? (
           <Image src={previewUrl} alt={label} fill className="object-cover" sizes="220px" />
         ) : (
-          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">暂无图片</div>
+          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">鏆傛棤鍥剧墖</div>
         )}
       </div>
       <label className="admin-studio-button-secondary mt-4 flex cursor-pointer items-center justify-center px-4 py-3 text-sm">
-        {uploading ? '上传中...' : '上传图片'}
+        {uploading ? '涓婁紶涓?..' : '涓婁紶鍥剧墖'}
         <input type="file" accept="image/*" className="hidden" onChange={onChange} />
       </label>
     </div>
@@ -207,7 +207,7 @@ function DynamicStringListField({
               type="button"
               onClick={() => onRemove(index)}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-black/48 hover:text-[#071110]"
-              aria-label={`删除${label}${index + 1}`}
+              aria-label={`鍒犻櫎${label}${index + 1}`}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -219,8 +219,7 @@ function DynamicStringListField({
           className="inline-flex items-center gap-2 rounded-full border border-[#d9e7dd] bg-[#f6fbf7] px-4 py-2 text-sm font-semibold text-[#071110]"
         >
           <Plus className="h-4 w-4" />
-          添加一行
-        </button>
+          娣诲姞涓€琛?        </button>
       </div>
     </Field>
   );
@@ -276,7 +275,7 @@ export default function DJStudioForm({
   const canSubmit = useMemo(() => Object.keys(validateDJStudioDraft(draft)).length === 0, [draft]);
   const currentStepItem = DJ_STUDIO_STEPS[currentStep];
   const totalSteps = DJ_STUDIO_STEPS.length;
-  const displayName = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull) || 'DJ 草稿';
+  const displayName = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull) || 'DJ 鑽夌';
   const hasPlatformLink = [
     draft.spotifyUrl,
     draft.instagramUrl,
@@ -381,7 +380,7 @@ export default function DJStudioForm({
       if (usage === 'banner') updateDraft('bannerImage', nextImage);
       if (usage === 'proof') updateDraft('proofImage', nextImage);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'DJ 图片上传失败');
+      setSubmitError(error instanceof Error ? error.message : 'DJ 鍥剧墖涓婁紶澶辫触');
     } finally {
       if (usage === 'avatar') setUploadingAvatar(false);
       if (usage === 'banner') setUploadingBanner(false);
@@ -407,7 +406,7 @@ export default function DJStudioForm({
       if (usage === 'banner') updateDraft('bannerImage', null);
       if (usage === 'proof') updateDraft('proofImage', null);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '删除 DJ 图片失败');
+      setSubmitError(error instanceof Error ? error.message : '鍒犻櫎 DJ 鍥剧墖澶辫触');
     }
   };
 
@@ -416,7 +415,7 @@ export default function DJStudioForm({
     setErrors(nextErrors);
     setSubmitError(null);
     if (currentStepHasBlockingErrors(nextErrors)) {
-      setSubmitError('当前分页还有必填项未完成，请先补齐后再继续。');
+      setSubmitError('褰撳墠鍒嗛〉杩樻湁蹇呭～椤规湭瀹屾垚锛岃鍏堣ˉ榻愬悗鍐嶇户缁€?);
       return;
     }
     goToStep(currentStep + 1);
@@ -439,7 +438,7 @@ export default function DJStudioForm({
           : await djStudioApi.createDJ(mapDJStudioDraftToCreateInput(draft));
       onSubmit(result);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'DJ 提交失败');
+      setSubmitError(error instanceof Error ? error.message : 'DJ 鎻愪氦澶辫触');
     } finally {
       setSubmitting(false);
     }
@@ -454,42 +453,41 @@ export default function DJStudioForm({
           <div className="admin-studio-label">{mode === 'create' ? 'DJ Studio' : 'Edit DJ Session'}</div>
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">{displayName}</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
-            <SummaryCard label="头像" value={draft.avatarImage ? '已上传' : '待上传'} tone="mint" />
-            <SummaryCard label="平台链接" value={hasPlatformLink ? '已填写' : '待补齐'} tone="sand" />
-            <SummaryCard label="Proof" value={draft.proofImage ? '已上传' : '可选'} tone="rose" />
-            <SummaryCard label="当前步骤" value={`${currentStep + 1}/${totalSteps} · ${currentStepItem.title}`} />
+            <SummaryCard label="澶村儚" value={draft.avatarImage ? '宸蹭笂浼? : '寰呬笂浼?} tone="mint" />
+            <SummaryCard label="骞冲彴閾炬帴" value={hasPlatformLink ? '宸插～鍐? : '寰呰ˉ榻?} tone="sand" />
+            <SummaryCard label="Proof" value={draft.proofImage ? '宸蹭笂浼? : '鍙€?} tone="rose" />
+            <SummaryCard label="褰撳墠姝ラ" value={`${currentStep + 1}/${totalSteps} 路 ${currentStepItem.title}`} />
           </div>
         </div>
 
         <div className="admin-studio-pastel-mint p-6">
           <div className="admin-studio-label">Aligned Flow</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">资料优先</h2>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">璧勬枡浼樺厛</h2>
           <p className="mt-4 text-sm leading-6 text-black/52">
-            Web 端 DJ 上传现在先集中处理资料与身份，再进入平台链接和最终检查。多语言字段统一采用和 event 一样的按钮式 overlay 编辑。
-          </p>
+            Web 绔?DJ 涓婁紶鐜板湪鍏堥泦涓鐞嗚祫鏂欎笌韬唤锛屽啀杩涘叆骞冲彴閾炬帴鍜屾渶缁堟鏌ャ€傚璇█瀛楁缁熶竴閲囩敤鍜?event 涓€鏍风殑鎸夐挳寮?overlay 缂栬緫銆?          </p>
         </div>
       </section>
 
       <StepNavigation currentStep={currentStep} onSelect={goToStep} />
 
       {currentStep === 0 ? (
-        <Section title="DJ 资料与身份" description="在同一页完成名称、多语言、头像素材、别名、Genres、国家和简介。">
+        <Section title="DJ 璧勬枡涓庤韩浠? description="鍦ㄥ悓涓€椤靛畬鎴愬悕绉般€佸璇█銆佸ご鍍忕礌鏉愩€佸埆鍚嶃€丟enres銆佸浗瀹跺拰绠€浠嬨€?>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="lg:col-span-2">
               <LocalizedTextField
-                label="DJ 名称"
+                label="DJ 鍚嶇О"
                 value={draft.name}
                 kind="input"
                 error={errors.name}
-                placeholder="例如：Martin Garrix"
-                hint="主输入默认编辑中文。"
+                placeholder="渚嬪锛歁artin Garrix"
+                hint="涓昏緭鍏ラ粯璁ょ紪杈戜腑鏂囥€?
                 onPrimaryChange={(value) => updateLocalizedField('name', 'zh', value)}
-                onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: 'DJ 名称', kind: 'input' })}
+                onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: 'DJ 鍚嶇О', kind: 'input' })}
               />
             </div>
 
             <div className="lg:col-span-2">
-              <Field label="图片素材" error={errors.avatarImage} hint="头像、Banner 和 proof 都使用更紧凑的正方形素材卡片管理。">
+              <Field label="鍥剧墖绱犳潗" error={errors.avatarImage} hint="澶村儚銆丅anner 鍜?proof 閮戒娇鐢ㄦ洿绱у噾鐨勬鏂瑰舰绱犳潗鍗＄墖绠＄悊銆?>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <ImageDropZone
                     label="Avatar"
@@ -517,10 +515,10 @@ export default function DJStudioForm({
             </div>
 
             <DynamicStringListField
-              label="别名"
+              label="鍒悕"
               items={draft.aliases}
-              placeholder="例如：Ytram"
-              hint="每点击一次加号按钮新增一行。"
+              placeholder="渚嬪锛歒tram"
+              hint="姣忕偣鍑讳竴娆″姞鍙锋寜閽柊澧炰竴琛屻€?
               onChange={(index, value) => handleListChange('aliases', index, value)}
               onAdd={() => handleListAdd('aliases')}
               onRemove={(index) => handleListRemove('aliases', index)}
@@ -529,30 +527,30 @@ export default function DJStudioForm({
             <DynamicStringListField
               label="Genres"
               items={draft.genres}
-              placeholder="例如：Progressive House"
-              hint="Genres 也按显式加号新增，不再靠换行。"
+              placeholder="渚嬪锛歅rogressive House"
+              hint="Genres 涔熸寜鏄惧紡鍔犲彿鏂板锛屼笉鍐嶉潬鎹㈣銆?
               onChange={(index, value) => handleListChange('genres', index, value)}
               onAdd={() => handleListAdd('genres')}
               onRemove={(index) => handleListRemove('genres', index)}
             />
 
             <LocalizedTextField
-              label="国家 / 地区"
+              label="鍥藉 / 鍦板尯"
               value={draft.country}
               kind="input"
-              placeholder="例如：荷兰"
+              placeholder="渚嬪锛氳嵎鍏?
               onPrimaryChange={(value) => updateLocalizedField('country', 'zh', value)}
-              onOpenOverlay={() => setActiveLocalizedField({ key: 'country', label: '国家 / 地区', kind: 'input' })}
+              onOpenOverlay={() => setActiveLocalizedField({ key: 'country', label: '鍥藉 / 鍦板尯', kind: 'input' })}
             />
 
             <div className="lg:col-span-2">
               <LocalizedTextField
-                label="简介"
+                label="绠€浠?
                 value={draft.bio}
                 kind="textarea"
-                placeholder="DJ 简介、风格、代表经历等"
+                placeholder="DJ 绠€浠嬨€侀鏍笺€佷唬琛ㄧ粡鍘嗙瓑"
                 onPrimaryChange={(value) => updateLocalizedField('bio', 'zh', value)}
-                onOpenOverlay={() => setActiveLocalizedField({ key: 'bio', label: '简介', kind: 'textarea' })}
+                onOpenOverlay={() => setActiveLocalizedField({ key: 'bio', label: '绠€浠?, kind: 'textarea' })}
               />
             </div>
           </div>
@@ -560,7 +558,7 @@ export default function DJStudioForm({
       ) : null}
 
       {currentStep === 1 ? (
-        <Section title="平台链接" description="尽量补齐官方平台入口和关键统计。proof 作为素材已经统一放在资料页管理。">
+        <Section title="骞冲彴閾炬帴" description="灏介噺琛ラ綈瀹樻柟骞冲彴鍏ュ彛鍜屽叧閿粺璁°€俻roof 浣滀负绱犳潗宸茬粡缁熶竴鏀惧湪璧勬枡椤电鐞嗐€?>
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="Spotify ID">
               <input value={draft.spotifyId} onChange={(event) => updateDraft('spotifyId', event.target.value)} className={textInputClassName} placeholder="spotify artist id" />
@@ -589,17 +587,17 @@ export default function DJStudioForm({
             <Field label="YouTube URL">
               <input value={draft.youtubeUrl} onChange={(event) => updateDraft('youtubeUrl', event.target.value)} className={textInputClassName} placeholder="https://youtube.com/..." />
             </Field>
-            <Field label="网易云 URL">
+            <Field label="缃戞槗浜?URL">
               <input value={draft.neteaseUrl} onChange={(event) => updateDraft('neteaseUrl', event.target.value)} className={textInputClassName} placeholder="https://music.163.com/..." />
             </Field>
-            <Field label="QQ 音乐 URL">
+            <Field label="QQ 闊充箰 URL">
               <input value={draft.qqMusicUrl} onChange={(event) => updateDraft('qqMusicUrl', event.target.value)} className={textInputClassName} placeholder="https://y.qq.com/..." />
             </Field>
-            <Field label="官网 URL">
+            <Field label="瀹樼綉 URL">
               <input value={draft.website} onChange={(event) => updateDraft('website', event.target.value)} className={textInputClassName} placeholder="https://..." />
             </Field>
-            <Field label="其他平台 URL">
-              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="其他平台链接" />
+            <Field label="鍏朵粬骞冲彴 URL">
+              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="鍏朵粬骞冲彴閾炬帴" />
             </Field>
             <Field label="Spotify Followers" error={errors.stats}>
               <input value={draft.spotifyFollowers} onChange={(event) => updateDraft('spotifyFollowers', event.target.value)} className={textInputClassName} placeholder="123456" />
@@ -621,17 +619,17 @@ export default function DJStudioForm({
       ) : null}
 
       {currentStep === 2 ? (
-        <Section title="检查与提交" description="最后确认关键资料。提交前如有缺项，会自动跳回对应分页。">
+        <Section title="妫€鏌ヤ笌鎻愪氦" description="鏈€鍚庣‘璁ゅ叧閿祫鏂欍€傛彁浜ゅ墠濡傛湁缂洪」锛屼細鑷姩璺冲洖瀵瑰簲鍒嗛〉銆?>
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="admin-reference-card p-4">
-              <div className="text-sm font-semibold text-[#071110]">资料摘要</div>
+              <div className="text-sm font-semibold text-[#071110]">璧勬枡鎽樿</div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <SummaryCard label="名称" value={displayName} />
-                <SummaryCard label="头像" value={draft.avatarImage ? '已上传到 OSS' : '未上传'} tone={draft.avatarImage ? 'mint' : 'rose'} />
-                <SummaryCard label="平台链接" value={hasPlatformLink ? '已填写' : '未填写'} tone={hasPlatformLink ? 'mint' : 'sand'} />
-                <SummaryCard label="Proof" value={draft.proofImage ? '已上传' : '未上传'} tone={draft.proofImage ? 'mint' : 'soft'} />
-                <SummaryCard label="别名" value={`${countFilledItems(draft.aliases)} 个`} />
-                <SummaryCard label="Genres" value={`${countFilledItems(draft.genres)} 个`} />
+                <SummaryCard label="鍚嶇О" value={displayName} />
+                <SummaryCard label="澶村儚" value={draft.avatarImage ? '宸蹭笂浼犲埌 OSS' : '鏈笂浼?} tone={draft.avatarImage ? 'mint' : 'rose'} />
+                <SummaryCard label="骞冲彴閾炬帴" value={hasPlatformLink ? '宸插～鍐? : '鏈～鍐?} tone={hasPlatformLink ? 'mint' : 'sand'} />
+                <SummaryCard label="Proof" value={draft.proofImage ? '宸蹭笂浼? : '鏈笂浼?} tone={draft.proofImage ? 'mint' : 'soft'} />
+                <SummaryCard label="鍒悕" value={`${countFilledItems(draft.aliases)} 涓猔} />
+                <SummaryCard label="Genres" value={`${countFilledItems(draft.genres)} 涓猔} />
               </div>
             </div>
 
@@ -639,10 +637,10 @@ export default function DJStudioForm({
               <div className="admin-studio-pastel-mint p-5">
                 <div className="admin-studio-label">Ready To Submit</div>
                 <div className="mt-2 text-lg font-semibold text-[#071110]">
-                  {canSubmit ? '当前 DJ 资料已满足提交条件。' : '还有必填项未完成，提交时会自动跳转。'}
+                  {canSubmit ? '褰撳墠 DJ 璧勬枡宸叉弧瓒虫彁浜ゆ潯浠躲€? : '杩樻湁蹇呭～椤规湭瀹屾垚锛屾彁浜ゆ椂浼氳嚜鍔ㄨ烦杞€?}
                 </div>
                 <div className="mt-3 text-sm leading-6 text-black/52">
-                  {mode === 'create' ? '提交后会创建 DJ，或进入内容审核队列。' : '提交后会保存 DJ 编辑，或进入编辑审核队列。'}
+                  {mode === 'create' ? '鎻愪氦鍚庝細鍒涘缓 DJ锛屾垨杩涘叆鍐呭瀹℃牳闃熷垪銆? : '鎻愪氦鍚庝細淇濆瓨 DJ 缂栬緫锛屾垨杩涘叆缂栬緫瀹℃牳闃熷垪銆?}
                 </div>
               </div>
               {Object.values(errors)
@@ -664,19 +662,17 @@ export default function DJStudioForm({
           disabled={currentStep === 0}
           className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
         >
-          上一步
-        </button>
+          涓婁竴姝?        </button>
         <div className="text-sm text-black/45">
           {currentStepItem.eyebrow} / {currentStepItem.title}
         </div>
         {currentStep < totalSteps - 1 ? (
           <button type="button" onClick={handleAdvance} className="admin-studio-button-primary px-5 py-3 text-sm">
-            下一步
-          </button>
+            涓嬩竴姝?          </button>
         ) : (
           <div className="flex flex-wrap gap-3">
-            <Link href="/admin/content/djs" className="admin-studio-button-secondary px-5 py-3 text-sm">
-              返回 DJ 工作区
+            <Link href="/admin/content/djs/catalog" className="admin-studio-button-secondary px-5 py-3 text-sm">
+              ?? DJ ??
             </Link>
             <button
               type="button"
@@ -684,7 +680,7 @@ export default function DJStudioForm({
               disabled={submitting || uploadingAvatar || uploadingBanner || uploadingProof}
               className="admin-studio-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交 DJ' : '提交编辑')}
+              {submitting ? '鎻愪氦涓?..' : submitButtonText || (mode === 'create' ? '鎻愪氦 DJ' : '鎻愪氦缂栬緫')}
             </button>
           </div>
         )}
@@ -704,3 +700,4 @@ export default function DJStudioForm({
     </div>
   );
 }
+

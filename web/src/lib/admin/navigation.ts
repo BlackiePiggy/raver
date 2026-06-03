@@ -76,24 +76,24 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: 'Content',
     items: [
       {
-        href: '/admin/content/events',
-        label: '活动工作区',
+        href: '/admin/content/events/catalog',
+        label: '活动目录',
         description: '活动目录与编辑',
         icon: RadioTower,
         visible: contentVisible,
         matchMode: 'prefix',
       },
       {
-        href: '/admin/content/organizers',
-        label: '主办方工作区',
+        href: '/admin/content/organizers/catalog',
+        label: '主办方目录',
         description: '主办方目录与绑定',
         icon: TicketCheck,
         visible: contentVisible,
         matchMode: 'prefix',
       },
       {
-        href: '/admin/content/djs',
-        label: 'DJ 工作区',
+        href: '/admin/content/djs/catalog',
+        label: 'DJ 目录',
         description: 'DJ 目录与编辑',
         icon: Headphones,
         visible: contentVisible,
@@ -101,7 +101,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         href: '/admin/content/news',
-        label: '资讯工作区',
+        label: '资讯目录',
         description: '资讯创建与编辑',
         icon: Newspaper,
         visible: contentVisible,
@@ -109,7 +109,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         href: '/admin/content/labels',
-        label: '厂牌工作区',
+        label: '厂牌目录',
         description: '厂牌资料与编辑',
         icon: Disc3,
         visible: contentVisible,

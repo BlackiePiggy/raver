@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import Image from 'next/image';
@@ -77,7 +77,7 @@ function ImageDropZone({
             onClick={onRemove}
             className="text-xs text-black/48"
           >
-            移除
+            绉婚櫎
           </button>
         ) : null}
       </div>
@@ -87,11 +87,11 @@ function ImageDropZone({
         </div>
       ) : (
         <div className="mt-3 flex aspect-video items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#edf7f2,#f7efda)] text-sm text-black/42">
-          暂无图片
+          鏆傛棤鍥剧墖
         </div>
       )}
       <label className="admin-studio-button-secondary mt-4 cursor-pointer px-4 py-3 text-sm">
-        {uploading ? '上传中...' : acceptMultiple ? '选择图片' : '上传图片'}
+        {uploading ? '涓婁紶涓?..' : acceptMultiple ? '閫夋嫨鍥剧墖' : '涓婁紶鍥剧墖'}
         <input
           type="file"
           accept="image/*"
@@ -222,7 +222,7 @@ export default function OrganizerStudioForm({
         updateDraft('backgroundImage', nextValue);
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '主办方图片上传失败');
+      setSubmitError(error instanceof Error ? error.message : '涓诲姙鏂瑰浘鐗囦笂浼犲け璐?);
     } finally {
       if (usage === 'avatar') {
         setUploadingAvatar(false);
@@ -266,7 +266,7 @@ export default function OrganizerStudioForm({
         return next;
       });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '证明图片上传失败');
+      setSubmitError(error instanceof Error ? error.message : '璇佹槑鍥剧墖涓婁紶澶辫触');
     } finally {
       setUploadingProof(false);
       event.target.value = '';
@@ -292,7 +292,7 @@ export default function OrganizerStudioForm({
             );
       onSubmit(result);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '主办方提交失败');
+      setSubmitError(error instanceof Error ? error.message : '涓诲姙鏂规彁浜ゅけ璐?);
     } finally {
       setSubmitting(false);
     }
@@ -323,7 +323,7 @@ export default function OrganizerStudioForm({
         updateDraft('backgroundImage', null);
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '图片移除失败');
+      setSubmitError(error instanceof Error ? error.message : '鍥剧墖绉婚櫎澶辫触');
     } finally {
       if (usage === 'avatar') {
         setDeletingAvatar(false);
@@ -358,7 +358,7 @@ export default function OrganizerStudioForm({
         draft.proofImages.filter((_, itemIndex) => itemIndex !== index)
       );
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '证明图片移除失败');
+      setSubmitError(error instanceof Error ? error.message : '璇佹槑鍥剧墖绉婚櫎澶辫触');
     } finally {
       setDeletingProofIndexes((current) => current.filter((item) => item !== index));
     }
@@ -373,13 +373,13 @@ export default function OrganizerStudioForm({
       ) : null}
 
       <Section
-        title="媒体与证明"
-        description="第一版先对齐头像、背景和证明图片上传。头像是必填主视觉，官方链接与证明图满足其一即可提交。"
+        title="濯掍綋涓庤瘉鏄?
+        description="绗竴鐗堝厛瀵归綈澶村儚銆佽儗鏅拰璇佹槑鍥剧墖涓婁紶銆傚ご鍍忔槸蹇呭～涓昏瑙夛紝瀹樻柟閾炬帴涓庤瘉鏄庡浘婊¤冻鍏朵竴鍗冲彲鎻愪氦銆?
       >
         <div className="grid gap-4 xl:grid-cols-2">
-          <Field label="主办方头像" error={errors.avatarImage}>
+          <Field label="涓诲姙鏂瑰ご鍍? error={errors.avatarImage}>
             <ImageDropZone
-              label="用于列表和详情页的主视觉头像"
+              label="鐢ㄤ簬鍒楄〃鍜岃鎯呴〉鐨勪富瑙嗚澶村儚"
               previewUrl={draft.avatarImage?.remoteUrl}
               uploading={uploadingAvatar || deletingAvatar}
               onChange={(event) => void handleSingleImageUpload(event, 'avatar')}
@@ -387,14 +387,14 @@ export default function OrganizerStudioForm({
             />
             {draft.avatarImage?.origin === 'persisted' ? (
               <div className="mt-2 text-xs text-text-secondary">
-                当前为已持久化头像。移除会解除本次编辑中的引用，但不会直接删除既有主视觉文件。
+                褰撳墠涓哄凡鎸佷箙鍖栧ご鍍忋€傜Щ闄や細瑙ｉ櫎鏈缂栬緫涓殑寮曠敤锛屼絾涓嶄細鐩存帴鍒犻櫎鏃㈡湁涓昏瑙夋枃浠躲€?
               </div>
             ) : null}
           </Field>
 
-          <Field label="背景图">
+          <Field label="鑳屾櫙鍥?>
             <ImageDropZone
-              label="用于详情头图或主视觉延展"
+              label="鐢ㄤ簬璇︽儏澶村浘鎴栦富瑙嗚寤跺睍"
               previewUrl={draft.backgroundImage?.remoteUrl}
               uploading={uploadingBackground || deletingBackground}
               onChange={(event) => void handleSingleImageUpload(event, 'background')}
@@ -402,16 +402,16 @@ export default function OrganizerStudioForm({
             />
             {draft.backgroundImage?.origin === 'persisted' ? (
               <div className="mt-2 text-xs text-text-secondary">
-                当前为已持久化背景图。移除会解除本次编辑中的引用，但不会直接删除既有背景资源。
+                褰撳墠涓哄凡鎸佷箙鍖栬儗鏅浘銆傜Щ闄や細瑙ｉ櫎鏈缂栬緫涓殑寮曠敤锛屼絾涓嶄細鐩存帴鍒犻櫎鏃㈡湁鑳屾櫙璧勬簮銆?
               </div>
             ) : null}
           </Field>
         </div>
 
         <div className="mt-5">
-          <Field label="证明图片" error={errors.links}>
+          <Field label="璇佹槑鍥剧墖" error={errors.links}>
             <ImageDropZone
-              label="可上传营业执照、官方截图、海报或其他证明图"
+              label="鍙笂浼犺惀涓氭墽鐓с€佸畼鏂规埅鍥俱€佹捣鎶ユ垨鍏朵粬璇佹槑鍥?
               uploading={uploadingProof}
               onChange={(event) => void handleProofUpload(event)}
               acceptMultiple
@@ -442,7 +442,7 @@ export default function OrganizerStudioForm({
                         disabled={deletingProofIndexes.includes(index)}
                         className="text-xs text-black/48 hover:text-[#071110]"
                       >
-                        {deletingProofIndexes.includes(index) ? '移除中...' : '移除'}
+                        {deletingProofIndexes.includes(index) ? '绉婚櫎涓?..' : '绉婚櫎'}
                       </button>
                     </div>
                   </div>
@@ -454,19 +454,19 @@ export default function OrganizerStudioForm({
       </Section>
 
       <Section
-        title="基础信息"
-        description="这里先对齐名称、别名、城市、国家和基础档案字段。多语言先以中文、英文为主，后续再继续扩展更细粒度语言编辑。"
+        title="鍩虹淇℃伅"
+        description="杩欓噷鍏堝榻愬悕绉般€佸埆鍚嶃€佸煄甯傘€佸浗瀹跺拰鍩虹妗ｆ瀛楁銆傚璇█鍏堜互涓枃銆佽嫳鏂囦负涓伙紝鍚庣画鍐嶇户缁墿灞曟洿缁嗙矑搴﹁瑷€缂栬緫銆?
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="主办方名称（中文）" error={errors.name}>
+          <Field label="涓诲姙鏂瑰悕绉帮紙涓枃锛? error={errors.name}>
             <input
               value={draft.name.zh}
               onChange={(event) => updateLocalizedField('name', 'zh', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：Tomorrowland"
+              placeholder="渚嬪锛歍omorrowland"
             />
           </Field>
-          <Field label="主办方名称（英文）">
+          <Field label="涓诲姙鏂瑰悕绉帮紙鑻辨枃锛?>
             <input
               value={draft.name.en}
               onChange={(event) => updateLocalizedField('name', 'en', event.target.value)}
@@ -474,15 +474,15 @@ export default function OrganizerStudioForm({
               placeholder="English name"
             />
           </Field>
-          <Field label="简称">
+          <Field label="绠€绉?>
             <input
               value={draft.abbreviation}
               onChange={(event) => updateDraft('abbreviation', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：TML"
+              placeholder="渚嬪锛歍ML"
             />
           </Field>
-          <Field label="别名（逗号或换行分隔）">
+          <Field label="鍒悕锛堥€楀彿鎴栨崲琛屽垎闅旓級">
             <textarea
               value={draft.aliasesText}
               onChange={(event) => updateDraft('aliasesText', event.target.value)}
@@ -490,15 +490,15 @@ export default function OrganizerStudioForm({
               placeholder="Tomorrowland Belgium&#10;Tomorrowland Brasil"
             />
           </Field>
-          <Field label="国家（中文）">
+          <Field label="鍥藉锛堜腑鏂囷級">
             <input
               value={draft.country.zh}
               onChange={(event) => updateLocalizedField('country', 'zh', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：比利时"
+              placeholder="渚嬪锛氭瘮鍒╂椂"
             />
           </Field>
-          <Field label="国家（英文）">
+          <Field label="鍥藉锛堣嫳鏂囷級">
             <input
               value={draft.country.en}
               onChange={(event) => updateLocalizedField('country', 'en', event.target.value)}
@@ -506,15 +506,15 @@ export default function OrganizerStudioForm({
               placeholder="Belgium"
             />
           </Field>
-          <Field label="城市（中文）">
+          <Field label="鍩庡競锛堜腑鏂囷級">
             <input
               value={draft.city.zh}
               onChange={(event) => updateLocalizedField('city', 'zh', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：Boom"
+              placeholder="渚嬪锛欱oom"
             />
           </Field>
-          <Field label="城市（英文）">
+          <Field label="鍩庡競锛堣嫳鏂囷級">
             <input
               value={draft.city.en}
               onChange={(event) => updateLocalizedField('city', 'en', event.target.value)}
@@ -522,240 +522,47 @@ export default function OrganizerStudioForm({
               placeholder="Boom"
             />
           </Field>
-          <Field label="成立年份">
+          <Field label="鎴愮珛骞翠唤">
             <input
               value={draft.foundedYear}
               onChange={(event) => updateDraft('foundedYear', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：2005"
+              placeholder="渚嬪锛?005"
             />
           </Field>
-          <Field label="举办频率">
+          <Field label="涓惧姙棰戠巼">
             <input
               value={draft.frequency}
               onChange={(event) => updateDraft('frequency', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：Annual"
+              placeholder="渚嬪锛欰nnual"
             />
           </Field>
         </div>
       </Section>
 
       <Section
-        title="品牌资料"
-        description="主办方详情描述会作为 Brand / WikiFestival 的主资料来源。后续 Event 绑定和更完整的 profile diff 也会继续靠拢这里。"
+        title="鍝佺墝璧勬枡"
+        description="涓诲姙鏂硅鎯呮弿杩颁細浣滀负 Brand / WikiFestival 鐨勪富璧勬枡鏉ユ簮銆傚悗缁?Event 缁戝畾鍜屾洿瀹屾暣鐨?profile diff 涔熶細缁х画闈犳嫝杩欓噷銆?
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="一句话标签">
+          <Field label="涓€鍙ヨ瘽鏍囩">
             <input
               value={draft.tagline}
               onChange={(event) => updateDraft('tagline', event.target.value)}
               className={textInputClassName}
-              placeholder="例如：Global electronic music festival"
+              placeholder="渚嬪锛欸lobal electronic music festival"
             />
           </Field>
           <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
-            当前版本先覆盖基础 profile 字段。活动绑定、similar brand 提示和更完整的 revision diff 会在下一批继续补上。
-          </div>
-          <Field label="简介（中文）">
-            <textarea
-              value={draft.introduction.zh}
-              onChange={(event) =>
-                updateLocalizedField('introduction', 'zh', event.target.value)
-              }
-              className={textAreaClassName}
-              placeholder="填写主办方简介"
-            />
-          </Field>
-          <Field label="简介（英文）">
-            <textarea
-              value={draft.introduction.en}
-              onChange={(event) =>
-                updateLocalizedField('introduction', 'en', event.target.value)
-              }
-              className={textAreaClassName}
-              placeholder="Organizer introduction"
-            />
-          </Field>
-        </div>
-      </Section>
-
-      <Section
-        title="官方链接"
-        description="这里按 iOS OrganizerUploadFlow 的语义拆分为官方链接和补充链接。官方链接或证明图片满足其一即可。"
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="官网" error={errors.links}>
-            <input
-              value={draft.officialWebsite}
-              onChange={(event) => updateDraft('officialWebsite', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://..."
-            />
-          </Field>
-          <Field label="Instagram">
-            <input
-              value={draft.instagram}
-              onChange={(event) => updateDraft('instagram', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://instagram.com/..."
-            />
-          </Field>
-          <Field label="Facebook">
-            <input
-              value={draft.facebook}
-              onChange={(event) => updateDraft('facebook', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://facebook.com/..."
-            />
-          </Field>
-          <Field label="Twitter / X">
-            <input
-              value={draft.twitter}
-              onChange={(event) => updateDraft('twitter', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://x.com/..."
-            />
-          </Field>
-          <Field label="YouTube">
-            <input
-              value={draft.youtube}
-              onChange={(event) => updateDraft('youtube', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://youtube.com/..."
-            />
-          </Field>
-          <Field label="TikTok">
-            <input
-              value={draft.tiktok}
-              onChange={(event) => updateDraft('tiktok', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://tiktok.com/@..."
-            />
-          </Field>
-        </div>
-
-        <div className="admin-reference-card mt-5 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold">补充链接</h3>
-              <p className="mt-1 text-sm text-black/48">
-                用于官网之外的购票页、播客页、社区页或其他外部资料。
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                updateDraft('extraLinks', [
-                  ...draft.extraLinks,
-                  createEmptyOrganizerExtraLinkDraft(),
-                ])
-              }
-              className="admin-studio-button-secondary px-3 py-2 text-sm"
-            >
-              添加链接
-            </button>
-          </div>
-
-          {draft.extraLinks.length ? (
-            <div className="mt-4 space-y-3">
-              {draft.extraLinks.map((item) => (
-                <div
-                  key={item.id}
-                  className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.8fr_0.8fr_1.6fr_auto]"
-                >
-                  <input
-                    value={item.title}
-                    onChange={(event) =>
-                      updateExtraLink(item.id, 'title', event.target.value)
-                    }
-                    className={textInputClassName}
-                    placeholder="标题"
-                  />
-                  <input
-                    value={item.icon}
-                    onChange={(event) =>
-                      updateExtraLink(item.id, 'icon', event.target.value)
-                    }
-                    className={textInputClassName}
-                    placeholder="icon"
-                  />
-                  <input
-                    value={item.url}
-                    onChange={(event) =>
-                      updateExtraLink(item.id, 'url', event.target.value)
-                    }
-                    className={textInputClassName}
-                    placeholder="https://..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateDraft(
-                        'extraLinks',
-                        draft.extraLinks.filter((link) => link.id !== item.id)
-                      )
-                    }
-                    className="admin-studio-button-secondary px-3 py-2 text-sm"
-                  >
-                    删除
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4 text-sm text-black/48">当前还没有补充链接。</div>
-          )}
-        </div>
-      </Section>
-
-      <Section
-        title="提交确认"
-        description="保持与 iOS 一致，提交前需要确认资料权利与身份声明。编辑态还会带上当前 revision 作为基线。"
-      >
-        <div className="space-y-4">
-          {mode === 'edit' ? (
-            <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/48">
-              当前编辑基线 revision：
-              <span className="ml-2 font-semibold text-[#071110]">
-                {draft.baseBrandRevision ?? '未加载'}
-              </span>
-            </div>
-          ) : null}
-
-          <label className="admin-reference-soft-card flex items-start gap-3 px-4 py-3 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.rightsConfirmed}
-              onChange={(event) => updateDraft('rightsConfirmed', event.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-border-secondary bg-transparent"
-            />
-            <span>我确认已获得本次提交所用图片、品牌资料和外部链接的合法使用权。</span>
-          </label>
-
-          <label className="admin-reference-soft-card flex items-start gap-3 px-4 py-3 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.identityConfirmed}
-              onChange={(event) => updateDraft('identityConfirmed', event.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-border-secondary bg-transparent"
-            />
-            <span>我确认本次提交代表真实主办方、授权成员或可信整理来源。</span>
-          </label>
-
-          {errors.review ? (
-            <div className="text-sm text-red-300">{errors.review}</div>
-          ) : null}
-
-          <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
-            Event 绑定还没有完全内嵌到本页。
+            Event ?????????????
             <Link
-              href="/admin/content/events"
+              href="/admin/content/events/catalog"
               className="ml-1 font-semibold text-[#071110] hover:underline"
             >
-              先去活动工作区
+              ??????
             </Link>
-            处理活动创建和绑定，下一批会把 organizer inline bind 继续补齐。
+            ??????????????? organizer inline bind ?????
           </div>
         </div>
       </Section>
@@ -768,11 +575,12 @@ export default function OrganizerStudioForm({
           className="admin-studio-button-primary"
         >
           {submitting
-            ? '提交中...'
+            ? '鎻愪氦涓?..'
             : submitButtonText ||
-              (mode === 'edit' ? '提交主办方编辑' : '提交主办方创建')}
+              (mode === 'edit' ? '鎻愪氦涓诲姙鏂圭紪杈? : '鎻愪氦涓诲姙鏂瑰垱寤?)}
         </button>
       </div>
     </div>
   );
 }
+

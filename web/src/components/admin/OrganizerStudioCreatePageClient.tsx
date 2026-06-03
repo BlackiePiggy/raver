@@ -38,10 +38,10 @@ export default function OrganizerStudioCreatePageClient({
       actions={
         <>
           <Link
-            href="/admin/content/organizers"
+            href="/admin/content/organizers/catalog"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            返回主办方工作区
+            返回主办方目录
           </Link>
           <Link
             href="/admin/content/events/new"

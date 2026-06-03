@@ -1368,6 +1368,13 @@ export default function EventCatalogPageClient() {
       actions={
         <>
           <Link
+            href="/admin/content/organizers/bindings"
+            className="inline-flex items-center gap-2.5 rounded-full border border-[#e9dcff] bg-[#f6f0ff] px-7 py-3.5 text-[15px] font-semibold text-[#6d28d9] shadow-[0_2px_10px_rgba(109,40,217,0.08)]"
+          >
+            <Users2 className="h-5 w-5" />
+            <span>主办方绑定</span>
+          </Link>
+          <Link
             href="/admin/content/events/new"
             className="inline-flex items-center gap-2.5 rounded-full border border-[#e8eceb] bg-white px-7 py-3.5 text-[15px] font-semibold text-[#111827] shadow-[0_2px_10px_rgba(15,23,42,0.04)]"
           >

@@ -812,8 +812,11 @@ export default function OrganizerCatalogPageClient() {
       description="统一查看主办方目录、资料摘要、绑定入口与编辑入口。目录层保持轻量检索，深入修改时再进入详细页面。"
       actions={
         <>
-          <Link href="/admin/content/organizers" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回主办方工作区
+          <Link
+            href="/admin/content/organizers/bindings"
+            className="rounded-full border border-[#e9dcff] bg-[#f6f0ff] px-5 py-3 text-sm font-semibold text-[#6d28d9]"
+          >
+            活动绑定中心
           </Link>
           <button
             type="button"

@@ -545,7 +545,7 @@ function StudioTopbar({
     <section className="admin-event-workbench-topbar">
       <div className="min-w-0">
         <div className="admin-event-workbench-crumb">
-          <span>活动工作区</span>
+          <span>活动目录</span>
           <span>/</span>
           <span className="truncate">{draftTitle}</span>
           <span>/</span>

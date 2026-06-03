@@ -23,11 +23,11 @@ export default function AdminContentLabelCreatePage() {
   return (
     <AdminContentLayout
       title="新建厂牌"
-      description="新厂牌创建页已经接上当前后台接口，主区域突出身份、简介和官方渠道，统计与附加信息放到次级区。"
+      description="新建厂牌页面已经接上当前后台接口，主区域突出身份、简介和官方渠道，统计与附加信息放在次级区。"
       actions={
         <>
           <Link href="/admin/content/labels" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回厂牌工作区
+            返回厂牌目录
           </Link>
           <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             返回内容控制台

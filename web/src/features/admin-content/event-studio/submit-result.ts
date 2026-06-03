@@ -42,15 +42,16 @@ export const resolveEventStudioSubmitResultContent = (
   const eventId = state.eventId?.trim() || null;
   const fallbackPrimaryHref = '/admin/content/events/catalog';
   const eventEditHref = eventId ? `/admin/content/events/${eventId}/edit` : fallbackPrimaryHref;
+  const fallbackCatalogLabel = '返回活动目录';
 
   if (state.outcome === 'created' && state.flow === 'create') {
     return {
       title: '活动已发布',
       message: '活动已经出现在活动页，也可以在我的发布里继续管理。',
       primaryHref: eventEditHref,
-      primaryLabel: eventId ? '继续查看活动' : '返回活动工作区',
+      primaryLabel: eventId ? '继续查看活动' : fallbackCatalogLabel,
       secondaryHref: '/admin/content/events/catalog',
-      secondaryLabel: '返回活动工作区',
+      secondaryLabel: fallbackCatalogLabel,
     };
   }
 
@@ -59,9 +60,9 @@ export const resolveEventStudioSubmitResultContent = (
       title: '活动已更新',
       message: '更新已保存。你可以返回活动页查看最新内容，也可以在我的发布里继续管理。',
       primaryHref: eventEditHref,
-      primaryLabel: eventId ? '继续查看活动' : '返回活动工作区',
+      primaryLabel: eventId ? '继续查看活动' : fallbackCatalogLabel,
       secondaryHref: '/admin/content/events/catalog',
-      secondaryLabel: '返回活动工作区',
+      secondaryLabel: fallbackCatalogLabel,
     };
   }
 
@@ -72,7 +73,7 @@ export const resolveEventStudioSubmitResultContent = (
       primaryHref: '/admin/content/reviews/submissions',
       primaryLabel: '查看提交任务',
       secondaryHref: '/admin/content/events/catalog',
-      secondaryLabel: '返回活动工作区',
+      secondaryLabel: fallbackCatalogLabel,
     };
   }
 
@@ -82,6 +83,6 @@ export const resolveEventStudioSubmitResultContent = (
     primaryHref: '/admin/content/reviews/submissions',
     primaryLabel: '查看提交任务',
     secondaryHref: eventEditHref,
-    secondaryLabel: eventId ? '返回活动编辑页' : '返回活动工作区',
+    secondaryLabel: eventId ? '返回活动编辑页' : fallbackCatalogLabel,
   };
 };

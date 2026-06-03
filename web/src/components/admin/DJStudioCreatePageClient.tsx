@@ -22,7 +22,7 @@ export default function DJStudioCreatePageClient({
   const handleSubmitResult = (result: DJStudioCreateResult) => {
     if (result.kind === 'created') {
       setSubmitNotice(`DJ 已创建成功：${result.dj.name}`);
-      setSubmitResultLink(result.dj.id ? `/djs/${result.dj.id}` : '/admin/content/djs');
+      setSubmitResultLink(result.dj.id ? `/djs/${result.dj.id}` : '/admin/content/djs/catalog');
       return;
     }
     setSubmitNotice(result.payload.message || 'DJ 已进入审核队列');
@@ -35,8 +35,8 @@ export default function DJStudioCreatePageClient({
       description="这里已经接上 DJ Studio 第一版可提交流程。当前版本先覆盖头像、banner、proof、平台链接和基础平台统计，并走统一 `/v1/djs/manual/import` 创建链路。"
       actions={
         <>
-          <Link href="/admin/content/djs" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回 DJ 工作区
+          <Link href="/admin/content/djs/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+            返回 DJ 目录
           </Link>
           <Link href="/admin/content/events/new" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
             去新建活动
