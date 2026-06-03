@@ -74,7 +74,7 @@ export default function AdminSearchField({
   return (
     <div
       className={clsx(
-        'flex min-w-0 items-center rounded-full border border-[#e8eceb] bg-white text-[#111827] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset]',
+        'admin-search-field-shell flex min-w-0 items-center rounded-full border border-[#e8eceb] bg-white text-[#111827] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset]',
         styles.shell,
         disabled && 'opacity-60',
         className
@@ -82,13 +82,14 @@ export default function AdminSearchField({
     >
       <Search className={clsx('shrink-0 text-[#9aa1ad]', styles.icon)} />
       <input
+        type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         aria-label={ariaLabel || placeholder}
         className={clsx(
-          'min-w-0 flex-1 border-0 bg-transparent px-0 py-0 font-medium text-[#111827] outline-none placeholder:text-[#9aa1ad]',
+          'admin-search-field-input min-w-0 flex-1 appearance-none border-0 bg-transparent px-0 py-0 font-medium text-[#111827] outline-none ring-0 shadow-none placeholder:text-[#9aa1ad]',
           styles.input,
           inputClassName
         )}

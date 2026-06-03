@@ -5,11 +5,9 @@ import {
   ChevronDown,
   Command,
   PanelLeftClose,
-  Search,
   Settings,
   Sparkles,
   Triangle,
-  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,6 +15,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { getVisibleAdminNavGroups, isAdminHrefActive } from '@/lib/admin/navigation';
+import AdminSearchField from '@/components/admin/AdminSearchField';
 
 type AdminAppShellProps = {
   title: string;
@@ -220,22 +219,15 @@ function Topbar({
         >
           <PanelLeftClose className="size-4 rotate-180" />
         </button>
-        <label className="mx-auto flex h-[42px] w-full max-w-[470px] items-center rounded-full border border-[#ececec] bg-[#f5f5f7] px-3 transition-all duration-300 md:px-4">
-          <Search className="mr-2 size-4 shrink-0 md:mr-3" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-[#071110] outline-none placeholder:text-black/40"
-            placeholder="Search modules, queues, records"
-          />
-          {query ? (
-            <button type="button" onClick={() => setQuery('')}>
-              <X className="size-4" />
-            </button>
-          ) : (
-            <Command className="size-4 max-md:hidden" />
-          )}
-        </label>
+        <AdminSearchField
+          value={query}
+          onChange={setQuery}
+          placeholder="Search modules, queues, records"
+          size="sm"
+          className="mx-auto h-[42px] w-full max-w-[470px] bg-[#f5f5f7]"
+          inputClassName="text-[12px] font-medium placeholder:text-black/40"
+          onClear={query ? () => setQuery('') : undefined}
+        />
         <div className="hidden items-center gap-3 md:flex">
           <button className="admin-shell-pill h-[42px] px-7 text-[12px] font-bold">Integration</button>
           <div className="flex items-center -space-x-2">
