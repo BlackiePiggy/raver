@@ -229,6 +229,21 @@ export const eventStudioApi = {
     return payload.data;
   },
 
+  async deleteEvent(id: string): Promise<void> {
+    const response = await authenticatedFetch(getApiUrl(`/v1/events/${id}`), {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = (await response.json().catch(() => ({}))) as EventStudioApiErrorPayload;
+      throw new EventStudioApiError(
+        error.error || error.message || '删除活动失败',
+        response.status,
+        error.code,
+        error.details
+      );
+    }
+  },
+
   async previewLineupTimetableAlignment(input: EventStudioCreateInput): Promise<EventStudioAlignmentPreview> {
     const payload = await authenticatedJsonFetch<EventAlignmentPreviewEnvelope>(
       getApiUrl('/v1/events/lineup-timetable-alignment/preview'),

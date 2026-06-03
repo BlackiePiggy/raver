@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
   ChevronDown,
@@ -485,6 +485,10 @@ export default function EventCatalogPageClient() {
   const [selectedEventError, setSelectedEventError] = useState('');
   const [selectedEventLoading, setSelectedEventLoading] = useState(false);
   const [detailCache, setDetailCache] = useState<Record<string, EventStudioLoadedEvent>>({});
+  const [menuOpenEventId, setMenuOpenEventId] = useState<string | null>(null);
+  const [pendingDeleteEvent, setPendingDeleteEvent] = useState<EventCatalogItem | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
   const filters = useMemo<EventCatalogFilters>(
     () => ({
@@ -547,6 +551,29 @@ export default function EventCatalogPageClient() {
     void loadCatalog();
   }, [loadCatalog]);
 
+  useEffect(() => {
+    if (!menuOpenEventId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!actionMenuRef.current) return;
+      if (event.target instanceof Node && actionMenuRef.current.contains(event.target)) return;
+      setMenuOpenEventId(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpenEventId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpenEventId]);
+
   const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPage(1);
@@ -573,6 +600,7 @@ export default function EventCatalogPageClient() {
   }, [pagination.page, pagination.totalPages]);
 
   const openDetailOverlay = useCallback(async (item: EventCatalogItem) => {
+    setMenuOpenEventId(null);
     setSelectedEvent(item);
     setSelectedEventError('');
     const cached = detailCache[item.id];
@@ -596,11 +624,44 @@ export default function EventCatalogPageClient() {
   }, [detailCache]);
 
   const closeDetailOverlay = useCallback(() => {
+    setMenuOpenEventId(null);
     setSelectedEvent(null);
     setSelectedEventDetail(null);
     setSelectedEventError('');
     setSelectedEventLoading(false);
   }, []);
+
+  const requestDeleteEvent = useCallback((item: EventCatalogItem) => {
+    setMenuOpenEventId(null);
+    setPendingDeleteEvent(item);
+  }, []);
+
+  const confirmDeleteEvent = useCallback(async () => {
+    if (!pendingDeleteEvent) return;
+    const eventId = pendingDeleteEvent.id;
+    try {
+      setDeletingEventId(eventId);
+      await eventStudioApi.deleteEvent(eventId);
+      setItems((current) => current.filter((item) => item.id !== eventId));
+      setPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+      }));
+      if (selectedEvent?.id === eventId) {
+        closeDetailOverlay();
+      }
+      setPendingDeleteEvent(null);
+      setDetailCache((current) => {
+        const next = { ...current };
+        delete next[eventId];
+        return next;
+      });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '删除活动失败');
+    } finally {
+      setDeletingEventId(null);
+    }
+  }, [closeDetailOverlay, pendingDeleteEvent, selectedEvent]);
 
   return (
     <AdminContentLayout
@@ -844,14 +905,36 @@ export default function EventCatalogPageClient() {
                       >
                         编辑活动
                       </Link>
-                      <button
-                        type="button"
-                        onClick={(event) => event.stopPropagation()}
-                        className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white text-[#111827]"
-                        aria-label="更多操作"
+                      <div
+                        className="relative"
+                        ref={menuOpenEventId === item.id ? actionMenuRef : null}
                       >
-                        <Ellipsis className="h-5 w-5" />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setMenuOpenEventId((current) => (current === item.id ? null : item.id));
+                          }}
+                          className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white text-[#111827]"
+                          aria-label="更多操作"
+                        >
+                          <Ellipsis className="h-5 w-5" />
+                        </button>
+                        {menuOpenEventId === item.id ? (
+                          <div
+                            className="absolute right-0 top-[52px] z-20 min-w-[148px] rounded-[18px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => requestDeleteEvent(item)}
+                              className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
+                            >
+                              删除活动
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </article>
                 );
@@ -926,6 +1009,39 @@ export default function EventCatalogPageClient() {
         error={selectedEventError}
         onClose={closeDetailOverlay}
       />
+      {pendingDeleteEvent ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" onClick={() => setPendingDeleteEvent(null)}>
+          <div
+            className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">Delete Event</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这个活动？</div>
+            <p className="mt-3 text-sm leading-6 text-[#6b7280]">
+              {pendingDeleteEvent.name}
+              <br />
+              删除后将无法恢复，请再次确认这是你要执行的操作。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteEvent(null)}
+                className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteEvent()}
+                disabled={deletingEventId === pendingDeleteEvent.id}
+                className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingEventId === pendingDeleteEvent.id ? '删除中...' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       </section>
     </AdminContentLayout>
   );

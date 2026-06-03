@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Languages, X } from 'lucide-react';
 import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
@@ -31,6 +32,7 @@ import {
   type EventStudioImageState,
   type EventStudioImageUsage,
   type EventStudioLineupArtistDraft,
+  type EventStudioLocalizedText,
   type EventStudioOrganizer,
   type EventStudioTimetableSlotDraft,
   type EventStudioValidationErrors,
@@ -60,6 +62,23 @@ const EVENT_STUDIO_STEP_ITEMS = [
 ] as const;
 
 type EventStudioStepKey = (typeof EVENT_STUDIO_STEP_ITEMS)[number]['key'];
+type LocalizedFieldKey = 'name' | 'city' | 'country' | 'detailAddress';
+type LocalizedLocaleKey = 'zh' | 'en' | 'ja' | 'enFull';
+type LocalizedFieldKind = 'input' | 'textarea';
+
+type LocalizedFieldOverlayState = {
+  key: LocalizedFieldKey;
+  label: string;
+  kind: LocalizedFieldKind;
+  clearable?: boolean;
+};
+
+const LOCALIZED_LOCALE_ITEMS: Array<{ key: LocalizedLocaleKey; label: string; hint: string }> = [
+  { key: 'zh', label: '中文', hint: '用于中文展示和搜索回填。' },
+  { key: 'en', label: 'English', hint: '用于英文展示和国际化回退。' },
+  { key: 'ja', label: '日本語', hint: '用于日文展示。' },
+  { key: 'enFull', label: 'English Full', hint: '可选，用于更完整的英文地址或全称。' },
+];
 
 const STEP_ERROR_KEYS: Record<EventStudioStepKey, Array<keyof EventStudioValidationErrors>> = {
   media: ['coverImage'],
@@ -331,6 +350,70 @@ function StepNavigation({
   );
 }
 
+const localizedTextFilledLocaleLabels = (value: EventStudioLocalizedText): string[] =>
+  LOCALIZED_LOCALE_ITEMS.filter((item) => value[item.key].trim()).map((item) => item.label);
+
+function LocalizedTextField({
+  label,
+  value,
+  kind,
+  placeholder,
+  error,
+  hint,
+  onPrimaryChange,
+  onOpenOverlay,
+}: {
+  label: string;
+  value: EventStudioLocalizedText;
+  kind: LocalizedFieldKind;
+  placeholder: string;
+  error?: string;
+  hint?: string;
+  onPrimaryChange: (value: string) => void;
+  onOpenOverlay: () => void;
+}) {
+  const filledLocales = localizedTextFilledLocaleLabels(value);
+  const extraLocales = filledLocales.filter((item) => item !== '中文');
+  const combinedHint = [
+    hint,
+    extraLocales.length ? `已填写：${extraLocales.join(' / ')}` : '右侧图标可展开编辑英文、日文等多语言内容。',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <Field label={label} error={error} hint={combinedHint}>
+      <div className={`admin-localized-field-shell ${kind === 'textarea' ? 'is-textarea' : ''}`}>
+        {kind === 'textarea' ? (
+          <textarea
+            value={value.zh}
+            onChange={(event) => onPrimaryChange(event.target.value)}
+            className={textAreaClassName}
+            placeholder={placeholder}
+          />
+        ) : (
+          <input
+            value={value.zh}
+            onChange={(event) => onPrimaryChange(event.target.value)}
+            className={textInputClassName}
+            placeholder={placeholder}
+          />
+        )}
+        <button
+          type="button"
+          onClick={onOpenOverlay}
+          className={`admin-localized-field-trigger ${kind === 'textarea' ? 'is-textarea' : ''}`}
+          aria-label={`${label}多语言编辑`}
+          title={`${label}多语言编辑`}
+        >
+          <Languages className="h-4 w-4" strokeWidth={2.2} />
+          {extraLocales.length ? <span className="admin-localized-field-trigger-dot" /> : null}
+        </button>
+      </div>
+    </Field>
+  );
+}
+
 function StudioTopbar({
   mode,
   draftTitle,
@@ -598,8 +681,17 @@ const actTypePerformerCount = (value?: string | null): number => {
   return EVENT_STUDIO_ACT_TYPES.find((item) => item.value === normalized)?.performerCount ?? 1;
 };
 
+const collaborativeActBadgeLabel = (value?: string | null): string => {
+  const normalized = normalizeActType(value);
+  if (normalized === 'b2b') return 'B2B';
+  if (normalized === 'b3b') return 'B3B';
+  return '';
+};
+
 const splitPerformerNames = (value: string): string[] =>
   value
+    .replace(/\bB2B\b/gi, '/')
+    .replace(/\bB3B\b/gi, '/')
     .split(/[\/,&]/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -623,6 +715,21 @@ const getTimetableSlotBoundDjId = (
   const memberDjId = String(slot.memberDjIds[performerIndex] || '').trim();
   if (memberDjId) return memberDjId;
   return performerIndex === 0 ? String(slot.djId || '').trim() : '';
+};
+
+const getLineupArtistPerformerNames = (artist: EventStudioLineupArtistDraft): string[] => {
+  const performerCount = actTypePerformerCount(artist.actType);
+  const names = splitPerformerNames(artist.memberNamesText);
+  return Array.from({ length: performerCount }, (_, index) => names[index] || '');
+};
+
+const getLineupArtistBoundDjId = (
+  artist: EventStudioLineupArtistDraft,
+  performerIndex: number
+): string => {
+  const memberDjId = String(artist.memberDjIds[performerIndex] || '').trim();
+  if (memberDjId) return memberDjId;
+  return performerIndex === 0 ? String(artist.djId || '').trim() : '';
 };
 
 const getTimetableSlotPerformerRows = (
@@ -695,10 +802,21 @@ const normalizeTimetableSlotActType = (
 const normalizeLineupArtistActType = (
   artist: EventStudioLineupArtistDraft,
   actType: 'solo' | 'b2b' | 'b3b'
-): EventStudioLineupArtistDraft => ({
-  ...artist,
-  actType,
-});
+): EventStudioLineupArtistDraft => {
+  const performerCount = actTypePerformerCount(actType);
+  const memberDjIds = artist.memberDjIds.slice(0, performerCount).map((item) => {
+    const trimmed = String(item || '').trim();
+    return trimmed || null;
+  });
+  const primaryDjId = memberDjIds.find((item) => Boolean(item)) || '';
+  return {
+    ...artist,
+    actType,
+    djId: primaryDjId,
+    memberDjIds,
+    memberNamesText: getLineupArtistPerformerNames(artist).slice(0, performerCount).join(' / '),
+  };
+};
 
 const extractTimeValue = (value: string): string => {
   const text = String(value || '').trim();
@@ -744,6 +862,9 @@ export default function EventStudioForm({
   const [organizerError, setOrganizerError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(mode === 'edit' ? 3 : 0);
+  const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldOverlayState | null>(null);
+  const [hasLoadedTimetableStep, setHasLoadedTimetableStep] = useState(mode === 'edit');
+  const [hasLoadedLineupStep, setHasLoadedLineupStep] = useState(false);
   const [alignmentPreviewLoading, setAlignmentPreviewLoading] = useState(false);
   const [alignmentPreview, setAlignmentPreview] = useState<EventStudioAlignmentPreview | null>(null);
   const [alignmentPreviewError, setAlignmentPreviewError] = useState<string | null>(null);
@@ -867,6 +988,28 @@ export default function EventStudioForm({
     setConfirmedTimetableSlotIds(draft.timetableSlots.map((slot) => slot.id));
     setFocusedTimetableSlotId(null);
   }, [mode, draft.timetableSlots]);
+
+  useEffect(() => {
+    if (currentStep === 3) {
+      setHasLoadedTimetableStep(true);
+    }
+    if (currentStep === 4) {
+      setHasLoadedLineupStep(true);
+    }
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (!activeLocalizedField) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveLocalizedField(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeLocalizedField]);
 
   const locationPointInitial = useMemo<EventLocationPoint | null>(() => {
     if (draft.locationPoint) {
@@ -1053,7 +1196,49 @@ export default function EventStudioForm({
     updateDraftState(updater);
   };
 
+  const mutateLineupArtist = (
+    artistId: string,
+    updater: (artist: EventStudioLineupArtistDraft) => EventStudioLineupArtistDraft
+  ) => {
+    updateLineupDraft((current) => ({
+      ...current,
+      lineupArtists: current.lineupArtists.map((artist) => (artist.id === artistId ? updater(artist) : artist)),
+    }));
+  };
+
+  const updateLineupArtistPerformerName = (artistId: string, performerIndex: number, value: string) => {
+    mutateLineupArtist(artistId, (artist) => {
+      const names = getLineupArtistPerformerNames(artist);
+      names[performerIndex] = value;
+      return {
+        ...artist,
+        memberNamesText: names.map((item) => item.trim()).filter(Boolean).join(' / '),
+      };
+    });
+  };
+
+  const updateLineupArtistPerformerBinding = (artistId: string, performerIndex: number, value: string) => {
+    mutateLineupArtist(artistId, (artist) => {
+      const performerCount = actTypePerformerCount(artist.actType);
+      const memberDjIds = Array.from({ length: performerCount }, (_, index) => {
+        const currentValue = String(artist.memberDjIds[index] || '').trim();
+        if (index !== performerIndex) return currentValue || null;
+        const trimmed = value.trim();
+        return trimmed || null;
+      });
+      const primaryDjId = memberDjIds.find((item) => Boolean(item)) || '';
+      return {
+        ...artist,
+        djId: primaryDjId,
+        memberDjIds,
+      };
+    });
+  };
+
   const eventDisplayTimeZone = normalizeDisplayTimeZone(draft.timeZoneSelection?.timezone || draft.timeZoneQuery);
+  const activeLocalizedValue = activeLocalizedField ? draft[activeLocalizedField.key] : null;
+  const timetableStepActive = hasLoadedTimetableStep || currentStep === 3;
+  const lineupStepActive = hasLoadedLineupStep || currentStep === 4;
 
   const getStepForErrors = (nextErrors: EventStudioValidationErrors): number => {
     for (let index = 0; index < EVENT_STUDIO_STEP_ITEMS.length; index += 1) {
@@ -2120,11 +2305,13 @@ export default function EventStudioForm({
   }, [draft.stageOrder, visibleTimetableSlots]);
   const visibleTimetableSlotsByStage = useMemo(
     () =>
-      visibleStageOrder.map((stage) => ({
-        stage,
-        slots: visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)),
-      })),
-    [visibleStageOrder, visibleTimetableSlots]
+      !timetableStepActive
+        ? []
+        : visibleStageOrder.map((stage) => ({
+            stage,
+            slots: visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)),
+          })),
+    [timetableStepActive, visibleStageOrder, visibleTimetableSlots]
   );
   const filteredVisibleTimetableSlotsByStage = useMemo(() => {
     if (selectedTimetableStageFilter === 'all') return visibleTimetableSlotsByStage;
@@ -2163,12 +2350,13 @@ export default function EventStudioForm({
     return `${startLabel} - ${endLabel}`;
   };
   const lineupPreviewArtists = useMemo(() => {
+    if (!lineupStepActive) return [];
     const source = draft.lineupArtists.length ? draft.lineupArtists : buildLineupArtistsFromTimetableSlots(draft.timetableSlots);
     return [...source].sort((left, right) => left.sortOrder - right.sortOrder);
-  }, [draft.lineupArtists, draft.timetableSlots]);
+  }, [draft.lineupArtists, draft.timetableSlots, lineupStepActive]);
   const lineupStageCount = useMemo(
-    () => draft.lineupArtists.filter((artist) => artist.memberNamesText.trim() || artist.djId.trim()).length,
-    [draft.lineupArtists]
+    () => (lineupStepActive ? draft.lineupArtists.filter((artist) => artist.memberNamesText.trim() || artist.djId.trim()).length : 0),
+    [draft.lineupArtists, lineupStepActive]
   );
   const lineupIdentityKeys = useMemo(
     () => new Set(draft.lineupArtists.map(eventStudioLineupArtistIdentityKey).filter((key): key is string => Boolean(key))),
@@ -2179,6 +2367,7 @@ export default function EventStudioForm({
     [draft.timetableSlots]
   );
   const missingLineupArtistsFromTimetable = useMemo(() => {
+    if (!lineupStepActive) return [];
     const seen = new Set<string>();
     return buildLineupArtistsFromTimetableSlots(draft.timetableSlots).filter((artist) => {
       const key = eventStudioLineupArtistIdentityKey(artist);
@@ -2186,13 +2375,15 @@ export default function EventStudioForm({
       seen.add(key);
       return true;
     });
-  }, [draft.timetableSlots, lineupIdentityKeys]);
+  }, [draft.timetableSlots, lineupIdentityKeys, lineupStepActive]);
   const lineupArtistsOnlyInLineup = useMemo(
-    () => draft.lineupArtists.filter((artist) => {
-      const key = eventStudioLineupArtistIdentityKey(artist);
-      return Boolean(key && !timetableIdentityKeys.has(key));
-    }),
-    [draft.lineupArtists, timetableIdentityKeys]
+    () => (lineupStepActive
+      ? draft.lineupArtists.filter((artist) => {
+          const key = eventStudioLineupArtistIdentityKey(artist);
+          return Boolean(key && !timetableIdentityKeys.has(key));
+        })
+      : []),
+    [draft.lineupArtists, lineupStepActive, timetableIdentityKeys]
   );
 
   const applyTimetableIncrementalFillToLineup = () => {
@@ -2443,22 +2634,24 @@ export default function EventStudioForm({
               <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="poster" onOpenStep={() => setCurrentStep(1)} />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="活动名称（中文）" error={errors.name}>
-                <input
-                  value={draft.name.zh}
-                  onChange={(event) => updateLocalizedField('name', 'zh', event.target.value)}
-                  className={textInputClassName}
+              <div className="lg:col-span-2">
+                <LocalizedTextField
+                  label="活动名称"
+                  value={draft.name}
+                  kind="input"
+                  error={errors.name}
                   placeholder="例如：Tomorrowland"
+                  hint="主输入默认编辑中文。"
+                  onPrimaryChange={(value) => updateLocalizedField('name', 'zh', value)}
+                  onOpenOverlay={() =>
+                    setActiveLocalizedField({
+                      key: 'name',
+                      label: '活动名称',
+                      kind: 'input',
+                    })
+                  }
                 />
-              </Field>
-              <Field label="活动名称（英文）">
-                <input
-                  value={draft.name.en}
-                  onChange={(event) => updateLocalizedField('name', 'en', event.target.value)}
-                  className={textInputClassName}
-                  placeholder="English name"
-                />
-              </Field>
+              </div>
               <Field label="活动类型">
                 <select
                   value={draft.eventType}
@@ -2692,65 +2885,57 @@ export default function EventStudioForm({
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <Field label="城市（中文）" error={errors.city}>
-                    <input
-                      value={draft.city.zh}
-                      onChange={(event) => updateLocalizedField('city', 'zh', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="Shanghai"
-                    />
-                  </Field>
-                  <Field label="城市（英文）">
-                    <input
-                      value={draft.city.en}
-                      onChange={(event) => updateLocalizedField('city', 'en', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="Shanghai"
-                    />
-                  </Field>
-                  <div className="lg:col-span-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => clearLocalizedI18n('city')}
-                      className="admin-studio-button-secondary px-4 py-2 text-xs"
-                    >
-                      Remove city i18n
-                    </button>
-                  </div>
-                  <Field label="国家（中文）" error={errors.country}>
-                    <input
-                      value={draft.country.zh}
-                      onChange={(event) => updateLocalizedField('country', 'zh', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="中国"
-                    />
-                  </Field>
-                  <Field label="国家（英文）">
-                    <input
-                      value={draft.country.en}
-                      onChange={(event) => updateLocalizedField('country', 'en', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="China"
-                    />
-                  </Field>
-                  <div className="lg:col-span-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => clearLocalizedI18n('country')}
-                      className="admin-studio-button-secondary px-4 py-2 text-xs"
-                    >
-                      Remove country i18n
-                    </button>
-                  </div>
+                  <LocalizedTextField
+                    label="城市"
+                    value={draft.city}
+                    kind="input"
+                    error={errors.city}
+                    placeholder="Shanghai"
+                    hint="主输入默认编辑中文。"
+                    onPrimaryChange={(value) => updateLocalizedField('city', 'zh', value)}
+                    onOpenOverlay={() =>
+                      setActiveLocalizedField({
+                        key: 'city',
+                        label: '城市',
+                        kind: 'input',
+                        clearable: true,
+                      })
+                    }
+                  />
+                  <LocalizedTextField
+                    label="国家"
+                    value={draft.country}
+                    kind="input"
+                    error={errors.country}
+                    placeholder="中国"
+                    hint="主输入默认编辑中文。"
+                    onPrimaryChange={(value) => updateLocalizedField('country', 'zh', value)}
+                    onOpenOverlay={() =>
+                      setActiveLocalizedField({
+                        key: 'country',
+                        label: '国家',
+                        kind: 'input',
+                        clearable: true,
+                      })
+                    }
+                  />
                   <div className="lg:col-span-2">
-                    <Field label="详细地址（中文）" error={errors.detailAddress}>
-                      <textarea
-                        value={draft.detailAddress.zh}
-                        onChange={(event) => updateLocalizedField('detailAddress', 'zh', event.target.value)}
-                        className={textAreaClassName}
-                        placeholder="活动详细地址"
-                      />
-                    </Field>
+                    <LocalizedTextField
+                      label="详细地址"
+                      value={draft.detailAddress}
+                      kind="textarea"
+                      error={errors.detailAddress}
+                      placeholder="活动详细地址"
+                      hint="主输入默认编辑中文。"
+                      onPrimaryChange={(value) => updateLocalizedField('detailAddress', 'zh', value)}
+                      onOpenOverlay={() =>
+                        setActiveLocalizedField({
+                          key: 'detailAddress',
+                          label: '详细地址',
+                          kind: 'textarea',
+                        })
+                      }
+                    />
                   </div>
                   <Field label="纬度（可选）">
                     <input
@@ -3309,6 +3494,7 @@ export default function EventStudioForm({
                       {slots.map((slot) => {
                         const performerCount = actTypePerformerCount(slot.actType);
                         const performerNames = getTimetableSlotPerformerNames(slot);
+                        const actBadge = collaborativeActBadgeLabel(slot.actType);
                         const isConfirmed = confirmedTimetableSlotIds.includes(slot.id);
                         const isExpanded = focusedTimetableSlotId === slot.id || !isConfirmed;
                         const boundCount = Array.from({ length: performerCount }, (_, index) => getTimetableSlotBoundDjId(slot, index)).filter(Boolean).length;
@@ -3321,7 +3507,10 @@ export default function EventStudioForm({
                           >
                             <div className="admin-event-slot-editor-summary">
                               <div className="min-w-0">
-                                <strong>{performerNames.filter(Boolean).join(' / ') || '未填写艺人'}</strong>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <strong>{performerNames.filter(Boolean).join(' / ') || '未填写艺人'}</strong>
+                                  {actBadge ? <span className="admin-event-collab-badge">{actBadge}</span> : null}
+                                </div>
                                 <div className="admin-event-slot-editor-summary-meta">
                                   <span>{formatTimetableSlotRange(slot)}</span>
                                   <span>{slot.stageName || '未命名舞台'}</span>
@@ -3330,8 +3519,12 @@ export default function EventStudioForm({
                                 </div>
                               </div>
                               <div className="admin-event-slot-editor-summary-actions">
-                                <span className={`admin-event-slot-editor-status-badge ${boundCount === performerCount && performerCount > 0 ? 'is-bound' : 'is-pending'}`}>
-                                  {boundCount}/{performerCount} 已绑定
+                                <span
+                                  className={`admin-event-slot-editor-status-badge ${
+                                    isConfirmed ? 'is-confirmed' : boundCount === performerCount && performerCount > 0 ? 'is-bound' : 'is-pending'
+                                  }`}
+                                >
+                                  {isConfirmed ? '已确认' : `${boundCount}/${performerCount} 已绑定`}
                                 </span>
                                 {isExpanded ? null : (
                                   <button
@@ -3348,13 +3541,22 @@ export default function EventStudioForm({
                             <div className="admin-event-slot-editor-summary-performers">
                               {performerNames.map((performerName, performerIndex) => {
                                 const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
+                                const collapsedIdLabel =
+                                  normalizeActType(slot.actType) === 'solo'
+                                    ? boundDjId || '未绑定 DJ'
+                                    : `成员 ${performerIndex + 1} · ${boundDjId || '未绑定'}`;
                                 return (
-                                  <div key={`${slot.id}-summary-${performerIndex}`} className="admin-event-slot-editor-summary-performer">
-                                    <span className="admin-event-slot-editor-summary-name">
-                                      {performerName || `成员 ${performerIndex + 1}`}
-                                    </span>
+                                  <div
+                                    key={`${slot.id}-summary-${performerIndex}`}
+                                    className={`admin-event-slot-editor-summary-performer ${isExpanded ? '' : 'is-id-only'}`}
+                                  >
+                                    {isExpanded ? (
+                                      <span className="admin-event-slot-editor-summary-name">
+                                        {performerName || `成员 ${performerIndex + 1}`}
+                                      </span>
+                                    ) : null}
                                     <span className={`admin-event-slot-editor-summary-inline-id ${boundDjId ? 'is-bound' : 'is-empty'}`}>
-                                      {boundDjId || '未绑定'}
+                                      {isExpanded ? boundDjId || '未绑定' : collapsedIdLabel}
                                     </span>
                                   </div>
                                 );
@@ -3791,6 +3993,8 @@ export default function EventStudioForm({
                 {lineupPreviewArtists.length ? (
                   lineupPreviewArtists.map((artist, index) => {
                     const artistKey = eventStudioLineupArtistIdentityKey(artist);
+                    const previewActBadge = collaborativeActBadgeLabel(artist.actType);
+                    const previewNames = getLineupArtistPerformerNames(artist).filter(Boolean).join(' / ') || artist.memberNamesText || artist.djId;
                     const hasTimetableMatch = Boolean(artistKey && timetableIdentityKeys.has(artistKey)) ||
                       draft.timetableSlots.some((slot) => Boolean(artist.canonicalArtistId && slot.lineupArtistId === artist.canonicalArtistId));
                     return (
@@ -3798,8 +4002,11 @@ export default function EventStudioForm({
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/38">#{index + 1}</div>
-                            <div className="mt-1 text-sm font-semibold text-[#071110]">
-                              {artist.memberNamesText || artist.djId || '未命名阵容'}
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <div className="text-sm font-semibold text-[#071110]">
+                                {previewNames || '未命名阵容'}
+                              </div>
+                              {previewActBadge ? <span className="admin-event-collab-badge">{previewActBadge}</span> : null}
                             </div>
                             <div className="mt-1 text-xs text-black/42">
                               {artist.djId || '无 DJ ID'} · {artist.memberDjIds.filter(Boolean).length} 个 member IDs
@@ -3821,109 +4028,107 @@ export default function EventStudioForm({
 
               <div className="mt-5 space-y-3">
                 {draft.lineupArtists.length ? (
-                  draft.lineupArtists.map((artist, index) => (
-                    <div key={artist.id} className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.72fr_0.55fr_1.25fr_1fr_1fr_auto]">
-                      <select
-                        value={normalizeActType(artist.actType)}
-                        onChange={(event) =>
-                          updateLineupDraft((current) => ({
-                            ...current,
-                            lineupArtists: current.lineupArtists.map((currentArtist) =>
-                              currentArtist.id === artist.id
-                                ? normalizeLineupArtistActType(currentArtist, normalizeActType(event.target.value))
-                                : currentArtist
-                            ),
-                          }))
-                        }
-                        className={textInputClassName}
-                      >
-                        {EVENT_STUDIO_ACT_TYPES.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={String(artist.sortOrder)}
-                        onChange={(event) =>
-                          updateLineupDraft((current) => ({
-                            ...current,
-                            lineupArtists: current.lineupArtists.map((currentArtist) =>
-                              currentArtist.id === artist.id
-                                ? { ...currentArtist, sortOrder: Number(event.target.value) || index + 1 }
-                                : currentArtist
-                            ),
-                          }))
-                        }
-                        className={textInputClassName}
-                        placeholder="排序"
-                      />
-                      <input
-                        value={artist.memberNamesText}
-                        onChange={(event) =>
-                          updateLineupDraft((current) => ({
-                            ...current,
-                            lineupArtists: current.lineupArtists.map((currentArtist) =>
-                              currentArtist.id === artist.id ? { ...currentArtist, memberNamesText: event.target.value } : currentArtist
-                            ),
-                          }))
-                        }
-                        className={textInputClassName}
-                        placeholder="艺人名称"
-                      />
-                      <input
-                        value={artist.djId}
-                        onChange={(event) =>
-                          updateLineupDraft((current) => ({
-                            ...current,
-                            lineupArtists: current.lineupArtists.map((currentArtist) =>
-                              currentArtist.id === artist.id
-                                ? {
-                                    ...currentArtist,
-                                    djId: event.target.value,
-                                    memberDjIds: event.target.value.trim() ? [event.target.value.trim()] : [],
-                                  }
-                                : currentArtist
-                            ),
-                          }))
-                        }
-                        className={textInputClassName}
-                        placeholder="DJ ID（可选）"
-                      />
-                      <input
-                        value={artist.canonicalArtistId || ''}
-                        onChange={(event) =>
-                          updateLineupDraft((current) => ({
-                            ...current,
-                            lineupArtists: current.lineupArtists.map((currentArtist) =>
-                              currentArtist.id === artist.id
-                                ? { ...currentArtist, canonicalArtistId: event.target.value.trim() || null }
-                                : currentArtist
-                            ),
-                          }))
-                        }
-                        className={textInputClassName}
-                        placeholder="canonical artist id"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateLineupDraft((current) => ({
-                            ...current,
-                            lineupArtists: current.lineupArtists
-                              .filter((currentArtist) => currentArtist.id !== artist.id)
-                              .map((currentArtist, nextIndex) => ({
-                                ...currentArtist,
-                                sortOrder: nextIndex + 1,
-                              })),
-                          }))
-                        }
-                        className="admin-studio-button-danger px-4 py-3 text-sm"
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ))
+                  draft.lineupArtists.map((artist, index) => {
+                    const performerCount = actTypePerformerCount(artist.actType);
+                    const performerNames = getLineupArtistPerformerNames(artist);
+                    const actBadge = collaborativeActBadgeLabel(artist.actType);
+                    return (
+                      <div key={artist.id} className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.72fr_0.55fr_1.25fr_1fr_1fr_auto]">
+                        <select
+                          value={normalizeActType(artist.actType)}
+                          onChange={(event) =>
+                            updateLineupDraft((current) => ({
+                              ...current,
+                              lineupArtists: current.lineupArtists.map((currentArtist) =>
+                                currentArtist.id === artist.id
+                                  ? normalizeLineupArtistActType(currentArtist, normalizeActType(event.target.value))
+                                  : currentArtist
+                              ),
+                            }))
+                          }
+                          className={textInputClassName}
+                        >
+                          {EVENT_STUDIO_ACT_TYPES.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={String(artist.sortOrder)}
+                          onChange={(event) =>
+                            updateLineupDraft((current) => ({
+                              ...current,
+                              lineupArtists: current.lineupArtists.map((currentArtist) =>
+                                currentArtist.id === artist.id
+                                  ? { ...currentArtist, sortOrder: Number(event.target.value) || index + 1 }
+                                  : currentArtist
+                              ),
+                            }))
+                          }
+                          className={textInputClassName}
+                          placeholder="排序"
+                        />
+                        <div className="grid gap-2">
+                          {actBadge ? <span className="admin-event-collab-badge">{actBadge}</span> : null}
+                          {Array.from({ length: performerCount }).map((_, performerIndex) => (
+                            <input
+                              key={`${artist.id}-name-${performerIndex}`}
+                              value={performerNames[performerIndex] || ''}
+                              onChange={(event) => updateLineupArtistPerformerName(artist.id, performerIndex, event.target.value)}
+                              className={textInputClassName}
+                              placeholder={normalizeActType(artist.actType) === 'solo' ? '艺人名称' : `成员 ${performerIndex + 1} 名称`}
+                            />
+                          ))}
+                        </div>
+                        <div className="grid gap-2">
+                          {Array.from({ length: performerCount }).map((_, performerIndex) => (
+                            <input
+                              key={`${artist.id}-dj-${performerIndex}`}
+                              value={getLineupArtistBoundDjId(artist, performerIndex)}
+                              onChange={(event) => updateLineupArtistPerformerBinding(artist.id, performerIndex, event.target.value)}
+                              className={textInputClassName}
+                              placeholder={normalizeActType(artist.actType) === 'solo' ? 'DJ ID（可选）' : `成员 ${performerIndex + 1} DJ ID`}
+                            />
+                          ))}
+                        </div>
+                        <input type="hidden" value={artist.memberNamesText} readOnly />
+                        <input type="hidden" value={artist.djId} readOnly />
+                        <input
+                          value={artist.canonicalArtistId || ''}
+                          onChange={(event) =>
+                            updateLineupDraft((current) => ({
+                              ...current,
+                              lineupArtists: current.lineupArtists.map((currentArtist) =>
+                                currentArtist.id === artist.id
+                                  ? { ...currentArtist, canonicalArtistId: event.target.value.trim() || null }
+                                  : currentArtist
+                              ),
+                            }))
+                          }
+                          className={textInputClassName}
+                          placeholder="canonical artist id"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLineupDraft((current) => ({
+                              ...current,
+                              lineupArtists: current.lineupArtists
+                                .filter((currentArtist) => currentArtist.id !== artist.id)
+                                .map((currentArtist, nextIndex) => ({
+                                  ...currentArtist,
+                                  sortOrder: nextIndex + 1,
+                                })),
+                            }))
+                          }
+                          className="admin-studio-button-danger px-4 py-3 text-sm"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    );
+                  })
                 ) : (
                   <div className="admin-reference-soft-card p-4 text-sm text-black/48">
                     当前没有阵容艺人可编辑。你可以新增，或先用“预览对齐”同步时间表中的艺人。
@@ -4153,6 +4358,91 @@ export default function EventStudioForm({
 
         </main>
       </div>
+
+      {activeLocalizedField && activeLocalizedValue ? (
+        <div
+          className="admin-localized-overlay"
+          onClick={() => setActiveLocalizedField(null)}
+        >
+          <div
+            className="admin-localized-overlay-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="admin-studio-label">Multilingual Editor</div>
+                <div className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">
+                  {activeLocalizedField.label}
+                </div>
+                <div className="mt-2 text-sm leading-6 text-black/48">
+                  主输入默认使用中文，这里统一补充英文、日文和其他语言版本。
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveLocalizedField(null)}
+                className="admin-localized-overlay-close"
+                aria-label="关闭多语言编辑器"
+              >
+                <X className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4">
+              {LOCALIZED_LOCALE_ITEMS.map((item) => (
+                <Field
+                  key={`${activeLocalizedField.key}-${item.key}`}
+                  label={item.label}
+                  hint={item.hint}
+                >
+                  {activeLocalizedField.kind === 'textarea' ? (
+                    <textarea
+                      value={activeLocalizedValue[item.key]}
+                      onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
+                      className={textAreaClassName}
+                      placeholder={`${activeLocalizedField.label}${item.label}`}
+                    />
+                  ) : (
+                    <input
+                      value={activeLocalizedValue[item.key]}
+                      onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
+                      className={textInputClassName}
+                      placeholder={`${activeLocalizedField.label}${item.label}`}
+                    />
+                  )}
+                </Field>
+              ))}
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-black/40">
+                已填写语言：{localizedTextFilledLocaleLabels(activeLocalizedValue).join(' / ') || '暂无'}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {activeLocalizedField.clearable ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearLocalizedI18n(activeLocalizedField.key as 'city' | 'country');
+                      setActiveLocalizedField(null);
+                    }}
+                    className="admin-studio-button-secondary px-4 py-2 text-sm"
+                  >
+                    清除该字段多语言
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setActiveLocalizedField(null)}
+                  className="admin-studio-button-primary px-5 py-3 text-sm"
+                >
+                  完成
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <EventLocationPickerModal
         open={showLocationPicker}

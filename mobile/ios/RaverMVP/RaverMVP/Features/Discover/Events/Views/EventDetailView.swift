@@ -1610,6 +1610,7 @@ struct EventDetailView: View {
     @State private var isTogglingMarkedEvent = false
     @State private var shareMorePresentation: EventCardSharePresentation?
     @State private var isShareMorePanelVisible = false
+    @State private var showDeleteEventConfirmation = false
     @State private var fullChatSharePresentation: EventCardSharePresentation?
     @State private var reportTarget: ReportSheetTarget?
     @State private var eventDiscussionPosts: [Post] = []
@@ -2426,6 +2427,17 @@ struct EventDetailView: View {
             Button(LT("确定", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .alert(
+            LT("确认删除活动？", "Delete this event?", "このイベントを削除しますか？"),
+            isPresented: $showDeleteEventConfirmation
+        ) {
+            Button(LT("取消", "Cancel", "キャンセル"), role: .cancel) {}
+            Button(LT("确认删除", "Delete", "削除"), role: .destructive) {
+                Task { await deleteEvent() }
+            }
+        } message: {
+            Text(LT("删除后无法恢复，请确认不是误触。", "This action cannot be undone. Please confirm before deleting.", "削除すると元に戻せません。誤操作でないことを確認してください。"))
         }
         .confirmationDialog(
             pendingCollaborativeLineupEntry?.name ?? LT("选择 DJ", "Choose DJ", "DJを選択"),
@@ -5123,7 +5135,9 @@ struct EventDetailView: View {
                     systemImage: "trash",
                     accentColor: Color(red: 0.91, green: 0.29, blue: 0.32)
                 ) {
-                    Task { await deleteEvent() }
+                    dismissShareMorePanel {
+                        showDeleteEventConfirmation = true
+                    }
                 }
             )
         }
