@@ -112,21 +112,23 @@ const classifyEventImageUsage = (type?: string | null, label?: string | null): E
   return 'other';
 };
 
+const splitMemberNamesText = (value: string): string[] =>
+  value
+    .replace(/\bB2B\b/gi, '/')
+    .replace(/\bB3B\b/gi, '/')
+    .split(/[\/,&]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const defaultMemberNamesText = (members?: string[] | null, fallback?: string | null): string => {
   const normalizedMembers = Array.isArray(members)
-    ? members.map((item) => String(item || '').trim()).filter(Boolean)
+    ? members.flatMap((item) => splitMemberNamesText(String(item || '')))
     : [];
   if (normalizedMembers.length > 0) {
     return normalizedMembers.join(' / ');
   }
-  return String(fallback || '').trim();
+  return splitMemberNamesText(String(fallback || '')).join(' / ');
 };
-
-const splitMemberNamesText = (value: string): string[] =>
-  value
-    .split(/[\/,&]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
 
 const normalizedMemberDjIds = (memberDjIds?: Array<string | null> | null): string[] =>
   (memberDjIds ?? [])

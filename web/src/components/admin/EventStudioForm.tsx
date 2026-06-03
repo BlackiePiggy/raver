@@ -616,15 +616,22 @@ const getTimetableSlotPerformerNames = (slot: EventStudioTimetableSlotDraft): st
   return Array.from({ length: performerCount }, (_, index) => names[index] || '');
 };
 
+const getTimetableSlotBoundDjId = (
+  slot: EventStudioTimetableSlotDraft,
+  performerIndex: number
+): string => {
+  const memberDjId = String(slot.memberDjIds[performerIndex] || '').trim();
+  if (memberDjId) return memberDjId;
+  return performerIndex === 0 ? String(slot.djId || '').trim() : '';
+};
+
 const getTimetableSlotPerformerRows = (
   slot: EventStudioTimetableSlotDraft
 ): Array<{ key: string; label: string; isBound: boolean }> => {
   const performerCount = actTypePerformerCount(slot.actType);
   const names = splitPerformerNames(slot.memberNamesText);
-  const djIds = Array.isArray(slot.memberDjIds) ? slot.memberDjIds : [];
   const rows = Array.from({ length: performerCount }, (_, index) => {
-    const memberDjId = String(djIds[index] || '').trim();
-    const soloDjId = performerCount === 1 ? String(slot.djId || '').trim() : '';
+    const boundDjId = getTimetableSlotBoundDjId(slot, index);
     const fallbackLabel =
       performerCount === 1
         ? String(slot.djId || '').trim() || '未填写艺人'
@@ -632,7 +639,7 @@ const getTimetableSlotPerformerRows = (
     return {
       key: `${slot.id}-performer-${index}`,
       label: names[index] || fallbackLabel,
-      isBound: Boolean(memberDjId || soloDjId),
+      isBound: Boolean(boundDjId),
     };
   }).filter((row, index) => row.label || index === 0);
 
@@ -736,7 +743,7 @@ export default function EventStudioForm({
   const [organizerLoading, setOrganizerLoading] = useState(false);
   const [organizerError, setOrganizerError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(mode === 'edit' ? 3 : 0);
   const [alignmentPreviewLoading, setAlignmentPreviewLoading] = useState(false);
   const [alignmentPreview, setAlignmentPreview] = useState<EventStudioAlignmentPreview | null>(null);
   const [alignmentPreviewError, setAlignmentPreviewError] = useState<string | null>(null);
@@ -750,7 +757,9 @@ export default function EventStudioForm({
   const [timetableSelectionMode, setTimetableSelectionMode] = useState(false);
   const [selectedTimetableSlotIds, setSelectedTimetableSlotIds] = useState<string[]>([]);
   const [focusedTimetableSlotId, setFocusedTimetableSlotId] = useState<string | null>(null);
-  const [confirmedTimetableSlotIds, setConfirmedTimetableSlotIds] = useState<string[]>([]);
+  const [confirmedTimetableSlotIds, setConfirmedTimetableSlotIds] = useState<string[]>(
+    mode === 'edit' ? draft.timetableSlots.map((slot) => slot.id) : []
+  );
   const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
   const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
   const [timetableDJSearchResults, setTimetableDJSearchResults] = useState<Record<string, TimetableEditorDJSearchResult[]>>({});
@@ -759,6 +768,7 @@ export default function EventStudioForm({
   const draftRef = useRef(draft);
   const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  const didInitEditTimetableViewRef = useRef(false);
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
@@ -848,6 +858,15 @@ export default function EventStudioForm({
       Object.fromEntries(Object.entries(current).filter(([key]) => validIds.has(key.split('::')[0] || '')))
     );
   }, [draft.timetableSlots]);
+
+  useEffect(() => {
+    if (mode !== 'edit' || didInitEditTimetableViewRef.current) return;
+    if (!draft.timetableSlots.length) return;
+    didInitEditTimetableViewRef.current = true;
+    setCurrentStep(3);
+    setConfirmedTimetableSlotIds(draft.timetableSlots.map((slot) => slot.id));
+    setFocusedTimetableSlotId(null);
+  }, [mode, draft.timetableSlots]);
 
   const locationPointInitial = useMemo<EventLocationPoint | null>(() => {
     if (draft.locationPoint) {
@@ -3170,7 +3189,7 @@ export default function EventStudioForm({
                               key={slot.id}
                               type="button"
                               onClick={() => handleTimetableSlotCardClick(slot.id)}
-                              className={`admin-event-legacy-slot ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
+                              className={`admin-event-legacy-slot ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''} ${confirmedTimetableSlotIds.includes(slot.id) ? 'is-confirmed' : ''}`}
                             >
                               <span className="admin-event-legacy-slot-time">{formatTimetableSlotRange(slot)}</span>
                               <strong className="admin-event-legacy-slot-title">
@@ -3215,7 +3234,7 @@ export default function EventStudioForm({
                         key={slot.id}
                         type="button"
                         onClick={() => handleTimetableSlotCardClick(slot.id)}
-                        className={`admin-event-legacy-slot admin-event-legacy-flat-slot ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''}`}
+                        className={`admin-event-legacy-slot admin-event-legacy-flat-slot ${timetableSelectionMode && selectedTimetableSlotIds.includes(slot.id) ? 'is-selected' : ''} ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''} ${confirmedTimetableSlotIds.includes(slot.id) ? 'is-confirmed' : ''}`}
                       >
                         <span className="admin-event-legacy-slot-time">{formatTimetableSlotRange(slot)}</span>
                         <strong className="admin-event-legacy-slot-title">
@@ -3292,7 +3311,7 @@ export default function EventStudioForm({
                         const performerNames = getTimetableSlotPerformerNames(slot);
                         const isConfirmed = confirmedTimetableSlotIds.includes(slot.id);
                         const isExpanded = focusedTimetableSlotId === slot.id || !isConfirmed;
-                        const boundCount = Array.from({ length: performerCount }, (_, index) => String(slot.memberDjIds[index] || '').trim()).filter(Boolean).length;
+                        const boundCount = Array.from({ length: performerCount }, (_, index) => getTimetableSlotBoundDjId(slot, index)).filter(Boolean).length;
 
                         return (
                           <div
@@ -3328,14 +3347,14 @@ export default function EventStudioForm({
 
                             <div className="admin-event-slot-editor-summary-performers">
                               {performerNames.map((performerName, performerIndex) => {
-                                const boundDjId = String(slot.memberDjIds[performerIndex] || '').trim();
+                                const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
                                 return (
                                   <div key={`${slot.id}-summary-${performerIndex}`} className="admin-event-slot-editor-summary-performer">
                                     <span className="admin-event-slot-editor-summary-name">
                                       {performerName || `成员 ${performerIndex + 1}`}
                                     </span>
-                                    <span className={`admin-event-slot-editor-summary-binding ${boundDjId ? 'is-bound' : 'is-empty'}`}>
-                                      {boundDjId ? `已绑定 · ${boundDjId}` : '未绑定'}
+                                    <span className={`admin-event-slot-editor-summary-inline-id ${boundDjId ? 'is-bound' : 'is-empty'}`}>
+                                      {boundDjId || '未绑定'}
                                     </span>
                                   </div>
                                 );
@@ -3401,7 +3420,7 @@ export default function EventStudioForm({
                                 <div className="lg:col-span-3 grid gap-3">
                                   {Array.from({ length: performerCount }).map((_, performerIndex) => {
                                     const searchKey = timetableDJSearchKey(slot.id, performerIndex);
-                                    const boundDjId = String(slot.memberDjIds[performerIndex] || '').trim();
+                                    const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
                                     const candidateItems = timetableDJSearchResults[searchKey] || [];
                                     const isSearchingCandidates = Boolean(timetableDJSearchLoadingKeys[searchKey]);
                                     const isMatchingByName = Boolean(timetableDJMatchLoadingKeys[searchKey]);
