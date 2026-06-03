@@ -110,15 +110,15 @@ const createPostsState = (): DJPostsState => ({
 });
 
 const DJ_DETAIL_TABS: Array<{ key: DJDetailTabKey; label: string; helper: string }> = [
-  { key: 'intro', label: 'Intro', helper: '绠€浠? },
-  { key: 'events', label: 'Events', helper: '娲诲姩' },
-  { key: 'ratings', label: 'Ratings', helper: '璇勫垎' },
-  { key: 'posts', label: 'Posts', helper: '鍔ㄦ€? },
-  { key: 'sets', label: 'Sets', helper: '婕斿嚭' },
+  { key: 'intro', label: 'Intro', helper: '简介' },
+  { key: 'events', label: 'Events', helper: '活动' },
+  { key: 'ratings', label: 'Ratings', helper: '评分' },
+  { key: 'posts', label: 'Posts', helper: '动态' },
+  { key: 'sets', label: 'Sets', helper: '演出' },
 ];
 
 const formatDateTime = (value?: string | null): string => {
-  if (!value) return '鏈褰?;
+  if (!value) return '未记录';
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -129,14 +129,14 @@ const formatDateTime = (value?: string | null): string => {
 };
 
 const formatDateCell = (value?: string | null): { date: string; time: string } => {
-  if (!value) return { date: '鏈褰?, time: '' };
+  if (!value) return { date: '未记录', time: '' };
   const formatted = formatDateTime(value);
   const [date, time] = formatted.split(' ');
-  return { date: date || '鏈褰?, time: time || '' };
+  return { date: date || '未记录', time: time || '' };
 };
 
 const formatFollowers = (value?: number | null): string => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '鏈悓姝?;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '未同步';
   return new Intl.NumberFormat('zh-CN').format(value);
 };
 
@@ -146,7 +146,7 @@ const formatCompactNumber = (value?: number | null): string => {
 };
 
 const formatDateOnly = (value?: string | null): string => {
-  if (!value) return '鏃ユ湡鏈褰?;
+  if (!value) return '日期未记录';
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -176,20 +176,20 @@ const isDJIncomplete = (item: DJCatalogItem): boolean =>
 
 const resolveDJState = (item: DJCatalogItem): { label: string; tone: string } => {
   if (item.isVerified) {
-    return { label: '宸查獙璇?, tone: 'border-[#c6e8c8] bg-[#eef8ee] text-[#2f8b4f]' };
+    return { label: '已验证', tone: 'border-[#c6e8c8] bg-[#eef8ee] text-[#2f8b4f]' };
   }
   if (isDJIncomplete(item)) {
-    return { label: '璧勬枡寰呭畬鍠?, tone: 'border-[#c8d9fb] bg-[#eef2ff] text-[#4267c7]' };
+    return { label: '资料待完善', tone: 'border-[#c8d9fb] bg-[#eef2ff] text-[#4267c7]' };
   }
-  return { label: '鏈獙璇?, tone: 'border-[#f0dfaf] bg-[#fff9ec] text-[#b57a12]' };
+  return { label: '未验证', tone: 'border-[#f0dfaf] bg-[#fff9ec] text-[#b57a12]' };
 };
 
 const resolveCountryDisplay = (country?: string | null): { flag: string | null; label: string } => {
-  if (!country) return { flag: null, label: '寰呰ˉ鍏? };
+  if (!country) return { flag: null, label: '未设置' };
   const code = getCountryCode(country);
   return {
     flag: code ? getEmojiFlag(code) : null,
-    label: country, // 鈶?鏄剧ず瀹屾暣鍥藉鍚?
+    label: country,
   };
 };
 
@@ -197,7 +197,7 @@ const resolveTagPills = (item: DJCatalogItem): string[] => {
   const genres = Array.isArray(item.genres) ? item.genres : [];
   const aliases = Array.isArray(item.aliases) ? item.aliases : [];
   const tags = [...genres, ...aliases].map((entry) => entry.trim()).filter(Boolean);
-  if (!tags.length) return ['璧勬枡鏍囩寰呰ˉ鍏?];
+  if (!tags.length) return ['待补充'];
   return Array.from(new Set(tags)).slice(0, 2);
 };
 
@@ -249,7 +249,7 @@ const mergeById = <T extends { id: string }>(items: T[]): T[] => {
 const detailText = (label: string, value?: string | number | null) => (
   <div>
     <span className="font-medium text-[#111827]">{label}: </span>
-    {value === undefined || value === null || value === '' ? '鏈缃? : value}
+    {value === undefined || value === null || value === '' ? '未设置' : value}
   </div>
 );
 
@@ -279,7 +279,7 @@ function LoadMoreButton({
       disabled={loading}
       className="mt-4 inline-flex h-10 items-center rounded-full border border-[#d8dfdc] bg-white px-5 text-sm font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-50"
     >
-      {loading ? '鍔犺浇涓?..' : '鍔犺浇鏇村'}
+      {loading ? '加载中...' : '加载更多'}
     </button>
   );
 }
@@ -330,7 +330,7 @@ function DJDetailOverlay({
         ...current,
         loading: false,
         loaded: true,
-        error: nextError instanceof Error ? nextError.message : 'Sets 鍔犺浇澶辫触',
+        error: nextError instanceof Error ? nextError.message : 'Sets 加载失败',
       }));
     }
   }, [item?.id]);
@@ -376,7 +376,7 @@ function DJDetailOverlay({
         return next;
       });
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : '娲诲姩鍔犺浇澶辫触';
+      const message = nextError instanceof Error ? nextError.message : '活动加载失败';
       setEventsState((current) => {
         const next = { ...current };
         sections.forEach((key) => {
@@ -404,7 +404,7 @@ function DJDetailOverlay({
         ...current,
         loading: false,
         loaded: true,
-        error: nextError instanceof Error ? nextError.message : '璇勫垎鍗曞厓鍔犺浇澶辫触',
+        error: nextError instanceof Error ? nextError.message : '评分单元加载失败',
       }));
     }
   }, [item?.id]);
@@ -426,7 +426,7 @@ function DJDetailOverlay({
         ...current,
         loading: false,
         loaded: true,
-        error: nextError instanceof Error ? nextError.message : '鍔ㄦ€佸姞杞藉け璐?,
+        error: nextError instanceof Error ? nextError.message : '动态加载失败',
       }));
     }
   }, [item?.id]);
@@ -524,9 +524,9 @@ function DJDetailOverlay({
           type="button"
           onClick={onClose}
           className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
-          aria-label="鍏抽棴 DJ 璇︽儏"
+          aria-label="关闭 DJ 详情"
         >
-          脳
+          ×
         </button>
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
@@ -548,7 +548,7 @@ function DJDetailOverlay({
                     sizes="900px"
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-[#7b8794]">鏆傛棤 Banner</div>
+                  <div className="flex h-full items-center justify-center text-sm text-[#7b8794]">暂无 Banner</div>
                 )}
               </div>
             </button>
@@ -572,7 +572,7 @@ function DJDetailOverlay({
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="text-xs text-[#9aa1ad]">鏆傛棤澶村儚</span>
+                    <span className="text-xs text-[#9aa1ad]">暂无头像</span>
                   )}
                 </button>
                 <div className="min-w-0 flex-1">
@@ -589,41 +589,41 @@ function DJDetailOverlay({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">骞冲彴绮変笣</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Followers</div>
                 <div className="mt-2 text-xl font-semibold text-[#111827]">
                   {formatFollowers(item.followerCount ?? item.soundCloudFollowers)}
                 </div>
               </div>
               <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Spotify 绮変笣</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Spotify</div>
                 <div className="mt-2 text-xl font-semibold text-[#111827]">
                   {formatFollowers(resolved?.spotifyFollowers ?? null)}
                 </div>
               </div>
               <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">鏇茬洰鏁?/div>
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Tracks</div>
                 <div className="mt-2 text-xl font-semibold text-[#111827]">
-                  {typeof resolved?.trackCount === 'number' ? resolved.trackCount.toLocaleString() : '鏈悓姝?}
+                  {typeof resolved?.trackCount === 'number' ? resolved.trackCount.toLocaleString() : '未同步'}
                 </div>
               </div>
               <div className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">姝屽崟鏁?/div>
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Playlists</div>
                 <div className="mt-2 text-xl font-semibold text-[#111827]">
-                  {typeof resolved?.playlistCount === 'number' ? resolved.playlistCount.toLocaleString() : '鏈悓姝?}
+                  {typeof resolved?.playlistCount === 'number' ? resolved.playlistCount.toLocaleString() : '未同步'}
                 </div>
               </div>
             </div>
 
             <div className="mt-5 rounded-[22px] border border-[#e8eceb] bg-white p-5">
-              <div className="text-sm font-semibold text-[#111827]">Basic Info</div>
+              <div className="text-sm font-semibold text-[#111827]">基础信息</div>
               <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
                 {detailText('ID', resolved?.id || item.id)}
-                {detailText('Country', countryDisplay.label)}
+                {detailText('国家', countryDisplay.label)}
                 {detailText('Slug', resolved?.slug)}
-                {detailText('Updated At', formatDateTime(item.updatedAt))}
-                {detailText('Created At', formatDateTime(item.createdAt))}
+                {detailText('更新时间', formatDateTime(item.updatedAt))}
+                {detailText('创建时间', formatDateTime(item.createdAt))}
               </div>
             </div>
           </div>
@@ -632,13 +632,13 @@ function DJDetailOverlay({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">DJ Profile</div>
-                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">DJ 璇︽儏</div>
+                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">DJ 详情</div>
               </div>
               <Link
                 href={`/admin/content/djs/${item.id}/edit`}
                 className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
               >
-                缂栬緫 DJ
+                编辑 DJ
               </Link>
             </div>
 
@@ -661,7 +661,7 @@ function DJDetailOverlay({
 
             {loading ? (
               <div className="mt-6 rounded-[22px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
-                姝ｅ湪鍔犺浇 DJ 瀹屾暣淇℃伅...
+                正在加载 DJ 完整信息...
               </div>
             ) : error ? (
               <div className="mt-6 rounded-[22px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-[#7a2d29]">
@@ -674,36 +674,36 @@ function DJDetailOverlay({
                     <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <div className="text-sm font-semibold text-[#111827]">绠€浠?/div>
-                          <div className="mt-1 text-xs text-[#9aa1ad]">瀵瑰簲 iOS Intro 椤碉細鍩虹璧勬枡銆佺畝浠嬨€侀鏍笺€佸閾句笌璐＄尞鑰?/div>
+                          <div className="text-sm font-semibold text-[#111827]">简介</div>
+                          <div className="mt-1 text-xs text-[#9aa1ad]">与 iOS 端 Intro 语义对齐，展示 DJ 的核心资料。</div>
                         </div>
                         {typeof resolved?.viewerWatchedCount === 'number' ? (
                           <span className="rounded-full bg-[#eef8ee] px-3 py-1 text-xs font-semibold text-[#2f8b4f]">
-                            宸茬湅 {resolved.viewerWatchedCount}
+                            浏览 {resolved.viewerWatchedCount}
                           </span>
                         ) : null}
                       </div>
                       <div className="mt-4 text-sm leading-7 text-[#4b5563]">
-                        {bioText || '鏆傛棤绠€浠嬩俊鎭€?}
+                        {bioText || '暂无简介'}
                       </div>
                     </section>
 
                     <section className="grid gap-5 lg:grid-cols-2">
                       <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                        <div className="text-sm font-semibold text-[#111827]">鍩虹璧勬枡</div>
+                        <div className="text-sm font-semibold text-[#111827]">基础资料</div>
                         <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
                           {detailText('ID', resolved?.id || item.id)}
-                          {detailText('Slug', resolved?.slug || '鏈缃?)}
-                          {detailText('鍥藉/鍦板尯', countryDisplay.label)}
-                          {detailText('鍙紪杈?, resolved?.canEdit === false ? '鍚? : '鏄?)}
-                          {detailText('鏈€杩戝悓姝?, formatDateTime(item.lastSyncedAt))}
-                          {detailText('鏈€杩戞洿鏂?, formatDateTime(item.updatedAt))}
-                          {detailText('鍒涘缓鏃堕棿', formatDateTime(item.createdAt))}
+                          {detailText('Slug', resolved?.slug || '未设置')}
+                          {detailText('国家 / 地区', countryDisplay.label)}
+                          {detailText('可编辑', resolved?.canEdit === false ? '否' : '是')}
+                          {detailText('最近同步', formatDateTime(item.lastSyncedAt))}
+                          {detailText('最近更新', formatDateTime(item.updatedAt))}
+                          {detailText('创建时间', formatDateTime(item.createdAt))}
                         </div>
                       </div>
 
                       <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                        <div className="text-sm font-semibold text-[#111827]">椋庢牸涓庡埆鍚?/div>
+                        <div className="text-sm font-semibold text-[#111827]">风格与别名</div>
                         <div className="mt-4 space-y-4">
                           <div>
                             <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Genres</div>
@@ -712,7 +712,7 @@ function DJDetailOverlay({
                                 <span key={genre} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
                                   {genre}
                                 </span>
-                              )) : <span className="text-sm text-[#6b7280]">鏆傛棤</span>}
+                              )) : <span className="text-sm text-[#6b7280]">暂无风格</span>}
                             </div>
                           </div>
                           <div>
@@ -722,7 +722,7 @@ function DJDetailOverlay({
                                 <span key={alias} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
                                   {alias}
                                 </span>
-                              )) : <span className="text-sm text-[#6b7280]">鏆傛棤</span>}
+                              )) : <span className="text-sm text-[#6b7280]">暂无别名</span>}
                             </div>
                           </div>
                         </div>
@@ -730,7 +730,7 @@ function DJDetailOverlay({
                     </section>
 
                     <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                      <div className="text-sm font-semibold text-[#111827]">骞冲彴涓庡閾?/div>
+                      <div className="text-sm font-semibold text-[#111827]">平台与外链</div>
                       <div className="mt-4 grid gap-3 lg:grid-cols-2">
                         {linkItems.length ? linkItems.map((linkItem) => (
                           <div key={linkItem.label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm text-[#4b5563]">
@@ -739,18 +739,18 @@ function DJDetailOverlay({
                             {linkItem.id ? <div className="mt-1 text-xs text-[#8b93a1]">ID: {linkItem.id}</div> : null}
                           </div>
                         )) : (
-                          <div className="text-sm text-[#6b7280]">鏆傛棤骞冲彴閾炬帴銆?/div>
+                          <div className="text-sm text-[#6b7280]">暂未配置平台链接</div>
                         )}
                       </div>
                     </section>
 
                     <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                      <div className="text-sm font-semibold text-[#111827]">骞冲彴缁熻</div>
+                      <div className="text-sm font-semibold text-[#111827]">平台统计</div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                         {[
                           ['Spotify Followers', formatFollowers(resolved?.spotifyFollowers ?? null)],
                           ['SoundCloud Followers', formatFollowers(resolved?.soundCloudFollowers ?? null)],
-                          ['SoundCloud Favorites', typeof resolved?.soundCloudFavorites === 'number' ? resolved.soundCloudFavorites.toLocaleString() : '鏈悓姝?],
+                          ['SoundCloud Favorites', typeof resolved?.soundCloudFavorites === 'number' ? resolved.soundCloudFavorites.toLocaleString() : '未同步'],
                           ['Follower Count', formatFollowers(item.followerCount ?? null)],
                         ].map(([label, value]) => (
                           <div key={label} className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3">
@@ -762,13 +762,13 @@ function DJDetailOverlay({
                     </section>
 
                     <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                      <div className="text-sm font-semibold text-[#111827]">璐＄尞鑰?/div>
+                      <div className="text-sm font-semibold text-[#111827]">贡献者</div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {contributors.length ? contributors.map((contributor) => (
                           <span key={contributor.id} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
                             {contributor.displayName || contributor.username || contributor.id}
                           </span>
-                        )) : <span className="text-sm text-[#6b7280]">鏆傛棤璐＄尞鑰呬俊鎭€?/span>}
+                        )) : <span className="text-sm text-[#6b7280]">暂无贡献者记录</span>}
                       </div>
                     </section>
                   </div>
@@ -778,21 +778,22 @@ function DJDetailOverlay({
                   <div className="space-y-5">
                     {(['upcoming', 'ended'] as const).map((section) => {
                       const sectionState = eventsState[section];
-                      const title = section === 'upcoming' ? '鍗冲皢寮€濮?/ 杩涜涓? : '鍘嗗彶娲诲姩';
+                      const title = section === 'upcoming' ? '即将开始 / 进行中' : '历史活动';
                       const sectionVisiblePages = buildVisiblePages(sectionState.pagination.page, sectionState.pagination.totalPages);
                       return (
                         <section key={section} className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <div className="text-sm font-semibold text-[#111827]">{title}</div>
-                              <div className="mt-1 text-xs text-[#9aa1ad]">瀵瑰簲 iOS Events 椤电殑鍒嗙粍涓庡垎椤?/div>
+                              <div className="mt-1 text-xs text-[#9aa1ad]">与 iOS 端 Events 分组与分页逻辑对齐。</div>
                             </div>
                             <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#6b7280]">
-                              {sectionState.pagination.total} 鍦?                            </span>
+                              {sectionState.pagination.total} 场
+                            </span>
                           </div>
                           {sectionState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{sectionState.error}</div> : null}
                           {sectionState.loading && !sectionState.items.length ? (
-                            <div className="mt-4 text-sm text-[#6b7280]">姝ｅ湪鍔犺浇娲诲姩...</div>
+                            <div className="mt-4 text-sm text-[#6b7280]">正在加载活动...</div>
                           ) : sectionState.items.length ? (
                             <div className="mt-4 space-y-3">
                               {sectionState.items.map((eventItem) => (
@@ -808,7 +809,9 @@ function DJDetailOverlay({
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <div className="truncate text-sm font-semibold text-[#111827]">{eventItem.name}</div>
-                                    <div className="mt-1 text-xs text-[#6b7280]">{formatDateOnly(eventItem.startDate)} 路 {[eventItem.city, eventItem.country].filter(Boolean).join(', ') || '鍦扮偣鏈缃?}</div>
+                                    <div className="mt-1 text-xs text-[#6b7280]">
+                                      {formatDateOnly(eventItem.startDate)} · {[eventItem.city, eventItem.country].filter(Boolean).join(', ') || '地点未设置'}
+                                    </div>
                                     <div className="mt-2 flex flex-wrap gap-2">
                                       {eventItem.status ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.status}</span> : null}
                                       {eventItem.eventType ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.eventType}</span> : null}
@@ -819,12 +822,12 @@ function DJDetailOverlay({
                             </div>
                           ) : (
                             <div className="mt-4">
-                              <EmptyTabState title="鏆傛棤娲诲姩" description="杩欎釜鍒嗙粍涓嬭繕娌℃湁缁戝畾鍒拌 DJ 鐨勬椿鍔ㄣ€? />
+                              <EmptyTabState title="暂无活动" description="这个分组下还没有绑定到该 DJ 的活动。" />
                             </div>
                           )}
                           <div className="mt-4 flex flex-col gap-3 border-t border-[#edf0f2] pt-4 sm:flex-row sm:items-center sm:justify-between">
                             <div className="text-xs text-[#8b93a1]">
-                              Page {sectionState.pagination.page} / {Math.max(1, sectionState.pagination.totalPages)} 璺?Total {sectionState.pagination.total} events
+                              第 {sectionState.pagination.page} / {Math.max(1, sectionState.pagination.totalPages)} 页，共 {sectionState.pagination.total} 场活动
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <button
@@ -833,7 +836,7 @@ function DJDetailOverlay({
                                 onClick={() => void loadEvents(sectionState.pagination.page - 1, section)}
                                 className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-xs font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
                               >
-                                Prev
+                                上一页
                               </button>
                               {sectionVisiblePages.map((pageNumber) => (
                                 <button
@@ -856,7 +859,7 @@ function DJDetailOverlay({
                                 onClick={() => void loadEvents(sectionState.pagination.page + 1, section)}
                                 className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[#e8eceb] bg-white px-3 text-xs font-semibold text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
                               >
-                                Next
+                                下一页
                               </button>
                             </div>
                           </div>
@@ -870,15 +873,16 @@ function DJDetailOverlay({
                   <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-[#111827]">璇勫垎鍗曞厓</div>
-                        <div className="mt-1 text-xs text-[#9aa1ad]">瀵瑰簲 iOS Ratings 椤?/div>
+                        <div className="text-sm font-semibold text-[#111827]">评分单元</div>
+                        <div className="mt-1 text-xs text-[#9aa1ad]">与 iOS 端 Ratings 页面保持同类分组。</div>
                       </div>
                       <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#6b7280]">
-                        {ratingsState.pagination.total} 涓?                      </span>
+                        {ratingsState.pagination.total} 条
+                      </span>
                     </div>
                     {ratingsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{ratingsState.error}</div> : null}
                     {ratingsState.loading && !ratingsState.items.length ? (
-                      <div className="mt-4 text-sm text-[#6b7280]">姝ｅ湪鍔犺浇璇勫垎...</div>
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载评分...</div>
                     ) : ratingsState.items.length ? (
                       <div className="mt-4 grid gap-3">
                         {ratingsState.items.map((unit) => (
@@ -886,20 +890,20 @@ function DJDetailOverlay({
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-semibold text-[#111827]">{unit.name}</div>
-                                <div className="mt-1 text-xs text-[#6b7280]">{unit.event?.name || '鏈粦瀹氭椿鍔?} 路 {formatDateOnly(unit.createdAt)}</div>
+                                <div className="mt-1 text-xs text-[#6b7280]">{unit.event?.name || '未绑定活动'} · {formatDateOnly(unit.createdAt)}</div>
                               </div>
                               <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#111827]">
                                 {(unit.rating ?? 0).toFixed(1)} / {unit.ratingCount ?? 0}
                               </div>
                             </div>
                             {unit.description ? <div className="mt-3 text-sm leading-6 text-[#4b5563]">{unit.description}</div> : null}
-                            {unit.createdBy ? <div className="mt-3 text-xs text-[#8b93a1]">鍒涘缓鑰咃細{unit.createdBy.displayName || unit.createdBy.username || unit.createdBy.id}</div> : null}
+                            {unit.createdBy ? <div className="mt-3 text-xs text-[#8b93a1]">创建者：{unit.createdBy.displayName || unit.createdBy.username || unit.createdBy.id}</div> : null}
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div className="mt-4">
-                        <EmptyTabState title="鏆傛棤璇勫垎鍗曞厓" description="杩樻病鏈変笌杩欎釜 DJ 缁戝畾鐨勮瘎鍒嗗唴瀹广€? />
+                        <EmptyTabState title="暂无评分单元" description="还没有与这个 DJ 绑定的评分内容。" />
                       </div>
                     )}
                     <LoadMoreButton
@@ -914,13 +918,13 @@ function DJDetailOverlay({
                   <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-[#111827]">鐩稿叧鍔ㄦ€?/div>
-                        <div className="mt-1 text-xs text-[#9aa1ad]">瀵瑰簲 iOS Posts 椤碉紝鏉ヨ嚜缁戝畾 DJ 鐨?News feed</div>
+                        <div className="text-sm font-semibold text-[#111827]">相关动态</div>
+                        <div className="mt-1 text-xs text-[#9aa1ad]">与 iOS 端 Posts 页一致，展示绑定 DJ 的资讯流。</div>
                       </div>
                     </div>
                     {postsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{postsState.error}</div> : null}
                     {postsState.loading && !postsState.items.length ? (
-                      <div className="mt-4 text-sm text-[#6b7280]">姝ｅ湪鍔犺浇鍔ㄦ€?..</div>
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载动态...</div>
                     ) : postsState.items.length ? (
                       <div className="mt-4 space-y-3">
                         {postsState.items.map((article) => {
@@ -936,7 +940,7 @@ function DJDetailOverlay({
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="line-clamp-2 text-sm font-semibold text-[#111827]">{article.title}</div>
-                                <div className="mt-1 text-xs text-[#6b7280]">{article.source || 'Raver'} 路 {formatDateOnly(article.publishedAt)}</div>
+                                <div className="mt-1 text-xs text-[#6b7280]">{article.source || 'Raver'} · {formatDateOnly(article.publishedAt)}</div>
                                 {article.summary ? <div className="mt-2 line-clamp-2 text-xs leading-5 text-[#6b7280]">{article.summary}</div> : null}
                               </div>
                             </Link>
@@ -945,7 +949,7 @@ function DJDetailOverlay({
                       </div>
                     ) : (
                       <div className="mt-4">
-                        <EmptyTabState title="鏆傛棤鐩稿叧鍔ㄦ€? description="杩樻病鏈変笌杩欎釜 DJ 缁戝畾鐨勬柊闂绘垨鍔ㄦ€佸唴瀹广€? />
+                        <EmptyTabState title="暂无动态" description="还没有与这个 DJ 相关联的资讯内容。" />
                       </div>
                     )}
                     <LoadMoreButton
@@ -961,14 +965,15 @@ function DJDetailOverlay({
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-sm font-semibold text-[#111827]">DJ Sets</div>
-                        <div className="mt-1 text-xs text-[#9aa1ad]">瀵瑰簲 iOS Sets 椤?/div>
+                        <div className="mt-1 text-xs text-[#9aa1ad]">与 iOS 端 Sets 页一致。</div>
                       </div>
                       <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#6b7280]">
-                        {setsState.pagination.total} 涓?                      </span>
+                        {setsState.pagination.total} 条
+                      </span>
                     </div>
                     {setsState.error ? <div className="mt-4 rounded-[16px] bg-red-50 px-4 py-3 text-sm text-[#7a2d29]">{setsState.error}</div> : null}
                     {setsState.loading && !setsState.items.length ? (
-                      <div className="mt-4 text-sm text-[#6b7280]">姝ｅ湪鍔犺浇 Sets...</div>
+                      <div className="mt-4 text-sm text-[#6b7280]">正在加载 Sets...</div>
                     ) : setsState.items.length ? (
                       <div className="mt-4 grid gap-3">
                         {setsState.items.map((setItem) => (
@@ -983,7 +988,7 @@ function DJDetailOverlay({
                             <div className="min-w-0 flex-1">
                               <div className="line-clamp-2 text-sm font-semibold text-[#111827]">{setItem.title}</div>
                               <div className="mt-1 text-xs text-[#6b7280]">
-                                {[setItem.eventName, setItem.venue, formatDateOnly(setItem.recordedAt || setItem.createdAt)].filter(Boolean).join(' 路 ')}
+                                {[setItem.eventName, setItem.venue, formatDateOnly(setItem.recordedAt || setItem.createdAt)].filter(Boolean).join(' · ')}
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {setItem.platform ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{setItem.platform}</span> : null}
@@ -998,7 +1003,7 @@ function DJDetailOverlay({
                       </div>
                     ) : (
                       <div className="mt-4">
-                        <EmptyTabState title="鏆傛棤 Sets" description="杩樻病鏈変笌杩欎釜 DJ 缁戝畾鐨?Set 鎴栬棰戝唴瀹广€? />
+                        <EmptyTabState title="暂无 Sets" description="还没有与这个 DJ 绑定的 Set 或视频内容。" />
                       </div>
                     )}
                     <LoadMoreButton
@@ -1127,7 +1132,7 @@ export default function DJCatalogPageClient() {
         setSummary(response.summary ?? null);
         setError('');
       } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : 'DJ 鐩綍鍔犺浇澶辫触');
+        setError(nextError instanceof Error ? nextError.message : 'DJ 目录加载失败');
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
@@ -1201,7 +1206,7 @@ export default function DJCatalogPageClient() {
       setDetailCache((current) => ({ ...current, [item.id]: detail }));
       setSelectedDJDetail(detail);
     } catch (detailError) {
-      setSelectedDJError(detailError instanceof Error ? detailError.message : 'DJ 璇︽儏鍔犺浇澶辫触');
+      setSelectedDJError(detailError instanceof Error ? detailError.message : 'DJ 详情加载失败');
     } finally {
       setSelectedDJLoading(false);
     }
@@ -1241,7 +1246,7 @@ export default function DJCatalogPageClient() {
         return next;
       });
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : '鍒犻櫎 DJ 澶辫触');
+      setError(deleteError instanceof Error ? deleteError.message : '删除 DJ 失败');
     } finally {
       setDeletingDJId(null);
     }
@@ -1249,7 +1254,7 @@ export default function DJCatalogPageClient() {
 
   const handleExport = () => {
     if (typeof window === 'undefined' || !items.length) return;
-    const header = ['DJ 鍚嶇О', '鍥藉/鍦板尯', '璁よ瘉鐘舵€?, '骞冲彴绮変笣', '鏈€杩戝悓姝?, '鏈€杩戞洿鏂?];
+    const header = ['DJ 名称', '国家/地区', '认证状态', '平台粉丝', '最近同步', '最近更新'];
     const rows = items.map((item) => [
       item.name,
       item.country || '',
@@ -1299,62 +1304,57 @@ export default function DJCatalogPageClient() {
 
   return (
     <AdminContentLayout
-      title="DJ 绠＄悊"
-      eyebrow="????? / DJ ??"
-      description="绠＄悊骞冲彴 DJ 璧勬枡銆佽璇佺姸鎬佷笌鍐呭銆傚彲绛涢€夈€佺紪杈戣祫鏂欐垨鏌ョ湅 DJ 璇︽儏銆?
+      title="DJ 管理"
+      eyebrow="内容中心 / DJ 目录"
+      description="管理平台 DJ 资料、认证状态与内容。可以筛选、编辑资料或查看 DJ 详情。"
       actions={
         <>
-          {/* 鈶?瀵煎叆鎸夐挳锛氭棤杈规銆佺函鏂囧瓧+鍥炬爣 */}
           <Link
             href="/admin/content/reviews/dj-bindings"
             className="inline-flex h-[44px] items-center gap-2 rounded-full border border-[#e9dcff] bg-[#f6f0ff] px-5 text-[14px] font-semibold text-[#6d28d9]"
           >
             <Headphones className="h-4 w-4" />
-            <span>DJ 缁戝畾瀹℃牳</span>
+            <span>DJ 绑定审核</span>
           </Link>
           <Link
             href="/admin/content/djs/new"
             className="inline-flex h-[44px] items-center gap-2 rounded-full border border-[#e8eceb] bg-white px-5 text-[14px] font-semibold text-[#111827]"
           >
             <Upload className="h-4 w-4" />
-            <span>瀵煎叆 DJ</span>
+            <span>导入 DJ</span>
           </Link>
           <Link
             href="/admin/content/djs/new"
             className="inline-flex h-[44px] items-center gap-2 rounded-full bg-[#071110] px-5 text-[14px] font-semibold text-white"
           >
             <Plus className="h-4 w-4" />
-            <span>鏂板 DJ</span>
+            <span>新建 DJ</span>
           </Link>
         </>
       }
     >
       <section className="space-y-4">
-
-        {/* 鈶?绛涢€夋爮 鈥?鏃犲灞傚崱鐗囷紝鎵佸钩涓€琛?*/}
         <div className="flex flex-wrap items-center gap-3">
           <form onSubmit={handleSearchSubmit} className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            {/* 鎼滅储妗嗭細鍥炬爣鍦ㄥ彸渚?*/}
             <label className="flex h-[44px] min-w-[220px] flex-[1.5_1_280px] items-center gap-3 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[#111827]">
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="鎼滅储 DJ 鍚嶇О銆佸浗瀹躲€佹爣绛?.."
+                placeholder="搜索 DJ 名称、国家、标签..."
                 className="w-full border-0 bg-transparent px-0 py-0 text-[14px] font-medium outline-none placeholder:text-[#9aa1ad]"
               />
               <Search className="h-4 w-4 shrink-0 text-[#9aa1ad]" />
             </label>
 
-            {/* 鍏ㄩ儴璁よ瘉鐘舵€?*/}
             <label className="relative flex h-[44px] min-w-[160px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
               <span>
                 {verificationStatus === 'all'
-                  ? '鍏ㄩ儴璁よ瘉鐘舵€?
+                  ? '全部认证状态'
                   : verificationStatus === 'verified'
-                    ? '宸查獙璇?
+                    ? '已验证'
                     : verificationStatus === 'unverified'
-                      ? '鏈獙璇?
-                      : '璧勬枡寰呭畬鍠?}
+                      ? '未验证'
+                      : '资料待完善'}
               </span>
               <select
                 value={verificationStatus}
@@ -1364,17 +1364,16 @@ export default function DJCatalogPageClient() {
                 }}
                 className="absolute inset-0 opacity-0"
               >
-                <option value="all">鍏ㄩ儴璁よ瘉鐘舵€?/option>
-                <option value="verified">宸查獙璇?/option>
-                <option value="unverified">鏈獙璇?/option>
-                <option value="incomplete">璧勬枡寰呭畬鍠?/option>
+                <option value="all">全部认证状态</option>
+                <option value="verified">已验证</option>
+                <option value="unverified">未验证</option>
+                <option value="incomplete">资料待完善</option>
               </select>
               <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
             </label>
 
-            {/* 鍏ㄩ儴鍥藉/鍦板尯 */}
             <label className="relative flex h-[44px] min-w-[150px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
-              <span>{country === 'all' ? '鍏ㄩ儴鍥藉/鍦板尯' : country}</span>
+              <span>{country === 'all' ? '全部国家/地区' : country}</span>
               <select
                 value={country}
                 onChange={(event) => {
@@ -1383,7 +1382,7 @@ export default function DJCatalogPageClient() {
                 }}
                 className="absolute inset-0 opacity-0"
               >
-                <option value="all">鍏ㄩ儴鍥藉/鍦板尯</option>
+                <option value="all">全部国家/地区</option>
                 {countryOptions.map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
@@ -1391,14 +1390,13 @@ export default function DJCatalogPageClient() {
               <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
             </label>
 
-            {/* 鏇村绛涢€?*/}
             <details className="relative">
               <summary className="flex h-[44px] cursor-pointer list-none items-center gap-2 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
                 <Filter className="h-4 w-4" />
-                <span>鏇村绛涢€?/span>
+                <span>更多筛选</span>
               </summary>
               <div className="absolute left-0 top-[calc(100%+8px)] z-20 min-w-[200px] rounded-[18px] border border-[#e8eceb] bg-white p-4 shadow-[0_12px_32px_rgba(33,52,47,0.10)]">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">鎺掑簭鏂瑰紡</div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">排序方式</div>
                 <select
                   value={sortBy}
                   onChange={(event) => {
@@ -1407,20 +1405,19 @@ export default function DJCatalogPageClient() {
                   }}
                   className="w-full rounded-[12px] border border-[#e8eceb] bg-white px-3 py-2.5 text-sm font-semibold text-[#111827] outline-none"
                 >
-                  <option value="followerCount">鎸夊钩鍙扮矇涓?/option>
-                  <option value="name">鎸夊悕绉?/option>
-                  <option value="createdAt">鎸夊垱寤烘椂闂?/option>
+                  <option value="followerCount">按平台粉丝</option>
+                  <option value="name">按名称</option>
+                  <option value="createdAt">按创建时间</option>
                 </select>
               </div>
             </details>
           </form>
 
-          {/* 鈶?鍒锋柊銆佸鍑?鈥?绉昏嚦鏈€鍙筹紝鍥炬爣+鏂囧瓧椋庢牸 */}
           <button
             type="button"
             onClick={handleRefresh}
             className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-[14px] border border-[#e8eceb] bg-white text-[#6b7280]"
-            aria-label="鍒锋柊鐩綍"
+            aria-label="刷新目录"
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
@@ -1431,43 +1428,40 @@ export default function DJCatalogPageClient() {
             className="inline-flex h-[44px] items-center gap-2 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]"
           >
             <Download className="h-4 w-4" />
-            <span>瀵煎嚭</span>
+            <span>导出</span>
           </button>
         </div>
 
-        {/* 鈶?缁熻鍧?鈥?鎵佸钩鍥涙牸妯帓锛岃交杈规瀹瑰櫒锛岀珫绾垮垎闅?*/}
         <div className="flex overflow-hidden rounded-[18px] border border-[#edf0f2] bg-white divide-x divide-[#edf0f2]">
           <StatBlock
-            label="鍏ㄩ儴 DJ"
+            label="全部 DJ"
             value={computedSummary.total}
-            helper={computedSummary.total ? `鈫?${Math.max(0, Math.min(items.length, PAGE_SIZE))} 鏈湀鏂板` : undefined}
+            helper={computedSummary.total ? `${Math.max(0, Math.min(items.length, PAGE_SIZE))} 条当前页` : undefined}
           />
           <StatBlock
-            label="宸查獙璇?
+            label="已验证"
             value={computedSummary.verified}
             rightText={formatPercentage(computedSummary.verified, computedSummary.total)}
           />
           <StatBlock
-            label="鏈獙璇?
+            label="未验证"
             value={computedSummary.unverified}
             rightText={formatPercentage(computedSummary.unverified, computedSummary.total)}
           />
           <StatBlock
-            label="璧勬枡寰呭畬鍠?
+            label="资料待完善"
             value={computedSummary.incomplete}
             rightText={formatPercentage(computedSummary.incomplete, computedSummary.total)}
           />
         </div>
 
-        {/* 鍒楄〃鍖?*/}
         <section className="overflow-hidden rounded-[18px] border border-[#edf0f2] bg-white">
           {error ? (
             <div className="border-b border-red-200 bg-red-50 px-6 py-3 text-sm text-[#7a2d29]">{error}</div>
           ) : null}
 
-          {/* 鈶?琛ㄥご 鈥?鏇村皬鏇磋交 */}
           <div className="hidden border-b border-[#edf0f2] px-5 py-3 lg:grid lg:grid-cols-[minmax(0,2.4fr)_1.2fr_0.9fr_1fr_1.2fr_1.2fr_140px] lg:gap-6">
-            {['DJ 淇℃伅', '鍥藉/鍦板尯', '璁よ瘉鐘舵€?, '骞冲彴绮変笣', '鏈€杩戝悓姝?, '鏈€杩戞洿鏂?, '鎿嶄綔'].map((label) => (
+            {['DJ 信息', '国家/地区', '认证状态', '平台粉丝', '最近同步', '最近更新', '操作'].map((label) => (
               <div key={label} className="text-[13px] font-medium text-[#9aa1ad]">
                 {label}
               </div>
@@ -1475,9 +1469,9 @@ export default function DJCatalogPageClient() {
           </div>
 
           {isLoading ? (
-            <div className="px-6 py-16 text-center text-sm text-[#6b7280]">DJ 鐩綍鍔犺浇涓€?/div>
+            <div className="px-6 py-16 text-center text-sm text-[#6b7280]">DJ 目录加载中...</div>
           ) : items.length === 0 ? (
-            <div className="px-6 py-16 text-center text-sm text-[#6b7280]">褰撳墠绛涢€夋潯浠朵笅杩樻病鏈?DJ銆?/div>
+            <div className="px-6 py-16 text-center text-sm text-[#6b7280]">当前筛选条件下还没有 DJ。</div>
           ) : (
             <div className="divide-y divide-[#edf0f2]">
               {items.map((item) => {
@@ -1500,7 +1494,6 @@ export default function DJCatalogPageClient() {
                     }}
                     className="cursor-pointer px-5 py-3.5 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:grid lg:grid-cols-[minmax(0,2.4fr)_1.2fr_0.9fr_1fr_1.2fr_1.2fr_140px] lg:items-center lg:gap-6"
                   >
-                    {/* 鈶?DJ淇℃伅鍒楋細澶村儚56脳56锛屾洿绱у噾 */}
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-[56px] w-[56px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-[#f1f4f6]">
@@ -1513,7 +1506,7 @@ export default function DJCatalogPageClient() {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <span className="text-xs text-[#9aa1ad]">鏆傛棤</span>
+                            <span className="text-xs text-[#9aa1ad]">暂无</span>
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -1537,7 +1530,6 @@ export default function DJCatalogPageClient() {
                       </div>
                     </div>
 
-                    {/* 鈶?鍥藉锛氬畬鏁村悕绉?*/}
                     <div className="mt-3 flex items-center gap-2 text-[14px] font-medium text-[#111827] lg:mt-0">
                       {countryDisplay.flag ? (
                         <span className="text-[20px] leading-none" aria-hidden="true">
@@ -1547,7 +1539,6 @@ export default function DJCatalogPageClient() {
                       <span>{countryDisplay.label}</span>
                     </div>
 
-                    {/* 鈶?璁よ瘉鐘舵€?badge 鈥?鏇寸揣鍑?*/}
                     <div className="mt-3 lg:mt-0">
                       <span
                         className={`inline-flex rounded-full border px-3 py-1 text-[12px] font-semibold ${state.tone}`}
@@ -1570,7 +1561,6 @@ export default function DJCatalogPageClient() {
                       {updatedAt.time ? <div className="text-[#6b7280]">{updatedAt.time}</div> : null}
                     </div>
 
-                    {/* 鈶?鎿嶄綔鎸夐挳 鈥?鏇村皬锛屾弿杈归鏍?*/}
                     <div
                       className="relative mt-3 flex items-center gap-2 lg:mt-0 lg:justify-end"
                       ref={menuOpenDJId === item.id ? actionMenuRef : null}
@@ -1583,7 +1573,7 @@ export default function DJCatalogPageClient() {
                         }}
                         className="inline-flex h-[36px] items-center rounded-[10px] border border-[#e8eceb] bg-white px-4 text-[13px] font-semibold text-[#111827]"
                       >
-                        缂栬緫
+                        编辑
                       </Link>
                       <button
                         type="button"
@@ -1592,7 +1582,7 @@ export default function DJCatalogPageClient() {
                           setMenuOpenDJId((current) => (current === item.id ? null : item.id));
                         }}
                         className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-[10px] border border-[#e8eceb] bg-white text-[#6b7280]"
-                        aria-label="鏇村鎿嶄綔"
+                        aria-label="更多操作"
                       >
                         <Ellipsis className="h-4 w-4" />
                       </button>
@@ -1606,7 +1596,7 @@ export default function DJCatalogPageClient() {
                             onClick={() => requestDeleteDJ(item)}
                             className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
                           >
-                            鍒犻櫎 DJ
+                            删除 DJ
                           </button>
                         </div>
                       ) : null}
@@ -1617,10 +1607,9 @@ export default function DJCatalogPageClient() {
             </div>
           )}
 
-          {/* 鍒嗛〉 */}
           <div className="flex flex-col gap-3 border-t border-[#edf0f2] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-[13px] font-medium text-[#6b7280]">
-              鍏?{pagination.total.toLocaleString()} 鏉?
+              共 {pagination.total.toLocaleString()} 条
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -1670,7 +1659,7 @@ export default function DJCatalogPageClient() {
             </div>
 
             <div className="flex items-center gap-2 rounded-[12px] border border-[#e8eceb] bg-white px-4 py-2 text-[13px] font-semibold text-[#111827]">
-              <span>{pagination.limit} 鏉?椤?/span>
+              <span>每页 {pagination.limit} 条</span>
               <ChevronDown className="h-3.5 w-3.5 text-[#9aa1ad]" />
             </div>
           </div>
@@ -1691,18 +1680,19 @@ export default function DJCatalogPageClient() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">Delete DJ</div>
-            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">纭鍒犻櫎杩欎釜 DJ锛?/div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这个 DJ？</div>
             <p className="mt-3 text-sm leading-6 text-[#6b7280]">
               {pendingDeleteDJ.name}
               <br />
-              鍒犻櫎鍚庡皢鏃犳硶鎭㈠锛岃鍐嶆纭杩欐槸浣犺鎵ц鐨勬搷浣溿€?            </p>
+              删除后将无法恢复，请再次确认这是你要执行的操作。
+            </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setPendingDeleteDJ(null)}
                 className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
               >
-                鍙栨秷
+                取消
               </button>
               <button
                 type="button"
@@ -1710,7 +1700,7 @@ export default function DJCatalogPageClient() {
                 disabled={deletingDJId === pendingDeleteDJ.id}
                 className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {deletingDJId === pendingDeleteDJ.id ? '鍒犻櫎涓?..' : '纭鍒犻櫎'}
+                {deletingDJId === pendingDeleteDJ.id ? '删除中...' : '确认删除'}
               </button>
             </div>
           </div>
@@ -1719,4 +1709,3 @@ export default function DJCatalogPageClient() {
     </AdminContentLayout>
   );
 }
-

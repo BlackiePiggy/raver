@@ -222,7 +222,7 @@ export default function OrganizerStudioForm({
         updateDraft('backgroundImage', nextValue);
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '涓诲姙鏂瑰浘鐗囦笂浼犲け璐?);
+      setSubmitError(error instanceof Error ? error.message : '主办方图片上传失败');
     } finally {
       if (usage === 'avatar') {
         setUploadingAvatar(false);
@@ -292,7 +292,7 @@ export default function OrganizerStudioForm({
             );
       onSubmit(result);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '涓诲姙鏂规彁浜ゅけ璐?);
+      setSubmitError(error instanceof Error ? error.message : '主办方提交失败');
     } finally {
       setSubmitting(false);
     }
@@ -373,13 +373,13 @@ export default function OrganizerStudioForm({
       ) : null}
 
       <Section
-        title="濯掍綋涓庤瘉鏄?
-        description="绗竴鐗堝厛瀵归綈澶村儚銆佽儗鏅拰璇佹槑鍥剧墖涓婁紶銆傚ご鍍忔槸蹇呭～涓昏瑙夛紝瀹樻柟閾炬帴涓庤瘉鏄庡浘婊¤冻鍏朵竴鍗冲彲鎻愪氦銆?
+        title="媒体与证明"
+        description="第一版先对齐头像、背景和证明图片上传。头像是必填主视觉，官方链接与证明图满足其一即可提交。"
       >
         <div className="grid gap-4 xl:grid-cols-2">
-          <Field label="涓诲姙鏂瑰ご鍍? error={errors.avatarImage}>
+          <Field label="主办方头像" error={errors.avatarImage}>
             <ImageDropZone
-              label="鐢ㄤ簬鍒楄〃鍜岃鎯呴〉鐨勪富瑙嗚澶村儚"
+              label="用于列表和详情页的主视觉头像"
               previewUrl={draft.avatarImage?.remoteUrl}
               uploading={uploadingAvatar || deletingAvatar}
               onChange={(event) => void handleSingleImageUpload(event, 'avatar')}
@@ -392,7 +392,7 @@ export default function OrganizerStudioForm({
             ) : null}
           </Field>
 
-          <Field label="鑳屾櫙鍥?>
+          <Field label="背景图">
             <ImageDropZone
               label="鐢ㄤ簬璇︽儏澶村浘鎴栦富瑙嗚寤跺睍"
               previewUrl={draft.backgroundImage?.remoteUrl}
@@ -411,7 +411,7 @@ export default function OrganizerStudioForm({
         <div className="mt-5">
           <Field label="璇佹槑鍥剧墖" error={errors.links}>
             <ImageDropZone
-              label="鍙笂浼犺惀涓氭墽鐓с€佸畼鏂规埅鍥俱€佹捣鎶ユ垨鍏朵粬璇佹槑鍥?
+              label="可上传营业执照、官方截图、海报或其他证明图"
               uploading={uploadingProof}
               onChange={(event) => void handleProofUpload(event)}
               acceptMultiple
@@ -455,10 +455,10 @@ export default function OrganizerStudioForm({
 
       <Section
         title="鍩虹淇℃伅"
-        description="杩欓噷鍏堝榻愬悕绉般€佸埆鍚嶃€佸煄甯傘€佸浗瀹跺拰鍩虹妗ｆ瀛楁銆傚璇█鍏堜互涓枃銆佽嫳鏂囦负涓伙紝鍚庣画鍐嶇户缁墿灞曟洿缁嗙矑搴﹁瑷€缂栬緫銆?
+        description="这里先对齐名称、别名、城市、国家和基础档案字段。多语言先以中文、英文为主，后续再继续扩展更细粒度语言编辑。"
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="涓诲姙鏂瑰悕绉帮紙涓枃锛? error={errors.name}>
+          <Field label="主办方名称（中文）" error={errors.name}>
             <input
               value={draft.name.zh}
               onChange={(event) => updateLocalizedField('name', 'zh', event.target.value)}
@@ -466,7 +466,7 @@ export default function OrganizerStudioForm({
               placeholder="渚嬪锛歍omorrowland"
             />
           </Field>
-          <Field label="涓诲姙鏂瑰悕绉帮紙鑻辨枃锛?>
+          <Field label="主办方名称（英文）">
             <input
               value={draft.name.en}
               onChange={(event) => updateLocalizedField('name', 'en', event.target.value)}
@@ -474,7 +474,7 @@ export default function OrganizerStudioForm({
               placeholder="English name"
             />
           </Field>
-          <Field label="绠€绉?>
+          <Field label="简称">
             <input
               value={draft.abbreviation}
               onChange={(event) => updateDraft('abbreviation', event.target.value)}
@@ -543,7 +543,7 @@ export default function OrganizerStudioForm({
 
       <Section
         title="鍝佺墝璧勬枡"
-        description="涓诲姙鏂硅鎯呮弿杩颁細浣滀负 Brand / WikiFestival 鐨勪富璧勬枡鏉ユ簮銆傚悗缁?Event 缁戝畾鍜屾洿瀹屾暣鐨?profile diff 涔熶細缁х画闈犳嫝杩欓噷銆?
+        description="主办方详情描述会作为 Brand / WikiFestival 的主资料来源。后续 Event 绑定和更完整的 profile diff 也会继续依赖这里。"
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="涓€鍙ヨ瘽鏍囩">
@@ -575,9 +575,9 @@ export default function OrganizerStudioForm({
           className="admin-studio-button-primary"
         >
           {submitting
-            ? '鎻愪氦涓?..'
+            ? '???...'
             : submitButtonText ||
-              (mode === 'edit' ? '鎻愪氦涓诲姙鏂圭紪杈? : '鎻愪氦涓诲姙鏂瑰垱寤?)}
+              (mode === 'edit' ? '???????' : '???????')}
         </button>
       </div>
     </div>
