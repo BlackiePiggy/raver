@@ -75,6 +75,7 @@ export type EventCatalogFilters = {
   country?: string;
   eventType?: string;
   wikiFestivalId?: string;
+  sortBy?: 'startDateDesc' | 'startDateAsc' | 'updatedAtDesc' | 'updatedAtAsc';
   refresh?: boolean;
 };
 
@@ -136,6 +137,7 @@ export const adminCatalogApi = {
       country: filters.country?.trim() || undefined,
       eventType: filters.eventType?.trim() || undefined,
       wikiFestivalId: filters.wikiFestivalId?.trim() || undefined,
+      sortBy: filters.sortBy || undefined,
       refresh: filters.refresh ? 1 : undefined,
     });
     const response = await authenticatedJsonFetch<BffEnvelope<{ items?: EventCatalogItem[]; meta?: { cache?: CatalogCacheMeta } }>>(

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Languages, X } from 'lucide-react';
+import { Languages, Pencil, Plus, Trash2, X } from 'lucide-react';
 import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
@@ -635,31 +635,6 @@ function WorkflowRail({
   );
 }
 
-function LineupArtistPill({
-  title,
-  subtitle,
-  tone = 'soft',
-}: {
-  title: string;
-  subtitle: string;
-  tone?: 'soft' | 'mint' | 'sand' | 'rose';
-}) {
-  const className =
-    tone === 'mint'
-      ? 'admin-studio-pastel-mint'
-      : tone === 'sand'
-        ? 'admin-studio-pastel-sand'
-        : tone === 'rose'
-          ? 'admin-studio-pastel-rose'
-          : 'admin-reference-soft-card';
-  return (
-    <div className={`${className} px-4 py-3`}>
-      <div className="text-sm font-semibold text-[#071110]">{title}</div>
-      <div className="mt-1 text-xs leading-5 text-black/48">{subtitle}</div>
-    </div>
-  );
-}
-
 const normalizeStageName = (value?: string | null): string => String(value || 'Main Stage').trim() || 'Main Stage';
 
 const stageKey = (value?: string | null): string => normalizeStageName(value).toLowerCase();
@@ -861,9 +836,9 @@ export default function EventStudioForm({
   const [organizerLoading, setOrganizerLoading] = useState(false);
   const [organizerError, setOrganizerError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [currentStep, setCurrentStep] = useState(mode === 'edit' ? 3 : 0);
+  const [currentStep, setCurrentStep] = useState(0);
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldOverlayState | null>(null);
-  const [hasLoadedTimetableStep, setHasLoadedTimetableStep] = useState(mode === 'edit');
+  const [hasLoadedTimetableStep, setHasLoadedTimetableStep] = useState(false);
   const [hasLoadedLineupStep, setHasLoadedLineupStep] = useState(false);
   const [alignmentPreviewLoading, setAlignmentPreviewLoading] = useState(false);
   const [alignmentPreview, setAlignmentPreview] = useState<EventStudioAlignmentPreview | null>(null);
@@ -882,6 +857,7 @@ export default function EventStudioForm({
     mode === 'edit' ? draft.timetableSlots.map((slot) => slot.id) : []
   );
   const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
+  const [activeLineupArtistEditorId, setActiveLineupArtistEditorId] = useState<string | null>(null);
   const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
   const [timetableDJSearchResults, setTimetableDJSearchResults] = useState<Record<string, TimetableEditorDJSearchResult[]>>({});
   const [timetableDJSearchLoadingKeys, setTimetableDJSearchLoadingKeys] = useState<Record<string, boolean>>({});
@@ -889,7 +865,6 @@ export default function EventStudioForm({
   const draftRef = useRef(draft);
   const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
   const objectUrlsRef = useRef<Set<string>>(new Set());
-  const didInitEditTimetableViewRef = useRef(false);
 
   const totalSteps = EVENT_STUDIO_STEP_ITEMS.length;
   const canSubmit = useMemo(() => Object.keys(validateEventStudioDraft(draft)).length === 0, [draft]);
@@ -979,15 +954,6 @@ export default function EventStudioForm({
       Object.fromEntries(Object.entries(current).filter(([key]) => validIds.has(key.split('::')[0] || '')))
     );
   }, [draft.timetableSlots]);
-
-  useEffect(() => {
-    if (mode !== 'edit' || didInitEditTimetableViewRef.current) return;
-    if (!draft.timetableSlots.length) return;
-    didInitEditTimetableViewRef.current = true;
-    setCurrentStep(3);
-    setConfirmedTimetableSlotIds(draft.timetableSlots.map((slot) => slot.id));
-    setFocusedTimetableSlotId(null);
-  }, [mode, draft.timetableSlots]);
 
   useEffect(() => {
     if (currentStep === 3) {
@@ -1233,6 +1199,63 @@ export default function EventStudioForm({
         memberDjIds,
       };
     });
+  };
+
+  const materializeEditableLineupArtists = (current: EventStudioDraft): EventStudioLineupArtistDraft[] => {
+    if (current.lineupArtists.length) return current.lineupArtists;
+    return buildLineupArtistsFromTimetableSlots(current.timetableSlots).map((artist, index) => ({
+      ...artist,
+      id: artist.id || crypto.randomUUID(),
+      sortOrder: artist.sortOrder || index + 1,
+    }));
+  };
+
+  const openLineupArtistEditor = (artistId: string) => {
+    updateLineupDraft((current) => (
+      current.lineupArtists.length
+        ? current
+        : {
+            ...current,
+            lineupArtists: materializeEditableLineupArtists(current),
+          }
+    ));
+    setActiveLineupArtistEditorId(artistId);
+  };
+
+  const addLineupArtist = () => {
+    const nextArtistId = crypto.randomUUID();
+    updateLineupDraft((current) => {
+      const lineupArtists = materializeEditableLineupArtists(current);
+      return {
+        ...current,
+        lineupArtists: [
+          ...lineupArtists,
+          {
+            id: nextArtistId,
+            canonicalArtistId: null,
+            djId: '',
+            memberDjIds: [],
+            memberNamesText: '',
+            sortOrder: lineupArtists.length + 1,
+            actType: 'solo',
+          },
+        ],
+      };
+    });
+    setActiveLineupArtistEditorId(nextArtistId);
+  };
+
+  const removeLineupArtist = (artistId: string) => {
+    updateLineupDraft((current) => ({
+      ...current,
+      lineupArtists: materializeEditableLineupArtists(current)
+        .filter((artist) => artist.id !== artistId)
+        .map((artist, index) => ({
+          ...artist,
+          sortOrder: index + 1,
+        })),
+    }));
+    setActiveLineupArtistEditorId((current) => (current === artistId ? null : current));
   };
 
   const eventDisplayTimeZone = normalizeDisplayTimeZone(draft.timeZoneSelection?.timezone || draft.timeZoneQuery);
@@ -3815,27 +3838,10 @@ export default function EventStudioForm({
           <div className="mb-5">
             <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="lineup" onOpenStep={() => setCurrentStep(4)} />
           </div>
-          <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+          <div className="grid gap-4">
             <div className="space-y-4">
-              <div className="admin-studio-section p-4">
+              <div className="admin-studio-section p-3">
                 <div className="admin-studio-label">Lineup Snapshot</div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <LineupArtistPill
-                    title={`${lineupPreviewArtists.length} 位阵容艺人`}
-                    subtitle="优先显示已读取的后端阵容，编辑页不会再被 timetable 覆盖。"
-                    tone="mint"
-                  />
-                  <LineupArtistPill
-                    title={draft.lineupSyncMode === 'exact_align' ? '严格对齐' : '增量补齐'}
-                    subtitle="和 iOS 一样，可切换同步策略。"
-                    tone="sand"
-                  />
-                  <LineupArtistPill
-                    title={`${draft.timetableSlots.length} 条时间表`}
-                    subtitle="可作为阵容补全来源，也可反向校验缺失艺人。"
-                    tone="rose"
-                  />
-                </div>
               </div>
 
               <div className="admin-reference-soft-card p-4">
@@ -3966,30 +3972,16 @@ export default function EventStudioForm({
                   ) : null}
                   <button
                     type="button"
-                    onClick={() =>
-                      updateLineupDraft((current) => ({
-                        ...current,
-                        lineupArtists: [
-                          ...current.lineupArtists,
-                          {
-                            id: crypto.randomUUID(),
-                            canonicalArtistId: null,
-                            djId: '',
-                            memberDjIds: [],
-                            memberNamesText: '',
-                            sortOrder: current.lineupArtists.length + 1,
-                          },
-                        ],
-                      }))
-                    }
-                    className="admin-studio-button-secondary px-4 py-2 text-sm"
+                    onClick={addLineupArtist}
+                    className="admin-studio-button-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
                   >
+                    <Plus className="h-4 w-4" />
                     新增阵容艺人
                   </button>
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="mt-4 grid gap-3">
                 {lineupPreviewArtists.length ? (
                   lineupPreviewArtists.map((artist, index) => {
                     const artistKey = eventStudioLineupArtistIdentityKey(artist);
@@ -3997,141 +3989,159 @@ export default function EventStudioForm({
                     const previewNames = getLineupArtistPerformerNames(artist).filter(Boolean).join(' / ') || artist.memberNamesText || artist.djId;
                     const hasTimetableMatch = Boolean(artistKey && timetableIdentityKeys.has(artistKey)) ||
                       draft.timetableSlots.some((slot) => Boolean(artist.canonicalArtistId && slot.lineupArtistId === artist.canonicalArtistId));
+                    const performerCount = actTypePerformerCount(artist.actType);
+                    const performerNames = getLineupArtistPerformerNames(artist);
+                    const isEditing = activeLineupArtistEditorId === artist.id;
                     return (
-                      <div key={artist.id} className="admin-reference-soft-card p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
+                      <div key={artist.id} className="rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
                             <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/38">#{index + 1}</div>
                             <div className="mt-1 flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-semibold text-[#071110]">
+                              <div className="truncate text-sm font-semibold text-[#071110]">
                                 {previewNames || '未命名阵容'}
                               </div>
                               {previewActBadge ? <span className="admin-event-collab-badge">{previewActBadge}</span> : null}
+                              <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${hasTimetableMatch ? 'bg-[#edf7f2] text-[#2f4027]' : 'bg-[#f7efda] text-[#604a1b]'}`}>
+                                {hasTimetableMatch ? '已在时间表中出现' : '待补齐'}
+                              </span>
                             </div>
                             <div className="mt-1 text-xs text-black/42">
-                              {artist.djId || '无 DJ ID'} · {artist.memberDjIds.filter(Boolean).length} 个 member IDs
+                              {artist.djId || '无 DJ ID'} · {artist.memberDjIds.filter(Boolean).length} 个 member IDs · sort {artist.sortOrder}
                             </div>
                           </div>
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${hasTimetableMatch ? 'bg-[#edf7f2] text-[#2f4027]' : 'bg-[#f7efda] text-[#604a1b]'}`}>
-                            {hasTimetableMatch ? '已在时间表中出现' : '待补齐'}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeLineupArtistEditorId === artist.id) {
+                                  setActiveLineupArtistEditorId(null);
+                                  return;
+                                }
+                                openLineupArtistEditor(artist.id);
+                              }}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#d9e7dd] bg-white text-[#071110]"
+                              aria-label="编辑阵容艺人"
+                              title="编辑阵容艺人"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeLineupArtist(artist.id)}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#f1d0cb] bg-white text-[#a13f33]"
+                              aria-label="删除阵容艺人"
+                              title="删除阵容艺人"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
+
+                        {isEditing ? (
+                          <div className="mt-4 rounded-[20px] border border-[#d9e7dd] bg-white p-4 shadow-[0_12px_28px_rgba(7,17,16,0.08)]">
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-[#071110]">编辑阵容艺人</div>
+                                <div className="mt-1 text-xs text-text-secondary">字段逻辑与 iOS 一致：act type、排序、艺人名、成员 DJ 绑定、canonical artist id。</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveLineupArtistEditorId(null)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d9e7dd] bg-white text-[#6b7280]"
+                                aria-label="关闭阵容编辑器"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            <div className="grid gap-3 lg:grid-cols-[0.72fr_0.55fr_1.25fr_1fr_1fr]">
+                              <select
+                                value={normalizeActType(artist.actType)}
+                                onChange={(event) =>
+                                  updateLineupDraft((current) => ({
+                                    ...current,
+                                    lineupArtists: materializeEditableLineupArtists(current).map((currentArtist) =>
+                                      currentArtist.id === artist.id
+                                        ? normalizeLineupArtistActType(currentArtist, normalizeActType(event.target.value))
+                                        : currentArtist
+                                    ),
+                                  }))
+                                }
+                                className={textInputClassName}
+                              >
+                                {EVENT_STUDIO_ACT_TYPES.map((item) => (
+                                  <option key={item.value} value={item.value}>
+                                    {item.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                value={String(artist.sortOrder)}
+                                onChange={(event) =>
+                                  updateLineupDraft((current) => ({
+                                    ...current,
+                                    lineupArtists: materializeEditableLineupArtists(current).map((currentArtist) =>
+                                      currentArtist.id === artist.id
+                                        ? { ...currentArtist, sortOrder: Number(event.target.value) || index + 1 }
+                                        : currentArtist
+                                    ),
+                                  }))
+                                }
+                                className={textInputClassName}
+                                placeholder="排序"
+                              />
+                              <div className="grid gap-2">
+                                {previewActBadge ? <span className="admin-event-collab-badge">{previewActBadge}</span> : null}
+                                {Array.from({ length: performerCount }).map((_, performerIndex) => (
+                                  <input
+                                    key={`${artist.id}-name-${performerIndex}`}
+                                    value={performerNames[performerIndex] || ''}
+                                    onChange={(event) => updateLineupArtistPerformerName(artist.id, performerIndex, event.target.value)}
+                                    className={textInputClassName}
+                                    placeholder={normalizeActType(artist.actType) === 'solo' ? '艺人名称' : `成员 ${performerIndex + 1} 名称`}
+                                  />
+                                ))}
+                              </div>
+                              <div className="grid gap-2">
+                                {Array.from({ length: performerCount }).map((_, performerIndex) => (
+                                  <input
+                                    key={`${artist.id}-dj-${performerIndex}`}
+                                    value={getLineupArtistBoundDjId(artist, performerIndex)}
+                                    onChange={(event) => updateLineupArtistPerformerBinding(artist.id, performerIndex, event.target.value)}
+                                    className={textInputClassName}
+                                    placeholder={normalizeActType(artist.actType) === 'solo' ? 'DJ ID（可选）' : `成员 ${performerIndex + 1} DJ ID`}
+                                  />
+                                ))}
+                              </div>
+                              <div className="grid gap-2">
+                                <input type="hidden" value={artist.memberNamesText} readOnly />
+                                <input type="hidden" value={artist.djId} readOnly />
+                                <input
+                                  value={artist.canonicalArtistId || ''}
+                                  onChange={(event) =>
+                                    updateLineupDraft((current) => ({
+                                      ...current,
+                                      lineupArtists: materializeEditableLineupArtists(current).map((currentArtist) =>
+                                        currentArtist.id === artist.id
+                                          ? { ...currentArtist, canonicalArtistId: event.target.value.trim() || null }
+                                          : currentArtist
+                                      ),
+                                    }))
+                                  }
+                                  className={textInputClassName}
+                                  placeholder="canonical artist id"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })
                 ) : (
                   <div className="admin-reference-soft-card p-4 text-sm text-black/48">
                     当前还没有读取到阵容艺人。若后端有 lineupArtists，这里会直接显示；否则会尝试从 timetable 自动推导。
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {draft.lineupArtists.length ? (
-                  draft.lineupArtists.map((artist, index) => {
-                    const performerCount = actTypePerformerCount(artist.actType);
-                    const performerNames = getLineupArtistPerformerNames(artist);
-                    const actBadge = collaborativeActBadgeLabel(artist.actType);
-                    return (
-                      <div key={artist.id} className="grid gap-3 rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4 lg:grid-cols-[0.72fr_0.55fr_1.25fr_1fr_1fr_auto]">
-                        <select
-                          value={normalizeActType(artist.actType)}
-                          onChange={(event) =>
-                            updateLineupDraft((current) => ({
-                              ...current,
-                              lineupArtists: current.lineupArtists.map((currentArtist) =>
-                                currentArtist.id === artist.id
-                                  ? normalizeLineupArtistActType(currentArtist, normalizeActType(event.target.value))
-                                  : currentArtist
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                        >
-                          {EVENT_STUDIO_ACT_TYPES.map((item) => (
-                            <option key={item.value} value={item.value}>
-                              {item.label}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          value={String(artist.sortOrder)}
-                          onChange={(event) =>
-                            updateLineupDraft((current) => ({
-                              ...current,
-                              lineupArtists: current.lineupArtists.map((currentArtist) =>
-                                currentArtist.id === artist.id
-                                  ? { ...currentArtist, sortOrder: Number(event.target.value) || index + 1 }
-                                  : currentArtist
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                          placeholder="排序"
-                        />
-                        <div className="grid gap-2">
-                          {actBadge ? <span className="admin-event-collab-badge">{actBadge}</span> : null}
-                          {Array.from({ length: performerCount }).map((_, performerIndex) => (
-                            <input
-                              key={`${artist.id}-name-${performerIndex}`}
-                              value={performerNames[performerIndex] || ''}
-                              onChange={(event) => updateLineupArtistPerformerName(artist.id, performerIndex, event.target.value)}
-                              className={textInputClassName}
-                              placeholder={normalizeActType(artist.actType) === 'solo' ? '艺人名称' : `成员 ${performerIndex + 1} 名称`}
-                            />
-                          ))}
-                        </div>
-                        <div className="grid gap-2">
-                          {Array.from({ length: performerCount }).map((_, performerIndex) => (
-                            <input
-                              key={`${artist.id}-dj-${performerIndex}`}
-                              value={getLineupArtistBoundDjId(artist, performerIndex)}
-                              onChange={(event) => updateLineupArtistPerformerBinding(artist.id, performerIndex, event.target.value)}
-                              className={textInputClassName}
-                              placeholder={normalizeActType(artist.actType) === 'solo' ? 'DJ ID（可选）' : `成员 ${performerIndex + 1} DJ ID`}
-                            />
-                          ))}
-                        </div>
-                        <input type="hidden" value={artist.memberNamesText} readOnly />
-                        <input type="hidden" value={artist.djId} readOnly />
-                        <input
-                          value={artist.canonicalArtistId || ''}
-                          onChange={(event) =>
-                            updateLineupDraft((current) => ({
-                              ...current,
-                              lineupArtists: current.lineupArtists.map((currentArtist) =>
-                                currentArtist.id === artist.id
-                                  ? { ...currentArtist, canonicalArtistId: event.target.value.trim() || null }
-                                  : currentArtist
-                              ),
-                            }))
-                          }
-                          className={textInputClassName}
-                          placeholder="canonical artist id"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateLineupDraft((current) => ({
-                              ...current,
-                              lineupArtists: current.lineupArtists
-                                .filter((currentArtist) => currentArtist.id !== artist.id)
-                                .map((currentArtist, nextIndex) => ({
-                                  ...currentArtist,
-                                  sortOrder: nextIndex + 1,
-                                })),
-                            }))
-                          }
-                          className="admin-studio-button-danger px-4 py-3 text-sm"
-                        >
-                          删除
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                    当前没有阵容艺人可编辑。你可以新增，或先用“预览对齐”同步时间表中的艺人。
                   </div>
                 )}
               </div>

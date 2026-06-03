@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import {
   organizerCatalogApi,
@@ -658,6 +659,13 @@ export default function OrganizerCatalogPageClient() {
     setSelectedOrganizerLoading(false);
   }, []);
 
+  const totalPages = Math.max(1, pagination.totalPages);
+  const visiblePages = useMemo(() => {
+    const start = Math.max(1, Math.min(totalPages - 4, pagination.page - 2));
+    const end = Math.min(totalPages, start + 4);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [pagination.page, totalPages]);
+
   return (
     <AdminContentLayout
       title="主办方目录中心"
@@ -681,28 +689,28 @@ export default function OrganizerCatalogPageClient() {
         </>
       }
     >
-      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
-        <div className="admin-reference-card p-6">
+      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
+        <div className="admin-reference-card p-5">
           <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Catalog Scope</div>
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录、编辑、绑定统一入口</h2>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             {[
               { title: '目录定位', body: '目录层优先承接名称、地区、视觉和链接的全量定位能力。', tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
               { title: '编辑主链路', body: '进入编辑页后继续沿用已落地的 Organizer Studio create / edit 主链路。', tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
               { title: '绑定中心', body: '活动绑定关系继续通过统一后台活动绑定中心处理。', tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
             ].map((item) => (
-              <div key={item.title} className={`admin-reference-pastel-card p-4 ${item.tone}`}>
+              <div key={item.title} className={`admin-reference-pastel-card p-3.5 ${item.tone}`}>
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{item.title}</div>
-                <div className="mt-5 text-sm leading-6 text-[#24312d]">{item.body}</div>
+                <div className="mt-3 text-sm leading-6 text-[#24312d]">{item.body}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-6">
+        <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-5">
           <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Catalog Snapshot</div>
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录概览</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-black/55">
+          <div className="mt-4 space-y-2 text-sm leading-6 text-black/55">
             <p>当前页：{pagination.page} / {pagination.totalPages}</p>
             <p>目录总量：{pagination.total.toLocaleString()} 个主办方</p>
             <p>当前策略：目录先轻量定位，深入修改再进入编辑页。</p>
@@ -711,9 +719,9 @@ export default function OrganizerCatalogPageClient() {
         </div>
       </section>
 
-      <section className="admin-reference-card p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1.7fr)_auto_auto]">
+      <section className="overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white p-5 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_auto_auto]">
             <label className="space-y-2">
               <span className="text-xs uppercase tracking-[0.2em] text-black/35">搜索关键词</span>
               <input
@@ -735,29 +743,29 @@ export default function OrganizerCatalogPageClient() {
             </button>
           </form>
 
-          <div className="admin-reference-soft-card px-4 py-3 text-sm text-black/50">
+          <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm leading-6 text-black/50 xl:max-w-[360px]">
             当前目录中心直接对齐 `/v1/learn/festivals`，不再依赖旧 Brand 页面做查找入口。
           </div>
         </div>
       </section>
 
-      <section className="admin-reference-card p-6">
+      <section className="overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
         {error ? (
-          <div className="rounded-[18px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-[#7a2d29]">
+          <div className="border-b border-red-200 bg-red-50 px-6 py-4 text-sm text-[#7a2d29]">
             {error}
           </div>
         ) : null}
 
         {isLoading ? (
-          <div className="py-20 text-center text-sm text-text-secondary">主办方目录加载中...</div>
+          <div className="px-6 py-20 text-center text-sm text-text-secondary">主办方目录加载中...</div>
         ) : items.length === 0 ? (
-          <div className="py-20 text-center text-sm text-text-secondary">当前筛选条件下没有主办方。</div>
+          <div className="px-6 py-20 text-center text-sm text-text-secondary">当前筛选条件下没有主办方。</div>
         ) : (
-          <div className="space-y-4">
+          <div className="divide-y divide-[#edf0f2]">
             {items.map((item) => {
               const visualUrl = resolvePrimaryVisual(item);
               return (
-                <div
+                <article
                   key={item.id}
                   role="button"
                   tabIndex={0}
@@ -768,66 +776,62 @@ export default function OrganizerCatalogPageClient() {
                       void openDetailOverlay(item);
                     }
                   }}
-                  className="grid cursor-pointer gap-4 rounded-[28px] border border-[#e8eceb] bg-[#fcfcfb] p-5 transition-colors hover:bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:grid-cols-[148px_minmax(0,1fr)_230px]"
+                  className="flex cursor-pointer flex-col gap-4 px-6 py-5 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-5"
                 >
-                  <div className="relative overflow-hidden rounded-[22px] border border-[#e8eceb] bg-[#f5f5f7]">
+                  <div className="flex min-w-0 flex-1 gap-4">
+                    <div className="relative h-[104px] w-[104px] shrink-0 overflow-hidden rounded-[18px] bg-[#f3f5f7]">
                     {visualUrl ? (
                       <Image
                         src={visualUrl}
                         alt={item.name}
-                        width={280}
-                        height={180}
-                        className="h-full min-h-[110px] w-full object-cover"
+                        width={104}
+                        height={104}
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-full min-h-[110px] items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/45">
+                      <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f7efda,#edf7f2)] text-sm text-black/45">
                         暂无主视觉
                       </div>
                     )}
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="admin-reference-chip">{item.country || '未知国家'}</span>
                       {item.city ? <span className="admin-reference-chip">{item.city}</span> : null}
                     </div>
-                    <h3 className="mt-3 text-xl font-semibold text-[#071110]">{item.name}</h3>
-                    <p className="mt-2 text-sm leading-6 text-black/52">
+                    <h3 className="mt-2 truncate text-[20px] font-semibold tracking-[-0.025em] text-[#071110]">{item.name}</h3>
+                    <p className="mt-1 truncate text-[13px] font-medium text-[#6b7280]">
                       {item.city || '未知城市'} / {item.country || '未知国家'}
                       {item.abbreviation ? ` · ${item.abbreviation}` : ''}
                       {typeof item.revision === 'number' ? ` · rev ${item.revision}` : ''}
                     </p>
-                    {item.tagline ? <p className="mt-2 text-sm leading-6 text-black/52">{item.tagline}</p> : null}
+                    {item.tagline ? <p className="mt-2 line-clamp-1 text-[13px] leading-6 text-black/55">{item.tagline}</p> : null}
                     {item.aliases?.length ? (
-                      <p className="mt-2 text-sm leading-6 text-black/52">别名：{item.aliases.slice(0, 4).join('、')}</p>
+                      <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-black/48">别名：{item.aliases.slice(0, 4).join('、')}</p>
                     ) : null}
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <div className="admin-reference-soft-card px-4 py-3 text-sm">
-                        <div className="text-black/42">更新时间</div>
-                        <div className="mt-1 font-semibold text-[#071110]">{formatDateTime(item.updatedAt)}</div>
-                      </div>
-                      <div className="admin-reference-soft-card px-4 py-3 text-sm">
-                        <div className="text-black/42">创建时间</div>
-                        <div className="mt-1 font-semibold text-[#071110]">{formatDateTime(item.createdAt)}</div>
-                      </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] font-medium text-[#7d8592]">
+                      <span>更新于 {formatDateTime(item.updatedAt)}</span>
+                      <span>创建于 {formatDateTime(item.createdAt)}</span>
                     </div>
                   </div>
+                  </div>
 
-                  <div className="admin-reference-soft-card grid gap-3 p-4">
-                    <div className="text-sm leading-6 text-black/48">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:w-[240px] lg:justify-end">
+                    <div className="rounded-[12px] bg-[#f4f5f7] px-3 py-2 text-[12px] leading-5 text-[#6b7280]">
                       目录中心承接查找和跳转，深入资料处理继续进入编辑与绑定工作流。
                     </div>
                     <Link
                       href={`/admin/content/organizers/${item.id}/edit`}
                       onClick={(event) => event.stopPropagation()}
-                      className="rounded-full bg-[#071110] px-4 py-3 text-center text-sm font-semibold text-white"
+                      className="inline-flex h-[40px] items-center justify-center rounded-full bg-[#071110] px-4 text-center text-sm font-semibold text-white"
                     >
                       编辑主办方
                     </Link>
                     <Link
                       href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`}
                       onClick={(event) => event.stopPropagation()}
-                      className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]"
+                      className="inline-flex h-[40px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
                     >
                       打开绑定中心
                     </Link>
@@ -837,39 +841,76 @@ export default function OrganizerCatalogPageClient() {
                         target="_blank"
                         rel="noreferrer"
                         onClick={(event) => event.stopPropagation()}
-                        className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm font-semibold text-[#071110]"
+                        className="inline-flex h-[40px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
                       >
                         官方链接
                       </a>
                     ) : (
-                      <div className="rounded-full border border-[#e8eceb] bg-white px-4 py-3 text-center text-sm text-black/42">
+                      <div className="rounded-full border border-[#e7ebef] bg-white px-4 py-2.5 text-center text-sm text-black/42">
                         暂无官方链接
                       </div>
                     )}
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
         )}
 
-        <div className="mt-6 flex justify-end gap-3 border-t border-white/5 pt-6">
-          <button
-            type="button"
-            disabled={pagination.page <= 1}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-            className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            上一页
-          </button>
-          <button
-            type="button"
-            disabled={pagination.page >= pagination.totalPages}
-            onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))}
-            className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm font-semibold text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            下一页
-          </button>
+        <div className="flex flex-col gap-4 border-t border-[#edf0f2] px-6 py-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="text-[14px] font-medium text-[#6b7280]">
+            共 {pagination.total.toLocaleString()} 条
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={pagination.page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#9ca3af] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+
+            {visiblePages.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                onClick={() => setPage(pageNumber)}
+                className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3.5 text-[15px] font-semibold ${
+                  pageNumber === pagination.page ? 'bg-[#071110] text-white' : 'text-[#111827]'
+                }`}
+              >
+                {pageNumber}
+              </button>
+            ))}
+
+            {totalPages > visiblePages[visiblePages.length - 1] ? (
+              <>
+                <span className="px-1 text-[18px] text-[#9ca3af]">...</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  className="inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3.5 text-[15px] font-semibold text-[#111827]"
+                >
+                  {totalPages}
+                </button>
+              </>
+            ) : null}
+
+            <button
+              type="button"
+              disabled={pagination.page >= totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#111827] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-[14px] border border-[#e8ecef] bg-white px-5 py-2.5 text-[14px] font-semibold text-[#111827]">
+            <span>{pagination.limit} 条 / 页</span>
+          </div>
         </div>
       </section>
 

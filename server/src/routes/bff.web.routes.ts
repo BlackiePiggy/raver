@@ -8707,6 +8707,13 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
     const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
     const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
     const wikiFestivalId = typeof req.query.wikiFestivalId === 'string' ? req.query.wikiFestivalId.trim() : '';
+    const sortByRaw = typeof req.query.sortBy === 'string' ? req.query.sortBy.trim() : 'startDateDesc';
+    const sortBy =
+      sortByRaw === 'startDateAsc'
+      || sortByRaw === 'updatedAtDesc'
+      || sortByRaw === 'updatedAtAsc'
+        ? sortByRaw
+        : 'startDateDesc';
     const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : 'all';
     const status = statusRaw.toLowerCase() === 'canceled' ? 'cancelled' : statusRaw.toLowerCase();
     const forceRefresh = isTruthyQueryFlag(req.query.refresh);
@@ -8719,6 +8726,7 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
       country,
       eventType,
       wikiFestivalId,
+      sortBy,
       status,
     });
     const cached = !forceRefresh
@@ -8834,9 +8842,13 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
     }
 
     const eventOrderBy: Prisma.EventOrderByWithRelationInput[] =
-      status === 'ended'
-        ? [{ startDate: 'desc' }, { id: 'desc' }]
-        : [{ startDate: 'asc' }, { id: 'asc' }];
+      sortBy === 'startDateAsc'
+        ? [{ startDate: 'asc' }, { id: 'asc' }]
+        : sortBy === 'updatedAtDesc'
+          ? [{ updatedAt: 'desc' }, { id: 'desc' }]
+          : sortBy === 'updatedAtAsc'
+            ? [{ updatedAt: 'asc' }, { id: 'asc' }]
+            : [{ startDate: 'desc' }, { id: 'desc' }];
 
     const [rows, total] = await Promise.all([
       prisma.event.findMany({
