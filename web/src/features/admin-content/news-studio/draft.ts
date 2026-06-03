@@ -1,4 +1,4 @@
-import { NewsStudioDraft, NewsStudioLoadedArticle } from './types';
+import { NewsStudioBindingItem, NewsStudioDraft, NewsStudioLoadedArticle } from './types';
 
 const toDateTimeLocal = (value?: string | null): string => {
   if (!value) return '';
@@ -12,7 +12,31 @@ const toDateTimeLocal = (value?: string | null): string => {
   return `${year}-${month}-${day}T${hour}:${minute}`;
 };
 
-const fromIds = (items?: string[] | null): string => (items || []).filter(Boolean).join(', ');
+const fromIds = (items?: string[] | null): NewsStudioBindingItem[] =>
+  (items || [])
+    .filter(Boolean)
+    .map((id) => ({
+      id,
+      name: id,
+    }));
+
+const toIdText = (items?: string[] | null): string => (items || []).filter(Boolean).join(', ');
+
+export const extractMarkdownImageUrls = (body: string): string[] => {
+  const source = String(body || '');
+  const regex = /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g;
+  const urls: string[] = [];
+  let match: RegExpExecArray | null = regex.exec(source);
+  while (match) {
+    const url = String(match[1] || '').trim();
+    if (url) urls.push(url);
+    match = regex.exec(source);
+  }
+  return Array.from(new Set(urls));
+};
+
+export const createNewsUploadDraftKey = (): string =>
+  `news-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
 export const createNewsStudioDraft = (): NewsStudioDraft => ({
   id: crypto.randomUUID(),
@@ -27,21 +51,39 @@ export const createNewsStudioDraft = (): NewsStudioDraft => ({
   boundDjIdsText: '',
   boundBrandIdsText: '',
   boundEventIdsText: '',
+  bodyImageUrls: [],
+  uploadNewsKey: createNewsUploadDraftKey(),
+  sessionUploadedResources: [],
+  boundDjs: [],
+  boundBrands: [],
+  boundEvents: [],
 });
 
 export const hydrateNewsStudioDraftFromArticle = (
   article: NewsStudioLoadedArticle
-): NewsStudioDraft => ({
-  id: article.id,
-  title: article.title || '',
-  summary: article.summary || '',
-  body: article.body || '',
-  source: article.source || 'Raver',
-  category: article.category || 'community',
-  link: article.link || '',
-  coverImageUrl: article.coverImageURL || '',
-  publishedAt: toDateTimeLocal(article.publishedAt),
-  boundDjIdsText: fromIds(article.boundDjIDs),
-  boundBrandIdsText: fromIds(article.boundBrandIDs),
-  boundEventIdsText: fromIds(article.boundEventIDs),
-});
+): NewsStudioDraft => {
+  const bodyImageUrls = extractMarkdownImageUrls(article.body || '').filter(
+    (url) => url !== String(article.coverImageURL || '').trim()
+  );
+
+  return {
+    id: article.id,
+    title: article.title || '',
+    summary: article.summary || '',
+    body: article.body || '',
+    source: article.source || 'Raver',
+    category: article.category || 'community',
+    link: article.link || '',
+    coverImageUrl: article.coverImageURL || '',
+    publishedAt: toDateTimeLocal(article.publishedAt),
+    boundDjIdsText: toIdText(article.boundDjIDs),
+    boundBrandIdsText: toIdText(article.boundBrandIDs),
+    boundEventIdsText: toIdText(article.boundEventIDs),
+    bodyImageUrls,
+    uploadNewsKey: createNewsUploadDraftKey(),
+    sessionUploadedResources: [],
+    boundDjs: fromIds(article.boundDjIDs),
+    boundBrands: fromIds(article.boundBrandIDs),
+    boundEvents: fromIds(article.boundEventIDs),
+  };
+};

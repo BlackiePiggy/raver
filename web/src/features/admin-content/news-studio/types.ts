@@ -1,5 +1,12 @@
 export type NewsStudioCategory = 'festival' | 'scene' | 'gear' | 'industry' | 'community';
 
+export type NewsStudioBindingItem = {
+  id: string;
+  name: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+};
+
 export type NewsStudioDraft = {
   id: string;
   title: string;
@@ -13,6 +20,12 @@ export type NewsStudioDraft = {
   boundDjIdsText: string;
   boundBrandIdsText: string;
   boundEventIdsText: string;
+  bodyImageUrls: string[];
+  uploadNewsKey: string;
+  sessionUploadedResources: string[];
+  boundDjs: NewsStudioBindingItem[];
+  boundBrands: NewsStudioBindingItem[];
+  boundEvents: NewsStudioBindingItem[];
 };
 
 export type NewsStudioValidationErrors = Partial<Record<'title' | 'body', string>>;

@@ -7269,15 +7269,35 @@ router.get('/news', optionalAuth, async (req: Request, res: Response): Promise<v
     const viewerId = authReq.user?.userId;
     const limit = normalizeLimit(req.query.limit, 20, 50);
     const cursorDate = parseCursorDate(req.query.cursor);
+    const category =
+      typeof req.query.category === 'string' && req.query.category.trim()
+        ? req.query.category.trim()
+        : '';
+    const source =
+      typeof req.query.source === 'string' && req.query.source.trim()
+        ? req.query.source.trim()
+        : '';
+    const sort =
+      typeof req.query.sort === 'string' && req.query.sort.trim().toLowerCase() === 'oldest'
+        ? 'oldest'
+        : 'newest';
     const blockedRelationUserIds = await buildBlockedRelationUserIds(viewerId);
+    const publishedAtCursorFilter =
+      cursorDate
+        ? sort === 'oldest'
+          ? { publishedAt: { gt: cursorDate } }
+          : { publishedAt: { lt: cursorDate } }
+        : {};
     const rows = await prisma.newsArticle.findMany({
       where: {
         visibility: 'public',
         authorId: blockedRelationUserIds.size > 0 ? { notIn: Array.from(blockedRelationUserIds) } : undefined,
-        ...(cursorDate ? { publishedAt: { lt: cursorDate } } : {}),
+        ...(category ? { category } : {}),
+        ...(source ? { source: { equals: source, mode: 'insensitive' as const } } : {}),
+        ...publishedAtCursorFilter,
       },
       include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
-      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+      orderBy: sort === 'oldest' ? [{ publishedAt: 'asc' }, { id: 'asc' }] : [{ publishedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
     });
 

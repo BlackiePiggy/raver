@@ -6,6 +6,19 @@ const parseIdText = (value: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const mapBindingIds = (items: NewsStudioDraft['boundDjs']): string[] =>
+  items
+    .map((item) => String(item.id || '').trim())
+    .filter(Boolean);
+
+const resolveBindingIds = (
+  items: NewsStudioDraft['boundDjs'],
+  legacyText: string
+): string[] => {
+  const next = mapBindingIds(items);
+  return next.length ? next : parseIdText(legacyText);
+};
+
 const toIsoStringOrNull = (value: string): string | null => {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -24,7 +37,7 @@ export const mapNewsStudioDraftToCreateInput = (
   link: draft.link.trim() || null,
   coverImageURL: draft.coverImageUrl.trim() || null,
   publishedAt: toIsoStringOrNull(draft.publishedAt),
-  boundDjIDs: parseIdText(draft.boundDjIdsText),
-  boundBrandIDs: parseIdText(draft.boundBrandIdsText),
-  boundEventIDs: parseIdText(draft.boundEventIdsText),
+  boundDjIDs: resolveBindingIds(draft.boundDjs, draft.boundDjIdsText),
+  boundBrandIDs: resolveBindingIds(draft.boundBrands, draft.boundBrandIdsText),
+  boundEventIDs: resolveBindingIds(draft.boundEvents, draft.boundEventIdsText),
 });

@@ -16,14 +16,14 @@ export default function AdminContentNewsCreatePage() {
   const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
 
   const handleSubmitResult = (result: NewsStudioCreateResult) => {
-    setSubmitNotice(`资讯已创建成功：${result.article.title}`);
+    setSubmitNotice(`资讯创建成功：${result.article.title}`);
     setSubmitResultLink(`/admin/content/news/${result.article.id}/edit`);
   };
 
   return (
     <AdminContentLayout
       title="新建资讯"
-      description="按照新的后台 Studio 流程创建资讯内容，正文区域作为主要操作区，关联实体作为辅助配置区。"
+      description="使用新的后台 Studio 流程创建资讯内容，正文编辑、资源管理和对象绑定都集中在同一条工作流中。"
       actions={
         <>
           <Link href="/admin/content/news" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">

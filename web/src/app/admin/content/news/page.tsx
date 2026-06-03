@@ -6,10 +6,27 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
+import { djStudioApi } from '@/features/admin-content/dj-studio/api';
+import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import { newsStudioApi, type NewsStudioLoadedArticle } from '@/features/admin-content/news-studio';
+import { organizerStudioApi } from '@/features/admin-content/organizer-studio/api';
+
+const NEWS_CATEGORY_OPTIONS = [
+  { value: '', label: '全部分类' },
+  { value: 'community', label: 'community' },
+  { value: 'festival', label: 'festival' },
+  { value: 'scene', label: 'scene' },
+  { value: 'gear', label: 'gear' },
+  { value: 'industry', label: 'industry' },
+] as const;
+
+const NEWS_SORT_OPTIONS = [
+  { value: 'newest', label: '发布时间从晚到早' },
+  { value: 'oldest', label: '发布时间从早到晚' },
+] as const;
 
 const formatDateTime = (value?: string | null): string => {
-  if (!value) return 'Not recorded';
+  if (!value) return '未记录';
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -20,19 +37,30 @@ const formatDateTime = (value?: string | null): string => {
 };
 
 type NewsDetailTabKey = 'overview' | 'content' | 'bindings';
+type BindingGroupKey = 'dj' | 'brand' | 'event';
+
+type BindingDisplayItem = {
+  id: string;
+  name: string;
+  subtitle?: string | null;
+  meta?: string | null;
+  imageUrl?: string | null;
+};
 
 const NEWS_DETAIL_TABS: Array<{ key: NewsDetailTabKey; label: string }> = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'content', label: 'Content' },
-  { key: 'bindings', label: 'Bindings' },
+  { key: 'overview', label: '概览' },
+  { key: 'content', label: '正文' },
+  { key: 'bindings', label: '绑定' },
 ];
 
 const renderDetailText = (label: string, value?: string | null) => (
   <div>
     <span className="font-medium text-[#111827]">{label}: </span>
-    {value && value.trim() ? value : 'Not set'}
+    {value && value.trim() ? value : '未设置'}
   </div>
 );
+
+const buildBindingCacheKey = (kind: BindingGroupKey, id: string): string => `${kind}:${id}`;
 
 function NewsDetailOverlay({
   item,
@@ -49,37 +77,118 @@ function NewsDetailOverlay({
 }) {
   const [activeTab, setActiveTab] = useState<NewsDetailTabKey>('overview');
   const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
+  const [bindingDetails, setBindingDetails] = useState<Record<string, BindingDisplayItem>>({});
+  const [bindingErrors, setBindingErrors] = useState<Record<string, string>>({});
+
+  const resolved = detail ?? item;
+
+  const bindingGroups = useMemo(
+    () =>
+      resolved
+        ? [
+            { kind: 'dj' as const, label: 'DJs', items: resolved.boundDjIDs },
+            { kind: 'brand' as const, label: 'Brands', items: resolved.boundBrandIDs },
+            { kind: 'event' as const, label: 'Events', items: resolved.boundEventIDs },
+          ]
+        : [],
+    [resolved]
+  );
 
   useEffect(() => {
     setActiveTab('overview');
     setPreviewAssetIndex(null);
+    setBindingDetails({});
+    setBindingErrors({});
   }, [item?.id]);
 
-  if (!item) return null;
+  useEffect(() => {
+    if (activeTab !== 'bindings' || !resolved) return;
 
-  const resolved = detail ?? item;
+    let cancelled = false;
+    const missingEntries = bindingGroups.flatMap((group) =>
+      group.items
+        .map((id) => ({ kind: group.kind, id }))
+        .filter(({ kind, id }) => {
+          const cacheKey = buildBindingCacheKey(kind, id);
+          return !bindingDetails[cacheKey] && !bindingErrors[cacheKey];
+        })
+    );
+
+    if (!missingEntries.length) return;
+
+    const loadBindings = async () => {
+      await Promise.all(
+        missingEntries.map(async ({ kind, id }) => {
+          const cacheKey = buildBindingCacheKey(kind, id);
+          try {
+            let payload: BindingDisplayItem;
+            if (kind === 'dj') {
+              const dj = await djStudioApi.fetchDJ(id);
+              payload = {
+                id,
+                name: dj.name || id,
+                subtitle: [dj.country, dj.slug].filter(Boolean).join(' / ') || null,
+                meta: dj.genres?.length ? dj.genres.slice(0, 3).join(' / ') : null,
+                imageUrl: dj.avatarUrl || dj.bannerUrl || null,
+              };
+            } else if (kind === 'brand') {
+              const brand = await organizerStudioApi.fetchOrganizer(id);
+              payload = {
+                id,
+                name: brand.name || id,
+                subtitle: [brand.city, brand.country].filter(Boolean).join(', ') || null,
+                meta: brand.tagline || brand.abbreviation || null,
+                imageUrl: brand.avatarUrl || brand.backgroundUrl || null,
+              };
+            } else {
+              const event = await eventStudioApi.fetchEventOverview(id);
+              payload = {
+                id,
+                name: event.name || id,
+                subtitle: [event.city, event.country].filter(Boolean).join(', ') || null,
+                meta: [event.eventType, event.status, formatDateTime(event.startDate)].filter(Boolean).join(' · ') || null,
+                imageUrl: event.coverImageUrl || event.cardImageUrl || null,
+              };
+            }
+
+            if (cancelled) return;
+            setBindingDetails((current) => ({ ...current, [cacheKey]: payload }));
+          } catch (loadError) {
+            if (cancelled) return;
+            setBindingErrors((current) => ({
+              ...current,
+              [cacheKey]: loadError instanceof Error ? loadError.message : '加载绑定对象失败',
+            }));
+          }
+        })
+      );
+    };
+
+    void loadBindings();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, bindingDetails, bindingErrors, bindingGroups, resolved]);
+
+  if (!item || !resolved) return null;
+
   const coverImage = resolved.coverImageURL || item.coverImageURL || '';
   const previewAssets: OverlayImageViewerAsset[] = coverImage
     ? [
         {
           url: coverImage,
           alt: resolved.title,
-          title: 'Cover Image',
-          subtitle: resolved.category || resolved.source || 'News asset',
+          title: '封面图',
+          subtitle: resolved.category || resolved.source || '资讯资源',
         },
       ]
     : [];
-  const bindingGroups = [
-    { label: 'DJs', items: resolved.boundDjIDs },
-    { label: 'Brands', items: resolved.boundBrandIDs },
-    { label: 'Events', items: resolved.boundEventIDs },
-  ];
 
   let tabContent: React.ReactNode = null;
   if (loading) {
     tabContent = (
       <div className="rounded-[22px] border border-[#e8eceb] bg-white px-5 py-10 text-sm text-[#6b7280]">
-        Loading full article details...
+        正在加载完整资讯详情...
       </div>
     );
   } else if (error) {
@@ -92,13 +201,13 @@ function NewsDetailOverlay({
     tabContent = (
       <div className="space-y-5">
         <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-          <div className="text-sm font-semibold text-[#111827]">Summary</div>
-          <div className="mt-3 text-sm leading-7 text-[#4b5563]">{resolved.summary || 'No summary available.'}</div>
+          <div className="text-sm font-semibold text-[#111827]">摘要</div>
+          <div className="mt-3 text-sm leading-7 text-[#4b5563]">{resolved.summary || '暂无摘要。'}</div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-2">
           <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-            <div className="text-sm font-semibold text-[#111827]">Article Metadata</div>
+            <div className="text-sm font-semibold text-[#111827]">文章信息</div>
             <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
               {renderDetailText('ID', resolved.id)}
               {renderDetailText('Category', resolved.category)}
@@ -108,14 +217,14 @@ function NewsDetailOverlay({
           </div>
 
           <div className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-            <div className="text-sm font-semibold text-[#111827]">Source Link</div>
+            <div className="text-sm font-semibold text-[#111827]">原始链接</div>
             <div className="mt-4 text-sm leading-7 text-[#4b5563]">
               {resolved.link ? (
                 <a href={resolved.link} target="_blank" rel="noreferrer" className="break-all text-[#1d4ed8] underline">
                   {resolved.link}
                 </a>
               ) : (
-                'No source link attached.'
+                '没有附带原始链接。'
               )}
             </div>
           </div>
@@ -125,8 +234,8 @@ function NewsDetailOverlay({
   } else if (activeTab === 'content') {
     tabContent = (
       <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-        <div className="text-sm font-semibold text-[#111827]">Body</div>
-        <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[#4b5563]">{resolved.body || 'No body content.'}</div>
+        <div className="text-sm font-semibold text-[#111827]">正文</div>
+        <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[#4b5563]">{resolved.body || '暂无正文内容。'}</div>
       </section>
     );
   } else {
@@ -140,15 +249,38 @@ function NewsDetailOverlay({
                 {group.items.length}
               </span>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 space-y-3">
               {group.items.length ? (
-                group.items.map((entry) => (
-                  <span key={entry} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
-                    {entry}
-                  </span>
-                ))
+                group.items.map((entry) => {
+                  const cacheKey = buildBindingCacheKey(group.kind, entry);
+                  const bound = bindingDetails[cacheKey];
+                  const boundError = bindingErrors[cacheKey];
+                  return (
+                    <div key={entry} className="rounded-[18px] border border-[#edf0f2] bg-[#fafaf9] p-3">
+                      <div className="flex gap-3">
+                        <div className="h-12 w-12 overflow-hidden rounded-[14px] border border-[#edf0f2] bg-white">
+                          {bound?.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={bound.imageUrl} alt={bound.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-black/25">
+                              {group.label.slice(0, 1)}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-[#111827]">{bound?.name || entry}</div>
+                          {bound?.subtitle ? <div className="mt-1 truncate text-xs text-black/48">{bound.subtitle}</div> : null}
+                          {bound?.meta ? <div className="mt-1 truncate text-xs text-black/35">{bound.meta}</div> : null}
+                          <div className="mt-2 break-all text-[11px] text-black/32">ID: {entry}</div>
+                          {boundError ? <div className="mt-2 text-[11px] text-[#8b3a3a]">{boundError}</div> : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                <div className="text-sm text-[#6b7280]">No bindings.</div>
+                <div className="text-sm text-[#6b7280]">暂无绑定。</div>
               )}
             </div>
           </section>
@@ -169,7 +301,7 @@ function NewsDetailOverlay({
           className="absolute right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
           aria-label="Close news detail"
         >
-          脳
+          关
         </button>
 
         <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
@@ -197,7 +329,7 @@ function NewsDetailOverlay({
                   <span className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">{resolved.source}</span>
                 </div>
                 <div className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{resolved.title}</div>
-                <div className="mt-2 text-sm font-medium text-[#6b7280]">Published {formatDateTime(resolved.publishedAt)}</div>
+                <div className="mt-2 text-sm font-medium text-[#6b7280]">发布时间 {formatDateTime(resolved.publishedAt)}</div>
               </div>
             </div>
 
@@ -216,7 +348,7 @@ function NewsDetailOverlay({
             </div>
 
             <div className="mt-5 rounded-[22px] border border-[#e8eceb] bg-white p-5">
-              <div className="text-sm font-semibold text-[#111827]">Basic Info</div>
+              <div className="text-sm font-semibold text-[#111827]">基础信息</div>
               <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
                 {renderDetailText('ID', resolved.id)}
                 {renderDetailText('Published', formatDateTime(resolved.publishedAt))}
@@ -231,13 +363,13 @@ function NewsDetailOverlay({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">News Profile</div>
-                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">Article Detail</div>
+                <div className="mt-2 text-[26px] font-semibold tracking-[-0.04em] text-[#111827]">资讯详情</div>
               </div>
               <Link
                 href={`/admin/content/news/${item.id}/edit`}
                 className="inline-flex h-[42px] items-center rounded-full bg-[#071110] px-5 text-sm font-semibold text-white"
               >
-                Edit News
+                编辑资讯
               </Link>
             </div>
 
@@ -278,6 +410,9 @@ export default function AdminContentNewsPage() {
   const [cursorStack, setCursorStack] = useState<Array<string | null>>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNews, setSelectedNews] = useState<NewsStudioLoadedArticle | null>(null);
@@ -296,13 +431,19 @@ export default function AdminContentNewsPage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await newsStudioApi.listNews(cursor, 12);
+        const response = await newsStudioApi.listNews({
+          cursor,
+          limit: 12,
+          category: categoryFilter || undefined,
+          source: sourceFilter || undefined,
+          sort: sortOrder,
+        });
         if (cancelled) return;
         setItems(response.items);
         setNextCursor(response.nextCursor);
       } catch (loadError) {
         if (cancelled) return;
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load news.');
+        setError(loadError instanceof Error ? loadError.message : '资讯列表加载失败。');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -311,7 +452,7 @@ export default function AdminContentNewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [cursor]);
+  }, [categoryFilter, cursor, sortOrder, sourceFilter]);
 
   useEffect(() => {
     if (!menuOpenNewsId) return;
@@ -342,6 +483,12 @@ export default function AdminContentNewsPage() {
     return items.filter((item) => [item.title, item.source, item.summary].join(' ').toLowerCase().includes(keyword));
   }, [items, query]);
 
+  const resetPaging = () => {
+    setCursor(null);
+    setCursorStack([]);
+    setNextCursor(null);
+  };
+
   const openDetailOverlay = async (item: NewsStudioLoadedArticle) => {
     setMenuOpenNewsId(null);
     setSelectedNews(item);
@@ -360,7 +507,7 @@ export default function AdminContentNewsPage() {
       setDetailCache((current) => ({ ...current, [item.id]: detail }));
       setSelectedNewsDetail(detail);
     } catch (detailError) {
-      setSelectedNewsError(detailError instanceof Error ? detailError.message : 'Failed to load article detail.');
+      setSelectedNewsError(detailError instanceof Error ? detailError.message : '资讯详情加载失败。');
     } finally {
       setSelectedNewsLoading(false);
     }
@@ -405,14 +552,14 @@ export default function AdminContentNewsPage() {
   return (
     <AdminContentLayout
       title="News Workspace"
-      description="Create, edit, and maintain article records with the same premium detail overlay structure used by events."
+      description="创建、编辑并维护资讯内容，详情 overlay 与新的对象绑定展示保持一致。"
       actions={
         <>
           <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            Back to Content
+            返回内容控制台
           </Link>
           <Link href="/admin/content/news/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-            New Article
+            新建资讯
           </Link>
         </>
       }
@@ -420,10 +567,10 @@ export default function AdminContentNewsPage() {
       <section className="space-y-5">
         <div className="grid gap-4 lg:grid-cols-4">
           {[
-            { label: 'News Studio', value: 'Live', note: 'create and edit enabled', tone: 'bg-[#dff4a8]' },
-            { label: 'Body First', value: 'On', note: 'long-form content workflow', tone: 'bg-[#f3e5a8]' },
-            { label: 'Bindings', value: 'IDs', note: 'dj, brand, and event relations', tone: 'bg-[#f7c4c0]' },
-            { label: 'Page Size', value: '12', note: 'cursor-based pagination', tone: 'bg-[#dbeefe]' },
+            { label: 'News Studio', value: 'Live', note: '创建与编辑流程可用', tone: 'bg-[#dff4a8]' },
+            { label: 'Default Sort', value: 'Newest', note: '默认按发布时间从晚到早', tone: 'bg-[#f3e5a8]' },
+            { label: 'Filters', value: '3', note: '搜索、来源、分类联动', tone: 'bg-[#f7c4c0]' },
+            { label: 'Page Size', value: '12', note: '基于 cursor 的分页', tone: 'bg-[#dbeefe]' },
           ].map((card) => (
             <div key={card.label} className={`admin-reference-pastel-card p-5 ${card.tone}`}>
               <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">{card.label}</div>
@@ -437,22 +584,61 @@ export default function AdminContentNewsPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-[12px] uppercase tracking-[0.18em] text-black/35">Latest News</div>
-              <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">Recent Articles</h2>
+              <h2 className="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-[#1a1a1a]">最新资讯</h2>
             </div>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              className="admin-studio-input max-w-[320px]"
-              placeholder="Search title, source, or summary"
-            />
+            <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[760px] lg:flex-row">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="admin-studio-input lg:flex-1"
+                placeholder="搜索标题、来源或摘要"
+              />
+              <input
+                value={sourceFilter}
+                onChange={(event) => {
+                  setSourceFilter(event.target.value);
+                  resetPaging();
+                }}
+                className="admin-studio-input lg:w-[180px]"
+                placeholder="来源筛选"
+              />
+              <select
+                value={categoryFilter}
+                onChange={(event) => {
+                  setCategoryFilter(event.target.value);
+                  resetPaging();
+                }}
+                className="admin-studio-input lg:w-[170px]"
+              >
+                {NEWS_CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sortOrder}
+                onChange={(event) => {
+                  setSortOrder(event.target.value as 'newest' | 'oldest');
+                  resetPaging();
+                }}
+                className="admin-studio-input lg:w-[210px]"
+              >
+                {NEWS_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {loading ? (
-            <div className="mt-6 text-sm text-black/48">Loading article list...</div>
+            <div className="mt-6 text-sm text-black/48">正在加载资讯列表...</div>
           ) : error ? (
             <div className="admin-studio-pastel-rose mt-6 p-4 text-sm text-[#6a3530]">{error}</div>
           ) : (
-            <div className="mt-6 space-y-4">
+            <div className="mt-6 space-y-3">
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
@@ -465,25 +651,43 @@ export default function AdminContentNewsPage() {
                       void openDetailOverlay(item);
                     }
                   }}
-                  className="admin-reference-soft-card cursor-pointer p-5 transition-colors hover:bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd]"
+                  className="admin-reference-soft-card cursor-pointer p-3 transition-colors hover:bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd]"
                 >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap gap-2">
-                        <span className="admin-reference-chip">{item.category}</span>
-                        <span className="admin-reference-chip">{item.source}</span>
-                      </div>
-                      <h3 className="mt-4 text-xl font-semibold tracking-[-0.02em] text-[#071110]">{item.title}</h3>
-                      <p className="mt-2 line-clamp-2 text-sm leading-7 text-black/48">{item.summary || item.body || 'No summary available.'}</p>
-                      <div className="mt-3 text-xs text-black/38">Published {formatDateTime(item.publishedAt)}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-[18px] border border-[#e8eceb] bg-[#eef1f0]">
+                      {item.coverImageURL ? (
+                        <Image src={item.coverImageURL} alt={item.title} fill className="object-cover" sizes="120px" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-black/25">
+                          NEWS
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap gap-2">
+                          <span className="admin-reference-chip">{item.category}</span>
+                          <span className="admin-reference-chip">{item.source}</span>
+                        </div>
+                        <div className="hidden text-[11px] text-black/36 md:block">{formatDateTime(item.publishedAt)}</div>
+                      </div>
+
+                      <h3 className="mt-2 truncate text-[17px] font-semibold tracking-[-0.02em] text-[#071110]">
+                        {item.title}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 text-[13px] leading-6 text-black/50">
+                        {item.summary || item.body || '暂无摘要。'}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 self-start">
                       <Link
                         href={`/admin/content/news/${item.id}/edit`}
                         onClick={(event) => event.stopPropagation()}
-                        className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
+                        className="rounded-full bg-[#071110] px-4 py-2.5 text-sm font-semibold text-white"
                       >
-                        Edit
+                        编辑
                       </Link>
                       <div className="relative" ref={menuOpenNewsId === item.id ? actionMenuRef : null}>
                         <button
@@ -492,14 +696,14 @@ export default function AdminContentNewsPage() {
                             event.stopPropagation();
                             setMenuOpenNewsId((current) => (current === item.id ? null : item.id));
                           }}
-                          className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
+                          className="inline-flex h-[40px] w-[40px] items-center justify-center rounded-full border border-[#e8eceb] bg-white text-[#6b7280]"
                           aria-label="More actions"
                         >
                           <Ellipsis className="h-4 w-4" />
                         </button>
                         {menuOpenNewsId === item.id ? (
                           <div
-                            className="absolute right-0 top-[52px] z-20 min-w-[140px] rounded-[16px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
+                            className="absolute right-0 top-[48px] z-20 min-w-[140px] rounded-[16px] border border-[#e7ebef] bg-white p-2 shadow-[0_16px_36px_rgba(17,24,39,0.14)]"
                             onClick={(event) => event.stopPropagation()}
                           >
                             <button
@@ -507,7 +711,7 @@ export default function AdminContentNewsPage() {
                               onClick={() => requestDeleteNews(item)}
                               className="flex w-full items-center justify-start rounded-[12px] px-3 py-2 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f4]"
                             >
-                              Delete Article
+                              删除资讯
                             </button>
                           </div>
                         ) : null}
@@ -517,7 +721,9 @@ export default function AdminContentNewsPage() {
                 </div>
               ))}
 
-              {!filteredItems.length ? <div className="admin-reference-soft-card p-6 text-sm text-black/48">No matching articles on this page.</div> : null}
+              {!filteredItems.length ? (
+                <div className="admin-reference-soft-card p-6 text-sm text-black/48">当前筛选条件下没有匹配的资讯。</div>
+              ) : null}
             </div>
           )}
 
@@ -534,7 +740,7 @@ export default function AdminContentNewsPage() {
               disabled={!cursorStack.length}
               className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
             >
-              Previous
+              上一页
             </button>
             <button
               type="button"
@@ -546,7 +752,7 @@ export default function AdminContentNewsPage() {
               disabled={!nextCursor}
               className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
             >
-              Next
+              下一页
             </button>
           </div>
         </section>

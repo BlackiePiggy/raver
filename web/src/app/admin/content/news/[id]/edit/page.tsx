@@ -38,7 +38,7 @@ export default function AdminContentNewsEditPage() {
         setDraft(hydrateNewsStudioDraftFromArticle(article));
       } catch (loadError) {
         if (cancelled) return;
-        setError(loadError instanceof Error ? loadError.message : '加载资讯失败');
+        setError(loadError instanceof Error ? loadError.message : '加载资讯失败。');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -57,7 +57,7 @@ export default function AdminContentNewsEditPage() {
   return (
     <AdminContentLayout
       title={draft.title || '编辑资讯'}
-      description="资讯编辑会回填当前正文、摘要和绑定关系，适合运营快速修正文案或调整关联内容。"
+      description="回填当前资讯的正文、摘要、媒体资源和绑定关系，适合快速修正文案与关联对象。"
       actions={
         <>
           <Link href="/admin/content/news" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">

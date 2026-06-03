@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
+import { adminCatalogApi } from '@/features/admin-content/catalog/api';
 
-export type EntityBindingKind = 'dj' | 'festival';
+export type EntityBindingKind = 'dj' | 'festival' | 'event' | 'brand';
 
 export type EntityBindingValue = {
   id: string;
@@ -50,7 +51,7 @@ export default function EntityBindingSearch({
   const effectiveQuery = useMemo(() => query.trim() || seedQuery.trim(), [query, seedQuery]);
 
   const mapResults = async (keyword: string): Promise<SearchResultItem[]> => {
-    if (kind === 'festival') {
+    if (kind === 'festival' || kind === 'brand') {
       const items = await eventStudioApi.searchOrganizers(keyword);
       return items.map((item) => ({
         id: item.id,
@@ -58,6 +59,22 @@ export default function EntityBindingSearch({
         subtitle: [item.city, item.country].filter(Boolean).join(', ') || null,
         imageUrl: item.avatarUrl || item.backgroundUrl || null,
         note: item.tagline || null,
+      }));
+    }
+
+    if (kind === 'event') {
+      const response = await adminCatalogApi.fetchEvents({
+        page: 1,
+        limit: 8,
+        search: keyword,
+        sortBy: 'updatedAtDesc',
+      });
+      return response.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        subtitle: [item.city, item.country].filter(Boolean).join(', ') || null,
+        imageUrl: item.coverImageUrl || null,
+        note: [item.status, item.eventType].filter(Boolean).join(' / ') || null,
       }));
     }
 
@@ -176,7 +193,13 @@ export default function EntityBindingSearch({
         <div className="flex flex-wrap gap-2">
           <input
             className="min-w-[180px] flex-1 rounded-[14px] border border-[#e8eceb] bg-white px-3 py-2 text-sm"
-            placeholder={kind === 'festival' ? 'Search organizer / festival brand' : 'Search DJ'}
+            placeholder={
+              kind === 'festival' || kind === 'brand'
+                ? 'Search organizer / festival brand'
+                : kind === 'event'
+                  ? 'Search event'
+                  : 'Search DJ'
+            }
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             disabled={disabled || submitting}
