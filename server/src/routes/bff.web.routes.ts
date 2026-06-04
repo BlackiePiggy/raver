@@ -54,6 +54,14 @@ import {
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
 import { contentCompliance } from '../utils/content-compliance';
 import {
+  INPUT_LIMITS,
+  normalizeMultiline,
+  normalizeOptionalMultiline,
+  normalizeOptionalSingleLine,
+  normalizeSingleLine,
+  normalizeStringArray,
+} from '../utils/input-rules';
+import {
   saveBufferToLocalUploads,
   shouldAllowLocalUploadFallback,
 } from '../services/media-storage.service';
@@ -71,6 +79,20 @@ import {
   attachContentSubmissionChangeSummary,
   changeSummaryTextFromPayload,
 } from '../services/content-submission-change-summary.service';
+import {
+  attachContributionInfo,
+  buildContributorSummary,
+  emptyContributorInfo,
+  fetchContributionCenterSummary,
+  fetchContributorEntriesForEntity,
+  fetchContributorInfoMap,
+  fetchContributionHistoryPage,
+  InvalidContributionHistoryCursorError,
+  isContributorForEntity,
+  recordDJContribution,
+  type ContributionHistoryFilter,
+  type ContributorInfo,
+} from '../services/contribution.service';
 import {
   assertBrandSubmissionBaseRevision,
   bindBrandDraftMediaToSubmission,
@@ -711,8 +733,58 @@ const buildSubmissionReviewNotes = async (
 
 const cleanSubmittedBrandText = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
+  const trimmed = normalizeSingleLine(value);
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeSubmittedSingleLine = (value: unknown, max: number): string =>
+  normalizeSingleLine(value).slice(0, max);
+
+const firstFilledSubmittedText = (...values: unknown[]): string => {
+  for (const value of values) {
+    const normalized = normalizeSingleLine(value);
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const firstFilledSubmittedMultiline = (...values: unknown[]): string => {
+  for (const value of values) {
+    const normalized = normalizeMultiline(value);
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const normalizeSubmittedUrl = (value: unknown): string | null =>
+  normalizeOptionalSingleLine(value, INPUT_LIMITS.common.url);
+
+const normalizeSubmittedMultiline = (value: unknown, max: number): string | null =>
+  normalizeOptionalMultiline(value, max);
+
+const normalizeSubmittedId = (value: unknown): string | null =>
+  normalizeOptionalSingleLine(value, INPUT_LIMITS.common.externalId);
+
+const normalizeSubmittedStringArray = (
+  value: unknown,
+  options?: { itemMax?: number; maxItems?: number }
+): string[] =>
+  normalizeStringArray(value, options);
+
+const isValidHttpUrl = (value: string | null | undefined): boolean => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const isValidGeneralUrl = (value: string | null | undefined): boolean => {
+  if (!value) return false;
+  if (value.startsWith('community://')) return true;
+  return isValidHttpUrl(value);
 };
 
 const hasSubmittedBrandImageAssetType = (
@@ -753,8 +825,69 @@ const submittedBrandFlag = (value: unknown): boolean =>
   value === true || cleanSubmittedBrandText(value)?.toLowerCase() === 'true';
 
 const validateBrandSubmissionPayload = (payload: Record<string, unknown>): string | null => {
-  if (!cleanSubmittedBrandText(payload.name)) {
+  const name = normalizeSingleLine(payload.name);
+  const country = firstFilledSubmittedText(payload.country, payload.countryI18n && (payload.countryI18n as Record<string, unknown>).zh, payload.countryI18n && (payload.countryI18n as Record<string, unknown>).en);
+  const city = firstFilledSubmittedText(payload.city, payload.cityI18n && (payload.cityI18n as Record<string, unknown>).zh, payload.cityI18n && (payload.cityI18n as Record<string, unknown>).en);
+  const abbreviation = normalizeSingleLine(payload.abbreviation);
+  const foundedYear = normalizeSingleLine(payload.foundedYear);
+  const frequency = firstFilledSubmittedText(payload.frequency, payload.frequencyI18n && (payload.frequencyI18n as Record<string, unknown>).zh, payload.frequencyI18n && (payload.frequencyI18n as Record<string, unknown>).en);
+  const tagline = normalizeSingleLine(payload.tagline);
+  const introduction = firstFilledSubmittedMultiline(payload.introduction, payload.description, payload.descriptionI18n && (payload.descriptionI18n as Record<string, unknown>).zh);
+
+  if (!name) {
     return 'name is required';
+  }
+  if (name.length > INPUT_LIMITS.organizer.name) {
+    return `name must be at most ${INPUT_LIMITS.organizer.name} characters`;
+  }
+  if (abbreviation.length > INPUT_LIMITS.organizer.abbreviation) {
+    return `abbreviation must be at most ${INPUT_LIMITS.organizer.abbreviation} characters`;
+  }
+  if (country.length > INPUT_LIMITS.organizer.country) {
+    return `country must be at most ${INPUT_LIMITS.organizer.country} characters`;
+  }
+  if (city.length > INPUT_LIMITS.organizer.city) {
+    return `city must be at most ${INPUT_LIMITS.organizer.city} characters`;
+  }
+  if (foundedYear.length > INPUT_LIMITS.organizer.foundedYear) {
+    return `foundedYear must be at most ${INPUT_LIMITS.organizer.foundedYear} characters`;
+  }
+  if (frequency.length > INPUT_LIMITS.organizer.frequency) {
+    return `frequency must be at most ${INPUT_LIMITS.organizer.frequency} characters`;
+  }
+  if (tagline.length > INPUT_LIMITS.organizer.tagline) {
+    return `tagline must be at most ${INPUT_LIMITS.organizer.tagline} characters`;
+  }
+  if (introduction.length > INPUT_LIMITS.organizer.introduction) {
+    return `introduction must be at most ${INPUT_LIMITS.organizer.introduction} characters`;
+  }
+  try {
+    for (const value of [
+      normalizeSubmittedUrl(payload.avatarUrl),
+      normalizeSubmittedUrl(payload.backgroundUrl),
+      normalizeSubmittedUrl(payload.proofImageUrl),
+      normalizeSubmittedUrl(payload.officialWebsite),
+      normalizeSubmittedUrl(payload.facebookUrl),
+      normalizeSubmittedUrl(payload.instagramUrl),
+      normalizeSubmittedUrl(payload.twitterUrl),
+      normalizeSubmittedUrl(payload.youtubeUrl),
+      normalizeSubmittedUrl(payload.tiktokUrl),
+    ]) {
+      ensureOptionalHttpUrl(value, 'brand url');
+    }
+    if (Array.isArray(payload.links)) {
+      for (const item of payload.links) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+        const row = item as Record<string, unknown>;
+        ensureOptionalHttpUrl(normalizeSubmittedUrl(row.url), 'links.url');
+        const titleLength = normalizeSingleLine(row.title).length;
+        if (titleLength > INPUT_LIMITS.organizer.extraLinkTitle) {
+          return `links.title must be at most ${INPUT_LIMITS.organizer.extraLinkTitle} characters`;
+        }
+      }
+    }
+  } catch (error) {
+    return (error as Error).message;
   }
   if (!hasSubmittedBrandPrimaryVisual(payload)) {
     return 'brand primary visual is required';
@@ -765,6 +898,157 @@ const validateBrandSubmissionPayload = (payload: Record<string, unknown>): strin
   if (!submittedBrandFlag(payload.rightsConfirmed) || !submittedBrandFlag(payload.identityConfirmed)) {
     return 'rightsConfirmed and identityConfirmed are required';
   }
+  return null;
+};
+
+const ensureOptionalHttpUrl = (
+  value: string | null,
+  fieldName: string
+): string | null => {
+  if (!value) return null;
+  if (!isValidHttpUrl(value)) {
+    throw new Error(`${fieldName} must be a valid http/https URL`);
+  }
+  return value;
+};
+
+const validateLabelPayload = (payload: Record<string, unknown>): string | null => {
+  const name = normalizeSubmittedSingleLine(payload.name, INPUT_LIMITS.label.name);
+  const slug = normalizeSubmittedSingleLine(payload.slug, INPUT_LIMITS.label.slug);
+  const profileSlug = normalizeSubmittedSingleLine(payload.profileSlug, INPUT_LIMITS.label.profileSlug);
+  const nation = firstFilledSubmittedText(payload.nation, payload.country);
+  const founderName = normalizeSubmittedSingleLine(payload.founderName, INPUT_LIMITS.label.founderName);
+  const foundedAt = normalizeSubmittedSingleLine(payload.foundedAt, INPUT_LIMITS.label.foundedAt);
+  const genresPreview = normalizeSubmittedSingleLine(payload.genresPreview, INPUT_LIMITS.label.genresPreview);
+  const latestReleaseListing = normalizeSubmittedSingleLine(payload.latestReleaseListing, INPUT_LIMITS.label.latestReleaseListing);
+  const locationPeriod = normalizeSubmittedSingleLine(payload.locationPeriod, INPUT_LIMITS.label.locationPeriod);
+  const introductionPreview = normalizeMultiline(payload.introductionPreview).slice(0, INPUT_LIMITS.label.introductionPreview);
+  const introduction = firstFilledSubmittedMultiline(payload.introduction, payload.description);
+  const demoSubmissionDisplay = normalizeSubmittedSingleLine(payload.demoSubmissionDisplay, INPUT_LIMITS.label.demoSubmissionDisplay);
+  const genres = normalizeSubmittedStringArray(payload.genres, {
+    itemMax: INPUT_LIMITS.label.genre,
+    maxItems: 20,
+  });
+
+  if (!name) {
+    return 'name is required';
+  }
+  if (normalizeSingleLine(payload.name).length > INPUT_LIMITS.label.name) {
+    return `name must be at most ${INPUT_LIMITS.label.name} characters`;
+  }
+  if (slug && normalizeSingleLine(payload.slug).length > INPUT_LIMITS.label.slug) {
+    return `slug must be at most ${INPUT_LIMITS.label.slug} characters`;
+  }
+  if (profileSlug && normalizeSingleLine(payload.profileSlug).length > INPUT_LIMITS.label.profileSlug) {
+    return `profileSlug must be at most ${INPUT_LIMITS.label.profileSlug} characters`;
+  }
+  if (nation.length > INPUT_LIMITS.label.nation) {
+    return `nation must be at most ${INPUT_LIMITS.label.nation} characters`;
+  }
+  if (founderName.length > INPUT_LIMITS.label.founderName) {
+    return `founderName must be at most ${INPUT_LIMITS.label.founderName} characters`;
+  }
+  if (foundedAt.length > INPUT_LIMITS.label.foundedAt) {
+    return `foundedAt must be at most ${INPUT_LIMITS.label.foundedAt} characters`;
+  }
+  if (genresPreview.length > INPUT_LIMITS.label.genresPreview) {
+    return `genresPreview must be at most ${INPUT_LIMITS.label.genresPreview} characters`;
+  }
+  if (latestReleaseListing.length > INPUT_LIMITS.label.latestReleaseListing) {
+    return `latestReleaseListing must be at most ${INPUT_LIMITS.label.latestReleaseListing} characters`;
+  }
+  if (locationPeriod.length > INPUT_LIMITS.label.locationPeriod) {
+    return `locationPeriod must be at most ${INPUT_LIMITS.label.locationPeriod} characters`;
+  }
+  if (introductionPreview.length > INPUT_LIMITS.label.introductionPreview) {
+    return `introductionPreview must be at most ${INPUT_LIMITS.label.introductionPreview} characters`;
+  }
+  if (introduction.length > INPUT_LIMITS.label.introduction) {
+    return `introduction must be at most ${INPUT_LIMITS.label.introduction} characters`;
+  }
+  if (demoSubmissionDisplay.length > INPUT_LIMITS.label.demoSubmissionDisplay) {
+    return `demoSubmissionDisplay must be at most ${INPUT_LIMITS.label.demoSubmissionDisplay} characters`;
+  }
+  if (genres.length > 20) {
+    return 'genres must contain at most 20 items';
+  }
+
+  try {
+    const profileUrl = normalizeOptionalSingleLine(payload.profileUrl, INPUT_LIMITS.common.url);
+    if (profileUrl && !isValidGeneralUrl(profileUrl)) {
+      return 'profileUrl must be a valid URL';
+    }
+    for (const [fieldName, value] of [
+      ['logoUrl', normalizeSubmittedUrl(payload.logoUrl)],
+      ['avatarUrl', normalizeSubmittedUrl(payload.avatarUrl)],
+      ['backgroundUrl', normalizeSubmittedUrl(payload.backgroundUrl)],
+      ['demoSubmissionUrl', normalizeSubmittedUrl(payload.demoSubmissionUrl)],
+      ['facebookUrl', normalizeSubmittedUrl(payload.facebookUrl)],
+      ['soundcloudUrl', normalizeSubmittedUrl(payload.soundcloudUrl)],
+      ['musicPurchaseUrl', normalizeSubmittedUrl(payload.musicPurchaseUrl)],
+      ['officialWebsiteUrl', normalizeSubmittedUrl(payload.officialWebsiteUrl ?? payload.officialWebsite)],
+    ] as Array<[string, string | null]>) {
+      ensureOptionalHttpUrl(value, fieldName);
+    }
+  } catch (error) {
+    return (error as Error).message;
+  }
+
+  return null;
+};
+
+const validateManualDjPayload = (payload: Record<string, unknown>): string | null => {
+  const name = normalizeSubmittedSingleLine(payload.name, INPUT_LIMITS.dj.name);
+  const bio = normalizeMultiline(payload.bio).slice(0, INPUT_LIMITS.dj.bio);
+  const country = normalizeSubmittedSingleLine(payload.country, INPUT_LIMITS.dj.country);
+  const aliases = normalizeSubmittedStringArray(payload.aliases, {
+    itemMax: INPUT_LIMITS.dj.alias,
+    maxItems: INPUT_LIMITS.dj.aliasesMaxItems,
+  });
+  const genres = normalizeSubmittedStringArray(payload.genres, {
+    itemMax: INPUT_LIMITS.dj.genre,
+    maxItems: INPUT_LIMITS.dj.genresMaxItems,
+  });
+
+  if (!name) {
+    return 'name is required';
+  }
+  if (normalizeSingleLine(payload.name).length > INPUT_LIMITS.dj.name) {
+    return `name must be at most ${INPUT_LIMITS.dj.name} characters`;
+  }
+  if (bio.length > INPUT_LIMITS.dj.bio) {
+    return `bio must be at most ${INPUT_LIMITS.dj.bio} characters`;
+  }
+  if (country.length > INPUT_LIMITS.dj.country) {
+    return `country must be at most ${INPUT_LIMITS.dj.country} characters`;
+  }
+  if (aliases.length > INPUT_LIMITS.dj.aliasesMaxItems) {
+    return `aliases must contain at most ${INPUT_LIMITS.dj.aliasesMaxItems} items`;
+  }
+  if (genres.length > INPUT_LIMITS.dj.genresMaxItems) {
+    return `genres must contain at most ${INPUT_LIMITS.dj.genresMaxItems} items`;
+  }
+
+  try {
+    [
+      ['avatarUrl', normalizeSubmittedUrl(payload.avatarUrl)],
+      ['bannerUrl', normalizeSubmittedUrl(payload.bannerUrl)],
+      ['proofImageUrl', normalizeSubmittedUrl(payload.proofImageUrl)],
+      ['spotifyUrl', normalizeSubmittedUrl(payload.spotifyUrl)],
+      ['instagramUrl', normalizeSubmittedUrl(payload.instagramUrl)],
+      ['facebookUrl', normalizeSubmittedUrl(payload.facebookUrl)],
+      ['soundcloudUrl', normalizeSubmittedUrl(payload.soundcloudUrl)],
+      ['twitterUrl', normalizeSubmittedUrl(payload.twitterUrl)],
+      ['youtubeUrl', normalizeSubmittedUrl(payload.youtubeUrl)],
+      ['neteaseUrl', normalizeSubmittedUrl(payload.neteaseUrl)],
+      ['qqMusicUrl', normalizeSubmittedUrl(payload.qqMusicUrl)],
+      ['website', normalizeSubmittedUrl(payload.website ?? payload.websiteUrl ?? payload.officialWebsite)],
+      ['otherPlatformUrl', normalizeSubmittedUrl(payload.otherPlatformUrl ?? payload.otherUrl)],
+    ].forEach(([fieldName, value]) => ensureOptionalHttpUrl(value as string | null, fieldName as string));
+  } catch (error) {
+    return (error as Error).message;
+  }
+
   return null;
 };
 
@@ -1089,15 +1373,19 @@ const loadEventDetailForWeb = async (
   eventId: string,
   viewerId?: string | null
 ) => {
-  const row = await prisma.event.findUnique({
-    where: { id: eventId },
-    select: selectEventDetailForWeb,
-  });
+  const row = await attachContributionInfo(
+    prisma,
+    'event',
+    await prisma.event.findUnique({
+      where: { id: eventId },
+      select: selectEventDetailForWeb,
+    })
+  );
   if (!row) return null;
   const favoriteIdsByEventId = await resolveEventFavoriteIds(viewerId ?? undefined, [row.id]);
   const rowWithFavorite = attachEventFavoriteState([row], favoriteIdsByEventId)[0];
   const complianceUser = await resolveRegionalComplianceUser(viewerId);
-  return mapEvent(rowWithFavorite, complianceUser);
+  return mapEvent(rowWithFavorite, complianceUser, viewerId ?? null, null);
 };
 
 const auditEventDirectApplyBestEffort = async (input: {
@@ -3490,27 +3778,8 @@ const mergeDJDataSources = (
   return result.length > 0 ? result.join('|') : null;
 };
 
-type DJContributorInfo = {
-  userIds: string[];
-  usernames: string[];
-  users: Array<{
-    id: string;
-    username: string;
-    displayName: string | null;
-    avatarUrl: string | null;
-  }>;
-  uploadedByUsername: string | null;
-};
-
-const emptyDJContributorInfo: DJContributorInfo = {
-  userIds: [],
-  usernames: [],
-  users: [],
-  uploadedByUsername: null,
-};
-
-const contributorInfoFromRow = (row: any): DJContributorInfo =>
-  (row?.__contributorInfo as DJContributorInfo | undefined) ?? emptyDJContributorInfo;
+const contributorInfoFromRow = (row: any): ContributorInfo =>
+  (row?.__contributorInfo as ContributorInfo | undefined) ?? emptyContributorInfo;
 
 type DJStatsInfo = {
   eventCount: number;
@@ -3525,64 +3794,8 @@ const emptyDJStatsInfo: DJStatsInfo = {
 const statsInfoFromRow = (row: any): DJStatsInfo =>
   (row?.__statsInfo as DJStatsInfo | undefined) ?? emptyDJStatsInfo;
 
-const fetchDJContributorInfoMap = async (djIds: string[]): Promise<Map<string, DJContributorInfo>> => {
-  const validIds = Array.from(new Set(djIds.map((id) => id.trim()).filter(Boolean)));
-  if (validIds.length === 0) {
-    return new Map();
-  }
-
-  const rows = await prisma.$queryRaw<
-    Array<{
-      djId: string;
-      userId: string;
-      username: string;
-      displayName: string | null;
-      avatarUrl: string | null;
-      createdAt: Date;
-    }>
-  >(Prisma.sql`
-    SELECT
-      c."dj_id" AS "djId",
-      c."user_id" AS "userId",
-      u."username" AS "username",
-      u."display_name" AS "displayName",
-      u."avatar_url" AS "avatarUrl",
-      c."created_at" AS "createdAt"
-    FROM "dj_contributors" c
-    INNER JOIN "users" u ON u."id" = c."user_id"
-    WHERE c."dj_id" IN (${Prisma.join(validIds)})
-    ORDER BY c."created_at" ASC
-  `);
-
-  const map = new Map<string, DJContributorInfo>();
-  for (const row of rows) {
-    const current = map.get(row.djId) ?? {
-      userIds: [],
-      usernames: [],
-      users: [],
-      uploadedByUsername: null,
-    };
-    if (!current.userIds.includes(row.userId)) {
-      current.userIds.push(row.userId);
-      current.users.push({
-        id: row.userId,
-        username: row.username,
-        displayName: row.displayName,
-        avatarUrl: row.avatarUrl,
-      });
-    }
-    const username = row.username?.trim() ?? '';
-    if (username && !current.usernames.some((item) => item.toLowerCase() === username.toLowerCase())) {
-      current.usernames.push(username);
-    }
-    if (!current.uploadedByUsername && username) {
-      current.uploadedByUsername = username;
-    }
-    map.set(row.djId, current);
-  }
-
-  return map;
-};
+const fetchDJContributorInfoMap = async (djIds: string[]) =>
+  fetchContributorInfoMap(prisma, 'dj', djIds);
 
 const fetchDJStatsInfoMap = async (djIds: string[]): Promise<Map<string, DJStatsInfo>> => {
   const validIds = Array.from(new Set(djIds.map((id) => id.trim()).filter(Boolean)));
@@ -3645,7 +3858,7 @@ const attachDJContributorInfo = async (row: any): Promise<any> => {
   ]);
   return {
     ...row,
-    __contributorInfo: contributorMap.get(String(row.id)) ?? emptyDJContributorInfo,
+    __contributorInfo: contributorMap.get(String(row.id)) ?? emptyContributorInfo,
     __statsInfo: statsMap.get(String(row.id)) ?? emptyDJStatsInfo,
   };
 };
@@ -3659,7 +3872,7 @@ const attachDJContributorInfoList = async (rows: any[]): Promise<any[]> => {
   ]);
   return rows.map((row) => ({
     ...row,
-    __contributorInfo: contributorMap.get(String(row.id)) ?? emptyDJContributorInfo,
+    __contributorInfo: contributorMap.get(String(row.id)) ?? emptyContributorInfo,
     __statsInfo: statsMap.get(String(row.id)) ?? emptyDJStatsInfo,
   }));
 };
@@ -3670,13 +3883,7 @@ const isDJContributorByRow = (row: any, userId: string | null | undefined): bool
 };
 
 const isDJContributor = async (djId: string, userId: string): Promise<boolean> => {
-  const rows = await prisma.$queryRaw<Array<{ matched: number }>>(Prisma.sql`
-    SELECT 1 AS "matched"
-    FROM "dj_contributors"
-    WHERE "dj_id" = ${djId} AND "user_id" = ${userId}
-    LIMIT 1
-  `);
-  return rows.length > 0;
+  return isContributorForEntity(prisma, 'dj', djId, userId);
 };
 
 const canUserEditDJ = async (
@@ -3686,6 +3893,28 @@ const canUserEditDJ = async (
 ): Promise<boolean> => {
   if (role === 'admin') return true;
   return isDJContributor(djId, userId);
+};
+
+const recordDirectDJContribution = async (
+  dj: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+  },
+  userId: string,
+  actionType: 'create' | 'edit',
+  source = 'direct_commit'
+): Promise<void> => {
+  await recordDJContribution(prisma, {
+    entityId: dj.id,
+    userId,
+    title: dj.name,
+    coverImageUrl: dj.avatarUrl ?? null,
+    role: actionType === 'create' ? 'creator' : 'editor',
+    actionType,
+    source,
+    approvedAt: new Date(),
+  });
 };
 
 const parseCommaSeparatedSet = (value: string | undefined, fallback: string[]): Set<string> => {
@@ -3729,14 +3958,6 @@ const canUserManageEvent = async (
   if (normalizedEmail && WEB_SUPER_ADMIN_EMAILS.has(normalizedEmail)) return true;
 
   return organizerId === userId;
-};
-
-const ensureDJContributor = async (djId: string, userId: string): Promise<void> => {
-  await prisma.$executeRaw(Prisma.sql`
-    INSERT INTO "dj_contributors" ("id", "dj_id", "user_id", "created_at", "updated_at")
-    VALUES (${crypto.randomUUID()}, ${djId}, ${userId}, NOW(), NOW())
-    ON CONFLICT ("dj_id", "user_id") DO NOTHING
-  `);
 };
 
 const fetchDJWithContributorsById = async (djId: string) =>
@@ -6734,6 +6955,7 @@ const mapDJ = (
     honors: Array.isArray(row.honors) ? row.honors : [],
     sourceDataSource: row.sourceDataSource ?? null,
     contributors,
+    contributorSummary: contributorInfo.summary,
     contributorUsernames,
     uploadedByUsername,
     isContributor,
@@ -6753,6 +6975,47 @@ const mapUserLite = (row: any) => {
     avatarUrl: row.avatarUrl || null,
   };
 };
+
+const normalizeContributionHistoryFilter = (value: unknown): ContributionHistoryFilter => {
+  if (value === 'event' || value === 'dj') return value;
+  return 'all';
+};
+
+const mapContributionHistoryItem = (item: {
+  id: string;
+  entityType: 'event' | 'dj';
+  entityId: string;
+  entityTitle: string | null;
+  entityCoverImageUrl: string | null;
+  role: 'creator' | 'editor';
+  actionType: 'create' | 'edit';
+  source: string;
+  submissionId: string | null;
+  occurredAt: Date;
+  approvedAt: Date | null;
+  versionAfter: number | null;
+  changeSummary: string | null;
+  metadata: Prisma.JsonValue | null;
+  createdAt: Date;
+}) => ({
+  id: item.id,
+  entity: {
+    id: item.entityId,
+    type: item.entityType,
+    title: item.entityTitle,
+    coverImageUrl: item.entityCoverImageUrl,
+  },
+  role: item.role,
+  actionType: item.actionType,
+  source: item.source,
+  submissionId: item.submissionId,
+  occurredAt: item.occurredAt,
+  approvedAt: item.approvedAt,
+  versionAfter: item.versionAfter,
+  changeSummary: item.changeSummary,
+  metadata: item.metadata,
+  createdAt: item.createdAt,
+});
 
 type WikiFestivalLinkPayload = {
   title: string;
@@ -7012,7 +7275,12 @@ const mapEventTimetableSlots = (performancesRaw: any): any[] => {
   });
 };
 
-const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
+const mapEvent = (
+  row: any,
+  complianceUser?: RegionalComplianceUser | null,
+  viewerId: string | null | undefined = null,
+  viewerRole: string | null | undefined = null
+) => {
   const eventTimeZone = normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE);
   const latitude = toNumber(row.latitude);
   const longitude = toNumber(row.longitude);
@@ -7036,6 +7304,11 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
   const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
   const mappedCanonicalArtists = mapEventLineupArtists(row.canonicalArtists);
   const mappedCanonicalSlots = mapEventTimetableSlots(row.performances);
+  const contributorInfo = contributorInfoFromRow(row);
+  const contributors = contributorInfo.users.map((user) => mapUserLite(user)).filter(Boolean);
+  const isContributor = !!viewerId && contributorInfo.userIds.includes(viewerId);
+  const isOrganizer = !!viewerId && row?.organizer?.id === viewerId;
+  const canEdit = viewerRole === 'admin' || isOrganizer;
 
   return {
     id: row.id,
@@ -7116,6 +7389,10 @@ const mapEvent = (row: any, complianceUser?: RegionalComplianceUser | null) => {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     organizer: mapUserLite(row.organizer),
+    contributors,
+    contributorSummary: contributorInfo.summary,
+    isContributor,
+    canEdit,
     wikiFestival: row.wikiFestival
       ? {
           id: row.wikiFestival.id,
@@ -9532,12 +9809,18 @@ router.delete('/events/:id/favorite', optionalAuth, async (req: Request, res: Re
 
 router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as BFFAuthRequest).user?.userId;
+    const authReq = req as BFFAuthRequest;
+    const userId = authReq.user?.userId;
+    const viewerRole = authReq.user?.role ?? null;
     const eventId = req.params.id as string;
-    const row = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: selectEventDetailForWeb,
-    });
+    const row = await attachContributionInfo(
+      prisma,
+      'event',
+      await prisma.event.findUnique({
+        where: { id: eventId },
+        select: selectEventDetailForWeb,
+      })
+    );
 
     if (!row) {
       res.status(404).json({ error: 'Event not found' });
@@ -9548,7 +9831,7 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
     const rowWithFavorite = attachEventFavoriteState([row], favoriteIdsByEventId)[0];
     const complianceUser = await resolveRegionalComplianceUser(userId);
 
-    ok(res, mapEvent(rowWithFavorite, complianceUser));
+    ok(res, mapEvent(rowWithFavorite, complianceUser, userId ?? null, viewerRole));
   } catch (error) {
     console.error('BFF web event detail error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -9557,12 +9840,18 @@ router.get('/events/:id', optionalAuth, async (req: Request, res: Response): Pro
 
 router.get('/events/:id/summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as BFFAuthRequest).user?.userId;
+    const authReq = req as BFFAuthRequest;
+    const userId = authReq.user?.userId;
+    const viewerRole = authReq.user?.role ?? null;
     const eventId = req.params.id as string;
-    const row = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: selectEventSummaryForIOS,
-    });
+    const row = await attachContributionInfo(
+      prisma,
+      'event',
+      await prisma.event.findUnique({
+        where: { id: eventId },
+        select: selectEventSummaryForIOS,
+      })
+    );
 
     if (!row) {
       res.status(404).json({ error: 'Event not found' });
@@ -9573,9 +9862,43 @@ router.get('/events/:id/summary', optionalAuth, async (req: Request, res: Respon
     const rowWithFavorite = attachEventFavoriteState([row], favoriteIdsByEventId)[0];
     const complianceUser = await resolveRegionalComplianceUser(userId);
 
-    ok(res, mapEvent(rowWithFavorite, complianceUser));
+    ok(res, mapEvent(rowWithFavorite, complianceUser, userId ?? null, viewerRole));
   } catch (error) {
     console.error('BFF iOS event summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/events/:id/contributors', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const eventId = req.params.id as string;
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const contributors = await fetchContributorEntriesForEntity(prisma, 'event', eventId);
+    ok(res, {
+      items: contributors.map((item) => ({
+        user: mapUserLite(item),
+        role: item.role,
+        firstContributedAt: item.firstContributedAt,
+        lastContributedAt: item.lastContributedAt,
+        contributionCount: item.contributionCount,
+        firstSubmissionId: item.firstSubmissionId,
+        lastSubmissionId: item.lastSubmissionId,
+        lastContributionSource: item.lastContributionSource,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+      summary: buildContributorSummary(contributors),
+    });
+  } catch (error) {
+    console.error('BFF event contributors error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -10222,6 +10545,8 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
       });
       await upsertEventReleasePublishTaskBestEffort({
         actorUserId: userId,
+        operationType: 'create',
+        sourceRoute: '/v1/events',
         event: applied.event,
       });
       ok(res, applied.event);
@@ -10336,6 +10661,8 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
       });
       await upsertEventReleasePublishTaskBestEffort({
         actorUserId: userId,
+        operationType: 'edit',
+        sourceRoute: `/v1/events/${eventId}`,
         event: applied.event,
       });
       ok(res, applied.event);
@@ -10413,6 +10740,10 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
       entityType: 'event',
       entityId: eventId,
       taskTypes: ['event_release'],
+    });
+    await notificationCenterService.deleteAdminContentHistoryByEntity({
+      entityType: 'event',
+      entityId: eventId,
     });
     await mediaAssetService.markDeletedByUrl(eventAssets?.coverImageUrl);
     await mediaAssetService.markDeletedByUrl(eventAssets?.lineupImageUrl);
@@ -12323,7 +12654,16 @@ router.post('/djs/spotify/import', optionalAuth, async (req: Request, res: Respo
       }
     }
 
-    await ensureDJContributor(persisted.id, userId);
+    await recordDirectDJContribution(
+      {
+        id: persisted.id,
+        name: persisted.name,
+        avatarUrl: persisted.avatarUrl ?? null,
+      },
+      userId,
+      action === 'created' ? 'create' : 'edit',
+      'manual_import'
+    );
     if (action === 'created') {
       await createDJEventBindingReviewJobBestEffort(persisted.id, {
         triggerSource: 'manual_import',
@@ -12646,7 +12986,16 @@ router.post('/djs/discogs/import', optionalAuth, async (req: Request, res: Respo
       }
     }
 
-    await ensureDJContributor(persisted.id, userId);
+    await recordDirectDJContribution(
+      {
+        id: persisted.id,
+        name: persisted.name,
+        avatarUrl: persisted.avatarUrl ?? null,
+      },
+      userId,
+      action === 'created' ? 'create' : 'edit',
+      'direct_commit'
+    );
     if (action === 'created') {
       await createDJEventBindingReviewJobBestEffort(persisted.id, {
         triggerSource: 'admin_create',
@@ -12688,28 +13037,34 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     const viewerRole = authReq.user?.role ?? null;
 
     const payload = (req.body ?? {}) as Record<string, unknown>;
-    const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+    const manualDjValidationError = validateManualDjPayload(payload);
+    if (manualDjValidationError) {
+      res.status(400).json({ error: manualDjValidationError });
+      return;
+    }
+
+    const name = normalizeSubmittedSingleLine(payload.name, INPUT_LIMITS.dj.name);
     if (!name) {
       res.status(400).json({ error: 'name is required' });
       return;
     }
 
-    const avatarUrl = typeof payload.avatarUrl === 'string' ? payload.avatarUrl.trim() : '';
-    const bannerUrl = typeof payload.bannerUrl === 'string' ? payload.bannerUrl.trim() : '';
-    const proofImageUrl = typeof payload.proofImageUrl === 'string' ? payload.proofImageUrl.trim() : '';
-    const spotifyIdForProof = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
-    const spotifyUrl = typeof payload.spotifyUrl === 'string' ? payload.spotifyUrl.trim() : '';
-    const appleMusicId = typeof payload.appleMusicId === 'string' ? payload.appleMusicId.trim() : '';
-    const instagramUrl = typeof payload.instagramUrl === 'string' ? payload.instagramUrl.trim() : '';
-    const facebookUrl = typeof payload.facebookUrl === 'string' ? payload.facebookUrl.trim() : '';
-    const soundcloudUrl = typeof payload.soundcloudUrl === 'string' ? payload.soundcloudUrl.trim() : '';
-    const twitterUrl = typeof payload.twitterUrl === 'string' ? payload.twitterUrl.trim() : '';
-    const youtubeUrl = typeof payload.youtubeUrl === 'string' ? payload.youtubeUrl.trim() : '';
-    const neteaseUrl = typeof payload.neteaseUrl === 'string' ? payload.neteaseUrl.trim() : '';
-    const qqMusicUrl = typeof payload.qqMusicUrl === 'string' ? payload.qqMusicUrl.trim() : '';
-    const soundcloudIdForProof = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
-    const website = parseOptionalStringFromPayload(payload, ['website', 'websiteUrl', 'officialWebsite']);
-    const otherPlatformUrl = parseOptionalStringFromPayload(payload, ['otherPlatformUrl', 'otherUrl']);
+    const avatarUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.avatarUrl), 'avatarUrl') || '';
+    const bannerUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.bannerUrl), 'bannerUrl') || '';
+    const proofImageUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.proofImageUrl), 'proofImageUrl') || '';
+    const spotifyIdForProof = normalizeSubmittedId(payload.spotifyId) || '';
+    const spotifyUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.spotifyUrl), 'spotifyUrl') || '';
+    const appleMusicId = normalizeSubmittedId(payload.appleMusicId) || '';
+    const instagramUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.instagramUrl), 'instagramUrl') || '';
+    const facebookUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.facebookUrl), 'facebookUrl') || '';
+    const soundcloudUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.soundcloudUrl), 'soundcloudUrl') || '';
+    const twitterUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.twitterUrl), 'twitterUrl') || '';
+    const youtubeUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.youtubeUrl), 'youtubeUrl') || '';
+    const neteaseUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.neteaseUrl), 'neteaseUrl') || '';
+    const qqMusicUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.qqMusicUrl), 'qqMusicUrl') || '';
+    const soundcloudIdForProof = normalizeSubmittedId(payloadValueByKeys(payload, ['soundcloudId', 'soundcloudid'])) || '';
+    const website = ensureOptionalHttpUrl(normalizeSubmittedUrl(payloadValueByKeys(payload, ['website', 'websiteUrl', 'officialWebsite'])), 'website') || '';
+    const otherPlatformUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payloadValueByKeys(payload, ['otherPlatformUrl', 'otherUrl'])), 'otherPlatformUrl') || '';
     const hasProofLink = [
       spotifyIdForProof,
       spotifyUrl,
@@ -12746,7 +13101,29 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           avatarUrl,
           bannerUrl: bannerUrl || null,
           proofImageUrl: proofImageUrl || null,
+          spotifyId: spotifyIdForProof || null,
+          spotifyUrl: spotifyUrl || null,
+          appleMusicId: appleMusicId || null,
+          instagramUrl: instagramUrl || null,
+          facebookUrl: facebookUrl || null,
+          soundcloudUrl: soundcloudUrl || null,
+          soundcloudId: soundcloudIdForProof || null,
+          twitterUrl: twitterUrl || null,
+          youtubeUrl: youtubeUrl || null,
+          neteaseUrl: neteaseUrl || null,
+          qqMusicUrl: qqMusicUrl || null,
+          website: website || null,
           otherPlatformUrl: otherPlatformUrl || null,
+          bio: normalizeSubmittedMultiline(payload.bio, INPUT_LIMITS.dj.bio),
+          country: normalizeOptionalSingleLine(payload.country, INPUT_LIMITS.dj.country),
+          aliases: normalizeSubmittedStringArray(payload.aliases, {
+            itemMax: INPUT_LIMITS.dj.alias,
+            maxItems: INPUT_LIMITS.dj.aliasesMaxItems,
+          }),
+          genres: normalizeSubmittedStringArray(payload.genres, {
+            itemMax: INPUT_LIMITS.dj.genre,
+            maxItems: INPUT_LIMITS.dj.genresMaxItems,
+          }),
           importSource: 'manual',
         },
       });
@@ -12769,18 +13146,24 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       return;
     }
 
-    const spotifyId = typeof payload.spotifyId === 'string' ? payload.spotifyId.trim() : '';
-    const aliases = Array.isArray(payload.aliases)
-      ? payload.aliases.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
-      : [];
-    const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
-    const country = typeof payload.country === 'string' ? payload.country.trim() : '';
+    const spotifyId = normalizeSubmittedId(payload.spotifyId) || '';
+    const aliases = normalizeSubmittedStringArray(payload.aliases, {
+      itemMax: INPUT_LIMITS.dj.alias,
+      maxItems: INPUT_LIMITS.dj.aliasesMaxItems,
+    });
+    const bio = normalizeSubmittedMultiline(payload.bio, INPUT_LIMITS.dj.bio) || '';
+    const country = normalizeOptionalSingleLine(payload.country, INPUT_LIMITS.dj.country) || '';
     const hasGenresInput = Object.prototype.hasOwnProperty.call(payload, 'genres');
     if (hasGenresInput && payload.genres !== null && !Array.isArray(payload.genres) && typeof payload.genres !== 'string') {
       res.status(400).json({ error: 'genres must be an array, string, or null' });
       return;
     }
-    const genres = hasGenresInput ? normalizeGenres(payload.genres) : [];
+    const genres = hasGenresInput
+      ? normalizeSubmittedStringArray(payload.genres, {
+        itemMax: INPUT_LIMITS.dj.genre,
+        maxItems: INPUT_LIMITS.dj.genresMaxItems,
+      })
+      : [];
     const hasSpotifyFollowersInput = Object.prototype.hasOwnProperty.call(payload, 'spotifyFollowers');
     let spotifyFollowers: number | null = null;
     if (hasSpotifyFollowersInput) {
@@ -12791,7 +13174,7 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
         return;
       }
     }
-    const soundcloudId = parseOptionalStringFromPayload(payload, ['soundcloudId', 'soundcloudid']);
+    const soundcloudId = normalizeSubmittedId(payloadValueByKeys(payload, ['soundcloudId', 'soundcloudid'])) || '';
     const hasTrackCountInput = payloadHasAnyKey(payload, ['trackCount', 'track_count']);
     const hasPlaylistCountInput = payloadHasAnyKey(payload, ['playlistCount', 'playlist_count']);
     const hasSoundCloudFollowersInput = payloadHasAnyKey(payload, [
@@ -12943,7 +13326,16 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       });
     }
 
-    await ensureDJContributor(persisted.id, userId);
+    await recordDirectDJContribution(
+      {
+        id: persisted.id,
+        name: persisted.name,
+        avatarUrl: persisted.avatarUrl ?? null,
+      },
+      userId,
+      action === 'created' ? 'create' : 'edit',
+      'direct_commit'
+    );
     if (action === 'created') {
       await createDJEventBindingReviewJobBestEffort(persisted.id, {
         triggerSource: 'admin_create',
@@ -12955,6 +13347,8 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
 
     await upsertDJReleasePublishTaskBestEffort({
       actorUserId: userId,
+      operationType: action === 'created' ? 'create' : 'edit',
+      sourceRoute: '/v1/djs/manual/import',
       dj: {
         id: mapped.id,
         name: mapped.name,
@@ -13198,7 +13592,7 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
 
     const existing = await prisma.dJ.findUnique({
       where: { id: djId },
-      select: { id: true, avatarUrl: true, bannerUrl: true },
+      select: { id: true, name: true, avatarUrl: true, bannerUrl: true },
     });
     if (!existing) {
       await fs.promises.unlink(file.path).catch(() => undefined);
@@ -13240,7 +13634,16 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
       await deleteSingleDJMediaOssObjectIfOwned(previousUrl, djId);
     }
 
-    await ensureDJContributor(djId, userId);
+    await recordDirectDJContribution(
+      {
+        id: djId,
+        name: existing.name,
+        avatarUrl: usage === 'avatar' ? nextMediaUrl : existing.avatarUrl ?? null,
+      },
+      userId,
+      'edit',
+      'direct_media_upload'
+    );
 
     ok(res, uploaded);
   } catch (error) {
@@ -13722,6 +14125,10 @@ router.delete('/djs/:id', optionalAuth, async (req: Request, res: Response): Pro
       entityId: djId,
       taskTypes: ['dj_release'],
     });
+    await notificationCenterService.deleteAdminContentHistoryByEntity({
+      entityType: 'dj',
+      entityId: djId,
+    });
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleDJMediaOssObjectIfOwned(url, djId);
@@ -13989,6 +14396,40 @@ router.get('/djs/:id', optionalAuth, async (req: Request, res: Response): Promis
     ok(res, mapDJ({ ...row, viewerWatchedCount }, isFollowing, viewerId, viewerRole));
   } catch (error) {
     console.error('BFF web dj detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/djs/:id/contributors', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const djId = req.params.id as string;
+    const dj = await prisma.dJ.findUnique({
+      where: { id: djId },
+      select: { id: true },
+    });
+    if (!dj) {
+      res.status(404).json({ error: 'DJ not found' });
+      return;
+    }
+
+    const contributors = await fetchContributorEntriesForEntity(prisma, 'dj', djId);
+    ok(res, {
+      items: contributors.map((item) => ({
+        user: mapUserLite(item),
+        role: item.role,
+        firstContributedAt: item.firstContributedAt,
+        lastContributedAt: item.lastContributedAt,
+        contributionCount: item.contributionCount,
+        firstSubmissionId: item.firstSubmissionId,
+        lastSubmissionId: item.lastSubmissionId,
+        lastContributionSource: item.lastContributionSource,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+      summary: buildContributorSummary(contributors),
+    });
+  } catch (error) {
+    console.error('BFF dj contributors error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -16097,6 +16538,8 @@ const uniqueGenreSlug = async (name: string, requestedSlug?: string, excludeId?:
 
 const upsertEventReleasePublishTaskBestEffort = async (input: {
   actorUserId: string;
+  operationType: 'create' | 'edit';
+  sourceRoute?: string | null;
   event: {
     id: string;
     name: string;
@@ -16126,7 +16569,7 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
       )
     );
 
-    await notificationCenterService.upsertAdminPublishTask({
+    const task = await notificationCenterService.upsertAdminPublishTask({
       taskType: 'event_release',
       entityType: 'event',
       entityId: input.event.id,
@@ -16150,6 +16593,35 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
         djIds,
       },
     });
+    await notificationCenterService.createAdminContentHistory({
+      entityType: 'event',
+      entityId: input.event.id,
+      taskType: 'event_release',
+      operationType: input.operationType,
+      resultStatus: 'success',
+      pushStatus: 'pending',
+      title: input.event.name,
+      summary: (typeof input.event.description === 'string' && input.event.description.trim()) || input.event.name,
+      payload: {
+        eventId: input.event.id,
+        title: input.event.name,
+        summary:
+          (typeof input.event.description === 'string' && input.event.description.trim()) || input.event.name,
+        coverImageURL: input.event.coverImageUrl ?? null,
+        timeZone: input.event.timeZone ?? null,
+        startDate:
+          input.event.startDate instanceof Date
+            ? input.event.startDate.toISOString()
+            : typeof input.event.startDate === 'string'
+              ? input.event.startDate
+              : null,
+        wikiFestivalId: input.event.wikiFestivalId ?? null,
+        djIds,
+      },
+      sourceRoute: input.sourceRoute,
+      createdBy: input.actorUserId,
+      linkedTaskId: task.id,
+    });
   } catch (error) {
     console.warn('BFF web event publish task upsert failed:', {
       eventId: input.event.id,
@@ -16160,6 +16632,8 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
 
 const upsertDJReleasePublishTaskBestEffort = async (input: {
   actorUserId: string;
+  operationType: 'create' | 'edit';
+  sourceRoute?: string | null;
   dj: {
     id: string;
     name: string;
@@ -16168,7 +16642,7 @@ const upsertDJReleasePublishTaskBestEffort = async (input: {
   };
 }): Promise<void> => {
   try {
-    await notificationCenterService.upsertAdminPublishTask({
+    const task = await notificationCenterService.upsertAdminPublishTask({
       taskType: 'dj_release',
       entityType: 'dj',
       entityId: input.dj.id,
@@ -16182,6 +16656,25 @@ const upsertDJReleasePublishTaskBestEffort = async (input: {
         coverImageURL: input.dj.avatarUrl ?? null,
       },
     });
+    await notificationCenterService.createAdminContentHistory({
+      entityType: 'dj',
+      entityId: input.dj.id,
+      taskType: 'dj_release',
+      operationType: input.operationType,
+      resultStatus: 'success',
+      pushStatus: 'pending',
+      title: input.dj.name,
+      summary: (typeof input.dj.bio === 'string' && input.dj.bio.trim()) || input.dj.name,
+      payload: {
+        djId: input.dj.id,
+        title: input.dj.name,
+        summary: (typeof input.dj.bio === 'string' && input.dj.bio.trim()) || input.dj.name,
+        coverImageURL: input.dj.avatarUrl ?? null,
+      },
+      sourceRoute: input.sourceRoute,
+      createdBy: input.actorUserId,
+      linkedTaskId: task.id,
+    });
   } catch (error) {
     console.warn('BFF web DJ publish task upsert failed:', {
       djId: input.dj.id,
@@ -16192,6 +16685,8 @@ const upsertDJReleasePublishTaskBestEffort = async (input: {
 
 const upsertBrandReleasePublishTaskBestEffort = async (input: {
   actorUserId: string;
+  operationType: 'create' | 'edit';
+  sourceRoute?: string | null;
   brand: {
     id: string;
     name: string;
@@ -16201,7 +16696,7 @@ const upsertBrandReleasePublishTaskBestEffort = async (input: {
   entityType: 'festival' | 'label';
 }): Promise<void> => {
   try {
-    await notificationCenterService.upsertAdminPublishTask({
+    const task = await notificationCenterService.upsertAdminPublishTask({
       taskType: 'brand_release',
       entityType: input.entityType,
       entityId: input.brand.id,
@@ -16215,6 +16710,26 @@ const upsertBrandReleasePublishTaskBestEffort = async (input: {
         summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
         coverImageURL: input.brand.coverImageURL ?? null,
       },
+    });
+    await notificationCenterService.createAdminContentHistory({
+      entityType: input.entityType,
+      entityId: input.brand.id,
+      taskType: 'brand_release',
+      operationType: input.operationType,
+      resultStatus: 'success',
+      pushStatus: 'pending',
+      title: input.brand.name,
+      summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
+      payload: {
+        brandId: input.brand.id,
+        brandEntityType: input.entityType,
+        title: input.brand.name,
+        summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
+        coverImageURL: input.brand.coverImageURL ?? null,
+      },
+      sourceRoute: input.sourceRoute,
+      createdBy: input.actorUserId,
+      linkedTaskId: task.id,
     });
   } catch (error) {
     console.warn('BFF web brand publish task upsert failed:', {
@@ -17589,6 +18104,10 @@ router.delete('/learn/festivals/:id', optionalAuth, async (req: Request, res: Re
       entityId: festivalId,
       taskTypes: ['brand_release'],
     });
+    await notificationCenterService.deleteAdminContentHistoryByEntity({
+      entityType: 'festival',
+      entityId: festivalId,
+    });
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleWikiBrandOssObjectIfOwned(url, festivalId);
@@ -17805,43 +18324,104 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
     const viewerRole = authReq.user?.role ?? null;
 
     const body = req.body as Record<string, unknown>;
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const labelValidationError = validateLabelPayload(body);
+    if (labelValidationError) {
+      res.status(400).json({ error: labelValidationError });
+      return;
+    }
+
+    const name = normalizeSubmittedSingleLine(body.name, INPUT_LIMITS.label.name);
     if (!name) {
       res.status(400).json({ error: 'Name is required' });
       return;
     }
 
     if (!canBypassContentReview(viewerRole)) {
+      const normalizedSubmissionPayload = {
+        ...body,
+        name,
+        slug: normalizeOptionalSingleLine(body.slug, INPUT_LIMITS.label.slug),
+        profileUrl: normalizeOptionalSingleLine(body.profileUrl, INPUT_LIMITS.common.url),
+        profileSlug: normalizeOptionalSingleLine(body.profileSlug, INPUT_LIMITS.label.profileSlug),
+        logoUrl: normalizeSubmittedUrl(body.logoUrl),
+        avatarUrl: normalizeSubmittedUrl(body.avatarUrl),
+        backgroundUrl: normalizeSubmittedUrl(body.backgroundUrl),
+        nation: normalizeOptionalSingleLine(body.nation ?? body.country, INPUT_LIMITS.label.nation),
+        genresPreview: normalizeOptionalSingleLine(body.genresPreview, INPUT_LIMITS.label.genresPreview),
+        latestReleaseListing: normalizeOptionalSingleLine(body.latestReleaseListing, INPUT_LIMITS.label.latestReleaseListing),
+        locationPeriod: normalizeOptionalSingleLine(body.locationPeriod, INPUT_LIMITS.label.locationPeriod),
+        introductionPreview: normalizeSubmittedMultiline(body.introductionPreview, INPUT_LIMITS.label.introductionPreview),
+        introduction: normalizeSubmittedMultiline(body.introduction ?? body.description, INPUT_LIMITS.label.introduction),
+        genres: normalizeSubmittedStringArray(body.genres, {
+          itemMax: INPUT_LIMITS.label.genre,
+          maxItems: 20,
+        }),
+        founderName: normalizeOptionalSingleLine(body.founderName, INPUT_LIMITS.label.founderName),
+        foundedAt: normalizeOptionalSingleLine(body.foundedAt, INPUT_LIMITS.label.foundedAt),
+        founderDjId: normalizeSubmittedId(body.founderDjId),
+        demoSubmissionUrl: normalizeSubmittedUrl(body.demoSubmissionUrl),
+        demoSubmissionDisplay: normalizeOptionalSingleLine(body.demoSubmissionDisplay, INPUT_LIMITS.label.demoSubmissionDisplay),
+        facebookUrl: normalizeSubmittedUrl(body.facebookUrl),
+        soundcloudUrl: normalizeSubmittedUrl(body.soundcloudUrl),
+        musicPurchaseUrl: normalizeSubmittedUrl(body.musicPurchaseUrl),
+        officialWebsiteUrl: normalizeSubmittedUrl(body.officialWebsiteUrl ?? body.officialWebsite),
+      };
       const submission = await createPendingContentSubmission({
         submitterId: userId,
         entityType: 'label',
         title: name,
-        payload: body,
+        payload: normalizedSubmissionPayload,
       });
       acceptedSubmission(res, submission, '厂牌信息已提交审核，管理员审核通过后才会入库');
       return;
     }
 
-    const slug = await uniqueLabelSlug(name, typeof body.slug === 'string' ? body.slug.trim() : undefined);
+    const requestedSlug = normalizeOptionalSingleLine(body.slug, INPUT_LIMITS.label.slug) || undefined;
+    const slug = await uniqueLabelSlug(name, requestedSlug);
     const created = await prisma.label.create({
       data: {
         name,
         slug,
-        profileUrl: typeof body.profileUrl === 'string' && body.profileUrl.trim() ? body.profileUrl.trim() : `community://${slug}`,
-        profileSlug: typeof body.profileSlug === 'string' && body.profileSlug.trim() ? body.profileSlug.trim() : slug,
-        logoUrl: typeof body.logoUrl === 'string' && body.logoUrl.trim() ? body.logoUrl.trim() : null,
-        avatarUrl: typeof body.avatarUrl === 'string' && body.avatarUrl.trim() ? body.avatarUrl.trim() : null,
-        backgroundUrl: typeof body.backgroundUrl === 'string' && body.backgroundUrl.trim() ? body.backgroundUrl.trim() : null,
-        nation: typeof body.nation === 'string' && body.nation.trim() ? body.nation.trim() : (typeof body.country === 'string' && body.country.trim() ? body.country.trim() : null),
-        genresPreview: typeof body.genresPreview === 'string' && body.genresPreview.trim() ? body.genresPreview.trim() : null,
-        introductionPreview: typeof body.introductionPreview === 'string' && body.introductionPreview.trim() ? body.introductionPreview.trim() : null,
-        introduction: typeof body.introduction === 'string' && body.introduction.trim() ? body.introduction.trim() : (typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null),
-        genres: Array.isArray(body.genres) ? body.genres.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean) : [],
+        profileUrl: normalizeOptionalSingleLine(body.profileUrl, INPUT_LIMITS.common.url) || `community://${slug}`,
+        profileSlug: normalizeOptionalSingleLine(body.profileSlug, INPUT_LIMITS.label.profileSlug) || slug,
+        logoUrl: normalizeSubmittedUrl(body.logoUrl),
+        avatarUrl: normalizeSubmittedUrl(body.avatarUrl),
+        backgroundUrl: normalizeSubmittedUrl(body.backgroundUrl),
+        nation: normalizeOptionalSingleLine(body.nation ?? body.country, INPUT_LIMITS.label.nation),
+        genresPreview: normalizeOptionalSingleLine(body.genresPreview, INPUT_LIMITS.label.genresPreview),
+        latestReleaseListing: normalizeOptionalSingleLine(body.latestReleaseListing, INPUT_LIMITS.label.latestReleaseListing),
+        locationPeriod: normalizeOptionalSingleLine(body.locationPeriod, INPUT_LIMITS.label.locationPeriod),
+        introductionPreview: normalizeSubmittedMultiline(body.introductionPreview, INPUT_LIMITS.label.introductionPreview),
+        introduction: normalizeSubmittedMultiline(body.introduction ?? body.description, INPUT_LIMITS.label.introduction),
+        genres: normalizeSubmittedStringArray(body.genres, {
+          itemMax: INPUT_LIMITS.label.genre,
+          maxItems: 20,
+        }),
+        generalContactEmail: normalizeOptionalSingleLine(body.generalContactEmail, 254),
+        demoSubmissionUrl: normalizeSubmittedUrl(body.demoSubmissionUrl),
+        demoSubmissionDisplay: normalizeOptionalSingleLine(body.demoSubmissionDisplay, INPUT_LIMITS.label.demoSubmissionDisplay),
+        facebookUrl: normalizeSubmittedUrl(body.facebookUrl),
+        soundcloudUrl: normalizeSubmittedUrl(body.soundcloudUrl),
+        musicPurchaseUrl: normalizeSubmittedUrl(body.musicPurchaseUrl),
+        officialWebsiteUrl: normalizeSubmittedUrl(body.officialWebsiteUrl ?? body.officialWebsite),
+        founderName: normalizeOptionalSingleLine(body.founderName, INPUT_LIMITS.label.founderName),
+        foundedAt: normalizeOptionalSingleLine(body.foundedAt, INPUT_LIMITS.label.foundedAt),
+        founderDj: normalizeSubmittedId(body.founderDjId)
+          ? { connect: { id: normalizeSubmittedId(body.founderDjId)! } }
+          : undefined,
+        soundcloudFollowers: Object.prototype.hasOwnProperty.call(body, 'soundcloudFollowers')
+          ? parseOptionalNonNegativeInt(body.soundcloudFollowers, 'soundcloudFollowers')
+          : null,
+        likes: Object.prototype.hasOwnProperty.call(body, 'likes')
+          ? parseOptionalNonNegativeInt(body.likes, 'likes')
+          : null,
       },
     });
 
     await upsertBrandReleasePublishTaskBestEffort({
       actorUserId: userId,
+      operationType: 'create',
+      sourceRoute: '/v1/learn/labels',
       entityType: 'label',
       brand: {
         id: created.id,
@@ -17886,20 +18466,45 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     const hasField = (key: string): boolean => Object.prototype.hasOwnProperty.call(body, key);
-    const trimOrNull = (value: unknown): string | null => {
-      if (value === null) return null;
-      if (typeof value !== 'string') return null;
-      const trimmed = value.trim();
-      return trimmed ? trimmed : null;
+    const mergedPayloadForValidation: Record<string, unknown> = {
+      name: hasField('name') ? body.name : existing.name,
+      slug: hasField('slug') ? body.slug : existing.slug,
+      profileUrl: hasField('profileUrl') ? body.profileUrl : existing.profileUrl,
+      profileSlug: hasField('profileSlug') ? body.profileSlug : existing.profileSlug,
+      nation: hasField('nation') ? body.nation : (hasField('country') ? body.country : existing.nation),
+      genresPreview: hasField('genresPreview') ? body.genresPreview : existing.genresPreview,
+      latestReleaseListing: hasField('latestReleaseListing') ? body.latestReleaseListing : existing.latestReleaseListing,
+      locationPeriod: hasField('locationPeriod') ? body.locationPeriod : existing.locationPeriod,
+      introductionPreview: hasField('introductionPreview') ? body.introductionPreview : existing.introductionPreview,
+      introduction: hasField('introduction') ? body.introduction : (hasField('description') ? body.description : existing.introduction),
+      genres: hasField('genres') ? body.genres : existing.genres,
+      founderName: hasField('founderName') ? body.founderName : existing.founderName,
+      foundedAt: hasField('foundedAt') ? body.foundedAt : existing.foundedAt,
+      demoSubmissionDisplay: hasField('demoSubmissionDisplay') ? body.demoSubmissionDisplay : existing.demoSubmissionDisplay,
+      demoSubmissionUrl: hasField('demoSubmissionUrl') ? body.demoSubmissionUrl : existing.demoSubmissionUrl,
+      facebookUrl: hasField('facebookUrl') ? body.facebookUrl : existing.facebookUrl,
+      soundcloudUrl: hasField('soundcloudUrl') ? body.soundcloudUrl : existing.soundcloudUrl,
+      musicPurchaseUrl: hasField('musicPurchaseUrl') ? body.musicPurchaseUrl : existing.musicPurchaseUrl,
+      officialWebsiteUrl: hasField('officialWebsiteUrl') ? body.officialWebsiteUrl : (hasField('officialWebsite') ? body.officialWebsite : existing.officialWebsiteUrl),
+      logoUrl: hasField('logoUrl') ? body.logoUrl : existing.logoUrl,
+      avatarUrl: hasField('avatarUrl') ? body.avatarUrl : existing.avatarUrl,
+      backgroundUrl: hasField('backgroundUrl') ? body.backgroundUrl : existing.backgroundUrl,
     };
+    const labelValidationError = validateLabelPayload(mergedPayloadForValidation);
+    if (labelValidationError) {
+      res.status(400).json({ error: labelValidationError });
+      return;
+    }
 
-    const nextName = hasField('name') ? trimOrNull(body.name) || '' : existing.name;
+    const nextName = hasField('name')
+      ? normalizeSubmittedSingleLine(body.name, INPUT_LIMITS.label.name)
+      : existing.name;
     if (!nextName) {
       res.status(400).json({ error: 'Name is required' });
       return;
     }
 
-    const requestedSlug = hasField('slug') ? trimOrNull(body.slug) : null;
+    const requestedSlug = hasField('slug') ? normalizeOptionalSingleLine(body.slug, INPUT_LIMITS.label.slug) : null;
     let nextSlug = existing.slug;
     const shouldRegenerateSlug = hasField('slug')
       ? Boolean(requestedSlug && requestedSlug !== existing.slug)
@@ -17923,34 +18528,34 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
     }
 
     if (hasField('profileUrl')) {
-      updateData.profileUrl = trimOrNull(body.profileUrl) || `community://${nextSlug}`;
+      updateData.profileUrl = normalizeOptionalSingleLine(body.profileUrl, INPUT_LIMITS.common.url) || `community://${nextSlug}`;
     }
     if (hasField('profileSlug')) {
-      updateData.profileSlug = trimOrNull(body.profileSlug);
+      updateData.profileSlug = normalizeOptionalSingleLine(body.profileSlug, INPUT_LIMITS.label.profileSlug);
     }
-    if (hasField('logoUrl')) updateData.logoUrl = trimOrNull(body.logoUrl);
-    if (hasField('avatarUrl')) updateData.avatarUrl = trimOrNull(body.avatarUrl);
-    if (hasField('backgroundUrl')) updateData.backgroundUrl = trimOrNull(body.backgroundUrl);
-    if (hasField('nation')) updateData.nation = trimOrNull(body.nation);
-    if (hasField('country') && !hasField('nation')) updateData.nation = trimOrNull(body.country);
-    if (hasField('genresPreview')) updateData.genresPreview = trimOrNull(body.genresPreview);
-    if (hasField('latestReleaseListing')) updateData.latestReleaseListing = trimOrNull(body.latestReleaseListing);
-    if (hasField('locationPeriod')) updateData.locationPeriod = trimOrNull(body.locationPeriod);
-    if (hasField('introductionPreview')) updateData.introductionPreview = trimOrNull(body.introductionPreview);
-    if (hasField('introduction')) updateData.introduction = trimOrNull(body.introduction);
-    if (hasField('description') && !hasField('introduction')) updateData.introduction = trimOrNull(body.description);
-    if (hasField('generalContactEmail')) updateData.generalContactEmail = trimOrNull(body.generalContactEmail);
-    if (hasField('demoSubmissionUrl')) updateData.demoSubmissionUrl = trimOrNull(body.demoSubmissionUrl);
-    if (hasField('demoSubmissionDisplay')) updateData.demoSubmissionDisplay = trimOrNull(body.demoSubmissionDisplay);
-    if (hasField('facebookUrl')) updateData.facebookUrl = trimOrNull(body.facebookUrl);
-    if (hasField('soundcloudUrl')) updateData.soundcloudUrl = trimOrNull(body.soundcloudUrl);
-    if (hasField('musicPurchaseUrl')) updateData.musicPurchaseUrl = trimOrNull(body.musicPurchaseUrl);
-    if (hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = trimOrNull(body.officialWebsiteUrl);
-    if (hasField('officialWebsite') && !hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = trimOrNull(body.officialWebsite);
-    if (hasField('founderName')) updateData.founderName = trimOrNull(body.founderName);
-    if (hasField('foundedAt')) updateData.foundedAt = trimOrNull(body.foundedAt);
+    if (hasField('logoUrl')) updateData.logoUrl = normalizeSubmittedUrl(body.logoUrl);
+    if (hasField('avatarUrl')) updateData.avatarUrl = normalizeSubmittedUrl(body.avatarUrl);
+    if (hasField('backgroundUrl')) updateData.backgroundUrl = normalizeSubmittedUrl(body.backgroundUrl);
+    if (hasField('nation')) updateData.nation = normalizeOptionalSingleLine(body.nation, INPUT_LIMITS.label.nation);
+    if (hasField('country') && !hasField('nation')) updateData.nation = normalizeOptionalSingleLine(body.country, INPUT_LIMITS.label.nation);
+    if (hasField('genresPreview')) updateData.genresPreview = normalizeOptionalSingleLine(body.genresPreview, INPUT_LIMITS.label.genresPreview);
+    if (hasField('latestReleaseListing')) updateData.latestReleaseListing = normalizeOptionalSingleLine(body.latestReleaseListing, INPUT_LIMITS.label.latestReleaseListing);
+    if (hasField('locationPeriod')) updateData.locationPeriod = normalizeOptionalSingleLine(body.locationPeriod, INPUT_LIMITS.label.locationPeriod);
+    if (hasField('introductionPreview')) updateData.introductionPreview = normalizeSubmittedMultiline(body.introductionPreview, INPUT_LIMITS.label.introductionPreview);
+    if (hasField('introduction')) updateData.introduction = normalizeSubmittedMultiline(body.introduction, INPUT_LIMITS.label.introduction);
+    if (hasField('description') && !hasField('introduction')) updateData.introduction = normalizeSubmittedMultiline(body.description, INPUT_LIMITS.label.introduction);
+    if (hasField('generalContactEmail')) updateData.generalContactEmail = normalizeOptionalSingleLine(body.generalContactEmail, 254);
+    if (hasField('demoSubmissionUrl')) updateData.demoSubmissionUrl = normalizeSubmittedUrl(body.demoSubmissionUrl);
+    if (hasField('demoSubmissionDisplay')) updateData.demoSubmissionDisplay = normalizeOptionalSingleLine(body.demoSubmissionDisplay, INPUT_LIMITS.label.demoSubmissionDisplay);
+    if (hasField('facebookUrl')) updateData.facebookUrl = normalizeSubmittedUrl(body.facebookUrl);
+    if (hasField('soundcloudUrl')) updateData.soundcloudUrl = normalizeSubmittedUrl(body.soundcloudUrl);
+    if (hasField('musicPurchaseUrl')) updateData.musicPurchaseUrl = normalizeSubmittedUrl(body.musicPurchaseUrl);
+    if (hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = normalizeSubmittedUrl(body.officialWebsiteUrl);
+    if (hasField('officialWebsite') && !hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = normalizeSubmittedUrl(body.officialWebsite);
+    if (hasField('founderName')) updateData.founderName = normalizeOptionalSingleLine(body.founderName, INPUT_LIMITS.label.founderName);
+    if (hasField('foundedAt')) updateData.foundedAt = normalizeOptionalSingleLine(body.foundedAt, INPUT_LIMITS.label.foundedAt);
     if (hasField('founderDjId')) {
-      const founderDjId = trimOrNull(body.founderDjId);
+      const founderDjId = normalizeSubmittedId(body.founderDjId);
       updateData.founderDj = founderDjId
         ? { connect: { id: founderDjId } }
         : { disconnect: true };
@@ -17964,9 +18569,10 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
       updateData.likes = value === null || value === '' ? null : Number(value);
     }
     if (hasField('genres')) {
-      updateData.genres = Array.isArray(body.genres)
-        ? body.genres.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
-        : [];
+      updateData.genres = normalizeSubmittedStringArray(body.genres, {
+        itemMax: INPUT_LIMITS.label.genre,
+        maxItems: 20,
+      });
     }
 
     const updated = await prisma.label.update({
@@ -17980,6 +18586,8 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
 
     await upsertBrandReleasePublishTaskBestEffort({
       actorUserId: userId,
+      operationType: 'edit',
+      sourceRoute: `/v1/learn/labels/${labelId}`,
       entityType: 'label',
       brand: {
         id: updated.id,
@@ -18042,6 +18650,10 @@ router.delete('/learn/labels/:id', optionalAuth, async (req: Request, res: Respo
       entityType: 'label',
       entityId: labelId,
       taskTypes: ['brand_release'],
+    });
+    await notificationCenterService.deleteAdminContentHistoryByEntity({
+      entityType: 'label',
+      entityId: labelId,
     });
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
@@ -20015,6 +20627,60 @@ router.delete('/events/poster/import-image/jobs/:jobId', optionalAuth, async (re
     });
   } catch (error) {
     console.error('BFF web cancel poster import job error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/me/contribution-center/summary', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const summary = await fetchContributionCenterSummary(prisma, userId);
+    ok(res, {
+      totalContributionCount: summary.totalContributionCount,
+      contributedEventCount: summary.contributedEventCount,
+      contributedDJCount: summary.contributedDJCount,
+      lastContributionAt: summary.lastContributionAt,
+      recentItems: summary.recentItems.map(mapContributionHistoryItem),
+    });
+  } catch (error) {
+    console.error('BFF contribution center summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/me/contributions', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const entityType = normalizeContributionHistoryFilter(req.query.entityType);
+    const limit = normalizeLimit(req.query.limit, 20, 50);
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor.trim() || null : null;
+    const page = await fetchContributionHistoryPage(prisma, userId, {
+      entityType,
+      limit,
+      cursor,
+    });
+
+    ok(res, {
+      items: page.items.map(mapContributionHistoryItem),
+      filter: {
+        entityType: page.entityType,
+      },
+      pageInfo: {
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidContributionHistoryCursorError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('BFF contributions history error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

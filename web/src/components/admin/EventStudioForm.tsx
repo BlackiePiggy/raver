@@ -11,6 +11,8 @@ import EventLocationPickerModal, {
   type EventLocationProvider,
 } from '@/components/admin/EventLocationPickerModal';
 import EventStudioAIImportDock from '@/components/admin/EventStudioAIImportDock';
+import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import { formatClockTimeInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 import {
   createEmptyTicketTierDraft,
@@ -361,6 +363,7 @@ function LocalizedTextField({
   placeholder,
   error,
   hint,
+  maxLength,
   onPrimaryChange,
   onOpenOverlay,
 }: {
@@ -370,13 +373,16 @@ function LocalizedTextField({
   placeholder: string;
   error?: string;
   hint?: string;
+  maxLength?: number;
   onPrimaryChange: (value: string) => void;
   onOpenOverlay: () => void;
 }) {
   const filledLocales = localizedTextFilledLocaleLabels(value);
   const extraLocales = filledLocales.filter((item) => item !== '中文');
+  const primaryCount = countText(value.zh, kind === 'textarea');
   const combinedHint = [
     hint,
+    typeof maxLength === 'number' ? `${primaryCount}/${maxLength}` : null,
     extraLocales.length ? `已填写：${extraLocales.join(' / ')}` : '右侧图标可展开编辑英文、日文等多语言内容。',
   ]
     .filter(Boolean)
@@ -391,6 +397,7 @@ function LocalizedTextField({
             onChange={(event) => onPrimaryChange(event.target.value)}
             className={textAreaClassName}
             placeholder={placeholder}
+            maxLength={maxLength}
           />
         ) : (
           <input
@@ -398,6 +405,7 @@ function LocalizedTextField({
             onChange={(event) => onPrimaryChange(event.target.value)}
             className={textInputClassName}
             placeholder={placeholder}
+            maxLength={maxLength}
           />
         )}
         <button
@@ -414,6 +422,14 @@ function LocalizedTextField({
     </Field>
   );
 }
+
+const urlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
+const localizedFieldMaxLength = (key: LocalizedFieldKey): number => {
+  if (key === 'name') return INPUT_LIMITS.event.name;
+  if (key === 'city') return INPUT_LIMITS.event.city;
+  if (key === 'country') return INPUT_LIMITS.event.country;
+  return INPUT_LIMITS.event.detailAddress;
+};
 
 function StudioTopbar({
   mode,
@@ -1856,6 +1872,29 @@ export default function EventStudioForm({
       setAlignmentPreview(null);
       onSubmit(result);
     } catch (error) {
+      const failureTitle =
+        firstFilledText(
+          draftRef.current.name.zh,
+          draftRef.current.name.en,
+          draftRef.current.name.ja,
+          draftRef.current.name.enFull
+        ) || (mode === 'edit' ? '活动编辑失败' : '活动创建失败');
+      await notificationCenterAdminApi
+        .logContentHistoryFailure({
+          entityType: 'event',
+          entityId: eventId ?? null,
+          taskType: 'event_release',
+          operationType: mode === 'edit' ? 'edit' : 'create',
+          title: failureTitle,
+          summary: firstFilledText(draftRef.current.detailAddress.zh, draftRef.current.detailAddress.en) || null,
+          sourceRoute: mode === 'edit' && eventId ? `/admin/content/events/${eventId}/edit` : '/admin/content/events/new',
+          errorMessage: error instanceof Error ? error.message : '活动提交失败',
+          payload: {
+            startDate: draftRef.current.startDate,
+            endDate: draftRef.current.endDate,
+          },
+        })
+        .catch(() => undefined);
       if (error instanceof EventStudioApiError && error.code === 'ACTIVE_EVENT_EDIT_SUBMISSION_EXISTS') {
         const activeSubmissionId = error.details?.activeSubmissionId;
         const activeSubmissionStatus = error.details?.activeSubmissionStatus;
@@ -2568,6 +2607,7 @@ export default function EventStudioForm({
                   error={errors.name}
                   placeholder="例如：Tomorrowland"
                   hint="主输入默认编辑中文。"
+                  maxLength={INPUT_LIMITS.event.name}
                   onPrimaryChange={(value) => updateLocalizedField('name', 'zh', value)}
                   onOpenOverlay={() =>
                     setActiveLocalizedField({
@@ -2591,66 +2631,73 @@ export default function EventStudioForm({
                   ))}
                 </select>
               </Field>
-              <Field label="活动简称">
+              <Field label="活动简称" hint={`${countText(draft.abbreviation)}/${INPUT_LIMITS.event.abbreviation}`}>
                 <input
                   value={draft.abbreviation}
                   onChange={(event) => updateDraft('abbreviation', event.target.value)}
                   className={textInputClassName}
                   placeholder="例如：ASOT"
+                  maxLength={INPUT_LIMITS.event.abbreviation}
                 />
               </Field>
-              <Field label="场馆名（可选）">
+              <Field label="场馆名（可选）" hint={`${countText(draft.venueName)}/${INPUT_LIMITS.event.venueName}`}>
                 <input
                   value={draft.venueName}
                   onChange={(event) => updateDraft('venueName', event.target.value)}
                   className={textInputClassName}
                   placeholder="例如：National Stadium"
+                  maxLength={INPUT_LIMITS.event.venueName}
                 />
               </Field>
-              <Field label="场馆地址（可选）">
+              <Field label="场馆地址（可选）" hint={`${countText(draft.venueAddress)}/${INPUT_LIMITS.event.venueAddress}`}>
                 <input
                   value={draft.venueAddress}
                   onChange={(event) => updateDraft('venueAddress', event.target.value)}
                   className={textInputClassName}
                   placeholder="例如：88 Xuhui Riverside"
+                  maxLength={INPUT_LIMITS.event.venueAddress}
                 />
               </Field>
-              <Field label="来源链接">
+              <Field label="来源链接" hint={urlHint(draft.sourceEventUrl)}>
                 <input
                   value={draft.sourceEventUrl}
                   onChange={(event) => updateDraft('sourceEventUrl', event.target.value)}
                   className={textInputClassName}
                   placeholder="https://..."
+                  maxLength={INPUT_LIMITS.common.url}
                 />
               </Field>
 
-              <Field label="来源平台（可选）">
+              <Field label="来源平台（可选）" hint={`${countText(draft.sourceProvider)}/${INPUT_LIMITS.event.sourceProvider}`}>
                 <input
                   value={draft.sourceProvider}
                   onChange={(event) => updateDraft('sourceProvider', event.target.value)}
                   className={textInputClassName}
                   placeholder="例如：official_website / instagram / manual"
+                  maxLength={INPUT_LIMITS.event.sourceProvider}
                 />
               </Field>
 
               <div className="lg:col-span-2">
-                <Field label="参考链接（每行一个，可选）">
+                <Field label="参考链接（每行一个，可选）" hint={`${countText(draft.referenceLinksText, true)}/${INPUT_LIMITS.event.referenceLinksText}`}>
                   <textarea
                     value={draft.referenceLinksText}
                     onChange={(event) => updateDraft('referenceLinksText', event.target.value)}
                     className={textAreaClassName}
                     placeholder="https://example.com/page-1&#10;https://example.com/page-2"
+                    maxLength={INPUT_LIMITS.event.referenceLinksText}
                   />
                 </Field>
               </div>
 
               <div className="lg:col-span-2">
-                <Field label="社交链接 JSON（可选）">
+                <Field label="社交链接 JSON（可选）" hint={`${countText(draft.socialLinksText, true)}/${INPUT_LIMITS.event.socialLinksText}`}>
                   <textarea
                     value={draft.socialLinksText}
                     onChange={(event) => updateDraft('socialLinksText', event.target.value)}
                     className={textAreaClassName}
                     placeholder='[{"type":"instagram","url":"https://instagram.com/example"}]'
+                    maxLength={INPUT_LIMITS.event.socialLinksText}
                   />
                   {errors.socialLinks ? <div className="mt-2 text-xs text-[#6a3530]">{errors.socialLinks}</div> : null}
                 </Field>
@@ -2671,6 +2718,7 @@ export default function EventStudioForm({
                         }
                         className={textInputClassName}
                         placeholder="输入主办方名称，或作为手动主办方文本保留"
+                        maxLength={INPUT_LIMITS.event.organizerName}
                       />
                       <Link
                         href={
@@ -2711,12 +2759,13 @@ export default function EventStudioForm({
               </div>
 
               <div className="lg:col-span-2">
-                <Field label="活动描述">
+                <Field label="活动描述" hint={`${countText(draft.description, true)}/${INPUT_LIMITS.event.description}`}>
                   <textarea
                     value={draft.description}
                     onChange={(event) => updateDraft('description', event.target.value)}
                     className={textAreaClassName}
                     placeholder="填写活动简介、风格或亮点说明"
+                    maxLength={INPUT_LIMITS.event.description}
                   />
                 </Field>
               </div>
@@ -2780,20 +2829,22 @@ export default function EventStudioForm({
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <Field label="地图地点名（可选）">
+                    <Field label="地图地点名（可选）" hint={`${countText(draft.pickedPlaceName)}/${INPUT_LIMITS.event.venueName}`}>
                       <input
                         value={draft.pickedPlaceName}
                         onChange={(event) => updateDraft('pickedPlaceName', event.target.value)}
                         className={textInputClassName}
                         placeholder="例如：National Stadium"
+                        maxLength={INPUT_LIMITS.event.venueName}
                       />
                     </Field>
-                    <Field label="地图地址（可选）">
+                    <Field label="地图地址（可选）" hint={`${countText(draft.pickedMapAddress)}/${INPUT_LIMITS.event.detailAddress}`}>
                       <input
                         value={draft.pickedMapAddress}
                         onChange={(event) => updateDraft('pickedMapAddress', event.target.value)}
                         className={textInputClassName}
                         placeholder="用于 locationPoint 回填"
+                        maxLength={INPUT_LIMITS.event.detailAddress}
                       />
                     </Field>
                   </div>
@@ -2807,6 +2858,7 @@ export default function EventStudioForm({
                     error={errors.city}
                     placeholder="Shanghai"
                     hint="主输入默认编辑中文。"
+                    maxLength={INPUT_LIMITS.event.city}
                     onPrimaryChange={(value) => updateLocalizedField('city', 'zh', value)}
                     onOpenOverlay={() =>
                       setActiveLocalizedField({
@@ -2824,6 +2876,7 @@ export default function EventStudioForm({
                     error={errors.country}
                     placeholder="中国"
                     hint="主输入默认编辑中文。"
+                    maxLength={INPUT_LIMITS.event.country}
                     onPrimaryChange={(value) => updateLocalizedField('country', 'zh', value)}
                     onOpenOverlay={() =>
                       setActiveLocalizedField({
@@ -2842,6 +2895,7 @@ export default function EventStudioForm({
                       error={errors.detailAddress}
                       placeholder="活动详细地址"
                       hint="主输入默认编辑中文。"
+                      maxLength={INPUT_LIMITS.event.detailAddress}
                       onPrimaryChange={(value) => updateLocalizedField('detailAddress', 'zh', value)}
                       onOpenOverlay={() =>
                         setActiveLocalizedField({
@@ -2988,12 +3042,13 @@ export default function EventStudioForm({
               </>
             ) : null}
 
-            <Field label="官网链接">
+            <Field label="官网链接" hint={urlHint(draft.officialWebsite)}>
               <input
                 value={draft.officialWebsite}
                 onChange={(event) => updateDraft('officialWebsite', event.target.value)}
                 className={textInputClassName}
                 placeholder="https://..."
+                maxLength={INPUT_LIMITS.common.url}
               />
             </Field>
           </div>
@@ -4027,30 +4082,33 @@ export default function EventStudioForm({
       {currentStep === 5 ? (
         <Section title="票务" description="票务相关信息单独收纳到一个分页里，让主要操作区域保持聚焦。">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="购票链接">
+            <Field label="购票链接" hint={urlHint(draft.ticketUrl)}>
               <input
                 value={draft.ticketUrl}
                 onChange={(event) => updateDraft('ticketUrl', event.target.value)}
                 className={textInputClassName}
                 placeholder="https://..."
+                maxLength={INPUT_LIMITS.common.url}
               />
               {errors.ticketUrl ? <div className="mt-2 text-xs text-[#6a3530]">{errors.ticketUrl}</div> : null}
             </Field>
-            <Field label="票务币种">
+            <Field label="票务币种" hint={`${countText(draft.ticketCurrency)}/${INPUT_LIMITS.common.currency}`}>
               <input
                 value={draft.ticketCurrency}
                 onChange={(event) => updateDraft('ticketCurrency', event.target.value)}
                 className={textInputClassName}
                 placeholder="CNY"
+                maxLength={INPUT_LIMITS.common.currency}
               />
             </Field>
             <div className="lg:col-span-2">
-              <Field label="票务备注">
+              <Field label="票务备注" hint={`${countText(draft.ticketNotes, true)}/${INPUT_LIMITS.event.ticketNotes}`}>
                 <textarea
                   value={draft.ticketNotes}
                   onChange={(event) => updateDraft('ticketNotes', event.target.value)}
                   className={textAreaClassName}
                   placeholder="例如：早鸟票已售罄，预售票次日开售"
+                  maxLength={INPUT_LIMITS.event.ticketNotes}
                 />
               </Field>
             </div>
@@ -4277,7 +4335,7 @@ export default function EventStudioForm({
                 <Field
                   key={`${activeLocalizedField.key}-${item.key}`}
                   label={item.label}
-                  hint={item.hint}
+                  hint={`${item.hint} ${countText(activeLocalizedValue[item.key], activeLocalizedField.kind === 'textarea')}/${localizedFieldMaxLength(activeLocalizedField.key)}`}
                 >
                   {activeLocalizedField.kind === 'textarea' ? (
                     <textarea
@@ -4285,6 +4343,7 @@ export default function EventStudioForm({
                       onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
                       className={textAreaClassName}
                       placeholder={`${activeLocalizedField.label}${item.label}`}
+                      maxLength={localizedFieldMaxLength(activeLocalizedField.key)}
                     />
                   ) : (
                     <input
@@ -4292,6 +4351,7 @@ export default function EventStudioForm({
                       onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
                       className={textInputClassName}
                       placeholder={`${activeLocalizedField.label}${item.label}`}
+                      maxLength={localizedFieldMaxLength(activeLocalizedField.key)}
                     />
                   )}
                 </Field>

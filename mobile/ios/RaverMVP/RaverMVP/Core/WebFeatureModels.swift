@@ -58,6 +58,82 @@ struct DJSetListPage: Codable {
     var pagination: BFFPagination?
 }
 
+struct WebContributorSummary: Codable, Hashable {
+    var totalCount: Int
+    var creator: WebUserLite? = nil
+    var previewUsers: [WebUserLite] = []
+    var displayName: String? = nil
+}
+
+struct WebEntityContributorItem: Codable, Identifiable, Hashable {
+    var user: WebUserLite
+    var role: String
+    var firstContributedAt: Date
+    var lastContributedAt: Date
+    var contributionCount: Int
+    var firstSubmissionId: String? = nil
+    var lastSubmissionId: String? = nil
+    var lastContributionSource: String? = nil
+    var createdAt: Date
+    var updatedAt: Date
+
+    var id: String {
+        let timestamp = Int(lastContributedAt.timeIntervalSince1970)
+        return "\(user.id)-\(role)-\(timestamp)"
+    }
+}
+
+struct WebEntityContributorPage: Codable, Hashable {
+    var items: [WebEntityContributorItem]
+    var summary: WebContributorSummary
+}
+
+struct WebContributionHistoryEntity: Codable, Hashable {
+    var id: String
+    var type: String
+    var title: String? = nil
+    var coverImageUrl: String? = nil
+}
+
+struct WebContributionHistoryItem: Codable, Identifiable, Hashable {
+    var id: String
+    var entity: WebContributionHistoryEntity
+    var role: String
+    var actionType: String
+    var source: String
+    var submissionId: String? = nil
+    var occurredAt: Date
+    var approvedAt: Date? = nil
+    var versionAfter: Int? = nil
+    var changeSummary: String? = nil
+    var metadata: ContentSubmissionJSONValue? = nil
+    var createdAt: Date
+}
+
+struct WebContributionCenterSummary: Codable, Hashable {
+    var totalContributionCount: Int
+    var contributedEventCount: Int
+    var contributedDJCount: Int
+    var lastContributionAt: Date? = nil
+    var recentItems: [WebContributionHistoryItem] = []
+}
+
+struct WebContributionHistoryFilterPayload: Codable, Hashable {
+    var entityType: String
+}
+
+struct WebContributionHistoryPageInfo: Codable, Hashable {
+    var limit: Int
+    var nextCursor: String? = nil
+    var hasMore: Bool
+}
+
+struct WebContributionHistoryPage: Codable, Hashable {
+    var items: [WebContributionHistoryItem]
+    var filter: WebContributionHistoryFilterPayload
+    var pageInfo: WebContributionHistoryPageInfo
+}
+
 struct DJWatchedCountResponse: Codable, Hashable {
     var count: Int
 }
@@ -738,6 +814,12 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var ticketTiers: [WebEventTicketTier]
     var lineupArtists: [WebEventLineupArtist]? = nil
     var lineupSlots: [WebEventLineupSlot]
+    var contributors: [WebUserLite]? = nil
+    var contributorSummary: WebContributorSummary? = nil
+    var contributorUsernames: [String]? = nil
+    var uploadedByUsername: String? = nil
+    var isContributor: Bool? = nil
+    var canEdit: Bool? = nil
     var favoriteId: String? = nil
     var isFavorited: Bool? = nil
 
@@ -1383,6 +1465,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var honors: [WebDJHonor]? = nil
     var sourceDataSource: String? = nil
     var contributors: [WebUserLite]? = nil
+    var contributorSummary: WebContributorSummary? = nil
     var contributorUsernames: [String]? = nil
     var uploadedByUsername: String? = nil
     var isContributor: Bool? = nil

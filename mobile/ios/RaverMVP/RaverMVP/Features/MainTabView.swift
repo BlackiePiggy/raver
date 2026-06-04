@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UIKit
 import AVKit
+import UserNotifications
 
 private struct MainGlobalSearchFramePreferenceKey: PreferenceKey {
     static var defaultValue: CGRect = .zero
@@ -18,6 +19,7 @@ struct MainTabView: View {
     @Environment(\.discoverPush) private var discoverPush
     @Environment(\.requestLoginGate) private var requestLoginGate
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("push.initialHomePromptAttempted") private var hasAttemptedInitialPushPrompt = false
     @Namespace private var tabBarIndicatorNamespace
     private let tabs: [MainTab] = [.discover, .circle, .messages, .profile]
     @State private var loadedTabs: Set<MainTab> = [.discover]
@@ -80,6 +82,7 @@ struct MainTabView: View {
         .onAppear {
             loadedTabs.insert(currentTab)
             presentGlobalSearchGuideIfNeeded()
+            requestInitialPushPermissionIfNeeded()
         }
         .onChange(of: currentTab) { _, newTab in
             loadedTabs.insert(newTab)
@@ -342,6 +345,30 @@ struct MainTabView: View {
             cornerRadius: 30,
             placement: .above
         )
+    }
+
+    private func requestInitialPushPermissionIfNeeded() {
+        guard !hasAttemptedInitialPushPrompt else { return }
+
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else {
+                Task { @MainActor in
+                    hasAttemptedInitialPushPrompt = true
+                }
+                return
+            }
+
+            Task { @MainActor in
+                hasAttemptedInitialPushPrompt = true
+            }
+
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                guard granted else { return }
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            }
+        }
     }
 
     private var globalSearchFallbackFrame: CGRect {

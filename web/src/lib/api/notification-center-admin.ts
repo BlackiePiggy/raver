@@ -159,6 +159,14 @@ export type NotificationAdminPublishTaskType =
   | 'dj_release'
   | 'brand_release';
 export type NotificationAdminPublishTaskStatus = 'pending' | 'published' | 'rejected';
+export type NotificationAdminContentHistoryOperationType = 'create' | 'edit';
+export type NotificationAdminContentHistoryResultStatus = 'success' | 'failed';
+export type NotificationAdminContentHistoryPushStatus =
+  | 'pending'
+  | 'published'
+  | 'skipped'
+  | 'superseded'
+  | 'not_applicable';
 
 export interface NotificationAdminPublishAudienceSummary {
   key: string;
@@ -213,6 +221,42 @@ export interface NotificationAdminPublishTaskPage {
 }
 
 export interface NotificationAdminPublishTaskDetailResponse {
+  task: NotificationAdminPublishTaskItem | null;
+  context: NotificationAdminPublishTaskContext | null;
+}
+
+export interface NotificationAdminContentHistoryItem {
+  id: string;
+  entityType: string;
+  entityId: string | null;
+  taskType: NotificationAdminPublishTaskType | null;
+  operationType: NotificationAdminContentHistoryOperationType;
+  resultStatus: NotificationAdminContentHistoryResultStatus;
+  pushStatus: NotificationAdminContentHistoryPushStatus;
+  title: string;
+  summary: string | null;
+  errorMessage: string | null;
+  sourceRoute: string | null;
+  createdBy: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  linkedTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationAdminContentHistoryPage {
+  items: NotificationAdminContentHistoryItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface NotificationAdminContentHistoryDetailResponse {
+  item: NotificationAdminContentHistoryItem | null;
   task: NotificationAdminPublishTaskItem | null;
   context: NotificationAdminPublishTaskContext | null;
 }
@@ -597,6 +641,70 @@ export const notificationCenterAdminApi = {
       task: result.task,
       context: result.context,
     };
+  },
+
+  async getContentHistory(input?: {
+    page?: number;
+    limit?: number;
+    entityType?: string;
+    taskType?: NotificationAdminPublishTaskType;
+    resultStatus?: NotificationAdminContentHistoryResultStatus;
+    pushStatus?: NotificationAdminContentHistoryPushStatus;
+    query?: string;
+  }): Promise<NotificationAdminContentHistoryPage> {
+    const query = new URLSearchParams();
+    query.set('page', String(input?.page ?? 1));
+    query.set('limit', String(input?.limit ?? 20));
+    if (input?.entityType) query.set('entityType', input.entityType);
+    if (input?.taskType) query.set('taskType', input.taskType);
+    if (input?.resultStatus) query.set('resultStatus', input.resultStatus);
+    if (input?.pushStatus) query.set('pushStatus', input.pushStatus);
+    if (input?.query) query.set('query', input.query);
+    const result = await request<{ success: boolean } & NotificationAdminContentHistoryPage>(
+      `/notifications/content-history?${query.toString()}`
+    );
+    return {
+      items: result.items,
+      pagination: result.pagination,
+    };
+  },
+
+  async getContentHistoryDetail(id: string): Promise<NotificationAdminContentHistoryDetailResponse> {
+    return request<{ success: boolean } & NotificationAdminContentHistoryDetailResponse>(
+      `/notifications/content-history/${encodeURIComponent(id)}`
+    );
+  },
+
+  async skipContentHistory(input: {
+    historyId: string;
+    reason?: string;
+  }): Promise<{
+    success: boolean;
+    item: NotificationAdminContentHistoryItem | null;
+    task: NotificationAdminPublishTaskItem | null;
+  }> {
+    const { historyId, ...body } = input;
+    return request(`/notifications/content-history/${encodeURIComponent(historyId)}/skip`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  async logContentHistoryFailure(input: {
+    entityType: string;
+    entityId?: string | null;
+    taskType?: NotificationAdminPublishTaskType | null;
+    operationType: NotificationAdminContentHistoryOperationType;
+    title: string;
+    summary?: string | null;
+    sourceRoute?: string | null;
+    errorMessage: string;
+    payload?: unknown;
+  }): Promise<{ success: boolean; item: NotificationAdminContentHistoryItem | null }> {
+    return request('/notifications/content-history/log-failure', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
 
   async publishTask(input: {

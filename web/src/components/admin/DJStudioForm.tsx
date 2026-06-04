@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { LocalizedTextField, MultilingualEditorOverlay, type LocalizedFieldKind, type LocalizedLocaleKey } from '@/components/admin/LocalizedTextEditor';
+import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
   djStudioApi,
   mapDJStudioDraftToCreateInput,
@@ -183,6 +185,8 @@ function DynamicStringListField({
   onAdd,
   onRemove,
   hint,
+  itemMax,
+  maxItems,
 }: {
   label: string;
   items: string[];
@@ -191,18 +195,28 @@ function DynamicStringListField({
   onAdd: () => void;
   onRemove: (index: number) => void;
   hint?: string;
+  itemMax: number;
+  maxItems: number;
 }) {
+  const combinedHint = [hint, `已填写 ${countFilledItems(items)}/${maxItems} 项，每项最多 ${itemMax} 个字符`]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={combinedHint}>
       <div className="space-y-3">
         {items.map((item, index) => (
-          <div key={`${label}-${index}`} className="flex items-center gap-2">
-            <input
-              value={item}
-              onChange={(event) => onChange(index, event.target.value)}
-              className="admin-studio-input"
-              placeholder={placeholder}
-            />
+          <div key={`${label}-${index}`} className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <input
+                value={item}
+                onChange={(event) => onChange(index, event.target.value)}
+                className="admin-studio-input"
+                placeholder={placeholder}
+                maxLength={itemMax}
+              />
+              <div className="mt-2 text-xs text-black/40">{countText(item)}/{itemMax}</div>
+            </div>
             <button
               type="button"
               onClick={() => onRemove(index)}
@@ -216,6 +230,7 @@ function DynamicStringListField({
         <button
           type="button"
           onClick={onAdd}
+          disabled={items.length >= maxItems}
           className="inline-flex items-center gap-2 rounded-full border border-[#d9e7dd] bg-[#f6fbf7] px-4 py-2 text-sm font-semibold text-[#071110]"
         >
           <Plus className="h-4 w-4" />
@@ -236,6 +251,8 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
 };
 
 const countFilledItems = (items: string[]) => items.map((item) => item.trim()).filter(Boolean).length;
+const commonUrlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
+const commonIdHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.externalId}`;
 
 type DJStudioFormProps = {
   mode: 'create' | 'edit';
@@ -345,7 +362,10 @@ export default function DJStudioForm({
   };
 
   const handleListAdd = (key: 'aliases' | 'genres') => {
-    updateStringList(key, (current) => [...current, '']);
+    updateStringList(key, (current) => {
+      const maxItems = key === 'aliases' ? INPUT_LIMITS.dj.aliasesMaxItems : INPUT_LIMITS.dj.genresMaxItems;
+      return current.length >= maxItems ? current : [...current, ''];
+    });
   };
 
   const handleListRemove = (key: 'aliases' | 'genres', index: number) => {
@@ -438,6 +458,22 @@ export default function DJStudioForm({
           : await djStudioApi.createDJ(mapDJStudioDraftToCreateInput(draft));
       onSubmit(result);
     } catch (error) {
+      await notificationCenterAdminApi
+        .logContentHistoryFailure({
+          entityType: 'dj',
+          entityId: djId ?? null,
+          taskType: 'dj_release',
+          operationType: mode === 'edit' ? 'edit' : 'create',
+          title: displayName || (mode === 'edit' ? 'DJ 编辑失败' : 'DJ 创建失败'),
+          summary: draft.bio.zh || draft.bio.en || draft.bio.ja || draft.bio.enFull || null,
+          sourceRoute: mode === 'edit' && djId ? `/admin/content/djs/${djId}/edit` : '/admin/content/djs/new',
+          errorMessage: error instanceof Error ? error.message : 'DJ 提交失败',
+          payload: {
+            name: draft.name,
+            country: draft.country,
+          },
+        })
+        .catch(() => undefined);
       setSubmitError(error instanceof Error ? error.message : 'DJ 鎻愪氦澶辫触');
     } finally {
       setSubmitting(false);
@@ -481,6 +517,7 @@ export default function DJStudioForm({
                 error={errors.name}
                 placeholder="渚嬪锛歁artin Garrix"
                 hint="主输入默认编辑中文。"
+                maxLength={INPUT_LIMITS.dj.name}
                 onPrimaryChange={(value) => updateLocalizedField('name', 'zh', value)}
                 onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: 'DJ 鍚嶇О', kind: 'input' })}
               />
@@ -519,6 +556,8 @@ export default function DJStudioForm({
               items={draft.aliases}
               placeholder="渚嬪锛歒tram"
               hint="每点击一次加号按钮新增一行。"
+              itemMax={INPUT_LIMITS.dj.alias}
+              maxItems={INPUT_LIMITS.dj.aliasesMaxItems}
               onChange={(index, value) => handleListChange('aliases', index, value)}
               onAdd={() => handleListAdd('aliases')}
               onRemove={(index) => handleListRemove('aliases', index)}
@@ -529,6 +568,8 @@ export default function DJStudioForm({
               items={draft.genres}
               placeholder="渚嬪锛歅rogressive House"
               hint="Genres 也按显式加号新增，不再依赖换行。"
+              itemMax={INPUT_LIMITS.dj.genre}
+              maxItems={INPUT_LIMITS.dj.genresMaxItems}
               onChange={(index, value) => handleListChange('genres', index, value)}
               onAdd={() => handleListAdd('genres')}
               onRemove={(index) => handleListRemove('genres', index)}
@@ -539,6 +580,7 @@ export default function DJStudioForm({
               value={draft.country}
               kind="input"
               placeholder="例如：荷兰"
+              maxLength={INPUT_LIMITS.dj.country}
               onPrimaryChange={(value) => updateLocalizedField('country', 'zh', value)}
               onOpenOverlay={() => setActiveLocalizedField({ key: 'country', label: '鍥藉 / 鍦板尯', kind: 'input' })}
             />
@@ -549,6 +591,7 @@ export default function DJStudioForm({
                 value={draft.bio}
                 kind="textarea"
                 placeholder="DJ 简介、风格、代表经历等"
+                maxLength={INPUT_LIMITS.dj.bio}
                 onPrimaryChange={(value) => updateLocalizedField('bio', 'zh', value)}
                 onOpenOverlay={() => setActiveLocalizedField({ key: 'bio', label: '简介', kind: 'textarea' })}
               />
@@ -560,44 +603,44 @@ export default function DJStudioForm({
       {currentStep === 1 ? (
         <Section title="平台链接" description="尽量补齐官方平台入口和关键统计。proof 作为素材已经统一放在资料页管理。">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Spotify ID">
-              <input value={draft.spotifyId} onChange={(event) => updateDraft('spotifyId', event.target.value)} className={textInputClassName} placeholder="spotify artist id" />
+            <Field label="Spotify ID" hint={commonIdHint(draft.spotifyId)}>
+              <input value={draft.spotifyId} onChange={(event) => updateDraft('spotifyId', event.target.value)} className={textInputClassName} placeholder="spotify artist id" maxLength={INPUT_LIMITS.common.externalId} />
             </Field>
-            <Field label="Spotify URL" error={errors.links}>
-              <input value={draft.spotifyUrl} onChange={(event) => updateDraft('spotifyUrl', event.target.value)} className={textInputClassName} placeholder="https://open.spotify.com/artist/..." />
+            <Field label="Spotify URL" error={errors.links} hint={commonUrlHint(draft.spotifyUrl)}>
+              <input value={draft.spotifyUrl} onChange={(event) => updateDraft('spotifyUrl', event.target.value)} className={textInputClassName} placeholder="https://open.spotify.com/artist/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="Apple Music ID">
-              <input value={draft.appleMusicId} onChange={(event) => updateDraft('appleMusicId', event.target.value)} className={textInputClassName} placeholder="apple music id" />
+            <Field label="Apple Music ID" hint={commonIdHint(draft.appleMusicId)}>
+              <input value={draft.appleMusicId} onChange={(event) => updateDraft('appleMusicId', event.target.value)} className={textInputClassName} placeholder="apple music id" maxLength={INPUT_LIMITS.common.externalId} />
             </Field>
-            <Field label="Instagram URL">
-              <input value={draft.instagramUrl} onChange={(event) => updateDraft('instagramUrl', event.target.value)} className={textInputClassName} placeholder="https://instagram.com/..." />
+            <Field label="Instagram URL" hint={commonUrlHint(draft.instagramUrl)}>
+              <input value={draft.instagramUrl} onChange={(event) => updateDraft('instagramUrl', event.target.value)} className={textInputClassName} placeholder="https://instagram.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="Facebook URL">
-              <input value={draft.facebookUrl} onChange={(event) => updateDraft('facebookUrl', event.target.value)} className={textInputClassName} placeholder="https://facebook.com/..." />
+            <Field label="Facebook URL" hint={commonUrlHint(draft.facebookUrl)}>
+              <input value={draft.facebookUrl} onChange={(event) => updateDraft('facebookUrl', event.target.value)} className={textInputClassName} placeholder="https://facebook.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="SoundCloud URL">
-              <input value={draft.soundcloudUrl} onChange={(event) => updateDraft('soundcloudUrl', event.target.value)} className={textInputClassName} placeholder="https://soundcloud.com/..." />
+            <Field label="SoundCloud URL" hint={commonUrlHint(draft.soundcloudUrl)}>
+              <input value={draft.soundcloudUrl} onChange={(event) => updateDraft('soundcloudUrl', event.target.value)} className={textInputClassName} placeholder="https://soundcloud.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="SoundCloud ID">
-              <input value={draft.soundcloudId} onChange={(event) => updateDraft('soundcloudId', event.target.value)} className={textInputClassName} placeholder="soundcloud user id" />
+            <Field label="SoundCloud ID" hint={commonIdHint(draft.soundcloudId)}>
+              <input value={draft.soundcloudId} onChange={(event) => updateDraft('soundcloudId', event.target.value)} className={textInputClassName} placeholder="soundcloud user id" maxLength={INPUT_LIMITS.common.externalId} />
             </Field>
-            <Field label="Twitter / X URL">
-              <input value={draft.twitterUrl} onChange={(event) => updateDraft('twitterUrl', event.target.value)} className={textInputClassName} placeholder="https://x.com/..." />
+            <Field label="Twitter / X URL" hint={commonUrlHint(draft.twitterUrl)}>
+              <input value={draft.twitterUrl} onChange={(event) => updateDraft('twitterUrl', event.target.value)} className={textInputClassName} placeholder="https://x.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="YouTube URL">
-              <input value={draft.youtubeUrl} onChange={(event) => updateDraft('youtubeUrl', event.target.value)} className={textInputClassName} placeholder="https://youtube.com/..." />
+            <Field label="YouTube URL" hint={commonUrlHint(draft.youtubeUrl)}>
+              <input value={draft.youtubeUrl} onChange={(event) => updateDraft('youtubeUrl', event.target.value)} className={textInputClassName} placeholder="https://youtube.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="缃戞槗浜?URL">
-              <input value={draft.neteaseUrl} onChange={(event) => updateDraft('neteaseUrl', event.target.value)} className={textInputClassName} placeholder="https://music.163.com/..." />
+            <Field label="缃戞槗浜?URL" hint={commonUrlHint(draft.neteaseUrl)}>
+              <input value={draft.neteaseUrl} onChange={(event) => updateDraft('neteaseUrl', event.target.value)} className={textInputClassName} placeholder="https://music.163.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="QQ 闊充箰 URL">
-              <input value={draft.qqMusicUrl} onChange={(event) => updateDraft('qqMusicUrl', event.target.value)} className={textInputClassName} placeholder="https://y.qq.com/..." />
+            <Field label="QQ 闊充箰 URL" hint={commonUrlHint(draft.qqMusicUrl)}>
+              <input value={draft.qqMusicUrl} onChange={(event) => updateDraft('qqMusicUrl', event.target.value)} className={textInputClassName} placeholder="https://y.qq.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="瀹樼綉 URL">
-              <input value={draft.website} onChange={(event) => updateDraft('website', event.target.value)} className={textInputClassName} placeholder="https://..." />
+            <Field label="瀹樼綉 URL" hint={commonUrlHint(draft.website)}>
+              <input value={draft.website} onChange={(event) => updateDraft('website', event.target.value)} className={textInputClassName} placeholder="https://..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="鍏朵粬骞冲彴 URL">
-              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="鍏朵粬骞冲彴閾炬帴" />
+            <Field label="鍏朵粬骞冲彴 URL" hint={commonUrlHint(draft.otherPlatformUrl)}>
+              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="鍏朵粬骞冲彴閾炬帴" maxLength={INPUT_LIMITS.common.url} />
             </Field>
             <Field label="Spotify Followers" error={errors.stats}>
               <input value={draft.spotifyFollowers} onChange={(event) => updateDraft('spotifyFollowers', event.target.value)} className={textInputClassName} placeholder="123456" />
@@ -690,6 +733,13 @@ export default function DJStudioForm({
         title={activeLocalizedField?.label ?? ''}
         kind={activeLocalizedField?.kind ?? 'input'}
         value={activeLocalizedValue ?? { zh: '', en: '', ja: '', enFull: '' }}
+        maxLength={
+          activeLocalizedField?.key === 'name'
+            ? INPUT_LIMITS.dj.name
+            : activeLocalizedField?.key === 'country'
+              ? INPUT_LIMITS.dj.country
+              : INPUT_LIMITS.dj.bio
+        }
         onChange={(locale, value) => {
           if (!activeLocalizedField) return;
           updateLocalizedField(activeLocalizedField.key, locale, value);

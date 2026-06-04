@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import OrganizerStudioForm from '@/components/admin/OrganizerStudioForm';
 import {
   createOrganizerStudioDraft,
@@ -21,6 +22,7 @@ export default function AdminContentOrganizerEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resultLink, setResultLink] = useState<string | null>(null);
+  const [savedOrganizerId, setSavedOrganizerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!organizerId) {
@@ -37,6 +39,7 @@ export default function AdminContentOrganizerEditPage() {
         const organizer = await organizerStudioApi.fetchOrganizer(organizerId);
         if (cancelled) return;
         setDraft(hydrateOrganizerStudioDraftFromOrganizer(organizer));
+        setSavedOrganizerId(organizerId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载主办方失败');
@@ -59,10 +62,12 @@ export default function AdminContentOrganizerEditPage() {
     if (result.kind === 'created') {
       setNotice(`主办方更新已提交成功：${result.organizer.name}`);
       setResultLink(`/admin/content/organizers/${result.organizer.id}/edit`);
+      setSavedOrganizerId(result.organizer.id);
       return;
     }
     setNotice(result.payload.message || '主办方编辑已进入审核队列');
     setResultLink('/admin/content/reviews');
+    setSavedOrganizerId(null);
   };
 
   return (
@@ -97,6 +102,16 @@ export default function AdminContentOrganizerEditPage() {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {notice && savedOrganizerId ? (
+        <NotificationContentHistoryPrompt
+          entityType="festival"
+          entityId={savedOrganizerId}
+          secondaryHref="/admin/content/organizers/catalog"
+          secondaryLabel="稍后处理，先回到主办方目录"
+          description="这次主办方资料更新已经直接保存成功。你可以现在去统一内容历史页继续决定是否推送，也可以稍后再处理。"
+        />
       ) : null}
 
       {loading ? (

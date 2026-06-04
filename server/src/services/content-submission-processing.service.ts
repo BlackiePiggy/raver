@@ -728,7 +728,11 @@ export async function processContentSubmission(
           ? await createOrUpdateDJFromSubmission(
               db,
               payload as any,
-              submission.submitterId
+              submission.submitterId,
+              {
+                submissionId: submission.id,
+                approvedAt: submission.reviewedAt || new Date(),
+              }
             )
           : await createOrUpdateBrandFromSubmission(
               db,

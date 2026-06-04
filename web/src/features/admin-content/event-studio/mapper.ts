@@ -12,6 +12,7 @@ import {
   eventStudioLineupArtistIdentityKey,
   eventStudioTimetableSlotIdentityKey,
 } from './draft';
+import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine, trimArrayItems } from '@/lib/input-rules';
 import { formatDateInputInTimeZone } from '@/lib/timezone';
 
 type EventLocationProvider = EventContractComponents['schemas']['EventLocationProvider'];
@@ -19,23 +20,27 @@ type EventLocationSourceMode = EventContractComponents['schemas']['EventLocation
 type EventLocationProviderMeta = EventContractComponents['schemas']['EventLocationProviderMeta'];
 type EventStudioLocationProviderMetaInput = NonNullable<NonNullable<EventStudioDraft['locationPoint']>['providerMeta']>;
 
-const trimOrNull = (value?: string | null): string | null => {
-  const trimmed = String(value || '').trim();
+const trimSingleLineOrNull = (value: string | null | undefined, max: number): string | null => {
+  const trimmed = normalizeSingleLine(value).slice(0, max);
   return trimmed || null;
 };
 
+const trimMultilineOrNull = (value: string | null | undefined, max: number): string | null => {
+  const trimmed = normalizeMultiline(value).slice(0, max);
+  return trimmed || null;
+};
+
+const trimUrlOrNull = (value?: string | null): string | null =>
+  trimSingleLineOrNull(value, INPUT_LIMITS.common.url);
+
+const trimExternalIdOrNull = (value?: string | null): string | null =>
+  trimSingleLineOrNull(value, INPUT_LIMITS.common.externalId);
+
 const splitLines = (value: string): string[] =>
-  Array.from(
-    new Set(
-      value
-        .split(/[\n,]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
+  trimArrayItems(value.split(/[\n,]/), INPUT_LIMITS.common.url);
 
 const parseJsonTextOrNull = (value: string): unknown | null => {
-  const trimmed = value.trim();
+  const trimmed = normalizeMultiline(value).slice(0, INPUT_LIMITS.event.socialLinksText);
   if (!trimmed) return null;
   try {
     return JSON.parse(trimmed);
@@ -45,7 +50,7 @@ const parseJsonTextOrNull = (value: string): unknown | null => {
 };
 
 const numericOrNull = (value?: string | null): number | null => {
-  const trimmed = String(value || '').trim();
+  const trimmed = normalizeSingleLine(value);
   if (!trimmed) return null;
   const numeric = Number(trimmed);
   return Number.isFinite(numeric) ? numeric : null;
@@ -91,8 +96,8 @@ const normalizeLocationProviderMeta = (
   if (!value) return null;
   const next: EventLocationProviderMeta = {};
 
-  const amapPoiId = trimOrNull(value.amap?.poiId);
-  const amapAdcode = trimOrNull(value.amap?.adcode);
+  const amapPoiId = trimExternalIdOrNull(value.amap?.poiId);
+  const amapAdcode = trimExternalIdOrNull(value.amap?.adcode);
   if (amapPoiId || amapAdcode) {
     next.amap = {
       poiId: amapPoiId,
@@ -100,8 +105,10 @@ const normalizeLocationProviderMeta = (
     };
   }
 
-  const googlePlaceId = trimOrNull(value.google?.placeId);
-  const googleTypes = value.google?.types?.map((item: string | null | undefined) => String(item || '').trim()).filter(Boolean) || null;
+  const googlePlaceId = trimExternalIdOrNull(value.google?.placeId);
+  const googleTypes = value.google?.types
+    ?.map((item: string | null | undefined) => trimExternalIdOrNull(item))
+    .filter((item): item is string => Boolean(item)) || null;
   if (googlePlaceId || (googleTypes && googleTypes.length)) {
     next.google = {
       placeId: googlePlaceId,
@@ -109,15 +116,15 @@ const normalizeLocationProviderMeta = (
     };
   }
 
-  const mapkitIdentifier = trimOrNull(value.mapkit?.mapItemIdentifier);
+  const mapkitIdentifier = trimExternalIdOrNull(value.mapkit?.mapItemIdentifier);
   if (mapkitIdentifier) {
     next.mapkit = {
       mapItemIdentifier: mapkitIdentifier,
     };
   }
 
-  const mapboxPlaceId = trimOrNull(value.mapbox?.placeId);
-  const mapboxFeatureType = trimOrNull(value.mapbox?.featureType);
+  const mapboxPlaceId = trimExternalIdOrNull(value.mapbox?.placeId);
+  const mapboxFeatureType = trimExternalIdOrNull(value.mapbox?.featureType);
   if (mapboxPlaceId || mapboxFeatureType) {
     next.mapbox = {
       placeId: mapboxPlaceId,
@@ -125,8 +132,8 @@ const normalizeLocationProviderMeta = (
     };
   }
 
-  const geoapifyPlaceId = trimOrNull(value.geoapify?.placeId);
-  const geoapifyFeatureType = trimOrNull(value.geoapify?.featureType);
+  const geoapifyPlaceId = trimExternalIdOrNull(value.geoapify?.placeId);
+  const geoapifyFeatureType = trimExternalIdOrNull(value.geoapify?.featureType);
   if (geoapifyPlaceId || geoapifyFeatureType) {
     next.geoapify = {
       placeId: geoapifyPlaceId,
@@ -151,7 +158,7 @@ const inferLocationProviderFromMeta = (
 };
 
 const nextDateText = (value: string): string => {
-  const trimmed = value.trim();
+  const trimmed = normalizeSingleLine(value);
   if (!trimmed) return trimmed;
   const parsed = new Date(`${trimmed}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) return trimmed;
@@ -160,14 +167,14 @@ const nextDateText = (value: string): string => {
 };
 
 const composeSlotDateTime = (date: string, time: string): string => {
-  const normalizedDate = date.trim();
-  const normalizedTime = time.trim();
+  const normalizedDate = normalizeSingleLine(date);
+  const normalizedTime = normalizeSingleLine(time);
   if (!normalizedDate || !normalizedTime) return '';
   return `${normalizedDate}T${normalizedTime}:00`;
 };
 
 const dateWithDayOffset = (date: string, offset?: number): string => {
-  const normalizedDate = date.trim();
+  const normalizedDate = normalizeSingleLine(date);
   const normalizedOffset = Math.max(0, Math.floor(Number(offset) || 0));
   if (!normalizedDate || normalizedOffset <= 0) return normalizedDate;
   let result = normalizedDate;
@@ -177,43 +184,51 @@ const dateWithDayOffset = (date: string, offset?: number): string => {
   return result;
 };
 
-const normalizedLocalizedText = (value: EventStudioLocalizedText): EventStudioLocalizedText | null => {
+const normalizedLocalizedText = (
+  value: EventStudioLocalizedText,
+  max: number,
+  multiline = false
+): EventStudioLocalizedText | null => {
   const next: EventStudioLocalizedText = {
-    zh: value.zh.trim(),
-    en: value.en.trim(),
-    ja: value.ja.trim(),
-    enFull: value.enFull.trim(),
+    zh: (multiline ? normalizeMultiline(value.zh) : normalizeSingleLine(value.zh)).slice(0, max),
+    en: (multiline ? normalizeMultiline(value.en) : normalizeSingleLine(value.en)).slice(0, max),
+    ja: (multiline ? normalizeMultiline(value.ja) : normalizeSingleLine(value.ja)).slice(0, max),
+    enFull: (multiline ? normalizeMultiline(value.enFull) : normalizeSingleLine(value.enFull)).slice(0, max),
   };
   return next.zh || next.en || next.ja || next.enFull ? next : null;
 };
 
 const primaryText = (value: EventStudioLocalizedText): string =>
-  value.zh.trim() || value.en.trim() || value.ja.trim() || value.enFull.trim();
+  normalizeSingleLine(value.zh)
+  || normalizeSingleLine(value.en)
+  || normalizeSingleLine(value.ja)
+  || normalizeSingleLine(value.enFull);
 
 const canonicalLocationText = (
   value: EventStudioLocalizedText,
+  max: number,
   options?: { preferEnglishFull?: boolean }
 ): string => {
-  const en = value.en.trim();
-  const zh = value.zh.trim();
-  const ja = value.ja.trim();
-  const enFull = value.enFull.trim();
+  const en = normalizeSingleLine(value.en).slice(0, max);
+  const zh = normalizeSingleLine(value.zh).slice(0, max);
+  const ja = normalizeSingleLine(value.ja).slice(0, max);
+  const enFull = normalizeSingleLine(value.enFull).slice(0, max);
   if (options?.preferEnglishFull) {
     return en || enFull || zh || ja;
   }
   return en || zh || ja || enFull;
 };
 
-const normalizedAddressText = (value: EventStudioLocalizedText): EventStudioLocalizedText => ({
-  zh: value.zh.trim(),
-  en: value.en.trim(),
-  ja: value.ja.trim(),
-  enFull: value.enFull.trim(),
+const normalizedAddressText = (value: EventStudioLocalizedText, max: number): EventStudioLocalizedText => ({
+  zh: normalizeSingleLine(value.zh).slice(0, max),
+  en: normalizeSingleLine(value.en).slice(0, max),
+  ja: normalizeSingleLine(value.ja).slice(0, max),
+  enFull: normalizeSingleLine(value.enFull).slice(0, max),
 });
 
 const joinAddressParts = (parts: Array<string | null | undefined>): string =>
   parts
-    .map((item) => String(item || '').trim())
+    .map((item) => normalizeSingleLine(item))
     .filter(Boolean)
     .join(' · ');
 
@@ -222,9 +237,9 @@ const joinLocalizedAddress = (
   city: EventStudioLocalizedText,
   country: EventStudioLocalizedText
 ): EventStudioLocalizedText => {
-  const normalizedDetail = normalizedAddressText(detail);
-  const normalizedCity = normalizedAddressText(city);
-  const normalizedCountry = normalizedAddressText(country);
+  const normalizedDetail = normalizedAddressText(detail, INPUT_LIMITS.event.detailAddress);
+  const normalizedCity = normalizedAddressText(city, INPUT_LIMITS.event.city);
+  const normalizedCountry = normalizedAddressText(country, INPUT_LIMITS.event.country);
 
   return {
     zh: joinAddressParts([
@@ -258,10 +273,7 @@ const resolveVisualStatus = (
 };
 
 const splitMemberNamesText = (value: string): string[] =>
-  value
-    .split(/[\/,&]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  trimArrayItems(value.split(/[\/,&]/), INPUT_LIMITS.dj.name);
 
 const normalizeActType = (value?: string | null): 'solo' | 'b2b' | 'b3b' => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -288,8 +300,7 @@ const composeActDisplayName = (actType: string | undefined, memberNames: string[
 
 const normalizeMemberDjIds = (memberDjIds: Array<string | null>): Array<string | null> => {
   const normalized = memberDjIds.map((item) => {
-    const trimmed = String(item || '').trim();
-    return trimmed || null;
+    return trimExternalIdOrNull(item);
   });
   return normalized.some((item) => item !== null) ? normalized : [];
 };
@@ -300,7 +311,7 @@ const firstImageInZone = (draft: EventStudioDraft, usage: EventStudioImageState[
     .find((item) => item.remoteUrl.trim()) || null;
 
 const cloneLocalizedTextOrUndefined = (value?: {
-  zh?: string | null;
+    zh?: string | null;
   en?: string | null;
   ja?: string | null;
   enFull?: string | null;
@@ -311,7 +322,7 @@ const cloneLocalizedTextOrUndefined = (value?: {
     en: value.en ?? '',
     ja: value.ja ?? '',
     enFull: value.enFull ?? '',
-  });
+  }, INPUT_LIMITS.event.detailAddress, true);
   return normalized ?? undefined;
 };
 
@@ -320,8 +331,10 @@ const hasLocationProviderMeta = (value: unknown): boolean => {
   return Object.values(value as Record<string, unknown>).some((providerMeta) => {
     if (!providerMeta || typeof providerMeta !== 'object' || Array.isArray(providerMeta)) return false;
     return Object.values(providerMeta as Record<string, unknown>).some((fieldValue) => {
-      if (Array.isArray(fieldValue)) return fieldValue.some((item) => String(item || '').trim());
-      return String(fieldValue || '').trim().length > 0;
+      if (Array.isArray(fieldValue)) {
+        return fieldValue.some((item) => typeof item === 'string' && normalizeSingleLine(item).length > 0);
+      }
+      return typeof fieldValue === 'string' && normalizeSingleLine(fieldValue).length > 0;
     });
   });
 };
@@ -359,7 +372,7 @@ const normalizeStageOrderForPayload = (
   const result: string[] = [];
   let hasBlankStageSlot = false;
   const pushStage = (value?: string | null) => {
-    const trimmed = String(value || '').trim();
+    const trimmed = trimSingleLineOrNull(value, INPUT_LIMITS.common.stageName);
     if (!trimmed) return;
     const key = trimmed.toLowerCase();
     if (seen.has(key)) return;
@@ -369,7 +382,7 @@ const normalizeStageOrderForPayload = (
 
   explicitStageOrder.forEach(pushStage);
   timetableSlots.forEach((slot) => {
-    const normalizedStageName = trimOrNull(slot.stageName);
+    const normalizedStageName = trimSingleLineOrNull(slot.stageName, INPUT_LIMITS.common.stageName);
     if (normalizedStageName) {
       pushStage(normalizedStageName);
       return;
@@ -389,7 +402,7 @@ const normalizeStageOrderForPayload = (
 const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   const performerCount = actTypePerformerCount(artist.actType);
   const memberNames = splitMemberNamesText(artist.memberNamesText).slice(0, performerCount);
-  const normalizedDjId = trimOrNull(artist.djId);
+  const normalizedDjId = trimExternalIdOrNull(artist.djId);
   if (!memberNames.length && !normalizedDjId) return null;
 
   const normalizedMemberDjIds = normalizeMemberDjIds(artist.memberDjIds).slice(0, performerCount);
@@ -397,11 +410,11 @@ const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   if (!displayName) return null;
 
   return {
-    id: trimOrNull(artist.canonicalArtistId),
+    id: trimExternalIdOrNull(artist.canonicalArtistId),
     djId: normalizedDjId,
     memberDjIds: normalizedMemberDjIds.length ? normalizedMemberDjIds : (normalizedDjId ? [normalizedDjId] : null),
     memberNames: memberNames.length ? memberNames : null,
-    djName: displayName,
+    djName: displayName.slice(0, INPUT_LIMITS.dj.name),
     sortOrder: artist.sortOrder,
   };
 };
@@ -414,10 +427,10 @@ const lineupSlotPayload = (
 ) => {
   const performerCount = actTypePerformerCount(slot.actType);
   const memberNames = splitMemberNamesText(slot.memberNamesText).slice(0, performerCount);
-  const normalizedDjId = trimOrNull(slot.djId);
-  const normalizedStageName = trimOrNull(slot.stageName) || fallbackStageName(stageOrder);
+  const normalizedDjId = trimExternalIdOrNull(slot.djId);
+  const normalizedStageName = trimSingleLineOrNull(slot.stageName, INPUT_LIMITS.common.stageName) || fallbackStageName(stageOrder);
   if (!memberNames.length && !normalizedDjId) return null;
-  if (!slot.eventDayId.trim() || !slot.localDate.trim() || !slot.startTime.trim() || !slot.endTime.trim()) return null;
+  if (!normalizeSingleLine(slot.eventDayId) || !normalizeSingleLine(slot.localDate) || !normalizeSingleLine(slot.startTime) || !normalizeSingleLine(slot.endTime)) return null;
 
   if (memberNames.length < performerCount) return null;
 
@@ -432,8 +445,8 @@ const lineupSlotPayload = (
   const identityKey = eventStudioTimetableSlotIdentityKey(slot);
 
   return {
-    id: trimOrNull(slot.canonicalSlotId),
-    lineupArtistId: trimOrNull(slot.lineupArtistId) || (identityKey ? lineupArtistIdByKey.get(identityKey) : null) || null,
+    id: trimExternalIdOrNull(slot.canonicalSlotId),
+    lineupArtistId: trimExternalIdOrNull(slot.lineupArtistId) || (identityKey ? lineupArtistIdByKey.get(identityKey) : null) || null,
     eventDayId: slot.eventDayId,
     weekIndex: slot.weekIndex,
     dayIndexInWeek: slot.dayIndexInWeek,
@@ -443,7 +456,7 @@ const lineupSlotPayload = (
     memberDjIds: normalizedMemberDjIds.length ? normalizedMemberDjIds : (normalizedDjId ? [normalizedDjId] : null),
     memberNames: memberNames.length ? memberNames : null,
     festivalDayIndex: null,
-    djName: displayName,
+    djName: displayName.slice(0, INPUT_LIMITS.dj.name),
     stageName: normalizedStageName,
     sortOrder: slot.sortOrder,
     startTime: normalizedStartTime,
@@ -452,33 +465,33 @@ const lineupSlotPayload = (
 };
 
 export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): EventStudioCreateInput => {
-  const nameI18n = normalizedLocalizedText(draft.name);
-  const cityI18n = draft.clearCityI18nIntent ? null : normalizedLocalizedText(draft.city);
-  const countryI18n = draft.clearCountryI18nIntent ? null : normalizedLocalizedText(draft.country);
-  const detailAddressI18n = normalizedLocalizedText(draft.detailAddress);
+  const nameI18n = normalizedLocalizedText(draft.name, INPUT_LIMITS.event.name);
+  const cityI18n = draft.clearCityI18nIntent ? null : normalizedLocalizedText(draft.city, INPUT_LIMITS.event.city);
+  const countryI18n = draft.clearCountryI18nIntent ? null : normalizedLocalizedText(draft.country, INPUT_LIMITS.event.country);
+  const detailAddressI18n = normalizedLocalizedText(draft.detailAddress, INPUT_LIMITS.event.detailAddress, true);
   const posterImage = firstImageInZone(draft, 'poster');
   const coverImage = firstImageInZone(draft, 'cover');
   const lineupImage = firstImageInZone(draft, 'lineup');
-  const coverUrl = trimOrNull(posterImage?.remoteUrl || coverImage?.remoteUrl);
-  const lineupUrl = trimOrNull(lineupImage?.remoteUrl);
+  const coverUrl = trimUrlOrNull(posterImage?.remoteUrl || coverImage?.remoteUrl);
+  const lineupUrl = trimUrlOrNull(lineupImage?.remoteUrl);
   const latitude = numericOrNull(draft.latitude);
   const longitude = numericOrNull(draft.longitude);
-  const locationName = trimOrNull(draft.pickedPlaceName);
-  const locationAddress = trimOrNull(draft.pickedMapAddress);
+  const locationName = trimSingleLineOrNull(draft.pickedPlaceName, INPUT_LIMITS.event.venueName);
+  const locationAddress = trimSingleLineOrNull(draft.pickedMapAddress, INPUT_LIMITS.event.venueAddress);
   const locationProviderMeta = normalizeLocationProviderMeta(draft.locationPoint?.providerMeta ?? null);
   const locationProvider =
     normalizeLocationProvider(draft.locationPoint?.provider)
-    || inferLocationProviderFromMeta(locationProviderMeta, trimOrNull(draft.locationPoint?.adcode), trimOrNull(draft.locationPoint?.poiId));
+    || inferLocationProviderFromMeta(locationProviderMeta, trimExternalIdOrNull(draft.locationPoint?.adcode), trimExternalIdOrNull(draft.locationPoint?.poiId));
   const locationSourceMode =
     normalizeLocationSourceMode(draft.locationPoint?.sourceMode)
-    || (locationProviderMeta || trimOrNull(draft.locationPoint?.providerPlaceId) || trimOrNull(draft.locationPoint?.poiId)
+    || (locationProviderMeta || trimExternalIdOrNull(draft.locationPoint?.providerPlaceId) || trimExternalIdOrNull(draft.locationPoint?.poiId)
       ? 'manual_search'
       : locationProvider
         ? 'legacy_coords'
         : null);
-  const locationProviderPlaceId = trimOrNull(draft.locationPoint?.providerPlaceId);
-  const locationPoiId = trimOrNull(draft.locationPoint?.poiId);
-  const locationAdcode = trimOrNull(draft.locationPoint?.adcode);
+  const locationProviderPlaceId = trimExternalIdOrNull(draft.locationPoint?.providerPlaceId);
+  const locationPoiId = trimExternalIdOrNull(draft.locationPoint?.poiId);
+  const locationAdcode = trimExternalIdOrNull(draft.locationPoint?.adcode);
   const hasRealLocationPointProvenance = hasLocationPointProvenance({
     providerPlaceId: locationProviderPlaceId,
     poiId: locationPoiId,
@@ -512,7 +525,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
                   ? 'POSTER'
                   : normalizedUsage.toUpperCase();
         return {
-          url: image.remoteUrl,
+          url: normalizeSingleLine(image.remoteUrl).slice(0, INPUT_LIMITS.common.url),
           type,
           label,
           sort: image.sortOrder || index + 1,
@@ -570,22 +583,22 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
           (detailAddressI18n
             ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
             : undefined),
-        city: trimOrNull(draft.locationPoint?.city) || trimOrNull(primaryText(draft.city)),
-        district: trimOrNull(draft.locationPoint?.district),
-        province: trimOrNull(draft.locationPoint?.province),
-        countryCode: trimOrNull(draft.locationPoint?.countryCode),
+        city: trimSingleLineOrNull(draft.locationPoint?.city, INPUT_LIMITS.event.city) || trimSingleLineOrNull(primaryText(draft.city), INPUT_LIMITS.event.city),
+        district: trimSingleLineOrNull(draft.locationPoint?.district, INPUT_LIMITS.event.city),
+        province: trimSingleLineOrNull(draft.locationPoint?.province, INPUT_LIMITS.event.country),
+        countryCode: trimSingleLineOrNull(draft.locationPoint?.countryCode, 16),
       }
     : null;
 
   const ticketTiers = draft.ticketTiers
     .map((tier, index) => {
-      const name = tier.name.trim() || defaultTicketTierName(index);
+      const name = normalizeSingleLine(tier.name).slice(0, INPUT_LIMITS.common.ticketTierName) || defaultTicketTierName(index);
       const price = Number(tier.price);
       if (!Number.isFinite(price)) return null;
       return {
         name,
         price,
-        currency: (trimOrNull(tier.currency) || trimOrNull(draft.ticketCurrency))?.toUpperCase() || null,
+        currency: (trimSingleLineOrNull(tier.currency, INPUT_LIMITS.common.currency) || trimSingleLineOrNull(draft.ticketCurrency, INPUT_LIMITS.common.currency))?.toUpperCase() || null,
         sortOrder: index + 1,
       };
     })
@@ -604,7 +617,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
 
   const weeks = draft.weeks.map((week) => ({
     weekIndex: week.weekIndex,
-    label: trimOrNull(week.label),
+    label: trimSingleLineOrNull(week.label, INPUT_LIMITS.event.name),
     startDate: week.startDate,
     endDate: week.endDate,
     sortOrder: week.sortOrder,
@@ -615,19 +628,17 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     weekIndex: day.weekIndex,
     dayIndexInWeek: day.dayIndexInWeek,
     overallDayIndex: day.overallDayIndex,
-    label: trimOrNull(day.label),
-    weekday: trimOrNull(day.weekday),
+    label: trimSingleLineOrNull(day.label, INPUT_LIMITS.event.name),
+    weekday: trimSingleLineOrNull(day.weekday, INPUT_LIMITS.event.abbreviation),
     date: day.date,
     sortOrder: day.sortOrder,
   }));
-  const explicitStageOrder = draft.stageOrder
-    .map((stage) => stage.trim())
-    .filter(Boolean);
+  const explicitStageOrder = trimArrayItems(draft.stageOrder, INPUT_LIMITS.common.stageName);
   const stageOrder = normalizeStageOrderForPayload(explicitStageOrder, draft.timetableSlots);
   const lineupArtistIdByKey = new Map<string, string>();
   draft.lineupArtists.forEach((artist) => {
     const key = eventStudioLineupArtistIdentityKey(artist);
-    const artistId = trimOrNull(artist.canonicalArtistId);
+    const artistId = trimExternalIdOrNull(artist.canonicalArtistId);
     if (key && artistId && !lineupArtistIdByKey.has(key)) {
       lineupArtistIdByKey.set(key, artistId);
     }
@@ -640,41 +651,41 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return {
-    name: primaryText(draft.name),
+    name: primaryText(nameI18n ?? draft.name).slice(0, INPUT_LIMITS.event.name),
     nameI18n: nameI18n ?? undefined,
-    wikiFestivalId: trimOrNull(draft.organizerFestivalId),
-    abbreviation: trimOrNull(draft.abbreviation),
-    description: trimOrNull(draft.description),
-    eventType: trimOrNull(draft.eventType),
-    organizerName: trimOrNull(draft.organizerName),
-    venueName: trimOrNull(draft.venueName),
-    venueAddress: trimOrNull(draft.venueAddress),
-    sourceEventUrl: trimOrNull(draft.sourceEventUrl),
-    sourceProvider: trimOrNull(draft.sourceProvider),
+    wikiFestivalId: trimExternalIdOrNull(draft.organizerFestivalId),
+    abbreviation: trimSingleLineOrNull(draft.abbreviation, INPUT_LIMITS.event.abbreviation),
+    description: trimMultilineOrNull(draft.description, INPUT_LIMITS.event.description),
+    eventType: trimExternalIdOrNull(draft.eventType),
+    organizerName: trimSingleLineOrNull(draft.organizerName, INPUT_LIMITS.event.organizerName),
+    venueName: trimSingleLineOrNull(draft.venueName, INPUT_LIMITS.event.venueName),
+    venueAddress: trimSingleLineOrNull(draft.venueAddress, INPUT_LIMITS.event.venueAddress),
+    sourceEventUrl: trimUrlOrNull(draft.sourceEventUrl),
+    sourceProvider: trimSingleLineOrNull(draft.sourceProvider, INPUT_LIMITS.event.sourceProvider),
     referenceLinks: splitLines(draft.referenceLinksText),
     socialLinks: parseJsonTextOrNull(draft.socialLinksText),
-    city: trimOrNull(canonicalLocationText(draft.city)),
+    city: trimSingleLineOrNull(canonicalLocationText(draft.city, INPUT_LIMITS.event.city), INPUT_LIMITS.event.city),
     cityI18n: cityI18n ?? undefined,
-    country: trimOrNull(canonicalLocationText(draft.country, { preferEnglishFull: true })),
+    country: trimSingleLineOrNull(canonicalLocationText(draft.country, INPUT_LIMITS.event.country, { preferEnglishFull: true }), INPUT_LIMITS.event.country),
     countryI18n: countryI18n ?? undefined,
     manualLocation: manualLocation ?? undefined,
     locationPoint: locationPoint ?? undefined,
     latitude,
     longitude,
-    ticketUrl: trimOrNull(draft.ticketUrl),
-    ticketCurrency: trimOrNull(draft.ticketCurrency)?.toUpperCase() || null,
-    ticketNotes: trimOrNull(draft.ticketNotes),
-    officialWebsite: trimOrNull(draft.officialWebsite),
+    ticketUrl: trimUrlOrNull(draft.ticketUrl),
+    ticketCurrency: trimSingleLineOrNull(draft.ticketCurrency, INPUT_LIMITS.common.currency)?.toUpperCase() || null,
+    ticketNotes: trimMultilineOrNull(draft.ticketNotes, INPUT_LIMITS.event.ticketNotes),
+    officialWebsite: trimUrlOrNull(draft.officialWebsite),
     startDate: draft.startDate,
     endDate: draft.endDate,
     schedule: schedule ?? undefined,
     weeks: weeks.length ? weeks : null,
     eventDays: eventDays.length ? eventDays : null,
-    timeZone: trimOrNull(draft.timeZoneSelection?.timezone),
-    timeZoneCity: trimOrNull(draft.timeZoneSelection?.city),
-    timeZoneProvince: trimOrNull(draft.timeZoneSelection?.exactProvince || draft.timeZoneSelection?.province),
-    timeZoneCountry: trimOrNull(draft.timeZoneSelection?.country),
-    timeZoneStateAnsi: trimOrNull(draft.timeZoneSelection?.stateAnsi),
+    timeZone: trimSingleLineOrNull(draft.timeZoneSelection?.timezone, INPUT_LIMITS.common.externalId),
+    timeZoneCity: trimSingleLineOrNull(draft.timeZoneSelection?.city, INPUT_LIMITS.event.city),
+    timeZoneProvince: trimSingleLineOrNull(draft.timeZoneSelection?.exactProvince || draft.timeZoneSelection?.province, INPUT_LIMITS.event.country),
+    timeZoneCountry: trimSingleLineOrNull(draft.timeZoneSelection?.country, INPUT_LIMITS.event.country),
+    timeZoneStateAnsi: trimSingleLineOrNull(draft.timeZoneSelection?.stateAnsi, 16),
     timeZoneLat: draft.timeZoneSelection?.lat ?? null,
     timeZoneLng: draft.timeZoneSelection?.lng ?? null,
     dayRolloverHour,

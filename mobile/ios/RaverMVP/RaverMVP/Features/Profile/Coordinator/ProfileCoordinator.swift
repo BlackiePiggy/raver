@@ -8,6 +8,7 @@ enum ProfileRoute: Hashable {
     case widgetManager
     case movieBanner
     case myPublishes
+    case contributionCenter
     case contentSubmissionDetail(submissionID: String)
     case mySaves
     case myRoutes

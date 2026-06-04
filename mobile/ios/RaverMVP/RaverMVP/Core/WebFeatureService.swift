@@ -8,6 +8,7 @@ protocol WebFeatureService {
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent]
     func fetchEventSummary(id: String) async throws -> WebEvent
+    func fetchEventContributors(eventID: String) async throws -> WebEntityContributorPage
     func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist]
     func fetchEventTimetable(eventID: String) async throws -> [WebEventLineupSlot]
     func fetchEvent(id: String) async throws -> WebEvent
@@ -90,6 +91,7 @@ protocol WebFeatureService {
     func fetchOnboardingDJCandidates(limit: Int) async throws -> [WebDJ]
     func fetchOnboardingPreferenceOptions() async throws -> OnboardingPreferenceOptions
     func fetchDJ(id: String) async throws -> WebDJ
+    func fetchDJContributors(djID: String) async throws -> WebEntityContributorPage
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate]
     func searchDiscogsDJs(query: String, limit: Int) async throws -> [DiscogsDJCandidate]
     func fetchDiscogsDJArtist(id: Int) async throws -> DiscogsDJArtistDetail
@@ -200,6 +202,8 @@ protocol WebFeatureService {
     func searchGlobal(query: String, tab: GlobalSearchTab, limit: Int) async throws -> GlobalSearchResponse
 
     func fetchMyPublishes() async throws -> MyPublishes
+    func fetchMyContributionCenterSummary() async throws -> WebContributionCenterSummary
+    func fetchMyContributionHistory(entityType: String, cursor: String?, limit: Int) async throws -> WebContributionHistoryPage
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary]
     func fetchMyContentSubmissions(page: Int, limit: Int) async throws -> ContentSubmissionListPage
     func fetchMyContentSubmission(id: String) async throws -> ContentSubmissionDetail

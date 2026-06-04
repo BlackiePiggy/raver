@@ -122,6 +122,18 @@ const isAdminBrandAudienceKey = (value: string): value is AdminBrandAudienceKey 
   (ADMIN_BRAND_AUDIENCE_KEYS as readonly string[]).includes(value);
 const isAdminPublishTaskType = (value: string): value is AdminPublishTaskType =>
   (NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES as readonly string[]).includes(value);
+const isAdminContentHistoryOperationType = (value: string): value is 'create' | 'edit' =>
+  value === 'create' || value === 'edit';
+const isAdminContentHistoryResultStatus = (value: string): value is 'success' | 'failed' =>
+  value === 'success' || value === 'failed';
+const isAdminContentHistoryPushStatus = (
+  value: string
+): value is 'pending' | 'published' | 'skipped' | 'superseded' | 'not_applicable' =>
+  value === 'pending' ||
+  value === 'published' ||
+  value === 'skipped' ||
+  value === 'superseded' ||
+  value === 'not_applicable';
 
 const parseLegacyNotificationType = (rawType: unknown): LegacyNotificationType | null => {
   if (typeof rawType !== 'string') return null;
@@ -3733,6 +3745,183 @@ router.get('/admin/publish-tasks/:id', authenticate, requireAdmin, async (req: A
   }
 });
 
+router.get('/admin/content-history', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const page = parsePage(query.page, 1, 100000);
+    const limit = parseLimit(query.limit, 20, 100);
+    const entityType = typeof query.entityType === 'string' ? query.entityType.trim() : undefined;
+    const taskTypeRaw = typeof query.taskType === 'string' ? query.taskType.trim() : '';
+    const taskType = isAdminPublishTaskType(taskTypeRaw) ? taskTypeRaw : undefined;
+    const resultStatusRaw = typeof query.resultStatus === 'string' ? query.resultStatus.trim().toLowerCase() : '';
+    const resultStatus = isAdminContentHistoryResultStatus(resultStatusRaw) ? resultStatusRaw : undefined;
+    const pushStatusRaw = typeof query.pushStatus === 'string' ? query.pushStatus.trim().toLowerCase() : '';
+    const pushStatus = isAdminContentHistoryPushStatus(pushStatusRaw) ? pushStatusRaw : undefined;
+    const search = typeof query.query === 'string' ? query.query.trim() : undefined;
+
+    const result = await notificationCenterService.fetchAdminContentHistory({
+      page,
+      limit,
+      entityType,
+      taskType,
+      resultStatus,
+      pushStatus,
+      query: search,
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Fetch admin content history error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin content history' });
+  }
+});
+
+router.get('/admin/content-history/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) {
+      res.status(400).json({ error: 'history id is required' });
+      return;
+    }
+    const item = await notificationCenterService.fetchAdminContentHistoryById(id);
+    if (!item) {
+      res.status(404).json({ error: 'Content history record not found' });
+      return;
+    }
+
+    let task = item.linkedTaskId
+      ? await notificationCenterService.fetchAdminPublishTaskById(item.linkedTaskId)
+      : null;
+    if (!task && item.taskType && item.entityId) {
+      task = await notificationCenterService.fetchAdminPublishTaskByEntity({
+        taskType: item.taskType,
+        entityType: item.entityType,
+        entityId: item.entityId,
+      });
+    }
+
+    const context =
+      item.taskType && item.entityId
+        ? await buildAdminPublishTaskContext(item.taskType, item.entityId, item.entityType)
+        : null;
+    res.json({ success: true, item, task, context });
+  } catch (error) {
+    console.error('Fetch admin content history detail error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin content history detail' });
+  }
+});
+
+router.post('/admin/content-history/:id/skip', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const actorUserId = req.user?.userId;
+    if (!actorUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const id = String(req.params.id || '').trim();
+    if (!id) {
+      res.status(400).json({ error: 'history id is required' });
+      return;
+    }
+    const item = await notificationCenterService.fetchAdminContentHistoryById(id);
+    if (!item) {
+      res.status(404).json({ error: 'Content history record not found' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { reason?: unknown };
+    const reason = readString(body.reason);
+    const updatedHistory = await notificationCenterService.updateAdminContentHistoryDecision({
+      id,
+      pushStatus: item.resultStatus === 'success' ? 'skipped' : 'not_applicable',
+      decidedBy: actorUserId,
+      decision: { reason, action: 'skip_push' },
+    });
+
+    let updatedTask = null;
+    if (item.linkedTaskId) {
+      const task = await notificationCenterService.fetchAdminPublishTaskById(item.linkedTaskId);
+      if (task && task.status === 'pending') {
+        updatedTask = await notificationCenterService.decideAdminPublishTask({
+          id: task.id,
+          status: 'rejected',
+          decidedBy: actorUserId,
+          decision: { reason, source: 'content_history_skip' },
+        });
+      }
+    }
+
+    await adminAuditService.createAction({
+      actorId: actorUserId,
+      action: 'notification.content_history.skip',
+      targetType: 'notification_content_history',
+      targetId: id,
+      detail: {
+        entityType: item.entityType,
+        entityId: item.entityId,
+        taskType: item.taskType,
+        reason,
+      },
+    });
+
+    res.json({ success: true, item: updatedHistory, task: updatedTask });
+  } catch (error) {
+    console.error('Skip admin content history push error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to skip admin content history push' });
+  }
+});
+
+router.post('/admin/content-history/log-failure', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const actorUserId = req.user?.userId;
+    if (!actorUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      entityType?: unknown;
+      entityId?: unknown;
+      taskType?: unknown;
+      operationType?: unknown;
+      title?: unknown;
+      summary?: unknown;
+      sourceRoute?: unknown;
+      errorMessage?: unknown;
+      payload?: unknown;
+    };
+
+    const entityType = readString(body.entityType);
+    const operationTypeRaw = readString(body.operationType) || '';
+    const title = readString(body.title);
+    if (!entityType || !isAdminContentHistoryOperationType(operationTypeRaw) || !title) {
+      res.status(400).json({ error: 'entityType, operationType and title are required' });
+      return;
+    }
+
+    const taskTypeRaw = readString(body.taskType) || '';
+    const taskType = isAdminPublishTaskType(taskTypeRaw) ? taskTypeRaw : null;
+    const item = await notificationCenterService.createAdminContentHistory({
+      entityType,
+      entityId: readString(body.entityId),
+      taskType,
+      operationType: operationTypeRaw,
+      resultStatus: 'failed',
+      pushStatus: 'not_applicable',
+      title,
+      summary: readString(body.summary),
+      payload: isRecord(body.payload) ? body.payload : {},
+      errorMessage: readString(body.errorMessage) || 'Unknown error',
+      sourceRoute: readString(body.sourceRoute),
+      createdBy: actorUserId,
+    });
+
+    res.json({ success: true, item });
+  } catch (error) {
+    console.error('Log admin content history failure error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to log admin content history failure' });
+  }
+});
+
 router.get('/admin/news/:id/publish-context', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const articleId = String(req.params.id || '').trim();
@@ -3817,6 +4006,17 @@ router.post('/admin/news/:id/publish', authenticate, requireAdmin, async (req: A
     if (publishTask && publishTask.status === 'pending') {
       await notificationCenterService.decideAdminPublishTask({
         id: publishTask.id,
+        status: 'published',
+        decidedBy: actorUserId,
+        decision: {
+          channels: normalizeStringArray(body.channels).filter(isDeliverableChannel),
+          audienceKeys: normalizeStringArray(body.audienceKeys).filter(isAdminNewsAudienceKey),
+          dedupeSalt: readString(body.dedupeSalt),
+          result: execution,
+        },
+      });
+      await notificationCenterService.syncAdminContentHistoryForTaskDecision({
+        taskId: publishTask.id,
         status: 'published',
         decidedBy: actorUserId,
         decision: {
@@ -3915,6 +4115,17 @@ router.post('/admin/publish-tasks/:id/publish', authenticate, requireAdmin, asyn
         result,
       },
     });
+    await notificationCenterService.syncAdminContentHistoryForTaskDecision({
+      taskId: task.id,
+      status: 'published',
+      decidedBy: actorUserId,
+      decision: {
+        channels,
+        audienceKeys: normalizeStringArray(body.audienceKeys),
+        dedupeSalt: readString(body.dedupeSalt),
+        result,
+      },
+    });
 
     await adminAuditService.createAction({
       actorId: actorUserId,
@@ -3959,6 +4170,14 @@ router.post('/admin/publish-tasks/:id/reject', authenticate, requireAdmin, async
     const body = (req.body ?? {}) as { reason?: unknown };
     const updatedTask = await notificationCenterService.decideAdminPublishTask({
       id: task.id,
+      status: 'rejected',
+      decidedBy: actorUserId,
+      decision: {
+        reason: readString(body.reason),
+      },
+    });
+    await notificationCenterService.syncAdminContentHistoryForTaskDecision({
+      taskId: task.id,
       status: 'rejected',
       decidedBy: actorUserId,
       decision: {

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import NewsStudioForm from '@/components/admin/NewsStudioForm';
 import {
@@ -55,6 +56,15 @@ export default function AdminContentNewsCreatePage() {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {savedNewsId ? (
+        <NotificationContentHistoryPrompt
+          entityType="news_article"
+          entityId={savedNewsId}
+          secondaryHref="/admin/content/news"
+          secondaryLabel="稍后处理，先回到资讯目录"
+        />
       ) : null}
 
       {savedNewsId ? (

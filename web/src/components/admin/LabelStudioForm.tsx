@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
   labelStudioApi,
   mapLabelStudioDraftToCreateInput,
@@ -33,16 +35,19 @@ function Section({
 function Field({
   label,
   error,
+  hint,
   children,
 }: {
   label: string;
   error?: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="block">
       <div className="mb-2 admin-studio-label">{label}</div>
       {children}
+      {hint ? <div className="mt-2 text-xs text-black/40">{hint}</div> : null}
       {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
   );
@@ -99,6 +104,22 @@ export default function LabelStudioForm({
           : await labelStudioApi.createLabel(payload);
       onSubmit(result);
     } catch (error) {
+      await notificationCenterAdminApi
+        .logContentHistoryFailure({
+          entityType: 'label',
+          entityId: labelId ?? null,
+          taskType: 'brand_release',
+          operationType: mode === 'edit' ? 'edit' : 'create',
+          title: draft.name || (mode === 'edit' ? '厂牌编辑失败' : '厂牌创建失败'),
+          summary: draft.introduction || draft.introductionPreview || null,
+          sourceRoute: mode === 'edit' && labelId ? `/admin/content/labels/${labelId}/edit` : '/admin/content/labels/new',
+          errorMessage: error instanceof Error ? error.message : '厂牌提交失败',
+          payload: {
+            name: draft.name,
+            nation: draft.nation,
+          },
+        })
+        .catch(() => undefined);
       setSubmitError(error instanceof Error ? error.message : '厂牌提交失败');
     } finally {
       setSubmitting(false);
@@ -160,6 +181,7 @@ export default function LabelStudioForm({
               onChange={(event) => updateDraft('name', event.target.value)}
               className={textInputClassName}
               placeholder="例如：Afterlife"
+              maxLength={INPUT_LIMITS.label.name}
             />
           </Field>
           <Field label="Slug">
@@ -168,6 +190,7 @@ export default function LabelStudioForm({
               onChange={(event) => updateDraft('slug', event.target.value)}
               className={textInputClassName}
               placeholder="afterlife"
+              maxLength={INPUT_LIMITS.label.slug}
             />
           </Field>
           <Field label="国家 / 地区">
@@ -176,6 +199,7 @@ export default function LabelStudioForm({
               onChange={(event) => updateDraft('nation', event.target.value)}
               className={textInputClassName}
               placeholder="Italy"
+              maxLength={INPUT_LIMITS.label.nation}
             />
           </Field>
           <Field label="Profile URL">
@@ -217,55 +241,61 @@ export default function LabelStudioForm({
 
       <Section title="品牌资料" description="把厂牌简介、预览文案、风格和时间地点信息集中维护。">
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="风格 Tags">
+          <Field label="风格 Tags" hint={`${countText(draft.genresText)}/${INPUT_LIMITS.label.genre * 10}`}>
             <input
               value={draft.genresText}
               onChange={(event) => updateDraft('genresText', event.target.value)}
               className={textInputClassName}
               placeholder="melodic techno, house"
+              maxLength={INPUT_LIMITS.label.genre * 10}
             />
           </Field>
-          <Field label="Genres Preview">
+          <Field label="Genres Preview" hint={`${countText(draft.genresPreview)}/${INPUT_LIMITS.label.genresPreview}`}>
             <input
               value={draft.genresPreview}
               onChange={(event) => updateDraft('genresPreview', event.target.value)}
               className={textInputClassName}
               placeholder="Melodic Techno / House"
+              maxLength={INPUT_LIMITS.label.genresPreview}
             />
           </Field>
-          <Field label="Latest Release">
+          <Field label="Latest Release" hint={`${countText(draft.latestReleaseListing)}/${INPUT_LIMITS.label.latestReleaseListing}`}>
             <input
               value={draft.latestReleaseListing}
               onChange={(event) => updateDraft('latestReleaseListing', event.target.value)}
               className={textInputClassName}
               placeholder="Anyma - Genesys"
+              maxLength={INPUT_LIMITS.label.latestReleaseListing}
             />
           </Field>
-          <Field label="Location Period">
+          <Field label="Location Period" hint={`${countText(draft.locationPeriod)}/${INPUT_LIMITS.label.locationPeriod}`}>
             <input
               value={draft.locationPeriod}
               onChange={(event) => updateDraft('locationPeriod', event.target.value)}
               className={textInputClassName}
               placeholder="Milan / 2016-now"
+              maxLength={INPUT_LIMITS.label.locationPeriod}
             />
           </Field>
           <div className="lg:col-span-2">
-            <Field label="Introduction Preview">
+            <Field label="Introduction Preview" hint={`${countText(draft.introductionPreview, true)}/${INPUT_LIMITS.label.introductionPreview}`}>
               <textarea
                 value={draft.introductionPreview}
                 onChange={(event) => updateDraft('introductionPreview', event.target.value)}
                 className={textAreaClassName}
                 placeholder="用于列表或卡片的简版简介"
+                maxLength={INPUT_LIMITS.label.introductionPreview}
               />
             </Field>
           </div>
           <div className="lg:col-span-2">
-            <Field label="Introduction">
+            <Field label="Introduction" hint={`${countText(draft.introduction, true)}/${INPUT_LIMITS.label.introduction}`}>
               <textarea
                 value={draft.introduction}
                 onChange={(event) => updateDraft('introduction', event.target.value)}
                 className="admin-studio-textarea min-h-[260px]"
                 placeholder="完整厂牌介绍"
+                maxLength={INPUT_LIMITS.label.introduction}
               />
             </Field>
           </div>
@@ -328,6 +358,7 @@ export default function LabelStudioForm({
               onChange={(event) => updateDraft('demoSubmissionDisplay', event.target.value)}
               className={textInputClassName}
               placeholder="Open / Invite Only"
+              maxLength={INPUT_LIMITS.label.demoSubmissionDisplay}
             />
           </Field>
         </div>
@@ -341,6 +372,7 @@ export default function LabelStudioForm({
               onChange={(event) => updateDraft('founderName', event.target.value)}
               className={textInputClassName}
               placeholder="Carmine Conte"
+              maxLength={INPUT_LIMITS.label.founderName}
             />
           </Field>
           <Field label="Founded At">
@@ -349,6 +381,7 @@ export default function LabelStudioForm({
               onChange={(event) => updateDraft('foundedAt', event.target.value)}
               className={textInputClassName}
               placeholder="2016"
+              maxLength={INPUT_LIMITS.label.foundedAt}
             />
           </Field>
           <Field label="Founder DJ ID">

@@ -9,6 +9,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { authAPI } from '@/lib/api/auth';
 import { djAPI, DJ } from '@/lib/api/dj';
 import { GENRE_TREE, flattenGenres } from '@/lib/genres';
+import {
+  INPUT_LIMITS,
+  countText,
+  normalizeMultiline,
+  normalizeSingleLine,
+  validateDisplayName,
+  validateOptionalMaxLength,
+} from '@/lib/input-rules';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -87,13 +95,35 @@ export default function ProfilePage() {
       return;
     }
 
+    const normalizedDisplayName = normalizeSingleLine(displayName);
+    const normalizedLocation = normalizeSingleLine(location);
+    const normalizedBio = normalizeMultiline(bio);
+
+    const displayNameError = validateDisplayName(normalizedDisplayName);
+    if (displayNameError) {
+      setMessage(displayNameError);
+      return;
+    }
+
+    const locationError = validateOptionalMaxLength(normalizedLocation, INPUT_LIMITS.user.location, '城市');
+    if (locationError) {
+      setMessage(locationError);
+      return;
+    }
+
+    const bioError = validateOptionalMaxLength(normalizedBio, INPUT_LIMITS.user.bio, '个人简介', true);
+    if (bioError) {
+      setMessage(bioError);
+      return;
+    }
+
     setSaving(true);
     setMessage('');
     try {
       const updated = await authAPI.updateProfile(token, {
-        displayName,
-        bio,
-        location,
+        displayName: normalizedDisplayName,
+        bio: normalizedBio,
+        location: normalizedLocation,
         favoriteDjIds,
         favoriteGenres,
       });
@@ -176,16 +206,24 @@ export default function ProfilePage() {
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={INPUT_LIMITS.user.displayName.max}
                 className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary focus:border-primary-blue focus:outline-none"
               />
+              <div className="mt-1 text-xs text-text-tertiary">
+                {countText(displayName)}/{INPUT_LIMITS.user.displayName.max}
+              </div>
             </div>
             <div>
               <label className="block text-text-secondary text-sm mb-1">城市</label>
               <input
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
+                maxLength={INPUT_LIMITS.user.location}
                 className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary focus:border-primary-blue focus:outline-none"
               />
+              <div className="mt-1 text-xs text-text-tertiary">
+                {countText(location)}/{INPUT_LIMITS.user.location}
+              </div>
             </div>
           </div>
           <div>
@@ -194,8 +232,12 @@ export default function ProfilePage() {
               rows={3}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
+              maxLength={INPUT_LIMITS.user.bio}
               className="w-full bg-bg-tertiary text-text-primary rounded-lg px-3 py-2 border border-bg-primary focus:border-primary-blue focus:outline-none"
             />
+            <div className="mt-1 text-xs text-text-tertiary">
+              {countText(bio, true)}/{INPUT_LIMITS.user.bio}
+            </div>
           </div>
         </div>
 

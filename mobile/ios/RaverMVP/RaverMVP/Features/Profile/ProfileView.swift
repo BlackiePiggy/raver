@@ -274,6 +274,9 @@ struct ProfileView: View {
                     quickActionTile(title: LT("我的发布", "My Posts", "自分の投稿"), icon: "square.stack.3d.up") {
                         profilePush(.myPublishes)
                     }
+                    quickActionTile(title: LT("贡献中心", "Contributions", "貢献センター"), icon: "person.3.fill") {
+                        profilePush(.contributionCenter)
+                    }
                     quickActionTile(title: LT("我的收藏", "My Saves", "保存済み"), icon: "star.fill") {
                         profilePush(.mySaves)
                     }
@@ -4273,6 +4276,679 @@ struct ShareAssetDetailView: View {
             feedbackMessage = error.userFacingMessage ?? LT("重新生成海报失败，请稍后再试。", "Failed to regenerate poster. Please try again later.", "海報の再生成に失敗しました。時間をおいて再試行してください。")
         }
     }
+}
+
+@MainActor
+private final class ContributionCenterViewModel: ObservableObject {
+    enum Filter: String, CaseIterable, Identifiable {
+        case all
+        case event
+        case dj
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return LT("全部", "All", "すべて")
+            case .event:
+                return "Event"
+            case .dj:
+                return "DJ"
+            }
+        }
+    }
+
+    @Published var summary: WebContributionCenterSummary?
+    @Published var items: [WebContributionHistoryItem] = []
+    @Published var selectedFilter: Filter = .all
+    @Published var phase: LoadPhase = .idle
+    @Published var isLoading = false
+    @Published var isLoadingMore = false
+    @Published var bannerMessage: String?
+    @Published var bannerStyle: ScreenStatusBannerStyle = .info
+    @Published var bannerAllowsRetry = false
+    @Published var loadMoreErrorMessage: String?
+    @Published var errorMessage: String?
+
+    private let contentRepository: ProfileContentRepository
+    private let pageSize = 20
+    private let offlineSnapshotStorageKey = "raver.profile.contributionCenter.offlineSnapshot.v1"
+    private var nextCursor: String?
+    private var hasMore = false
+    private var loadedInitial = false
+
+    init(contentRepository: ProfileContentRepository) {
+        self.contentRepository = contentRepository
+    }
+
+    var hasVisibleContent: Bool {
+        summary != nil || !items.isEmpty
+    }
+
+    func loadIfNeeded() async {
+        guard !loadedInitial else { return }
+        await reload()
+    }
+
+    func reload() async {
+        guard !isLoading else { return }
+        let restoredFromSnapshot = !hasVisibleContent && restoreOfflineSnapshot(for: selectedFilter)
+        let hadContent = hasVisibleContent
+        isLoading = true
+        loadMoreErrorMessage = nil
+        if hadContent || restoredFromSnapshot {
+            phase = .success
+        } else {
+            phase = .initialLoading
+        }
+        defer { isLoading = false }
+
+        do {
+            async let summaryTask = contentRepository.fetchMyContributionCenterSummary()
+            async let pageTask = contentRepository.fetchMyContributionHistory(
+                entityType: selectedFilter.rawValue,
+                cursor: nil,
+                limit: pageSize
+            )
+            let (loadedSummary, page) = try await (summaryTask, pageTask)
+            summary = loadedSummary
+            items = page.items
+            nextCursor = page.pageInfo.nextCursor
+            hasMore = page.pageInfo.hasMore
+            loadedInitial = true
+            phase = .success
+            bannerMessage = nil
+            bannerAllowsRetry = false
+            loadMoreErrorMessage = nil
+            errorMessage = nil
+            persistOfflineSnapshot(for: selectedFilter)
+        } catch {
+            guard !error.isUserInitiatedCancellation else { return }
+            loadedInitial = true
+
+            if restoreOfflineSnapshot(for: selectedFilter) {
+                phase = .success
+                bannerAllowsRetry = false
+                bannerStyle = .warning
+                bannerMessage = isRequestTimeoutError(error)
+                    ? LT(
+                        "请求超时，已展示最近一次同步的贡献记录。",
+                        "Request timed out. Showing your latest synced contributions.",
+                        "リクエストがタイムアウトしたため、最後に同期した貢献履歴を表示しています。"
+                    )
+                    : LT(
+                        "当前离线，已展示最近一次同步的贡献记录。",
+                        "You're offline. Showing your latest synced contributions.",
+                        "現在オフラインのため、最後に同期した貢献履歴を表示しています。"
+                    )
+                errorMessage = nil
+            } else if hadContent || restoredFromSnapshot {
+                phase = .success
+                bannerMessage = error.userFacingMessage ?? LT(
+                    "贡献记录刷新失败，请稍后重试。",
+                    "Failed to refresh contributions. Please try again later.",
+                    "貢献履歴を更新できませんでした。時間をおいて再試行してください。"
+                )
+                bannerStyle = .error
+                bannerAllowsRetry = true
+                errorMessage = nil
+            } else {
+                let message = error.userFacingMessage ?? LT(
+                    "贡献记录加载失败，请稍后重试。",
+                    "Failed to load contributions. Please try again later.",
+                    "貢献履歴を読み込めませんでした。時間をおいて再試行してください。"
+                )
+                phase = isOfflineRecoverableError(error) ? .offline(message: message) : .failure(message: message)
+            }
+        }
+    }
+
+    func selectFilter(_ filter: Filter) async {
+        guard selectedFilter != filter else { return }
+        selectedFilter = filter
+        applyCachedPageIfAvailable(for: filter)
+        await reload()
+    }
+
+    func loadMoreIfNeeded(currentItem item: WebContributionHistoryItem) async {
+        guard hasMore,
+              !isLoadingMore,
+              !isLoading,
+              items.last?.id == item.id else { return }
+        guard let nextCursor, !nextCursor.isEmpty else { return }
+
+        isLoadingMore = true
+        loadMoreErrorMessage = nil
+        defer { isLoadingMore = false }
+
+        do {
+            let page = try await contentRepository.fetchMyContributionHistory(
+                entityType: selectedFilter.rawValue,
+                cursor: nextCursor,
+                limit: pageSize
+            )
+            items.append(contentsOf: page.items.filter { candidate in
+                !items.contains(where: { $0.id == candidate.id })
+            })
+            self.nextCursor = page.pageInfo.nextCursor
+            hasMore = page.pageInfo.hasMore
+            persistOfflineSnapshot(for: selectedFilter)
+        } catch {
+            guard !error.isUserInitiatedCancellation else { return }
+            loadMoreErrorMessage = error.userFacingMessage ?? LT(
+                "更多贡献记录加载失败，请稍后重试。",
+                "Failed to load more contributions. Please try again later.",
+                "追加の貢献履歴を読み込めませんでした。時間をおいて再試行してください。"
+            )
+        }
+    }
+
+    func retryLoadMore() async {
+        guard let item = items.last else { return }
+        await loadMoreIfNeeded(currentItem: item)
+    }
+
+    func dismissBanner() {
+        bannerMessage = nil
+        bannerAllowsRetry = false
+    }
+
+    private func applyCachedPageIfAvailable(for filter: Filter) {
+        guard let snapshot = loadOfflineSnapshot(),
+              let cachedPage = snapshot.pages.first(where: { $0.filter == filter.rawValue }) else {
+            items = []
+            nextCursor = nil
+            hasMore = false
+            loadMoreErrorMessage = nil
+            return
+        }
+
+        summary = snapshot.summary ?? summary
+        items = cachedPage.items
+        nextCursor = cachedPage.nextCursor
+        hasMore = cachedPage.hasMore
+        phase = .success
+    }
+
+    private func persistOfflineSnapshot(for filter: Filter) {
+        var snapshot = loadOfflineSnapshot() ?? ContributionCenterOfflineSnapshot(summary: nil, pages: [], cachedAt: Date())
+        snapshot.summary = summary
+        snapshot.cachedAt = Date()
+        let nextPage = ContributionCenterOfflinePageSnapshot(
+            filter: filter.rawValue,
+            items: items,
+            nextCursor: nextCursor,
+            hasMore: hasMore
+        )
+        snapshot.pages.removeAll { $0.filter == filter.rawValue }
+        snapshot.pages.append(nextPage)
+
+        do {
+            let data = try JSONEncoder.raver.encode(snapshot)
+            UserDefaults.standard.set(data, forKey: offlineSnapshotStorageKey)
+        } catch {
+            assertionFailure("Failed to persist contribution center offline snapshot: \(error)")
+        }
+    }
+
+    private func loadOfflineSnapshot() -> ContributionCenterOfflineSnapshot? {
+        guard let data = UserDefaults.standard.data(forKey: offlineSnapshotStorageKey) else {
+            return nil
+        }
+        return try? JSONDecoder.raver.decode(ContributionCenterOfflineSnapshot.self, from: data)
+    }
+
+    private func restoreOfflineSnapshot(for filter: Filter) -> Bool {
+        guard let snapshot = loadOfflineSnapshot(),
+              let cachedPage = snapshot.pages.first(where: { $0.filter == filter.rawValue }) else {
+            return false
+        }
+
+        summary = snapshot.summary
+        items = cachedPage.items
+        nextCursor = cachedPage.nextCursor
+        hasMore = cachedPage.hasMore
+        phase = .success
+        loadMoreErrorMessage = nil
+        return true
+    }
+
+    private func isRequestTimeoutError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return urlError.code == .timedOut
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut
+    }
+
+    private func isOfflineRecoverableError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut,
+                 .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed,
+                 .internationalRoamingOff,
+                 .callIsActive,
+                 .dataNotAllowed:
+                return true
+            default:
+                break
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let recoverableCodes: Set<Int> = [
+                NSURLErrorTimedOut,
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+            ]
+            if recoverableCodes.contains(nsError.code) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private struct ContributionCenterOfflineSnapshot: Codable {
+        var summary: WebContributionCenterSummary?
+        var pages: [ContributionCenterOfflinePageSnapshot]
+        var cachedAt: Date
+    }
+
+    private struct ContributionCenterOfflinePageSnapshot: Codable {
+        var filter: String
+        var items: [WebContributionHistoryItem]
+        var nextCursor: String?
+        var hasMore: Bool
+    }
+}
+
+struct ContributionCenterView: View {
+    @Environment(\.appPush) private var appPush
+    @StateObject private var viewModel: ContributionCenterViewModel
+
+    init(contentRepository: ProfileContentRepository) {
+        _viewModel = StateObject(wrappedValue: ContributionCenterViewModel(contentRepository: contentRepository))
+    }
+
+    var body: some View {
+        Group {
+            switch viewModel.phase {
+            case .idle, .initialLoading:
+                ScrollView {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                }
+            case .failure(let message):
+                ScrollView {
+                    ScreenErrorCard(
+                        title: LT("贡献中心加载失败", "Failed to load contributions", "貢献センターを読み込めませんでした"),
+                        message: message,
+                        retryAction: {
+                        Task { await viewModel.reload() }
+                        }
+                    )
+                    .padding(16)
+                    .padding(.top, 40)
+                }
+            case .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(
+                        title: LT("网络不可用", "Network Unavailable", "ネットワークを利用できません"),
+                        message: message,
+                        retryAction: {
+                        Task { await viewModel.reload() }
+                        }
+                    )
+                    .padding(16)
+                    .padding(.top, 40)
+                }
+            case .empty, .success:
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if viewModel.isLoading && viewModel.hasVisibleContent {
+                            InlineLoadingBadge(title: LT("正在更新贡献记录", "Updating contributions", "貢献履歴を更新中"))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if let bannerMessage = viewModel.bannerMessage {
+                            ScreenStatusBanner(
+                                message: bannerMessage,
+                                style: viewModel.bannerStyle,
+                                actionTitle: viewModel.bannerAllowsRetry ? LT("重试", "Retry", "再試行") : nil,
+                                onDismiss: viewModel.dismissBanner,
+                                action: {
+                                    Task { await viewModel.reload() }
+                                }
+                            )
+                        }
+                        summaryCard
+                        filterBar
+                        historySection
+                    }
+                    .padding(16)
+                }
+            }
+        }
+        .background(RaverTheme.background.ignoresSafeArea())
+        .raverSystemNavigation(title: LT("贡献中心", "Contributions", "貢献センター"))
+        .task {
+            await viewModel.loadIfNeeded()
+        }
+        .refreshable {
+            await viewModel.reload()
+        }
+        .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button(LT("确定", "OK", "OK"), role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    private var summaryCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(LT("历史贡献总览", "Contribution Summary", "貢献サマリー"))
+                    .font(.headline)
+                    .foregroundStyle(RaverTheme.primaryText)
+
+                if let summary = viewModel.summary {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2),
+                        spacing: 10
+                    ) {
+                        summaryMetric(
+                            title: LT("全部贡献", "Total", "総貢献"),
+                            value: "\(summary.totalContributionCount)"
+                        )
+                        summaryMetric(
+                            title: LT("贡献过的活动", "Events", "イベント"),
+                            value: "\(summary.contributedEventCount)"
+                        )
+                        summaryMetric(
+                            title: LT("贡献过的 DJ", "DJs", "DJ"),
+                            value: "\(summary.contributedDJCount)"
+                        )
+                        summaryMetric(
+                            title: LT("最近贡献", "Latest", "最新"),
+                            value: summary.lastContributionAt.map(Self.utcTimestampText) ?? "-"
+                        )
+                    }
+
+                    if !summary.recentItems.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(LT("最近 3 条", "Recent 3", "最近3件"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            ForEach(summary.recentItems) { item in
+                                Button {
+                                    openContributionTarget(item)
+                                } label: {
+                                    contributionCompactRow(item)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                } else if viewModel.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 12)
+                } else {
+                    Text(LT("暂无贡献记录", "No contributions yet", "貢献履歴はまだありません"))
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(ContributionCenterViewModel.Filter.allCases) { filter in
+                    Button {
+                        Task { await viewModel.selectFilter(filter) }
+                    } label: {
+                        Text(filter.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(viewModel.selectedFilter == filter ? RaverTheme.background : RaverTheme.primaryText)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(viewModel.selectedFilter == filter ? RaverTheme.accent : RaverTheme.card)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(LT("历史列表", "History", "履歴"))
+                .font(.headline)
+                .foregroundStyle(RaverTheme.primaryText)
+
+            if viewModel.isLoading && viewModel.items.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            } else if viewModel.items.isEmpty {
+                ContentUnavailableView(
+                    LT("暂无贡献记录", "No contributions yet", "貢献履歴はまだありません"),
+                    systemImage: "person.crop.circle.badge.checkmark",
+                    description: Text(LT(
+                        "通过审核并成功生效的 Event / DJ 修改，会出现在这里。",
+                        "Approved Event and DJ changes that successfully go live will appear here.",
+                        "承認されて反映された Event / DJ の変更履歴がここに表示されます。"
+                    ))
+                )
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.items) { item in
+                        Button {
+                            openContributionTarget(item)
+                        } label: {
+                            contributionHistoryRow(item)
+                        }
+                        .buttonStyle(.plain)
+                        .task {
+                            await viewModel.loadMoreIfNeeded(currentItem: item)
+                        }
+                    }
+
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+
+                    if let loadMoreErrorMessage = viewModel.loadMoreErrorMessage {
+                        ScreenStatusBanner(
+                            message: loadMoreErrorMessage,
+                            style: .error,
+                            actionTitle: LT("重试", "Retry", "再試行"),
+                            action: {
+                                Task { await viewModel.retryLoadMore() }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func summaryMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(RaverTheme.primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+    }
+
+    private func contributionCompactRow(_ item: WebContributionHistoryItem) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(RaverTheme.accent.opacity(0.16))
+                .frame(width: 34, height: 34)
+                .overlay {
+                    Image(systemName: item.entity.type == "event" ? "calendar" : "music.mic")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.entity.title ?? fallbackTitle(for: item))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .lineLimit(1)
+                Text(Self.historyMetaText(for: item))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+    }
+
+    private func contributionHistoryRow(_ item: WebContributionHistoryItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            contributionCover(item)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.entity.title ?? fallbackTitle(for: item))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .multilineTextAlignment(.leading)
+
+                Text(Self.historyMetaText(for: item))
+                    .font(.caption)
+                    .foregroundStyle(RaverTheme.secondaryText)
+
+                if let summary = item.changeSummary?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !summary.isEmpty {
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Text(Self.utcTimestampText(item.occurredAt))
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(RaverTheme.card)
+        )
+    }
+
+    private func contributionCover(_ item: WebContributionHistoryItem) -> some View {
+        let resolved = AppConfig.resolvedURLString(item.entity.coverImageUrl)
+        return Group {
+            if let resolved, let url = URL(string: resolved) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        coverFallback(item)
+                    }
+                }
+            } else {
+                coverFallback(item)
+            }
+        }
+        .frame(width: 60, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func coverFallback(_ item: WebContributionHistoryItem) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(RaverTheme.accent.opacity(0.14))
+            .overlay {
+                Image(systemName: item.entity.type == "event" ? "calendar" : "music.mic")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(RaverTheme.accent)
+            }
+    }
+
+    private func openContributionTarget(_ item: WebContributionHistoryItem) {
+        if item.entity.type == "event" {
+            appPush(.eventDetail(eventID: item.entity.id))
+            return
+        }
+        if item.entity.type == "dj" {
+            appPush(.djDetail(djID: item.entity.id))
+        }
+    }
+
+    private func fallbackTitle(for item: WebContributionHistoryItem) -> String {
+        item.entity.type == "event"
+            ? LT("未命名活动", "Untitled Event", "名称未設定のイベント")
+            : LT("未命名 DJ", "Untitled DJ", "名称未設定のDJ")
+    }
+
+    private static func historyMetaText(for item: WebContributionHistoryItem) -> String {
+        let typeText = item.entity.type == "event" ? "Event" : "DJ"
+        let roleText = item.role == "creator"
+            ? LT("创建者", "Creator", "作成者")
+            : LT("贡献者", "Contributor", "貢献者")
+        let actionText = item.actionType == "create"
+            ? LT("创建", "Create", "作成")
+            : LT("修改", "Edit", "編集")
+        return "\(typeText) · \(roleText) · \(actionText)"
+    }
+
+    private static func utcTimestampText(_ date: Date) -> String {
+        utcFormatter.string(from: date)
+    }
+
+    private static let utcFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd HH:mm 'UTC'"
+        return formatter
+    }()
 }
 
 enum ShareAssetPhotoSaver {

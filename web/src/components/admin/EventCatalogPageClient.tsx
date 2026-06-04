@@ -30,6 +30,7 @@ import {
   readAdminCatalogCache,
   writeAdminCatalogCache,
 } from '@/features/admin-content/catalog/cache';
+import ContributionTabPanel from '@/features/contribution-module/ContributionTabPanel';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import type { EventStudioLoadedEvent, EventStudioOverview } from '@/features/admin-content/event-studio/types';
 import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
@@ -222,13 +223,14 @@ const detailText = (label: string, value?: string | number | null) => (
   </div>
 );
 
-type EventDetailTabKey = 'overview' | 'lineup' | 'timetable' | 'tickets' | 'schedule' | 'media';
+type EventDetailTabKey = 'overview' | 'lineup' | 'timetable' | 'tickets' | 'contribution' | 'schedule' | 'media';
 
 const EVENT_DETAIL_TABS: Array<{ key: EventDetailTabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'lineup', label: 'Lineup' },
   { key: 'timetable', label: 'Timetable' },
   { key: 'tickets', label: 'Tickets' },
+  { key: 'contribution', label: '贡献' },
 ];
 
 const countDateSpanDays = (start?: string | null, end?: string | null): number => {
@@ -310,6 +312,7 @@ function EventDetailOverlay({
   useEffect(() => {
     if (!item) return;
     if (activeTab === 'overview') return;
+    if (activeTab === 'contribution') return;
     if (detail || loading || error) return;
     void onRequestLoadDetail();
   }, [activeTab, detail, error, item, loading, onRequestLoadDetail]);
@@ -815,6 +818,8 @@ function EventDetailOverlay({
         {resolved?.ticketNotes ? <div className="mt-4 text-sm leading-6 text-[#4b5563]">{resolved.ticketNotes}</div> : null}
       </section>
     );
+  } else if (activeTab === 'contribution') {
+    tabContent = <ContributionTabPanel entityType="event" entityId={item.id} />;
   } else if (activeTab === 'media') {
     tabContent = (
       <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">

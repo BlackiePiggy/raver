@@ -4,67 +4,77 @@ import {
   DJStudioLocalizedText,
   DJStudioUpdateInput,
 } from './types';
+import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine, trimArrayItems } from '@/lib/input-rules';
 
-const trimOrNull = (value?: string | null): string | null => {
-  const trimmed = String(value || '').trim();
+const trimSingleLineOrNull = (value: string | null | undefined, max: number): string | null => {
+  const trimmed = normalizeSingleLine(value).slice(0, max);
   return trimmed || null;
 };
 
+const trimMultilineOrNull = (value: string | null | undefined, max: number): string | null => {
+  const trimmed = normalizeMultiline(value).slice(0, max);
+  return trimmed || null;
+};
+
+const trimUrlOrNull = (value?: string | null): string | null =>
+  trimSingleLineOrNull(value, INPUT_LIMITS.common.url);
+
+const trimIdOrNull = (value?: string | null): string | null =>
+  trimSingleLineOrNull(value, INPUT_LIMITS.common.externalId);
+
 const primaryText = (value: DJStudioLocalizedText): string =>
-  value.zh.trim() || value.en.trim() || value.ja.trim() || value.enFull.trim();
+  normalizeSingleLine(value.zh) || normalizeSingleLine(value.en) || normalizeSingleLine(value.ja) || normalizeSingleLine(value.enFull);
 
 const normalizedLocalizedText = (
-  value: DJStudioLocalizedText
+  value: DJStudioLocalizedText,
+  max: number,
+  multiline = false
 ): DJStudioLocalizedText | null => {
   const next: DJStudioLocalizedText = {
-    zh: value.zh.trim(),
-    en: value.en.trim(),
-    ja: value.ja.trim(),
-    enFull: value.enFull.trim(),
+    zh: (multiline ? normalizeMultiline(value.zh) : normalizeSingleLine(value.zh)).slice(0, max),
+    en: (multiline ? normalizeMultiline(value.en) : normalizeSingleLine(value.en)).slice(0, max),
+    ja: (multiline ? normalizeMultiline(value.ja) : normalizeSingleLine(value.ja)).slice(0, max),
+    enFull: (multiline ? normalizeMultiline(value.enFull) : normalizeSingleLine(value.enFull)).slice(0, max),
   };
   return next.zh || next.en || next.ja || next.enFull ? next : null;
 };
 
-const normalizeStringArray = (value: string[]): string[] => {
-  const items = value
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return Array.from(new Set(items));
-};
+const normalizeStringArray = (value: string[], itemMax: number, maxItems: number): string[] =>
+  trimArrayItems(value, itemMax).slice(0, maxItems);
 
 const integerOrNull = (value: string): number | null => {
-  const trimmed = value.trim();
+  const trimmed = normalizeSingleLine(value);
   if (!trimmed) return null;
   const numeric = Number(trimmed);
   return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
 };
 
 export const mapDJStudioDraftToCreateInput = (draft: DJStudioDraft): DJStudioCreateInput => ({
-  name: primaryText(draft.name),
-  nameI18n: normalizedLocalizedText(draft.name),
-  spotifyId: trimOrNull(draft.spotifyId),
-  aliases: normalizeStringArray(draft.aliases),
-  genres: normalizeStringArray(draft.genres),
-  bio: trimOrNull(primaryText(draft.bio)),
-  bioI18n: normalizedLocalizedText(draft.bio),
-  country: trimOrNull(primaryText(draft.country)),
-  countryI18n: normalizedLocalizedText(draft.country),
-  avatarUrl: trimOrNull(draft.avatarImage?.remoteUrl),
-  bannerUrl: trimOrNull(draft.bannerImage?.remoteUrl),
-  proofImageUrl: trimOrNull(draft.proofImage?.remoteUrl),
-  spotifyUrl: trimOrNull(draft.spotifyUrl),
+  name: primaryText(normalizedLocalizedText(draft.name, INPUT_LIMITS.dj.name) ?? draft.name).slice(0, INPUT_LIMITS.dj.name),
+  nameI18n: normalizedLocalizedText(draft.name, INPUT_LIMITS.dj.name),
+  spotifyId: trimIdOrNull(draft.spotifyId),
+  aliases: normalizeStringArray(draft.aliases, INPUT_LIMITS.dj.alias, INPUT_LIMITS.dj.aliasesMaxItems),
+  genres: normalizeStringArray(draft.genres, INPUT_LIMITS.dj.genre, INPUT_LIMITS.dj.genresMaxItems),
+  bio: trimMultilineOrNull(primaryText(draft.bio), INPUT_LIMITS.dj.bio),
+  bioI18n: normalizedLocalizedText(draft.bio, INPUT_LIMITS.dj.bio, true),
+  country: trimSingleLineOrNull(primaryText(draft.country), INPUT_LIMITS.dj.country),
+  countryI18n: normalizedLocalizedText(draft.country, INPUT_LIMITS.dj.country),
+  avatarUrl: trimUrlOrNull(draft.avatarImage?.remoteUrl),
+  bannerUrl: trimUrlOrNull(draft.bannerImage?.remoteUrl),
+  proofImageUrl: trimUrlOrNull(draft.proofImage?.remoteUrl),
+  spotifyUrl: trimUrlOrNull(draft.spotifyUrl),
   spotifyFollowers: integerOrNull(draft.spotifyFollowers),
-  appleMusicId: trimOrNull(draft.appleMusicId),
-  instagramUrl: trimOrNull(draft.instagramUrl),
-  facebookUrl: trimOrNull(draft.facebookUrl),
-  soundcloudUrl: trimOrNull(draft.soundcloudUrl),
-  soundcloudId: trimOrNull(draft.soundcloudId),
-  twitterUrl: trimOrNull(draft.twitterUrl),
-  youtubeUrl: trimOrNull(draft.youtubeUrl),
-  neteaseUrl: trimOrNull(draft.neteaseUrl),
-  qqMusicUrl: trimOrNull(draft.qqMusicUrl),
-  website: trimOrNull(draft.website),
-  otherPlatformUrl: trimOrNull(draft.otherPlatformUrl),
+  appleMusicId: trimIdOrNull(draft.appleMusicId),
+  instagramUrl: trimUrlOrNull(draft.instagramUrl),
+  facebookUrl: trimUrlOrNull(draft.facebookUrl),
+  soundcloudUrl: trimUrlOrNull(draft.soundcloudUrl),
+  soundcloudId: trimIdOrNull(draft.soundcloudId),
+  twitterUrl: trimUrlOrNull(draft.twitterUrl),
+  youtubeUrl: trimUrlOrNull(draft.youtubeUrl),
+  neteaseUrl: trimUrlOrNull(draft.neteaseUrl),
+  qqMusicUrl: trimUrlOrNull(draft.qqMusicUrl),
+  website: trimUrlOrNull(draft.website),
+  otherPlatformUrl: trimUrlOrNull(draft.otherPlatformUrl),
   trackCount: integerOrNull(draft.trackCount),
   playlistCount: integerOrNull(draft.playlistCount),
   soundCloudFollowers: integerOrNull(draft.soundCloudFollowers),
@@ -73,30 +83,30 @@ export const mapDJStudioDraftToCreateInput = (draft: DJStudioDraft): DJStudioCre
 });
 
 export const mapDJStudioDraftToUpdateInput = (draft: DJStudioDraft): DJStudioUpdateInput => ({
-  name: trimOrNull(primaryText(draft.name)),
-  nameI18n: normalizedLocalizedText(draft.name),
-  aliases: normalizeStringArray(draft.aliases),
-  genres: normalizeStringArray(draft.genres),
-  bio: trimOrNull(primaryText(draft.bio)),
-  bioI18n: normalizedLocalizedText(draft.bio),
-  avatarUrl: trimOrNull(draft.avatarImage?.remoteUrl),
-  bannerUrl: trimOrNull(draft.bannerImage?.remoteUrl),
-  country: trimOrNull(primaryText(draft.country)),
-  countryI18n: normalizedLocalizedText(draft.country),
-  spotifyId: trimOrNull(draft.spotifyId),
-  appleMusicId: trimOrNull(draft.appleMusicId),
-  spotifyUrl: trimOrNull(draft.spotifyUrl),
+  name: trimSingleLineOrNull(primaryText(draft.name), INPUT_LIMITS.dj.name),
+  nameI18n: normalizedLocalizedText(draft.name, INPUT_LIMITS.dj.name),
+  aliases: normalizeStringArray(draft.aliases, INPUT_LIMITS.dj.alias, INPUT_LIMITS.dj.aliasesMaxItems),
+  genres: normalizeStringArray(draft.genres, INPUT_LIMITS.dj.genre, INPUT_LIMITS.dj.genresMaxItems),
+  bio: trimMultilineOrNull(primaryText(draft.bio), INPUT_LIMITS.dj.bio),
+  bioI18n: normalizedLocalizedText(draft.bio, INPUT_LIMITS.dj.bio, true),
+  avatarUrl: trimUrlOrNull(draft.avatarImage?.remoteUrl),
+  bannerUrl: trimUrlOrNull(draft.bannerImage?.remoteUrl),
+  country: trimSingleLineOrNull(primaryText(draft.country), INPUT_LIMITS.dj.country),
+  countryI18n: normalizedLocalizedText(draft.country, INPUT_LIMITS.dj.country),
+  spotifyId: trimIdOrNull(draft.spotifyId),
+  appleMusicId: trimIdOrNull(draft.appleMusicId),
+  spotifyUrl: trimUrlOrNull(draft.spotifyUrl),
   spotifyFollowers: integerOrNull(draft.spotifyFollowers),
-  instagramUrl: trimOrNull(draft.instagramUrl),
-  facebookUrl: trimOrNull(draft.facebookUrl),
-  soundcloudUrl: trimOrNull(draft.soundcloudUrl),
-  soundcloudId: trimOrNull(draft.soundcloudId),
-  twitterUrl: trimOrNull(draft.twitterUrl),
-  youtubeUrl: trimOrNull(draft.youtubeUrl),
-  neteaseUrl: trimOrNull(draft.neteaseUrl),
-  qqMusicUrl: trimOrNull(draft.qqMusicUrl),
-  website: trimOrNull(draft.website),
-  otherPlatformUrl: trimOrNull(draft.otherPlatformUrl),
+  instagramUrl: trimUrlOrNull(draft.instagramUrl),
+  facebookUrl: trimUrlOrNull(draft.facebookUrl),
+  soundcloudUrl: trimUrlOrNull(draft.soundcloudUrl),
+  soundcloudId: trimIdOrNull(draft.soundcloudId),
+  twitterUrl: trimUrlOrNull(draft.twitterUrl),
+  youtubeUrl: trimUrlOrNull(draft.youtubeUrl),
+  neteaseUrl: trimUrlOrNull(draft.neteaseUrl),
+  qqMusicUrl: trimUrlOrNull(draft.qqMusicUrl),
+  website: trimUrlOrNull(draft.website),
+  otherPlatformUrl: trimUrlOrNull(draft.otherPlatformUrl),
   trackCount: integerOrNull(draft.trackCount),
   playlistCount: integerOrNull(draft.playlistCount),
   soundCloudFollowers: integerOrNull(draft.soundCloudFollowers),

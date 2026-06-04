@@ -143,6 +143,19 @@ const toPositiveSafeInteger = (value: unknown): number => {
   return 0;
 };
 
+const readDate = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
 const NOTIFICATION_CATEGORIES = [
   'chat_message',
   'community_interaction',
@@ -206,6 +219,50 @@ export type NotificationAdminPublishTaskRecord = NotificationAdminPublishTaskLis
 
 export type NotificationAdminPublishTaskPage = {
   items: NotificationAdminPublishTaskListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type NotificationAdminContentHistoryOperationType = 'create' | 'edit';
+export type NotificationAdminContentHistoryResultStatus = 'success' | 'failed';
+export type NotificationAdminContentHistoryPushStatus =
+  | 'pending'
+  | 'published'
+  | 'skipped'
+  | 'superseded'
+  | 'not_applicable';
+
+export type NotificationAdminContentHistoryListItem = {
+  id: string;
+  entityType: string;
+  entityId: string | null;
+  taskType: NotificationAdminPublishTaskType | null;
+  operationType: NotificationAdminContentHistoryOperationType;
+  resultStatus: NotificationAdminContentHistoryResultStatus;
+  pushStatus: NotificationAdminContentHistoryPushStatus;
+  title: string;
+  summary: string | null;
+  errorMessage: string | null;
+  sourceRoute: string | null;
+  createdBy: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  linkedTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NotificationAdminContentHistoryRecord = NotificationAdminContentHistoryListItem & {
+  payload: unknown;
+  decision: unknown;
+};
+
+export type NotificationAdminContentHistoryPage = {
+  items: NotificationAdminContentHistoryListItem[];
   pagination: {
     page: number;
     limit: number;
@@ -420,6 +477,23 @@ const isNotificationAdminPublishTaskType = (value: string): value is Notificatio
 const isNotificationAdminPublishTaskStatus = (value: string): value is NotificationAdminPublishTaskStatus =>
   value === 'pending' || value === 'published' || value === 'rejected';
 
+const isNotificationAdminContentHistoryOperationType = (
+  value: string
+): value is NotificationAdminContentHistoryOperationType => value === 'create' || value === 'edit';
+
+const isNotificationAdminContentHistoryResultStatus = (
+  value: string
+): value is NotificationAdminContentHistoryResultStatus => value === 'success' || value === 'failed';
+
+const isNotificationAdminContentHistoryPushStatus = (
+  value: string
+): value is NotificationAdminContentHistoryPushStatus =>
+  value === 'pending' ||
+  value === 'published' ||
+  value === 'skipped' ||
+  value === 'superseded' ||
+  value === 'not_applicable';
+
 const parseNotificationAdminPublishTaskRow = (row: {
   id: string;
   taskType: string;
@@ -442,7 +516,7 @@ const parseNotificationAdminPublishTaskRow = (row: {
 
   return {
     id: row.id,
-    taskType: row.taskType,
+    taskType: row.taskType as NotificationAdminPublishTaskType,
     entityType: row.entityType,
     entityId: row.entityId,
     status: row.status,
@@ -451,6 +525,62 @@ const parseNotificationAdminPublishTaskRow = (row: {
     createdBy: row.createdBy,
     decidedBy: row.decidedBy,
     decidedAt: row.decidedAt ? row.decidedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    payload: row.payload ?? null,
+    decision: row.decision ?? null,
+  };
+};
+
+const parseNotificationAdminContentHistoryRow = (row: {
+  id: string;
+  entityType: string;
+  entityId: string | null;
+  taskType: string | null;
+  operationType: string;
+  resultStatus: string;
+  pushStatus: string;
+  title: string;
+  summary: string | null;
+  errorMessage: string | null;
+  sourceRoute: string | null;
+  createdBy: string | null;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  linkedTaskId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  payload?: Prisma.JsonValue | null;
+  decision?: Prisma.JsonValue | null;
+}): NotificationAdminContentHistoryRecord | null => {
+  if (
+    !isNotificationAdminContentHistoryOperationType(row.operationType) ||
+    !isNotificationAdminContentHistoryResultStatus(row.resultStatus) ||
+    !isNotificationAdminContentHistoryPushStatus(row.pushStatus)
+  ) {
+    return null;
+  }
+
+  if (row.taskType && !isNotificationAdminPublishTaskType(row.taskType)) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    taskType: row.taskType as NotificationAdminPublishTaskType | null,
+    operationType: row.operationType as NotificationAdminContentHistoryOperationType,
+    resultStatus: row.resultStatus as NotificationAdminContentHistoryResultStatus,
+    pushStatus: row.pushStatus as NotificationAdminContentHistoryPushStatus,
+    title: row.title,
+    summary: row.summary,
+    errorMessage: row.errorMessage,
+    sourceRoute: row.sourceRoute,
+    createdBy: row.createdBy,
+    decidedBy: row.decidedBy,
+    decidedAt: row.decidedAt ? row.decidedAt.toISOString() : null,
+    linkedTaskId: row.linkedTaskId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     payload: row.payload ?? null,
@@ -3065,6 +3195,458 @@ export const notificationCenterService = {
         totalPages,
       },
     };
+  },
+
+  async createAdminContentHistory(input: {
+    entityType: string;
+    entityId?: string | null;
+    taskType?: NotificationAdminPublishTaskType | null;
+    operationType: NotificationAdminContentHistoryOperationType;
+    resultStatus: NotificationAdminContentHistoryResultStatus;
+    pushStatus: NotificationAdminContentHistoryPushStatus;
+    title: string;
+    summary?: string | null;
+    payload: unknown;
+    decision?: unknown;
+    errorMessage?: string | null;
+    sourceRoute?: string | null;
+    createdBy?: string | null;
+    decidedBy?: string | null;
+    decidedAt?: string | Date | null;
+    linkedTaskId?: string | null;
+  }): Promise<NotificationAdminContentHistoryRecord> {
+    const entityType = input.entityType.trim();
+    const entityId = input.entityId?.trim() || null;
+    const taskType = input.taskType?.trim() || null;
+    const title = input.title.trim();
+    if (!entityType || !title) {
+      throw new Error('history entityType/title are required');
+    }
+    if (taskType && !isNotificationAdminPublishTaskType(taskType)) {
+      throw new Error('invalid history taskType');
+    }
+
+    const decidedAt = readDate(input.decidedAt);
+    const row = await prisma.$transaction(async (tx) => {
+      if (input.resultStatus === 'success' && input.pushStatus === 'pending' && entityId && taskType) {
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE notification_admin_content_history
+          SET
+            push_status = 'superseded',
+            updated_at = NOW()
+          WHERE entity_type = ${entityType}
+            AND entity_id = ${entityId}
+            AND task_type = ${taskType}
+            AND result_status = 'success'
+            AND push_status = 'pending'
+        `);
+      }
+
+      const rows = await tx.$queryRaw<
+        Array<{
+          id: string;
+          entityType: string;
+          entityId: string | null;
+          taskType: string | null;
+          operationType: string;
+          resultStatus: string;
+          pushStatus: string;
+          title: string;
+          summary: string | null;
+          errorMessage: string | null;
+          sourceRoute: string | null;
+          createdBy: string | null;
+          decidedBy: string | null;
+          decidedAt: Date | null;
+          linkedTaskId: string | null;
+          createdAt: Date;
+          updatedAt: Date;
+          payload: Prisma.JsonValue | null;
+          decision: Prisma.JsonValue | null;
+        }>
+      >(Prisma.sql`
+        INSERT INTO notification_admin_content_history (
+          entity_type,
+          entity_id,
+          task_type,
+          operation_type,
+          result_status,
+          push_status,
+          title,
+          summary,
+          payload,
+          decision,
+          error_message,
+          source_route,
+          created_by,
+          decided_by,
+          decided_at,
+          linked_task_id
+        )
+        VALUES (
+          ${entityType},
+          ${entityId},
+          ${taskType},
+          ${input.operationType},
+          ${input.resultStatus},
+          ${input.pushStatus},
+          ${title},
+          ${input.summary?.trim() || null},
+          ${toInputJsonValue(input.payload)},
+          ${toInputJsonValue(input.decision ?? {})},
+          ${input.errorMessage?.trim() || null},
+          ${input.sourceRoute?.trim() || null},
+          ${input.createdBy?.trim() || null},
+          ${input.decidedBy?.trim() || null},
+          ${decidedAt},
+          ${input.linkedTaskId?.trim() || null}
+        )
+        RETURNING
+          id,
+          entity_type AS "entityType",
+          entity_id AS "entityId",
+          task_type AS "taskType",
+          operation_type AS "operationType",
+          result_status AS "resultStatus",
+          push_status AS "pushStatus",
+          title,
+          summary,
+          error_message AS "errorMessage",
+          source_route AS "sourceRoute",
+          created_by AS "createdBy",
+          decided_by AS "decidedBy",
+          decided_at AS "decidedAt",
+          linked_task_id AS "linkedTaskId",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          payload,
+          decision
+      `);
+      return parseNotificationAdminContentHistoryRow(rows[0]);
+    });
+
+    if (!row) {
+      throw new Error('Failed to persist admin content history');
+    }
+    return row;
+  },
+
+  async fetchAdminContentHistory(input?: {
+    page?: number;
+    limit?: number;
+    entityType?: string;
+    taskType?: NotificationAdminPublishTaskType;
+    resultStatus?: NotificationAdminContentHistoryResultStatus;
+    pushStatus?: NotificationAdminContentHistoryPushStatus;
+    query?: string;
+  }): Promise<NotificationAdminContentHistoryPage> {
+    const limit = normalizePositiveLimit(Number(input?.limit ?? 20), 20, 100);
+    const page = normalizePositiveLimit(Number(input?.page ?? 1), 1, 100000);
+    const entityType = input?.entityType?.trim();
+    const taskType = input?.taskType?.trim();
+    const resultStatus = input?.resultStatus?.trim();
+    const pushStatus = input?.pushStatus?.trim();
+    const query = input?.query?.trim();
+
+    const whereSql = Prisma.sql`
+      WHERE 1 = 1
+      ${entityType ? Prisma.sql`AND entity_type = ${entityType}` : Prisma.empty}
+      ${taskType && isNotificationAdminPublishTaskType(taskType) ? Prisma.sql`AND task_type = ${taskType}` : Prisma.empty}
+      ${
+        resultStatus && isNotificationAdminContentHistoryResultStatus(resultStatus)
+          ? Prisma.sql`AND result_status = ${resultStatus}`
+          : Prisma.empty
+      }
+      ${
+        pushStatus && isNotificationAdminContentHistoryPushStatus(pushStatus)
+          ? Prisma.sql`AND push_status = ${pushStatus}`
+          : Prisma.empty
+      }
+      ${
+        query
+          ? Prisma.sql`
+              AND (
+                title ILIKE ${`%${query}%`}
+                OR COALESCE(summary, '') ILIKE ${`%${query}%`}
+                OR COALESCE(error_message, '') ILIKE ${`%${query}%`}
+                OR COALESCE(entity_id, '') ILIKE ${`%${query}%`}
+              )
+            `
+          : Prisma.empty
+      }
+    `;
+
+    const totalRows = await prisma.$queryRaw<Array<{ total: bigint | number }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM notification_admin_content_history
+      ${whereSql}
+    `);
+    const total = toPositiveSafeInteger(totalRows[0]?.total ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const safeOffset = (safePage - 1) * limit;
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        entityType: string;
+        entityId: string | null;
+        taskType: string | null;
+        operationType: string;
+        resultStatus: string;
+        pushStatus: string;
+        title: string;
+        summary: string | null;
+        errorMessage: string | null;
+        sourceRoute: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        linkedTaskId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        task_type AS "taskType",
+        operation_type AS "operationType",
+        result_status AS "resultStatus",
+        push_status AS "pushStatus",
+        title,
+        summary,
+        error_message AS "errorMessage",
+        source_route AS "sourceRoute",
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        linked_task_id AS "linkedTaskId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+      FROM notification_admin_content_history
+      ${whereSql}
+      ORDER BY
+        CASE push_status
+          WHEN 'pending' THEN 0
+          WHEN 'published' THEN 1
+          WHEN 'skipped' THEN 2
+          WHEN 'superseded' THEN 3
+          ELSE 4
+        END,
+        created_at DESC,
+        id DESC
+      LIMIT ${limit}
+      OFFSET ${safeOffset}
+    `);
+
+    return {
+      items: rows
+        .map((row) => parseNotificationAdminContentHistoryRow(row))
+        .filter((row): row is NotificationAdminContentHistoryRecord => Boolean(row))
+        .map((row) => ({
+          id: row.id,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          taskType: row.taskType,
+          operationType: row.operationType,
+          resultStatus: row.resultStatus,
+          pushStatus: row.pushStatus,
+          title: row.title,
+          summary: row.summary,
+          errorMessage: row.errorMessage,
+          sourceRoute: row.sourceRoute,
+          createdBy: row.createdBy,
+          decidedBy: row.decidedBy,
+          decidedAt: row.decidedAt,
+          linkedTaskId: row.linkedTaskId,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+      pagination: {
+        page: safePage,
+        limit,
+        total,
+        totalPages,
+      },
+    };
+  },
+
+  async fetchAdminContentHistoryById(id: string): Promise<NotificationAdminContentHistoryRecord | null> {
+    const normalizedId = id.trim();
+    if (!normalizedId) return null;
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        entityType: string;
+        entityId: string | null;
+        taskType: string | null;
+        operationType: string;
+        resultStatus: string;
+        pushStatus: string;
+        title: string;
+        summary: string | null;
+        errorMessage: string | null;
+        sourceRoute: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        linkedTaskId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        task_type AS "taskType",
+        operation_type AS "operationType",
+        result_status AS "resultStatus",
+        push_status AS "pushStatus",
+        title,
+        summary,
+        error_message AS "errorMessage",
+        source_route AS "sourceRoute",
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        linked_task_id AS "linkedTaskId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+      FROM notification_admin_content_history
+      WHERE id = ${normalizedId}
+      LIMIT 1
+    `);
+    return parseNotificationAdminContentHistoryRow(rows[0]) ?? null;
+  },
+
+  async updateAdminContentHistoryDecision(input: {
+    id: string;
+    pushStatus: Exclude<NotificationAdminContentHistoryPushStatus, 'pending' | 'superseded'>;
+    decidedBy?: string | null;
+    decision?: unknown;
+  }): Promise<NotificationAdminContentHistoryRecord | null> {
+    const normalizedId = input.id.trim();
+    if (!normalizedId) return null;
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        entityType: string;
+        entityId: string | null;
+        taskType: string | null;
+        operationType: string;
+        resultStatus: string;
+        pushStatus: string;
+        title: string;
+        summary: string | null;
+        errorMessage: string | null;
+        sourceRoute: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        linkedTaskId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      UPDATE notification_admin_content_history
+      SET
+        push_status = ${input.pushStatus},
+        decided_by = ${input.decidedBy?.trim() || null},
+        decided_at = NOW(),
+        decision = ${toInputJsonValue(input.decision ?? {})},
+        updated_at = NOW()
+      WHERE id = ${normalizedId}
+      RETURNING
+        id,
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        task_type AS "taskType",
+        operation_type AS "operationType",
+        result_status AS "resultStatus",
+        push_status AS "pushStatus",
+        title,
+        summary,
+        error_message AS "errorMessage",
+        source_route AS "sourceRoute",
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        linked_task_id AS "linkedTaskId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+    `);
+    return parseNotificationAdminContentHistoryRow(rows[0]) ?? null;
+  },
+
+  async syncAdminContentHistoryForTaskDecision(input: {
+    taskId: string;
+    status: Extract<NotificationAdminPublishTaskStatus, 'published' | 'rejected'>;
+    decidedBy?: string | null;
+    decision?: unknown;
+  }): Promise<number> {
+    const taskId = input.taskId.trim();
+    if (!taskId) return 0;
+    const pushStatus: NotificationAdminContentHistoryPushStatus =
+      input.status === 'published' ? 'published' : 'skipped';
+    const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+      WITH target AS (
+        SELECT id
+        FROM notification_admin_content_history
+        WHERE linked_task_id = ${taskId}
+          AND push_status = 'pending'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      ),
+      updated AS (
+        UPDATE notification_admin_content_history
+        SET
+          push_status = ${pushStatus},
+          decided_by = ${input.decidedBy?.trim() || null},
+          decided_at = NOW(),
+          decision = ${toInputJsonValue(input.decision ?? {})},
+          updated_at = NOW()
+        WHERE id IN (SELECT id FROM target)
+        RETURNING 1
+      )
+      SELECT COUNT(*)::bigint AS count FROM updated
+    `);
+    return toPositiveSafeInteger(rows[0]?.count ?? 0);
+  },
+
+  async deleteAdminContentHistoryByEntity(input: {
+    entityType: string;
+    entityId: string;
+  }): Promise<number> {
+    const entityType = input.entityType.trim();
+    const entityId = input.entityId.trim();
+    if (!entityType || !entityId) {
+      return 0;
+    }
+    const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+      WITH deleted AS (
+        DELETE FROM notification_admin_content_history
+        WHERE entity_type = ${entityType}
+          AND entity_id = ${entityId}
+        RETURNING 1
+      )
+      SELECT COUNT(*)::bigint AS count FROM deleted
+    `);
+    return toPositiveSafeInteger(rows[0]?.count ?? 0);
   },
 
   async decideAdminPublishTask(input: {

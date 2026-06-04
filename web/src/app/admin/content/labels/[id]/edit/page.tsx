@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import LabelStudioForm from '@/components/admin/LabelStudioForm';
 import {
@@ -82,6 +83,16 @@ export default function AdminContentLabelEditPage() {
       }
     >
       {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
+
+      {notice && savedLabelId && !loading && !error ? (
+        <NotificationContentHistoryPrompt
+          entityType="label"
+          entityId={savedLabelId}
+          secondaryHref="/admin/content/labels"
+          secondaryLabel="稍后处理，先回到厂牌目录"
+          description="这次厂牌资料更新已经保存成功。你可以现在去统一内容历史页继续决定是否推送，也可以先返回目录稍后处理。"
+        />
+      ) : null}
 
       {savedLabelId && !loading && !error ? (
         <AdminPublishTaskActions

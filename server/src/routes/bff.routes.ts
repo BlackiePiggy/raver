@@ -84,6 +84,14 @@ import {
 import { accountDeletionService } from '../services/account-deletion.service';
 import { analyzeI18nCompleteness } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
+import {
+  INPUT_LIMITS,
+  normalizeMultiline,
+  normalizeSingleLine,
+  normalizeSingleLineLowercase,
+  validateDisplayName,
+  validateUsername,
+} from '../utils/input-rules';
 import { regionalCompliance } from '../config/regional-compliance';
 import {
   publicObjectStorageUrlForKey,
@@ -170,7 +178,7 @@ const ossClient =
 const postMediaOssClient = ossClient;
 
 const normalizeDisplayName = (value: string | null | undefined): string => {
-  return String(value || '').trim().replace(/\s+/g, ' ');
+  return normalizeSingleLine(value);
 };
 
 const normalizeDisplayNameForUniqueness = (value: string | null | undefined): string => {
@@ -178,9 +186,7 @@ const normalizeDisplayNameForUniqueness = (value: string | null | undefined): st
 };
 
 const createInternalUsername = async (seed: string): Promise<string> => {
-  const normalizedSeed = seed
-    .trim()
-    .toLowerCase()
+  const normalizedSeed = normalizeSingleLineLowercase(seed)
     .replace(/[^a-z0-9_]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 24) || 'user';
@@ -3746,11 +3752,12 @@ router.get('/auth/display-name/check', async (req: Request, res: Response): Prom
   try {
     const displayName = normalizeDisplayName(String(req.query.displayName || ''));
     const displayNameKey = normalizeDisplayNameForUniqueness(displayName);
-    if (!displayName || displayName.length < 2 || displayName.length > 24) {
+    const displayNameError = validateDisplayName(displayName);
+    if (displayNameError) {
       res.status(400).json({
         available: false,
         code: 'AUTH_DISPLAY_NAME_INVALID',
-        error: '昵称需要 2-24 个字符',
+        error: displayNameError,
       });
       return;
     }
@@ -3781,8 +3788,8 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
       guardianContactEmail?: string;
     };
 
-    const requestedUsername = String(username || '').trim().toLowerCase();
-    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const requestedUsername = normalizeSingleLineLowercase(username);
+    const normalizedEmail = normalizeSingleLineLowercase(email);
     const normalizedDisplayName = normalizeDisplayName(displayName);
     const normalizedDisplayNameKey = normalizeDisplayNameForUniqueness(normalizedDisplayName);
     const complianceRegion = regionalCompliance.resolveRegion(regionCode);
@@ -3831,18 +3838,31 @@ router.post('/auth/register', async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 24) {
+    const usernameError = requestedUsername ? validateUsername(requestedUsername) : null;
+    if (usernameError) {
+      writeAuthAuditLog(req, {
+        action: 'auth.register',
+        outcome: 'failed',
+        identifier: registerIdentifier,
+        errorCode: 'AUTH_USERNAME_INVALID',
+      });
+      res.status(400).json({ error: usernameError });
+      return;
+    }
+
+    const displayNameError = validateDisplayName(normalizedDisplayName);
+    if (displayNameError) {
       writeAuthAuditLog(req, {
         action: 'auth.register',
         outcome: 'failed',
         identifier: registerIdentifier,
         errorCode: 'AUTH_DISPLAY_NAME_INVALID',
       });
-      res.status(400).json({ error: '昵称需要 2-24 个字符' });
+      res.status(400).json({ error: displayNameError });
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < INPUT_LIMITS.user.passwordMin) {
       writeAuthAuditLog(req, {
         action: 'auth.register',
         outcome: 'failed',
@@ -4285,8 +4305,9 @@ router.post('/auth/email/register', async (req: Request, res: Response): Promise
       return;
     }
 
-    if (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 24) {
-      res.status(400).json({ error: '昵称需要 2-24 个字符', code: 'AUTH_DISPLAY_NAME_INVALID' });
+    const displayNameError = validateDisplayName(normalizedDisplayName);
+    if (displayNameError) {
+      res.status(400).json({ error: displayNameError, code: 'AUTH_DISPLAY_NAME_INVALID' });
       return;
     }
 
@@ -6930,10 +6951,10 @@ const normalizeNewsCategory = (value: unknown): string => {
 };
 
 const normalizeNewsDraft = (body: Record<string, unknown>) => {
-  const title = String(body.title || '').trim().slice(0, 180);
-  const summary = String(body.summary || '').trim().slice(0, 500);
-  const articleBody = String(body.body ?? body.content ?? '').trim();
-  const source = String(body.source || 'Raver').trim().slice(0, 80) || 'Raver';
+  const title = normalizeSingleLine(body.title).slice(0, INPUT_LIMITS.news.title);
+  const summary = normalizeMultiline(body.summary).slice(0, INPUT_LIMITS.news.summary);
+  const articleBody = normalizeMultiline(body.body ?? body.content ?? '').slice(0, INPUT_LIMITS.news.body);
+  const source = normalizeSingleLine(body.source || 'Raver').slice(0, INPUT_LIMITS.news.source) || 'Raver';
   const link = typeof body.link === 'string' && body.link.trim() ? body.link.trim().slice(0, 2000) : null;
   const coverImageUrl =
     typeof body.coverImageURL === 'string' && body.coverImageURL.trim()
@@ -6961,10 +6982,12 @@ const normalizeNewsDraft = (body: Record<string, unknown>) => {
 
 const upsertNewsReleasePublishTaskBestEffort = async (input: {
   actorUserId: string;
+  operationType: 'create' | 'edit';
+  sourceRoute?: string | null;
   article: ReturnType<typeof mapNewsArticle>;
 }): Promise<void> => {
   try {
-    await notificationCenterService.upsertAdminPublishTask({
+    const task = await notificationCenterService.upsertAdminPublishTask({
       taskType: 'news_release',
       entityType: 'news_article',
       entityId: input.article.id,
@@ -6981,6 +7004,29 @@ const upsertNewsReleasePublishTaskBestEffort = async (input: {
         boundDjIDs: input.article.boundDjIDs,
         boundBrandIDs: input.article.boundBrandIDs,
       },
+    });
+    await notificationCenterService.createAdminContentHistory({
+      entityType: 'news_article',
+      entityId: input.article.id,
+      taskType: 'news_release',
+      operationType: input.operationType,
+      resultStatus: 'success',
+      pushStatus: 'pending',
+      title: input.article.title,
+      summary: input.article.summary || input.article.title,
+      payload: {
+        articleId: input.article.id,
+        title: input.article.title,
+        summary: input.article.summary || input.article.title,
+        coverImageURL: input.article.coverImageURL,
+        publishedAt: input.article.publishedAt,
+        boundEventIDs: input.article.boundEventIDs,
+        boundDjIDs: input.article.boundDjIDs,
+        boundBrandIDs: input.article.boundBrandIDs,
+      },
+      sourceRoute: input.sourceRoute,
+      createdBy: input.actorUserId,
+      linkedTaskId: task.id,
     });
   } catch (error) {
     console.warn('BFF news publish task upsert failed:', {
@@ -7475,6 +7521,8 @@ router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<
     const mappedArticle = mapNewsArticle(created);
     await upsertNewsReleasePublishTaskBestEffort({
       actorUserId: userId,
+      operationType: 'create',
+      sourceRoute: '/v1/news',
       article: mappedArticle,
     });
     res.status(201).json(mappedArticle);
@@ -7571,6 +7619,8 @@ router.patch('/news/:id', optionalAuth, async (req: Request, res: Response): Pro
     const mappedArticle = mapNewsArticle(updated);
     await upsertNewsReleasePublishTaskBestEffort({
       actorUserId: userId,
+      operationType: 'edit',
+      sourceRoute: `/v1/news/${articleId}`,
       article: mappedArticle,
     });
     res.json(mappedArticle);
@@ -7617,6 +7667,10 @@ router.delete('/news/:id', optionalAuth, async (req: Request, res: Response): Pr
       entityType: 'news_article',
       entityId: articleId,
       taskTypes: ['news_release'],
+    });
+    await notificationCenterService.deleteAdminContentHistoryByEntity({
+      entityType: 'news_article',
+      entityId: articleId,
     });
 
     if (existing.coverImageUrl) {
@@ -12142,12 +12196,9 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
 
     if (typeof body.displayName === 'string') {
       const trimmed = normalizeDisplayName(body.displayName);
-      if (!trimmed) {
-        res.status(400).json({ error: 'displayName cannot be empty' });
-        return;
-      }
-      if (trimmed.length < 2 || trimmed.length > 24) {
-        res.status(400).json({ error: '昵称需要 2-24 个字符' });
+      const displayNameError = validateDisplayName(trimmed);
+      if (displayNameError) {
+        res.status(400).json({ error: displayNameError });
         return;
       }
       const displayNameKey = normalizeDisplayNameForUniqueness(trimmed);
@@ -12169,11 +12220,11 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
     }
 
     if (typeof body.bio === 'string') {
-      data.bio = body.bio.trim();
+      data.bio = normalizeMultiline(body.bio).slice(0, INPUT_LIMITS.user.bio);
     }
 
     if (typeof body.location === 'string') {
-      const normalizedLocation = body.location.trim().slice(0, 160);
+      const normalizedLocation = normalizeSingleLine(body.location).slice(0, INPUT_LIMITS.user.location);
       data.location = normalizedLocation || null;
     } else if (body.location === null) {
       data.location = null;

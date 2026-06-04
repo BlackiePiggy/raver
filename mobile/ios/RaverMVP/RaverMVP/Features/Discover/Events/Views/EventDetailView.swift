@@ -1601,6 +1601,7 @@ struct EventDetailView: View {
     @State private var venueMapContext: EventVenueMapContext?
     @State private var selectedLineupMedia: FullscreenMediaSelection?
     @State private var selectedHeroMedia: FullscreenMediaSelection?
+    @State private var showContributorList = false
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
     @State private var bannerDismissToken = UUID()
@@ -2352,6 +2353,13 @@ struct EventDetailView: View {
                     }
                 )
             }
+        }
+        .navigationDestination(isPresented: $showContributorList) {
+            EntityContributorListView(
+                entityType: "event",
+                entityID: eventID,
+                entityTitle: event?.name
+            )
         }
         .sheet(item: $fullChatSharePresentation) { presentation in
             ChatShareSheet(
@@ -3538,6 +3546,19 @@ struct EventDetailView: View {
         } else if let organizerName = event.organizerName, !organizerName.isEmpty {
             GlassCard {
                 eventInfoRow(icon: "person.2", title: LT("发布方", "Publisher", "公開元"), value: organizerName)
+            }
+            .frame(width: cardWidth, alignment: .leading)
+        }
+
+        let contributorUsers = (event.contributors ?? []).filter { !$0.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if event.contributorSummary != nil || !contributorUsers.isEmpty {
+            GlassCard {
+                ContributorSummaryRow(
+                    summary: event.contributorSummary,
+                    fallbackUsers: contributorUsers
+                ) {
+                    showContributorList = true
+                }
             }
             .frame(width: cardWidth, alignment: .leading)
         }

@@ -21,6 +21,8 @@ protocol ProfileContentRepository {
     func fetchMyRepostHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchMySaveHistory(cursor: String?) async throws -> ActivityPostPage
     func fetchEvent(id: String) async throws -> WebEvent
+    func fetchMyContributionCenterSummary() async throws -> WebContributionCenterSummary
+    func fetchMyContributionHistory(entityType: String, cursor: String?, limit: Int) async throws -> WebContributionHistoryPage
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage
     func fetchMyPublishes() async throws -> MyPublishes
     func fetchMyEvents(page: Int, limit: Int) async throws -> EventListPage
@@ -144,6 +146,14 @@ struct ProfileContentRepositoryAdapter: ProfileContentRepository {
 
     func fetchEvent(id: String) async throws -> WebEvent {
         try await webService.fetchEvent(id: id)
+    }
+
+    func fetchMyContributionCenterSummary() async throws -> WebContributionCenterSummary {
+        try await webService.fetchMyContributionCenterSummary()
+    }
+
+    func fetchMyContributionHistory(entityType: String, cursor: String?, limit: Int) async throws -> WebContributionHistoryPage {
+        try await webService.fetchMyContributionHistory(entityType: entityType, cursor: cursor, limit: limit)
     }
 
     func fetchFollowedDJs(page: Int, limit: Int) async throws -> DJListPage {

@@ -1,4 +1,5 @@
 import { NewsStudioCreateInput, NewsStudioDraft } from './types';
+import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine } from '@/lib/input-rules';
 
 const parseIdText = (value: string): string[] =>
   value
@@ -29,10 +30,10 @@ const toIsoStringOrNull = (value: string): string | null => {
 export const mapNewsStudioDraftToCreateInput = (
   draft: NewsStudioDraft
 ): NewsStudioCreateInput => ({
-  title: draft.title.trim(),
-  summary: draft.summary.trim(),
-  body: draft.body.trim(),
-  source: draft.source.trim() || 'Raver',
+  title: normalizeSingleLine(draft.title).slice(0, INPUT_LIMITS.news.title),
+  summary: normalizeMultiline(draft.summary).slice(0, INPUT_LIMITS.news.summary),
+  body: normalizeMultiline(draft.body).slice(0, INPUT_LIMITS.news.body),
+  source: normalizeSingleLine(draft.source).slice(0, INPUT_LIMITS.news.source) || 'Raver',
   category: draft.category,
   link: draft.link.trim() || null,
   coverImageURL: draft.coverImageUrl.trim() || null,

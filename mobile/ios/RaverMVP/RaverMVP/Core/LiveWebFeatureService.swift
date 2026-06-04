@@ -201,6 +201,14 @@ final class LiveWebFeatureService: WebFeatureService {
         return localizedEvent(response.data)
     }
 
+    func fetchEventContributors(eventID: String) async throws -> WebEntityContributorPage {
+        let response: BFFEnvelope<WebEntityContributorPage> = try await request(
+            path: "/v1/events/\(eventID)/contributors",
+            method: "GET"
+        )
+        return localizedContributorPage(response.data)
+    }
+
     func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist] {
         let response: BFFEnvelope<BFFItems<WebEventLineupArtist>> = try await request(
             path: "/v1/events/\(eventID)/lineup",
@@ -696,6 +704,14 @@ final class LiveWebFeatureService: WebFeatureService {
     func fetchDJ(id: String) async throws -> WebDJ {
         let response: BFFEnvelope<WebDJ> = try await request(path: "/v1/djs/\(id)", method: "GET")
         return localizedDJ(response.data)
+    }
+
+    func fetchDJContributors(djID: String) async throws -> WebEntityContributorPage {
+        let response: BFFEnvelope<WebEntityContributorPage> = try await request(
+            path: "/v1/djs/\(djID)/contributors",
+            method: "GET"
+        )
+        return localizedContributorPage(response.data)
     }
 
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate] {
@@ -1643,6 +1659,34 @@ final class LiveWebFeatureService: WebFeatureService {
         return response.data
     }
 
+    func fetchMyContributionCenterSummary() async throws -> WebContributionCenterSummary {
+        let response: BFFEnvelope<WebContributionCenterSummary> = try await request(
+            path: "/v1/me/contribution-center/summary",
+            method: "GET"
+        )
+        return response.data
+    }
+
+    func fetchMyContributionHistory(
+        entityType: String,
+        cursor: String?,
+        limit: Int
+    ) async throws -> WebContributionHistoryPage {
+        var queryItems = [
+            URLQueryItem(name: "entityType", value: entityType),
+            URLQueryItem(name: "limit", value: "\(max(1, min(50, limit)))")
+        ]
+        if let cursor, !cursor.isEmpty {
+            queryItems.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        let response: BFFEnvelope<WebContributionHistoryPage> = try await request(
+            path: "/v1/me/contributions",
+            method: "GET",
+            queryItems: queryItems
+        )
+        return response.data
+    }
+
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {
         var page = 1
         var merged: [ContentSubmissionSummary] = []
@@ -1959,6 +2003,33 @@ final class LiveWebFeatureService: WebFeatureService {
             let next = frequencyI18n.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines)
             if !next.isEmpty { localized.frequency = next }
         }
+        return localized
+    }
+
+    private func localizedContributorPage(_ page: WebEntityContributorPage) -> WebEntityContributorPage {
+        WebEntityContributorPage(
+            items: page.items.map(localizedContributorItem),
+            summary: localizedContributorSummary(page.summary)
+        )
+    }
+
+    private func localizedContributorItem(_ item: WebEntityContributorItem) -> WebEntityContributorItem {
+        var localized = item
+        localized.user = localizedUserLite(item.user)
+        return localized
+    }
+
+    private func localizedContributorSummary(_ summary: WebContributorSummary) -> WebContributorSummary {
+        var localized = summary
+        localized.creator = summary.creator.map(localizedUserLite)
+        localized.previewUsers = summary.previewUsers.map(localizedUserLite)
+        return localized
+    }
+
+    private func localizedUserLite(_ user: WebUserLite) -> WebUserLite {
+        var localized = user
+        let trimmed = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        localized.displayName = trimmed.isEmpty ? user.displayName : trimmed
         return localized
     }
 

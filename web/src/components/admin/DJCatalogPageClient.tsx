@@ -27,6 +27,7 @@ import {
   DJCatalogResponse,
   DJCatalogSummary,
 } from '@/features/admin-content/catalog/api';
+import ContributionTabPanel from '@/features/contribution-module/ContributionTabPanel';
 import { djStudioApi } from '@/features/admin-content/dj-studio/api';
 import type {
   DJStudioLoadedDJ,
@@ -60,7 +61,7 @@ const RELATED_PAGE_SIZE = {
   sets: 10,
 };
 
-type DJDetailTabKey = 'intro' | 'events' | 'ratings' | 'posts' | 'sets';
+type DJDetailTabKey = 'intro' | 'contribution' | 'events' | 'ratings' | 'posts' | 'sets';
 
 type DJRelatedSectionState<T> = {
   items: T[];
@@ -111,6 +112,7 @@ const createPostsState = (): DJPostsState => ({
 
 const DJ_DETAIL_TABS: Array<{ key: DJDetailTabKey; label: string; helper: string }> = [
   { key: 'intro', label: 'Intro', helper: '简介' },
+  { key: 'contribution', label: '贡献', helper: '贡献' },
   { key: 'events', label: 'Events', helper: '活动' },
   { key: 'ratings', label: 'Ratings', helper: '评分' },
   { key: 'posts', label: 'Posts', helper: '动态' },
@@ -505,15 +507,6 @@ function DJDetailOverlay({
         ]
       : []),
   ];
-  const contributors: Array<{
-    id: string;
-    username?: string | null;
-    displayName?: string | null;
-    avatarUrl?: string | null;
-  }> = Array.isArray(resolved?.contributors)
-    ? resolved.contributors
-    : compactTextList(resolved?.contributorUsernames).map((username) => ({ id: username, username }));
-
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
       <div
@@ -763,17 +756,11 @@ function DJDetailOverlay({
                       </div>
                     </section>
 
-                    <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">
-                      <div className="text-sm font-semibold text-[#111827]">贡献者</div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {contributors.length ? contributors.map((contributor) => (
-                          <span key={contributor.id} className="rounded-full bg-[#f4f5f7] px-3 py-1 text-xs font-semibold text-[#4b5563]">
-                            {contributor.displayName || contributor.username || contributor.id}
-                          </span>
-                        )) : <span className="text-sm text-[#6b7280]">暂无贡献者记录</span>}
-                      </div>
-                    </section>
                   </div>
+                ) : null}
+
+                {activeTab === 'contribution' ? (
+                  <ContributionTabPanel entityType="dj" entityId={item.id} />
                 ) : null}
 
                 {activeTab === 'events' ? (

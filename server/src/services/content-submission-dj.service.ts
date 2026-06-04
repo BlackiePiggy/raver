@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
-import crypto from 'crypto';
+import { recordDJContribution } from './contribution.service';
 import { normalizeCountryBiTextPayload } from '../utils/country-i18n';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 
@@ -21,6 +21,23 @@ const integerOrNull = (value: unknown): number | null => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
 };
+
+const stableSerialize = (value: unknown): string => {
+  if (value === null || value === undefined) return 'null';
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableSerialize(entryValue)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const isEqualValue = (left: unknown, right: unknown): boolean => stableSerialize(left) === stableSerialize(right);
 
 const stringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -80,18 +97,6 @@ const uniqueDJSlug = async (
   }
 };
 
-const ensureDJContributor = async (
-  db: Prisma.TransactionClient | PrismaClient,
-  djId: string,
-  userId: string
-): Promise<void> => {
-  await db.$executeRaw(Prisma.sql`
-    INSERT INTO "dj_contributors" ("id", "dj_id", "user_id", "created_at", "updated_at")
-    VALUES (${crypto.randomUUID()}, ${djId}, ${userId}, NOW(), NOW())
-    ON CONFLICT ("dj_id", "user_id") DO NOTHING
-  `);
-};
-
 const resolvePrimaryName = (payload: Prisma.JsonObject, fallback?: string | null): string => {
   const name = cleanText(payload.name) || cleanText(payload.title) || fallback || '';
   return name.trim();
@@ -139,10 +144,118 @@ const hasAnyProof = (
   return values.some((value) => typeof value === 'string' && value.trim().length > 0);
 };
 
+const buildResolvedDJUpdateData = (
+  payload: Prisma.JsonObject,
+  existing: Awaited<ReturnType<Prisma.TransactionClient['dJ']['findUnique']>> extends infer T
+    ? NonNullable<T>
+    : never,
+  resolved: {
+    name: string;
+    avatarUrl: string;
+    aliases: string[];
+    genres: string[];
+    slug: string;
+  }
+) => ({
+  name: resolved.name,
+  nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n ?? existing.nameI18n, resolved.name)),
+  aliases: resolved.aliases,
+  genres: resolved.genres,
+  slug: resolved.slug,
+  bio: cleanText(payload.bio) ?? existing.bio ?? null,
+  bioI18n: triTextToJson(
+    normalizeTriTextPayload(payload.bioI18n ?? existing.bioI18n, cleanText(payload.bio) ?? existing.bio ?? '')
+  ),
+  avatarUrl: resolved.avatarUrl,
+  avatarSourceUrl: resolved.avatarUrl,
+  bannerUrl: cleanText(payload.bannerUrl) ?? existing.bannerUrl ?? null,
+  country: cleanText(payload.country) ?? existing.country ?? null,
+  countryI18n: triTextToJson(
+    normalizeCountryBiTextPayload(
+      payload.countryI18n ?? existing.countryI18n,
+      cleanText(payload.country) ?? existing.country ?? ''
+    )
+  ),
+  spotifyUrl: cleanText(payload.spotifyUrl) ?? existing.spotifyUrl ?? null,
+  spotifyId: cleanText(payload.spotifyId) ?? existing.spotifyId ?? null,
+  spotifyFollowers: integerOrNull(payload.spotifyFollowers) ?? existing.spotifyFollowers ?? null,
+  appleMusicId: cleanText(payload.appleMusicId) ?? existing.appleMusicId ?? null,
+  soundcloudUrl: cleanText(payload.soundcloudUrl) ?? existing.soundcloudUrl ?? null,
+  soundcloudId:
+    cleanText(payload.soundcloudId) ??
+    cleanText(payload.soundcloudid) ??
+    existing.soundcloudId ??
+    null,
+  instagramUrl: cleanText(payload.instagramUrl) ?? existing.instagramUrl ?? null,
+  facebookUrl: cleanText(payload.facebookUrl) ?? existing.facebookUrl ?? null,
+  twitterUrl: cleanText(payload.twitterUrl) ?? existing.twitterUrl ?? null,
+  youtubeUrl: cleanText(payload.youtubeUrl) ?? existing.youtubeUrl ?? null,
+  neteaseUrl: cleanText(payload.neteaseUrl) ?? existing.neteaseUrl ?? null,
+  qqMusicUrl: cleanText(payload.qqMusicUrl) ?? existing.qqMusicUrl ?? null,
+  website: resolveWebsite(payload, existing.website) ?? null,
+  trackCount: integerOrNull(payload.trackCount) ?? existing.trackCount ?? null,
+  playlistCount: integerOrNull(payload.playlistCount) ?? existing.playlistCount ?? null,
+  soundCloudFollowers:
+    integerOrNull(payload.soundCloudFollowers) ??
+    integerOrNull(payload.soundcloudFollowers) ??
+    integerOrNull(payload.followers_count) ??
+    existing.soundCloudFollowers ??
+    null,
+  soundCloudFavorites:
+    integerOrNull(payload.soundCloudFavorites) ??
+    integerOrNull(payload.soundcloudFavorites) ??
+    integerOrNull(payload.public_favorites_count) ??
+    existing.soundCloudFavorites ??
+    null,
+  isVerified: typeof payload.isVerified === 'boolean' ? payload.isVerified : existing.isVerified,
+});
+
+const hasDJMaterialChanges = (
+  existing: Awaited<ReturnType<Prisma.TransactionClient['dJ']['findUnique']>> extends infer T
+    ? NonNullable<T>
+    : never,
+  next: ReturnType<typeof buildResolvedDJUpdateData>
+): boolean => (
+  !isEqualValue(existing.name, next.name)
+  || !isEqualValue(existing.nameI18n, next.nameI18n)
+  || !isEqualValue(existing.aliases ?? [], next.aliases)
+  || !isEqualValue(existing.genres ?? [], next.genres)
+  || !isEqualValue(existing.slug, next.slug)
+  || !isEqualValue(existing.bio ?? null, next.bio)
+  || !isEqualValue(existing.bioI18n, next.bioI18n)
+  || !isEqualValue(existing.avatarUrl ?? null, next.avatarUrl)
+  || !isEqualValue(existing.avatarSourceUrl ?? null, next.avatarSourceUrl)
+  || !isEqualValue(existing.bannerUrl ?? null, next.bannerUrl)
+  || !isEqualValue(existing.country ?? null, next.country)
+  || !isEqualValue(existing.countryI18n, next.countryI18n)
+  || !isEqualValue(existing.spotifyUrl ?? null, next.spotifyUrl)
+  || !isEqualValue(existing.spotifyId ?? null, next.spotifyId)
+  || !isEqualValue(existing.spotifyFollowers ?? null, next.spotifyFollowers)
+  || !isEqualValue(existing.appleMusicId ?? null, next.appleMusicId)
+  || !isEqualValue(existing.soundcloudUrl ?? null, next.soundcloudUrl)
+  || !isEqualValue(existing.soundcloudId ?? null, next.soundcloudId)
+  || !isEqualValue(existing.instagramUrl ?? null, next.instagramUrl)
+  || !isEqualValue(existing.facebookUrl ?? null, next.facebookUrl)
+  || !isEqualValue(existing.twitterUrl ?? null, next.twitterUrl)
+  || !isEqualValue(existing.youtubeUrl ?? null, next.youtubeUrl)
+  || !isEqualValue(existing.neteaseUrl ?? null, next.neteaseUrl)
+  || !isEqualValue(existing.qqMusicUrl ?? null, next.qqMusicUrl)
+  || !isEqualValue(existing.website ?? null, next.website)
+  || !isEqualValue(existing.trackCount ?? null, next.trackCount)
+  || !isEqualValue(existing.playlistCount ?? null, next.playlistCount)
+  || !isEqualValue(existing.soundCloudFollowers ?? null, next.soundCloudFollowers)
+  || !isEqualValue(existing.soundCloudFavorites ?? null, next.soundCloudFavorites)
+  || !isEqualValue(existing.isVerified, next.isVerified)
+);
+
 export const createOrUpdateDJFromSubmission = async (
   db: Prisma.TransactionClient | PrismaClient,
   payload: Prisma.JsonObject,
-  submitterId: string
+  submitterId: string,
+  options: {
+    submissionId?: string;
+    approvedAt?: Date | null;
+  } = {}
 ) => {
   const targetDJId = cleanText(payload.targetDJId) || cleanText(payload.editTargetDJId) || null;
 
@@ -194,65 +307,35 @@ export const createOrUpdateDJFromSubmission = async (
       ? stringArray(payload.genres)
       : (existing.genres ?? []);
     const nextSlug = await uniqueDJSlug(db, name, cleanText(payload.slug) || existing.slug, existing.id);
+    const nextData = buildResolvedDJUpdateData(payload, existing, {
+      name,
+      avatarUrl,
+      aliases,
+      genres,
+      slug: nextSlug,
+    });
+
+    if (!hasDJMaterialChanges(existing, nextData)) {
+      return existing;
+    }
 
     const updated = await db.dJ.update({
       where: { id: existing.id },
-      data: {
-        name,
-        nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n ?? existing.nameI18n, name)),
-        aliases,
-        genres,
-        slug: nextSlug,
-        bio: cleanText(payload.bio) ?? existing.bio ?? null,
-        bioI18n: triTextToJson(
-          normalizeTriTextPayload(payload.bioI18n ?? existing.bioI18n, cleanText(payload.bio) ?? existing.bio ?? '')
-        ),
-        avatarUrl,
-        avatarSourceUrl: avatarUrl,
-        bannerUrl: cleanText(payload.bannerUrl) ?? existing.bannerUrl ?? null,
-        country: cleanText(payload.country) ?? existing.country ?? null,
-        countryI18n: triTextToJson(
-          normalizeCountryBiTextPayload(
-            payload.countryI18n ?? existing.countryI18n,
-            cleanText(payload.country) ?? existing.country ?? ''
-          )
-        ),
-        spotifyUrl: cleanText(payload.spotifyUrl) ?? existing.spotifyUrl ?? null,
-        spotifyId: cleanText(payload.spotifyId) ?? existing.spotifyId ?? null,
-        spotifyFollowers: integerOrNull(payload.spotifyFollowers) ?? existing.spotifyFollowers ?? null,
-        appleMusicId: cleanText(payload.appleMusicId) ?? existing.appleMusicId ?? null,
-        soundcloudUrl: cleanText(payload.soundcloudUrl) ?? existing.soundcloudUrl ?? null,
-        soundcloudId:
-          cleanText(payload.soundcloudId) ??
-          cleanText(payload.soundcloudid) ??
-          existing.soundcloudId ??
-          null,
-        instagramUrl: cleanText(payload.instagramUrl) ?? existing.instagramUrl ?? null,
-        facebookUrl: cleanText(payload.facebookUrl) ?? existing.facebookUrl ?? null,
-        twitterUrl: cleanText(payload.twitterUrl) ?? existing.twitterUrl ?? null,
-        youtubeUrl: cleanText(payload.youtubeUrl) ?? existing.youtubeUrl ?? null,
-        neteaseUrl: cleanText(payload.neteaseUrl) ?? existing.neteaseUrl ?? null,
-        qqMusicUrl: cleanText(payload.qqMusicUrl) ?? existing.qqMusicUrl ?? null,
-        website: resolveWebsite(payload, existing.website) ?? null,
-        trackCount: integerOrNull(payload.trackCount) ?? existing.trackCount ?? null,
-        playlistCount: integerOrNull(payload.playlistCount) ?? existing.playlistCount ?? null,
-        soundCloudFollowers:
-          integerOrNull(payload.soundCloudFollowers) ??
-          integerOrNull(payload.soundcloudFollowers) ??
-          integerOrNull(payload.followers_count) ??
-          existing.soundCloudFollowers ??
-          null,
-        soundCloudFavorites:
-          integerOrNull(payload.soundCloudFavorites) ??
-          integerOrNull(payload.soundcloudFavorites) ??
-          integerOrNull(payload.public_favorites_count) ??
-          existing.soundCloudFavorites ??
-          null,
-        isVerified: typeof payload.isVerified === 'boolean' ? payload.isVerified : existing.isVerified,
-      } as any,
+      data: nextData as any,
     });
 
-    await ensureDJContributor(db, updated.id, submitterId);
+    await recordDJContribution(db, {
+      entityId: updated.id,
+      userId: submitterId,
+      title: updated.name,
+      coverImageUrl: updated.avatarUrl ?? null,
+      role: 'editor',
+      actionType: 'edit',
+      source: 'submission_edit',
+      submissionId: options.submissionId ?? null,
+      approvedAt: options.approvedAt ?? null,
+      versionAfter: null,
+    });
     return updated;
   }
 
@@ -278,7 +361,7 @@ export const createOrUpdateDJFromSubmission = async (
   }
 
   const slug = await uniqueDJSlug(db, name, cleanText(payload.slug));
-  return db.dJ.create({
+  const created = await db.dJ.create({
     data: {
       name,
       nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
@@ -318,7 +401,19 @@ export const createOrUpdateDJFromSubmission = async (
         integerOrNull(payload.soundcloudFavorites) ??
         integerOrNull(payload.public_favorites_count),
       isVerified: typeof payload.isVerified === 'boolean' ? payload.isVerified : true,
-      contributors: { create: { userId: submitterId } },
     } as any,
   });
+  await recordDJContribution(db, {
+    entityId: created.id,
+    userId: submitterId,
+    title: created.name,
+    coverImageUrl: created.avatarUrl ?? null,
+    role: 'creator',
+    actionType: 'create',
+    source: 'submission_create',
+    submissionId: options.submissionId ?? null,
+    approvedAt: options.approvedAt ?? null,
+    versionAfter: null,
+  });
+  return created;
 };

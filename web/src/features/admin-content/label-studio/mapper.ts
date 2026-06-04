@@ -1,10 +1,8 @@
 import { LabelStudioCreateInput, LabelStudioDraft } from './types';
+import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine, trimArrayItems } from '@/lib/input-rules';
 
 const parseTextList = (value: string): string[] =>
-  value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  trimArrayItems(value.split(/[\n,]/), INPUT_LIMITS.label.genre);
 
 const parseOptionalNumber = (value: string): number | null => {
   const trimmed = value.trim();
@@ -16,23 +14,23 @@ const parseOptionalNumber = (value: string): number | null => {
 export const mapLabelStudioDraftToCreateInput = (
   draft: LabelStudioDraft
 ): LabelStudioCreateInput => ({
-  name: draft.name.trim(),
-  slug: draft.slug.trim() || null,
+  name: normalizeSingleLine(draft.name).slice(0, INPUT_LIMITS.label.name),
+  slug: normalizeSingleLine(draft.slug).slice(0, INPUT_LIMITS.label.slug) || null,
   profileUrl: draft.profileUrl.trim() || null,
-  profileSlug: draft.profileSlug.trim() || null,
-  nation: draft.nation.trim() || null,
-  founderName: draft.founderName.trim() || null,
-  foundedAt: draft.foundedAt.trim() || null,
+  profileSlug: normalizeSingleLine(draft.profileSlug).slice(0, INPUT_LIMITS.label.profileSlug) || null,
+  nation: normalizeSingleLine(draft.nation).slice(0, INPUT_LIMITS.label.nation) || null,
+  founderName: normalizeSingleLine(draft.founderName).slice(0, INPUT_LIMITS.label.founderName) || null,
+  foundedAt: normalizeSingleLine(draft.foundedAt).slice(0, INPUT_LIMITS.label.foundedAt) || null,
   founderDjId: draft.founderDjId.trim() || null,
   genres: parseTextList(draft.genresText),
-  genresPreview: draft.genresPreview.trim() || null,
-  latestReleaseListing: draft.latestReleaseListing.trim() || null,
-  locationPeriod: draft.locationPeriod.trim() || null,
-  introductionPreview: draft.introductionPreview.trim() || null,
-  introduction: draft.introduction.trim() || null,
+  genresPreview: normalizeSingleLine(draft.genresPreview).slice(0, INPUT_LIMITS.label.genresPreview) || null,
+  latestReleaseListing: normalizeSingleLine(draft.latestReleaseListing).slice(0, INPUT_LIMITS.label.latestReleaseListing) || null,
+  locationPeriod: normalizeSingleLine(draft.locationPeriod).slice(0, INPUT_LIMITS.label.locationPeriod) || null,
+  introductionPreview: normalizeMultiline(draft.introductionPreview).slice(0, INPUT_LIMITS.label.introductionPreview) || null,
+  introduction: normalizeMultiline(draft.introduction).slice(0, INPUT_LIMITS.label.introduction) || null,
   generalContactEmail: draft.generalContactEmail.trim() || null,
   demoSubmissionUrl: draft.demoSubmissionUrl.trim() || null,
-  demoSubmissionDisplay: draft.demoSubmissionDisplay.trim() || null,
+  demoSubmissionDisplay: normalizeSingleLine(draft.demoSubmissionDisplay).slice(0, INPUT_LIMITS.label.demoSubmissionDisplay) || null,
   officialWebsiteUrl: draft.officialWebsiteUrl.trim() || null,
   facebookUrl: draft.facebookUrl.trim() || null,
   soundcloudUrl: draft.soundcloudUrl.trim() || null,

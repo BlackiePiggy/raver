@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import {
   resolveEventStudioSubmitResultContent,
   type EventStudioSubmitFlow,
@@ -70,6 +71,18 @@ function EventResultContent() {
               {content.secondaryLabel}
             </Link>
           </div>
+
+          {eventId && outcome === 'created' ? (
+            <div className="mt-8 w-full max-w-3xl">
+              <NotificationContentHistoryPrompt
+                entityType="event"
+                entityId={eventId}
+                secondaryHref="/admin/content/events/catalog"
+                secondaryLabel="稍后处理，先回到活动目录"
+                description="这场活动已经直接入库成功。你可以现在去统一内容历史页预览推送内容并一键发送，也可以稍后再处理。"
+              />
+            </div>
+          ) : null}
         </div>
       </section>
 

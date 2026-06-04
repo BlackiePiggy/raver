@@ -2489,11 +2489,12 @@
 		896A4A476916FD78493C9D68 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 0CB64C6BE4A47FD839CA5861 /* Pods-RaverMVP.debug.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = RaverMVP/Info.plist;
+				buildSettings = {
+					APS_ENVIRONMENT = development;
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
+					CODE_SIGN_IDENTITY = "iPhone Developer";
+					INFOPLIST_FILE = RaverMVP/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2630,11 +2631,12 @@
 		D8FAEACEF7BCB1B9041AF8C5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7F00BD774D2332E5C1DD2C50 /* Pods-RaverMVP.release.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = RaverMVP/Info.plist;
+				buildSettings = {
+					APS_ENVIRONMENT = production;
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					CODE_SIGN_ENTITLEMENTS = RaverMVP/RaverMVP.entitlements;
+					CODE_SIGN_IDENTITY = "iPhone Developer";
+					INFOPLIST_FILE = RaverMVP/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

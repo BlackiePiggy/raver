@@ -6,34 +6,40 @@ import {
   OrganizerStudioLocalizedText,
   OrganizerStudioUpdateInput,
 } from './types';
+import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine, trimArrayItems } from '@/lib/input-rules';
 
-const trimOrNull = (value?: string | null): string | null => {
-  const trimmed = String(value || '').trim();
+const trimSingleLineOrNull = (value: string | null | undefined, max: number): string | null => {
+  const trimmed = normalizeSingleLine(value).slice(0, max);
   return trimmed || null;
 };
 
+const trimMultilineOrNull = (value: string | null | undefined, max: number): string | null => {
+  const trimmed = normalizeMultiline(value).slice(0, max);
+  return trimmed || null;
+};
+
+const trimUrlOrNull = (value?: string | null): string | null =>
+  trimSingleLineOrNull(value, INPUT_LIMITS.common.url);
+
 const normalizedLocalizedText = (
-  value: OrganizerStudioLocalizedText
+  value: OrganizerStudioLocalizedText,
+  max: number,
+  multiline = false
 ): OrganizerStudioLocalizedText | null => {
   const next: OrganizerStudioLocalizedText = {
-    zh: value.zh.trim(),
-    en: value.en.trim(),
-    ja: value.ja.trim(),
-    enFull: value.enFull.trim(),
+    zh: (multiline ? normalizeMultiline(value.zh) : normalizeSingleLine(value.zh)).slice(0, max),
+    en: (multiline ? normalizeMultiline(value.en) : normalizeSingleLine(value.en)).slice(0, max),
+    ja: (multiline ? normalizeMultiline(value.ja) : normalizeSingleLine(value.ja)).slice(0, max),
+    enFull: (multiline ? normalizeMultiline(value.enFull) : normalizeSingleLine(value.enFull)).slice(0, max),
   };
   return next.zh || next.en || next.ja || next.enFull ? next : null;
 };
 
 const primaryText = (value: OrganizerStudioLocalizedText): string =>
-  value.zh.trim() || value.en.trim() || value.ja.trim() || value.enFull.trim();
+  normalizeSingleLine(value.zh) || normalizeSingleLine(value.en) || normalizeSingleLine(value.ja) || normalizeSingleLine(value.enFull);
 
-const splitAliases = (value: string): string[] => {
-  const items = value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return Array.from(new Set(items));
-};
+const splitAliases = (value: string): string[] =>
+  trimArrayItems(value.split(/[\n,]/), INPUT_LIMITS.organizer.alias).slice(0, 20);
 
 const inferLinkTitle = (rawUrl: string): string => {
   try {
@@ -50,12 +56,12 @@ const normalizedLinks = (
 ): OrganizerStudioLinkPayload[] =>
   items
     .map((item) => {
-      const url = item.url.trim();
+      const url = normalizeSingleLine(item.url).slice(0, INPUT_LIMITS.common.url);
       if (!url) return null;
-      const title = item.title.trim() || inferLinkTitle(url);
+      const title = normalizeSingleLine(item.title).slice(0, INPUT_LIMITS.organizer.extraLinkTitle) || inferLinkTitle(url).slice(0, INPUT_LIMITS.organizer.extraLinkTitle);
       return {
         title,
-        icon: item.icon.trim() || 'link',
+        icon: normalizeSingleLine(item.icon).slice(0, INPUT_LIMITS.common.linkIcon) || 'link',
         url,
       };
     })
@@ -64,16 +70,16 @@ const normalizedLinks = (
 export const mapOrganizerStudioDraftToCreateInput = (
   draft: OrganizerStudioDraft
 ): OrganizerStudioCreateInput => {
-  const nameI18n = normalizedLocalizedText(draft.name);
-  const countryI18n = normalizedLocalizedText(draft.country);
-  const cityI18n = normalizedLocalizedText(draft.city);
-  const descriptionI18n = normalizedLocalizedText(draft.introduction);
+  const nameI18n = normalizedLocalizedText(draft.name, INPUT_LIMITS.organizer.name);
+  const countryI18n = normalizedLocalizedText(draft.country, INPUT_LIMITS.organizer.country);
+  const cityI18n = normalizedLocalizedText(draft.city, INPUT_LIMITS.organizer.city);
+  const descriptionI18n = normalizedLocalizedText(draft.introduction, INPUT_LIMITS.organizer.introduction, true);
   const aliases = splitAliases(draft.aliasesText);
   const links = normalizedLinks(draft.extraLinks);
   const imageAssets = [
     draft.avatarImage
       ? {
-          url: draft.avatarImage.remoteUrl,
+          url: normalizeSingleLine(draft.avatarImage.remoteUrl).slice(0, INPUT_LIMITS.common.url),
           type: 'avatar',
           label: 'AVATAR',
           sort: 0,
@@ -84,7 +90,7 @@ export const mapOrganizerStudioDraftToCreateInput = (
       : null,
     draft.backgroundImage
       ? {
-          url: draft.backgroundImage.remoteUrl,
+          url: normalizeSingleLine(draft.backgroundImage.remoteUrl).slice(0, INPUT_LIMITS.common.url),
           type: 'background',
           label: 'BACKGROUND',
           sort: 1,
@@ -94,7 +100,7 @@ export const mapOrganizerStudioDraftToCreateInput = (
         }
       : null,
     ...draft.proofImages.map((item, index) => ({
-      url: item.remoteUrl,
+      url: normalizeSingleLine(item.remoteUrl).slice(0, INPUT_LIMITS.common.url),
       type: 'proof',
       label: 'PROOF',
       sort: index,
@@ -105,28 +111,28 @@ export const mapOrganizerStudioDraftToCreateInput = (
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return {
-    name: primaryText(draft.name),
+    name: primaryText(nameI18n ?? draft.name).slice(0, INPUT_LIMITS.organizer.name),
     nameI18n,
-    abbreviation: trimOrNull(draft.abbreviation),
+    abbreviation: trimSingleLineOrNull(draft.abbreviation, INPUT_LIMITS.organizer.abbreviation),
     aliases,
-    country: trimOrNull(primaryText(draft.country)),
+    country: trimSingleLineOrNull(primaryText(draft.country), INPUT_LIMITS.organizer.country),
     countryI18n,
-    city: trimOrNull(primaryText(draft.city)),
+    city: trimSingleLineOrNull(primaryText(draft.city), INPUT_LIMITS.organizer.city),
     cityI18n,
-    foundedYear: trimOrNull(draft.foundedYear),
-    frequency: trimOrNull(draft.frequency),
-    tagline: trimOrNull(draft.tagline),
-    introduction: trimOrNull(primaryText(draft.introduction)),
+    foundedYear: trimSingleLineOrNull(draft.foundedYear, INPUT_LIMITS.organizer.foundedYear),
+    frequency: trimSingleLineOrNull(draft.frequency, INPUT_LIMITS.organizer.frequency),
+    tagline: trimSingleLineOrNull(draft.tagline, INPUT_LIMITS.organizer.tagline),
+    introduction: trimMultilineOrNull(primaryText(draft.introduction), INPUT_LIMITS.organizer.introduction),
     descriptionI18n,
-    officialWebsite: trimOrNull(draft.officialWebsite),
-    facebookUrl: trimOrNull(draft.facebook),
-    instagramUrl: trimOrNull(draft.instagram),
-    twitterUrl: trimOrNull(draft.twitter),
-    youtubeUrl: trimOrNull(draft.youtube),
-    tiktokUrl: trimOrNull(draft.tiktok),
-    avatarUrl: trimOrNull(draft.avatarImage?.remoteUrl),
-    backgroundUrl: trimOrNull(draft.backgroundImage?.remoteUrl),
-    proofImageUrl: trimOrNull(draft.proofImages[0]?.remoteUrl),
+    officialWebsite: trimUrlOrNull(draft.officialWebsite),
+    facebookUrl: trimUrlOrNull(draft.facebook),
+    instagramUrl: trimUrlOrNull(draft.instagram),
+    twitterUrl: trimUrlOrNull(draft.twitter),
+    youtubeUrl: trimUrlOrNull(draft.youtube),
+    tiktokUrl: trimUrlOrNull(draft.tiktok),
+    avatarUrl: trimUrlOrNull(draft.avatarImage?.remoteUrl),
+    backgroundUrl: trimUrlOrNull(draft.backgroundImage?.remoteUrl),
+    proofImageUrl: trimUrlOrNull(draft.proofImages[0]?.remoteUrl),
     imageAssets: imageAssets.length ? imageAssets : null,
     rightsConfirmed: draft.rightsConfirmed,
     identityConfirmed: draft.identityConfirmed,

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AdminToast, { type AdminToastTone } from '@/components/admin/AdminToast';
 import {
@@ -200,7 +201,7 @@ export default function AdminPublishTaskActions({
             {mode === 'create' ? '内容已保存，决定是否立即通知用户' : '内容已更新，决定是否向用户推送这次变更'}
           </h3>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-black/52">
-            这里使用统一的后台发布任务链路。你现在可以直接发布，也可以稍后到通知中心继续处理。
+            这里使用统一的后台发布任务链路。你现在可以直接发布，也可以跳到统一内容历史页稍后继续处理。
           </p>
         </div>
         <div className="rounded-full bg-[#f3f5f4] px-4 py-2 text-xs font-semibold text-[#42514c]">
@@ -279,6 +280,13 @@ export default function AdminPublishTaskActions({
             </div>
 
             <div className="space-y-4 rounded-[28px] border border-[#e7ece8] bg-[#fcfcfb] p-5">
+              <Link
+                href={`/admin/notification-center/content-history?entityType=${encodeURIComponent(entityType)}&query=${encodeURIComponent(entityId)}`}
+                className="inline-flex w-full items-center justify-center rounded-full border border-[#d7ddda] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+              >
+                去统一内容历史继续处理
+              </Link>
+
               <div>
                 <div className="text-xs uppercase tracking-[0.24em] text-black/38">Channels</div>
                 <div className="mt-3 space-y-3">
@@ -318,11 +326,11 @@ export default function AdminPublishTaskActions({
                 disabled={rejecting || isFinished}
                 className="inline-flex w-full items-center justify-center rounded-full border border-[#d7ddda] bg-white px-5 py-3 text-sm font-semibold text-[#071110] disabled:opacity-45"
               >
-                {rejecting ? '处理中...' : '暂不发布'}
+                {rejecting ? '处理中...' : '标记无需推送'}
               </button>
 
               <div className="text-xs leading-6 text-black/42">
-                如果这里暂时不处理，这条任务会保留在通知中心的待处理发布候选项里，后续仍可继续发布或拒绝。
+                如果暂时不在这里处理，也可以稍后到统一内容历史页继续推送、查看预览，或者标记为无需推送。
               </div>
             </div>
           </div>

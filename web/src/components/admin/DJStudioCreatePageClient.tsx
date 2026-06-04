@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import DJStudioForm from '@/components/admin/DJStudioForm';
 import {
@@ -66,6 +67,15 @@ export default function DJStudioCreatePageClient({
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {savedDJId ? (
+        <NotificationContentHistoryPrompt
+          entityType="dj"
+          entityId={savedDJId}
+          secondaryHref="/admin/content/djs/catalog"
+          secondaryLabel="稍后处理，先回到 DJ 目录"
+        />
       ) : null}
 
       {savedDJId ? (

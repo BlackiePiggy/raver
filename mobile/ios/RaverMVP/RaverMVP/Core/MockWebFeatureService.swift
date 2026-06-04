@@ -36,6 +36,18 @@ actor MockWebFeatureService: WebFeatureService {
 
     init() {
         let now = Date()
+        let contributorAna = WebUserLite(
+            id: "u_ana",
+            username: "acid_ana",
+            displayName: "Ana",
+            avatarUrl: MockWebFeatureService.seededAvatarURL(for: "u_ana")
+        )
+        let contributorMika = WebUserLite(
+            id: "u_mika",
+            username: "mika_rave",
+            displayName: "Mika",
+            avatarUrl: MockWebFeatureService.seededAvatarURL(for: "u_mika")
+        )
         let djA = WebDJ(
             id: "dj_amelie",
             name: "Amelie Lens",
@@ -77,9 +89,35 @@ actor MockWebFeatureService: WebFeatureService {
             isFollowing: true
         )
 
-        djs = [djA, djB]
+        var populatedDjA = djA
+        populatedDjA.contributors = [currentUser, contributorAna]
+        populatedDjA.contributorSummary = WebContributorSummary(
+            totalCount: 2,
+            creator: currentUser,
+            previewUsers: [currentUser, contributorAna],
+            displayName: currentUser.shownName
+        )
+        populatedDjA.contributorUsernames = [currentUser.username, contributorAna.username]
+        populatedDjA.uploadedByUsername = currentUser.username
+        populatedDjA.isContributor = true
+        populatedDjA.canEdit = true
 
-        let mockEvent = WebEvent(
+        var populatedDjB = djB
+        populatedDjB.contributors = [currentUser, contributorAna, contributorMika]
+        populatedDjB.contributorSummary = WebContributorSummary(
+            totalCount: 3,
+            creator: currentUser,
+            previewUsers: [currentUser, contributorAna, contributorMika],
+            displayName: currentUser.shownName
+        )
+        populatedDjB.contributorUsernames = [currentUser.username, contributorAna.username, contributorMika.username]
+        populatedDjB.uploadedByUsername = currentUser.username
+        populatedDjB.isContributor = true
+        populatedDjB.canEdit = true
+
+        djs = [populatedDjA, populatedDjB]
+
+        var mockEvent = WebEvent(
             id: "evt_shanghai_001",
             name: "Raver Night Shanghai",
             slug: "raver-night-shanghai",
@@ -134,6 +172,18 @@ actor MockWebFeatureService: WebFeatureService {
                 )
             ]
         )
+
+        mockEvent.contributors = [currentUser, contributorAna, contributorMika]
+        mockEvent.contributorSummary = WebContributorSummary(
+            totalCount: 3,
+            creator: currentUser,
+            previewUsers: [currentUser, contributorAna, contributorMika],
+            displayName: currentUser.shownName
+        )
+        mockEvent.contributorUsernames = [currentUser.username, contributorAna.username, contributorMika.username]
+        mockEvent.uploadedByUsername = currentUser.username
+        mockEvent.isContributor = true
+        mockEvent.canEdit = true
 
         events = [mockEvent]
 
@@ -553,6 +603,42 @@ actor MockWebFeatureService: WebFeatureService {
         event.lineupArtists = nil
         event.lineupSlots = []
         return event
+    }
+
+    func fetchEventContributors(eventID: String) async throws -> WebEntityContributorPage {
+        guard let event = events.first(where: { $0.id == eventID }) else {
+            throw ServiceError.message("活动不存在")
+        }
+        let contributors = event.contributors ?? []
+        let now = Date()
+        let items = contributors.enumerated().map { index, user in
+            WebEntityContributorItem(
+                user: user,
+                role: index == 0 ? "creator" : "editor",
+                firstContributedAt: now.addingTimeInterval(TimeInterval(-(contributors.count - index) * 86400)),
+                lastContributedAt: now.addingTimeInterval(TimeInterval(-index * 3600)),
+                contributionCount: max(1, contributors.count - index),
+                firstSubmissionId: nil,
+                lastSubmissionId: nil,
+                lastContributionSource: index == 0 ? "submission_create" : "submission_edit",
+                createdAt: now.addingTimeInterval(TimeInterval(-(contributors.count - index) * 86400)),
+                updatedAt: now.addingTimeInterval(TimeInterval(-index * 3600))
+            )
+        }
+        return WebEntityContributorPage(
+            items: items.sorted { lhs, rhs in
+                if lhs.lastContributedAt != rhs.lastContributedAt {
+                    return lhs.lastContributedAt > rhs.lastContributedAt
+                }
+                return lhs.id > rhs.id
+            },
+            summary: event.contributorSummary ?? WebContributorSummary(
+                totalCount: contributors.count,
+                creator: contributors.first,
+                previewUsers: Array(contributors.prefix(3)),
+                displayName: contributors.first?.shownName
+            )
+        )
     }
 
     func fetchEventLineup(eventID: String) async throws -> [WebEventLineupArtist] {
@@ -1228,6 +1314,42 @@ actor MockWebFeatureService: WebFeatureService {
             throw ServiceError.message("DJ 不存在")
         }
         return dj
+    }
+
+    func fetchDJContributors(djID: String) async throws -> WebEntityContributorPage {
+        guard let dj = djs.first(where: { $0.id == djID }) else {
+            throw ServiceError.message("DJ 不存在")
+        }
+        let contributors = dj.contributors ?? []
+        let now = Date()
+        let items = contributors.enumerated().map { index, user in
+            WebEntityContributorItem(
+                user: user,
+                role: index == 0 ? "creator" : "editor",
+                firstContributedAt: now.addingTimeInterval(TimeInterval(-(contributors.count - index) * 86400)),
+                lastContributedAt: now.addingTimeInterval(TimeInterval(-index * 5400)),
+                contributionCount: max(1, contributors.count - index),
+                firstSubmissionId: nil,
+                lastSubmissionId: nil,
+                lastContributionSource: index == 0 ? "submission_create" : "submission_edit",
+                createdAt: now.addingTimeInterval(TimeInterval(-(contributors.count - index) * 86400)),
+                updatedAt: now.addingTimeInterval(TimeInterval(-index * 5400))
+            )
+        }
+        return WebEntityContributorPage(
+            items: items.sorted { lhs, rhs in
+                if lhs.lastContributedAt != rhs.lastContributedAt {
+                    return lhs.lastContributedAt > rhs.lastContributedAt
+                }
+                return lhs.id > rhs.id
+            },
+            summary: dj.contributorSummary ?? WebContributorSummary(
+                totalCount: contributors.count,
+                creator: contributors.first,
+                previewUsers: Array(contributors.prefix(3)),
+                displayName: contributors.first?.shownName
+            )
+        )
     }
 
     func searchSpotifyDJs(query: String, limit: Int) async throws -> [SpotifyDJCandidate] {
@@ -3672,6 +3794,103 @@ actor MockWebFeatureService: WebFeatureService {
             .sorted(by: { $0.createdAt > $1.createdAt })
 
         return MyPublishes(djSets: mySets, events: myEvents, ratingEvents: myRatingEvents, ratingUnits: myRatingUnits)
+    }
+
+    func fetchMyContributionCenterSummary() async throws -> WebContributionCenterSummary {
+        let page = try await fetchMyContributionHistory(entityType: "all", cursor: nil, limit: 3)
+        let allItems = try await fetchMyContributionHistory(entityType: "all", cursor: nil, limit: 20).items
+        return WebContributionCenterSummary(
+            totalContributionCount: allItems.count,
+            contributedEventCount: Set(allItems.filter { $0.entity.type == "event" }.map(\.entity.id)).count,
+            contributedDJCount: Set(allItems.filter { $0.entity.type == "dj" }.map(\.entity.id)).count,
+            lastContributionAt: allItems.first?.occurredAt,
+            recentItems: page.items
+        )
+    }
+
+    func fetchMyContributionHistory(
+        entityType: String,
+        cursor: String?,
+        limit: Int
+    ) async throws -> WebContributionHistoryPage {
+        _ = cursor
+        let now = Date()
+        let items: [WebContributionHistoryItem] = [
+            WebContributionHistoryItem(
+                id: "contribution_evt_create",
+                entity: WebContributionHistoryEntity(
+                    id: "evt_shanghai_001",
+                    type: "event",
+                    title: "Raver Night Shanghai",
+                    coverImageUrl: nil
+                ),
+                role: "creator",
+                actionType: "create",
+                source: "submission_create",
+                submissionId: "submission_evt_create",
+                occurredAt: now.addingTimeInterval(-86400 * 3),
+                approvedAt: now.addingTimeInterval(-86400 * 3 + 1200),
+                versionAfter: 1,
+                changeSummary: "创建了活动基础信息与初版 lineup",
+                metadata: nil,
+                createdAt: now.addingTimeInterval(-86400 * 3)
+            ),
+            WebContributionHistoryItem(
+                id: "contribution_dj_edit",
+                entity: WebContributionHistoryEntity(
+                    id: "dj_charlotte",
+                    type: "dj",
+                    title: "Charlotte de Witte",
+                    coverImageUrl: djs.first(where: { $0.id == "dj_charlotte" })?.avatarUrl
+                ),
+                role: "editor",
+                actionType: "edit",
+                source: "submission_edit",
+                submissionId: "submission_dj_edit",
+                occurredAt: now.addingTimeInterval(-86400 * 2),
+                approvedAt: now.addingTimeInterval(-86400 * 2 + 1800),
+                versionAfter: 3,
+                changeSummary: "补充了 DJ 简介和社交平台链接",
+                metadata: nil,
+                createdAt: now.addingTimeInterval(-86400 * 2)
+            ),
+            WebContributionHistoryItem(
+                id: "contribution_evt_edit",
+                entity: WebContributionHistoryEntity(
+                    id: "evt_shanghai_001",
+                    type: "event",
+                    title: "Raver Night Shanghai",
+                    coverImageUrl: nil
+                ),
+                role: "editor",
+                actionType: "edit",
+                source: "submission_edit",
+                submissionId: "submission_evt_edit",
+                occurredAt: now.addingTimeInterval(-86400),
+                approvedAt: now.addingTimeInterval(-86400 + 900),
+                versionAfter: 2,
+                changeSummary: "修正了 timetable 的演出时间",
+                metadata: nil,
+                createdAt: now.addingTimeInterval(-86400)
+            ),
+        ]
+
+        let filtered = items
+            .filter { entityType == "all" || $0.entity.type == entityType }
+            .sorted {
+                if $0.occurredAt != $1.occurredAt { return $0.occurredAt > $1.occurredAt }
+                return $0.createdAt > $1.createdAt
+            }
+        let capped = Array(filtered.prefix(max(1, limit)))
+        return WebContributionHistoryPage(
+            items: capped,
+            filter: WebContributionHistoryFilterPayload(entityType: entityType),
+            pageInfo: WebContributionHistoryPageInfo(
+                limit: max(1, limit),
+                nextCursor: nil,
+                hasMore: false
+            )
+        )
     }
 
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {

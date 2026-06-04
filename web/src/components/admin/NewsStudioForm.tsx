@@ -6,6 +6,8 @@ import AdminToast, { type AdminToastTone } from '@/components/admin/AdminToast';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import MarkdownEditor from '@/components/admin/MarkdownEditor';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
+import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
   extractMarkdownImageUrls,
   mapNewsStudioDraftToCreateInput,
@@ -398,6 +400,22 @@ export default function NewsStudioForm({
           : await newsStudioApi.createNews(payload);
       onSubmit(result);
     } catch (error) {
+      await notificationCenterAdminApi
+        .logContentHistoryFailure({
+          entityType: 'news_article',
+          entityId: newsId ?? null,
+          taskType: 'news_release',
+          operationType: mode === 'edit' ? 'edit' : 'create',
+          title: draft.title || (mode === 'edit' ? '资讯编辑失败' : '资讯创建失败'),
+          summary: draft.summary || null,
+          sourceRoute: mode === 'edit' && newsId ? `/admin/content/news/${newsId}/edit` : '/admin/content/news/new',
+          errorMessage: error instanceof Error ? error.message : '资讯提交失败。',
+          payload: {
+            category: draft.category,
+            source: draft.source,
+          },
+        })
+        .catch(() => undefined);
       setSubmitError(error instanceof Error ? error.message : '资讯提交失败。');
     } finally {
       setSubmitting(false);
@@ -464,7 +482,9 @@ export default function NewsStudioForm({
               onChange={(event) => updateDraft('title', event.target.value)}
               className={textInputClassName}
               placeholder="填写资讯标题"
+              maxLength={INPUT_LIMITS.news.title}
             />
+            <div className="mt-2 text-xs text-black/40">{countText(draft.title)}/{INPUT_LIMITS.news.title}</div>
           </Field>
           <Field label="来源">
             <input
@@ -472,7 +492,9 @@ export default function NewsStudioForm({
               onChange={(event) => updateDraft('source', event.target.value)}
               className={textInputClassName}
               placeholder="Raver / Billboard / Resident Advisor"
+              maxLength={INPUT_LIMITS.news.source}
             />
+            <div className="mt-2 text-xs text-black/40">{countText(draft.source)}/{INPUT_LIMITS.news.source}</div>
           </Field>
           <Field label="资讯分类">
             <select
@@ -510,7 +532,9 @@ export default function NewsStudioForm({
                 onChange={(event) => updateDraft('summary', event.target.value)}
                 className={`${textAreaClassName} min-h-[148px]`}
                 placeholder="写一个适合列表展示的摘要"
+                maxLength={INPUT_LIMITS.news.summary}
               />
+              <div className="mt-2 text-xs text-black/40">{countText(draft.summary, true)}/{INPUT_LIMITS.news.summary}</div>
             </Field>
 
             <div className="grid gap-4">
@@ -713,6 +737,8 @@ export default function NewsStudioForm({
                 value={draft.body}
                 onChange={updateBody}
                 placeholder="填写资讯正文，支持 Markdown"
+                helperText={`${countText(draft.body, true)}/${INPUT_LIMITS.news.body} · 支持标题、列表、引用、链接、图片与代码块`}
+                maxLength={INPUT_LIMITS.news.body}
                 error={errors.body}
                 textareaRef={bodyTextareaRef}
                 minHeightClassName="h-[560px]"

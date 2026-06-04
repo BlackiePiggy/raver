@@ -12,6 +12,7 @@ import {
   assertNoActiveEventEditSubmission,
   autoAlignEventLineupToTimetablePayload,
   buildSubmittedEventScheduleContextFromEvent,
+  getEventEditTargetIdFromPayload,
   createOrUpdateEventFromSubmission,
   incrementallyFillEventLineupFromTimetablePayload,
   normalizeSubmittedEventScheduleContext,
@@ -23,6 +24,7 @@ import {
   BrandSubmissionConflictError,
   buildBrandSubmissionReviewNotes,
   createOrUpdateBrandFromSubmission,
+  getBrandEditTargetIdFromPayload,
   normalizeBrandSubmissionPayload,
 } from '../services/content-submission-brand.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
@@ -692,7 +694,7 @@ const createEntityFromSubmission = async (
     case 'event':
       return createOrUpdateEventFromSubmission(prisma, payload, submitterId, options);
     case 'dj':
-      return createOrUpdateDJFromSubmission(prisma, payload, submitterId);
+      return createOrUpdateDJFromSubmission(prisma, payload, submitterId, options);
     case 'news':
       return createNewsFromSubmission(payload, submitterId);
     case 'set':
@@ -707,6 +709,270 @@ const createEntityFromSubmission = async (
       return createIDFromSubmission(payload, submitterId);
     default:
       throw new Error(`暂不支持审核类型：${entityType}`);
+  }
+};
+
+const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
+  actorId: string;
+  entityType: string;
+  payload: Prisma.JsonObject;
+  createdEntity: unknown;
+}): Promise<void> => {
+  const row =
+    input.createdEntity && typeof input.createdEntity === 'object' && !Array.isArray(input.createdEntity)
+      ? (input.createdEntity as Record<string, unknown>)
+      : {};
+  const entityId = cleanText(row.id);
+  if (!entityId) return;
+
+  const operationType =
+    input.entityType === 'event'
+      ? (getEventEditTargetIdFromPayload(input.payload) ? 'edit' : 'create')
+      : input.entityType === 'brand'
+        ? (getBrandEditTargetIdFromPayload(input.payload) ? 'edit' : 'create')
+        : input.entityType === 'dj'
+          ? (cleanText(input.payload.targetDJId) || cleanText(input.payload.editTargetDJId) ? 'edit' : 'create')
+          : 'create';
+
+  try {
+    if (input.entityType === 'event') {
+      const title = cleanText(row.name) || titleFromPayload('event', input.payload);
+      const summary = cleanText(row.description) || title;
+      if (!title) return;
+      const task = await notificationCenterService.upsertAdminPublishTask({
+        taskType: 'event_release',
+        entityType: 'event',
+        entityId,
+        title,
+        summary,
+        createdBy: input.actorId,
+        payload: {
+          eventId: entityId,
+          title,
+          summary,
+          coverImageURL: cleanText(row.coverImageUrl) || null,
+          timeZone: cleanText(row.timeZone) || null,
+          startDate:
+            row.startDate instanceof Date
+              ? row.startDate.toISOString()
+              : cleanText(row.startDate) || null,
+          wikiFestivalId: cleanText(row.wikiFestivalId) || null,
+        },
+      });
+      await notificationCenterService.createAdminContentHistory({
+        entityType: 'event',
+        entityId,
+        taskType: 'event_release',
+        operationType,
+        resultStatus: 'success',
+        pushStatus: 'pending',
+        title,
+        summary,
+        payload: {
+          eventId: entityId,
+          title,
+          summary,
+          coverImageURL: cleanText(row.coverImageUrl) || null,
+          timeZone: cleanText(row.timeZone) || null,
+          startDate:
+            row.startDate instanceof Date
+              ? row.startDate.toISOString()
+              : cleanText(row.startDate) || null,
+          wikiFestivalId: cleanText(row.wikiFestivalId) || null,
+          source: 'content_submission_approved',
+        },
+        sourceRoute: '/admin/content-submissions/:id/review',
+        createdBy: input.actorId,
+        linkedTaskId: task.id,
+      });
+      return;
+    }
+
+    if (input.entityType === 'dj') {
+      const title = cleanText(row.name) || titleFromPayload('dj', input.payload);
+      const summary = cleanText(row.bio) || title;
+      if (!title) return;
+      const task = await notificationCenterService.upsertAdminPublishTask({
+        taskType: 'dj_release',
+        entityType: 'dj',
+        entityId,
+        title,
+        summary,
+        createdBy: input.actorId,
+        payload: {
+          djId: entityId,
+          title,
+          summary,
+          coverImageURL: cleanText(row.avatarUrl) || null,
+        },
+      });
+      await notificationCenterService.createAdminContentHistory({
+        entityType: 'dj',
+        entityId,
+        taskType: 'dj_release',
+        operationType,
+        resultStatus: 'success',
+        pushStatus: 'pending',
+        title,
+        summary,
+        payload: {
+          djId: entityId,
+          title,
+          summary,
+          coverImageURL: cleanText(row.avatarUrl) || null,
+          source: 'content_submission_approved',
+        },
+        sourceRoute: '/admin/content-submissions/:id/review',
+        createdBy: input.actorId,
+        linkedTaskId: task.id,
+      });
+      return;
+    }
+
+    if (input.entityType === 'brand') {
+      const title = cleanText(row.name) || titleFromPayload('brand', input.payload);
+      const summary = cleanText(row.introduction) || cleanText(input.payload.description) || title;
+      if (!title) return;
+      const task = await notificationCenterService.upsertAdminPublishTask({
+        taskType: 'brand_release',
+        entityType: 'festival',
+        entityId,
+        title,
+        summary,
+        createdBy: input.actorId,
+        payload: {
+          brandId: entityId,
+          brandEntityType: 'festival',
+          title,
+          summary,
+          coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
+        },
+      });
+      await notificationCenterService.createAdminContentHistory({
+        entityType: 'festival',
+        entityId,
+        taskType: 'brand_release',
+        operationType,
+        resultStatus: 'success',
+        pushStatus: 'pending',
+        title,
+        summary,
+        payload: {
+          brandId: entityId,
+          brandEntityType: 'festival',
+          title,
+          summary,
+          coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
+          source: 'content_submission_approved',
+        },
+        sourceRoute: '/admin/content-submissions/:id/review',
+        createdBy: input.actorId,
+        linkedTaskId: task.id,
+      });
+      return;
+    }
+
+    if (input.entityType === 'news') {
+      const title = cleanText(row.title) || titleFromPayload('news', input.payload);
+      const summary = cleanText(row.summary) || title;
+      if (!title) return;
+      const task = await notificationCenterService.upsertAdminPublishTask({
+        taskType: 'news_release',
+        entityType: 'news_article',
+        entityId,
+        title,
+        summary,
+        createdBy: input.actorId,
+        payload: {
+          articleId: entityId,
+          title,
+          summary,
+          coverImageURL: cleanText(row.coverImageUrl) || null,
+          publishedAt:
+            row.publishedAt instanceof Date
+              ? row.publishedAt.toISOString()
+              : cleanText(row.publishedAt) || null,
+        },
+      });
+      await notificationCenterService.createAdminContentHistory({
+        entityType: 'news_article',
+        entityId,
+        taskType: 'news_release',
+        operationType,
+        resultStatus: 'success',
+        pushStatus: 'pending',
+        title,
+        summary,
+        payload: {
+          articleId: entityId,
+          title,
+          summary,
+          coverImageURL: cleanText(row.coverImageUrl) || null,
+          publishedAt:
+            row.publishedAt instanceof Date
+              ? row.publishedAt.toISOString()
+              : cleanText(row.publishedAt) || null,
+          source: 'content_submission_approved',
+        },
+        sourceRoute: '/admin/content-submissions/:id/review',
+        createdBy: input.actorId,
+        linkedTaskId: task.id,
+      });
+      return;
+    }
+
+    if (input.entityType === 'label') {
+      const title = cleanText(row.name) || titleFromPayload('label', input.payload);
+      const summary =
+        cleanText(row.introduction) ||
+        cleanText(input.payload.introduction) ||
+        cleanText(input.payload.description) ||
+        title;
+      if (!title) return;
+      const task = await notificationCenterService.upsertAdminPublishTask({
+        taskType: 'brand_release',
+        entityType: 'label',
+        entityId,
+        title,
+        summary,
+        createdBy: input.actorId,
+        payload: {
+          brandId: entityId,
+          brandEntityType: 'label',
+          title,
+          summary,
+          coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
+        },
+      });
+      await notificationCenterService.createAdminContentHistory({
+        entityType: 'label',
+        entityId,
+        taskType: 'brand_release',
+        operationType,
+        resultStatus: 'success',
+        pushStatus: 'pending',
+        title,
+        summary,
+        payload: {
+          brandId: entityId,
+          brandEntityType: 'label',
+          title,
+          summary,
+          coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
+          source: 'content_submission_approved',
+        },
+        sourceRoute: '/admin/content-submissions/:id/review',
+        createdBy: input.actorId,
+        linkedTaskId: task.id,
+      });
+    }
+  } catch (error) {
+    console.warn('Approved submission notification enqueue failed:', {
+      entityType: input.entityType,
+      entityId,
+      actorId: input.actorId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 
@@ -1227,12 +1493,14 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
     const reasonCode = cleanText(reviewDecision?.reasonCode);
 
     let createdEntityId: string | null = null;
+    let createdEntity: unknown = null;
     if (decision === 'approved') {
       const payload = current.payload as Prisma.JsonObject;
       const created = await createEntityFromSubmission(current.entityType, payload, current.submitterId, {
         submissionId: current.id,
       });
       createdEntityId = created.id;
+      createdEntity = created;
       if (current.entityType === 'dj' && createdEntityId) {
         try {
           await djEventBindingReviewService.createJobForDJ(createdEntityId, {
@@ -1248,6 +1516,12 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
           });
         }
       }
+      await enqueueApprovedSubmissionForNotificationBestEffort({
+        actorId,
+        entityType: current.entityType,
+        payload,
+        createdEntity,
+      });
     }
 
     // Rejected submissions intentionally keep their content-submission-owned media.

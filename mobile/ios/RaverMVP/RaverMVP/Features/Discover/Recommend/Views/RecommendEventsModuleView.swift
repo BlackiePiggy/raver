@@ -38,8 +38,13 @@ struct RecommendEventsModuleView: View {
     @State private var guideStep: RecommendEventsGuidanceStep = .tap
     @State private var guideHandOffset: CGFloat = 0
     @State private var hasTriggeredInitialLoad = false
+    @State private var isInitialConnectionGraceActive = false
+    @State private var hasScheduledInitialConnectionGrace = false
 
     private let isActive: Bool
+    private let initialConnectionGraceDurationNanoseconds: UInt64 = 10_000_000_000
+    private let initialConnectionRetryDelayNanoseconds: UInt64 = 2_000_000_000
+    private let initialConnectionRetryAttempts = 4
     init(
         viewModel: RecommendEventsViewModel,
         isActive: Bool = true,
@@ -55,7 +60,7 @@ struct RecommendEventsModuleView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Group {
-                if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+                if shouldShowInitialLoadingState {
                     RecommendEventsSkeletonView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 } else if case .failure(let message) = viewModel.phase {
@@ -123,9 +128,13 @@ struct RecommendEventsModuleView: View {
         }
         .task {
             await triggerInitialLoadIfNeeded()
+            await scheduleInitialConnectionGraceIfNeeded()
         }
         .onChange(of: isActive) { _, _ in
-            Task { await triggerInitialLoadIfNeeded() }
+            Task {
+                await triggerInitialLoadIfNeeded()
+                await scheduleInitialConnectionGraceIfNeeded()
+            }
         }
         .onChange(of: viewModel.events.count) { _, _ in
             presentGuideIfNeeded()
@@ -153,6 +162,60 @@ struct RecommendEventsModuleView: View {
         hasTriggeredInitialLoad = true
         await viewModel.loadIfNeeded(sessionUserID: appState.session?.user.id)
         presentGuideIfNeeded()
+    }
+
+    private var shouldShowInitialLoadingState: Bool {
+        if viewModel.phase == .idle || viewModel.phase == .initialLoading {
+            return true
+        }
+
+        guard isInitialConnectionGraceActive, viewModel.events.isEmpty else { return false }
+        switch viewModel.phase {
+        case .failure, .offline:
+            return true
+        case .idle, .initialLoading, .success, .empty:
+            return false
+        }
+    }
+
+    @MainActor
+    private func scheduleInitialConnectionGraceIfNeeded() async {
+        guard isActive else { return }
+        guard !hasScheduledInitialConnectionGrace else { return }
+        guard viewModel.events.isEmpty else { return }
+
+        hasScheduledInitialConnectionGrace = true
+        isInitialConnectionGraceActive = true
+
+        defer { isInitialConnectionGraceActive = false }
+
+        do {
+            for _ in 0..<initialConnectionRetryAttempts {
+                try await Task.sleep(nanoseconds: initialConnectionRetryDelayNanoseconds)
+                guard shouldRetryDuringInitialGrace else { return }
+                await viewModel.reload(sessionUserID: appState.session?.user.id)
+            }
+
+            let consumedRetryWindow = initialConnectionRetryDelayNanoseconds * UInt64(initialConnectionRetryAttempts)
+            let remaining = initialConnectionGraceDurationNanoseconds > consumedRetryWindow
+                ? initialConnectionGraceDurationNanoseconds - consumedRetryWindow
+                : 0
+            if remaining > 0 {
+                try await Task.sleep(nanoseconds: remaining)
+            }
+        } catch {
+            return
+        }
+    }
+
+    private var shouldRetryDuringInitialGrace: Bool {
+        guard viewModel.events.isEmpty else { return false }
+        switch viewModel.phase {
+        case .failure, .offline:
+            return true
+        case .idle, .initialLoading, .success, .empty:
+            return false
+        }
     }
 
     private var recommendationPager: some View {

@@ -33,7 +33,7 @@ export interface RegisterData {
   username: string;
   email: string;
   password: string;
-  displayName?: string;
+  displayName: string;
   birthYear?: number;
   regionCode?: string;
 }

@@ -1,4 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import { recordEventContribution } from './contribution.service';
+import { changeSummaryTextFromPayload } from './content-submission-change-summary.service';
 import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
@@ -13,9 +15,11 @@ import {
 } from '../utils/event-timezone';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 import {
+  type CanonicalLineupSnapshot,
   type CanonicalLineupSyncProfiling,
   type CanonicalLineupArtistInput,
   type CanonicalLineupSlotInput,
+  loadCanonicalEventLineupSnapshot,
   normalizeCanonicalLineupArtists,
   syncCanonicalEventLineupAndTimetable,
 } from './event-lineup-canonical.service';
@@ -532,6 +536,35 @@ const dateTimeValue = (value: Date | string | null | undefined): number | null =
   const parsed = value instanceof Date ? value : new Date(value);
   const time = parsed.getTime();
   return Number.isFinite(time) ? time : null;
+};
+
+const stableSerialize = (value: unknown): string => {
+  if (value === null || value === undefined) return 'null';
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableSerialize(entryValue)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const isEqualValue = (left: unknown, right: unknown): boolean => stableSerialize(left) === stableSerialize(right);
+
+const normalizeJsonLikeForCompare = (value: unknown): unknown => {
+  if (value === undefined || value === null || value === Prisma.JsonNull || value === Prisma.DbNull) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((item) => normalizeJsonLikeForCompare(item));
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, normalizeJsonLikeForCompare(item)])
+    );
+  }
+  return value;
 };
 
 const eventImageAssetsFromPayload = (value: unknown): Prisma.InputJsonValue[] => {
@@ -1303,6 +1336,477 @@ type NormalizedEventSubmissionWriteInput = {
   ticketTiers: Prisma.EventTicketTierCreateWithoutEventInput[];
 };
 
+type EventCoreComparableState = {
+  name: string;
+  nameI18n: unknown;
+  wikiFestivalId: string | null;
+  description: string | null;
+  descriptionI18n: unknown;
+  coverImageUrl: string | null;
+  lineupImageUrl: string | null;
+  imageAssets: unknown;
+  eventType: string | null;
+  organizerName: string | null;
+  venueName: string | null;
+  venueAddress: string | null;
+  referenceLinks: string[];
+  socialLinks: unknown;
+  sourceProvider: string | null;
+  sourceEventUrl: string | null;
+  city: string | null;
+  country: string | null;
+  cityI18n: unknown;
+  countryI18n: unknown;
+  manualLocation: unknown;
+  locationPoint: unknown;
+  latitude: string | null;
+  longitude: string | null;
+  startDate: number | null;
+  endDate: number | null;
+  scheduleMode: string;
+  timeZone: string;
+  startTime: string | null;
+  endTime: string | null;
+  dayRolloverHour: number;
+  ticketUrl: string | null;
+  ticketPriceMin: string | null;
+  ticketPriceMax: string | null;
+  ticketCurrency: string | null;
+  ticketNotes: string | null;
+  officialWebsite: string | null;
+  status: string;
+  isVerified: boolean;
+};
+
+type EventScheduleComparableState = {
+  scheduleMode: string;
+  timeZone: string;
+  dayRolloverHour: number;
+  weeks: Array<{
+    weekIndex: number;
+    label: string | null;
+    startDate: number | null;
+    endDate: number | null;
+    sortOrder: number;
+  }>;
+  eventDays: Array<{
+    eventDayId: string;
+    weekIndex: number;
+    dayIndexInWeek: number;
+    overallDayIndex: number;
+    label: string | null;
+    weekday: string | null;
+    date: number | null;
+    sortOrder: number;
+  }>;
+};
+
+type EventTicketTierComparableState = Array<{
+  name: string;
+  price: string;
+  currency: string | null;
+  sortOrder: number;
+}>;
+
+type CanonicalLineupComparableState = {
+  artists: Array<{
+    djId: string | null;
+    memberDjIds: Array<string | null>;
+    memberNames: string[];
+    djName: string;
+    sortOrder: number;
+  }>;
+  slots: Array<{
+    eventDayId: string | null;
+    weekIndex: number | null;
+    dayIndexInWeek: number | null;
+    overallDayIndex: number | null;
+    djId: string | null;
+    memberDjIds: Array<string | null>;
+    djName: string;
+    stageName: string | null;
+    startTime: number | null;
+    endTime: number | null;
+    sortOrder: number;
+  }>;
+  stageOrder: string[];
+};
+
+type EventSubmissionComparableState = {
+  core: EventCoreComparableState;
+  ticketTiers: EventTicketTierComparableState;
+  schedule: EventScheduleComparableState;
+  canonical: CanonicalLineupComparableState;
+};
+
+const decimalToComparableString = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+};
+
+const normalizeStringArrayForCompare = (value: string[] | null | undefined): string[] => (value ?? []).map((item) => item.trim());
+
+const buildComparableEventTicketTiers = (
+  tiers: Array<{ name: string; price: unknown; currency: string | null; sortOrder: number }>
+): EventTicketTierComparableState => tiers
+  .map((tier) => ({
+    name: tier.name.trim(),
+    price: decimalToComparableString(tier.price) ?? '0',
+    currency: cleanText(tier.currency) ?? null,
+    sortOrder: tier.sortOrder,
+  }))
+  .sort((left, right) =>
+    left.sortOrder - right.sortOrder
+    || left.name.localeCompare(right.name)
+    || left.price.localeCompare(right.price)
+    || (left.currency ?? '').localeCompare(right.currency ?? '')
+  );
+
+const buildComparableScheduleStateFromContext = (
+  scheduleContext: SubmittedEventScheduleContext
+): EventScheduleComparableState => ({
+  scheduleMode: scheduleContext.scheduleMode,
+  timeZone: scheduleContext.timeZone,
+  dayRolloverHour: scheduleContext.dayRolloverHour,
+  weeks: scheduleContext.weeks.map((week) => ({
+    weekIndex: week.weekIndex,
+    label: week.label ?? null,
+    startDate: dateTimeValue(eventDateOnlyToStorageDate(week.startDate, scheduleContext.timeZone)),
+    endDate: dateTimeValue(eventDateOnlyToStorageDate(week.endDate, scheduleContext.timeZone)),
+    sortOrder: week.sortOrder,
+  })),
+  eventDays: scheduleContext.eventDays.map((day) => ({
+    eventDayId: day.eventDayId,
+    weekIndex: day.weekIndex,
+    dayIndexInWeek: day.dayIndexInWeek,
+    overallDayIndex: day.overallDayIndex,
+    label: day.label ?? null,
+    weekday: day.weekday ?? null,
+    date: dateTimeValue(eventDateOnlyToStorageDate(day.date, scheduleContext.timeZone)),
+    sortOrder: day.sortOrder,
+  })),
+});
+
+const buildComparableCanonicalArtists = (
+  artists: CanonicalLineupArtistInput[]
+): CanonicalLineupComparableState['artists'] => normalizeCanonicalLineupArtists(artists, [])
+  .map((artist) => ({
+    djId: cleanText(artist.djId) ?? null,
+    memberDjIds: Array.isArray(artist.memberDjIds)
+      ? artist.memberDjIds.map((item) => cleanText(item) ?? null)
+      : [],
+    memberNames: Array.isArray(artist.memberNames)
+      ? artist.memberNames.map((item) => item.trim()).filter(Boolean)
+      : [],
+    djName: artist.djName.trim(),
+    sortOrder: artist.sortOrder,
+  }))
+  .sort((left, right) => left.sortOrder - right.sortOrder || left.djName.localeCompare(right.djName));
+
+const buildComparableCanonicalSlots = (
+  slots: CanonicalLineupSlotInput[]
+): CanonicalLineupComparableState['slots'] => slots
+  .map((slot) => ({
+    eventDayId: cleanText(slot.eventDayId) ?? null,
+    weekIndex: slot.weekIndex ?? null,
+    dayIndexInWeek: slot.dayIndexInWeek ?? null,
+    overallDayIndex: slot.overallDayIndex ?? null,
+    djId: cleanText(slot.djId) ?? null,
+    memberDjIds: Array.isArray(slot.memberDjIds)
+      ? slot.memberDjIds.map((item) => cleanText(item) ?? null)
+      : [],
+    djName: slot.djName.trim(),
+    stageName: cleanText(slot.stageName) ?? null,
+    startTime: dateTimeValue(slot.startTime),
+    endTime: dateTimeValue(slot.endTime),
+    sortOrder: slot.sortOrder,
+  }))
+  .sort((left, right) =>
+    (left.startTime ?? 0) - (right.startTime ?? 0)
+    || left.sortOrder - right.sortOrder
+    || (left.eventDayId ?? '').localeCompare(right.eventDayId ?? '')
+    || left.djName.localeCompare(right.djName)
+  );
+
+const buildComparableCanonicalState = (
+  snapshot: Pick<CanonicalLineupSnapshot, 'artists' | 'slots' | 'stageOrder'>
+): CanonicalLineupComparableState => ({
+  artists: buildComparableCanonicalArtists(snapshot.artists),
+  slots: buildComparableCanonicalSlots(snapshot.slots),
+  stageOrder: normalizeEventStageOrder(snapshot.stageOrder),
+});
+
+const buildComparableCanonicalStateFromPayload = (
+  payload: Prisma.JsonObject,
+  scheduleContext: SubmittedEventScheduleContext
+): CanonicalLineupComparableState => {
+  const slots = normalizeSubmissionLineupSlots(payload.lineupSlots, scheduleContext);
+  const submittedArtists = normalizeSubmissionLineupArtists(payload.lineupArtists, []);
+  const normalizedArtists = normalizeCanonicalLineupArtists(submittedArtists, []);
+  const timetableArtists = normalizeCanonicalLineupArtists([], slots);
+  const lineupSyncMode = resolveEventLineupSyncMode(payload);
+  const artists = lineupSyncMode === 'exact_align'
+    ? mergeAlignedLineupArtists(normalizedArtists, timetableArtists)
+    : mergeIncrementalLineupArtists(normalizedArtists, timetableArtists);
+  const relinkedSlots = relinkSlotsToAlignedArtists(slots, artists);
+  return buildComparableCanonicalState({
+    artists,
+    slots: relinkedSlots,
+    stageOrder: normalizeEventStageOrder(payload.stageOrder),
+  });
+};
+
+const buildComparableEventCoreFromInput = (input: NormalizedEventSubmissionWriteInput): EventCoreComparableState => ({
+  name: input.eventData.name as string,
+  nameI18n: normalizeJsonLikeForCompare(input.eventData.nameI18n),
+  wikiFestivalId: cleanText(input.eventData.wikiFestivalId) ?? null,
+  description: cleanText(input.eventData.description) ?? null,
+  descriptionI18n: normalizeJsonLikeForCompare(input.eventData.descriptionI18n),
+  coverImageUrl: cleanText(input.eventData.coverImageUrl) ?? null,
+  lineupImageUrl: cleanText(input.eventData.lineupImageUrl) ?? null,
+  imageAssets: normalizeJsonLikeForCompare(input.eventData.imageAssets),
+  eventType: cleanText(input.eventData.eventType) ?? null,
+  organizerName: cleanText(input.eventData.organizerName) ?? null,
+  venueName: cleanText(input.eventData.venueName) ?? null,
+  venueAddress: cleanText(input.eventData.venueAddress) ?? null,
+  referenceLinks: normalizeStringArrayForCompare((input.eventData.referenceLinks as string[] | undefined) ?? []),
+  socialLinks: normalizeJsonLikeForCompare(input.eventData.socialLinks),
+  sourceProvider: cleanText(input.eventData.sourceProvider) ?? null,
+  sourceEventUrl: cleanText(input.eventData.sourceEventUrl) ?? null,
+  city: cleanText(input.eventData.city) ?? null,
+  country: cleanText(input.eventData.country) ?? null,
+  cityI18n: normalizeJsonLikeForCompare(input.eventData.cityI18n),
+  countryI18n: normalizeJsonLikeForCompare(input.eventData.countryI18n),
+  manualLocation: normalizeJsonLikeForCompare(input.eventData.manualLocation),
+  locationPoint: normalizeJsonLikeForCompare(input.eventData.locationPoint),
+  latitude: decimalToComparableString(input.eventData.latitude),
+  longitude: decimalToComparableString(input.eventData.longitude),
+  startDate: dateTimeValue(input.eventData.startDate as Date | string | null | undefined),
+  endDate: dateTimeValue(input.eventData.endDate as Date | string | null | undefined),
+  scheduleMode: cleanText(input.eventData.scheduleMode) ?? 'single_day',
+  timeZone: cleanText(input.eventData.timeZone) ?? DEFAULT_EVENT_TIME_ZONE,
+  startTime: cleanText(input.eventData.startTime) ?? null,
+  endTime: cleanText(input.eventData.endTime) ?? null,
+  dayRolloverHour: integerOrNull(input.eventData.dayRolloverHour) ?? 6,
+  ticketUrl: cleanText(input.eventData.ticketUrl) ?? null,
+  ticketPriceMin: decimalToComparableString(input.eventData.ticketPriceMin),
+  ticketPriceMax: decimalToComparableString(input.eventData.ticketPriceMax),
+  ticketCurrency: cleanText(input.eventData.ticketCurrency) ?? null,
+  ticketNotes: cleanText(input.eventData.ticketNotes) ?? null,
+  officialWebsite: cleanText(input.eventData.officialWebsite) ?? null,
+  status: cleanText(input.eventData.status) ?? 'upcoming',
+  isVerified: Boolean(input.eventData.isVerified),
+});
+
+const buildComparableEventCoreFromExisting = (event: {
+  name: string;
+  nameI18n: Prisma.JsonValue | null;
+  wikiFestivalId: string | null;
+  description: string | null;
+  descriptionI18n: Prisma.JsonValue | null;
+  coverImageUrl: string | null;
+  lineupImageUrl: string | null;
+  imageAssets: Prisma.JsonValue | null;
+  eventType: string | null;
+  organizerName: string | null;
+  venueName: string | null;
+  venueAddress: string | null;
+  referenceLinks: string[];
+  socialLinks: Prisma.JsonValue | null;
+  sourceProvider: string | null;
+  sourceEventUrl: string | null;
+  city: string | null;
+  country: string | null;
+  cityI18n: Prisma.JsonValue | null;
+  countryI18n: Prisma.JsonValue | null;
+  manualLocation: Prisma.JsonValue | null;
+  locationPoint: Prisma.JsonValue | null;
+  latitude: unknown;
+  longitude: unknown;
+  startDate: Date;
+  endDate: Date;
+  scheduleMode: string;
+  timeZone: string;
+  startTime: string;
+  endTime: string;
+  dayRolloverHour: number;
+  ticketUrl: string | null;
+  ticketPriceMin: unknown;
+  ticketPriceMax: unknown;
+  ticketCurrency: string | null;
+  ticketNotes: string | null;
+  officialWebsite: string | null;
+  status: string;
+  isVerified: boolean;
+}): EventCoreComparableState => ({
+  name: event.name,
+  nameI18n: normalizeJsonLikeForCompare(event.nameI18n),
+  wikiFestivalId: event.wikiFestivalId ?? null,
+  description: event.description ?? null,
+  descriptionI18n: normalizeJsonLikeForCompare(event.descriptionI18n),
+  coverImageUrl: event.coverImageUrl ?? null,
+  lineupImageUrl: event.lineupImageUrl ?? null,
+  imageAssets: normalizeJsonLikeForCompare(event.imageAssets),
+  eventType: event.eventType ?? null,
+  organizerName: event.organizerName ?? null,
+  venueName: event.venueName ?? null,
+  venueAddress: event.venueAddress ?? null,
+  referenceLinks: normalizeStringArrayForCompare(event.referenceLinks),
+  socialLinks: normalizeJsonLikeForCompare(event.socialLinks),
+  sourceProvider: event.sourceProvider ?? null,
+  sourceEventUrl: event.sourceEventUrl ?? null,
+  city: event.city ?? null,
+  country: event.country ?? null,
+  cityI18n: normalizeJsonLikeForCompare(event.cityI18n),
+  countryI18n: normalizeJsonLikeForCompare(event.countryI18n),
+  manualLocation: normalizeJsonLikeForCompare(event.manualLocation),
+  locationPoint: normalizeJsonLikeForCompare(event.locationPoint),
+  latitude: decimalToComparableString(event.latitude),
+  longitude: decimalToComparableString(event.longitude),
+  startDate: dateTimeValue(event.startDate),
+  endDate: dateTimeValue(event.endDate),
+  scheduleMode: event.scheduleMode,
+  timeZone: event.timeZone,
+  startTime: cleanText(event.startTime) ?? null,
+  endTime: cleanText(event.endTime) ?? null,
+  dayRolloverHour: event.dayRolloverHour,
+  ticketUrl: event.ticketUrl ?? null,
+  ticketPriceMin: decimalToComparableString(event.ticketPriceMin),
+  ticketPriceMax: decimalToComparableString(event.ticketPriceMax),
+  ticketCurrency: event.ticketCurrency ?? null,
+  ticketNotes: event.ticketNotes ?? null,
+  officialWebsite: event.officialWebsite ?? null,
+  status: event.status,
+  isVerified: event.isVerified,
+});
+
+const buildComparableSubmissionState = (
+  input: NormalizedEventSubmissionWriteInput,
+  payload: Prisma.JsonObject
+): EventSubmissionComparableState => ({
+  core: buildComparableEventCoreFromInput(input),
+  ticketTiers: buildComparableEventTicketTiers(input.ticketTiers.map((tier) => ({
+    name: tier.name,
+    price: tier.price,
+    currency: tier.currency ?? null,
+    sortOrder: tier.sortOrder ?? 0,
+  }))),
+  schedule: buildComparableScheduleStateFromContext(input.scheduleContext),
+  canonical: buildComparableCanonicalStateFromPayload(payload, input.scheduleContext),
+});
+
+const buildComparableExistingEventState = async (
+  tx: Prisma.TransactionClient,
+  eventId: string
+): Promise<{
+  core: EventCoreComparableState;
+  ticketTiers: EventTicketTierComparableState;
+  schedule: EventScheduleComparableState;
+  canonical: CanonicalLineupComparableState;
+  revision: number;
+  event: {
+    id: string;
+    name: string;
+    coverImageUrl: string | null;
+    revision: number;
+  };
+}> => {
+  const existing = await tx.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: {
+      id: true,
+      name: true,
+      nameI18n: true,
+      wikiFestivalId: true,
+      description: true,
+      descriptionI18n: true,
+      coverImageUrl: true,
+      lineupImageUrl: true,
+      imageAssets: true,
+      eventType: true,
+      organizerName: true,
+      venueName: true,
+      venueAddress: true,
+      referenceLinks: true,
+      socialLinks: true,
+      sourceProvider: true,
+      sourceEventUrl: true,
+      city: true,
+      country: true,
+      cityI18n: true,
+      countryI18n: true,
+      manualLocation: true,
+      locationPoint: true,
+      latitude: true,
+      longitude: true,
+      startDate: true,
+      endDate: true,
+      scheduleMode: true,
+      timeZone: true,
+      startTime: true,
+      endTime: true,
+      dayRolloverHour: true,
+      ticketUrl: true,
+      ticketPriceMin: true,
+      ticketPriceMax: true,
+      ticketCurrency: true,
+      ticketNotes: true,
+      officialWebsite: true,
+      status: true,
+      isVerified: true,
+      revision: true,
+      ticketTiers: {
+        select: {
+          name: true,
+          price: true,
+          currency: true,
+          sortOrder: true,
+        },
+      },
+      weeks: {
+        select: {
+          weekIndex: true,
+          label: true,
+          startDate: true,
+          endDate: true,
+          sortOrder: true,
+        },
+        orderBy: [{ weekIndex: 'asc' }, { sortOrder: 'asc' }],
+      },
+      eventDays: {
+        select: {
+          eventDayId: true,
+          weekIndex: true,
+          dayIndexInWeek: true,
+          overallDayIndex: true,
+          label: true,
+          weekday: true,
+          date: true,
+          sortOrder: true,
+        },
+        orderBy: [{ overallDayIndex: 'asc' }, { sortOrder: 'asc' }],
+      },
+    },
+  });
+
+  const canonicalSnapshot = await loadCanonicalEventLineupSnapshot(tx, eventId);
+
+  return {
+    core: buildComparableEventCoreFromExisting(existing),
+    ticketTiers: buildComparableEventTicketTiers(existing.ticketTiers),
+    schedule: buildComparableScheduleStateFromContext(buildSubmittedEventScheduleContextFromEvent(existing)),
+    canonical: buildComparableCanonicalState(canonicalSnapshot),
+    revision: existing.revision,
+    event: {
+      id: existing.id,
+      name: existing.name,
+      coverImageUrl: existing.coverImageUrl ?? null,
+      revision: existing.revision,
+    },
+  };
+};
+
 const uniqueEventSlug = async (db: PrismaClient, name: string, requestedSlug?: string): Promise<string> => {
   const base = String(requestedSlug || name)
     .toLowerCase()
@@ -1737,32 +2241,73 @@ export async function createOrUpdateEventFromSubmission(
   options: {
     submissionId?: string;
     skipCanonicalApply?: boolean;
+    approvedAt?: Date | null;
   } = {}
 ) {
   const input = await normalizeEventSubmissionWriteInput(db, payload, options);
+  const changeSummary = changeSummaryTextFromPayload(payload);
 
   if (input.targetEventId) {
-    const existing = await db.event.findUnique({
-      where: { id: input.targetEventId },
-      select: {
-        id: true,
-      },
-    });
-    if (!existing) {
-      throw new Error('待更新的活动不存在');
-    }
-
     await runEventSubmissionTransaction(db, async (tx) => {
-      await applyEventCoreUpdate(tx, input.targetEventId as string, input);
-      if (options.submissionId) {
+      const existingState = await buildComparableExistingEventState(tx, input.targetEventId as string);
+      const nextState = buildComparableSubmissionState(input, payload);
+      const coreChanged = !isEqualValue(existingState.core, nextState.core);
+      const ticketTiersChanged = !isEqualValue(existingState.ticketTiers, nextState.ticketTiers);
+      const scheduleChanged = !isEqualValue(existingState.schedule, nextState.schedule);
+      const shouldApplyCanonical = !options.skipCanonicalApply;
+      const canonicalChanged = shouldApplyCanonical && !isEqualValue(existingState.canonical, nextState.canonical);
+      const effectiveChanged = coreChanged || ticketTiersChanged || scheduleChanged || canonicalChanged;
+
+      if (!effectiveChanged) {
+        return;
+      }
+
+      if (coreChanged || ticketTiersChanged || scheduleChanged) {
+        await applyEventCoreUpdate(tx, input.targetEventId as string, input);
+      }
+
+      if (options.submissionId && (coreChanged || ticketTiersChanged || scheduleChanged)) {
         await rebindEventSubmissionMediaToEvent(tx, payload, options.submissionId, input.targetEventId as string);
       }
-      if (!options.skipCanonicalApply) {
+
+      if (shouldApplyCanonical && canonicalChanged) {
         await applyEventCanonicalSubmissionState(tx, input.targetEventId as string, payload, input.scheduleContext);
       }
+
+      if (!coreChanged && !ticketTiersChanged && !scheduleChanged && canonicalChanged) {
+        await tx.event.update({
+          where: { id: input.targetEventId as string },
+          data: {
+            revision: { increment: 1 },
+          },
+        });
+      }
+
       if (options.submissionId) {
         await cancelSupersededActiveEventEditSubmissions(tx, input.targetEventId as string, options.submissionId);
       }
+      const updated = await tx.event.findUniqueOrThrow({
+        where: { id: input.targetEventId as string },
+        select: {
+          id: true,
+          name: true,
+          coverImageUrl: true,
+          revision: true,
+        },
+      });
+      await recordEventContribution(tx, {
+        entityId: updated.id,
+        userId: submitterId,
+        title: updated.name,
+        coverImageUrl: updated.coverImageUrl ?? null,
+        role: 'editor',
+        actionType: 'edit',
+        source: 'submission_edit',
+        submissionId: options.submissionId ?? null,
+        approvedAt: options.approvedAt ?? null,
+        versionAfter: updated.revision ?? null,
+        changeSummary,
+      });
     });
 
     return db.event.findUniqueOrThrow({
@@ -1785,6 +2330,28 @@ export async function createOrUpdateEventFromSubmission(
     if (!options.skipCanonicalApply) {
       await applyEventCanonicalSubmissionState(tx, created.id, payload, input.scheduleContext);
     }
+    const persisted = await tx.event.findUniqueOrThrow({
+      where: { id: created.id },
+      select: {
+        id: true,
+        name: true,
+        coverImageUrl: true,
+        revision: true,
+      },
+    });
+    await recordEventContribution(tx, {
+      entityId: persisted.id,
+      userId: submitterId,
+      title: persisted.name,
+      coverImageUrl: persisted.coverImageUrl ?? null,
+      role: 'creator',
+      actionType: 'create',
+      source: 'submission_create',
+      submissionId: options.submissionId ?? null,
+      approvedAt: options.approvedAt ?? null,
+      versionAfter: persisted.revision ?? null,
+      changeSummary,
+    });
     return created;
   });
 

@@ -8,6 +8,12 @@ import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
+import {
+  INPUT_LIMITS,
+  normalizeSingleLine,
+  validateDisplayName,
+  validateUsername,
+} from '@/lib/input-rules';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,6 +30,27 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    const normalizedUsername = normalizeSingleLine(username).toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedDisplayName = normalizeSingleLine(displayName);
+
+    const usernameError = validateUsername(normalizedUsername);
+    if (usernameError) {
+      setError(usernameError);
+      return;
+    }
+
+    const displayNameError = validateDisplayName(normalizedDisplayName);
+    if (displayNameError) {
+      setError(displayNameError);
+      return;
+    }
+
+    if (!normalizedEmail) {
+      setError('请输入邮箱');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -37,7 +64,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await register(username, email, password, displayName || undefined);
+      await register(normalizedUsername, normalizedEmail, password, normalizedDisplayName);
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -68,6 +95,7 @@ export default function RegisterPage() {
               placeholder="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              maxLength={INPUT_LIMITS.user.username.max}
               required
             />
 
@@ -82,10 +110,12 @@ export default function RegisterPage() {
 
             <Input
               type="text"
-              label="Display Name (Optional)"
+              label="Display Name"
               placeholder="Your Name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={INPUT_LIMITS.user.displayName.max}
+              required
             />
 
             <Input

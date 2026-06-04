@@ -10,6 +10,7 @@ import {
   type LocalizedFieldKind,
   type LocalizedLocaleKey,
 } from '@/components/admin/LocalizedTextEditor';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
   createEmptyOrganizerExtraLinkDraft,
   mapOrganizerStudioDraftToCreateInput,
@@ -112,6 +113,7 @@ function ImageDropZone({
 
 const textInputClassName = 'admin-studio-input';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
+const commonUrlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
 
 type OrganizerStudioFormProps = {
   mode: 'create' | 'edit';
@@ -473,25 +475,28 @@ export default function OrganizerStudioForm({
             placeholder="例如：Tomorrowland"
             error={errors.name}
             hint="目录卡片、详情页标题和搜索结果都会优先使用这里的主名称。"
+            maxLength={INPUT_LIMITS.organizer.name}
             onPrimaryChange={(value) => updateLocalizedField('name', 'zh', value)}
             onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: '主办方名称', kind: 'input' })}
           />
 
-          <Field label="简称">
+          <Field label="简称" hint={`${countText(draft.abbreviation)}/${INPUT_LIMITS.organizer.abbreviation}`}>
             <input
               value={draft.abbreviation}
               onChange={(event) => updateDraft('abbreviation', event.target.value)}
               className={textInputClassName}
               placeholder="例如：TML"
+              maxLength={INPUT_LIMITS.organizer.abbreviation}
             />
           </Field>
 
-          <Field label="别名（逗号或换行分隔）">
+          <Field label="别名（逗号或换行分隔）" hint={`${countText(draft.aliasesText, true)}/${INPUT_LIMITS.organizer.alias * 10}`}>
             <textarea
               value={draft.aliasesText}
               onChange={(event) => updateDraft('aliasesText', event.target.value)}
               className={textAreaClassName}
               placeholder={'Tomorrowland Belgium\nTomorrowland Brasil'}
+              maxLength={INPUT_LIMITS.organizer.alias * 10}
             />
           </Field>
 
@@ -500,6 +505,7 @@ export default function OrganizerStudioForm({
             value={draft.country}
             kind="input"
             placeholder="例如：比利时"
+            maxLength={INPUT_LIMITS.organizer.country}
             onPrimaryChange={(value) => updateLocalizedField('country', 'zh', value)}
             onOpenOverlay={() => setActiveLocalizedField({ key: 'country', label: '国家', kind: 'input' })}
           />
@@ -509,25 +515,28 @@ export default function OrganizerStudioForm({
             value={draft.city}
             kind="input"
             placeholder="例如：Boom"
+            maxLength={INPUT_LIMITS.organizer.city}
             onPrimaryChange={(value) => updateLocalizedField('city', 'zh', value)}
             onOpenOverlay={() => setActiveLocalizedField({ key: 'city', label: '城市', kind: 'input' })}
           />
 
-          <Field label="成立年份">
+          <Field label="成立年份" hint={`${countText(draft.foundedYear)}/${INPUT_LIMITS.organizer.foundedYear}`}>
             <input
               value={draft.foundedYear}
               onChange={(event) => updateDraft('foundedYear', event.target.value)}
               className={textInputClassName}
               placeholder="例如：2005"
+              maxLength={INPUT_LIMITS.organizer.foundedYear}
             />
           </Field>
 
-          <Field label="举办频率">
+          <Field label="举办频率" hint={`${countText(draft.frequency)}/${INPUT_LIMITS.organizer.frequency}`}>
             <input
               value={draft.frequency}
               onChange={(event) => updateDraft('frequency', event.target.value)}
               className={textInputClassName}
               placeholder="例如：Annual"
+              maxLength={INPUT_LIMITS.organizer.frequency}
             />
           </Field>
         </div>
@@ -538,12 +547,13 @@ export default function OrganizerStudioForm({
         description="主办方详情描述会作为品牌档案和详情页的核心资料来源。多语言介绍使用和 event / DJ 相同的共享编辑方式。"
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="一句话标签">
+          <Field label="一句话标签" hint={`${countText(draft.tagline)}/${INPUT_LIMITS.organizer.tagline}`}>
             <input
               value={draft.tagline}
               onChange={(event) => updateDraft('tagline', event.target.value)}
               className={textInputClassName}
               placeholder="例如：Global electronic music festival"
+              maxLength={INPUT_LIMITS.organizer.tagline}
             />
           </Field>
 
@@ -565,6 +575,7 @@ export default function OrganizerStudioForm({
             value={draft.introduction}
             kind="textarea"
             placeholder="填写中文介绍，其他语言通过右侧按钮补充。"
+            maxLength={INPUT_LIMITS.organizer.introduction}
             onPrimaryChange={(value) => updateLocalizedField('introduction', 'zh', value)}
             onOpenOverlay={() =>
               setActiveLocalizedField({ key: 'introduction', label: '主办方介绍', kind: 'textarea' })
@@ -578,52 +589,58 @@ export default function OrganizerStudioForm({
         description="至少提供一个官方链接，或上传一张以上证明图片。额外链接会一起进入最终 links payload。"
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="官方网站" error={errors.links}>
+          <Field label="官方网站" error={errors.links} hint={commonUrlHint(draft.officialWebsite)}>
             <input
               value={draft.officialWebsite}
               onChange={(event) => updateDraft('officialWebsite', event.target.value)}
               className={textInputClassName}
               placeholder="https://..."
+              maxLength={INPUT_LIMITS.common.url}
             />
           </Field>
-          <Field label="Instagram">
+          <Field label="Instagram" hint={commonUrlHint(draft.instagram)}>
             <input
               value={draft.instagram}
               onChange={(event) => updateDraft('instagram', event.target.value)}
               className={textInputClassName}
               placeholder="https://instagram.com/..."
+              maxLength={INPUT_LIMITS.common.url}
             />
           </Field>
-          <Field label="Facebook">
+          <Field label="Facebook" hint={commonUrlHint(draft.facebook)}>
             <input
               value={draft.facebook}
               onChange={(event) => updateDraft('facebook', event.target.value)}
               className={textInputClassName}
               placeholder="https://facebook.com/..."
+              maxLength={INPUT_LIMITS.common.url}
             />
           </Field>
-          <Field label="X / Twitter">
+          <Field label="X / Twitter" hint={commonUrlHint(draft.twitter)}>
             <input
               value={draft.twitter}
               onChange={(event) => updateDraft('twitter', event.target.value)}
               className={textInputClassName}
               placeholder="https://x.com/..."
+              maxLength={INPUT_LIMITS.common.url}
             />
           </Field>
-          <Field label="YouTube">
+          <Field label="YouTube" hint={commonUrlHint(draft.youtube)}>
             <input
               value={draft.youtube}
               onChange={(event) => updateDraft('youtube', event.target.value)}
               className={textInputClassName}
               placeholder="https://youtube.com/..."
+              maxLength={INPUT_LIMITS.common.url}
             />
           </Field>
-          <Field label="TikTok">
+          <Field label="TikTok" hint={commonUrlHint(draft.tiktok)}>
             <input
               value={draft.tiktok}
               onChange={(event) => updateDraft('tiktok', event.target.value)}
               className={textInputClassName}
               placeholder="https://tiktok.com/@..."
+              maxLength={INPUT_LIMITS.common.url}
             />
           </Field>
         </div>
@@ -667,18 +684,21 @@ export default function OrganizerStudioForm({
                       onChange={(event) => updateExtraLink(item.id, 'title', event.target.value)}
                       className={textInputClassName}
                       placeholder="标题，例如 Ticket"
+                      maxLength={INPUT_LIMITS.organizer.extraLinkTitle}
                     />
                     <input
                       value={item.icon}
                       onChange={(event) => updateExtraLink(item.id, 'icon', event.target.value)}
                       className={textInputClassName}
                       placeholder="icon，例如 link / ticket"
+                      maxLength={INPUT_LIMITS.common.linkIcon}
                     />
                     <input
                       value={item.url}
                       onChange={(event) => updateExtraLink(item.id, 'url', event.target.value)}
                       className={textInputClassName}
                       placeholder="https://..."
+                      maxLength={INPUT_LIMITS.common.url}
                     />
                   </div>
                 </div>
@@ -747,6 +767,15 @@ export default function OrganizerStudioForm({
         title={activeLocalizedField?.label ?? ''}
         kind={activeLocalizedField?.kind ?? 'input'}
         value={activeLocalizedValue ?? { zh: '', en: '', ja: '', enFull: '' }}
+        maxLength={
+          activeLocalizedField?.key === 'name'
+            ? INPUT_LIMITS.organizer.name
+            : activeLocalizedField?.key === 'country'
+              ? INPUT_LIMITS.organizer.country
+              : activeLocalizedField?.key === 'city'
+                ? INPUT_LIMITS.organizer.city
+                : INPUT_LIMITS.organizer.introduction
+        }
         onChange={(locale, value) => {
           if (!activeLocalizedField) return;
           updateLocalizedField(activeLocalizedField.key, locale, value);

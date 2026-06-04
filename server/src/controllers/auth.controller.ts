@@ -14,6 +14,14 @@ import {
   resolveUserGenrePreferences,
   syncUserGenrePreferences,
 } from '../services/user-genre-preference.service';
+import {
+  INPUT_LIMITS,
+  normalizeMultiline,
+  normalizeSingleLine,
+  normalizeSingleLineLowercase,
+  validateDisplayName,
+  validateUsername,
+} from '../utils/input-rules';
 
 const prisma = new PrismaClient();
 
@@ -41,12 +49,8 @@ const ossClient =
       })
     : null;
 
-const normalizeDisplayName = (value: string | null | undefined): string => {
-  return String(value || '').trim().replace(/\s+/g, ' ');
-};
-
 const normalizeDisplayNameForUniqueness = (value: string | null | undefined): string => {
-  return normalizeDisplayName(value).toLocaleLowerCase('zh-Hans-CN');
+  return normalizeSingleLine(value).toLocaleLowerCase('zh-Hans-CN');
 };
 
 const publicOssUrlForObjectKey = (objectKey: string): string => {
@@ -175,22 +179,36 @@ const syncFavoriteDjRelations = async (
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { username, email, password, displayName } = req.body;
-    const normalizedDisplayName = normalizeDisplayName(displayName);
+    const normalizedUsername = normalizeSingleLineLowercase(username);
+    const normalizedEmail = normalizeSingleLineLowercase(email);
+    const normalizedDisplayName = normalizeSingleLine(displayName);
     const displayNameKey = normalizeDisplayNameForUniqueness(normalizedDisplayName);
 
-    if (!username || !email || !password || !normalizedDisplayName) {
+    if (!normalizedUsername || !normalizedEmail || !password || !normalizedDisplayName) {
       res.status(400).json({ error: 'Username, email, password, and displayName are required' });
       return;
     }
 
-    if (password.length < 6) {
+    const usernameError = validateUsername(normalizedUsername);
+    if (usernameError) {
+      res.status(400).json({ error: usernameError });
+      return;
+    }
+
+    const displayNameError = validateDisplayName(normalizedDisplayName);
+    if (displayNameError) {
+      res.status(400).json({ error: displayNameError });
+      return;
+    }
+
+    if (password.length < INPUT_LIMITS.user.passwordMin) {
       res.status(400).json({ error: 'Password must be at least 6 characters' });
       return;
     }
 
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [{ email }, { username }],
+        OR: [{ email: normalizedEmail }, { username: normalizedUsername }],
       },
     });
 
@@ -213,8 +231,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     const user = await prisma.user.create({
       data: {
-        username,
-        email,
+        username: normalizedUsername,
+        email: normalizedEmail,
         passwordHash,
         displayName: normalizedDisplayName,
         displayNameNormalized: displayNameKey,
@@ -430,18 +448,16 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       displayNameReviewNote?: string | null;
       bio?: string;
       location?: string;
-    } = {
-      bio: bio ?? undefined,
-      location: location ?? undefined,
-    };
+    } = {};
     const normalizedFavoriteGenres = Array.isArray(favoriteGenres)
       ? normalizeGenrePreferenceKeys(favoriteGenres)
       : null;
 
     if (typeof displayName === 'string') {
-      const trimmedDisplayName = normalizeDisplayName(displayName);
-      if (!trimmedDisplayName) {
-        res.status(400).json({ error: 'displayName cannot be empty' });
+      const trimmedDisplayName = normalizeSingleLine(displayName);
+      const displayNameError = validateDisplayName(trimmedDisplayName);
+      if (displayNameError) {
+        res.status(400).json({ error: displayNameError });
         return;
       }
       const displayNameKey = normalizeDisplayNameForUniqueness(trimmedDisplayName);
@@ -460,6 +476,15 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       data.displayNameNormalized = displayNameKey;
       data.displayNameStatus = 'pending';
       data.displayNameReviewNote = null;
+    }
+
+    if (typeof bio === 'string') {
+      data.bio = normalizeMultiline(bio).slice(0, INPUT_LIMITS.user.bio);
+    }
+
+    if (typeof location === 'string') {
+      const normalizedLocation = normalizeSingleLine(location).slice(0, INPUT_LIMITS.user.location);
+      data.location = normalizedLocation || undefined;
     }
 
     const updatedUser = await prisma.$transaction(async (tx) => {

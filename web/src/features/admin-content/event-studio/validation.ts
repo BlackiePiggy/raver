@@ -1,4 +1,5 @@
 import { EventStudioDraft, EventStudioImageState, EventStudioValidationErrors } from './types';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 
 const firstFilledText = (...values: Array<string | undefined | null>): string => {
   for (const value of values) {
@@ -31,20 +32,69 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     draft.imageZones.lineup.some(hasVisualItem) ||
     draft.imageZones.cover.some(hasVisualItem);
 
-  if (!firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull)) {
+  const name = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull);
+  const city = firstFilledText(draft.city.zh, draft.city.en, draft.city.ja, draft.city.enFull);
+  const country = firstFilledText(draft.country.zh, draft.country.en, draft.country.ja, draft.country.enFull);
+  const detailAddress = firstFilledText(draft.detailAddress.zh, draft.detailAddress.en, draft.detailAddress.ja, draft.detailAddress.enFull);
+
+  if (!name) {
     errors.name = '请至少填写一个活动名称。';
+  } else if (countText(name) > INPUT_LIMITS.event.name) {
+    errors.name = `活动名称不能超过 ${INPUT_LIMITS.event.name} 个字符。`;
   }
 
-  if (!firstFilledText(draft.city.zh, draft.city.en, draft.city.ja, draft.city.enFull)) {
+  if (!city) {
     errors.city = '请填写活动城市。';
+  } else if (countText(city) > INPUT_LIMITS.event.city) {
+    errors.city = `活动城市不能超过 ${INPUT_LIMITS.event.city} 个字符。`;
   }
 
-  if (!firstFilledText(draft.country.zh, draft.country.en, draft.country.ja, draft.country.enFull)) {
+  if (!country) {
     errors.country = '请填写活动国家。';
+  } else if (countText(country) > INPUT_LIMITS.event.country) {
+    errors.country = `活动国家不能超过 ${INPUT_LIMITS.event.country} 个字符。`;
   }
 
-  if (!firstFilledText(draft.detailAddress.zh, draft.detailAddress.en, draft.detailAddress.ja, draft.detailAddress.enFull)) {
+  if (!detailAddress) {
     errors.detailAddress = '请填写详细地址。';
+  } else if (countText(detailAddress, true) > INPUT_LIMITS.event.detailAddress) {
+    errors.detailAddress = `详细地址不能超过 ${INPUT_LIMITS.event.detailAddress} 个字符。`;
+  }
+
+  if (draft.description.trim() && countText(draft.description, true) > INPUT_LIMITS.event.description) {
+    errors.name = errors.name || `活动描述不能超过 ${INPUT_LIMITS.event.description} 个字符。`;
+  }
+
+  if (draft.abbreviation.trim() && countText(draft.abbreviation) > INPUT_LIMITS.event.abbreviation) {
+    errors.name = errors.name || `活动简称不能超过 ${INPUT_LIMITS.event.abbreviation} 个字符。`;
+  }
+
+  if (draft.organizerName.trim() && countText(draft.organizerName) > INPUT_LIMITS.event.organizerName) {
+    errors.name = errors.name || `主办方名称不能超过 ${INPUT_LIMITS.event.organizerName} 个字符。`;
+  }
+
+  if (draft.venueName.trim() && countText(draft.venueName) > INPUT_LIMITS.event.venueName) {
+    errors.name = errors.name || `场馆名不能超过 ${INPUT_LIMITS.event.venueName} 个字符。`;
+  }
+
+  if (draft.venueAddress.trim() && countText(draft.venueAddress) > INPUT_LIMITS.event.venueAddress) {
+    errors.detailAddress = errors.detailAddress || `场馆地址不能超过 ${INPUT_LIMITS.event.venueAddress} 个字符。`;
+  }
+
+  if (draft.sourceProvider.trim() && countText(draft.sourceProvider) > INPUT_LIMITS.event.sourceProvider) {
+    errors.socialLinks = errors.socialLinks || `来源平台不能超过 ${INPUT_LIMITS.event.sourceProvider} 个字符。`;
+  }
+
+  if (draft.referenceLinksText.trim() && countText(draft.referenceLinksText, true) > INPUT_LIMITS.event.referenceLinksText) {
+    errors.socialLinks = errors.socialLinks || `参考链接内容不能超过 ${INPUT_LIMITS.event.referenceLinksText} 个字符。`;
+  }
+
+  if (draft.socialLinksText.trim() && countText(draft.socialLinksText, true) > INPUT_LIMITS.event.socialLinksText) {
+    errors.socialLinks = errors.socialLinks || `社交链接 JSON 不能超过 ${INPUT_LIMITS.event.socialLinksText} 个字符。`;
+  }
+
+  if (draft.ticketNotes.trim() && countText(draft.ticketNotes, true) > INPUT_LIMITS.event.ticketNotes) {
+    errors.ticketTiers = errors.ticketTiers || `票务说明不能超过 ${INPUT_LIMITS.event.ticketNotes} 个字符。`;
   }
 
   if (!draft.startDate.trim()) {

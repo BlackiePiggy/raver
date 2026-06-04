@@ -16,6 +16,7 @@ type NotificationCenterWorkspaceLayoutProps = {
 
 const NAV_ITEMS = [
   { href: '/admin/notification-center', label: '总览', exact: true },
+  { href: '/admin/notification-center/content-history', label: '内容历史', exact: false },
   { href: '/admin/notification-center/publish-tasks', label: '发布任务', exact: false },
   { href: '/admin/notification-center/manual', label: '手动发布', exact: false },
   { href: '/admin/notification-center/deliveries', label: '投递记录', exact: false },

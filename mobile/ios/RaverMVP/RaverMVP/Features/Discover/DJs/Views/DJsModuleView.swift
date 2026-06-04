@@ -1967,6 +1967,7 @@ struct DJDetailView: View {
     @State private var isCachingManualSnapshot = false
     @State private var manualCachedAt: Date?
     @State private var isHonorListExpanded = false
+    @State private var showContributorList = false
     @State private var djCardSharePresentation: DJCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: DJCardSharePresentation?
@@ -2126,6 +2127,13 @@ struct DJDetailView: View {
         }
         .navigationDestination(isPresented: $showSpotifyImportSheet) {
             spotifyImportSheet
+        }
+        .navigationDestination(isPresented: $showContributorList) {
+            EntityContributorListView(
+                entityType: "dj",
+                entityID: djID,
+                entityTitle: dj?.name
+            )
         }
         .onChange(of: selectedTab) { _, tab in
             resetVisibleCounts(for: tab)
@@ -4217,38 +4225,13 @@ struct DJDetailView: View {
         honorSection(for: dj)
 
         let contributorUsers = (dj.contributors ?? []).filter { !$0.username.isEmpty }
-        if !contributorUsers.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(LT("贡献者", "贡献者", "コントリビューター"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(RaverTheme.secondaryText)
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(contributorUsers) { user in
-                        Button {
-                            appPush(.userProfile(userID: user.id))
-                        } label: {
-                            HStack(spacing: 10) {
-                                contributorUserAvatar(user, size: 28)
-                                Text(user.shownName)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        } else {
-            let contributorNames = (dj.contributorUsernames ?? []).filter { !$0.isEmpty }
-            if !contributorNames.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(LT("贡献者", "贡献者", "コントリビューター"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RaverTheme.secondaryText)
-                    Text(contributorNames.joined(separator: "、"))
-                        .font(.subheadline)
-                        .foregroundStyle(RaverTheme.primaryText)
+        if dj.contributorSummary != nil || !contributorUsers.isEmpty {
+            GlassCard {
+                ContributorSummaryRow(
+                    summary: dj.contributorSummary,
+                    fallbackUsers: contributorUsers
+                ) {
+                    showContributorList = true
                 }
             }
         }

@@ -528,6 +528,22 @@ const buildAdminEditLink = (submission: ContentSubmission | ContentSubmissionDet
   return null;
 };
 
+const buildContentHistoryLink = (submission: ContentSubmission | ContentSubmissionDetail): string | null => {
+  if (!submission.createdEntityId) return null;
+  const entityType =
+    submission.entityType === 'brand'
+      ? 'festival'
+      : submission.entityType === 'news'
+        ? 'news_article'
+        : submission.entityType;
+
+  if (!['event', 'dj', 'festival', 'news_article', 'label'].includes(entityType)) {
+    return null;
+  }
+
+  return `/admin/notification-center/content-history?entityType=${encodeURIComponent(entityType)}&query=${encodeURIComponent(submission.createdEntityId)}`;
+};
+
 const reviewNotesSummary = (detail: ContentSubmissionDetail | null): string[] => {
   if (!detail?.reviewNotes || typeof detail.reviewNotes !== 'object') return [];
   const reviewNotes = detail.reviewNotes as Record<string, unknown>;
@@ -1048,6 +1064,7 @@ export default function ReviewSubmissionsPageClient() {
   const [submittingDecision, setSubmittingDecision] = useState(false);
   const [selectedReasonCode, setSelectedReasonCode] = useState('');
   const [decisionReason, setDecisionReason] = useState('');
+  const [latestApprovedSubmission, setLatestApprovedSubmission] = useState<ContentSubmission | null>(null);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -1148,7 +1165,9 @@ export default function ReviewSubmissionsPageClient() {
         reviewNotes: mergedReviewNotes,
       });
       setSuccessMessage(result.message || `已${decision === 'approved' ? '通过' : '拒绝'}当前提交`);
+      setLatestApprovedSubmission(decision === 'approved' ? result.submission : null);
       await loadList();
+      await loadDetail(selectedDetail.id);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '提交审核决策失败');
     } finally {
@@ -1172,6 +1191,7 @@ export default function ReviewSubmissionsPageClient() {
   const noteLines = reviewNotesSummary(selectedDetail);
   const noteSections = reviewNotesSections(selectedDetail);
   const reasonTemplates = selectedDetail ? REVIEW_REASON_TEMPLATES[selectedDetail.entityType] || [] : [];
+  const latestApprovedHistoryLink = latestApprovedSubmission ? buildContentHistoryLink(latestApprovedSubmission) : null;
   const latestVersion = selectedDetail?.versions?.[0] ?? null;
   const previousVersion = selectedDetail?.versions?.[1] ?? null;
   const autoReviewInsights = useMemo(() => {
@@ -1229,6 +1249,32 @@ export default function ReviewSubmissionsPageClient() {
       {successMessage ? (
         <section className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-4 text-sm text-[#2f4027]">
           {successMessage}
+        </section>
+      ) : null}
+
+      {latestApprovedSubmission && latestApprovedHistoryLink ? (
+        <section className="admin-reference-card p-5">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Next Step</div>
+          <h2 className="mt-2 text-xl font-semibold text-[#071110]">审核已通过，可继续处理推送</h2>
+          <p className="mt-2 text-sm leading-6 text-black/56">
+            这条内容已经入库，并已进入统一内容历史待推送队列。你现在可以直接去预览推送内容、决定是否发送，或者稍后再处理。
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link
+              href={latestApprovedHistoryLink}
+              className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
+            >
+              去统一内容历史处理推送
+            </Link>
+            {latestApprovedSubmission.createdEntityId ? (
+              <Link
+                href={buildAdminEditLink(latestApprovedSubmission) || '#'}
+                className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+              >
+                打开已入库内容
+              </Link>
+            ) : null}
+          </div>
         </section>
       ) : null}
 

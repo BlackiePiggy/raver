@@ -647,6 +647,8 @@ struct MainTabCoordinatorView: View {
                     userRepository: appContainer.profileUserRepository,
                     contentRepository: appContainer.profileContentRepository
                 )
+            case .contributionCenter:
+                ContributionCenterView(contentRepository: appContainer.profileContentRepository)
             case let .contentSubmissionDetail(submissionID):
                 ContentSubmissionDetailView(
                     submissionID: submissionID,
@@ -957,6 +959,7 @@ struct MainTabCoordinatorView: View {
                 .widgetManager,
                 .movieBanner,
                 .myPublishes,
+                .contributionCenter,
                 .contentSubmissionDetail,
                 .mySaves,
                 .myRoutes,
@@ -1125,6 +1128,12 @@ struct MainTabCoordinatorView: View {
             return .squadProfile(squadID: squadID)
         }
 
+        if host == "profile",
+           let firstPath = pathParts.first?.lowercased(),
+           firstPath == "contributions" {
+            return .profile(.contributionCenter)
+        }
+
         if host == "profile", let userID = pathParts.first {
             return .userProfile(userID: userID)
         }
@@ -1203,6 +1212,11 @@ struct MainTabCoordinatorView: View {
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "squad" {
             return .squadProfile(squadID: normalizedParts[1])
+        }
+        if normalizedParts.count >= 2,
+           normalizedParts[0] == "profile",
+           normalizedParts[1].lowercased() == "contributions" {
+            return .profile(.contributionCenter)
         }
         if normalizedParts.count >= 2, normalizedParts[0] == "profile" {
             return .userProfile(userID: normalizedParts[1])

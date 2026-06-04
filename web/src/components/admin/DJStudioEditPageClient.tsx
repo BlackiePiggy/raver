@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import DJStudioForm from '@/components/admin/DJStudioForm';
 import {
   createDJStudioDraft,
@@ -21,6 +22,7 @@ export default function DJStudioEditPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resultLink, setResultLink] = useState<string | null>(null);
+  const [savedDJId, setSavedDJId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!djId) {
@@ -37,6 +39,7 @@ export default function DJStudioEditPageClient() {
         const dj = await djStudioApi.fetchDJ(djId);
         if (cancelled) return;
         setDraft(hydrateDJStudioDraftFromDJ(dj));
+        setSavedDJId(djId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载 DJ 失败');
@@ -62,10 +65,12 @@ export default function DJStudioEditPageClient() {
     if (result.kind === 'created') {
       setNotice(`DJ 更新已提交成功：${result.dj.name}`);
       setResultLink(`/admin/content/djs/${result.dj.id}/edit`);
+      setSavedDJId(result.dj.id);
       return;
     }
     setNotice(result.payload.message || 'DJ 编辑已进入审核队列');
     setResultLink('/admin/content/reviews');
+    setSavedDJId(null);
   };
 
   return (
@@ -100,6 +105,16 @@ export default function DJStudioEditPageClient() {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {notice && savedDJId ? (
+        <NotificationContentHistoryPrompt
+          entityType="dj"
+          entityId={savedDJId}
+          secondaryHref="/admin/content/djs/catalog"
+          secondaryLabel="稍后处理，先回到 DJ 目录"
+          description="这次 DJ 资料更新已经保存成功。你可以现在去统一内容历史页继续决定是否推送给用户，也可以稍后再处理。"
+        />
       ) : null}
 
       {loading ? (

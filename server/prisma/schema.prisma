@@ -50,6 +50,8 @@ model User {
   dailyDJRecommendations    UserDailyDJRecommendation[]
   uploadedSets        DJSet[]         @relation("UserUploadedSets")
   djContributions     DJContributor[]
+  eventContributions  EventContributor[]
+  contributionHistoryEntries ContributionHistoryEntry[]
   publishedEvents     Event[]         @relation("UserPublishedEvents")
   uploadedTracklists  Tracklist[]     @relation("UserUploadedTracklists")
   comments            Comment[]       @relation("UserComments")
@@ -511,6 +513,7 @@ model Event {
 
   organizer              User?                  @relation("UserPublishedEvents", fields: [organizerId], references: [id], onDelete: SetNull)
   wikiFestival           WikiFestival?          @relation(fields: [wikiFestivalId], references: [id], onDelete: SetNull)
+  contributors           EventContributor[]
   checkins               Checkin[]
   canonicalArtists       EventArtist[]
   weeks                  EventWeek[]
@@ -918,6 +921,13 @@ model DJContributor {
   id        String   @id @default(uuid())
   djId      String   @map("dj_id")
   userId    String   @map("user_id")
+  role      String   @default("editor")
+  firstContributedAt DateTime @default(now()) @map("first_contributed_at")
+  lastContributedAt  DateTime @default(now()) @map("last_contributed_at")
+  contributionCount  Int      @default(1) @map("contribution_count")
+  firstSubmissionId  String?  @map("first_submission_id")
+  lastSubmissionId   String?  @map("last_submission_id")
+  lastContributionSource String? @map("last_contribution_source")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -928,6 +938,56 @@ model DJContributor {
   @@index([djId])
   @@index([userId])
   @@map("dj_contributors")
+}
+
+model EventContributor {
+  id                     String   @id @default(uuid())
+  eventId                String   @map("event_id")
+  userId                 String   @map("user_id")
+  role                   String   @default("editor")
+  firstContributedAt     DateTime @default(now()) @map("first_contributed_at")
+  lastContributedAt      DateTime @default(now()) @map("last_contributed_at")
+  contributionCount      Int      @default(1) @map("contribution_count")
+  firstSubmissionId      String?  @map("first_submission_id")
+  lastSubmissionId       String?  @map("last_submission_id")
+  lastContributionSource String?  @map("last_contribution_source")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([eventId, lastContributedAt])
+  @@map("event_contributors")
+}
+
+model ContributionHistoryEntry {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  entityType          String    @map("entity_type")
+  entityId            String    @map("entity_id")
+  entityTitleSnapshot String?   @map("entity_title_snapshot")
+  entityCoverSnapshot String?   @map("entity_cover_snapshot")
+  roleSnapshot        String    @map("role_snapshot")
+  actionType          String    @map("action_type")
+  source              String
+  submissionId        String?   @map("submission_id")
+  occurredAt          DateTime  @default(now()) @map("occurred_at")
+  approvedAt          DateTime? @map("approved_at")
+  versionAfter        Int?      @map("version_after")
+  changeSummary       String?   @map("change_summary") @db.Text
+  metadata            Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([entityType, entityId, occurredAt])
+  @@index([submissionId])
+  @@map("contribution_history_entries")
 }
 
 model RankingBoard {
@@ -2527,6 +2587,34 @@ model NotificationAdminPublishTask {
   @@index([status, createdAt])
   @@index([taskType, status, updatedAt])
   @@map("notification_admin_publish_tasks")
+}
+
+model NotificationAdminContentHistory {
+  id               String    @id @default(uuid())
+  entityType       String    @map("entity_type")
+  entityId         String?   @map("entity_id")
+  taskType         String?   @map("task_type")
+  operationType    String    @map("operation_type")
+  resultStatus     String    @map("result_status")
+  pushStatus       String    @map("push_status")
+  title            String
+  summary          String?   @db.Text
+  payload          Json
+  decision         Json?
+  errorMessage     String?   @map("error_message") @db.Text
+  sourceRoute      String?   @map("source_route")
+  createdBy        String?   @map("created_by")
+  decidedBy        String?   @map("decided_by")
+  decidedAt        DateTime? @map("decided_at")
+  linkedTaskId     String?   @map("linked_task_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([entityType, createdAt])
+  @@index([resultStatus, pushStatus, createdAt])
+  @@index([taskType, pushStatus, updatedAt])
+  @@index([linkedTaskId])
+  @@map("notification_admin_content_history")
 }
 
 model OpenIMSyncJob {

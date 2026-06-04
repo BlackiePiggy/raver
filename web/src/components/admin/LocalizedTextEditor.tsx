@@ -1,6 +1,7 @@
 'use client';
 
 import { Languages, X } from 'lucide-react';
+import { countText } from '@/lib/input-rules';
 
 export type LocalizedLocaleKey = 'zh' | 'en' | 'ja' | 'enFull';
 export type LocalizedFieldKind = 'input' | 'textarea';
@@ -33,6 +34,7 @@ export function LocalizedTextField({
   placeholder,
   error,
   hint,
+  maxLength,
   onPrimaryChange,
   onOpenOverlay,
 }: {
@@ -42,13 +44,16 @@ export function LocalizedTextField({
   placeholder: string;
   error?: string;
   hint?: string;
+  maxLength?: number;
   onPrimaryChange: (value: string) => void;
   onOpenOverlay: () => void;
 }) {
   const filledLocales = localizedTextFilledLocaleLabels(value);
   const extraLocales = filledLocales.filter((item) => item !== '中文');
+  const primaryCount = countText(value.zh, kind === 'textarea');
   const combinedHint = [
     hint,
+    typeof maxLength === 'number' ? `${primaryCount}/${maxLength}` : null,
     extraLocales.length ? `已填写：${extraLocales.join(' / ')}` : '点击右侧按钮展开编辑英文、日文等多语言内容。',
   ]
     .filter(Boolean)
@@ -64,6 +69,7 @@ export function LocalizedTextField({
             onChange={(event) => onPrimaryChange(event.target.value)}
             className="admin-studio-textarea min-h-28"
             placeholder={placeholder}
+            maxLength={maxLength}
           />
         ) : (
           <input
@@ -71,6 +77,7 @@ export function LocalizedTextField({
             onChange={(event) => onPrimaryChange(event.target.value)}
             className="admin-studio-input"
             placeholder={placeholder}
+            maxLength={maxLength}
           />
         )}
         <button
@@ -98,6 +105,7 @@ export function MultilingualEditorOverlay({
   onChange,
   onClose,
   onClear,
+  maxLength,
   clearLabel = '清除该字段多语言',
   description = '主输入默认使用中文，这里统一补充英文、日文和其他语言版本。',
 }: {
@@ -108,6 +116,7 @@ export function MultilingualEditorOverlay({
   onChange: (locale: LocalizedLocaleKey, value: string) => void;
   onClose: () => void;
   onClear?: () => void;
+  maxLength?: number;
   clearLabel?: string;
   description?: string;
 }) {
@@ -142,6 +151,7 @@ export function MultilingualEditorOverlay({
                   onChange={(event) => onChange(item.key, event.target.value)}
                   className="admin-studio-textarea min-h-28"
                   placeholder={`${title}${item.label}`}
+                  maxLength={maxLength}
                 />
               ) : (
                 <input
@@ -149,9 +159,13 @@ export function MultilingualEditorOverlay({
                   onChange={(event) => onChange(item.key, event.target.value)}
                   className="admin-studio-input"
                   placeholder={`${title}${item.label}`}
+                  maxLength={maxLength}
                 />
               )}
-              <div className="mt-2 text-xs text-black/40">{item.hint}</div>
+              <div className="mt-2 text-xs text-black/40">
+                {item.hint}
+                {typeof maxLength === 'number' ? ` ${countText(value[item.key], kind === 'textarea')}/${maxLength}` : ''}
+              </div>
             </label>
           ))}
         </div>

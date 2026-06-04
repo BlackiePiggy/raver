@@ -14,6 +14,12 @@ import { formatPercent, formatTime } from '@/components/admin/notification-cente
 
 const ENTRY_CARDS = [
   {
+    href: '/admin/notification-center/content-history',
+    label: '内容历史',
+    title: '统一查看内容创建与编辑结果',
+    description: '按内容类型查看成功与失败历史，并对成功项继续决定是否推送。',
+  },
+  {
     href: '/admin/notification-center/publish-tasks',
     label: '发布任务',
     title: '处理待发布候选项',

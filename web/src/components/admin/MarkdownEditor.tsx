@@ -7,6 +7,8 @@ type MarkdownEditorProps = {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  helperText?: string;
+  maxLength?: number;
   minHeightClassName?: string;
   gridClassName?: string;
   scrollablePanels?: boolean;
@@ -169,6 +171,8 @@ export default function MarkdownEditor({
   value,
   onChange,
   placeholder,
+  helperText,
+  maxLength,
   minHeightClassName = 'min-h-[360px]',
   gridClassName,
   scrollablePanels = false,
@@ -181,7 +185,9 @@ export default function MarkdownEditor({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="admin-studio-label">{label}</div>
-        <div className="text-xs text-black/45">支持标题、列表、引用、链接、图片与代码块</div>
+        <div className="text-xs text-black/45">
+          {helperText || '支持标题、列表、引用、链接、图片与代码块'}
+        </div>
       </div>
 
       <div className={gridClassName || 'grid gap-4 xl:grid-cols-2'}>
@@ -189,6 +195,7 @@ export default function MarkdownEditor({
           ref={textareaRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          maxLength={maxLength}
           className={`admin-studio-textarea ${minHeightClassName} ${
             scrollablePanels ? 'resize-none overflow-y-auto' : ''
           }`}

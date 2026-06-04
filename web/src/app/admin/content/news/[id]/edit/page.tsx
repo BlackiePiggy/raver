@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import NewsStudioForm from '@/components/admin/NewsStudioForm';
 import {
@@ -80,6 +81,16 @@ export default function AdminContentNewsEditPage() {
       }
     >
       {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
+
+      {notice && savedNewsId && !loading && !error ? (
+        <NotificationContentHistoryPrompt
+          entityType="news_article"
+          entityId={savedNewsId}
+          secondaryHref="/admin/content/news"
+          secondaryLabel="稍后处理，先回到资讯目录"
+          description="这次资讯更新已经保存成功。你可以现在去统一内容历史页预览推送内容并继续处理，也可以先回目录稍后再决定。"
+        />
+      ) : null}
 
       {savedNewsId && !loading && !error ? (
         <AdminPublishTaskActions
