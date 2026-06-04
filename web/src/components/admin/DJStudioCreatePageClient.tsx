@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import DJStudioForm from '@/components/admin/DJStudioForm';
 import {
   createDJStudioDraft,
@@ -18,27 +19,37 @@ export default function DJStudioCreatePageClient({
   const [draft, setDraft] = useState<DJStudioDraft>(() => createDJStudioDraft(initialName));
   const [submitNotice, setSubmitNotice] = useState<string | null>(null);
   const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
+  const [savedDJId, setSavedDJId] = useState<string | null>(null);
 
   const handleSubmitResult = (result: DJStudioCreateResult) => {
     if (result.kind === 'created') {
       setSubmitNotice(`DJ 已创建成功：${result.dj.name}`);
       setSubmitResultLink(result.dj.id ? `/djs/${result.dj.id}` : '/admin/content/djs/catalog');
+      setSavedDJId(result.dj.id ?? null);
       return;
     }
+
     setSubmitNotice(result.payload.message || 'DJ 已进入审核队列');
     setSubmitResultLink('/admin/content/reviews');
+    setSavedDJId(null);
   };
 
   return (
     <AdminContentLayout
       title="新建 DJ"
-      description="这里已经接上 DJ Studio 第一版可提交流程。当前版本先覆盖头像、banner、proof、平台链接和基础平台统计，并走统一 `/v1/djs/manual/import` 创建链路。"
+      description="这里已经接上 DJ Studio 第一版提交流程。当前版本先覆盖头像、banner、proof、平台链接和基础平台统计，并走统一 `/v1/djs/manual/import` 创建链路。"
       actions={
         <>
-          <Link href="/admin/content/djs/catalog" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+          <Link
+            href="/admin/content/djs/catalog"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+          >
             返回 DJ 目录
           </Link>
-          <Link href="/admin/content/events/new" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+          <Link
+            href="/admin/content/events/new"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+          >
             去新建活动
           </Link>
         </>
@@ -55,6 +66,15 @@ export default function DJStudioCreatePageClient({
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {savedDJId ? (
+        <AdminPublishTaskActions
+          taskType="dj_release"
+          entityType="dj"
+          entityId={savedDJId}
+          mode="create"
+        />
       ) : null}
 
       <DJStudioForm

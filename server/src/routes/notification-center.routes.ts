@@ -106,12 +106,20 @@ const ADMIN_NEWS_AUDIENCE_KEYS = ['event_news', 'followed_dj_news', 'followed_br
 type AdminNewsAudienceKey = (typeof ADMIN_NEWS_AUDIENCE_KEYS)[number];
 const ADMIN_EVENT_AUDIENCE_KEYS = ['followed_dj_event', 'followed_brand_event'] as const;
 type AdminEventAudienceKey = (typeof ADMIN_EVENT_AUDIENCE_KEYS)[number];
+const ADMIN_DJ_AUDIENCE_KEYS = ['followed_dj_info'] as const;
+type AdminDJAudienceKey = (typeof ADMIN_DJ_AUDIENCE_KEYS)[number];
+const ADMIN_BRAND_AUDIENCE_KEYS = ['followed_brand_info'] as const;
+type AdminBrandAudienceKey = (typeof ADMIN_BRAND_AUDIENCE_KEYS)[number];
 type AdminPublishTaskType = (typeof NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES)[number];
 
 const isAdminNewsAudienceKey = (value: string): value is AdminNewsAudienceKey =>
   (ADMIN_NEWS_AUDIENCE_KEYS as readonly string[]).includes(value);
 const isAdminEventAudienceKey = (value: string): value is AdminEventAudienceKey =>
   (ADMIN_EVENT_AUDIENCE_KEYS as readonly string[]).includes(value);
+const isAdminDJAudienceKey = (value: string): value is AdminDJAudienceKey =>
+  (ADMIN_DJ_AUDIENCE_KEYS as readonly string[]).includes(value);
+const isAdminBrandAudienceKey = (value: string): value is AdminBrandAudienceKey =>
+  (ADMIN_BRAND_AUDIENCE_KEYS as readonly string[]).includes(value);
 const isAdminPublishTaskType = (value: string): value is AdminPublishTaskType =>
   (NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES as readonly string[]).includes(value);
 
@@ -261,6 +269,60 @@ type AdminEventAudienceRuntime = {
 
 type AdminEventNotificationRuntime = AdminEventNotificationContext & {
   audienceRuntime: AdminEventAudienceRuntime[];
+};
+
+type AdminDJAudienceRuntime = {
+  key: AdminDJAudienceKey;
+  label: string;
+  rows: Array<{
+    id: string;
+    name: string;
+    targetUserIds: string[];
+  }>;
+};
+
+type AdminDJNotificationContext = {
+  dj: {
+    id: string;
+    title: string;
+    summary: string;
+    coverImageURL: string | null;
+    deeplink: string;
+    updatedAt: string;
+  };
+  audiences: AdminPublishAudienceSummary[];
+};
+
+type AdminDJNotificationRuntime = AdminDJNotificationContext & {
+  audienceRuntime: AdminDJAudienceRuntime[];
+};
+
+type AdminBrandAudienceRuntime = {
+  key: AdminBrandAudienceKey;
+  label: string;
+  rows: Array<{
+    id: string;
+    name: string;
+    entityType: 'festival' | 'label';
+    targetUserIds: string[];
+  }>;
+};
+
+type AdminBrandNotificationContext = {
+  brand: {
+    id: string;
+    entityType: 'festival' | 'label';
+    title: string;
+    summary: string;
+    coverImageURL: string | null;
+    deeplink: string;
+    updatedAt: string;
+  };
+  audiences: AdminPublishAudienceSummary[];
+};
+
+type AdminBrandNotificationRuntime = AdminBrandNotificationContext & {
+  audienceRuntime: AdminBrandAudienceRuntime[];
 };
 
 type AdminPublishExecutionAudienceResult = {
@@ -766,6 +828,205 @@ const buildAdminEventNotificationContext = async (eventId: string): Promise<Admi
   };
 };
 
+const resolveAdminDJNotificationRuntime = async (
+  djId: string
+): Promise<AdminDJNotificationRuntime | null> => {
+  const [row, followers] = await Promise.all([
+    prisma.dJ.findUnique({
+      where: { id: djId },
+      select: {
+        id: true,
+        name: true,
+        bio: true,
+        avatarUrl: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.userEntityFollow.findMany({
+      where: {
+        relationType: USER_ENTITY_RELATION_FOLLOW,
+        targetType: USER_ENTITY_TARGET_DJ,
+        targetId: djId,
+      },
+      select: { userId: true },
+    }),
+  ]);
+
+  if (!row) return null;
+
+  const audienceRows = [
+    {
+      id: row.id,
+      name: row.name.trim() || row.id,
+      targetUserIds: Array.from(new Set(followers.map((item) => item.userId.trim()).filter(Boolean))),
+    },
+  ];
+
+  const audienceRuntime: AdminDJAudienceRuntime[] = [
+    {
+      key: 'followed_dj_info',
+      label: 'Followed DJ Audience',
+      rows: audienceRows,
+    },
+  ];
+
+  const audiences: AdminPublishAudienceSummary[] = audienceRuntime.map((audience) => ({
+    key: audience.key,
+    label: audience.label,
+    entityCount: audience.rows.length,
+    targetUserCount: Array.from(new Set(audience.rows.flatMap((item) => item.targetUserIds))).length,
+    entities: audience.rows.map((item) => ({
+      id: item.id,
+      name: item.name,
+      targetUserCount: item.targetUserIds.length,
+    })),
+  }));
+
+  return {
+    dj: {
+      id: row.id,
+      title: row.name.trim() || row.id,
+      summary: readString(row.bio) ?? row.name.trim() ?? row.id,
+      coverImageURL: readString(row.avatarUrl),
+      deeplink: `raver://dj/${encodeURIComponent(row.id)}`,
+      updatedAt: row.updatedAt.toISOString(),
+    },
+    audiences,
+    audienceRuntime,
+  };
+};
+
+const buildAdminDJNotificationContext = async (djId: string): Promise<AdminDJNotificationContext | null> => {
+  const runtime = await resolveAdminDJNotificationRuntime(djId);
+  if (!runtime) return null;
+  return {
+    dj: runtime.dj,
+    audiences: runtime.audiences,
+  };
+};
+
+const resolveAdminBrandNotificationRuntime = async (
+  brandId: string,
+  entityType: string
+): Promise<AdminBrandNotificationRuntime | null> => {
+  const normalizedEntityType = entityType.trim().toLowerCase();
+  let row:
+    | {
+        id: string;
+        title: string;
+        summary: string;
+        coverImageURL: string | null;
+        deeplink: string;
+        updatedAt: string;
+        entityType: 'festival' | 'label';
+      }
+    | null = null;
+
+  if (normalizedEntityType === 'festival' || normalizedEntityType === 'brand' || normalizedEntityType === 'wiki_festival') {
+    const festival = await prisma.wikiFestival.findUnique({
+      where: { id: brandId },
+      select: {
+        id: true,
+        name: true,
+        introduction: true,
+        avatarUrl: true,
+        backgroundUrl: true,
+        updatedAt: true,
+      },
+    });
+    if (festival) {
+      row = {
+        id: festival.id,
+        title: festival.name.trim() || festival.id,
+        summary: readString(festival.introduction) ?? festival.name.trim() ?? festival.id,
+        coverImageURL: readString(festival.avatarUrl) ?? readString(festival.backgroundUrl),
+        deeplink: `raver://festival/${encodeURIComponent(festival.id)}`,
+        updatedAt: festival.updatedAt.toISOString(),
+        entityType: 'festival',
+      };
+    }
+  }
+
+  if (!row) {
+    const label = await prisma.label.findUnique({
+      where: { id: brandId },
+      select: {
+        id: true,
+        name: true,
+        introduction: true,
+        avatarUrl: true,
+        backgroundUrl: true,
+        updatedAt: true,
+      },
+    });
+    if (!label) return null;
+    row = {
+      id: label.id,
+      title: label.name.trim() || label.id,
+      summary: readString(label.introduction) ?? label.name.trim() ?? label.id,
+      coverImageURL: readString(label.avatarUrl) ?? readString(label.backgroundUrl),
+      deeplink: `raver://label/${encodeURIComponent(label.id)}`,
+      updatedAt: label.updatedAt.toISOString(),
+      entityType: 'label',
+    };
+  }
+
+  const subscriptions = await notificationCenterService.fetchFollowedBrandUpdateSubscriptions();
+  const audienceRows = [
+    {
+      id: row.id,
+      name: row.title,
+      entityType: row.entityType,
+      targetUserIds: Array.from(
+        new Set(
+          subscriptions
+            .filter((item) => item.preference.enabled && item.preference.watchedBrandIds.includes(row!.id))
+            .map((item) => item.userId.trim())
+            .filter(Boolean)
+        )
+      ),
+    },
+  ];
+
+  const audienceRuntime: AdminBrandAudienceRuntime[] = [
+    {
+      key: 'followed_brand_info',
+      label: 'Followed Brand Audience',
+      rows: audienceRows,
+    },
+  ];
+
+  const audiences: AdminPublishAudienceSummary[] = audienceRuntime.map((audience) => ({
+    key: audience.key,
+    label: audience.label,
+    entityCount: audience.rows.length,
+    targetUserCount: Array.from(new Set(audience.rows.flatMap((item) => item.targetUserIds))).length,
+    entities: audience.rows.map((item) => ({
+      id: item.id,
+      name: item.name,
+      targetUserCount: item.targetUserIds.length,
+    })),
+  }));
+
+  return {
+    brand: row,
+    audiences,
+    audienceRuntime,
+  };
+};
+
+const buildAdminBrandNotificationContext = async (
+  brandId: string,
+  entityType: string
+): Promise<AdminBrandNotificationContext | null> => {
+  const runtime = await resolveAdminBrandNotificationRuntime(brandId, entityType);
+  if (!runtime) return null;
+  return {
+    brand: runtime.brand,
+    audiences: runtime.audiences,
+  };
+};
+
 const executeAdminNewsPublish = async (input: {
   actorUserId: string;
   articleId: string;
@@ -1014,9 +1275,194 @@ const executeAdminEventPublish = async (input: {
   };
 };
 
+const executeAdminDJPublish = async (input: {
+  actorUserId: string;
+  djId: string;
+  audienceKeys?: AdminDJAudienceKey[];
+  channels: Array<'in_app' | 'apns'>;
+  dedupeSalt?: string | null;
+}): Promise<AdminPublishExecutionResult | null> => {
+  const runtime = await resolveAdminDJNotificationRuntime(input.djId);
+  if (!runtime) return null;
+
+  const audienceKeys = input.audienceKeys?.length ? input.audienceKeys : ['followed_dj_info'];
+  const dedupeSalt = input.dedupeSalt?.trim() || runtime.dj.updatedAt.slice(0, 13);
+  const publicationResults: AdminPublishExecutionAudienceResult[] = [];
+
+  for (const key of audienceKeys) {
+    const runtimeAudience = runtime.audienceRuntime.find((item) => item.key === key);
+    if (!runtimeAudience) continue;
+
+    const resultsForAudience: AdminPublishExecutionAudienceResult['results'] = [];
+    const dedupeKeys: string[] = [];
+
+    for (const row of runtimeAudience.rows) {
+      const targetUserIds = Array.from(new Set(row.targetUserIds.map((item) => item.trim()).filter(Boolean)));
+      if (!targetUserIds.length) continue;
+
+      const dedupeKey = `dj-info:${row.id}:dj:${runtime.dj.id}:${dedupeSalt}`;
+      const publishResult = await notificationCenterService.publish({
+        category: 'followed_dj_update',
+        targets: targetUserIds.map((userId) => ({ userId })),
+        channels: input.channels,
+        dedupeKey,
+        payload: {
+          title: `${row.name} profile updated`,
+          body: runtime.dj.title,
+          deeplink: runtime.dj.deeplink,
+          metadata: {
+            route: 'dj_update',
+            primaryUpdateKind: 'info',
+            updateKind: 'info',
+            source: 'admin_dj_publish',
+            sourceAudience: 'followed_dj_users',
+            actorUserId: input.actorUserId,
+            djId: runtime.dj.id,
+            djName: runtime.dj.title,
+            djSummary: runtime.dj.summary,
+            djCoverImageURL: runtime.dj.coverImageURL,
+            occurredAt: runtime.dj.updatedAt,
+          },
+        },
+      });
+
+      dedupeKeys.push(dedupeKey);
+      resultsForAudience.push({
+        entityId: row.id,
+        entityName: row.name,
+        targetUserCount: targetUserIds.length,
+        publishResult: publishResult.map((item) => ({
+          channel: item.channel,
+          success: item.success,
+          detail: item.detail,
+        })),
+      });
+    }
+
+    publicationResults.push({
+      key,
+      label: runtimeAudience.label,
+      entityCount: runtimeAudience.rows.length,
+      targetUserCount: Array.from(new Set(runtimeAudience.rows.flatMap((item) => item.targetUserIds))).length,
+      dedupeKeys,
+      results: resultsForAudience,
+    });
+  }
+
+  return {
+    success: true,
+    kind: 'dj_release',
+    entity: {
+      id: runtime.dj.id,
+      title: runtime.dj.title,
+      summary: runtime.dj.summary,
+      coverImageURL: runtime.dj.coverImageURL,
+      deeplink: runtime.dj.deeplink,
+      occurredAt: runtime.dj.updatedAt,
+      startDate: null,
+      timeZone: null,
+    },
+    audiences: publicationResults,
+  };
+};
+
+const executeAdminBrandPublish = async (input: {
+  actorUserId: string;
+  brandId: string;
+  entityType: string;
+  audienceKeys?: AdminBrandAudienceKey[];
+  channels: Array<'in_app' | 'apns'>;
+  dedupeSalt?: string | null;
+}): Promise<AdminPublishExecutionResult | null> => {
+  const runtime = await resolveAdminBrandNotificationRuntime(input.brandId, input.entityType);
+  if (!runtime) return null;
+
+  const audienceKeys = input.audienceKeys?.length ? input.audienceKeys : ['followed_brand_info'];
+  const dedupeSalt = input.dedupeSalt?.trim() || runtime.brand.updatedAt.slice(0, 13);
+  const publicationResults: AdminPublishExecutionAudienceResult[] = [];
+
+  for (const key of audienceKeys) {
+    const runtimeAudience = runtime.audienceRuntime.find((item) => item.key === key);
+    if (!runtimeAudience) continue;
+
+    const resultsForAudience: AdminPublishExecutionAudienceResult['results'] = [];
+    const dedupeKeys: string[] = [];
+
+    for (const row of runtimeAudience.rows) {
+      const targetUserIds = Array.from(new Set(row.targetUserIds.map((item) => item.trim()).filter(Boolean)));
+      if (!targetUserIds.length) continue;
+
+      const dedupeKey = `brand-info:${row.entityType}:${row.id}:brand:${runtime.brand.id}:${dedupeSalt}`;
+      const publishResult = await notificationCenterService.publish({
+        category: 'followed_brand_update',
+        targets: targetUserIds.map((userId) => ({ userId })),
+        channels: input.channels,
+        dedupeKey,
+        payload: {
+          title: `${row.name} profile updated`,
+          body: runtime.brand.title,
+          deeplink: runtime.brand.deeplink,
+          metadata: {
+            route: 'brand_update',
+            primaryUpdateKind: 'info',
+            updateKind: 'info',
+            source: 'admin_brand_publish',
+            sourceAudience: 'followed_brand_users',
+            actorUserId: input.actorUserId,
+            brandId: runtime.brand.id,
+            brandEntityType: runtime.brand.entityType,
+            brandName: runtime.brand.title,
+            brandSummary: runtime.brand.summary,
+            brandCoverImageURL: runtime.brand.coverImageURL,
+            occurredAt: runtime.brand.updatedAt,
+          },
+        },
+      });
+
+      dedupeKeys.push(dedupeKey);
+      resultsForAudience.push({
+        entityId: row.id,
+        entityName: row.name,
+        targetUserCount: targetUserIds.length,
+        publishResult: publishResult.map((item) => ({
+          channel: item.channel,
+          success: item.success,
+          detail: item.detail,
+        })),
+      });
+    }
+
+    publicationResults.push({
+      key,
+      label: runtimeAudience.label,
+      entityCount: runtimeAudience.rows.length,
+      targetUserCount: Array.from(new Set(runtimeAudience.rows.flatMap((item) => item.targetUserIds))).length,
+      dedupeKeys,
+      results: resultsForAudience,
+    });
+  }
+
+  return {
+    success: true,
+    kind: 'brand_release',
+    entity: {
+      id: runtime.brand.id,
+      title: runtime.brand.title,
+      summary: runtime.brand.summary,
+      coverImageURL: runtime.brand.coverImageURL,
+      deeplink: runtime.brand.deeplink,
+      occurredAt: runtime.brand.updatedAt,
+      startDate: null,
+      timeZone: null,
+    },
+    audiences: publicationResults,
+  };
+};
+
 const buildAdminPublishTaskContext = async (
   taskType: AdminPublishTaskType,
-  entityId: string
+  entityId: string,
+  entityType: string
 ): Promise<AdminPublishTaskContext | null> => {
   if (taskType === 'news_release') {
     const context = await buildAdminNewsNotificationContext(entityId);
@@ -1037,19 +1483,57 @@ const buildAdminPublishTaskContext = async (
     };
   }
 
-  const context = await buildAdminEventNotificationContext(entityId);
+  if (taskType === 'event_release') {
+    const context = await buildAdminEventNotificationContext(entityId);
+    if (!context) return null;
+    return {
+      kind: taskType,
+      entity: {
+        id: context.event.id,
+        title: context.event.title,
+        summary: context.event.summary,
+        coverImageURL: context.event.coverImageURL,
+        deeplink: context.event.deeplink,
+        occurredAt: context.event.updatedAt,
+        startDate: context.event.startDate,
+        timeZone: context.event.timeZone,
+      },
+      audiences: context.audiences,
+    };
+  }
+
+  if (taskType === 'dj_release') {
+    const context = await buildAdminDJNotificationContext(entityId);
+    if (!context) return null;
+    return {
+      kind: taskType,
+      entity: {
+        id: context.dj.id,
+        title: context.dj.title,
+        summary: context.dj.summary,
+        coverImageURL: context.dj.coverImageURL,
+        deeplink: context.dj.deeplink,
+        occurredAt: context.dj.updatedAt,
+        startDate: null,
+        timeZone: null,
+      },
+      audiences: context.audiences,
+    };
+  }
+
+  const context = await buildAdminBrandNotificationContext(entityId, entityType);
   if (!context) return null;
   return {
     kind: taskType,
     entity: {
-      id: context.event.id,
-      title: context.event.title,
-      summary: context.event.summary,
-      coverImageURL: context.event.coverImageURL,
-      deeplink: context.event.deeplink,
-      occurredAt: context.event.updatedAt,
-      startDate: context.event.startDate,
-      timeZone: context.event.timeZone,
+      id: context.brand.id,
+      title: context.brand.title,
+      summary: context.brand.summary,
+      coverImageURL: context.brand.coverImageURL,
+      deeplink: context.brand.deeplink,
+      occurredAt: context.brand.updatedAt,
+      startDate: null,
+      timeZone: null,
     },
     audiences: context.audiences,
   };
@@ -3221,7 +3705,7 @@ router.get('/admin/publish-tasks/by-entity', authenticate, requireAdmin, async (
       entityType,
       entityId,
     });
-    const context = await buildAdminPublishTaskContext(taskTypeRaw, entityId);
+    const context = await buildAdminPublishTaskContext(taskTypeRaw, entityId, entityType);
     res.json({ success: true, task, context });
   } catch (error) {
     console.error('Fetch admin publish task by entity error:', error);
@@ -3241,7 +3725,7 @@ router.get('/admin/publish-tasks/:id', authenticate, requireAdmin, async (req: A
       res.status(404).json({ error: 'Publish task not found' });
       return;
     }
-    const context = await buildAdminPublishTaskContext(task.taskType, task.entityId);
+    const context = await buildAdminPublishTaskContext(task.taskType, task.entityId, task.entityType);
     res.json({ success: true, task, context });
   } catch (error) {
     console.error('Fetch admin publish task error:', error);
@@ -3393,6 +3877,23 @@ router.post('/admin/publish-tasks/:id/publish', authenticate, requireAdmin, asyn
         actorUserId,
         eventId: task.entityId,
         audienceKeys: normalizeStringArray(body.audienceKeys).filter(isAdminEventAudienceKey),
+        channels,
+        dedupeSalt: readString(body.dedupeSalt),
+      });
+    } else if (task.taskType === 'dj_release') {
+      result = await executeAdminDJPublish({
+        actorUserId,
+        djId: task.entityId,
+        audienceKeys: normalizeStringArray(body.audienceKeys).filter(isAdminDJAudienceKey),
+        channels,
+        dedupeSalt: readString(body.dedupeSalt),
+      });
+    } else if (task.taskType === 'brand_release') {
+      result = await executeAdminBrandPublish({
+        actorUserId,
+        brandId: task.entityId,
+        entityType: task.entityType,
+        audienceKeys: normalizeStringArray(body.audienceKeys).filter(isAdminBrandAudienceKey),
         channels,
         dedupeSalt: readString(body.dedupeSalt),
       });

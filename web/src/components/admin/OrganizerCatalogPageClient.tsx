@@ -414,7 +414,7 @@ function OrganizerDetailOverlay({
               </div>
             </button>
 
-            <div className="-mt-10 px-4">
+            <div className="mt-4 px-4">
               <div className="rounded-[24px] border border-[#e8eceb] bg-white/96 p-5 shadow-[0_12px_32px_rgba(33,52,47,0.08)]">
                 <div className="text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{primaryName}</div>
                 <div className="mt-2 text-sm font-medium text-[#6b7280]">

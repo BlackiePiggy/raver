@@ -26,14 +26,18 @@ type ToastState = {
 const TASK_TITLES: Record<NotificationAdminPublishTaskType, string> = {
   news_release: '资讯发布通知',
   event_release: '活动发布通知',
+  dj_release: 'DJ 资料发布通知',
+  brand_release: '品牌资料发布通知',
 };
 
 const AUDIENCE_LABELS: Record<string, string> = {
-  event_news: '活动关注用户',
-  followed_dj_news: 'DJ 关注用户',
-  followed_brand_news: '品牌关注用户',
-  followed_dj_event: 'DJ 关注用户',
-  followed_brand_event: '品牌关注用户',
+  event_news: '关注活动资讯的用户',
+  followed_dj_news: '关注 DJ 资讯的用户',
+  followed_brand_news: '关注品牌资讯的用户',
+  followed_dj_event: '关注 DJ 活动的用户',
+  followed_brand_event: '关注品牌活动的用户',
+  followed_dj_info: '关注 DJ 的用户',
+  followed_brand_info: '关注品牌的用户',
 };
 
 export default function AdminPublishTaskActions({
@@ -84,6 +88,7 @@ export default function AdminPublishTaskActions({
     };
 
     void load();
+
     return () => {
       cancelled = true;
     };
@@ -110,11 +115,11 @@ export default function AdminPublishTaskActions({
 
   const handlePublish = async () => {
     if (!task) {
-      setToast({ message: '当前没有待发布任务', tone: 'warning' });
+      setToast({ message: '当前没有可发布任务', tone: 'warning' });
       return;
     }
     if (!selectedAudienceKeys.length) {
-      setToast({ message: '请至少选择一类通知受众', tone: 'warning' });
+      setToast({ message: '请至少选择一类受众', tone: 'warning' });
       return;
     }
     if (!availableChannels.length) {
@@ -150,7 +155,7 @@ export default function AdminPublishTaskActions({
         taskId: task.id,
       });
       setTask(response.task);
-      setToast({ message: '已标记为不发布', tone: 'success' });
+      setToast({ message: '已标记为暂不发布', tone: 'success' });
     } catch (rejectError) {
       setError(rejectError instanceof Error ? rejectError.message : '拒绝发布失败');
       setToast({ message: '拒绝发布失败', tone: 'error' });
@@ -192,10 +197,10 @@ export default function AdminPublishTaskActions({
         <div>
           <div className="admin-studio-label">发布后通知</div>
           <h3 className="mt-2 text-[22px] font-semibold tracking-[-0.03em] text-[#071110]">
-            {mode === 'create' ? '内容已保存，决定是否立刻通知用户' : '内容已更新，决定是否向用户推送变更'}
+            {mode === 'create' ? '内容已保存，决定是否立即通知用户' : '内容已更新，决定是否向用户推送这次变更'}
           </h3>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-black/52">
-            这一步会生成可追踪的后台通知任务。你现在可以直接发布，也可以稍后到通知中心统一处理。
+            这里使用统一的后台发布任务链路。你现在可以直接发布，也可以稍后到通知中心继续处理。
           </p>
         </div>
         <div className="rounded-full bg-[#f3f5f4] px-4 py-2 text-xs font-semibold text-[#42514c]">
@@ -222,7 +227,7 @@ export default function AdminPublishTaskActions({
             <div className="rounded-[28px] border border-[#e7ece8] bg-white p-5">
               <div className="text-xs uppercase tracking-[0.24em] text-black/38">Target Snapshot</div>
               <div className="mt-3 text-3xl font-semibold text-[#071110]">{totalTargetUsers}</div>
-              <div className="mt-2 text-sm text-black/56">当前选中受众的用户数</div>
+              <div className="mt-2 text-sm text-black/56">当前选中受众用户数</div>
             </div>
           </div>
 
@@ -317,28 +322,16 @@ export default function AdminPublishTaskActions({
               </button>
 
               <div className="text-xs leading-6 text-black/42">
-                如果这里不处理，这条任务会保留在通知中心的待决策列表里，后续仍可继续发布或拒绝。
+                如果这里暂时不处理，这条任务会保留在通知中心的待处理发布候选项里，后续仍可继续发布或拒绝。
               </div>
             </div>
           </div>
 
           {result ? (
-            <div className="rounded-[28px] border border-[#dbe6dd] bg-[#f6fbf7] p-5">
-              <div className="text-xs uppercase tracking-[0.24em] text-[#44614f]">Publish Result</div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {result.audiences.map((audience) => (
-                  <div key={audience.key} className="rounded-[20px] border border-[#d8e5dc] bg-white px-4 py-4">
-                    <div className="text-sm font-semibold text-[#071110]">
-                      {AUDIENCE_LABELS[audience.key] || audience.label}
-                    </div>
-                    <div className="mt-2 text-xs leading-6 text-[#45604f]">
-                      {audience.entityCount} 个绑定对象 / {audience.targetUserCount} 位用户
-                    </div>
-                    <div className="mt-3 text-xs leading-6 text-[#45604f]">
-                      {audience.results.length} 个发送批次
-                    </div>
-                  </div>
-                ))}
+            <div className="rounded-[28px] border border-[#d8e5dc] bg-[#f7fbf8] p-5">
+              <div className="admin-studio-label">Latest Result</div>
+              <div className="mt-3 text-sm text-[#2f5d43]">
+                已完成发布，本次共处理 {result.audiences.length} 组受众。
               </div>
             </div>
           ) : null}

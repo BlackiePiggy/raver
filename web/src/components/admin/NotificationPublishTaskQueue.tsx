@@ -5,7 +5,6 @@ import AdminToast, { type AdminToastTone } from '@/components/admin/AdminToast';
 import {
   notificationCenterAdminApi,
   type NotificationAdminPublishTaskContext,
-  type NotificationAdminPublishTaskItem,
   type NotificationAdminPublishTaskPage,
 } from '@/lib/api/notification-center-admin';
 
@@ -23,11 +22,20 @@ type ToastState = {
 } | null;
 
 const AUDIENCE_LABELS: Record<string, string> = {
-  event_news: '活动关注用户',
-  followed_dj_news: 'DJ 关注用户',
-  followed_brand_news: '品牌关注用户',
-  followed_dj_event: 'DJ 关注用户',
-  followed_brand_event: '品牌关注用户',
+  event_news: '关注活动资讯的用户',
+  followed_dj_news: '关注 DJ 资讯的用户',
+  followed_brand_news: '关注品牌资讯的用户',
+  followed_dj_event: '关注 DJ 活动的用户',
+  followed_brand_event: '关注品牌活动的用户',
+  followed_dj_info: '关注 DJ 的用户',
+  followed_brand_info: '关注品牌的用户',
+};
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  news_release: '资讯发布',
+  event_release: '活动发布',
+  dj_release: 'DJ 资料发布',
+  brand_release: '品牌资料发布',
 };
 
 export default function NotificationPublishTaskQueue({
@@ -58,7 +66,8 @@ export default function NotificationPublishTaskQueue({
     }
 
     let cancelled = false;
-    const run = async () => {
+
+    const load = async () => {
       try {
         setDetailLoading(true);
         setDetailError(null);
@@ -75,13 +84,12 @@ export default function NotificationPublishTaskQueue({
         if (cancelled) return;
         setDetailError(error instanceof Error ? error.message : '加载任务详情失败');
       } finally {
-        if (!cancelled) {
-          setDetailLoading(false);
-        }
+        if (!cancelled) setDetailLoading(false);
       }
     };
 
-    void run();
+    void load();
+
     return () => {
       cancelled = true;
     };
@@ -115,11 +123,11 @@ export default function NotificationPublishTaskQueue({
 
   const handlePublish = async () => {
     if (!selectedTask) return;
-    if (selectedAudienceKeys.length === 0) {
+    if (!selectedAudienceKeys.length) {
       setToast({ message: '请至少选择一类受众', tone: 'warning' });
       return;
     }
-    if (availableChannels.length === 0) {
+    if (!availableChannels.length) {
       setToast({ message: '请至少选择一种发送渠道', tone: 'warning' });
       return;
     }
@@ -146,7 +154,7 @@ export default function NotificationPublishTaskQueue({
     try {
       setActingTaskId(selectedTask.id);
       await notificationCenterAdminApi.rejectTask({ taskId: selectedTask.id });
-      setToast({ message: '已标记为不发布', tone: 'success' });
+      setToast({ message: '已标记为暂不发布', tone: 'success' });
       setExpandedTaskId(null);
       await onReload();
     } catch (error) {
@@ -157,7 +165,10 @@ export default function NotificationPublishTaskQueue({
   };
 
   return (
-    <section className="rounded-[28px] border border-[#e7ece8] bg-white p-5">
+    <section
+      id="notification-publish-task-queue"
+      className="rounded-[28px] border border-[#e7ece8] bg-white p-5"
+    >
       <AdminToast
         message={toast?.message || null}
         tone={toast?.tone || 'neutral'}
@@ -167,7 +178,7 @@ export default function NotificationPublishTaskQueue({
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="admin-studio-label">Pending Decisions</div>
+          <div className="admin-studio-label">Decision Queue</div>
           <h2 className="mt-2 text-xl font-semibold text-[#071110]">待决策发布任务</h2>
           <div className="mt-2 text-sm text-[#5b6763]">
             {page
@@ -191,7 +202,7 @@ export default function NotificationPublishTaskQueue({
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-[#071110]">{task.title}</div>
                     <div className="mt-1 text-xs text-[#5b6763]">
-                      {task.taskType} / {task.entityType} / {task.entityId}
+                      {TASK_TYPE_LABELS[task.taskType] || task.taskType} / {task.entityType} / {task.entityId}
                     </div>
                     {task.summary ? <div className="mt-2 text-sm text-[#5b6763]">{task.summary}</div> : null}
                     <div className="mt-2 text-xs text-[#5b6763]">最近更新时间 {task.updatedAt}</div>
@@ -223,8 +234,12 @@ export default function NotificationPublishTaskQueue({
                         <div className="grid gap-4 md:grid-cols-[1.3fr_0.7fr]">
                           <div className="rounded-[18px] border border-[#edf1ef] bg-[#fbfcfb] p-4">
                             <div className="text-xs uppercase tracking-[0.14em] text-black/38">Entity</div>
-                            <div className="mt-2 text-base font-semibold text-[#071110]">{detailContext.entity.title}</div>
-                            <div className="mt-2 text-sm leading-6 text-black/56">{detailContext.entity.summary}</div>
+                            <div className="mt-2 text-base font-semibold text-[#071110]">
+                              {detailContext.entity.title}
+                            </div>
+                            <div className="mt-2 text-sm leading-6 text-black/56">
+                              {detailContext.entity.summary || '暂无摘要'}
+                            </div>
                           </div>
                           <div className="rounded-[18px] border border-[#edf1ef] bg-[#fbfcfb] p-4">
                             <div className="text-xs uppercase tracking-[0.14em] text-black/38">Snapshot</div>
@@ -263,6 +278,18 @@ export default function NotificationPublishTaskQueue({
                                       {audience.targetUserCount} 位用户
                                     </span>
                                   </div>
+                                  {audience.entities.length ? (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {audience.entities.map((entity) => (
+                                        <span
+                                          key={entity.id}
+                                          className="rounded-full border border-[#dde5e1] px-3 py-1 text-xs text-[#42514c]"
+                                        >
+                                          {entity.name} / {entity.targetUserCount}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
                                 </div>
                               </label>
                             );
@@ -296,7 +323,7 @@ export default function NotificationPublishTaskQueue({
                               disabled={actingTaskId === task.id}
                               className="rounded-full border border-[#d9e1de] bg-white px-5 py-3 text-sm font-semibold text-[#071110] disabled:opacity-45"
                             >
-                              {actingTaskId === task.id ? '处理中...' : '不发布'}
+                              {actingTaskId === task.id ? '处理中...' : '暂不发布'}
                             </button>
                             <button
                               type="button"

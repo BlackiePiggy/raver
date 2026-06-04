@@ -7613,6 +7613,11 @@ router.delete('/news/:id', optionalAuth, async (req: Request, res: Response): Pr
     }
 
     await prisma.newsArticle.delete({ where: { id: articleId } });
+    await notificationCenterService.deleteAdminPublishTasksByEntity({
+      entityType: 'news_article',
+      entityId: articleId,
+      taskTypes: ['news_release'],
+    });
 
     if (existing.coverImageUrl) {
       await mediaAssetService.markDeletedByUrl(existing.coverImageUrl);

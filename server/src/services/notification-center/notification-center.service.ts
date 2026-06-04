@@ -177,6 +177,8 @@ export type NotificationAdminDeliverySection = (typeof NOTIFICATION_ADMIN_DELIVE
 export const NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES = [
   'news_release',
   'event_release',
+  'dj_release',
+  'brand_release',
 ] as const;
 
 export type NotificationAdminPublishTaskType = (typeof NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES)[number];
@@ -3120,6 +3122,44 @@ export const notificationCenterService = {
         decision
     `);
     return parseNotificationAdminPublishTaskRow(rows[0]) ?? null;
+  },
+
+  async deleteAdminPublishTasksByEntity(input: {
+    entityType: string;
+    entityId: string;
+    taskTypes?: NotificationAdminPublishTaskType[];
+  }): Promise<number> {
+    const entityType = input.entityType.trim();
+    const entityId = input.entityId.trim();
+    if (!entityType || !entityId) {
+      return 0;
+    }
+
+    const normalizedTaskTypes = Array.from(
+      new Set(
+        (input.taskTypes ?? []).filter((value): value is NotificationAdminPublishTaskType =>
+          isNotificationAdminPublishTaskType(value)
+        )
+      )
+    );
+
+    const taskTypeFilter =
+      normalizedTaskTypes.length > 0
+        ? Prisma.sql`AND task_type IN (${Prisma.join(normalizedTaskTypes)})`
+        : Prisma.empty;
+
+    const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+      WITH deleted AS (
+        DELETE FROM notification_admin_publish_tasks
+        WHERE entity_type = ${entityType}
+          AND entity_id = ${entityId}
+          ${taskTypeFilter}
+        RETURNING 1
+      )
+      SELECT COUNT(*)::bigint AS count FROM deleted
+    `);
+
+    return toPositiveSafeInteger(rows[0]?.count ?? 0);
   },
 
   async fetchDeliveryStats(windowHours = 24) {

@@ -10409,6 +10409,11 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
       select: { coverImageUrl: true, lineupImageUrl: true, imageAssets: true },
     });
     await prisma.event.delete({ where: { id: eventId } });
+    await notificationCenterService.deleteAdminPublishTasksByEntity({
+      entityType: 'event',
+      entityId: eventId,
+      taskTypes: ['event_release'],
+    });
     await mediaAssetService.markDeletedByUrl(eventAssets?.coverImageUrl);
     await mediaAssetService.markDeletedByUrl(eventAssets?.lineupImageUrl);
     const imageAssets = Array.isArray(eventAssets?.imageAssets) ? eventAssets?.imageAssets : [];
@@ -12948,6 +12953,16 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     const hydrated = await fetchDJWithContributorsById(persisted.id);
     const mapped = mapDJ(hydrated ?? persisted, false, userId, viewerRole);
 
+    await upsertDJReleasePublishTaskBestEffort({
+      actorUserId: userId,
+      dj: {
+        id: mapped.id,
+        name: mapped.name,
+        bio: mapped.bio ?? null,
+        avatarUrl: mapped.avatarUrl ?? null,
+      },
+    });
+
     ok(res, {
       action,
       dj: mapped,
@@ -13702,6 +13717,11 @@ router.delete('/djs/:id', optionalAuth, async (req: Request, res: Response): Pro
     ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
     await prisma.dJ.delete({ where: { id: djId } });
+    await notificationCenterService.deleteAdminPublishTasksByEntity({
+      entityType: 'dj',
+      entityId: djId,
+      taskTypes: ['dj_release'],
+    });
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleDJMediaOssObjectIfOwned(url, djId);
@@ -16138,6 +16158,73 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
   }
 };
 
+const upsertDJReleasePublishTaskBestEffort = async (input: {
+  actorUserId: string;
+  dj: {
+    id: string;
+    name: string;
+    bio?: string | null;
+    avatarUrl?: string | null;
+  };
+}): Promise<void> => {
+  try {
+    await notificationCenterService.upsertAdminPublishTask({
+      taskType: 'dj_release',
+      entityType: 'dj',
+      entityId: input.dj.id,
+      title: input.dj.name,
+      summary: (typeof input.dj.bio === 'string' && input.dj.bio.trim()) || input.dj.name,
+      createdBy: input.actorUserId,
+      payload: {
+        djId: input.dj.id,
+        title: input.dj.name,
+        summary: (typeof input.dj.bio === 'string' && input.dj.bio.trim()) || input.dj.name,
+        coverImageURL: input.dj.avatarUrl ?? null,
+      },
+    });
+  } catch (error) {
+    console.warn('BFF web DJ publish task upsert failed:', {
+      djId: input.dj.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+const upsertBrandReleasePublishTaskBestEffort = async (input: {
+  actorUserId: string;
+  brand: {
+    id: string;
+    name: string;
+    summary?: string | null;
+    coverImageURL?: string | null;
+  };
+  entityType: 'festival' | 'label';
+}): Promise<void> => {
+  try {
+    await notificationCenterService.upsertAdminPublishTask({
+      taskType: 'brand_release',
+      entityType: input.entityType,
+      entityId: input.brand.id,
+      title: input.brand.name,
+      summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
+      createdBy: input.actorUserId,
+      payload: {
+        brandId: input.brand.id,
+        brandEntityType: input.entityType,
+        title: input.brand.name,
+        summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
+        coverImageURL: input.brand.coverImageURL ?? null,
+      },
+    });
+  } catch (error) {
+    console.warn('BFF web brand publish task upsert failed:', {
+      brandId: input.brand.id,
+      entityType: input.entityType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 const buildGenrePath = (parentPath: string | null, slug: string): string =>
   parentPath ? `${parentPath}/${slug}` : slug;
 
@@ -17497,6 +17584,11 @@ router.delete('/learn/festivals/:id', optionalAuth, async (req: Request, res: Re
     ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
     await prisma.wikiFestival.delete({ where: { id: festivalId } });
+    await notificationCenterService.deleteAdminPublishTasksByEntity({
+      entityType: 'festival',
+      entityId: festivalId,
+      taskTypes: ['brand_release'],
+    });
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleWikiBrandOssObjectIfOwned(url, festivalId);
@@ -17748,6 +17840,17 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
       },
     });
 
+    await upsertBrandReleasePublishTaskBestEffort({
+      actorUserId: userId,
+      entityType: 'label',
+      brand: {
+        id: created.id,
+        name: created.name,
+        summary: created.introduction ?? created.introductionPreview ?? created.genresPreview ?? created.name,
+        coverImageURL: created.avatarUrl ?? created.backgroundUrl ?? created.logoUrl ?? null,
+      },
+    });
+
     ok(res, created);
   } catch (error) {
     console.error('BFF web create learn label error:', error);
@@ -17875,6 +17978,17 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
       ? await prisma.dJ.findUnique({ where: { id: updated.founderDjId } })
       : null;
 
+    await upsertBrandReleasePublishTaskBestEffort({
+      actorUserId: userId,
+      entityType: 'label',
+      brand: {
+        id: updated.id,
+        name: updated.name,
+        summary: updated.introduction ?? updated.introductionPreview ?? updated.genresPreview ?? updated.name,
+        coverImageURL: updated.avatarUrl ?? updated.backgroundUrl ?? updated.logoUrl ?? null,
+      },
+    });
+
     ok(res, {
       ...updated,
       founderDj,
@@ -17924,6 +18038,11 @@ router.delete('/learn/labels/:id', optionalAuth, async (req: Request, res: Respo
     ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
     await prisma.label.delete({ where: { id: labelId } });
+    await notificationCenterService.deleteAdminPublishTasksByEntity({
+      entityType: 'label',
+      entityId: labelId,
+      taskTypes: ['brand_release'],
+    });
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleWikiBrandOssObjectIfOwned(url, labelId);

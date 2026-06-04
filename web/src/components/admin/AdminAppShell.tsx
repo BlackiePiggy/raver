@@ -27,6 +27,7 @@ type AdminAppShellProps = {
 
 const SIDEBAR_STATE_KEY = 'raver-admin-shell-collapsed';
 const SIDEBAR_SCROLL_KEY = 'raver-admin-shell-scroll-top';
+const SIDEBAR_GROUP_STATE_KEY = 'raver-admin-shell-group-open';
 
 const initialsFromName = (value?: string | null): string =>
   value
@@ -53,6 +54,18 @@ function Sidebar({
   const policy = useMemo(() => getAdminCmsRolePolicy(user), [user]);
   const groups = useMemo(() => getVisibleAdminNavGroups(policy), [policy]);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const [groupOpenState, setGroupOpenState] = useState<Record<string, boolean>>({});
+
+  const groupActiveState = useMemo(
+    () =>
+      Object.fromEntries(
+        groups.map((group) => [
+          group.id,
+          group.items.some((item) => isAdminHrefActive(pathname, item.href, item.matchMode)),
+        ])
+      ) as Record<string, boolean>,
+    [groups, pathname]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -69,9 +82,68 @@ function Sidebar({
     window.requestAnimationFrame(restore);
   }, [pathname]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_GROUP_STATE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+      const nextState: Record<string, boolean> = {};
+
+      for (const group of groups) {
+        const savedValue = parsed[group.id];
+        nextState[group.id] = typeof savedValue === 'boolean' ? savedValue : true;
+        if (groupActiveState[group.id]) {
+          nextState[group.id] = true;
+        }
+      }
+
+      setGroupOpenState(nextState);
+    } catch {
+      setGroupOpenState(
+        Object.fromEntries(groups.map((group) => [group.id, true])) as Record<string, boolean>
+      );
+    }
+  }, [groups, groupActiveState]);
+
+  useEffect(() => {
+    setGroupOpenState((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const group of groups) {
+        if (!(group.id in next)) {
+          next[group.id] = true;
+          changed = true;
+        }
+        if (groupActiveState[group.id] && next[group.id] === false) {
+          next[group.id] = true;
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [groups, groupActiveState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SIDEBAR_GROUP_STATE_KEY, JSON.stringify(groupOpenState));
+  }, [groupOpenState]);
+
   const persistSidebarScroll = () => {
     if (typeof window === 'undefined' || !scrollAreaRef.current) return;
     window.sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(scrollAreaRef.current.scrollTop));
+  };
+
+  const toggleGroup = (groupId: string) => {
+    setGroupOpenState((current) => {
+      if (groupActiveState[groupId]) {
+        return { ...current, [groupId]: true };
+      }
+      return {
+        ...current,
+        [groupId]: !current[groupId],
+      };
+    });
   };
 
   return (
@@ -105,50 +177,76 @@ function Sidebar({
             onScroll={persistSidebarScroll}
             className="absolute inset-0 overflow-y-auto px-1 py-2 admin-shell-scrollbar"
           >
-            {groups.map((group) => (
-              <div key={group.id} className="mb-6">
-                {!collapsed && group.id !== 'menu' && (
-                  <div className="mb-3 flex items-center justify-between px-1 text-[13px] font-bold text-[#071110]">
-                    <span>{group.label}</span>
-                    <ChevronDown className="size-4" />
-                  </div>
-                )}
-                <nav className="space-y-[7px]">
-                  {group.items.map((item) => {
-                    const active = isAdminHrefActive(pathname, item.href, item.matchMode);
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => {
-                          persistSidebarScroll();
-                          setMobileOpen(false);
-                        }}
+            {groups.map((group) => {
+              const isOpen = groupOpenState[group.id] ?? true;
+              return (
+                <div key={group.id} className="mb-4">
+                  {!collapsed ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.id)}
+                      className="mb-2 flex w-full items-center justify-between rounded-full px-2 py-2 text-left text-[13px] font-bold text-[#071110] transition hover:bg-white/50"
+                    >
+                      <span>{group.label}</span>
+                      <ChevronDown
                         className={clsx(
-                          'group flex h-[44px] w-full items-center rounded-full text-[13px] font-semibold transition-all duration-300 hover:-translate-y-0.5',
-                          collapsed ? 'justify-center px-0' : 'gap-4 px-[15px]',
-                          active
-                            ? 'bg-[#071110] text-white shadow-[0_0_28px_rgba(91,245,255,.24)]'
-                            : 'text-[#18211f] hover:bg-white/60'
+                          'size-4 transition-transform duration-300 ease-[cubic-bezier(.22,1,.36,1)]',
+                          isOpen ? 'rotate-0' : '-rotate-90'
                         )}
-                      >
-                        <span
-                          className={clsx(
-                            'grid place-items-center',
-                            active ? 'text-white' : 'rounded-full bg-white/45 text-[#121b19] group-hover:bg-white/80',
-                            collapsed ? 'size-9' : 'size-7'
-                          )}
-                        >
-                          <Icon className="size-[15px]" />
-                        </span>
-                        {!collapsed && <span>{item.label}</span>}
-                      </Link>
-                    );
-                  })}
-                </nav>
-              </div>
-            ))}
+                      />
+                    </button>
+                  ) : null}
+
+                  <div
+                    className={clsx(
+                      collapsed
+                        ? 'grid grid-rows-[1fr] opacity-100'
+                        : isOpen
+                          ? 'grid grid-rows-[1fr] opacity-100'
+                          : 'grid grid-rows-[0fr] opacity-70',
+                      'transition-all duration-300 ease-[cubic-bezier(.22,1,.36,1)]'
+                    )}
+                  >
+                    <div className="overflow-hidden">
+                      <nav className="space-y-[7px]">
+                        {group.items.map((item) => {
+                          const active = isAdminHrefActive(pathname, item.href, item.matchMode);
+                          const Icon = item.icon;
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => {
+                                persistSidebarScroll();
+                                setMobileOpen(false);
+                              }}
+                              className={clsx(
+                                'group flex h-[44px] w-full items-center rounded-full text-[13px] font-semibold transition-all duration-300 hover:-translate-y-0.5',
+                                collapsed ? 'justify-center px-0' : 'gap-4 px-[15px]',
+                                active
+                                  ? 'bg-[#071110] text-white shadow-[0_0_28px_rgba(91,245,255,.24)]'
+                                  : 'text-[#18211f] hover:bg-white/60'
+                              )}
+                            >
+                              <span
+                                className={clsx(
+                                  'grid place-items-center',
+                                  active ? 'text-white' : 'rounded-full bg-white/45 text-[#121b19] group-hover:bg-white/80',
+                                  collapsed ? 'size-9' : 'size-7'
+                                )}
+                              >
+                                <Icon className="size-[15px]" />
+                              </span>
+                              {!collapsed && <span>{item.label}</span>}
+                            </Link>
+                          );
+                        })}
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

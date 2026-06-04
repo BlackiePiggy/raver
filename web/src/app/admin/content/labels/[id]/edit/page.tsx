@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import LabelStudioForm from '@/components/admin/LabelStudioForm';
 import {
   createLabelStudioDraft,
@@ -20,6 +21,7 @@ export default function AdminContentLabelEditPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [savedLabelId, setSavedLabelId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!labelId) {
@@ -29,6 +31,7 @@ export default function AdminContentLabelEditPage() {
     }
 
     let cancelled = false;
+
     const load = async () => {
       try {
         setLoading(true);
@@ -36,6 +39,7 @@ export default function AdminContentLabelEditPage() {
         const label = await labelStudioApi.fetchLabel(labelId);
         if (cancelled) return;
         setDraft(hydrateLabelStudioDraftFromLabel(label));
+        setSavedLabelId(labelId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载厂牌失败');
@@ -43,7 +47,9 @@ export default function AdminContentLabelEditPage() {
         if (!cancelled) setLoading(false);
       }
     };
+
     void load();
+
     return () => {
       cancelled = true;
     };
@@ -51,24 +57,40 @@ export default function AdminContentLabelEditPage() {
 
   const handleSubmitResult = (result: LabelStudioCreateResult) => {
     setNotice(`厂牌已保存：${result.label.name}`);
+    setSavedLabelId(result.label.id);
   };
 
   return (
     <AdminContentLayout
       title={draft.name || '编辑厂牌'}
-      description="编辑态会回填当前厂牌视觉、简介和外链信息，适合做持续修订与补全。"
+      description="编辑厂牌资料后，可以直接决定这次变更是否进入统一通知发布链路。未当场处理的内容，也会进入通知中心待处理候选项。"
       actions={
         <>
-          <Link href="/admin/content/labels" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+          <Link
+            href="/admin/content/labels"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+          >
             返回厂牌目录
           </Link>
-          <Link href="/admin/content/labels/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+          <Link
+            href="/admin/content/labels/new"
+            className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
+          >
             新建厂牌
           </Link>
         </>
       }
     >
       {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
+
+      {savedLabelId && !loading && !error ? (
+        <AdminPublishTaskActions
+          taskType="brand_release"
+          entityType="label"
+          entityId={savedLabelId}
+          mode="edit"
+        />
+      ) : null}
 
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">正在加载厂牌详情...</section>

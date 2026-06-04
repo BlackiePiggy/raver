@@ -153,7 +153,11 @@ export type NotificationCenterDeliverySection =
   | 'moderation_and_system'
   | 'other';
 
-export type NotificationAdminPublishTaskType = 'news_release' | 'event_release';
+export type NotificationAdminPublishTaskType =
+  | 'news_release'
+  | 'event_release'
+  | 'dj_release'
+  | 'brand_release';
 export type NotificationAdminPublishTaskStatus = 'pending' | 'published' | 'rejected';
 
 export interface NotificationAdminPublishAudienceSummary {
