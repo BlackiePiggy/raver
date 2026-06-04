@@ -1,9 +1,10 @@
 ﻿'use client';
 
+import { countries, getCountryCode, getEmojiFlag } from 'countries-list';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
@@ -11,6 +12,7 @@ import {
   organizerCatalogApi,
   OrganizerCatalogItem,
   OrganizerCatalogPagination,
+  type OrganizerCatalogSortBy,
 } from '@/features/admin-content/organizer-catalog/api';
 import { organizerStudioApi } from '@/features/admin-content/organizer-studio/api';
 import type {
@@ -31,6 +33,14 @@ const EMPTY_PAGINATION: OrganizerCatalogPagination = {
 
 const RELATED_EVENTS_LIMIT = 10;
 const RELATED_POSTS_LIMIT = 10;
+const ORGANIZER_SORT_OPTIONS: Array<{ value: OrganizerCatalogSortBy; label: string }> = [
+  { value: 'updatedAtDesc', label: '最新更新' },
+  { value: 'updatedAtAsc', label: '最早更新' },
+  { value: 'createdAtDesc', label: '最新创建' },
+  { value: 'createdAtAsc', label: '最早创建' },
+  { value: 'nameAsc', label: '名称 A-Z' },
+  { value: 'nameDesc', label: '名称 Z-A' },
+];
 
 type OrganizerTabKey = 'info' | 'events' | 'posts';
 
@@ -114,7 +124,16 @@ const sortedAssets = <T extends { sort?: number | null; order?: number | null }>
     ? [...items].sort((left, right) => (left.sort ?? left.order ?? 0) - (right.sort ?? right.order ?? 0))
     : [];
 
+const normalizeAssetType = (value?: string | null): string => String(value || '').trim().toLowerCase();
+
 const resolvePrimaryVisual = (item: OrganizerCatalogItem): string | null => item.avatarUrl || item.backgroundUrl || null;
+
+const resolveCountryLabel = (country?: string | null): string => {
+  if (!country || country === 'all') return '全部国家';
+  const code = getCountryCode(country);
+  const flag = code ? getEmojiFlag(code) : '';
+  return flag ? `${flag} ${country}` : country;
+};
 
 const formatDateOnly = (value?: string | null): string => {
   if (!value) return '日期未记录';
@@ -302,40 +321,57 @@ function OrganizerDetailOverlay({
     item.tagline
   );
   const imageAssets = sortedAssets(resolved?.imageAssets);
-  const heroImage = resolved?.avatarUrl || item.avatarUrl || resolved?.backgroundUrl || item.backgroundUrl || imageAssets[0]?.url || '';
+  const backgroundImage = resolved?.backgroundUrl || item.backgroundUrl || '';
+  const avatarImage = resolved?.avatarUrl || item.avatarUrl || '';
+  const backgroundAsset = imageAssets.find((asset) => normalizeAssetType(asset.type) === 'background' && asset.url);
+  const avatarAsset = imageAssets.find((asset) => normalizeAssetType(asset.type) === 'avatar' && asset.url);
+  const heroImage =
+    backgroundImage ||
+    backgroundAsset?.url ||
+    imageAssets.find((asset) => asset.url && normalizeAssetType(asset.type) !== 'avatar')?.url ||
+    avatarImage ||
+    avatarAsset?.url ||
+    imageAssets[0]?.url ||
+    '';
   const links = resolved?.links || [];
   const aliases = compactList(resolved?.aliases);
   const contributors = compactList(resolved?.aliases);
-  const previewAssets: OverlayImageViewerAsset[] = [
-    ...(resolved?.backgroundUrl || item.backgroundUrl
-      ? [
-          {
-            url: resolved?.backgroundUrl || item.backgroundUrl || '',
-            alt: `${primaryName} banner`,
-            title: 'Banner',
-            subtitle: 'Organizer background',
-          },
-        ]
-      : []),
-    ...(resolved?.avatarUrl || item.avatarUrl
-      ? [
-          {
-            url: resolved?.avatarUrl || item.avatarUrl || '',
-            alt: `${primaryName} avatar`,
-            title: 'Avatar',
-            subtitle: 'Organizer avatar',
-          },
-        ]
-      : []),
-    ...imageAssets
-      .filter((asset) => asset.url)
-      .map((asset) => ({
-        url: asset.url,
-        alt: asset.label || asset.fileName || asset.type || primaryName,
-        title: asset.label || asset.fileName || asset.type || 'Asset',
-        subtitle: asset.type || 'Organizer asset',
-      })),
-  ];
+  const previewSeen = new Set<string>();
+  const previewAssets: OverlayImageViewerAsset[] = [];
+  const pushPreviewAsset = (asset: OverlayImageViewerAsset | null) => {
+    if (!asset?.url || previewSeen.has(asset.url)) return;
+    previewSeen.add(asset.url);
+    previewAssets.push(asset);
+  };
+
+  pushPreviewAsset(
+    backgroundImage
+      ? {
+          url: backgroundImage,
+          alt: `${primaryName} banner`,
+          title: 'Banner',
+          subtitle: 'Organizer background',
+        }
+      : null
+  );
+  pushPreviewAsset(
+    avatarImage
+      ? {
+          url: avatarImage,
+          alt: `${primaryName} avatar`,
+          title: 'Avatar',
+          subtitle: 'Organizer avatar',
+        }
+      : null
+  );
+  imageAssets.forEach((asset) => {
+    pushPreviewAsset({
+      url: asset.url,
+      alt: asset.label || asset.fileName || asset.type || primaryName,
+      title: asset.label || asset.fileName || asset.type || 'Asset',
+      subtitle: asset.type || 'Organizer asset',
+    });
+  });
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
@@ -369,7 +405,7 @@ function OrganizerDetailOverlay({
               }}
               className="block w-full overflow-hidden rounded-[24px] border border-[#dfe7e2] bg-[#e7ece9] text-left"
             >
-              <div className="relative aspect-[1.25/1]">
+              <div className="relative aspect-[1.42/1]">
                 {heroImage ? (
                   <Image src={heroImage} alt={primaryName} fill className="object-cover" sizes="900px" />
                 ) : (
@@ -665,6 +701,8 @@ function OrganizerDetailOverlay({
 export default function OrganizerCatalogPageClient() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [country, setCountry] = useState('all');
+  const [sortBy, setSortBy] = useState<OrganizerCatalogSortBy>('updatedAtDesc');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<OrganizerCatalogItem[]>([]);
   const [pagination, setPagination] = useState<OrganizerCatalogPagination>(EMPTY_PAGINATION);
@@ -679,6 +717,15 @@ export default function OrganizerCatalogPageClient() {
   const [pendingDeleteOrganizer, setPendingDeleteOrganizer] = useState<OrganizerCatalogItem | null>(null);
   const [deletingOrganizerId, setDeletingOrganizerId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const countryOptions = useMemo(
+    () =>
+      Object.values(countries)
+        .map((item) => item.name)
+        .sort((left, right) => left.localeCompare(right, 'en')),
+    []
+  );
+  const selectedSortLabel =
+    ORGANIZER_SORT_OPTIONS.find((item) => item.value === sortBy)?.label || '最新更新';
 
   const loadCatalog = useCallback(async () => {
     try {
@@ -688,6 +735,8 @@ export default function OrganizerCatalogPageClient() {
         page,
         limit: PAGE_SIZE,
         search: search || undefined,
+        country: country === 'all' ? undefined : country,
+        sortBy,
       });
       setItems(response.items);
       setPagination(response.pagination);
@@ -696,7 +745,7 @@ export default function OrganizerCatalogPageClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, search]);
+  }, [country, page, search, sortBy]);
 
   useEffect(() => {
     void loadCatalog();
@@ -734,6 +783,8 @@ export default function OrganizerCatalogPageClient() {
   const handleReset = () => {
     setSearchInput('');
     setSearch('');
+    setCountry('all');
+    setSortBy('updatedAtDesc');
     setPage(1);
   };
 
@@ -812,7 +863,6 @@ export default function OrganizerCatalogPageClient() {
     <AdminContentLayout
       title="主办方目录中心"
       eyebrow="Admin / Content Workspace / Organizer Catalog"
-      description="统一查看主办方目录、资料摘要、绑定入口与编辑入口。目录层保持轻量检索，深入修改时再进入详细页面。"
       actions={
         <>
           <Link
@@ -834,63 +884,81 @@ export default function OrganizerCatalogPageClient() {
         </>
       }
     >
-      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
-        <div className="admin-reference-card p-5">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Catalog Scope</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录、编辑、绑定统一入口</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {[
-              { title: '目录定位', body: '优先承接名称、地区、视觉和链接的全量检索定位能力。', tone: 'bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)]' },
-              { title: '编辑主链路', body: '进入编辑页后继续沿用既有 Organizer Studio 的创建与编辑链路。', tone: 'bg-[linear-gradient(180deg,#f7efda_0%,#ffffff_100%)]' },
-              { title: '绑定中心', body: '活动绑定关系继续通过后台统一绑定中心处理。', tone: 'bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)]' },
-            ].map((card) => (
-              <div key={card.title} className={`admin-reference-pastel-card p-3.5 ${card.tone}`}>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{card.title}</div>
-                <div className="mt-3 text-sm leading-6 text-[#24312d]">{card.body}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-5">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-black/35">Catalog Snapshot</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">目录概览</h2>
-          <div className="mt-4 space-y-2 text-sm leading-6 text-black/55">
-            <p>当前页：{pagination.page} / {pagination.totalPages}</p>
-            <p>目录总量：{pagination.total.toLocaleString()} 个主办方</p>
-            <p>当前策略：目录先轻量定位，深入修改再进入编辑页。</p>
-            <p>当前目标：让 Organizer Catalog / New / Edit 成为统一后台内可直接使用的主链路。</p>
-          </div>
-        </div>
-      </section>
-
       <section className="overflow-hidden rounded-[28px] border border-[#edf0f2] bg-white p-5 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <form onSubmit={handleSearchSubmit} className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_auto]">
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-black/35">搜索关键词</span>
-              <AdminSearchField
-                value={searchInput}
-                onChange={setSearchInput}
-                placeholder="主办方名称 / 别名 / 城市 / 国家 / 官方链接"
-                size="md"
-                className="w-full"
-                submitLabel="搜索目录"
-                submitButtonType="submit"
-                onClear={handleReset}
-              />
+        <div className="flex flex-col gap-4">
+          <form onSubmit={handleSearchSubmit} className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            <AdminSearchField
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="主办方名称 / 别名 / 城市 / 国家 / 官方链接"
+              size="md"
+              className="min-w-0 flex-1"
+              submitLabel="搜索目录"
+              submitButtonType="submit"
+              onClear={handleReset}
+            />
+
+            <label className="relative flex h-[48px] min-w-[154px] items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827] xl:w-[190px]">
+              <span>{resolveCountryLabel(country)}</span>
+              <select
+                value={country}
+                onChange={(event) => {
+                  setCountry(event.target.value);
+                  setPage(1);
+                }}
+                className="absolute inset-0 opacity-0"
+              >
+                <option value="all">全部国家</option>
+                {countryOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
             </label>
+
+            <label className="relative flex h-[48px] min-w-[154px] items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827] xl:w-[190px]">
+              <span>{selectedSortLabel}</span>
+              <select
+                value={sortBy}
+                onChange={(event) => {
+                  setSortBy(event.target.value as OrganizerCatalogSortBy);
+                  setPage(1);
+                }}
+                className="absolute inset-0 opacity-0"
+              >
+                {ORGANIZER_SORT_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
+            </label>
+
             <button
               type="button"
               onClick={handleReset}
-              className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+              className="inline-flex h-[48px] items-center justify-center rounded-full border border-[#e8eceb] bg-white px-5 text-sm font-semibold text-[#071110] xl:min-w-[112px]"
             >
               清空筛选
             </button>
           </form>
 
-          <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 text-sm leading-6 text-black/50 xl:max-w-[360px]">
-            当前目录中心直接对齐 `/v1/learn/festivals`，不再依赖旧 Brand 页面作为查找入口。
+          <div className="flex flex-wrap items-center gap-0 divide-x divide-[#edf0f2]">
+            <div className="pr-7 text-sm text-[#6b7280]">
+              共 <span className="font-semibold text-[#111827]">{pagination.total.toLocaleString()}</span> 个主办方
+            </div>
+            <div className="px-7 text-sm text-[#6b7280]">
+              当前页 <span className="font-semibold text-[#111827]">{pagination.page}</span> / {Math.max(1, pagination.totalPages)}
+            </div>
+            <div className="px-7 text-sm text-[#6b7280]">
+              国家筛选 <span className="font-semibold text-[#111827]">{resolveCountryLabel(country)}</span>
+            </div>
+            <div className="pl-7 text-sm text-[#6b7280]">
+              排序 <span className="font-semibold text-[#111827]">{selectedSortLabel}</span>
+            </div>
           </div>
         </div>
       </section>

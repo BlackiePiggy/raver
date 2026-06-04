@@ -6,7 +6,7 @@ import AdminAppShell from '@/components/admin/AdminAppShell';
 type AdminContentLayoutProps = {
   title: string;
   eyebrow?: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
   children: ReactNode;
 };

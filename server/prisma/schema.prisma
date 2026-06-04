@@ -2507,6 +2507,28 @@ model NotificationAdminConfig {
   @@map("notification_admin_configs")
 }
 
+model NotificationAdminPublishTask {
+  id         String    @id @default(uuid())
+  taskType   String    @map("task_type")
+  entityType String    @map("entity_type")
+  entityId   String    @map("entity_id")
+  status     String    @default("pending")
+  title      String
+  summary    String?   @db.Text
+  payload    Json
+  decision   Json?
+  createdBy  String?   @map("created_by")
+  decidedBy  String?   @map("decided_by")
+  decidedAt  DateTime? @map("decided_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@unique([taskType, entityType, entityId])
+  @@index([status, createdAt])
+  @@index([taskType, status, updatedAt])
+  @@map("notification_admin_publish_tasks")
+}
+
 model OpenIMSyncJob {
   id          String    @id @default(uuid())
   dedupeKey   String    @unique @map("dedupe_key")

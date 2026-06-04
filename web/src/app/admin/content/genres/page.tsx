@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ChevronDown, ChevronRight, Languages, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import EntityBindingField from '@/components/admin/EntityBindingField';
+import EditableEntityBindingCard from '@/components/admin/EditableEntityBindingCard';
 import {
   MultilingualEditorOverlay,
   type LocalizedLocaleKey,
@@ -436,54 +436,40 @@ export default function AdminGenresPage() {
                         : null;
 
                       return (
-                        <div key={item.id} className="rounded-[18px] border border-[#e8eceb] bg-white p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-semibold text-[#111827]">Key Artist #{index + 1}</div>
-                            <button
-                              type="button"
-                              className="rounded-full border border-[#ead6d6] bg-white p-2 text-[#8b3a3a]"
-                              onClick={() => removeKeyArtistDraft(item.id)}
-                              aria-label="Delete key artist"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-
-                          <input
-                            className="admin-reference-soft-card mt-3 w-full px-4 py-3 text-sm"
-                            placeholder="Artist name"
-                            value={item.name}
-                            onChange={(event) => updateKeyArtistDraft(item.id, { name: event.target.value })}
-                          />
-
-                          <div className="mt-3">
-                            <EntityBindingField
-                              kind="dj"
-                              mode="single"
-                              seedQuery={item.name}
-                              items={currentBinding ? [currentBinding] : []}
-                              title="Bound DJ"
-                              emptyLabel="This key artist is not linked to a DJ yet."
-                              onAdd={(value) =>
-                                updateKeyArtistDraft(item.id, {
-                                  djId: value.id,
-                                  dj: {
-                                    id: value.id,
-                                    name: value.name,
-                                    avatarUrl: value.imageUrl || null,
-                                    avatarMediumUrl: value.imageUrl || null,
-                                  },
-                                })
-                              }
-                              onRemove={() =>
-                                updateKeyArtistDraft(item.id, {
-                                  djId: null,
-                                  dj: null,
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
+                        <EditableEntityBindingCard
+                          key={item.id}
+                          header={`Key Artist #${index + 1}`}
+                          name={item.name}
+                          nameValue={item.name}
+                          namePlaceholder="Artist name"
+                          bindingKind="dj"
+                          binding={currentBinding}
+                          seedQuery={item.name}
+                          bindingTitle="Bound DJ"
+                          bindingEmptyLabel="This key artist is not linked to a DJ yet."
+                          confirmedMeta={null}
+                          boundLabel="Bound"
+                          unboundLabel="Unbound"
+                          onNameChange={(value) => updateKeyArtistDraft(item.id, { name: value })}
+                          onAddBinding={(value) =>
+                            updateKeyArtistDraft(item.id, {
+                              djId: value.id,
+                              dj: {
+                                id: value.id,
+                                name: value.name,
+                                avatarUrl: value.imageUrl || null,
+                                avatarMediumUrl: value.imageUrl || null,
+                              },
+                            })
+                          }
+                          onRemoveBinding={() =>
+                            updateKeyArtistDraft(item.id, {
+                              djId: null,
+                              dj: null,
+                            })
+                          }
+                          onDelete={() => removeKeyArtistDraft(item.id)}
+                        />
                       );
                     })}
 

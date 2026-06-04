@@ -1,16 +1,20 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { authAPI } from '@/lib/api/auth';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import { adminCatalogApi } from '@/features/admin-content/catalog/api';
+import { labelStudioApi } from '@/features/admin-content/label-studio/api';
+import { newsStudioApi } from '@/features/admin-content/news-studio/api';
 
-export type EntityBindingKind = 'dj' | 'festival' | 'event' | 'brand';
+export type EntityBindingKind = 'dj' | 'festival' | 'label' | 'event' | 'brand' | 'news' | 'user';
 
 export type EntityBindingValue = {
   id: string;
   name: string;
   subtitle?: string | null;
   imageUrl?: string | null;
+  entityType?: string | null;
 };
 
 type EntityBindingSearchProps = {
@@ -51,7 +55,7 @@ export default function EntityBindingSearch({
   const effectiveQuery = useMemo(() => query.trim() || seedQuery.trim(), [query, seedQuery]);
 
   const mapResults = async (keyword: string): Promise<SearchResultItem[]> => {
-    if (kind === 'festival' || kind === 'brand') {
+    if (kind === 'festival') {
       const items = await eventStudioApi.searchOrganizers(keyword);
       return items.map((item) => ({
         id: item.id,
@@ -59,7 +63,54 @@ export default function EntityBindingSearch({
         subtitle: [item.city, item.country].filter(Boolean).join(', ') || null,
         imageUrl: item.avatarUrl || item.backgroundUrl || null,
         note: item.tagline || null,
+        entityType: 'festival',
       }));
+    }
+
+    if (kind === 'label') {
+      const labels = await labelStudioApi.listLabels(1, 8, keyword, 'name', 'asc');
+      return labels.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        subtitle: item.nation || null,
+        imageUrl: item.avatarUrl || item.backgroundUrl || null,
+        note: item.genresPreview || null,
+        entityType: 'label',
+      }));
+    }
+
+    if (kind === 'brand') {
+      const [festivals, labels] = await Promise.all([
+        eventStudioApi.searchOrganizers(keyword),
+        labelStudioApi.listLabels(1, 8, keyword, 'name', 'asc'),
+      ]);
+
+      const merged = new Map<string, SearchResultItem>();
+
+      for (const item of festivals) {
+        merged.set(item.id, {
+          id: item.id,
+          name: item.name,
+          subtitle: [item.city, item.country].filter(Boolean).join(', ') || null,
+          imageUrl: item.avatarUrl || item.backgroundUrl || null,
+          note: item.tagline || null,
+          entityType: 'festival',
+        });
+      }
+
+      for (const item of labels.items) {
+        if (merged.has(item.id)) continue;
+        merged.set(item.id, {
+          id: item.id,
+          name: item.name,
+          subtitle: item.nation || null,
+          imageUrl: item.avatarUrl || item.backgroundUrl || null,
+          note: item.genresPreview || null,
+          entityType: 'label',
+        });
+      }
+
+      return Array.from(merged.values());
     }
 
     if (kind === 'event') {
@@ -75,6 +126,31 @@ export default function EntityBindingSearch({
         subtitle: [item.city, item.country].filter(Boolean).join(', ') || null,
         imageUrl: item.coverImageUrl || null,
         note: [item.status, item.eventType].filter(Boolean).join(' / ') || null,
+        entityType: 'event',
+      }));
+    }
+
+    if (kind === 'news') {
+      const response = await newsStudioApi.searchNews(keyword, 8);
+      return response.map((item) => ({
+        id: item.id,
+        name: item.title,
+        subtitle: [item.source, item.category].filter(Boolean).join(' / ') || null,
+        imageUrl: item.coverImageURL || null,
+        note: item.summary || null,
+        entityType: 'news',
+      }));
+    }
+
+    if (kind === 'user') {
+      const response = await authAPI.searchUsers(keyword);
+      return response.map((item) => ({
+        id: item.id,
+        name: item.displayName?.trim() || item.username,
+        subtitle: item.displayName?.trim() ? `@${item.username}` : null,
+        imageUrl: item.avatarUrl || null,
+        note: null,
+        entityType: 'user',
       }));
     }
 
@@ -91,6 +167,7 @@ export default function EntityBindingSearch({
         subtitle: item.aliases?.length ? item.aliases.join(' / ') : null,
         imageUrl: item.avatarUrl || item.avatarMediumUrl || item.avatarSmallUrl || null,
         note: 'Exact match',
+        entityType: 'dj',
       }));
 
     const loose = await eventStudioApi.searchDJs(keyword);
@@ -108,6 +185,7 @@ export default function EntityBindingSearch({
           subtitle: item.country || item.slug || null,
           imageUrl: item.avatarUrl || item.avatarMediumUrl || item.avatarSmallUrl || null,
           note: item.slug || null,
+          entityType: 'dj',
         });
       }
     }
@@ -194,10 +272,18 @@ export default function EntityBindingSearch({
           <input
             className="min-w-[180px] flex-1 rounded-[14px] border border-[#e8eceb] bg-white px-3 py-2 text-sm"
             placeholder={
-              kind === 'festival' || kind === 'brand'
-                ? 'Search organizer / festival brand'
+              kind === 'festival' || kind === 'brand' || kind === 'label'
+                ? kind === 'festival'
+                  ? 'Search organizer / festival'
+                  : kind === 'label'
+                    ? 'Search label'
+                    : 'Search organizer / label'
                 : kind === 'event'
                   ? 'Search event'
+                  : kind === 'news'
+                    ? 'Search news'
+                    : kind === 'user'
+                      ? 'Search user'
                   : 'Search DJ'
             }
             value={query}

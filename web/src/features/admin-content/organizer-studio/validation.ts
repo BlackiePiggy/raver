@@ -60,7 +60,7 @@ export const validateOrganizerStudioDraft = (
   }
 
   if (!hasAnyLink(draft) && draft.proofImages.length === 0) {
-    errors.links = '请至少填写一个官方链接，或上传证明图片';
+    errors.links = '请至少填写一个官方链接，或上传一张证明图片';
   } else if (hasInvalidLink(draft)) {
     errors.links = '存在链接格式不正确，请检查后再提交';
   }

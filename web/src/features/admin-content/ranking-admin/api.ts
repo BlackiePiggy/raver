@@ -63,6 +63,37 @@ export type RankingBoardDetail = {
   entries: RankingBoardDetailEntry[];
 };
 
+export type RankingAutoMatchCandidate = {
+  id: string;
+  name: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+};
+
+export type RankingAutoMatchStatus = 'already_bound' | 'matched' | 'ambiguous' | 'unmatched';
+
+export type RankingAutoMatchPreviewItem = {
+  rank: number;
+  name: string;
+  currentEntityId: string | null;
+  status: RankingAutoMatchStatus;
+  current?: RankingAutoMatchCandidate | null;
+  suggested?: RankingAutoMatchCandidate | null;
+  candidates: RankingAutoMatchCandidate[];
+};
+
+export type RankingAutoMatchPreview = {
+  boardId: string;
+  year: number;
+  entityType: RankingEntityType;
+  total: number;
+  alreadyBoundCount: number;
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  items: RankingAutoMatchPreviewItem[];
+};
+
 export type RankingBoardInput = {
   id?: string;
   title: string;
@@ -135,6 +166,23 @@ export const rankingAdminApi = {
       {
         method: 'POST',
         body: JSON.stringify(input),
+      }
+    );
+    return payload.data;
+  },
+
+  async previewAutoMatch(boardId: string, year: number): Promise<RankingAutoMatchPreview> {
+    const payload = await authenticatedJsonFetch<Envelope<RankingAutoMatchPreview>>(
+      getApiUrl(`/v1/learn/rankings/${encodeURIComponent(boardId)}/years/${encodeURIComponent(String(year))}/auto-match-preview`)
+    );
+    return payload.data;
+  },
+
+  async applyAutoMatch(boardId: string, year: number): Promise<RankingAutoMatchPreview> {
+    const payload = await authenticatedJsonFetch<Envelope<RankingAutoMatchPreview>>(
+      getApiUrl(`/v1/learn/rankings/${encodeURIComponent(boardId)}/years/${encodeURIComponent(String(year))}/auto-match-apply`),
+      {
+        method: 'POST',
       }
     );
     return payload.data;

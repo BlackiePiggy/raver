@@ -19,7 +19,7 @@ import AdminSearchField from '@/components/admin/AdminSearchField';
 
 type AdminAppShellProps = {
   title: string;
-  description: string;
+  description?: string;
   eyebrow?: string;
   actions?: ReactNode;
   children: ReactNode;
@@ -252,7 +252,7 @@ function Topbar({
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-black/35">{eyebrow || 'Raver Admin'}</p>
           <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em] text-[#071110]">{title}</h1>
-          <p className="mt-3 max-w-3xl text-[14px] leading-7 text-black/48">{description}</p>
+          {description ? <p className="mt-3 max-w-3xl text-[14px] leading-7 text-black/48">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
       </div>

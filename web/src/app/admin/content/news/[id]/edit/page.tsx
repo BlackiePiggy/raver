@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import NewsStudioForm from '@/components/admin/NewsStudioForm';
 import {
   createNewsStudioDraft,
@@ -20,6 +21,7 @@ export default function AdminContentNewsEditPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [savedNewsId, setSavedNewsId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!newsId) {
@@ -36,6 +38,7 @@ export default function AdminContentNewsEditPage() {
         const article = await newsStudioApi.fetchNews(newsId);
         if (cancelled) return;
         setDraft(hydrateNewsStudioDraftFromArticle(article));
+        setSavedNewsId(newsId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载资讯失败。');
@@ -52,24 +55,40 @@ export default function AdminContentNewsEditPage() {
 
   const handleSubmitResult = (result: NewsStudioCreateResult) => {
     setNotice(`资讯已保存：${result.article.title}`);
+    setSavedNewsId(result.article.id);
   };
 
   return (
     <AdminContentLayout
       title={draft.title || '编辑资讯'}
-      description="回填当前资讯的正文、摘要、媒体资源和绑定关系，适合快速修正文案与关联对象。"
+      description="回填当前资讯的正文、摘要、媒体资源和绑定关系，保存后可按需要决定是否发送用户通知。"
       actions={
         <>
-          <Link href="/admin/content/news" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
+          <Link
+            href="/admin/content/news"
+            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
+          >
             返回资讯目录
           </Link>
-          <Link href="/admin/content/news/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+          <Link
+            href="/admin/content/news/new"
+            className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
+          >
             新建资讯
           </Link>
         </>
       }
     >
       {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
+
+      {savedNewsId && !loading && !error ? (
+        <AdminPublishTaskActions
+          taskType="news_release"
+          entityType="news_article"
+          entityId={savedNewsId}
+          mode="edit"
+        />
+      ) : null}
 
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">正在加载资讯详情...</section>

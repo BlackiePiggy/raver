@@ -18,6 +18,10 @@ type NewsListResponse = {
 };
 
 export type NewsStudioListSort = 'newest' | 'oldest';
+export type NewsStudioSearchItem = Pick<
+  NewsStudioLoadedArticle,
+  'id' | 'title' | 'summary' | 'source' | 'category' | 'coverImageURL' | 'publishedAt'
+>;
 
 export type NewsStudioListFilters = {
   page?: number;
@@ -69,6 +73,17 @@ export const newsStudioApi = {
 
   async fetchNews(id: string): Promise<NewsStudioLoadedArticle> {
     return authenticatedJsonFetch<NewsStudioLoadedArticle>(getApiUrl(`/v1/news/${id}`));
+  },
+
+  async searchNews(query: string, limit = 8): Promise<NewsStudioSearchItem[]> {
+    const params = new URLSearchParams({
+      q: query.trim(),
+      limit: String(limit),
+    });
+    const response = await authenticatedJsonFetch<{ items?: NewsStudioSearchItem[] }>(
+      getApiUrl(`/v1/news/search?${params.toString()}`)
+    );
+    return Array.isArray(response.items) ? response.items : [];
   },
 
   async createNews(input: NewsStudioCreateInput): Promise<NewsStudioCreateResult> {

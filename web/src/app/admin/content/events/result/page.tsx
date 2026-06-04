@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import {
   resolveEventStudioSubmitResultContent,
   type EventStudioSubmitFlow,
@@ -71,6 +72,15 @@ function EventResultContent() {
           </div>
         </div>
       </section>
+
+      {eventId && outcome === 'created' ? (
+        <AdminPublishTaskActions
+          taskType="event_release"
+          entityType="event"
+          entityId={eventId}
+          mode={flow === 'create' ? 'create' : 'edit'}
+        />
+      ) : null}
     </AdminContentLayout>
   );
 }

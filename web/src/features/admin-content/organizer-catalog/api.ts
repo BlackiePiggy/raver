@@ -40,6 +40,14 @@ export type OrganizerCatalogResponse = {
   pagination: OrganizerCatalogPagination;
 };
 
+export type OrganizerCatalogSortBy =
+  | 'updatedAtDesc'
+  | 'updatedAtAsc'
+  | 'createdAtDesc'
+  | 'createdAtAsc'
+  | 'nameAsc'
+  | 'nameDesc';
+
 const buildQuery = (params: Record<string, string | number | undefined>): string => {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -54,11 +62,15 @@ export const organizerCatalogApi = {
     page: number;
     limit: number;
     search?: string;
+    country?: string;
+    sortBy?: OrganizerCatalogSortBy;
   }): Promise<OrganizerCatalogResponse> {
     const query = buildQuery({
       page: input.page,
       limit: input.limit,
       search: input.search?.trim() || undefined,
+      country: input.country?.trim() || undefined,
+      sortBy: input.sortBy || undefined,
     });
 
     const response = await authenticatedJsonFetch<{

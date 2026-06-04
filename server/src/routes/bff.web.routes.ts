@@ -7639,6 +7639,37 @@ type RankingYearRecord = {
   entries: RankingEntryRecord[];
 };
 
+type RankingMatchCandidate = {
+  id: string;
+  name: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+};
+
+type RankingAutoMatchStatus = 'already_bound' | 'matched' | 'ambiguous' | 'unmatched';
+
+type RankingAutoMatchPreviewItem = {
+  rank: number;
+  name: string;
+  currentEntityId: string | null;
+  status: RankingAutoMatchStatus;
+  current?: RankingMatchCandidate | null;
+  suggested?: RankingMatchCandidate | null;
+  candidates: RankingMatchCandidate[];
+};
+
+type RankingAutoMatchPreview = {
+  boardId: string;
+  year: number;
+  entityType: RankingEntityType;
+  total: number;
+  alreadyBoundCount: number;
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  items: RankingAutoMatchPreviewItem[];
+};
+
 const sanitizeRankingBoardId = (value: string): string => {
   const normalized = String(value || '')
     .trim()
@@ -7949,6 +7980,206 @@ const saveRankingYearData = async (
       name: entry.name,
       entityId: entry.entityId || null,
     })),
+  };
+};
+
+const buildRankingAutoMatchPreview = async (
+  board: RankingBoardRecord,
+  yearData: RankingYearRecord
+): Promise<RankingAutoMatchPreview> => {
+  if (board.entityType === 'festival') {
+    const festivals = await prisma.wikiFestival.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        nameI18n: true,
+        aliases: true,
+        avatarUrl: true,
+        backgroundUrl: true,
+        country: true,
+        city: true,
+        tagline: true,
+      },
+    });
+
+    const byId = new Map<string, RankingMatchCandidate>();
+    const lookup = new Map<string, RankingMatchCandidate[]>();
+    const addLookup = (key: string, candidate: RankingMatchCandidate) => {
+      if (!key) return;
+      const current = lookup.get(key) ?? [];
+      if (!current.some((item) => item.id === candidate.id)) current.push(candidate);
+      lookup.set(key, current);
+    };
+
+    for (const festival of festivals) {
+      const candidate: RankingMatchCandidate = {
+        id: festival.id,
+        name: festival.name,
+        subtitle: [festival.city, festival.country].filter(Boolean).join(', ') || festival.tagline || null,
+        imageUrl: festival.avatarUrl || festival.backgroundUrl || null,
+      };
+      byId.set(candidate.id, candidate);
+      addLookup(normalizeName(festival.name), candidate);
+      const nameI18n = resolveBiTextWithFallback(festival.nameI18n ?? null, festival.name ?? '');
+      if (nameI18n?.zh) addLookup(normalizeName(nameI18n.zh), candidate);
+      if (nameI18n?.en) addLookup(normalizeName(nameI18n.en), candidate);
+      for (const alias of Array.isArray(festival.aliases) ? festival.aliases : []) {
+        addLookup(normalizeName(alias), candidate);
+      }
+    }
+
+    const items = yearData.entries.map<RankingAutoMatchPreviewItem>((entry) => {
+      const current = entry.entityId ? byId.get(entry.entityId) ?? null : null;
+      if (current) {
+        return {
+          rank: entry.rank,
+          name: entry.name,
+          currentEntityId: entry.entityId || null,
+          status: 'already_bound',
+          current,
+          suggested: current,
+          candidates: [current],
+        };
+      }
+      const candidates = lookup.get(normalizeName(entry.name)) ?? [];
+      if (candidates.length === 1) {
+        return {
+          rank: entry.rank,
+          name: entry.name,
+          currentEntityId: entry.entityId || null,
+          status: 'matched',
+          current: null,
+          suggested: candidates[0],
+          candidates,
+        };
+      }
+      if (candidates.length > 1) {
+        return {
+          rank: entry.rank,
+          name: entry.name,
+          currentEntityId: entry.entityId || null,
+          status: 'ambiguous',
+          current: null,
+          suggested: null,
+          candidates,
+        };
+      }
+      return {
+        rank: entry.rank,
+        name: entry.name,
+        currentEntityId: entry.entityId || null,
+        status: 'unmatched',
+        current: null,
+        suggested: null,
+        candidates: [],
+      };
+    });
+
+    return {
+      boardId: board.id,
+      year: yearData.year,
+      entityType: board.entityType,
+      total: items.length,
+      alreadyBoundCount: items.filter((item) => item.status === 'already_bound').length,
+      matchedCount: items.filter((item) => item.status === 'matched').length,
+      ambiguousCount: items.filter((item) => item.status === 'ambiguous').length,
+      unmatchedCount: items.filter((item) => item.status === 'unmatched').length,
+      items,
+    };
+  }
+
+  const djs = await prisma.dJ.findMany({
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      avatarUrl: true,
+      bannerUrl: true,
+      country: true,
+      aliases: true,
+    },
+  });
+  const byId = new Map<string, RankingMatchCandidate>();
+  const lookup = new Map<string, RankingMatchCandidate[]>();
+  const addLookup = (key: string, candidate: RankingMatchCandidate) => {
+    if (!key) return;
+    const current = lookup.get(key) ?? [];
+    if (!current.some((item) => item.id === candidate.id)) current.push(candidate);
+    lookup.set(key, current);
+  };
+
+  for (const dj of djs) {
+    const candidate: RankingMatchCandidate = {
+      id: dj.id,
+      name: dj.name,
+      subtitle: dj.country || dj.slug || null,
+      imageUrl: dj.avatarUrl || dj.bannerUrl || null,
+    };
+    byId.set(candidate.id, candidate);
+    addLookup(normalizeName(dj.name), candidate);
+    for (const alias of Array.isArray(dj.aliases) ? dj.aliases : []) {
+      addLookup(normalizeName(alias), candidate);
+    }
+  }
+
+  const items = yearData.entries.map<RankingAutoMatchPreviewItem>((entry) => {
+    const current = entry.entityId ? byId.get(entry.entityId) ?? null : null;
+    if (current) {
+      return {
+        rank: entry.rank,
+        name: entry.name,
+        currentEntityId: entry.entityId || null,
+        status: 'already_bound',
+        current,
+        suggested: current,
+        candidates: [current],
+      };
+    }
+    const candidates = lookup.get(normalizeName(entry.name)) ?? [];
+    if (candidates.length === 1) {
+      return {
+        rank: entry.rank,
+        name: entry.name,
+        currentEntityId: entry.entityId || null,
+        status: 'matched',
+        current: null,
+        suggested: candidates[0],
+        candidates,
+      };
+    }
+    if (candidates.length > 1) {
+      return {
+        rank: entry.rank,
+        name: entry.name,
+        currentEntityId: entry.entityId || null,
+        status: 'ambiguous',
+        current: null,
+        suggested: null,
+        candidates,
+      };
+    }
+    return {
+      rank: entry.rank,
+      name: entry.name,
+      currentEntityId: entry.entityId || null,
+      status: 'unmatched',
+      current: null,
+      suggested: null,
+      candidates: [],
+    };
+  });
+
+  return {
+    boardId: board.id,
+    year: yearData.year,
+    entityType: board.entityType,
+    total: items.length,
+    alreadyBoundCount: items.filter((item) => item.status === 'already_bound').length,
+    matchedCount: items.filter((item) => item.status === 'matched').length,
+    ambiguousCount: items.filter((item) => item.status === 'ambiguous').length,
+    unmatchedCount: items.filter((item) => item.status === 'unmatched').length,
+    items,
   };
 };
 
@@ -9989,6 +10220,10 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         payload: normalizedBody,
         idempotencyKey,
       });
+      await upsertEventReleasePublishTaskBestEffort({
+        actorUserId: userId,
+        event: applied.event,
+      });
       ok(res, applied.event);
       return;
     }
@@ -10098,6 +10333,10 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         title: submittedName,
         payload: normalizedBody,
         idempotencyKey,
+      });
+      await upsertEventReleasePublishTaskBestEffort({
+        actorUserId: userId,
+        event: applied.event,
       });
       ok(res, applied.event);
       return;
@@ -15836,6 +16075,69 @@ const uniqueGenreSlug = async (name: string, requestedSlug?: string, excludeId?:
   }
 };
 
+const upsertEventReleasePublishTaskBestEffort = async (input: {
+  actorUserId: string;
+  event: {
+    id: string;
+    name: string;
+    description?: string | null;
+    coverImageUrl?: string | null;
+    timeZone?: string | null;
+    startDate?: Date | string | null;
+    wikiFestivalId?: string | null;
+    lineupArtists?: Array<{
+      djId?: string | null;
+      memberDjIds?: Array<string | null>;
+    }> | null;
+  };
+}): Promise<void> => {
+  try {
+    const djIds = Array.from(
+      new Set(
+        (Array.isArray(input.event.lineupArtists) ? input.event.lineupArtists : []).flatMap((artist) => {
+          const primary = typeof artist?.djId === 'string' ? artist.djId.trim() : '';
+          const members = Array.isArray(artist?.memberDjIds)
+            ? artist.memberDjIds
+                .map((value) => (typeof value === 'string' ? value.trim() : ''))
+                .filter(Boolean)
+            : [];
+          return primary ? [primary, ...members] : members;
+        })
+      )
+    );
+
+    await notificationCenterService.upsertAdminPublishTask({
+      taskType: 'event_release',
+      entityType: 'event',
+      entityId: input.event.id,
+      title: input.event.name,
+      summary: (typeof input.event.description === 'string' && input.event.description.trim()) || input.event.name,
+      createdBy: input.actorUserId,
+      payload: {
+        eventId: input.event.id,
+        title: input.event.name,
+        summary:
+          (typeof input.event.description === 'string' && input.event.description.trim()) || input.event.name,
+        coverImageURL: input.event.coverImageUrl ?? null,
+        timeZone: input.event.timeZone ?? null,
+        startDate:
+          input.event.startDate instanceof Date
+            ? input.event.startDate.toISOString()
+            : typeof input.event.startDate === 'string'
+              ? input.event.startDate
+              : null,
+        wikiFestivalId: input.event.wikiFestivalId ?? null,
+        djIds,
+      },
+    });
+  } catch (error) {
+    console.warn('BFF web event publish task upsert failed:', {
+      eventId: input.event.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 const buildGenrePath = (parentPath: string | null, slug: string): string =>
   parentPath ? `${parentPath}/${slug}` : slug;
 
@@ -16699,8 +17001,27 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
     const limit = normalizeLimit(req.query.limit, 20, 100);
     const skip = (page - 1) * limit;
     const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
+    const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+    const sortByRaw = typeof req.query.sortBy === 'string' ? req.query.sortBy.trim() : 'updatedAtDesc';
+    const sortBy =
+      sortByRaw === 'nameAsc'
+      || sortByRaw === 'nameDesc'
+      || sortByRaw === 'createdAtAsc'
+      || sortByRaw === 'createdAtDesc'
+      || sortByRaw === 'updatedAtAsc'
+      || sortByRaw === 'updatedAtDesc'
+        ? sortByRaw
+        : 'updatedAtDesc';
     const where: Prisma.WikiFestivalWhereInput = {
       isActive: true,
+      ...(country
+        ? {
+            country: {
+              equals: country,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -16723,12 +17044,25 @@ router.get('/learn/festivals', optionalAuth, async (req: Request, res: Response)
         : {}),
     };
 
+    const orderBy: Prisma.WikiFestivalOrderByWithRelationInput[] =
+      sortBy === 'nameAsc'
+        ? [{ name: 'asc' }, { id: 'asc' }]
+        : sortBy === 'nameDesc'
+          ? [{ name: 'desc' }, { id: 'desc' }]
+          : sortBy === 'createdAtAsc'
+            ? [{ createdAt: 'asc' }, { id: 'asc' }]
+            : sortBy === 'createdAtDesc'
+              ? [{ createdAt: 'desc' }, { id: 'desc' }]
+              : sortBy === 'updatedAtAsc'
+                ? [{ updatedAt: 'asc' }, { id: 'asc' }]
+                : [{ updatedAt: 'desc' }, { id: 'desc' }];
+
     const [rows, total, followedBrandPreference] = await Promise.all([
       prisma.wikiFestival.findMany({
         where,
         skip,
         take: limit,
-        orderBy: [{ name: 'asc' }],
+        orderBy,
         select: learnFestivalListSelect,
       }),
       prisma.wikiFestival.count({ where }),
@@ -18021,6 +18355,94 @@ router.post('/learn/rankings/:boardId/years/:year/upsert', optionalAuth, async (
     });
   } catch (error) {
     console.error('BFF web upsert ranking year error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/learn/rankings/:boardId/years/:year/auto-match-preview', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const year = Number(req.params.year);
+    if (!Number.isFinite(year) || year < 1900 || year > 2200) {
+      res.status(400).json({ error: 'year is invalid' });
+      return;
+    }
+
+    const board = await loadRankingBoardById(boardId);
+    if (!board) {
+      res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+
+    const yearData = await loadRankingYearData(boardId, Math.floor(year));
+    if (!yearData) {
+      res.status(404).json({ error: 'Ranking year not found' });
+      return;
+    }
+
+    ok(res, await buildRankingAutoMatchPreview(board, yearData));
+  } catch (error) {
+    console.error('BFF web ranking auto match preview error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/rankings/:boardId/years/:year/auto-match-apply', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const boardId = sanitizeRankingBoardId(String(req.params.boardId ?? ''));
+    const year = Number(req.params.year);
+    if (!Number.isFinite(year) || year < 1900 || year > 2200) {
+      res.status(400).json({ error: 'year is invalid' });
+      return;
+    }
+
+    const board = await loadRankingBoardById(boardId);
+    if (!board) {
+      res.status(404).json({ error: 'Board not found' });
+      return;
+    }
+
+    const yearData = await loadRankingYearData(boardId, Math.floor(year));
+    if (!yearData) {
+      res.status(404).json({ error: 'Ranking year not found' });
+      return;
+    }
+
+    const preview = await buildRankingAutoMatchPreview(board, yearData);
+    const nextEntries = yearData.entries.map((entry) => {
+      const matched = preview.items.find((item) => item.rank === entry.rank);
+      if (matched?.status === 'matched' && matched.suggested?.id) {
+        return {
+          ...entry,
+          entityId: matched.suggested.id,
+        };
+      }
+      return entry;
+    });
+
+    await saveRankingYearData(boardId, Math.floor(year), nextEntries, 'auto_match_apply');
+    if (board.entityType === 'dj') {
+      const affectedIds = await collectAffectedDJIdsFromEntries([...yearData.entries, ...nextEntries]);
+      await syncDJHonorsForDJIds(affectedIds);
+    }
+
+    const savedYear = await loadRankingYearData(boardId, Math.floor(year));
+    if (!savedYear) {
+      res.status(500).json({ error: 'Ranking year could not be reloaded' });
+      return;
+    }
+
+    ok(res, await buildRankingAutoMatchPreview(board, savedYear));
+  } catch (error) {
+    console.error('BFF web ranking auto match apply error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -12,9 +12,13 @@ export type LocalizedTextValue = {
   enFull: string;
 };
 
-export const LOCALIZED_LOCALE_ITEMS: Array<{ key: LocalizedLocaleKey; label: string; hint: string }> = [
-  { key: 'zh', label: '中文', hint: '用于中文展示和搜索回填。' },
-  { key: 'en', label: 'English', hint: '用于英文展示和国际化回退。' },
+export const LOCALIZED_LOCALE_ITEMS: Array<{
+  key: LocalizedLocaleKey;
+  label: string;
+  hint: string;
+}> = [
+  { key: 'zh', label: '中文', hint: '用于中文展示与检索回填。' },
+  { key: 'en', label: 'English', hint: '用于英文展示与国际化回退。' },
   { key: 'ja', label: '日本語', hint: '用于日文展示。' },
   { key: 'enFull', label: 'English Full', hint: '可选，用于更完整的英文全称或地址。' },
 ];
@@ -55,9 +59,19 @@ export function LocalizedTextField({
       <div className="mb-2 admin-studio-label">{label}</div>
       <div className={`admin-localized-field-shell ${kind === 'textarea' ? 'is-textarea' : ''}`}>
         {kind === 'textarea' ? (
-          <textarea value={value.zh} onChange={(event) => onPrimaryChange(event.target.value)} className="admin-studio-textarea min-h-28" placeholder={placeholder} />
+          <textarea
+            value={value.zh}
+            onChange={(event) => onPrimaryChange(event.target.value)}
+            className="admin-studio-textarea min-h-28"
+            placeholder={placeholder}
+          />
         ) : (
-          <input value={value.zh} onChange={(event) => onPrimaryChange(event.target.value)} className="admin-studio-input" placeholder={placeholder} />
+          <input
+            value={value.zh}
+            onChange={(event) => onPrimaryChange(event.target.value)}
+            className="admin-studio-input"
+            placeholder={placeholder}
+          />
         )}
         <button
           type="button"
@@ -108,7 +122,12 @@ export function MultilingualEditorOverlay({
             <div className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">{title}</div>
             <div className="mt-2 text-sm leading-6 text-black/48">{description}</div>
           </div>
-          <button type="button" onClick={onClose} className="admin-localized-overlay-close" aria-label="关闭多语言编辑器">
+          <button
+            type="button"
+            onClick={onClose}
+            className="admin-localized-overlay-close"
+            aria-label="关闭多语言编辑器"
+          >
             <X className="h-4 w-4" strokeWidth={2.2} />
           </button>
         </div>
@@ -138,7 +157,9 @@ export function MultilingualEditorOverlay({
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-black/40">已填写语言：{localizedTextFilledLocaleLabels(value).join(' / ') || '暂无'}</div>
+          <div className="text-xs text-black/40">
+            已填写语言：{localizedTextFilledLocaleLabels(value).join(' / ') || '暂无'}
+          </div>
           <div className="flex flex-wrap gap-3">
             {onClear ? (
               <button type="button" onClick={onClear} className="admin-studio-button-secondary px-4 py-2 text-sm">

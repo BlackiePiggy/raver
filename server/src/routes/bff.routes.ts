@@ -6959,6 +6959,37 @@ const normalizeNewsDraft = (body: Record<string, unknown>) => {
   };
 };
 
+const upsertNewsReleasePublishTaskBestEffort = async (input: {
+  actorUserId: string;
+  article: ReturnType<typeof mapNewsArticle>;
+}): Promise<void> => {
+  try {
+    await notificationCenterService.upsertAdminPublishTask({
+      taskType: 'news_release',
+      entityType: 'news_article',
+      entityId: input.article.id,
+      title: input.article.title,
+      summary: input.article.summary || input.article.title,
+      createdBy: input.actorUserId,
+      payload: {
+        articleId: input.article.id,
+        title: input.article.title,
+        summary: input.article.summary || input.article.title,
+        coverImageURL: input.article.coverImageURL,
+        publishedAt: input.article.publishedAt,
+        boundEventIDs: input.article.boundEventIDs,
+        boundDjIDs: input.article.boundDjIDs,
+        boundBrandIDs: input.article.boundBrandIDs,
+      },
+    });
+  } catch (error) {
+    console.warn('BFF news publish task upsert failed:', {
+      articleId: input.article.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 router.get('/news/search', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const authReq = req as BFFAuthRequest;
@@ -7441,7 +7472,12 @@ router.post('/news', optionalAuth, async (req: Request, res: Response): Promise<
         include: { author: { select: selectNewsArticleAuthor }, ...includeNewsBindings },
       });
     });
-    res.status(201).json(mapNewsArticle(created));
+    const mappedArticle = mapNewsArticle(created);
+    await upsertNewsReleasePublishTaskBestEffort({
+      actorUserId: userId,
+      article: mappedArticle,
+    });
+    res.status(201).json(mappedArticle);
   } catch (error) {
     console.error('BFF create news article error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -7532,7 +7568,12 @@ router.patch('/news/:id', optionalAuth, async (req: Request, res: Response): Pro
       });
     });
 
-    res.json(mapNewsArticle(updated));
+    const mappedArticle = mapNewsArticle(updated);
+    await upsertNewsReleasePublishTaskBestEffort({
+      actorUserId: userId,
+      article: mappedArticle,
+    });
+    res.json(mappedArticle);
   } catch (error) {
     console.error('BFF update news article error:', error);
     res.status(500).json({ error: 'Internal server error' });

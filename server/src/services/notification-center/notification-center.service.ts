@@ -129,6 +129,20 @@ const toRate = (numerator: number, denominator: number): number => {
   return value;
 };
 
+const toPositiveSafeInteger = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === 'bigint') {
+    return Number(value > 0n ? value : 0n);
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+  }
+  return 0;
+};
+
 const NOTIFICATION_CATEGORIES = [
   'chat_message',
   'community_interaction',
@@ -144,6 +158,125 @@ const NOTIFICATION_CATEGORIES = [
 ] as const;
 
 type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+export const NOTIFICATION_ADMIN_DELIVERY_SECTIONS = [
+  'event_news',
+  'event_release',
+  'followed_dj_news',
+  'followed_dj_event',
+  'followed_brand_news',
+  'followed_brand_event',
+  'major_news_broadcast',
+  'event_schedule',
+  'chat_and_community',
+  'moderation_and_system',
+  'other',
+] as const;
+
+export type NotificationAdminDeliverySection = (typeof NOTIFICATION_ADMIN_DELIVERY_SECTIONS)[number];
+
+export const NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES = [
+  'news_release',
+  'event_release',
+] as const;
+
+export type NotificationAdminPublishTaskType = (typeof NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES)[number];
+export type NotificationAdminPublishTaskStatus = 'pending' | 'published' | 'rejected';
+
+export type NotificationAdminPublishTaskListItem = {
+  id: string;
+  taskType: NotificationAdminPublishTaskType;
+  entityType: string;
+  entityId: string;
+  status: NotificationAdminPublishTaskStatus;
+  title: string;
+  summary: string | null;
+  createdBy: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NotificationAdminPublishTaskRecord = NotificationAdminPublishTaskListItem & {
+  payload: unknown;
+  decision: unknown;
+};
+
+export type NotificationAdminPublishTaskPage = {
+  items: NotificationAdminPublishTaskListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type NotificationAdminDeliverySectionSummary = {
+  section: NotificationAdminDeliverySection;
+  total: number;
+  apnsCount: number;
+  inAppCount: number;
+  failedCount: number;
+  lastDeliveryAt: string | null;
+};
+
+export type NotificationAdminDeliveryListItem = {
+  id: string;
+  section: NotificationAdminDeliverySection;
+  eventId: string;
+  userId: string;
+  channel: NotificationChannel | string;
+  status: string;
+  error: string | null;
+  attempts: number;
+  deliveredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  payload: {
+    title: string | null;
+    body: string | null;
+    deeplink: string | null;
+  };
+  metadata: {
+    route: string | null;
+    source: string | null;
+    newsId: string | null;
+    newsTitle: string | null;
+    eventId: string | null;
+    eventName: string | null;
+    djId: string | null;
+    djName: string | null;
+    brandId: string | null;
+    brandName: string | null;
+    audience: string | null;
+  };
+  event: {
+    id: string;
+    category: string;
+    status: string;
+    dedupeKey: string | null;
+    createdAt: string;
+    dispatchedAt: string | null;
+  };
+  user: {
+    id: string;
+    username: string;
+    displayName: string | null;
+  };
+};
+
+export type NotificationAdminDeliveryPage = {
+  section: NotificationAdminDeliverySection;
+  items: NotificationAdminDeliveryListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 type NotificationRateLimitPolicy = {
   enabled: boolean;
   windowSeconds: number;
@@ -242,6 +375,86 @@ export type FollowedBrandUpdatePreference = {
 };
 
 const GLOBAL_CONFIG_KEY = 'global_policy';
+const NOTIFICATION_DELIVERY_SECTION_CASE_SQL = Prisma.sql`
+  CASE
+    WHEN e.category = 'major_news'
+      AND COALESCE(e.payload #>> '{metadata,route}', '') = 'event_update'
+      AND COALESCE(e.payload #>> '{metadata,primaryUpdateKind}', COALESCE(e.payload #>> '{metadata,updateKind}', '')) = 'news'
+      THEN 'event_news'
+    WHEN e.category = 'major_news'
+      AND COALESCE(e.payload #>> '{metadata,route}', '') = 'event_update'
+      AND COALESCE(e.payload #>> '{metadata,primaryUpdateKind}', COALESCE(e.payload #>> '{metadata,updateKind}', '')) = 'event'
+      THEN 'event_release'
+    WHEN e.category = 'followed_dj_update'
+      AND COALESCE(e.payload #>> '{metadata,primaryUpdateKind}', COALESCE(e.payload #>> '{metadata,updateKind}', '')) = 'news'
+      THEN 'followed_dj_news'
+    WHEN e.category = 'followed_dj_update'
+      AND COALESCE(e.payload #>> '{metadata,primaryUpdateKind}', COALESCE(e.payload #>> '{metadata,updateKind}', '')) = 'event'
+      THEN 'followed_dj_event'
+    WHEN e.category = 'followed_brand_update'
+      AND COALESCE(e.payload #>> '{metadata,primaryUpdateKind}', COALESCE(e.payload #>> '{metadata,updateKind}', '')) = 'news'
+      THEN 'followed_brand_news'
+    WHEN e.category = 'followed_brand_update'
+      AND COALESCE(e.payload #>> '{metadata,primaryUpdateKind}', COALESCE(e.payload #>> '{metadata,updateKind}', '')) = 'event'
+      THEN 'followed_brand_event'
+    WHEN e.category = 'major_news'
+      THEN 'major_news_broadcast'
+    WHEN e.category IN ('event_countdown', 'event_daily_digest', 'route_dj_reminder')
+      THEN 'event_schedule'
+    WHEN e.category IN ('chat_message', 'community_interaction')
+      THEN 'chat_and_community'
+    WHEN e.category IN ('content_review', 'report_decision', 'account_enforcement')
+      THEN 'moderation_and_system'
+    ELSE 'other'
+  END
+`;
+
+const isNotificationAdminDeliverySection = (value: string): value is NotificationAdminDeliverySection =>
+  (NOTIFICATION_ADMIN_DELIVERY_SECTIONS as readonly string[]).includes(value);
+
+const isNotificationAdminPublishTaskType = (value: string): value is NotificationAdminPublishTaskType =>
+  (NOTIFICATION_ADMIN_PUBLISH_TASK_TYPES as readonly string[]).includes(value);
+
+const isNotificationAdminPublishTaskStatus = (value: string): value is NotificationAdminPublishTaskStatus =>
+  value === 'pending' || value === 'published' || value === 'rejected';
+
+const parseNotificationAdminPublishTaskRow = (row: {
+  id: string;
+  taskType: string;
+  entityType: string;
+  entityId: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  createdBy: string | null;
+  decidedBy: string | null;
+  decidedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  payload?: Prisma.JsonValue | null;
+  decision?: Prisma.JsonValue | null;
+}): NotificationAdminPublishTaskRecord | null => {
+  if (!isNotificationAdminPublishTaskType(row.taskType) || !isNotificationAdminPublishTaskStatus(row.status)) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    taskType: row.taskType,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    status: row.status,
+    title: row.title,
+    summary: row.summary,
+    createdBy: row.createdBy,
+    decidedBy: row.decidedBy,
+    decidedAt: row.decidedAt ? row.decidedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    payload: row.payload ?? null,
+    decision: row.decision ?? null,
+  };
+};
 
 const DEFAULT_GLOBAL_CONFIG: NotificationAdminGlobalConfig = {
   categorySwitches: {
@@ -2279,6 +2492,634 @@ export const notificationCenterService = {
         },
       },
     });
+  },
+
+  async fetchAdminDeliverySectionSummaries(input?: {
+    channel?: NotificationChannel;
+    status?: string;
+    userId?: string;
+    eventId?: string;
+    query?: string;
+  }): Promise<NotificationAdminDeliverySectionSummary[]> {
+    const channel = input?.channel?.trim();
+    const status = input?.status?.trim();
+    const userId = input?.userId?.trim();
+    const eventId = input?.eventId?.trim();
+    const query = input?.query?.trim();
+
+    const whereSql = Prisma.sql`
+      WHERE 1 = 1
+      ${channel && isNotificationChannel(channel) ? Prisma.sql`AND d.channel = ${channel}` : Prisma.empty}
+      ${status ? Prisma.sql`AND d.status = ${status}` : Prisma.empty}
+      ${userId ? Prisma.sql`AND d.user_id = ${userId}` : Prisma.empty}
+      ${eventId ? Prisma.sql`AND d.event_id = ${eventId}` : Prisma.empty}
+      ${
+        query
+          ? Prisma.sql`
+              AND (
+                COALESCE(e.payload #>> '{title}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{body}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,newsTitle}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,eventName}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,djName}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,brandName}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(u.display_name, '') ILIKE ${`%${query}%`}
+                OR COALESCE(u.username, '') ILIKE ${`%${query}%`}
+              )
+            `
+          : Prisma.empty
+      }
+    `;
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        section: string;
+        total: bigint | number;
+        apnsCount: bigint | number;
+        inAppCount: bigint | number;
+        failedCount: bigint | number;
+        lastDeliveryAt: Date | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        ${NOTIFICATION_DELIVERY_SECTION_CASE_SQL} AS section,
+        COUNT(*)::bigint AS total,
+        COUNT(*) FILTER (WHERE d.channel = 'apns')::bigint AS "apnsCount",
+        COUNT(*) FILTER (WHERE d.channel = 'in_app')::bigint AS "inAppCount",
+        COUNT(*) FILTER (WHERE d.status = 'failed')::bigint AS "failedCount",
+        MAX(COALESCE(d.delivered_at, d.created_at)) AS "lastDeliveryAt"
+      FROM notification_deliveries d
+      INNER JOIN notification_events e ON e.id = d.event_id
+      INNER JOIN users u ON u.id = d.user_id
+      ${whereSql}
+      GROUP BY 1
+      ORDER BY MAX(COALESCE(d.delivered_at, d.created_at)) DESC NULLS LAST, section ASC
+    `);
+
+    const summaryMap = new Map<NotificationAdminDeliverySection, NotificationAdminDeliverySectionSummary>();
+    for (const section of NOTIFICATION_ADMIN_DELIVERY_SECTIONS) {
+      summaryMap.set(section, {
+        section,
+        total: 0,
+        apnsCount: 0,
+        inAppCount: 0,
+        failedCount: 0,
+        lastDeliveryAt: null,
+      });
+    }
+
+    for (const row of rows) {
+      const section = isNotificationAdminDeliverySection(row.section) ? row.section : 'other';
+      summaryMap.set(section, {
+        section,
+        total: toPositiveSafeInteger(row.total),
+        apnsCount: toPositiveSafeInteger(row.apnsCount),
+        inAppCount: toPositiveSafeInteger(row.inAppCount),
+        failedCount: toPositiveSafeInteger(row.failedCount),
+        lastDeliveryAt: row.lastDeliveryAt ? row.lastDeliveryAt.toISOString() : null,
+      });
+    }
+
+    return NOTIFICATION_ADMIN_DELIVERY_SECTIONS.map((section) => summaryMap.get(section)!);
+  },
+
+  async fetchAdminDeliveriesBySection(input: {
+    section: NotificationAdminDeliverySection;
+    page?: number;
+    limit?: number;
+    channel?: NotificationChannel;
+    status?: string;
+    userId?: string;
+    eventId?: string;
+    query?: string;
+  }): Promise<NotificationAdminDeliveryPage> {
+    const limit = normalizePositiveLimit(Number(input.limit ?? 20), 20, 100);
+    const page = normalizePositiveLimit(Number(input.page ?? 1), 1, 100000);
+    const channel = input.channel?.trim();
+    const status = input.status?.trim();
+    const userId = input.userId?.trim();
+    const eventId = input.eventId?.trim();
+    const query = input.query?.trim();
+
+    const whereSql = Prisma.sql`
+      WHERE ${NOTIFICATION_DELIVERY_SECTION_CASE_SQL} = ${input.section}
+      ${channel && isNotificationChannel(channel) ? Prisma.sql`AND d.channel = ${channel}` : Prisma.empty}
+      ${status ? Prisma.sql`AND d.status = ${status}` : Prisma.empty}
+      ${userId ? Prisma.sql`AND d.user_id = ${userId}` : Prisma.empty}
+      ${eventId ? Prisma.sql`AND d.event_id = ${eventId}` : Prisma.empty}
+      ${
+        query
+          ? Prisma.sql`
+              AND (
+                COALESCE(e.payload #>> '{title}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{body}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,newsTitle}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,eventName}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,djName}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(e.payload #>> '{metadata,brandName}', '') ILIKE ${`%${query}%`}
+                OR COALESCE(u.display_name, '') ILIKE ${`%${query}%`}
+                OR COALESCE(u.username, '') ILIKE ${`%${query}%`}
+              )
+            `
+          : Prisma.empty
+      }
+    `;
+
+    const totalRows = await prisma.$queryRaw<Array<{ total: bigint | number }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM notification_deliveries d
+      INNER JOIN notification_events e ON e.id = d.event_id
+      INNER JOIN users u ON u.id = d.user_id
+      ${whereSql}
+    `);
+    const total = toPositiveSafeInteger(totalRows[0]?.total ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const safeOffset = (safePage - 1) * limit;
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        section: string;
+        eventId: string;
+        userId: string;
+        channel: string;
+        status: string;
+        error: string | null;
+        attempts: number;
+        deliveredAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payloadTitle: string | null;
+        payloadBody: string | null;
+        payloadDeeplink: string | null;
+        metadataRoute: string | null;
+        metadataSource: string | null;
+        metadataNewsId: string | null;
+        metadataNewsTitle: string | null;
+        metadataEventId: string | null;
+        metadataEventName: string | null;
+        metadataDjId: string | null;
+        metadataDjName: string | null;
+        metadataBrandId: string | null;
+        metadataBrandName: string | null;
+        metadataAudience: string | null;
+        notificationEventId: string;
+        notificationCategory: string;
+        notificationEventStatus: string;
+        notificationDedupeKey: string | null;
+        notificationCreatedAt: Date;
+        notificationDispatchedAt: Date | null;
+        username: string;
+        displayName: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        d.id,
+        ${NOTIFICATION_DELIVERY_SECTION_CASE_SQL} AS section,
+        d.event_id AS "eventId",
+        d.user_id AS "userId",
+        d.channel,
+        d.status,
+        d.error,
+        d.attempts,
+        d.delivered_at AS "deliveredAt",
+        d.created_at AS "createdAt",
+        d.updated_at AS "updatedAt",
+        e.payload #>> '{title}' AS "payloadTitle",
+        e.payload #>> '{body}' AS "payloadBody",
+        e.payload #>> '{deeplink}' AS "payloadDeeplink",
+        e.payload #>> '{metadata,route}' AS "metadataRoute",
+        e.payload #>> '{metadata,source}' AS "metadataSource",
+        e.payload #>> '{metadata,newsId}' AS "metadataNewsId",
+        e.payload #>> '{metadata,newsTitle}' AS "metadataNewsTitle",
+        e.payload #>> '{metadata,eventId}' AS "metadataEventId",
+        e.payload #>> '{metadata,eventName}' AS "metadataEventName",
+        e.payload #>> '{metadata,djId}' AS "metadataDjId",
+        e.payload #>> '{metadata,djName}' AS "metadataDjName",
+        e.payload #>> '{metadata,brandId}' AS "metadataBrandId",
+        e.payload #>> '{metadata,brandName}' AS "metadataBrandName",
+        e.payload #>> '{metadata,sourceAudience}' AS "metadataAudience",
+        e.id AS "notificationEventId",
+        e.category AS "notificationCategory",
+        e.status AS "notificationEventStatus",
+        e.dedupe_key AS "notificationDedupeKey",
+        e.created_at AS "notificationCreatedAt",
+        e.dispatched_at AS "notificationDispatchedAt",
+        u.username,
+        u.display_name AS "displayName"
+      FROM notification_deliveries d
+      INNER JOIN notification_events e ON e.id = d.event_id
+      INNER JOIN users u ON u.id = d.user_id
+      ${whereSql}
+      ORDER BY d.created_at DESC, d.id DESC
+      LIMIT ${limit}
+      OFFSET ${safeOffset}
+    `);
+
+    return {
+      section: input.section,
+      items: rows.map((row) => ({
+        id: row.id,
+        section: isNotificationAdminDeliverySection(row.section) ? row.section : 'other',
+        eventId: row.eventId,
+        userId: row.userId,
+        channel: row.channel,
+        status: row.status,
+        error: row.error,
+        attempts: row.attempts,
+        deliveredAt: row.deliveredAt ? row.deliveredAt.toISOString() : null,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        payload: {
+          title: row.payloadTitle,
+          body: row.payloadBody,
+          deeplink: row.payloadDeeplink,
+        },
+        metadata: {
+          route: row.metadataRoute,
+          source: row.metadataSource,
+          newsId: row.metadataNewsId,
+          newsTitle: row.metadataNewsTitle,
+          eventId: row.metadataEventId,
+          eventName: row.metadataEventName,
+          djId: row.metadataDjId,
+          djName: row.metadataDjName,
+          brandId: row.metadataBrandId,
+          brandName: row.metadataBrandName,
+          audience: row.metadataAudience,
+        },
+        event: {
+          id: row.notificationEventId,
+          category: row.notificationCategory,
+          status: row.notificationEventStatus,
+          dedupeKey: row.notificationDedupeKey,
+          createdAt: row.notificationCreatedAt.toISOString(),
+          dispatchedAt: row.notificationDispatchedAt ? row.notificationDispatchedAt.toISOString() : null,
+        },
+        user: {
+          id: row.userId,
+          username: row.username,
+          displayName: row.displayName,
+        },
+      })),
+      pagination: {
+        page: safePage,
+        limit,
+        total,
+        totalPages,
+      },
+    };
+  },
+
+  async upsertAdminPublishTask(input: {
+    taskType: NotificationAdminPublishTaskType;
+    entityType: string;
+    entityId: string;
+    title: string;
+    summary?: string | null;
+    payload: unknown;
+    createdBy?: string | null;
+  }): Promise<NotificationAdminPublishTaskRecord> {
+    const entityType = input.entityType.trim();
+    const entityId = input.entityId.trim();
+    const title = input.title.trim();
+    if (!entityType || !entityId || !title) {
+      throw new Error('task entityType/entityId/title are required');
+    }
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        taskType: string;
+        entityType: string;
+        entityId: string;
+        status: string;
+        title: string;
+        summary: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      INSERT INTO notification_admin_publish_tasks (
+        task_type,
+        entity_type,
+        entity_id,
+        status,
+        title,
+        summary,
+        payload,
+        decision,
+        created_by
+      )
+      VALUES (
+        ${input.taskType},
+        ${entityType},
+        ${entityId},
+        'pending',
+        ${title},
+        ${input.summary?.trim() || null},
+        ${toInputJsonValue(input.payload)},
+        NULL,
+        ${input.createdBy?.trim() || null}
+      )
+      ON CONFLICT (task_type, entity_type, entity_id)
+      DO UPDATE SET
+        status = 'pending',
+        title = EXCLUDED.title,
+        summary = EXCLUDED.summary,
+        payload = EXCLUDED.payload,
+        decision = NULL,
+        decided_by = NULL,
+        decided_at = NULL,
+        updated_at = NOW()
+      RETURNING
+        id,
+        task_type AS "taskType",
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        status,
+        title,
+        summary,
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+    `);
+    const row = parseNotificationAdminPublishTaskRow(rows[0]);
+    if (!row) {
+      throw new Error('Failed to persist publish task');
+    }
+    return row;
+  },
+
+  async fetchAdminPublishTaskByEntity(input: {
+    taskType: NotificationAdminPublishTaskType;
+    entityType: string;
+    entityId: string;
+  }): Promise<NotificationAdminPublishTaskRecord | null> {
+    const entityType = input.entityType.trim();
+    const entityId = input.entityId.trim();
+    if (!entityType || !entityId) return null;
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        taskType: string;
+        entityType: string;
+        entityId: string;
+        status: string;
+        title: string;
+        summary: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        task_type AS "taskType",
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        status,
+        title,
+        summary,
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+      FROM notification_admin_publish_tasks
+      WHERE task_type = ${input.taskType}
+        AND entity_type = ${entityType}
+        AND entity_id = ${entityId}
+      LIMIT 1
+    `);
+    return parseNotificationAdminPublishTaskRow(rows[0]) ?? null;
+  },
+
+  async fetchAdminPublishTaskById(id: string): Promise<NotificationAdminPublishTaskRecord | null> {
+    const normalizedId = id.trim();
+    if (!normalizedId) return null;
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        taskType: string;
+        entityType: string;
+        entityId: string;
+        status: string;
+        title: string;
+        summary: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        task_type AS "taskType",
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        status,
+        title,
+        summary,
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+      FROM notification_admin_publish_tasks
+      WHERE id = ${normalizedId}
+      LIMIT 1
+    `);
+    return parseNotificationAdminPublishTaskRow(rows[0]) ?? null;
+  },
+
+  async fetchAdminPublishTasks(input?: {
+    page?: number;
+    limit?: number;
+    status?: NotificationAdminPublishTaskStatus;
+    taskType?: NotificationAdminPublishTaskType;
+    query?: string;
+  }): Promise<NotificationAdminPublishTaskPage> {
+    const limit = normalizePositiveLimit(Number(input?.limit ?? 20), 20, 100);
+    const page = normalizePositiveLimit(Number(input?.page ?? 1), 1, 100000);
+    const status = input?.status?.trim();
+    const taskType = input?.taskType?.trim();
+    const query = input?.query?.trim();
+
+    const whereSql = Prisma.sql`
+      WHERE 1 = 1
+      ${status && isNotificationAdminPublishTaskStatus(status) ? Prisma.sql`AND status = ${status}` : Prisma.empty}
+      ${taskType && isNotificationAdminPublishTaskType(taskType) ? Prisma.sql`AND task_type = ${taskType}` : Prisma.empty}
+      ${
+        query
+          ? Prisma.sql`
+              AND (
+                title ILIKE ${`%${query}%`}
+                OR COALESCE(summary, '') ILIKE ${`%${query}%`}
+                OR entity_id ILIKE ${`%${query}%`}
+              )
+            `
+          : Prisma.empty
+      }
+    `;
+
+    const totalRows = await prisma.$queryRaw<Array<{ total: bigint | number }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS total
+      FROM notification_admin_publish_tasks
+      ${whereSql}
+    `);
+    const total = toPositiveSafeInteger(totalRows[0]?.total ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const safeOffset = (safePage - 1) * limit;
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        taskType: string;
+        entityType: string;
+        entityId: string;
+        status: string;
+        title: string;
+        summary: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        id,
+        task_type AS "taskType",
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        status,
+        title,
+        summary,
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+      FROM notification_admin_publish_tasks
+      ${whereSql}
+      ORDER BY
+        CASE status WHEN 'pending' THEN 0 WHEN 'published' THEN 1 ELSE 2 END,
+        updated_at DESC,
+        created_at DESC
+      LIMIT ${limit}
+      OFFSET ${safeOffset}
+    `);
+
+    return {
+      items: rows
+        .map((row) => parseNotificationAdminPublishTaskRow(row))
+        .filter((row): row is NotificationAdminPublishTaskRecord => Boolean(row))
+        .map((row) => ({
+          id: row.id,
+          taskType: row.taskType,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          status: row.status,
+          title: row.title,
+          summary: row.summary,
+          createdBy: row.createdBy,
+          decidedBy: row.decidedBy,
+          decidedAt: row.decidedAt,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        })),
+      pagination: {
+        page: safePage,
+        limit,
+        total,
+        totalPages,
+      },
+    };
+  },
+
+  async decideAdminPublishTask(input: {
+    id: string;
+    status: Extract<NotificationAdminPublishTaskStatus, 'published' | 'rejected'>;
+    decidedBy: string;
+    decision?: unknown;
+  }): Promise<NotificationAdminPublishTaskRecord | null> {
+    const id = input.id.trim();
+    const decidedBy = input.decidedBy.trim();
+    if (!id || !decidedBy) {
+      throw new Error('task id / decidedBy are required');
+    }
+
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        taskType: string;
+        entityType: string;
+        entityId: string;
+        status: string;
+        title: string;
+        summary: string | null;
+        createdBy: string | null;
+        decidedBy: string | null;
+        decidedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        payload: Prisma.JsonValue | null;
+        decision: Prisma.JsonValue | null;
+      }>
+    >(Prisma.sql`
+      UPDATE notification_admin_publish_tasks
+      SET
+        status = ${input.status},
+        decided_by = ${decidedBy},
+        decided_at = NOW(),
+        decision = ${toInputJsonValue(input.decision ?? {})},
+        updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING
+        id,
+        task_type AS "taskType",
+        entity_type AS "entityType",
+        entity_id AS "entityId",
+        status,
+        title,
+        summary,
+        created_by AS "createdBy",
+        decided_by AS "decidedBy",
+        decided_at AS "decidedAt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt",
+        payload,
+        decision
+    `);
+    return parseNotificationAdminPublishTaskRow(rows[0]) ?? null;
   },
 
   async fetchDeliveryStats(windowHours = 24) {
