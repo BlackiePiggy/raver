@@ -1031,20 +1031,26 @@ export default function OrganizerCatalogPageClient() {
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2 overflow-x-auto lg:w-auto lg:max-w-[560px] lg:justify-end">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:w-auto lg:max-w-[560px] lg:justify-end">
                     <div className="shrink-0 rounded-[12px] bg-[#f4f5f7] px-3 py-2 text-[11px] leading-4 text-[#6b7280]">
                       目录中心承接查找和跳转，深入资料处理继续进入编辑与绑定工作流。
                     </div>
                     <Link
                       href={`/admin/content/organizers/${item.id}/edit`}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMenuOpenOrganizerId(null);
+                      }}
                       className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full bg-[#071110] px-4 text-center text-sm font-semibold text-white"
                     >
                       编辑主办方
                     </Link>
                     <Link
                       href={`/admin/content/organizers/bindings?organizerId=${encodeURIComponent(item.id)}&organizerName=${encodeURIComponent(item.name)}`}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMenuOpenOrganizerId(null);
+                      }}
                       className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
                     >
                       打开绑定中心
@@ -1054,7 +1060,10 @@ export default function OrganizerCatalogPageClient() {
                         href={item.officialWebsite}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuOpenOrganizerId(null);
+                        }}
                         className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
                       >
                         官方链接
