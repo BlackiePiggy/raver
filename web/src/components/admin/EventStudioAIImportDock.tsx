@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import {
   eventStudioApi,
   normalizeEventStudioDateInput,
@@ -771,14 +772,14 @@ const taskPhaseLabel = (task: EventStudioAIImportTaskEntry): string => {
 };
 
 const imageOriginLabel = (origin: EventStudioImageState['origin']): string => {
-  if (origin === 'persisted-event') return 'Persisted event image';
-  if (origin === 'event-upload') return 'Uploaded in edit flow';
-  return 'Uploaded in current draft';
+  if (origin === 'persisted-event') return '已入库图片';
+  if (origin === 'event-upload') return '编辑流程上传';
+  return '当前草稿上传';
 };
 
 const selectedCountLabel = (panel: ImportPanelState | null): string => {
-  if (!panel) return '0 selected';
-  return `${panel.selectedImageIds.length} selected`;
+  if (!panel) return '已选 0 张';
+  return `已选 ${panel.selectedImageIds.length} 张`;
 };
 
 const formatDurationMs = (durationMs: number): string => {
@@ -896,6 +897,7 @@ export default function EventStudioAIImportDock({
   const [timezoneResults, setTimezoneResults] = useState<NonNullable<EventStudioDraft['timeZoneSelection']>[]>([]);
   const [timezoneSearching, setTimezoneSearching] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [previewAssetIndex, setPreviewAssetIndex] = useState<number | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const runTokenRef = useRef(0);
   const cancelRequestedRef = useRef(false);
@@ -914,6 +916,17 @@ export default function EventStudioAIImportDock({
     const selectedIdSet = new Set(panel.selectedImageIds);
     return selectedImageOptions.filter((item) => selectedIdSet.has(item.id));
   }, [panel, selectedImageOptions]);
+  const previewAssets = useMemo<OverlayImageViewerAsset[]>(
+    () =>
+      selectedImageOptions.map((image) => ({
+        url: image.remoteUrl,
+        alt: image.fileName,
+        title: image.fileName || '识别图片',
+        subtitle: imageOriginLabel(image.origin),
+        fileName: image.fileName || undefined,
+      })),
+    [selectedImageOptions]
+  );
 
   const selectedPosterImage = useMemo(() => {
     if (!panel || panel.kind !== 'poster') return null;
@@ -939,6 +952,12 @@ export default function EventStudioAIImportDock({
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [panel]);
+
+  useEffect(() => {
+    if (previewAssetIndex === null) return;
+    if (previewAssetIndex < previewAssets.length) return;
+    setPreviewAssetIndex(null);
+  }, [previewAssetIndex, previewAssets.length]);
 
   const updatePanel = (patch: Partial<ImportPanelState>) => {
     setPanel((current) => (current ? { ...current, ...patch } : current));
@@ -1769,8 +1788,8 @@ export default function EventStudioAIImportDock({
     const title = item.actType === 'solo' ? '艺人信息' : `成员 ${performerIndex + 1}`;
 
     return (
-      <div key={`${item.id}-${performerIndex}`} className="rounded-[18px] border border-[#e8eceb] bg-white p-3 shadow-[0_10px_26px_rgba(15,23,42,0.04)]">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <div key={`${item.id}-${performerIndex}`} className="rounded-[16px] border border-[#e8eceb] bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+        <div className="mb-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {avatar ? (
               <span className="inline-flex h-9 w-9 overflow-hidden rounded-full border border-[#e8eceb] bg-[#f4f6f3]">
@@ -1801,7 +1820,7 @@ export default function EventStudioAIImportDock({
             />
           </label>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <input
             className={`${aiCompactInputClass} min-w-[160px] flex-1`}
             value={item.performerDJIDs[performerIndex] || ''}
@@ -1879,21 +1898,21 @@ export default function EventStudioAIImportDock({
   const renderResultAvatarGroup = (item: EventStudioAIEditableAct) => {
     const names = performerNamesForDisplay(item);
     return (
-      <div className="flex shrink-0 -space-x-2">
+      <div className="flex shrink-0 -space-x-1.5">
         {names.slice(0, 3).map((name, index) => {
           const avatar = item.performerAvatarURLs[index];
           const initial = (name.trim()[0] || '?').toUpperCase();
           return avatar ? (
             <span
               key={`${item.id}-avatar-${index}`}
-              className="inline-flex h-11 w-11 overflow-hidden rounded-full border-2 border-white bg-[#eef1ec] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+              className="inline-flex h-9 w-9 overflow-hidden rounded-full border-2 border-white bg-[#eef1ec] shadow-[0_8px_20px_rgba(15,23,42,0.08)]"
             >
-              <Image src={avatar} alt="" width={44} height={44} className="h-11 w-11 object-cover" />
+              <Image src={avatar} alt="" width={36} height={36} className="h-9 w-9 object-cover" />
             </span>
           ) : (
             <span
               key={`${item.id}-avatar-${index}`}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-[#eef4ff] text-sm font-semibold text-[#3567d6] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-[#eef4ff] text-xs font-semibold text-[#3567d6] shadow-[0_8px_20px_rgba(15,23,42,0.08)]"
             >
               {initial}
             </span>
@@ -1911,10 +1930,10 @@ export default function EventStudioAIImportDock({
   ) => (
     <div className="admin-reference-card p-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <label className="flex min-w-0 flex-1 items-center gap-3 rounded-[20px] border border-[#e7ece7] bg-white px-4 py-3">
+        <label className="flex min-w-0 flex-1 items-center gap-3 rounded-[18px] border border-[#e7ece7] bg-white px-4 py-2.5">
           <span className="text-black/35">⌕</span>
           <input
-            className="min-w-0 flex-1 bg-transparent text-sm text-[#071110] outline-none placeholder:text-black/35"
+            className="min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-sm text-[#071110] shadow-none outline-none ring-0 placeholder:text-black/35 focus:outline-none focus:ring-0"
             value={panel?.resultSearchQuery || ''}
             onChange={(event) => updatePanel({ resultSearchQuery: event.target.value })}
             placeholder={searchPlaceholder}
@@ -1943,7 +1962,7 @@ export default function EventStudioAIImportDock({
     value: EventStudioAIActType,
     onChange: (next: EventStudioAIActType) => void
   ) => (
-    <div className="grid grid-cols-3 gap-1 rounded-[16px] border border-[#e7ece7] bg-white p-1">
+    <div className="grid grid-cols-3 gap-1 rounded-[14px] border border-[#e7ece7] bg-white p-1">
       {ACT_TYPE_ITEMS.map((act) => {
         const active = act.value === value;
         return (
@@ -1951,7 +1970,7 @@ export default function EventStudioAIImportDock({
             key={act.value}
             type="button"
             onClick={() => onChange(act.value)}
-            className={`rounded-[12px] px-3 py-2 text-sm font-semibold transition ${
+            className={`min-w-0 whitespace-nowrap rounded-[10px] px-2.5 py-2 text-[13px] font-semibold tracking-[0.01em] transition ${
               active ? 'bg-[#eef4ff] text-[#3567d6]' : 'text-black/45 hover:bg-[#f5f7f5]'
             }`}
           >
@@ -1967,6 +1986,28 @@ export default function EventStudioAIImportDock({
     const names = performerNamesForDisplay(item);
     return (
       <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold text-[#071110]">编辑演出对象</div>
+            <div className="mt-1 text-xs text-black/42">可以修改展示名、演出形式和每位成员的绑定结果。</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => toggleExpandedResultItem(item.id)}
+              className="admin-studio-button-primary min-w-[82px] whitespace-nowrap px-3 py-2 text-xs"
+            >
+              确认此项
+            </button>
+            <button
+              type="button"
+              onClick={() => removeLineupItem(item.id)}
+              className="admin-studio-button-danger min-w-[68px] whitespace-nowrap px-3 py-2 text-xs"
+            >
+              删除
+            </button>
+          </div>
+        </div>
         <div className="grid gap-3 xl:grid-cols-[220px_140px_minmax(0,1fr)]">
           <div className="space-y-1 text-xs text-black/45">
             <span>演出形式</span>
@@ -2015,6 +2056,28 @@ export default function EventStudioAIImportDock({
 
   const renderTimetableEditPanel = (slot: EventStudioAIEditableTimetableSlot) => (
     <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-[#071110]">编辑时刻表对象</div>
+          <div className="mt-1 text-xs text-black/42">确认时间、舞台、展示名和每位成员绑定后，再切回确认态。</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => toggleExpandedResultItem(slot.id)}
+            className="admin-studio-button-primary min-w-[82px] whitespace-nowrap px-3 py-2 text-xs"
+          >
+            确认此项
+          </button>
+          <button
+            type="button"
+            onClick={() => removeTimetableSlot(slot.id)}
+            className="admin-studio-button-danger min-w-[68px] whitespace-nowrap px-3 py-2 text-xs"
+          >
+            删除
+          </button>
+        </div>
+      </div>
       <div className="grid gap-3 xl:grid-cols-2">
         <div className="space-y-1 text-xs text-black/45">
           <span>演出形式</span>
@@ -2290,7 +2353,7 @@ export default function EventStudioAIImportDock({
               return (
                 <div key={item.kind} className="rounded-[22px] border border-[#e8eceb] bg-[#f8f9f8] p-4">
                   {renderEntryButton(item, true)}
-                  <div className="mt-3 text-xs text-black/40">Available images: {count}</div>
+                  <div className="mt-3 text-xs text-black/40">可用图片：{count}</div>
                 </div>
               );
             })}
@@ -2311,30 +2374,34 @@ export default function EventStudioAIImportDock({
           <div className="flex min-h-full items-end justify-center sm:items-center">
             <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl sm:max-h-[calc(100vh-3rem)]">
               <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-[#e8eceb] px-5 py-4">
-              <div>
-                <div className="admin-studio-label">{PANEL_ITEMS.find((item) => item.kind === panel.kind)?.title}</div>
-                <div className="mt-2 text-sm leading-6 text-black/52">{panel.errorText || panel.statusText}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => void cancelRecognition()} className="admin-studio-button-secondary min-w-[84px] whitespace-nowrap px-4 py-2 text-sm">
-                  {panel.running ? '取消' : '关闭'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void startRecognition()}
-                  disabled={(panel.kind === 'poster' ? !selectedPosterImage : !selectedImages.length) || panel.running}
-                  className={`admin-ai-action-button min-w-[148px] whitespace-nowrap px-4 py-2 text-sm ${
-                    panel.running ? 'admin-ai-action-button-running' : ''
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  {panel.running ? '识别中...' : '开始识别'}
-                </button>
-              </div>
+                <div className="min-w-0 flex-1">
+                  <div className="admin-studio-label">{PANEL_ITEMS.find((item) => item.kind === panel.kind)?.title}</div>
+                  <div className="mt-2 text-sm leading-6 text-black/52">{panel.errorText || panel.statusText}</div>
+                </div>
+                <div className="flex shrink-0 flex-nowrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void cancelRecognition()}
+                    className="admin-studio-button-secondary h-9 min-w-[76px] whitespace-nowrap px-3 text-[13px]"
+                  >
+                    {panel.running ? '取消' : '关闭'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void startRecognition()}
+                    disabled={(panel.kind === 'poster' ? !selectedPosterImage : !selectedImages.length) || panel.running}
+                    className={`admin-ai-action-button h-9 min-w-[118px] whitespace-nowrap px-3 text-[13px] ${
+                      panel.running ? 'admin-ai-action-button-running' : ''
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {panel.running ? '识别中...' : '开始识别'}
+                  </button>
+                </div>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="grid gap-5 p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-                  <div className="space-y-4">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="grid h-full min-h-0 gap-5 p-5 lg:grid-cols-[248px_minmax(0,1fr)]">
+                  <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
                     <div className="admin-reference-card p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-semibold text-[#071110]">选择图片</div>
@@ -2357,25 +2424,35 @@ export default function EventStudioAIImportDock({
                           };
 
                           return (
-                            <button
+                            <div
                               key={image.id}
-                              type="button"
-                              onClick={toggle}
-                              className={`overflow-hidden rounded-[16px] border text-left ${
+                              className={`relative overflow-hidden rounded-[16px] border bg-white ${
                                 checked ? 'border-[#3aa66b]' : 'border-[#e8eceb]'
-                              } bg-white`}
+                              }`}
                             >
-                              <div className="relative aspect-[4/3] bg-[#f2f3ef]">
-                                <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="140px" />
-                              </div>
-                              <div className="flex items-start justify-between gap-2 px-2.5 py-2">
-                                <div className="min-w-0">
-                                  <div className="truncate text-[12px] font-medium text-[#071110]">{image.fileName}</div>
-                                  <div className="mt-1 text-[10px] text-black/40">{imageOriginLabel(image.origin)}</div>
+                              <button type="button" onClick={toggle} className="block w-full text-left">
+                                <div className="relative aspect-square bg-[#f2f3ef]">
+                                  <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="140px" />
                                 </div>
-                                <input readOnly type={panel.kind === 'poster' ? 'radio' : 'checkbox'} checked={checked} />
-                              </div>
-                            </button>
+                                <div className="flex items-start justify-between gap-2 px-2.5 py-2">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[12px] font-medium text-[#071110]">{image.fileName}</div>
+                                    <div className="mt-1 text-[10px] text-black/40">{imageOriginLabel(image.origin)}</div>
+                                  </div>
+                                  <input readOnly type={panel.kind === 'poster' ? 'radio' : 'checkbox'} checked={checked} />
+                                </div>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const previewIndex = selectedImageOptions.findIndex((candidate) => candidate.id === image.id);
+                                  if (previewIndex >= 0) setPreviewAssetIndex(previewIndex);
+                                }}
+                                className="absolute right-2 top-2 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white"
+                              >
+                                预览
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -2387,14 +2464,16 @@ export default function EventStudioAIImportDock({
                         <div className="mt-3 space-y-2">
                           {panel.taskEntries.map((task) => (
                             <div key={task.id} className="rounded-[18px] border border-[#e8eceb] bg-white/80 p-3">
-                              <div className="flex items-center justify-between gap-3">
+                              <div className="flex flex-nowrap items-start justify-between gap-2">
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-medium text-[#071110]">{task.imageFileName}</div>
                                   <div className="mt-1 text-xs text-black/40">{imageOriginLabel(task.imageOrigin)}</div>
                                 </div>
-                                <div className={`min-w-[68px] whitespace-nowrap rounded-full px-3 py-1 text-center text-xs ${taskPhaseClassName(task)}`}>{taskPhaseLabel(task)}</div>
+                                <div className={`shrink-0 rounded-full px-3 py-1 text-center text-xs font-semibold ${taskPhaseClassName(task)}`}>
+                                  {taskPhaseLabel(task)}
+                                </div>
                               </div>
-                              <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-black/38">
+                              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-black/38">
                                 <span>{task.phase === 'preparing' || task.phase === 'polling' || task.phase === 'auto_matching' ? '已耗时' : '总耗时'}: {taskDurationText(task, clockNow)}</span>
                                 {task.matchSuccessCount || task.matchFailedCount ? (
                                   <span>
@@ -2417,76 +2496,76 @@ export default function EventStudioAIImportDock({
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                <div className="admin-reference-card p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[#071110]">识别结果</div>
-                      <div className="mt-1 text-xs text-black/40">先确认识别结果，再将它们应用到当前草稿。</div>
-                      {panel.kind !== 'poster' && visibleMatchSummary.attempted ? (
-                        <div className="mt-2 text-xs text-black/45">
-                          自动匹配：成功 {visibleMatchSummary.matched} / 失败 {visibleMatchSummary.failed}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {panel.kind !== 'poster' ? (
-                        <button
-                          type="button"
-                          onClick={() => void autoMatchAIItems()}
-                          disabled={panel.autoMatching || panel.running}
-                          className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {panel.autoMatching ? '匹配中...' : '自动匹配 DJ'}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={applyResult}
-                        disabled={
-                          panel.running ||
-                          (panel.kind === 'poster' && !panel.posterResult) ||
-                          (panel.kind === 'lineup' && !panel.lineupItems.length) ||
-                          (panel.kind === 'timetable' && (!panel.timetableSlots.length || unresolvedTimetableSlots.length > 0))
-                        }
-                        className="admin-studio-button-primary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        应用结果
-                      </button>
-                    </div>
-                  </div>
-
-                  {panel.warnings.length || panel.unparsedTexts.length ? (
-                    <div className="mt-3 rounded-[18px] border border-[#f0dcc5] bg-[#fff7ef] p-3 text-xs text-[#7c4d20]">
-                      <div className="flex items-center justify-between gap-3">
+                  <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                    <div className="admin-reference-card p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          Warnings: {panel.warnings.length} / Unparsed: {panel.unparsedTexts.length}
+                          <div className="text-sm font-semibold text-[#071110]">识别结果</div>
+                          <div className="mt-1 text-xs text-black/40">先确认识别结果，再将它们应用到当前草稿。</div>
+                          {panel.kind !== 'poster' && visibleMatchSummary.attempted ? (
+                            <div className="mt-2 text-xs text-black/45">
+                              自动匹配：成功 {visibleMatchSummary.matched} / 失败 {visibleMatchSummary.failed}
+                            </div>
+                          ) : null}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => updatePanel({ warningsExpanded: !panel.warningsExpanded })}
-                          className="admin-studio-button-secondary px-3 py-1.5 text-xs"
-                        >
-                          {panel.warningsExpanded ? 'Hide Details' : 'Show Details'}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          {panel.kind !== 'poster' ? (
+                            <button
+                              type="button"
+                              onClick={() => void autoMatchAIItems()}
+                              disabled={panel.autoMatching || panel.running}
+                              className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {panel.autoMatching ? '匹配中...' : '自动匹配 DJ'}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={applyResult}
+                            disabled={
+                              panel.running ||
+                              (panel.kind === 'poster' && !panel.posterResult) ||
+                              (panel.kind === 'lineup' && !panel.lineupItems.length) ||
+                              (panel.kind === 'timetable' && (!panel.timetableSlots.length || unresolvedTimetableSlots.length > 0))
+                            }
+                            className="admin-studio-button-primary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            应用结果
+                          </button>
+                        </div>
                       </div>
-                      {panel.warningsExpanded ? (
-                        <div className="mt-2 space-y-2">
-                          {panel.warnings.length ? <div>Warnings: {panel.warnings.join(' / ')}</div> : null}
-                          {panel.unparsedTexts.length ? <div>Unparsed: {panel.unparsedTexts.join(' / ')}</div> : null}
+
+                      {panel.warnings.length || panel.unparsedTexts.length ? (
+                        <div className="mt-3 rounded-[18px] border border-[#f0dcc5] bg-[#fff7ef] p-3 text-xs text-[#7c4d20]">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              警告 {panel.warnings.length} 条 / 未解析 {panel.unparsedTexts.length} 条
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => updatePanel({ warningsExpanded: !panel.warningsExpanded })}
+                              className="admin-studio-button-secondary px-3 py-1.5 text-xs"
+                            >
+                              {panel.warningsExpanded ? '收起详情' : '展开详情'}
+                            </button>
+                          </div>
+                          {panel.warningsExpanded ? (
+                            <div className="mt-2 space-y-2">
+                              {panel.warnings.length ? <div>警告：{panel.warnings.join(' / ')}</div> : null}
+                              {panel.unparsedTexts.length ? <div>未解析：{panel.unparsedTexts.join(' / ')}</div> : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {panel.kind === 'timetable' && unresolvedTimetableSlots.length ? (
+                        <div className="mt-3 rounded-[18px] border border-[#f0d0d0] bg-[#fff3f3] p-3 text-xs text-[#8a3e3e]">
+                          还有 {unresolvedTimetableSlots.length} 条 timetable 结果需要先手动确认活动日，才能应用到草稿。
                         </div>
                       ) : null}
                     </div>
-                  ) : null}
 
-                  {panel.kind === 'timetable' && unresolvedTimetableSlots.length ? (
-                    <div className="mt-3 rounded-[18px] border border-[#f0d0d0] bg-[#fff3f3] p-3 text-xs text-[#8a3e3e]">
-                      {unresolvedTimetableSlots.length} timetable slot(s) still need manual event-day resolution before apply.
-                    </div>
-                  ) : null}
-                </div>
-
-                {panel.kind === 'poster' ? (
+                    {panel.kind === 'poster' ? (
                   panel.posterResult ? (
                     <div className="space-y-3">
                       <div className="admin-reference-card p-4">
@@ -2857,7 +2936,7 @@ export default function EventStudioAIImportDock({
                         '搜索 DJ 名称'
                       )}
                       <div className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-                        <div className="hidden items-center gap-4 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[56px_minmax(280px,1.8fr)_110px_150px_120px_130px]">
+                        <div className="hidden items-center gap-3 border-b border-[#eef1ee] bg-[#fafcf9] px-3.5 py-2.5 text-[11px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[40px_minmax(0,1.9fr)_92px_104px_96px_148px]">
                           <span>#</span>
                           <span>DJ / 艺人</span>
                           <span>演出形式</span>
@@ -2871,25 +2950,25 @@ export default function EventStudioAIImportDock({
                             const confidence = resultConfidenceValue(item.confidence);
                             return (
                               <div key={item.id} className="border-t border-[#f1f3f0] first:border-t-0">
-                                <div className="grid gap-4 px-4 py-4 lg:grid-cols-[56px_minmax(280px,1.8fr)_110px_150px_120px_130px] lg:items-center">
+                                <div className="grid gap-3 px-3.5 py-3 lg:grid-cols-[40px_minmax(0,1.9fr)_92px_104px_96px_148px] lg:items-center">
                                   <div className="text-sm font-semibold text-black/65">{index + 1}</div>
-                                  <div className="flex min-w-0 items-center gap-3">
+                                  <div className="flex min-w-0 items-center gap-2.5">
                                     {renderResultAvatarGroup(item)}
                                     <div className="min-w-0 flex-1">
-                                      <div className="truncate text-[15px] font-semibold leading-6 text-[#071110]">{performerDisplayName(item)}</div>
-                                      <div className="mt-1 whitespace-nowrap text-xs text-black/42">
+                                      <div className="truncate text-[14px] font-semibold leading-5 text-[#071110]">{performerDisplayName(item)}</div>
+                                      <div className="mt-0.5 truncate text-[11px] text-black/42">
                                         {matchedPerformerCount(item)} / {actTypePerformerCount(item.actType)} 已绑定
                                       </div>
                                     </div>
                                   </div>
                                   <div>
-                                    <span className="inline-flex rounded-full border border-[#dbe6ff] bg-[#f4f7ff] px-3 py-1 text-xs font-semibold text-[#3567d6]">
+                                    <span className="inline-flex rounded-full border border-[#dbe6ff] bg-[#f4f7ff] px-2.5 py-1 text-[11px] font-semibold text-[#3567d6]">
                                       {actTypeLabel(item.actType)}
                                     </span>
                                   </div>
                                   <div>
-                                    <div className="text-sm font-semibold text-[#071110]">{confidence == null ? '--' : confidence.toFixed(2)}</div>
-                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#edf1ee]">
+                                    <div className="text-sm font-semibold leading-5 text-[#071110]">{confidence == null ? '--' : confidence.toFixed(2)}</div>
+                                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#edf1ee]">
                                       <div
                                         className="h-full rounded-full bg-[#23a35d]"
                                         style={{ width: `${Math.round((confidence ?? 0) * 100)}%` }}
@@ -2897,7 +2976,7 @@ export default function EventStudioAIImportDock({
                                     </div>
                                   </div>
                                   <div>
-                                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${resultItemStatusClassName(item)}`}>
+                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${resultItemStatusClassName(item)}`}>
                                       {resultItemStatusLabel(item)}
                                     </span>
                                   </div>
@@ -3005,7 +3084,7 @@ export default function EventStudioAIImportDock({
                       '搜索 DJ 名称、舞台或时间'
                     )}
                     <div className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-                      <div className="hidden items-center gap-4 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[52px_56px_minmax(320px,2fr)_180px_120px_120px_140px]">
+                      <div className="hidden items-center gap-3 border-b border-[#eef1ee] bg-[#fafcf9] px-3.5 py-2.5 text-[11px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[40px_40px_minmax(0,2fr)_152px_104px_104px_148px]">
                         <span />
                         <span>#</span>
                         <span>DJ / 艺人</span>
@@ -3016,11 +3095,11 @@ export default function EventStudioAIImportDock({
                       </div>
                       {visibleTimetableSlots.length ? (
                         visibleTimetableSlots.map((slot, index) => {
-                          const expanded = panel.expandedResultItemIds.includes(slot.id);
-                          const confidence = resultConfidenceValue(slot.confidence);
+                            const expanded = panel.expandedResultItemIds.includes(slot.id);
+                            const confidence = resultConfidenceValue(slot.confidence);
                           return (
                             <div key={slot.id} className="border-t border-[#f1f3f0] first:border-t-0">
-                              <div className="grid gap-4 px-4 py-4 lg:grid-cols-[52px_56px_minmax(320px,2fr)_180px_120px_120px_140px] lg:items-center">
+                              <div className="grid gap-3 px-3.5 py-3 lg:grid-cols-[40px_40px_minmax(0,2fr)_152px_104px_104px_148px] lg:items-center">
                                 <div className="flex justify-center">
                                   <input
                                     type="checkbox"
@@ -3040,40 +3119,39 @@ export default function EventStudioAIImportDock({
                                   />
                                 </div>
                                 <div className="text-sm font-semibold text-black/65">{index + 1}</div>
-                                <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex min-w-0 items-center gap-2.5">
                                   {renderResultAvatarGroup(slot)}
                                   <div className="min-w-0 flex-1">
-                                    <div className="truncate text-[15px] font-semibold leading-6 text-[#071110]">{performerDisplayName(slot)}</div>
-                                    <div className="mt-1 whitespace-nowrap text-xs text-black/42">
+                                    <div className="truncate text-[14px] font-semibold leading-5 text-[#071110]">{performerDisplayName(slot)}</div>
+                                    <div className="mt-0.5 truncate text-[11px] text-black/42">
                                       {slot.dayLabel || slot.localDate}
                                       {slot.unresolvedEventDay ? ' · 活动日待确认' : ''}
                                     </div>
                                   </div>
                                 </div>
-                                <div className="space-y-2">
-                                  <div className="inline-flex rounded-full border border-[#dbe6ff] bg-[#f4f7ff] px-3 py-1 text-xs font-semibold text-[#3567d6]">
+                                <div className="space-y-1.5">
+                                  <div className="inline-flex rounded-full border border-[#dbe6ff] bg-[#f4f7ff] px-2.5 py-1 text-[11px] font-semibold text-[#3567d6]">
                                     {slot.stageName || 'Main Stage'}
                                   </div>
-                                  <div className="text-xs text-black/45">
+                                  <div className="text-[11px] text-black/45">
                                     {slot.startTimeText || '--'} - {slot.endTimeText || '--'}
                                   </div>
                                 </div>
                                 <div>
-                                  <div className="text-sm font-semibold text-[#071110]">{confidence == null ? '--' : confidence.toFixed(2)}</div>
-                                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#edf1ee]">
+                                  <div className="text-sm font-semibold leading-5 text-[#071110]">{confidence == null ? '--' : confidence.toFixed(2)}</div>
+                                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#edf1ee]">
                                     <div
                                       className="h-full rounded-full bg-[#23a35d]"
                                       style={{ width: `${Math.round((confidence ?? 0) * 100)}%` }}
                                     />
                                   </div>
                                 </div>
-                                <div className="space-y-2">
-                                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${resultItemStatusClassName(slot)}`}>
+                                <div className="space-y-1.5">
+                                  <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${resultItemStatusClassName(slot)}`}>
                                     {resultItemStatusLabel(slot)}
                                   </span>
-                                  {slot.unresolvedEventDay ? (
-                                    <div className="text-xs text-[#a6621a]">日期待确认</div>
-                                  ) : null}
+                                  <div className="text-[11px] text-black/45">{actTypeLabel(slot.actType)}</div>
+                                  {slot.unresolvedEventDay ? <div className="text-[11px] text-[#a6621a]">日期待确认</div> : null}
                                 </div>
                                 <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
                                   <button
@@ -3107,6 +3185,12 @@ export default function EventStudioAIImportDock({
               </div>
             </div>
           </div>
+          <OverlayImageViewer
+            assets={previewAssets}
+            activeIndex={previewAssetIndex}
+            onClose={() => setPreviewAssetIndex(null)}
+            onChange={setPreviewAssetIndex}
+          />
         </div>
       ) : null}
     </div>
