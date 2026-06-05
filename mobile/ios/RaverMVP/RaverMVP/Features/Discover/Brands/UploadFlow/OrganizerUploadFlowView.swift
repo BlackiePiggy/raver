@@ -4,6 +4,7 @@ import UIKit
 
 struct OrganizerUploadFlowView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appPush) private var appPush
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: OrganizerUploadFlowViewModel
     @State private var avatarItem: PhotosPickerItem?
@@ -960,6 +961,13 @@ struct OrganizerUploadFlowView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 24)
+
+            EntityChangeResultPreviewCard(
+                change: success.change,
+                showsReviewPendingNotice: success.showsReviewPendingDiffNotice
+            ) { changeLogID in
+                appPush(.entityChangeDetail(changeLogID: changeLogID))
+            }
 
             Text(LT("之后也可以在我的发布和通知中心里查看后续状态。", "You can also review later status updates from My Posts and notifications.", "後からマイ投稿と通知センターで状態更新を確認できます。"))
                 .font(.caption)

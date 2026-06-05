@@ -152,13 +152,21 @@ function ContributionListRow({
 export default function ContributionTabPanel({
   entityType,
   entityId,
+  initialData,
 }: {
   entityType: ContributionEntityType;
   entityId: string;
+  initialData?: ContributionListResponse | null;
 }) {
-  const [data, setData] = useState<ContributionListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<ContributionListResponse | null>(initialData ?? null);
+  const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setData(initialData ?? null);
+    setLoading(!initialData);
+    setError('');
+  }, [entityId, entityType, initialData]);
 
   useEffect(() => {
     trackContributionModuleEvent('contribution_tab_exposure', {
@@ -171,7 +179,9 @@ export default function ContributionTabPanel({
     let cancelled = false;
 
     const load = async () => {
-      setLoading(true);
+      if (!initialData) {
+        setLoading(true);
+      }
       setError('');
       try {
         const next = await contributionModuleApi.fetchEntityContributors(entityType, entityId);
@@ -179,7 +189,9 @@ export default function ContributionTabPanel({
         setData(next);
       } catch (nextError) {
         if (cancelled) return;
-        setError(nextError instanceof Error ? nextError.message : '贡献列表加载失败');
+        if (!initialData) {
+          setError(nextError instanceof Error ? nextError.message : '贡献列表加载失败');
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -191,7 +203,7 @@ export default function ContributionTabPanel({
     return () => {
       cancelled = true;
     };
-  }, [entityId, entityType]);
+  }, [entityId, entityType, initialData]);
 
   if (loading) {
     return (

@@ -369,6 +369,7 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
     var canEdit: Bool?
     var createdAt: Date?
     var updatedAt: Date?
+    var change: EntityChangeInlineResult? = nil
 }
 
 struct UpdateLearnFestivalInput: Codable {
@@ -822,6 +823,7 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var canEdit: Bool? = nil
     var favoriteId: String? = nil
     var isFavorited: Bool? = nil
+    var change: EntityChangeInlineResult? = nil
 
     var eventTimeZone: TimeZone {
         let preferred = schedule?.timeZone.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1473,6 +1475,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var createdAt: Date?
     var updatedAt: Date?
     var isFollowing: Bool?
+    var change: EntityChangeInlineResult? = nil
 }
 
 struct WebDJHonor: Codable, Identifiable, Hashable {

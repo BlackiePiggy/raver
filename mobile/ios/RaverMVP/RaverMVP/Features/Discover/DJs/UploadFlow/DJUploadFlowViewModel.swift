@@ -225,13 +225,15 @@ final class DJUploadFlowViewModel: ObservableObject {
                 case .submittedForReview:
                     submitSuccess = DJUploadSubmitSuccess(
                         title: LT("编辑任务已提交", "Edit Task Submitted", "編集タスクを送信しました"),
-                        message: LT("当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。", "The edit task is now processing. Later updates will arrive through notifications and My Posts.", "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。")
+                        message: LT("当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。", "The edit task is now processing. Later updates will arrive through notifications and My Posts.", "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。"),
+                        showsReviewPendingDiffNotice: true
                     )
                     onCompleted?(nil)
                 case .created(let updated):
                     submitSuccess = DJUploadSubmitSuccess(
                         title: LT("DJ 已更新", "DJ Updated", "DJを更新しました"),
-                        message: LT("更新已保存。你可以返回 DJ 页面查看最新内容，也可以在我的发布里继续管理。", "Your changes are saved. Return to the DJ page to view the latest content, or manage it from My Posts.", "更新を保存しました。DJページで最新内容を確認するか、マイ投稿から管理できます。")
+                        message: LT("更新已保存。你可以返回 DJ 页面查看最新内容，也可以在我的发布里继续管理。", "Your changes are saved. Return to the DJ page to view the latest content, or manage it from My Posts.", "更新を保存しました。DJページで最新内容を確認するか、マイ投稿から管理できます。"),
+                        change: updated.change
                     )
                     onCompleted?(updated)
                 }
@@ -369,4 +371,6 @@ struct DJUploadSubmitSuccess: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let message: String
+    var change: EntityChangeInlineResult? = nil
+    var showsReviewPendingDiffNotice = false
 }

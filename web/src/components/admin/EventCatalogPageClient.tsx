@@ -33,6 +33,7 @@ import {
 import ContributionTabPanel from '@/features/contribution-module/ContributionTabPanel';
 import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import type { EventStudioLoadedEvent, EventStudioOverview } from '@/features/admin-content/event-studio/types';
+import type { ContributionListResponse, ContributionUserLite } from '@/features/contribution-module/types';
 import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 
 const PAGE_SIZE = 10;
@@ -223,6 +224,62 @@ const detailText = (label: string, value?: string | number | null) => (
   </div>
 );
 
+const isContributionUserLite = (value: unknown): value is ContributionUserLite => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.id === 'string';
+};
+
+const buildContributionInitialData = (source: unknown): ContributionListResponse | null => {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const row = source as {
+    contributors?: unknown;
+    contributorSummary?: unknown;
+  };
+
+  const contributors = Array.isArray(row.contributors)
+    ? row.contributors.filter(isContributionUserLite)
+    : [];
+  if (!contributors.length) return null;
+
+  const summaryRow = row.contributorSummary as {
+    totalCount?: unknown;
+    creator?: unknown;
+    previewUsers?: unknown;
+    displayName?: unknown;
+  } | null | undefined;
+
+  const creator = isContributionUserLite(summaryRow?.creator) ? summaryRow?.creator : contributors[0];
+  const previewUsers = Array.isArray(summaryRow?.previewUsers)
+    ? summaryRow.previewUsers.filter(isContributionUserLite)
+    : contributors.slice(0, 3);
+  const totalCount = typeof summaryRow?.totalCount === 'number' && Number.isFinite(summaryRow.totalCount)
+    ? summaryRow.totalCount
+    : contributors.length;
+  const displayName = typeof summaryRow?.displayName === 'string' ? summaryRow.displayName : creator?.displayName ?? creator?.username ?? null;
+
+  return {
+    items: contributors.map((user, index) => ({
+      user,
+      role: index === 0 ? 'creator' : 'editor',
+      contributionCount: 1,
+      firstContributedAt: '',
+      lastContributedAt: '',
+      createdAt: '',
+      updatedAt: '',
+      firstSubmissionId: null,
+      lastSubmissionId: null,
+      lastContributionSource: null,
+    })),
+    summary: {
+      totalCount,
+      creator,
+      previewUsers,
+      displayName,
+    },
+  };
+};
+
 type EventDetailTabKey = 'overview' | 'lineup' | 'timetable' | 'tickets' | 'contribution' | 'schedule' | 'media';
 
 const EVENT_DETAIL_TABS: Array<{ key: EventDetailTabKey; label: string }> = [
@@ -312,7 +369,6 @@ function EventDetailOverlay({
   useEffect(() => {
     if (!item) return;
     if (activeTab === 'overview') return;
-    if (activeTab === 'contribution') return;
     if (detail || loading || error) return;
     void onRequestLoadDetail();
   }, [activeTab, detail, error, item, loading, onRequestLoadDetail]);
@@ -335,6 +391,7 @@ function EventDetailOverlay({
 
   const resolved = detail ?? overview ?? null;
   const detailedResolved = detail ?? null;
+  const contributionInitialData = buildContributionInitialData(detailedResolved ?? overview ?? null);
   const state = resolveEventStatus(safeItem);
   const primaryName =
     firstFilledText(resolved?.nameI18n?.zh, resolved?.nameI18n?.en, resolved?.name, safeItem.name) || safeItem.name;
@@ -819,7 +876,13 @@ function EventDetailOverlay({
       </section>
     );
   } else if (activeTab === 'contribution') {
-    tabContent = <ContributionTabPanel entityType="event" entityId={item.id} />;
+    tabContent = (
+      <ContributionTabPanel
+        entityType="event"
+        entityId={item.id}
+        initialData={contributionInitialData}
+      />
+    );
   } else if (activeTab === 'media') {
     tabContent = (
       <section className="rounded-[24px] border border-[#e8eceb] bg-white p-5">

@@ -84,6 +84,7 @@ private enum EventUploadTimeDisplay {
 struct EventUploadFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.discoverPush) private var discoverPush
+    @Environment(\.appPush) private var appPush
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: EventUploadFlowViewModel
     @State private var showLocationPicker = false
@@ -2347,6 +2348,13 @@ struct EventUploadFlowView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 24)
+
+            EntityChangeResultPreviewCard(
+                change: success.change,
+                showsReviewPendingNotice: success.showsReviewPendingDiffNotice
+            ) { changeLogID in
+                appPush(.entityChangeDetail(changeLogID: changeLogID))
+            }
 
             VStack(spacing: 10) {
                 Button {

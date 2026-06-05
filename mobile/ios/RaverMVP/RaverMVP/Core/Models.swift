@@ -1764,6 +1764,23 @@ struct EntityChangeSummaryBundle: Codable, Hashable {
     }
 }
 
+struct EntityChangeInlineResult: Codable, Hashable {
+    var changeLogId: String?
+    var changed: Bool
+    var changeCount: Int
+    var summary: String?
+    var summaries: EntityChangeSummaryBundle?
+    var publicChanges: [EntityChangePublicChange]
+
+    var localizedSummary: String? {
+        summaries?.localizedText ?? summary?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+    }
+
+    var canOpenDetail: Bool {
+        changeLogId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+}
+
 struct EntityChangePublicChange: Codable, Identifiable, Hashable {
     var id: String { path + kind + (before ?? "") + (after ?? "") }
     var path: String

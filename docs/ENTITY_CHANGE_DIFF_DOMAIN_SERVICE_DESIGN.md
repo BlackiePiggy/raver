@@ -1669,6 +1669,29 @@ server/src/scripts/entity-change-brand-regression.ts
 - 无 revision 实体不因本阶段改造出现破坏性 API 变更。
 - 旧 publicChanges、summary、多语言 detail 不受影响。
 
+#### Phase 17: iOS 编辑成功页 Inline Diff 预览
+
+> 用户在 Event、DJ、Brand 编辑保存成功后，需要立刻知道“这次到底改了哪里”。本阶段不新增服务端 diff 逻辑，而是消费 direct update API 已返回的 `change`，在 iOS 成功页展示 public-safe 旧值/新值预览，并保留“查看完整修改详情”入口。
+
+- [x] 新增 iOS `EntityChangeInlineResult` DTO，覆盖 `changeLogId/changed/changeCount/summary/summaries/publicChanges`。
+- [x] `WebEvent`、`WebDJ`、`WebLearnFestival` 保留 direct update 响应里的 `change`。
+- [x] 新增统一 `EntityChangeResultPreviewCard`，展示多语言 summary、最多 4 条 publicChanges 旧值/新值、剩余数量提示。
+- [x] 有 `changeLogId` 时显示“查看完整修改详情”，复用既有 `entityChangeDetail` App route。
+- [x] Event 编辑成功页传入 `updated.change`。
+- [x] DJ 编辑成功页传入 `updated.change`。
+- [x] Brand 编辑成功页传入 `brand.change`。
+- [x] 编辑提交审核场景不展示伪 diff，显示“审核通过后生成修改详情”的说明。
+- [x] 创建成功场景暂不展示 inline diff，保持本阶段聚焦“编辑修改之后”。
+- [x] 更新本文档 `23.3 变更流水`。
+
+验收方式：
+
+- Event/DJ/Brand direct edit 成功页出现“本次修改”区域。
+- publicChanges 展示字段名、修改前、修改后，并按当前语言选择 zh/en/ja 文案。
+- publicChanges 超过 4 条时成功页只展示预览，完整列表通过详情页查看。
+- submitted-for-review 成功页不伪造 diff，只提示审核通过后再生成。
+- 如果后端未返回 `change`，成功页仍可正常展示原成功文案与按钮。
+
 ### 23.3 变更流水
 
 每次代码改动都必须新增一行。只改文档也要记录，方便回看设计演进。
@@ -1716,6 +1739,7 @@ server/src/scripts/entity-change-brand-regression.ts
 | 2026-06-05 | Phase 16 | `server/src/modules/entity-change/entity-change-revision-guard.ts`, `server/src/modules/entity-change/entity-change.service.ts`, `server/src/modules/entity-change/index.ts`, `server/src/controllers/event.controller.ts`, `server/src/services/content-submission-brand.service.ts`, `server/src/scripts/entity-change-revision-guard-regression.ts`, `server/package.json`, `server/src/modules/entity-change/README.md`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 revision guard；`trackUpdate` 支持 expectedRevision hook；Event update 支持 expected/base/revision 并使用 revision CAS；Brand 实际写库使用 revision CAS；新增 regression 和 README 说明 | `pnpm build`, `pnpm entity-change:revision-guard:regression` | Done |
 | 2026-06-05 | Phase 16 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 完成 Phase 16 最终验证；compare-and-swap 从未来扩展移动到已落地范围 | `pnpm build`, `pnpm prisma validate`, `pnpm entity-change:revision-guard:regression`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression`, `pnpm entity-change:snapshot-archive:regression`, `pnpm entity-change:news-post:regression`, `pnpm entity-change:label:regression` | Done |
 | 2026-06-05 | Phase 16 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 收敛未来扩展文案，明确当前暂无下一阶段保留项，后续新增实体或回滚 UI 再开 Phase 17 | checklist 搜索无未完成项 | Done |
+| 2026-06-05 | Phase 17 | `mobile/ios/RaverMVP/RaverMVP/Core/Models.swift`, `mobile/ios/RaverMVP/RaverMVP/Core/WebFeatureModels.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Notifications/EntityChangeDetailView.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/UploadFlow/EventUploadFlowViewModel.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Discover/Events/UploadFlow/EventUploadFlowView.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/UploadFlow/DJUploadFlowViewModel.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/UploadFlow/DJUploadFlowView.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Discover/Brands/UploadFlow/OrganizerUploadFlowViewModel.swift`, `mobile/ios/RaverMVP/RaverMVP/Features/Discover/Brands/UploadFlow/OrganizerUploadFlowView.swift`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | iOS direct edit 成功页展示 inline diff 预览；Event/DJ/Brand 透传 `change`；审核中编辑展示延后生成说明；完整详情入口复用既有 route | `rg "EntityChangeResultPreviewCard|EntityChangeInlineResult|showsReviewPendingDiffNotice" mobile/ios/RaverMVP/RaverMVP`, `git diff --check -- <changed files>` | Done |
 
 ## 24. 验收标准
 

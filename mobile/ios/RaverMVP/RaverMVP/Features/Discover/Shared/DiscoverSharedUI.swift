@@ -353,7 +353,6 @@ struct ContributorSummaryRow: View {
 }
 
 struct EntityContributorListView: View {
-    @Environment(\.appPush) private var appPush
     @EnvironmentObject private var appContainer: AppContainer
 
     let entityType: String
@@ -363,6 +362,7 @@ struct EntityContributorListView: View {
     @State private var page: WebEntityContributorPage?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var selectedProfileUserID: String?
 
     var body: some View {
         ScrollView {
@@ -389,6 +389,22 @@ struct EntityContributorListView: View {
                 contentSection
             }
             .padding(16)
+        }
+        .background {
+            NavigationLink(
+                destination: selectedProfileDestination,
+                isActive: Binding(
+                    get: { selectedProfileUserID != nil },
+                    set: { isActive in
+                        if !isActive {
+                            selectedProfileUserID = nil
+                        }
+                    }
+                )
+            ) {
+                EmptyView()
+            }
+            .hidden()
         }
         .background(RaverTheme.background.ignoresSafeArea())
         .raverSystemNavigation(title: LT("贡献者", "Contributors", "貢献者"))
@@ -433,7 +449,7 @@ struct EntityContributorListView: View {
                             entityID: entityID,
                             targetUserID: item.user.id
                         )
-                        appPush(.userProfile(userID: item.user.id))
+                        openUserProfile(item.user.id)
                     } label: {
                         contributorRow(item)
                     }
@@ -460,7 +476,7 @@ struct EntityContributorListView: View {
             HStack(alignment: .top, spacing: 12) {
                 ContributorAvatarStack(users: [item.user])
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .center, spacing: 8) {
                         Text(item.user.shownName)
                             .font(.subheadline.weight(.semibold))
@@ -476,35 +492,12 @@ struct EntityContributorListView: View {
                             )
                     }
 
-                    if let entityTitle = entityTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !entityTitle.isEmpty {
-                        Text(entityTitle)
-                            .font(.footnote)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-
                     Text(LT(
-                        "首次贡献：\(utcTimestampText(item.firstContributedAt))",
-                        "First contribution: \(utcTimestampText(item.firstContributedAt))",
-                        "初回貢献: \(utcTimestampText(item.firstContributedAt))"
+                        "\(item.contributionCount) 次贡献",
+                        "\(item.contributionCount) contributions",
+                        "\(item.contributionCount) 回の貢献"
                     ))
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
-
-                    Text(LT(
-                        "最近修改：\(utcTimestampText(item.lastContributedAt))",
-                        "Latest edit: \(utcTimestampText(item.lastContributedAt))",
-                        "最終更新: \(utcTimestampText(item.lastContributedAt))"
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(RaverTheme.secondaryText)
-
-                    Text(LT(
-                        "贡献次数：\(item.contributionCount)",
-                        "Contribution count: \(item.contributionCount)",
-                        "貢献回数: \(item.contributionCount)"
-                    ))
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(RaverTheme.secondaryText)
                 }
 
@@ -517,6 +510,21 @@ struct EntityContributorListView: View {
             }
             .contentShape(Rectangle())
         }
+    }
+
+    @ViewBuilder
+    private var selectedProfileDestination: some View {
+        if let selectedProfileUserID {
+            UserProfileView(
+                userID: TencentIMIdentity.normalizePlatformUserIDForProfile(selectedProfileUserID)
+            )
+        } else {
+            EmptyView()
+        }
+    }
+
+    private func openUserProfile(_ userID: String) {
+        selectedProfileUserID = userID
     }
 
     @MainActor

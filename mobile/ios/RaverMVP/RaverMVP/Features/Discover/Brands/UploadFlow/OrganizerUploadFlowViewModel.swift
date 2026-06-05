@@ -502,16 +502,18 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
                         "当前正在处理中，后续会通过通知更新为审核中或已入库。你可以在我的发布里查看状态。",
                         "The edit task is now processing. Later updates will arrive through notifications and My Posts.",
                         "編集タスクは現在処理中です。以降の更新は通知とマイ投稿で確認できます。"
-                    )
+                    ),
+                    showsReviewPendingDiffNotice: true
                 )
-            case (.edit(_), .created(_)):
+            case (.edit(_), .created(let brand)):
                 submitSuccess = OrganizerUploadSubmitSuccess(
                     title: LT("主办方已更新", "Organizer Updated", "主催者を更新しました"),
                     message: LT(
                         "更新已保存。你可以返回主办方页面查看最新内容，也可以在我的发布里继续管理。",
                         "Your changes are saved. Return to the organizer page to view the latest content, or manage it from My Posts.",
                         "更新を保存しました。主催者ページで最新内容を確認するか、マイ投稿から管理できます。"
-                    )
+                    ),
+                    change: brand.change
                 )
             }
         } catch {
@@ -784,4 +786,6 @@ struct OrganizerUploadSubmitSuccess: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let message: String
+    var change: EntityChangeInlineResult? = nil
+    var showsReviewPendingDiffNotice = false
 }

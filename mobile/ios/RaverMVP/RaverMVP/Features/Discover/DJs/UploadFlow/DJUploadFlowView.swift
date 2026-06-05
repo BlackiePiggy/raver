@@ -4,6 +4,7 @@ import UIKit
 
 struct DJUploadFlowView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appPush) private var appPush
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: DJUploadFlowViewModel
     @State private var avatarItem: PhotosPickerItem?
@@ -531,6 +532,13 @@ struct DJUploadFlowView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 24)
+
+            EntityChangeResultPreviewCard(
+                change: success.change,
+                showsReviewPendingNotice: success.showsReviewPendingDiffNotice
+            ) { changeLogID in
+                appPush(.entityChangeDetail(changeLogID: changeLogID))
+            }
 
             VStack(spacing: 10) {
                 Button {
