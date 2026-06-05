@@ -632,7 +632,7 @@ export default function LabelStudioForm({
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={submitting || uploadingLogo || uploadingAvatar || uploadingBackground || !canSubmit}
+            disabled={submitting || uploadingLogo || uploadingAvatar || uploadingBackground}
             className="admin-studio-button-primary px-6 py-3 text-sm"
           >
             {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '创建厂牌' : '保存厂牌')}
