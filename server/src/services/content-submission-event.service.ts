@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { recordEventContribution } from './contribution.service';
-import { changeSummaryTextFromPayload } from './content-submission-change-summary.service';
+import { entityChangeService } from '../modules/entity-change';
 import {
   DEFAULT_EVENT_TIME_ZONE,
   diffEventDays,
@@ -2245,9 +2245,13 @@ export async function createOrUpdateEventFromSubmission(
   } = {}
 ) {
   const input = await normalizeEventSubmissionWriteInput(db, payload, options);
-  const changeSummary = changeSummaryTextFromPayload(payload);
 
   if (input.targetEventId) {
+    const beforeChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'event',
+      entityId: input.targetEventId,
+      db,
+    });
     await runEventSubmissionTransaction(db, async (tx) => {
       const existingState = await buildComparableExistingEventState(tx, input.targetEventId as string);
       const nextState = buildComparableSubmissionState(input, payload);
@@ -2306,13 +2310,40 @@ export async function createOrUpdateEventFromSubmission(
         submissionId: options.submissionId ?? null,
         approvedAt: options.approvedAt ?? null,
         versionAfter: updated.revision ?? null,
-        changeSummary,
+        changeSummary: null,
       });
     });
 
-    return db.event.findUniqueOrThrow({
+    const updatedEvent = await db.event.findUniqueOrThrow({
       where: { id: input.targetEventId },
     });
+    const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'event',
+      entityId: input.targetEventId,
+      db,
+    });
+    const change = await entityChangeService.diffSnapshots({
+      entityType: 'event',
+      entityId: input.targetEventId,
+      operationType: 'update',
+      before: beforeChangeSnapshot,
+      after: afterChangeSnapshot,
+    });
+    await entityChangeService.persistChange({
+      result: change,
+      snapshots: {
+        before: beforeChangeSnapshot,
+        after: afterChangeSnapshot,
+      },
+      actorId: submitterId,
+      source: 'content_submission_event_apply',
+      sourceRoute: 'content-submission:event:update',
+      metadata: {
+        submissionId: options.submissionId ?? null,
+        skipCanonicalApply: options.skipCanonicalApply ?? false,
+      },
+    });
+    return updatedEvent;
   }
 
   const slug = await uniqueEventSlug(db, input.name, cleanText(payload.slug));
@@ -2350,12 +2381,39 @@ export async function createOrUpdateEventFromSubmission(
       submissionId: options.submissionId ?? null,
       approvedAt: options.approvedAt ?? null,
       versionAfter: persisted.revision ?? null,
-      changeSummary,
+      changeSummary: null,
     });
     return created;
   });
 
-  return db.event.findUniqueOrThrow({
+  const persistedEvent = await db.event.findUniqueOrThrow({
     where: { id: created.id },
   });
+  const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+    entityType: 'event',
+    entityId: created.id,
+    db,
+  });
+  const change = await entityChangeService.diffSnapshots({
+    entityType: 'event',
+    entityId: created.id,
+    operationType: 'create',
+    before: null,
+    after: afterChangeSnapshot,
+  });
+  await entityChangeService.persistChange({
+    result: change,
+    snapshots: {
+      before: null,
+      after: afterChangeSnapshot,
+    },
+    actorId: submitterId,
+    source: 'content_submission_event_apply',
+    sourceRoute: 'content-submission:event:create',
+    metadata: {
+      submissionId: options.submissionId ?? null,
+      skipCanonicalApply: options.skipCanonicalApply ?? false,
+    },
+  });
+  return persistedEvent;
 }

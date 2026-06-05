@@ -1,6 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { notificationCenterService } from '../modules/notifications';
-import { changeSummaryTextFromPayload } from './content-submission-change-summary.service';
 import {
   applyEventTimetableFromSubmission,
   createOrUpdateEventFromSubmission,
@@ -196,10 +195,14 @@ export async function publishContentSubmissionTaskNotification(input: {
   notificationKey?: string;
   payload?: Prisma.InputJsonObject | Prisma.JsonObject;
   locale?: string;
+  changeLogId?: string | null;
+  publicSummaryZh?: string | null;
+  publicSummaryEn?: string | null;
+  publicSummaryJa?: string | null;
+  publicChanges?: Prisma.JsonValue | null;
 }) {
   const typeLabel = typeLabelMap[input.entityType] || '内容';
   const statusLabels = statusLabelMap[input.status];
-  const changeSummary = changeSummaryTextFromPayload(input.payload);
   const titleI18n = {
     zh: `${typeLabel}提交${statusLabels.zh}`,
     en: `${typeLabel} submission ${statusLabels.en}`,
@@ -237,13 +240,10 @@ export async function publishContentSubmissionTaskNotification(input: {
               ? `投稿「${input.title}」の処理に失敗しました：${input.reason || '後でもう一度お試しいただくか、サポートへお問い合わせください。'}`
               : `投稿「${input.title}」は承認されませんでした：${input.reason || 'より正確な情報を追加して再送信してください。'}`,
   };
-  if (changeSummary) {
-    bodyI18n.zh = `${bodyI18n.zh}\n变更摘要：${changeSummary}`;
-    bodyI18n.en = `${bodyI18n.en}\nChange summary: ${changeSummary}`;
-    bodyI18n.ja = `${bodyI18n.ja}\n変更概要：${changeSummary}`;
-  }
-
-  const localizedBody = input.bodyOverride || bodyI18n.zh;
+  const localizedBody = input.bodyOverride
+    || (input.status === 'approved' && input.publicSummaryZh
+      ? `${bodyI18n.zh}\n${input.publicSummaryZh}`
+      : bodyI18n.zh);
   await notificationCenterService.publish({
     category: 'content_review',
     targets: [{ userId: input.userId }],
@@ -268,12 +268,61 @@ export async function publishContentSubmissionTaskNotification(input: {
         reason: input.reason || null,
         reasonCode: input.reasonCode || null,
         createdEntityId: input.createdEntityId || null,
+        changeLogId: input.changeLogId || null,
+        publicSummaryZh: input.publicSummaryZh || null,
+        publicSummaryEn: input.publicSummaryEn || null,
+        publicSummaryJa: input.publicSummaryJa || null,
+        publicChanges: input.publicChanges || [],
         typeLabel,
         statusLabel: input.statusLabelOverride || statusLabels.zh,
       },
     },
   });
 }
+
+const fetchLatestEntityChangeNotificationPayload = async (
+  db: PrismaClient,
+  entityType: string,
+  entityId?: string | null
+): Promise<{
+  changeLogId: string | null;
+  publicSummaryZh: string | null;
+  publicSummaryEn: string | null;
+  publicSummaryJa: string | null;
+  publicChanges: Prisma.JsonValue | null;
+}> => {
+  if (!entityId || !['event', 'dj', 'brand', 'news', 'post', 'label'].includes(entityType)) {
+    return {
+      changeLogId: null,
+      publicSummaryZh: null,
+      publicSummaryEn: null,
+      publicSummaryJa: null,
+      publicChanges: null,
+    };
+  }
+  const row = await db.entityChangeLog.findFirst({
+    where: {
+      entityType,
+      entityId,
+      changed: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      publicSummaryZh: true,
+      publicSummaryEn: true,
+      publicSummaryJa: true,
+      publicChanges: true,
+    },
+  });
+  return {
+    changeLogId: row?.id ?? null,
+    publicSummaryZh: row?.publicSummaryZh ?? null,
+    publicSummaryEn: row?.publicSummaryEn ?? null,
+    publicSummaryJa: row?.publicSummaryJa ?? null,
+    publicChanges: row?.publicChanges ?? null,
+  };
+};
 
 export async function enqueueContentSubmissionProcessingJob(
   submissionId: string,
@@ -432,6 +481,11 @@ const publishApprovedSubmissionPhaseBSuccess = async (
     },
   });
   if (!submission || submission.entityType !== 'event') return;
+  const changeNotification = await fetchLatestEntityChangeNotificationPayload(
+    db,
+    submission.entityType,
+    submission.createdEntityId
+  );
 
   await publishContentSubmissionTaskNotification({
     userId: submission.submitterId,
@@ -444,6 +498,7 @@ const publishApprovedSubmissionPhaseBSuccess = async (
     notificationKey: 'event_timetable_applied',
     bodyOverride: `你提交的「${submission.title}」时间表已同步完成。`,
     payload: submission.payload as Prisma.JsonObject,
+    ...changeNotification,
   });
 };
 
@@ -784,6 +839,11 @@ export async function processContentSubmission(
         approvalFinalizeMs,
         createdEntityId: approved.createdEntityId,
       });
+      const changeNotification = await fetchLatestEntityChangeNotificationPayload(
+        db,
+        approved.entityType,
+        approved.createdEntityId
+      );
 
       await publishContentSubmissionTaskNotification({
         userId: approved.submitterId,
@@ -793,6 +853,7 @@ export async function processContentSubmission(
         submissionId: approved.id,
         createdEntityId: approved.createdEntityId,
         payload: payload as Prisma.JsonObject,
+        ...changeNotification,
       });
 
       return {

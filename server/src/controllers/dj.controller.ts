@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import spotifyArtistService from '../services/spotify-artist.service';
+import { entityChangeService } from '../modules/entity-change';
 
 const prisma = new PrismaClient();
 const DJ_SYNC_TTL_MS = 1000 * 60 * 60 * 12;
@@ -75,6 +76,86 @@ const mergeDataSources = (
   }
 
   return result.length > 0 ? result.join('|') : null;
+};
+
+const DJ_UPDATE_FIELD_ALLOWLIST = new Set([
+  'name',
+  'nameI18n',
+  'aliases',
+  'genres',
+  'slug',
+  'bio',
+  'bioI18n',
+  'avatarUrl',
+  'avatarSourceUrl',
+  'bannerUrl',
+  'country',
+  'countryI18n',
+  'spotifyUrl',
+  'spotifyId',
+  'spotifyFollowers',
+  'appleMusicId',
+  'soundcloudUrl',
+  'soundcloudId',
+  'neteaseUrl',
+  'qqMusicUrl',
+  'website',
+  'trackCount',
+  'playlistCount',
+  'soundCloudFollowers',
+  'soundCloudFavorites',
+  'instagramUrl',
+  'facebookUrl',
+  'twitterUrl',
+  'youtubeUrl',
+  'isVerified',
+  'honors',
+  'sourceId',
+  'sourceAddedAt',
+  'sourceUpdatedAt',
+  'sourceArtistType',
+  'sourceDataSource',
+  'sourceSameAs',
+  'sourceGenres',
+  'sourceLabels',
+  'sourceWebsite',
+  'sourceWikipedia',
+  'sourceTiktok',
+  'sourceBookingAgency',
+  'sourceBookingAgent',
+  'sourceBookingUrl',
+  'sourceRealName',
+  'sourceBirthDate',
+  'sourceNationality',
+  'sourceYearsActive',
+  'sourceDiscographyCount',
+  'sourceUpcomingShows',
+  'sourceLineupEventCount',
+  'sourceLineupCityCount',
+  'sourcePromotionScore',
+  'sourceTotalVotes',
+  'sourceTrendingScore',
+  'sourceVerificationScore',
+  'sourceLastEnrichedAt',
+  'sourceLastImageAttemptAt',
+  'sourceNextImageAttemptAt',
+  'sourceSetlistFmMbid',
+  'sourceSetlistFmUrl',
+  'sourceSetlistFmFetchedAt',
+  'raId',
+  'discogsId',
+  'beatportId',
+]);
+
+const sanitizeDJUpdateData = (input: unknown): Prisma.DJUpdateInput => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (DJ_UPDATE_FIELD_ALLOWLIST.has(key)) {
+      result[key] = value;
+    }
+  }
+  return result as Prisma.DJUpdateInput;
 };
 
 const ensureDJByName = async (name: string) => {
@@ -574,14 +655,29 @@ export const ensureDJs = async (req: Request, res: Response): Promise<void> => {
 export const updateDJ = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = sanitizeDJUpdateData(req.body);
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: 'No valid DJ update fields provided' });
+      return;
+    }
 
-    const dj = await prisma.dJ.update({
-      where: { id: id as string },
-      data: updateData,
+    const { value: dj, change, changeLog } = await entityChangeService.trackUpdate({
+      entityType: 'dj',
+      entityId: id as string,
+      actorId: req.user?.userId ?? null,
+      actorRole: req.user?.role ?? null,
+      source: 'dj_admin_api',
+      sourceRoute: 'PUT /api/djs/:id',
+      update: (tx) => tx.dJ.update({
+        where: { id: id as string },
+        data: updateData,
+      }),
     });
 
-    res.json(dj);
+    res.json({
+      ...dj,
+      change: entityChangeService.toResponse({ change, changeLog }),
+    });
   } catch (error) {
     console.error('Update DJ error:', error);
     res.status(500).json({ error: 'Internal server error' });

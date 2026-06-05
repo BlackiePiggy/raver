@@ -275,6 +275,7 @@ struct ProfileView: View {
                         profilePush(.myPublishes)
                     }
                     quickActionTile(title: LT("贡献中心", "Contributions", "貢献センター"), icon: "person.3.fill") {
+                        ContributionModuleTelemetry.contributionCenterEntryTapped()
                         profilePush(.contributionCenter)
                     }
                     quickActionTile(title: LT("我的收藏", "My Saves", "保存済み"), icon: "star.fill") {
@@ -4406,6 +4407,7 @@ private final class ContributionCenterViewModel: ObservableObject {
 
     func selectFilter(_ filter: Filter) async {
         guard selectedFilter != filter else { return }
+        ContributionModuleTelemetry.contributionCenterFilterTapped(filter: filter.rawValue)
         selectedFilter = filter
         applyCachedPageIfAvailable(for: filter)
         await reload()
@@ -4575,6 +4577,7 @@ private final class ContributionCenterViewModel: ObservableObject {
 struct ContributionCenterView: View {
     @Environment(\.appPush) private var appPush
     @StateObject private var viewModel: ContributionCenterViewModel
+    @State private var hasTrackedExposure = false
 
     init(contentRepository: ProfileContentRepository) {
         _viewModel = StateObject(wrappedValue: ContributionCenterViewModel(contentRepository: contentRepository))
@@ -4642,6 +4645,10 @@ struct ContributionCenterView: View {
         .background(RaverTheme.background.ignoresSafeArea())
         .raverSystemNavigation(title: LT("贡献中心", "Contributions", "貢献センター"))
         .task {
+            if !hasTrackedExposure {
+                ContributionModuleTelemetry.contributionCenterExposure(filter: viewModel.selectedFilter.rawValue)
+                hasTrackedExposure = true
+            }
             await viewModel.loadIfNeeded()
         }
         .refreshable {

@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { recordDJContribution } from './contribution.service';
 import { normalizeCountryBiTextPayload } from '../utils/country-i18n';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
+import { entityChangeService } from '../modules/entity-change';
 
 const cleanText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -260,6 +261,11 @@ export const createOrUpdateDJFromSubmission = async (
   const targetDJId = cleanText(payload.targetDJId) || cleanText(payload.editTargetDJId) || null;
 
   if (targetDJId) {
+    const beforeChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'dj',
+      entityId: targetDJId,
+      db,
+    });
     const existing = await db.dJ.findUnique({
       where: { id: targetDJId },
     });
@@ -335,6 +341,31 @@ export const createOrUpdateDJFromSubmission = async (
       submissionId: options.submissionId ?? null,
       approvedAt: options.approvedAt ?? null,
       versionAfter: null,
+    });
+    const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'dj',
+      entityId: updated.id,
+      db,
+    });
+    const change = await entityChangeService.diffSnapshots({
+      entityType: 'dj',
+      entityId: updated.id,
+      operationType: 'update',
+      before: beforeChangeSnapshot,
+      after: afterChangeSnapshot,
+    });
+    await entityChangeService.persistChange({
+      result: change,
+      snapshots: {
+        before: beforeChangeSnapshot,
+        after: afterChangeSnapshot,
+      },
+      actorId: submitterId,
+      source: 'content_submission_dj_apply',
+      sourceRoute: 'content-submission:dj:update',
+      metadata: {
+        submissionId: options.submissionId ?? null,
+      },
     });
     return updated;
   }
@@ -414,6 +445,31 @@ export const createOrUpdateDJFromSubmission = async (
     submissionId: options.submissionId ?? null,
     approvedAt: options.approvedAt ?? null,
     versionAfter: null,
+  });
+  const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+    entityType: 'dj',
+    entityId: created.id,
+    db,
+  });
+  const change = await entityChangeService.diffSnapshots({
+    entityType: 'dj',
+    entityId: created.id,
+    operationType: 'create',
+    before: null,
+    after: afterChangeSnapshot,
+  });
+  await entityChangeService.persistChange({
+    result: change,
+    snapshots: {
+      before: null,
+      after: afterChangeSnapshot,
+    },
+    actorId: submitterId,
+    source: 'content_submission_dj_apply',
+    sourceRoute: 'content-submission:dj:create',
+    metadata: {
+      submissionId: options.submissionId ?? null,
+    },
   });
   return created;
 };

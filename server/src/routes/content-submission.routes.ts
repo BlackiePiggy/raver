@@ -4,6 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { adminAuditService } from '../modules/admin/admin-audit.service';
 import { requireAdminOrOperator } from '../modules/admin/admin-auth.policy';
 import { notificationCenterService } from '../modules/notifications';
+import { entityChangeService, EntitySnapshot } from '../modules/entity-change';
 import { analyzeI18nCompleteness, normalizeTriTextPayload, resolveLocalizedText, triTextToJson } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
 import { syncNewsBindings, syncPostBindings } from '../services/content-bindings.service';
@@ -29,10 +30,6 @@ import {
 } from '../services/content-submission-brand.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
-import {
-  attachContentSubmissionChangeSummary,
-  changeSummaryTextFromPayload,
-} from '../services/content-submission-change-summary.service';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -468,7 +465,44 @@ const stringArray = (value: unknown): string[] => {
 
 const dateOrUndefined = (value: unknown): Date | undefined => dateFromPayload(value) ?? undefined;
 
-const createNewsFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
+const persistCreateEntityChangeFromSnapshot = async (input: {
+  entityType: 'news' | 'post' | 'label';
+  entityId: string;
+  after: EntitySnapshot | null;
+  actorId: string;
+  submissionId?: string;
+}): Promise<void> => {
+  if (!input.after) return;
+  const change = await entityChangeService.diffSnapshots({
+    entityType: input.entityType,
+    entityId: input.entityId,
+    operationType: 'create',
+    before: null,
+    after: input.after,
+  });
+  await entityChangeService.persistChange({
+    result: change,
+    snapshots: {
+      before: null,
+      after: input.after,
+    },
+    actorId: input.actorId,
+    actorRole: 'user',
+    source: 'content_submission',
+    sourceRoute: '/admin/content-submissions/:id/review',
+    metadata: {
+      submissionId: input.submissionId ?? null,
+    },
+  });
+};
+
+const createNewsFromSubmission = async (
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  options: {
+    submissionId?: string;
+  } = {}
+) => {
   const title = cleanText(payload.title) || titleFromPayload('news', payload);
   const body = cleanText(payload.body) || cleanText(payload.content) || title;
   const coverImageUrl =
@@ -479,7 +513,8 @@ const createNewsFromSubmission = async (payload: Prisma.JsonObject, submitterId:
   const boundDjIds = stringArray(payload.boundDjIds);
   const boundBrandIds = stringArray(payload.boundBrandIds);
   const boundEventIds = stringArray(payload.boundEventIds);
-  return prisma.$transaction(async (tx) => {
+  let afterSnapshot: EntitySnapshot | null = null;
+  const article = await prisma.$transaction(async (tx) => {
     const article = await tx.newsArticle.create({
       data: {
         authorId: submitterId,
@@ -499,8 +534,21 @@ const createNewsFromSubmission = async (payload: Prisma.JsonObject, submitterId:
       brandIds: boundBrandIds,
       eventIds: boundEventIds,
     });
+    afterSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'news',
+      entityId: article.id,
+      db: tx,
+    });
     return article;
   });
+  await persistCreateEntityChangeFromSnapshot({
+    entityType: 'news',
+    entityId: article.id,
+    after: afterSnapshot,
+    actorId: submitterId,
+    submissionId: options.submissionId,
+  });
+  return article;
 };
 
 const createSetFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
@@ -562,41 +610,64 @@ const createSetFromSubmission = async (payload: Prisma.JsonObject, submitterId: 
   });
 };
 
-const createLabelFromSubmission = async (payload: Prisma.JsonObject) => {
+const createLabelFromSubmission = async (
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  options: {
+    submissionId?: string;
+  } = {}
+) => {
   const name = cleanText(payload.name);
   if (!name) throw new Error('厂牌名称不能为空');
   const slug = await uniqueLabelSlug(name, cleanText(payload.slug));
   const profileUrl = cleanText(payload.profileUrl) || `community://${slug}`;
-  return prisma.label.create({
-    data: {
-      name,
-      nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
-      slug,
-      profileUrl,
-      profileSlug: cleanText(payload.profileSlug) || slug,
-      logoUrl: cleanText(payload.logoUrl) || null,
-      avatarUrl: cleanText(payload.avatarUrl) || null,
-      backgroundUrl: cleanText(payload.backgroundUrl) || null,
-      nation: cleanText(payload.nation) || cleanText(payload.country) || null,
-      genresPreview: cleanText(payload.genresPreview) || null,
-      introductionPreview: cleanText(payload.introductionPreview) || null,
-      introduction: cleanText(payload.introduction) || cleanText(payload.description) || null,
-      descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.introduction) || cleanText(payload.description) || '')),
-      genres: stringArray(payload.genres),
-      contacts: (payload.contacts as Prisma.InputJsonValue | undefined) ?? undefined,
-      linksInWeb: (payload.linksInWeb as Prisma.InputJsonValue | undefined) ?? undefined,
-      generalContactEmail: cleanText(payload.generalContactEmail) || null,
-      demoSubmissionUrl: cleanText(payload.demoSubmissionUrl) || null,
-      demoSubmissionDisplay: cleanText(payload.demoSubmissionDisplay) || null,
-      facebookUrl: cleanText(payload.facebookUrl) || null,
-      soundcloudUrl: cleanText(payload.soundcloudUrl) || null,
-      musicPurchaseUrl: cleanText(payload.musicPurchaseUrl) || null,
-      officialWebsiteUrl: cleanText(payload.officialWebsiteUrl) || cleanText(payload.officialWebsite) || null,
-      founderName: cleanText(payload.founderName) || null,
-      foundedAt: cleanText(payload.foundedAt) || null,
-      founderDjId: cleanText(payload.founderDjId) || null,
-    } as any,
+  let afterSnapshot: EntitySnapshot | null = null;
+  const label = await prisma.$transaction(async (tx) => {
+    const label = await tx.label.create({
+      data: {
+        name,
+        nameI18n: triTextToJson(normalizeTriTextPayload(payload.nameI18n, name)),
+        slug,
+        profileUrl,
+        profileSlug: cleanText(payload.profileSlug) || slug,
+        logoUrl: cleanText(payload.logoUrl) || null,
+        avatarUrl: cleanText(payload.avatarUrl) || null,
+        backgroundUrl: cleanText(payload.backgroundUrl) || null,
+        nation: cleanText(payload.nation) || cleanText(payload.country) || null,
+        genresPreview: cleanText(payload.genresPreview) || null,
+        introductionPreview: cleanText(payload.introductionPreview) || null,
+        introduction: cleanText(payload.introduction) || cleanText(payload.description) || null,
+        descriptionI18n: triTextToJson(normalizeTriTextPayload(payload.descriptionI18n, cleanText(payload.introduction) || cleanText(payload.description) || '')),
+        genres: stringArray(payload.genres),
+        contacts: (payload.contacts as Prisma.InputJsonValue | undefined) ?? undefined,
+        linksInWeb: (payload.linksInWeb as Prisma.InputJsonValue | undefined) ?? undefined,
+        generalContactEmail: cleanText(payload.generalContactEmail) || null,
+        demoSubmissionUrl: cleanText(payload.demoSubmissionUrl) || null,
+        demoSubmissionDisplay: cleanText(payload.demoSubmissionDisplay) || null,
+        facebookUrl: cleanText(payload.facebookUrl) || null,
+        soundcloudUrl: cleanText(payload.soundcloudUrl) || null,
+        musicPurchaseUrl: cleanText(payload.musicPurchaseUrl) || null,
+        officialWebsiteUrl: cleanText(payload.officialWebsiteUrl) || cleanText(payload.officialWebsite) || null,
+        founderName: cleanText(payload.founderName) || null,
+        foundedAt: cleanText(payload.foundedAt) || null,
+        founderDjId: cleanText(payload.founderDjId) || null,
+      } as any,
+    });
+    afterSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'label',
+      entityId: label.id,
+      db: tx,
+    });
+    return label;
   });
+  await persistCreateEntityChangeFromSnapshot({
+    entityType: 'label',
+    entityId: label.id,
+    after: afterSnapshot,
+    actorId: submitterId,
+    submissionId: options.submissionId,
+  });
+  return label;
 };
 
 const createRatingFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
@@ -646,7 +717,13 @@ const createRatingFromSubmission = async (payload: Prisma.JsonObject, submitterI
   });
 };
 
-const createIDFromSubmission = async (payload: Prisma.JsonObject, submitterId: string) => {
+const createIDFromSubmission = async (
+  payload: Prisma.JsonObject,
+  submitterId: string,
+  options: {
+    submissionId?: string;
+  } = {}
+) => {
   const songName = cleanText(payload.songName) || cleanText(payload.title);
   if (!songName) throw new Error('ID 名称不能为空');
   const audioUrl = cleanText(payload.audioUrl);
@@ -655,7 +732,8 @@ const createIDFromSubmission = async (payload: Prisma.JsonObject, submitterId: s
   const djNames = stringArray(payload.djNames);
   const boundDjIds = stringArray(payload.boundDjIds);
   const boundEventIds = stringArray(payload.boundEventIds);
-  return prisma.$transaction(async (tx) => {
+  let afterSnapshot: EntitySnapshot | null = null;
+  const post = await prisma.$transaction(async (tx) => {
     const post = await tx.post.create({
       data: {
         userId: submitterId,
@@ -676,10 +754,23 @@ const createIDFromSubmission = async (payload: Prisma.JsonObject, submitterId: s
     });
     await syncPostBindings(tx, post.id, {
       djIds: boundDjIds,
-      eventIds: boundEventIds,
+        eventIds: boundEventIds,
+      });
+    afterSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'post',
+      entityId: post.id,
+      db: tx,
     });
     return post;
   });
+  await persistCreateEntityChangeFromSnapshot({
+    entityType: 'post',
+    entityId: post.id,
+    after: afterSnapshot,
+    actorId: submitterId,
+    submissionId: options.submissionId,
+  });
+  return post;
 };
 
 const createEntityFromSubmission = async (
@@ -696,20 +787,63 @@ const createEntityFromSubmission = async (
     case 'dj':
       return createOrUpdateDJFromSubmission(prisma, payload, submitterId, options);
     case 'news':
-      return createNewsFromSubmission(payload, submitterId);
+      return createNewsFromSubmission(payload, submitterId, options);
     case 'set':
       return createSetFromSubmission(payload, submitterId);
     case 'brand':
       return createOrUpdateBrandFromSubmission(prisma, payload, submitterId, options);
     case 'label':
-      return createLabelFromSubmission(payload);
+      return createLabelFromSubmission(payload, submitterId, options);
     case 'rating':
       return createRatingFromSubmission(payload, submitterId);
     case 'id':
-      return createIDFromSubmission(payload, submitterId);
+      return createIDFromSubmission(payload, submitterId, options);
     default:
       throw new Error(`暂不支持审核类型：${entityType}`);
   }
+};
+
+type SubmissionHistoryChangeEntityType = 'event' | 'dj' | 'brand' | 'djSet' | 'news' | 'post' | 'label';
+
+const entityChangeTypeForSubmissionHistory = (entityType: string): SubmissionHistoryChangeEntityType | null => {
+  if (entityType === 'event' || entityType === 'dj' || entityType === 'brand' || entityType === 'news' || entityType === 'label') return entityType;
+  if (entityType === 'set') return 'djSet';
+  if (entityType === 'id') return 'post';
+  return null;
+};
+
+const fetchLatestEntityChangePayloadForSubmissionHistory = async (
+  entityType: SubmissionHistoryChangeEntityType,
+  entityId: string
+): Promise<{
+  changeLogId: string | null;
+  publicSummaryZh: string | null;
+  publicSummaryEn: string | null;
+  publicSummaryJa: string | null;
+  publicChanges: Prisma.JsonValue;
+}> => {
+  const row = await prisma.entityChangeLog.findFirst({
+    where: {
+      entityType,
+      entityId,
+      changed: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      publicSummaryZh: true,
+      publicSummaryEn: true,
+      publicSummaryJa: true,
+      publicChanges: true,
+    },
+  });
+  return {
+    changeLogId: row?.id ?? null,
+    publicSummaryZh: row?.publicSummaryZh ?? null,
+    publicSummaryEn: row?.publicSummaryEn ?? null,
+    publicSummaryJa: row?.publicSummaryJa ?? null,
+    publicChanges: row?.publicChanges ?? [],
+  };
 };
 
 const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
@@ -736,6 +870,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
 
   try {
     if (input.entityType === 'event') {
+      const changePayload = await fetchLatestEntityChangePayloadForSubmissionHistory('event', entityId);
       const title = cleanText(row.name) || titleFromPayload('event', input.payload);
       const summary = cleanText(row.description) || title;
       if (!title) return;
@@ -757,6 +892,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
               ? row.startDate.toISOString()
               : cleanText(row.startDate) || null,
           wikiFestivalId: cleanText(row.wikiFestivalId) || null,
+          ...changePayload,
         },
       });
       await notificationCenterService.createAdminContentHistory({
@@ -780,6 +916,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
               : cleanText(row.startDate) || null,
           wikiFestivalId: cleanText(row.wikiFestivalId) || null,
           source: 'content_submission_approved',
+          ...changePayload,
         },
         sourceRoute: '/admin/content-submissions/:id/review',
         createdBy: input.actorId,
@@ -789,6 +926,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
     }
 
     if (input.entityType === 'dj') {
+      const changePayload = await fetchLatestEntityChangePayloadForSubmissionHistory('dj', entityId);
       const title = cleanText(row.name) || titleFromPayload('dj', input.payload);
       const summary = cleanText(row.bio) || title;
       if (!title) return;
@@ -804,6 +942,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
           title,
           summary,
           coverImageURL: cleanText(row.avatarUrl) || null,
+          ...changePayload,
         },
       });
       await notificationCenterService.createAdminContentHistory({
@@ -821,6 +960,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
           summary,
           coverImageURL: cleanText(row.avatarUrl) || null,
           source: 'content_submission_approved',
+          ...changePayload,
         },
         sourceRoute: '/admin/content-submissions/:id/review',
         createdBy: input.actorId,
@@ -830,6 +970,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
     }
 
     if (input.entityType === 'brand') {
+      const changePayload = await fetchLatestEntityChangePayloadForSubmissionHistory('brand', entityId);
       const title = cleanText(row.name) || titleFromPayload('brand', input.payload);
       const summary = cleanText(row.introduction) || cleanText(input.payload.description) || title;
       if (!title) return;
@@ -846,6 +987,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
           title,
           summary,
           coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
+          ...changePayload,
         },
       });
       await notificationCenterService.createAdminContentHistory({
@@ -864,6 +1006,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
           summary,
           coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
           source: 'content_submission_approved',
+          ...changePayload,
         },
         sourceRoute: '/admin/content-submissions/:id/review',
         createdBy: input.actorId,
@@ -873,6 +1016,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
     }
 
     if (input.entityType === 'news') {
+      const changePayload = await fetchLatestEntityChangePayloadForSubmissionHistory('news', entityId);
       const title = cleanText(row.title) || titleFromPayload('news', input.payload);
       const summary = cleanText(row.summary) || title;
       if (!title) return;
@@ -892,6 +1036,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
             row.publishedAt instanceof Date
               ? row.publishedAt.toISOString()
               : cleanText(row.publishedAt) || null,
+          ...changePayload,
         },
       });
       await notificationCenterService.createAdminContentHistory({
@@ -913,6 +1058,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
               ? row.publishedAt.toISOString()
               : cleanText(row.publishedAt) || null,
           source: 'content_submission_approved',
+          ...changePayload,
         },
         sourceRoute: '/admin/content-submissions/:id/review',
         createdBy: input.actorId,
@@ -922,6 +1068,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
     }
 
     if (input.entityType === 'label') {
+      const changePayload = await fetchLatestEntityChangePayloadForSubmissionHistory('label', entityId);
       const title = cleanText(row.name) || titleFromPayload('label', input.payload);
       const summary =
         cleanText(row.introduction) ||
@@ -942,6 +1089,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
           title,
           summary,
           coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
+          ...changePayload,
         },
       });
       await notificationCenterService.createAdminContentHistory({
@@ -960,6 +1108,7 @@ const enqueueApprovedSubmissionForNotificationBestEffort = async (input: {
           summary,
           coverImageURL: cleanText(row.avatarUrl) || cleanText(row.backgroundUrl) || null,
           source: 'content_submission_approved',
+          ...changePayload,
         },
         sourceRoute: '/admin/content-submissions/:id/review',
         createdBy: input.actorId,
@@ -1006,7 +1155,6 @@ const publishSubmissionStatusNotification = async (input: {
     failed: { zh: '处理失败', en: 'failed', ja: '処理失敗' },
   } as const;
   const statusLabels = statusLabelMap[input.status];
-  const changeSummary = changeSummaryTextFromPayload(input.payload);
   const titleI18n = {
     zh: `${typeLabel}提交${statusLabels.zh}`,
     en: `${typeLabel} submission ${statusLabels.en}`,
@@ -1044,11 +1192,6 @@ const publishSubmissionStatusNotification = async (input: {
               ? `投稿「${input.title}」の処理に失敗しました：${input.reason || '後でもう一度お試しいただくか、サポートへお問い合わせください。'}`
               : `投稿「${input.title}」は承認されませんでした：${input.reason || 'より正確な情報を追加して再送信してください。'}`,
   };
-  if (changeSummary) {
-    bodyI18n.zh = `${bodyI18n.zh}\n变更摘要：${changeSummary}`;
-    bodyI18n.en = `${bodyI18n.en}\nChange summary: ${changeSummary}`;
-    bodyI18n.ja = `${bodyI18n.ja}\n変更概要：${changeSummary}`;
-  }
   await notificationCenterService.publish({
     category: 'content_review',
     targets: [{ userId: input.userId }],
@@ -1096,7 +1239,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
       : entityType === 'brand'
         ? normalizeBrandSubmissionPayload(rawPayload)
         : rawPayload;
-    const payloadWithSummary = attachContentSubmissionChangeSummary(entityType, normalizedPayload);
+    const payloadWithSummary = normalizedPayload;
     const validationError = ensureSubmissionPayload(entityType, payloadWithSummary);
     if (validationError) {
       res.status(400).json({ error: validationError });
@@ -1249,7 +1392,7 @@ router.patch('/mine/:id', authenticate, async (req: AuthRequest, res: Response):
       : current.entityType === 'brand'
         ? normalizeBrandSubmissionPayload(rawPayload)
         : rawPayload;
-    const payload = attachContentSubmissionChangeSummary(current.entityType, normalizedPayload);
+    const payload = normalizedPayload;
 
     const validationError = ensureSubmissionPayload(current.entityType, payload);
     if (validationError) {
@@ -1559,6 +1702,13 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
       },
     });
 
+    const statusChangeEntityType = decision === 'approved' && createdEntityId
+      ? entityChangeTypeForSubmissionHistory(current.entityType)
+      : null;
+    const statusChangePayload = statusChangeEntityType && createdEntityId
+      ? await fetchLatestEntityChangePayloadForSubmissionHistory(statusChangeEntityType, createdEntityId)
+      : null;
+
     await publishSubmissionStatusNotification({
       userId: current.submitterId,
       entityType: current.entityType,
@@ -1568,6 +1718,7 @@ router.post('/admin/:id/review', authenticate, requireAdminOrOperator, async (re
       reason: reason || null,
       reasonCode: reasonCode || null,
       createdEntityId,
+      ...(statusChangePayload ?? {}),
     });
 
     res.json({ message: decision === 'approved' ? '审核通过，内容已入库' : '审核未通过，结果已反馈给用户', submission: updated });

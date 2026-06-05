@@ -3557,6 +3557,11 @@ struct EventDetailView: View {
                     summary: event.contributorSummary,
                     fallbackUsers: contributorUsers
                 ) {
+                    ContributionModuleTelemetry.contributorSummaryTapped(
+                        entityType: "event",
+                        entityID: event.id,
+                        totalCount: max(event.contributorSummary?.totalCount ?? 0, contributorUsers.count)
+                    )
                     showContributorList = true
                 }
             }

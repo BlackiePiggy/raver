@@ -1316,8 +1316,8 @@ server/src/scripts/entity-change-brand-regression.ts
 - [x] 确认用户推送需要展示旧值/新值。
 - [x] 确认长期不保存完整 before/after snapshot。
 - [x] 确认旧 payload 猜测式 summary 直接废弃。
-- [ ] 记录当前所有旧 summary 调用点的最终替换清单。
-- [ ] 确认本轮不扩展 `djSet/news/post/label`。
+- [x] 记录当前所有旧 summary 调用点的最终替换清单。
+- [x] 确认本轮不扩展 `djSet/news/post/label`。
 
 验收方式：
 
@@ -1326,12 +1326,12 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 1: 数据库与持久化模型
 
-- [ ] 新增 Prisma model `EntityChangeLog`。
-- [ ] 新增 migration 创建 `entity_change_logs`。
-- [ ] 确认 `changes`、`public_changes`、summary、hash、revision 字段齐全。
-- [ ] 增加索引：`entityType/entityId/createdAt`、`actorId/createdAt`、`operationType/createdAt`。
-- [ ] 运行 Prisma generate。
-- [ ] 验证 migration 可在本地数据库应用。
+- [x] 新增 Prisma model `EntityChangeLog`。
+- [x] 新增 migration 创建 `entity_change_logs`。
+- [x] 确认 `changes`、`public_changes`、summary、hash、revision 字段齐全。
+- [x] 增加索引：`entityType/entityId/createdAt`、`actorId/createdAt`、`operationType/createdAt`。
+- [x] 运行 Prisma generate。
+- [x] 验证 migration 可在本地数据库应用。已通过 `pnpm prisma migrate deploy` 应用 `20260605103000_add_entity_change_logs`，并通过事务内写入后回滚验证 `EntityChangeLog` 可创建。
 
 验收方式：
 
@@ -1341,16 +1341,16 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 2: 核心 entity-change 模块骨架
 
-- [ ] 新增 `server/src/modules/entity-change/index.ts`。
-- [ ] 新增 `entity-change.types.ts`。
-- [ ] 新增 `entity-change.registry.ts`。
-- [ ] 新增 `entity-change.service.ts` facade。
-- [ ] 新增 `entity-change.repository.ts`。
-- [ ] 新增 `entity-change-canonicalizer.ts`。
-- [ ] 新增 `entity-change-diff-engine.ts`。
-- [ ] 新增 `entity-change-summarizer.ts`。
-- [ ] 新增 `entity-change-visibility.ts`。
-- [ ] 提供 `trackUpdate`、`captureSnapshot`、`diffSnapshots`、`persistChange` API。
+- [x] 新增 `server/src/modules/entity-change/index.ts`。
+- [x] 新增 `entity-change.types.ts`。
+- [x] 新增 `entity-change.registry.ts`。
+- [x] 新增 `entity-change.service.ts` facade。
+- [x] 新增 `entity-change.repository.ts`。
+- [x] 新增 `entity-change-canonicalizer.ts`。
+- [x] 新增 `entity-change-diff-engine.ts`。
+- [x] 新增 `entity-change-summarizer.ts`。
+- [x] 新增 `entity-change-visibility.ts`。
+- [x] 提供 `trackUpdate`、`captureSnapshot`、`diffSnapshots`、`persistChange` API。
 
 验收方式：
 
@@ -1360,17 +1360,17 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 3: Canonicalizer 与 Diff Engine
 
-- [ ] object key 排序稳定。
-- [ ] Date 统一 ISO。
-- [ ] Decimal 统一 string。
-- [ ] i18n JSON key 顺序稳定。
-- [ ] 支持 scalar diff。
-- [ ] 支持 set array diff。
-- [ ] 支持 ordered-list diff。
-- [ ] 支持 keyed-list diff。
-- [ ] 支持 hash tree 剪枝。
-- [ ] 支持 path config 控制 empty string/null 语义。
-- [ ] 支持 public/private/operator visibility 分类。
+- [x] object key 排序稳定。
+- [x] Date 统一 ISO。
+- [x] Decimal 统一 string。
+- [x] i18n JSON key 顺序稳定。
+- [x] 支持 scalar diff。
+- [x] 支持 set array diff。
+- [x] 支持 ordered-list diff。
+- [x] 支持 keyed-list diff。
+- [x] 支持 hash tree 剪枝。
+- [x] 支持 path config 控制 empty string/null 语义。
+- [x] 支持 public/private/operator visibility 分类。
 
 验收方式：
 
@@ -1381,18 +1381,19 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 4: Event 接入
 
-- [ ] 新增 `snapshots/event.snapshot.ts`。
-- [ ] 新增 `configs/event.change-config.ts`。
-- [ ] Event snapshot 覆盖主表 profile/media/location/schedule/tickets/lineup/links。
-- [ ] Event snapshot 读取 `ticketTiers`。
-- [ ] Event snapshot 读取 `weeks`、`eventDays`。
-- [ ] Event snapshot 读取 `stages`。
-- [ ] Event snapshot 读取 `canonicalArtists` 和 members。
-- [ ] Event snapshot 读取 `performances`，并使用 `identityKey`。
-- [ ] 改造 `updateEvent` 使用 `entityChangeService`。
-- [ ] 处理 `shouldRebaseExistingLineupSlots` 后再 capture after snapshot。
-- [ ] API 响应增加 `change` 字段，保持旧客户端兼容。
-- [ ] Event 更新成功写入 `entity_change_logs`。
+- [x] 新增 `snapshots/event.snapshot.ts`。
+- [x] 新增 `configs/event.change-config.ts`。
+- [x] Event snapshot 覆盖主表 profile/media/location/schedule/tickets/lineup/links。
+- [x] Event snapshot 读取 `ticketTiers`。
+- [x] Event snapshot 读取 `weeks`、`eventDays`。
+- [x] Event snapshot 读取 `stages`。
+- [x] Event snapshot 读取 `canonicalArtists` 和 members。
+- [x] Event snapshot 读取 `performances`，并使用 `identityKey`。
+- [x] 改造 `updateEvent` 使用 `entityChangeService`。
+- [x] 处理 `shouldRebaseExistingLineupSlots` 后再 capture after snapshot。
+- [x] API 响应增加 `change` 字段，保持旧客户端兼容。
+- [x] Event 更新成功写入 `entity_change_logs`。
+- [x] Event content submission 入库路径生成 `entity_change_logs`。
 
 验收方式：
 
@@ -1404,16 +1405,17 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 5: DJ 接入
 
-- [ ] 新增 `snapshots/dj.snapshot.ts`。
-- [ ] 新增 `configs/dj.change-config.ts`。
-- [ ] DJ snapshot 覆盖 profile/media/links/platform/source。
-- [ ] `aliases` 使用 set 语义。
-- [ ] `genres` 使用 set 语义。
-- [ ] `source.*` 默认 private。
-- [ ] 改造 `updateDJ` 使用 `entityChangeService`。
-- [ ] 为 `updateDJ` 增加 update input 白名单。
-- [ ] API 响应增加 `change` 字段，保持旧客户端兼容。
-- [ ] DJ 更新成功写入 `entity_change_logs`。
+- [x] 新增 `snapshots/dj.snapshot.ts`。
+- [x] 新增 `configs/dj.change-config.ts`。
+- [x] DJ snapshot 覆盖 profile/media/links/platform/source。
+- [x] `aliases` 使用 set 语义。
+- [x] `genres` 使用 set 语义。
+- [x] `source.*` 默认 private。
+- [x] 改造 `updateDJ` 使用 `entityChangeService`。
+- [x] 为 `updateDJ` 增加 update input 白名单。
+- [x] API 响应增加 `change` 字段，保持旧客户端兼容。
+- [x] DJ 更新成功写入 `entity_change_logs`。
+- [x] DJ content submission 入库路径生成 `entity_change_logs`。
 
 验收方式：
 
@@ -1424,16 +1426,16 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 6: Brand(WikiFestival) 接入
 
-- [ ] 新增 `snapshots/brand.snapshot.ts`。
-- [ ] 新增 `configs/brand.change-config.ts`。
-- [ ] Brand snapshot 覆盖 profile/region/basics/media/links/bindings。
-- [ ] `aliases` 使用 set 语义。
-- [ ] `links.links` 使用 keyed-list by `url`。
-- [ ] `bindings.eventIds` 进入 operator，不进入 public。
-- [ ] `bindings.postIds/newsIds` 进入 private。
-- [ ] 在 `content-submission-brand.service.ts` 实际写库路径接入 `entityChangeService`。
-- [ ] Brand revisionBefore/revisionAfter 写入 change log。
-- [ ] 审核通过后通知使用新生成的 change log。
+- [x] 新增 `snapshots/brand.snapshot.ts`。
+- [x] 新增 `configs/brand.change-config.ts`。
+- [x] Brand snapshot 覆盖 profile/region/basics/media/links/bindings。
+- [x] `aliases` 使用 set 语义。
+- [x] `links.links` 使用 keyed-list by `url`。
+- [x] `bindings.eventIds` 进入 operator，不进入 public。
+- [x] `bindings.postIds/newsIds` 进入 private。
+- [x] 在 `content-submission-brand.service.ts` 实际写库路径接入 `entityChangeService`。
+- [x] Brand revisionBefore/revisionAfter 写入 change log。
+- [x] 审核通过后通知使用新生成的 change log。
 
 验收方式：
 
@@ -1444,14 +1446,14 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 7: 旧 summary 删除与调用点替换
 
-- [ ] 删除 `content-submission-change-summary.service.ts`。
-- [ ] 替换 `content-submission-processing.service.ts` 中的 `changeSummaryTextFromPayload`。
-- [ ] 替换 `content-submission-event.service.ts` 中的 `changeSummaryTextFromPayload`。
-- [ ] 替换 `bff.web.routes.ts` 中的 `attachContentSubmissionChangeSummary`。
-- [ ] 替换 `bff.web.routes.ts` 中的 `changeSummaryTextFromPayload`。
-- [ ] 替换 `content-submission.routes.ts` 中的旧 summary 调用。
-- [ ] 更新或删除 `dj-edit-submission-regression.ts` 中旧 summary 断言。
-- [ ] 确认 `rg "content-submission-change-summary|changeSummaryTextFromPayload|attachContentSubmissionChangeSummary" server/src` 无生产调用。
+- [x] 删除 `content-submission-change-summary.service.ts`。
+- [x] 替换 `content-submission-processing.service.ts` 中的 `changeSummaryTextFromPayload`。
+- [x] 替换 `content-submission-event.service.ts` 中的 `changeSummaryTextFromPayload`。
+- [x] 替换 `bff.web.routes.ts` 中的 `attachContentSubmissionChangeSummary`。
+- [x] 替换 `bff.web.routes.ts` 中的 `changeSummaryTextFromPayload`。
+- [x] 替换 `content-submission.routes.ts` 中的旧 summary 调用。
+- [x] 更新或删除 `dj-edit-submission-regression.ts` 中旧 summary 断言。
+- [x] 确认 `rg "content-submission-change-summary|changeSummaryTextFromPayload|attachContentSubmissionChangeSummary" server/src` 无生产调用。
 
 验收方式：
 
@@ -1460,14 +1462,14 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 8: Notification 与 Admin History 接入
 
-- [ ] notification metadata 增加 `changeLogId`。
-- [ ] notification metadata 增加 `publicChanges`。
-- [ ] `event_update` 推送 body 使用 `publicSummaryZh`。
-- [ ] `dj_update` 推送 body 使用 `publicSummaryZh`。
-- [ ] `brand_update` 推送 body 使用 `publicSummaryZh`。
-- [ ] `NotificationAdminContentHistory.payload` 改为引用 `changeLogId`。
-- [ ] `AdminAuditLog.detail` 写入 `changeLogId` 和 private summary。
-- [ ] iOS 现有 `event_update`、`dj_update`、`brand_update` route metadata 保持兼容。
+- [x] notification metadata 增加 `changeLogId`。
+- [x] notification metadata 增加 `publicChanges`。
+- [x] `event_update` 推送 body 使用 `publicSummaryZh`。
+- [x] `dj_update` 推送 body 使用 `publicSummaryZh`。
+- [x] `brand_update` 推送 body 使用 `publicSummaryZh`。
+- [x] `NotificationAdminContentHistory.payload` 改为引用 `changeLogId`。
+- [x] `AdminAuditLog.detail` 写入 `changeLogId` 和 private summary。
+- [x] iOS 现有 `event_update`、`dj_update`、`brand_update` route metadata 保持兼容。
 
 验收方式：
 
@@ -1477,17 +1479,17 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 9: 测试、回归脚本与验收
 
-- [ ] 新增 canonicalizer 单测。
-- [ ] 新增 diff engine 单测。
-- [ ] 新增 event snapshot/diff 单测。
-- [ ] 新增 dj snapshot/diff 单测。
-- [ ] 新增 brand snapshot/diff 单测。
-- [ ] 新增 `entity-change-event-regression.ts`。
-- [ ] 新增 `entity-change-dj-regression.ts`。
-- [ ] 新增 `entity-change-brand-regression.ts`。
-- [ ] 跑 TypeScript typecheck。
-- [ ] 跑相关 regression scripts。
-- [ ] 更新本文档 `23.3 变更流水` 和最终验收状态。
+- [x] 新增 canonicalizer 单测。
+- [x] 新增 diff engine 单测。
+- [x] 新增 event snapshot/diff 单测。
+- [x] 新增 dj snapshot/diff 单测。
+- [x] 新增 brand snapshot/diff 单测。
+- [x] 新增 `entity-change-event-regression.ts`。
+- [x] 新增 `entity-change-dj-regression.ts`。
+- [x] 新增 `entity-change-brand-regression.ts`。
+- [x] 跑 TypeScript typecheck。
+- [x] 跑相关 regression scripts。
+- [x] 更新本文档 `23.3 变更流水` 和最终验收状态。
 
 验收方式：
 
@@ -1497,17 +1499,175 @@ server/src/scripts/entity-change-brand-regression.ts
 
 #### Phase 10: 清理与交付
 
-- [ ] 删除不再使用的 imports、types、scripts。
-- [ ] 更新 README 或后台开发说明中的变更摘要来源。
-- [ ] 确认没有把完整 snapshot 写入持久化表。
-- [ ] 确认没有把 private 字段写入 publicChanges。
-- [ ] 确认所有代码变更都已在 `23.3 变更流水` 记录。
-- [ ] 最终复查 `git diff`，确认无无关回滚。
+- [x] 删除不再使用的 imports、types、scripts。
+- [x] 更新 README 或后台开发说明中的变更摘要来源。
+- [x] 确认没有把完整 snapshot 写入持久化表。
+- [x] 确认没有把 private 字段写入 publicChanges。
+- [x] 确认所有代码变更都已在 `23.3 变更流水` 记录。
+- [x] 最终复查 `git diff`，确认无无关回滚。已按 `docs`/`server` 范围复查；工作区仍存在本轮外的 submodule 脏状态，未触碰也不纳入本次交付。
 
 验收方式：
 
 - `git diff` 只包含本次改造相关变更。
 - 本文档 checklist 与实际代码状态一致。
+
+#### Phase 11: DJSet 扩展接入
+
+> 第一波 `event/dj/brand` 已完成。本阶段从 `## 26. 未来扩展` 中选择第一项 `djSet` 进入第二阶段开发，仍沿用同一个领域级服务，不另起旧式 summary。
+
+- [x] 扩展 `EntityChangeEntityType` 支持 `djSet`。
+- [x] 新增 `snapshots/dj-set.snapshot.ts`，覆盖 profile/video/media/recording/lineup/tracks。
+- [x] 新增 `configs/dj-set.change-config.ts`，定义 public/operator/private 可见性。
+- [x] `customDjNames`/lineup 使用 set 或 keyed-list 语义，避免顺序误判。
+- [x] `tracks` 使用 keyed-list by `identityKey`，曲名/艺人/时间/平台链接修改给出具体旧值/新值。
+- [x] `createDJSet` 写入 `entity_change_logs`，operationType=`create`。
+- [x] `updateDJSetByUploader` 写入 `entity_change_logs`，operationType=`update`。
+- [x] `addTrack` 与 `batchAddTracks` 写入 `entity_change_logs`，operationType=`update`。
+- [x] `replaceTracksByUploader` 写入 `entity_change_logs`，operationType=`update`。
+- [x] `deleteDJSetByUploader` 写入 `entity_change_logs`，operationType=`delete`。
+- [x] DJSet API 响应 additive 增加 `change` 字段，保持旧客户端兼容。
+- [x] 新增 `entity-change-dj-set-regression.ts` 并加入 package scripts。
+- [x] 更新模块 README，说明第二阶段已接入 `djSet`。
+- [x] 跑 build、schema validate、core/event/dj/brand/djSet regression。
+- [x] 更新本文档 `23.3 变更流水` 和 Phase 11 最终状态。
+
+验收方式：
+
+- 创建 DJSet 生成 create diff。
+- 修改标题/封面/场地/录制时间生成 public diff。
+- lineup/customDjNames 顺序变化不误判整组替换。
+- tracks 新增/删除/修改能定位到具体曲目。
+- 删除 DJSet 生成 delete diff，但不保存完整 before snapshot。
+- 旧 `event/dj/brand` regression 继续通过。
+
+#### Phase 12: 多语言 Summary 与 App 修改详情页
+
+> 将 `## 26. 未来扩展` 中的“多语言 summary：英文、日文”和“App 内查看完整修改详情页面”正式纳入落地范围。英文 summary 已有基础字段，本阶段补齐日文字段、公开详情 API 和 iOS 页面入口。
+
+- [x] Prisma `EntityChangeLog` 新增 `privateSummaryJa/operatorSummaryJa/publicSummaryJa`。
+- [x] 新增 migration 为 `entity_change_logs` 增加日文 summary 列。
+- [x] `EntityChangeSummary` 类型增加 Ja 字段。
+- [x] summarizer 生成 private/operator/public 日文摘要。
+- [x] repository 持久化 Ja summary。
+- [x] response/detail API 返回 zh/en/ja summaries。
+- [x] public detail API 只返回 `publicChanges`，不泄露 private/operator changes。
+- [x] notification metadata 增加 `publicSummaryEn/publicSummaryJa`，兼容旧字段。
+- [x] iOS model 支持 `changeLogId` 和 public change detail DTO。
+- [x] iOS repository/service 增加 fetch entity change detail。
+- [x] iOS 新增“修改详情”页面，展示 summary 与旧值/新值列表。
+- [x] iOS 通知列表点击有 `changeLogId` 的更新通知时进入修改详情页。
+- [x] 新增/更新 regression，覆盖英文/日文 summary 和 public detail API payload。
+- [x] 跑 Prisma validate、build、entity-change regressions 和 iOS Swift 编译/静态检查可行项。iOS `xcodebuild -list` 通过；完整 simulator build 已尝试，但被外部 SwiftPM 依赖 `_OpenAPIGeneratorCore` 的既有编译限制阻塞，尚未进入 App Swift 文件编译。
+- [x] 更新本文档 `23.3 变更流水` 和 Phase 12 最终状态。
+
+验收方式：
+
+- 新生成 change log 同时保存 zh/en/ja summary。
+- 老 change log 缺少 Ja 时 API/UI fallback，不崩溃。
+- App 修改详情页只展示 public-safe 字段旧值/新值。
+- notification metadata 中 `changeLogId` 可驱动 App 详情页。
+- private/operator changes 不进入 public detail API。
+
+#### Phase 13: News/Post 内容绑定与正文摘要 Diff
+
+> 从 `## 26. 未来扩展` 继续推进 `news/post`。本阶段先接入审核通过后的实际创建路径：`news` 使用 `NewsArticle`，`post` 使用 `Post`，并统一记录正文/媒体/绑定关系的 create diff。后续如果出现独立编辑入口，再沿用同一 snapshot/config 追加 update/delete 路径。
+
+- [x] 扩展 `EntityChangeEntityType` 支持 `news`、`post`。
+- [x] 新增 `snapshots/news.snapshot.ts`，覆盖 profile/media/publish/bindings。
+- [x] 新增 `configs/news.change-config.ts`，定义 title/summary/body/cover/link/bindings 可见性。
+- [x] 新增 `snapshots/post.snapshot.ts`，覆盖 content/media/context/stats/bindings。
+- [x] 新增 `configs/post.change-config.ts`，定义 content/images/location/type/visibility/bindings 可见性。
+- [x] `bindings.djIds/brandIds/eventIds` 使用 set 语义，避免顺序变化误判。
+- [x] `createNewsFromSubmission` 写入 `entity_change_logs`，operationType=`create`。
+- [x] `createIDFromSubmission` 写入 `entity_change_logs`，operationType=`create`。
+- [x] submission history latest change helper 支持 `news`、`post`，继续返回 `changeLogId/publicSummary*/publicChanges`。
+- [x] notification/history metadata 可引用 news/post change log，但不破坏原有事件/DJ/品牌通知。
+- [x] 新增 `entity-change-news-post-regression.ts` 并加入 package scripts。
+- [x] 更新模块 README，说明第三阶段已接入 `news/post`。
+- [x] 跑 build、schema validate、core/event/dj/brand/djSet/newsPost regression。
+- [x] 更新本文档 `23.3 变更流水` 和 Phase 13 最终状态。
+
+验收方式：
+
+- News create 生成 create diff，能展示标题、摘要、正文摘要、封面、链接、绑定关系。
+- Post create 生成 create diff，能展示内容摘要、图片、类型、可见性、绑定关系。
+- DJ/Event/Brand 绑定顺序变化不产生噪音 diff。
+- public detail API 对 news/post 仍只展示 public-safe fields。
+- 旧 event/dj/brand/djSet regression 继续通过。
+
+#### Phase 14: Label 厂牌资料 Diff
+
+> 从 `## 26. 未来扩展` 继续推进 `label`。本阶段先覆盖审核通过后的 `Label` 创建路径，并把 profile/media/region/genres/contact/links/founder 等资料纳入统一领域级 diff。后续如出现独立编辑入口，再复用同一 snapshot/config 接入 update/delete。
+
+- [x] 扩展 `EntityChangeEntityType` 支持 `label`。
+- [x] 新增 `snapshots/label.snapshot.ts`，覆盖 profile/source/media/region/music/contact/links/founder/stats。
+- [x] 新增 `configs/label.change-config.ts`，定义 public/operator/private 可见性。
+- [x] `genres` 使用 set 语义，避免顺序变化误判。
+- [x] `contacts`、`linksInWeb` 规范化 JSON，避免 key 顺序噪音。
+- [x] `createLabelFromSubmission` 写入 `entity_change_logs`，operationType=`create`。
+- [x] submission history latest change helper 支持 `label`，继续返回 `changeLogId/publicSummary*/publicChanges`。
+- [x] notification/history metadata 可引用 label change log，保持现有 `brand_release`/`label` 兼容。
+- [x] 新增 `entity-change-label-regression.ts` 并加入 package scripts。
+- [x] 更新模块 README，说明第四阶段已接入 `label`。
+- [x] 跑 build、schema validate、core/event/dj/brand/djSet/newsPost/label regression。
+- [x] 更新本文档 `23.3 变更流水` 和 Phase 14 最终状态。
+
+验收方式：
+
+- Label create 生成 create diff，能展示名称、简介、图片、国家/地区、genres、链接与 founder 信息。
+- contacts、sourcePage、sourceListingUrl、cardId 等非公开字段不进入 publicChanges。
+- genres 顺序变化不产生 diff。
+- 旧 event/dj/brand/djSet/news/post regression 继续通过。
+
+#### Phase 15: Snapshot 短期归档与回滚基础
+
+> 从 `## 26. 未来扩展` 继续推进 Snapshot 短期归档。仍遵守 Phase 0 的长期隐私边界：`entity_change_logs` 不长期保存完整 before/after snapshot；本阶段新增独立短期归档表，给运营审计、短期排查和后续回滚能力提供基础数据。
+
+- [x] 启动 Phase 15 checklist，明确短期归档不改变 `entity_change_logs` 长期存储边界。
+- [x] Prisma 新增 `EntityChangeSnapshotArchive` model，独立保存 before/after snapshot。已在 `schema.prisma` 增加独立 model，未向 `EntityChangeLog` 增加完整 snapshot 字段。
+- [x] 新增 migration 创建 `entity_change_snapshot_archives`，包含 `expires_at` 和必要索引。已新增 `20260605143000_add_entity_change_snapshot_archives`。
+- [x] `PersistEntityChangeInput` 支持携带 before/after snapshots。已新增 `snapshots` 和可选 `snapshotArchiveRetentionDays`。
+- [x] repository 在创建 change log 后同事务写入短期 snapshot archive。已通过 Prisma transaction 同步创建 log 与 archives。
+- [x] `trackUpdate` 自动把 capture 到的 before/after snapshot 传给 repository。
+- [x] 手动 `diffSnapshots` + `persistChange` 调用点补齐 snapshots 传递。已覆盖 Event、content submission event/dj/brand/news/post/label、DJSet create/delete。
+- [x] 新增归档 regression，覆盖 create/update/delete/no-change 场景。已新增 `entity-change-snapshot-archive-regression.ts`。
+- [x] 新增 snapshot archive 清理脚本，按 `expiresAt` 删除过期归档。默认 dry-run，`cleanup:apply` 执行删除。
+- [x] 更新模块 README，说明短期归档用途、隐私边界与 TTL。
+- [x] 跑 Prisma generate/validate、build、全量 entity-change regressions。已通过 `pnpm prisma:generate`、`pnpm prisma validate`、`pnpm prisma migrate deploy`、`pnpm build`、全量 entity-change regression 和 cleanup dry-run。
+- [x] 更新本文档 `23.3 变更流水` 和 Phase 15 最终状态。
+
+验收方式：
+
+- 新生成 change log 在有 before/after snapshot 时同步写入短期 archive。
+- create 只归档 after，delete 只归档 before，update 归档 before/after。
+- 无变化更新不写 change log，也不写 archive。
+- archive 有明确 `expiresAt`，可被清理脚本删除。
+- public detail API 仍不暴露完整 snapshot。
+- `entity_change_logs` 仍不新增完整 snapshot 字段。
+
+#### Phase 16: Revision Compare-And-Swap 冲突检测
+
+> 从 `## 26. 未来扩展` 推进最后一项“操作冲突检测”。本阶段先把 CAS 能力沉入 entity-change 领域模块，并在已有稳定 revision 的 `event` 与 `brand(WikiFestival)` 更新路径启用强校验；`dj/djSet/news/post/label` 暂无统一 revision 字段，本阶段只保留扩展 hook，不强行改 schema。
+
+- [x] 启动 Phase 16 checklist，明确第一版 CAS 范围为 Event/Brand。
+- [x] 新增 entity-change revision guard，统一解析 expected/base revision 并输出 409 conflict error。已新增 `entity-change-revision-guard.ts`。
+- [x] `trackUpdate` 支持 `expectedRevision`，为未来 revision 实体提供统一 hook。
+- [x] Event 管理更新入口支持 `expectedRevision/baseRevision/revision`，并在 update where 中使用 revision CAS。
+- [x] Event CAS 冲突返回 409，不写 change log，不写 snapshot archive。已在 update CAS miss 时抛出 `EntityChangeRevisionConflictError`。
+- [x] Brand content submission apply 保持 `baseBrandRevision` 校验，并在实际 `WikiFestival.update` 时增加 revision CAS。
+- [x] Brand CAS 冲突继续返回既有 `BRAND_SUBMISSION_STALE_EDIT` 409。
+- [x] 新增 revision guard regression，覆盖解析、匹配、冲突错误。已新增 `entity-change-revision-guard-regression.ts`。
+- [x] 更新模块 README，说明 CAS 使用方式和无 revision 实体边界。
+- [x] 跑 build、schema validate、全量 entity-change regressions。已通过 `pnpm build`、`pnpm prisma validate`、revision guard regression 和全量 entity-change regression。
+- [x] 更新本文档 `23.3 变更流水` 和 Phase 16 最终状态。
+
+验收方式：
+
+- Event 传入过期 revision 时返回 409。
+- Event 无 revision 冲突时仍生成正常 diff/change log/archive。
+- Brand 审核通过实际写库时，如果 revision 已变化，写库失败并返回 stale edit。
+- 无 revision 实体不因本阶段改造出现破坏性 API 变更。
+- 旧 publicChanges、summary、多语言 detail 不受影响。
 
 ### 23.3 变更流水
 
@@ -1517,6 +1677,45 @@ server/src/scripts/entity-change-brand-regression.ts
 | --- | --- | --- | --- | --- | --- |
 | 2026-06-04 | Phase 0 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新建设计文档，确认第一批范围、存储策略、推送旧值/新值、旧服务废弃策略 | `wc -l`、`rg` 检查关键决策 | Done |
 | 2026-06-04 | Phase 0 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增分阶段 checklist、追踪规则、变更流水，作为后续改造唯一执行看板 | 人工复查章节结构 | Done |
+| 2026-06-05 | Phase 0/1 | `server/prisma/schema.prisma`, `server/prisma/migrations/20260605103000_add_entity_change_logs/migration.sql`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 `EntityChangeLog` Prisma model 与 `entity_change_logs` migration；记录旧 summary 调用点替换范围并锁定第一波实体边界 | `pnpm prisma:generate`, `pnpm prisma migrate deploy`, 事务写入后回滚检查 | Done |
+| 2026-06-05 | Phase 1/2/3/4/5/6 | `server/src/modules/entity-change/**`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 entity-change 核心模块、diff engine、summarizer、repository、registry，以及 event/dj/brand snapshot builders 和 configs | `pnpm prisma:generate`, `pnpm build` | Done |
+| 2026-06-05 | Phase 4/5 | `server/src/controllers/event.controller.ts`, `server/src/controllers/dj.controller.ts`, `server/src/modules/entity-change/entity-change.service.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 接入 Event/DJ 更新入口；Event 在现有更新流程前后 capture snapshot；DJ 改为 `trackUpdate` 并补 update 白名单；响应增加 `change` | `pnpm build` | Done |
+| 2026-06-05 | Phase 6 | `server/src/services/content-submission-brand.service.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Brand content submission 实际 create/update `WikiFestival` 后生成并持久化 change log，create 使用 null before，update 使用 before/after snapshot | `pnpm build` | Done |
+| 2026-06-05 | Phase 3/7 | `server/src/modules/entity-change/entity-change-diff-engine.ts`, `server/src/services/content-submission-processing.service.ts`, `server/src/services/content-submission-event.service.ts`, `server/src/routes/bff.web.routes.ts`, `server/src/routes/content-submission.routes.ts`, `server/src/scripts/backfill-contribution-module.ts`, `server/src/scripts/dj-edit-submission-regression.ts`, `server/src/services/content-submission-change-summary.service.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 补 ordered-list diff；删除旧 payload 猜测式 summary 服务；移除生产 routes/services 和脚本中的旧 summary 调用 | `rg "content-submission-change-summary|changeSummaryTextFromPayload|attachContentSubmissionChangeSummary" server/src`, `pnpm build` | Done |
+| 2026-06-05 | Phase 3 | `server/src/modules/entity-change/entity-change-diff-engine.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | create/delete 场景从 root diff 改为递归字段 diff，避免 Brand create 只记录根节点新增 | `pnpm build` | Done |
+| 2026-06-05 | Phase 1/9 | `server/prisma/schema.prisma`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 执行最终基础验证；schema 合法，旧 summary 搜索无结果；migration 实际应用因工作区存在其他未提交 migration 暂不执行 | `pnpm prisma validate`, `rg "content-submission-change-summary|changeSummaryTextFromPayload|attachContentSubmissionChangeSummary" server/src` | Done |
+| 2026-06-05 | Phase 4/5/8 | `server/src/services/content-submission-event.service.ts`, `server/src/services/content-submission-dj.service.ts`, `server/src/modules/entity-change/entity-change.service.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Event/DJ content submission 实际入库路径生成 change log；`persistChange` 统一桥接 `AdminAuditLog.detail`，写入 `changeLogId`、hash、summary 和 private changes | `pnpm build` | Done |
+| 2026-06-05 | Phase 8 | `server/src/services/content-submission-processing.service.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | content submission approved 通知查询最新 entity change log，将 `changeLogId`、`publicSummaryZh`、`publicChanges` 写入 notification metadata，并在通知 body 追加 public summary | `pnpm build` | Done |
+| 2026-06-05 | Phase 8 | `server/src/routes/notification-center.routes.ts`, `server/src/routes/bff.web.routes.ts`, `server/src/routes/content-submission.routes.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | admin event/dj/brand 发布使用 latest change log 更新 body/metadata；BFF 与 content-submission review 创建的 `NotificationAdminContentHistory.payload` 写入 `changeLogId/publicChanges/publicSummaryZh`；route 字段保持 additive 兼容 | `pnpm build` | Done |
+| 2026-06-05 | Phase 9 | `server/src/scripts/entity-change-event-regression.ts`, `server/src/scripts/entity-change-dj-regression.ts`, `server/src/scripts/entity-change-brand-regression.ts`, `server/package.json`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 event/dj/brand entity-change regression scripts，并加入 package scripts；覆盖 Event keyed timetable diff、DJ set 数组语义、Brand aliases/city old/new | `pnpm build`, `pnpm ts-node src/scripts/entity-change-event-regression.ts`, `pnpm ts-node src/scripts/entity-change-dj-regression.ts`, `pnpm ts-node src/scripts/entity-change-brand-regression.ts` | Done |
+| 2026-06-05 | Phase 9/10 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 执行收敛验证并更新最终追踪状态；旧 summary 搜索无结果，schema/build 通过；migration apply 和最终 diff 范围审阅保留为阻塞/待确认项 | `rg "content-submission-change-summary|changeSummaryTextFromPayload|attachContentSubmissionChangeSummary" server/src`, `pnpm prisma validate`, `pnpm build`, `git status --short` | Done |
+| 2026-06-05 | Phase 9/10 | `server/src/scripts/entity-change-core-regression.ts`, `server/package.json`, `server/src/modules/entity-change/README.md`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 core regression 覆盖 canonicalizer 和 diff engine；补 entity-change 模块 README，说明变更摘要来源、通知 publicChanges 规则和 MD 追踪纪律 | `pnpm build`, `pnpm ts-node src/scripts/entity-change-core-regression.ts` | Done |
+| 2026-06-05 | Phase 1/9/10 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 最终非破坏性验证通过；只剩 migration 实际应用和全量 diff 范围审阅两个阻塞项，均因工作区存在其他未提交 migration/submodule 改动需单独确认 | `pnpm build`, `pnpm prisma validate`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `git status --short` | Done |
+| 2026-06-05 | Phase 1/9/10 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 应用 `entity_change_logs` migration，完成事务写入后回滚验证；重新跑 schema/build/四个 regression；按 `docs`/`server` 范围完成最终 diff 复查，外部 submodule 脏状态保持未触碰 | `pnpm prisma migrate deploy`, `pnpm ts-node -e ...rollback...`, `pnpm prisma validate`, `pnpm build`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `git diff --name-status -- docs server` | Done |
+| 2026-06-05 | Phase 11 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 启动第二阶段 `djSet` 扩展接入 checklist，明确 create/update/add tracks/replace tracks/delete 都统一调用 entity-change 领域服务 | `rg "Phase 11" docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Done |
+| 2026-06-05 | Phase 11 | `server/src/modules/entity-change/entity-change.types.ts`, `server/src/modules/entity-change/entity-change-summarizer.ts`, `server/src/modules/entity-change/entity-change-diff-engine.ts`, `server/src/modules/entity-change/index.ts`, `server/src/modules/entity-change/snapshots/dj-set.snapshot.ts`, `server/src/modules/entity-change/configs/dj-set.change-config.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | entity-change 核心扩展 `djSet`；新增 DJSet snapshot/config/registry；tracks 使用 keyed-list by `position` identity，lineup 使用无序语义；增强 keyed-list 子字段 path config 命中 | `pnpm build`, `pnpm entity-change:dj-set:regression` | Done |
+| 2026-06-05 | Phase 11 | `server/src/services/djset.service.ts`, `server/src/routes/djset.routes.ts`, `server/src/scripts/entity-change-dj-set-regression.ts`, `server/package.json`, `server/src/modules/entity-change/README.md`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | DJSet create/update/add tracks/batch tracks/replace tracks/delete 统一写入 entity-change log；API 响应 additive 返回 `change`；新增 djSet regression 和 README 第二阶段说明 | `pnpm prisma validate`, `pnpm build`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression` | Done |
+| 2026-06-05 | Phase 11 | `server/src/services/djset.service.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | DJSet delete 路径改为在同一 transaction 内 capture before snapshot 并删除，减少删除日志与实际删除之间的竞态窗口 | `pnpm build`, `pnpm entity-change:dj-set:regression` | Done |
+| 2026-06-05 | Phase 12 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 将多语言 summary 英文/日文和 App 内修改详情页从未来扩展提升为 Phase 12 正式范围，补充数据库、API、iOS 页面与验收 checklist | `rg "Phase 12" docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Done |
+| 2026-06-05 | Phase 12 | `server/prisma/schema.prisma`, `server/prisma/migrations/20260605113000_add_entity_change_log_ja_summaries/migration.sql`, `server/src/modules/entity-change/**` | `EntityChangeLog` 增加 Ja summary 字段；summarizer 生成 zh/en/ja private/operator/public 摘要；repository 持久化 Ja；diff engine 输出 `labelJa/beforeJa/afterJa` 并提供日文字段标签兜底 | `pnpm prisma:generate`, `pnpm prisma validate`, `pnpm build`, `pnpm entity-change:core:regression` | Done |
+| 2026-06-05 | Phase 12 | `server/src/routes/bff.routes.ts`, `server/src/services/content-submission-processing.service.ts`, `server/src/routes/notification-center.routes.ts`, `server/src/routes/bff.web.routes.ts`, `server/src/routes/content-submission.routes.ts` | 新增 `GET /v1/entity-change-logs/:id/public`，只返回 summaries 与 `publicChanges`；notification/history metadata 增加 `publicSummaryEn/publicSummaryJa` 并兼容旧 `publicSummaryZh` | `pnpm build`, `pnpm entity-change:core:regression` public detail payload 断言 | Done |
+| 2026-06-05 | Phase 12 | `mobile/ios/RaverMVP/RaverMVP/Core/Models.swift`, `Core/SocialService.swift`, `Core/LiveSocialService.swift`, `Core/MockSocialService.swift`, `Features/Notifications/NotificationRepository.swift` | iOS 增加 `changeLogId`、`EntityChangeSummaryBundle`、`EntityChangePublicChange`、`EntityChangePublicDetail`；Live/Mock service 与 repository 增加公开修改详情拉取能力 | `xcodebuild -list -workspace RaverMVP.xcworkspace` | Done |
+| 2026-06-05 | Phase 12 | `mobile/ios/RaverMVP/RaverMVP/Features/Notifications/EntityChangeDetailView.swift`, `Features/Notifications/NotificationsView.swift`, `Application/Coordinator/MainTabCoordinator.swift`, `RaverMVP.xcodeproj/project.pbxproj` | 新增 App 内“修改详情 / Change Details”页面，展示多语言 summary 和公开字段旧值/新值；通知点击携带 `changeLogId` 时优先进入详情页；新增页面加入 Xcode target Sources | `xcodebuild -list -workspace RaverMVP.xcworkspace`; `xcodebuild ... build` 已尝试但被外部 `_OpenAPIGeneratorCore` target 限制阻塞 | Done |
+| 2026-06-05 | Phase 12 | `server/src/scripts/entity-change-core-regression.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 更新 regression 覆盖英/日 summary、public detail payload 多语言字段，以及不暴露 private `changes`；完成 Phase 12 checklist 与最终流水记录 | `pnpm build`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression`, `git diff --check -- docs server mobile/ios/RaverMVP/RaverMVP mobile/ios/RaverMVP/RaverMVP.xcodeproj/project.pbxproj` | Done |
+| 2026-06-05 | Phase 13 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 启动 `news/post` 第三阶段接入 checklist，明确先覆盖审核通过后的 NewsArticle/Post create 路径和绑定关系 diff | `rg "Phase 13" docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Done |
+| 2026-06-05 | Phase 13 | `server/src/modules/entity-change/entity-change.types.ts`, `server/src/modules/entity-change/snapshots/news.snapshot.ts`, `server/src/modules/entity-change/snapshots/post.snapshot.ts`, `server/src/modules/entity-change/configs/news.change-config.ts`, `server/src/modules/entity-change/configs/post.change-config.ts`, `server/src/modules/entity-change/index.ts`, `server/src/modules/entity-change/entity-change-summarizer.ts`, `server/src/modules/entity-change/entity-change-diff-engine.ts` | entity-change 核心扩展 `news/post`；正文类字段使用 preview+hash，hash 保持 private；绑定关系使用 set 语义；summary 和日文字段标签支持 News/Post | `pnpm build`, `pnpm entity-change:news-post:regression` | Done |
+| 2026-06-05 | Phase 13 | `server/src/routes/content-submission.routes.ts`, `server/src/services/content-submission-processing.service.ts`, `server/src/modules/entity-change/snapshots/snapshot-utils.ts`, `server/src/scripts/entity-change-news-post-regression.ts`, `server/package.json`, `server/src/modules/entity-change/README.md` | NewsArticle 和 ID/Post 审核通过创建路径写入 create change log；submission/status notification helper 支持 `news/post/djSet` change metadata；新增 news/post regression 与 README 第三阶段说明 | `pnpm prisma validate`, `pnpm build`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression`, `pnpm entity-change:news-post:regression` | Done |
+| 2026-06-05 | Phase 14 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 启动 `label` 第四阶段接入 checklist，明确先覆盖审核通过后的 Label create 路径和厂牌资料 diff | `rg "Phase 14" docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Done |
+| 2026-06-05 | Phase 14 | `server/src/modules/entity-change/entity-change.types.ts`, `server/src/modules/entity-change/snapshots/label.snapshot.ts`, `server/src/modules/entity-change/configs/label.change-config.ts`, `server/src/modules/entity-change/index.ts`, `server/src/modules/entity-change/entity-change-summarizer.ts`, `server/src/modules/entity-change/entity-change-diff-engine.ts` | entity-change 核心扩展 `label`；新增厂牌资料 snapshot/config；genres 使用 set 语义；summary 和日文字段标签支持 Label | `pnpm build`, `pnpm entity-change:label:regression` | Done |
+| 2026-06-05 | Phase 14 | `server/src/routes/content-submission.routes.ts`, `server/src/services/content-submission-processing.service.ts`, `server/src/scripts/entity-change-label-regression.ts`, `server/package.json`, `server/src/modules/entity-change/README.md` | Label 审核通过创建路径写入 create change log；submission/status notification helper 支持 `label` change metadata；新增 label regression 与 README 第四阶段说明 | `pnpm prisma validate`, `pnpm build`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression`, `pnpm entity-change:news-post:regression`, `pnpm entity-change:label:regression` | Done |
+| 2026-06-05 | Phase 15 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 启动 Snapshot 短期归档与回滚基础 checklist，明确独立短期归档表不改变 `entity_change_logs` 长期隐私边界 | `rg "Phase 15" docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Done |
+| 2026-06-05 | Phase 15 | `server/prisma/schema.prisma`, `server/prisma/migrations/20260605143000_add_entity_change_snapshot_archives/migration.sql`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 `EntityChangeSnapshotArchive` Prisma model 和 `entity_change_snapshot_archives` migration；归档表独立保存 before/after snapshot，带 `expires_at`、实体索引和 change log 级联关系 | `pnpm prisma:generate`, `pnpm prisma validate`, `pnpm prisma migrate deploy` | Done |
+| 2026-06-05 | Phase 15 | `server/src/modules/entity-change/entity-change.types.ts`, `server/src/modules/entity-change/entity-change.repository.ts`, `server/src/modules/entity-change/entity-change.service.ts`, `server/src/controllers/event.controller.ts`, `server/src/services/content-submission-event.service.ts`, `server/src/services/content-submission-dj.service.ts`, `server/src/services/content-submission-brand.service.ts`, `server/src/routes/content-submission.routes.ts`, `server/src/services/djset.service.ts`, `server/src/scripts/entity-change-snapshot-archive-regression.ts`, `server/src/scripts/entity-change-snapshot-archive-cleanup.ts`, `server/package.json`, `server/src/modules/entity-change/README.md` | `persistChange` 支持 snapshots；repository 同事务写入短期 before/after archive；`trackUpdate` 与所有手动调用点传递 snapshots；新增归档 regression、过期清理脚本和 README 说明 | `rg "snapshots:\\s*\\{" server/src/controllers server/src/services server/src/routes server/src/modules -g '*.ts'`, `pnpm build`, `pnpm entity-change:snapshot-archive:regression` | Done |
+| 2026-06-05 | Phase 15 | `server/src/scripts/entity-change-snapshot-archive-regression.ts`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 修正 snapshot archive regression 的 TypeScript assertion 收窄写法；完成 Phase 15 全量验证并同步最终 checklist | `pnpm prisma:generate`, `pnpm prisma validate`, `pnpm prisma migrate deploy`, `pnpm build`, `pnpm entity-change:snapshot-archive:regression`, `pnpm entity-change:snapshot-archive:cleanup`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression`, `pnpm entity-change:news-post:regression`, `pnpm entity-change:label:regression` | Done |
+| 2026-06-05 | Phase 16 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 启动 Revision Compare-And-Swap 冲突检测 checklist，明确第一版强 CAS 范围为已有 revision 的 Event/Brand，无 revision 实体只保留扩展 hook | `rg "Phase 16" docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | Done |
+| 2026-06-05 | Phase 16 | `server/src/modules/entity-change/entity-change-revision-guard.ts`, `server/src/modules/entity-change/entity-change.service.ts`, `server/src/modules/entity-change/index.ts`, `server/src/controllers/event.controller.ts`, `server/src/services/content-submission-brand.service.ts`, `server/src/scripts/entity-change-revision-guard-regression.ts`, `server/package.json`, `server/src/modules/entity-change/README.md`, `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 新增 revision guard；`trackUpdate` 支持 expectedRevision hook；Event update 支持 expected/base/revision 并使用 revision CAS；Brand 实际写库使用 revision CAS；新增 regression 和 README 说明 | `pnpm build`, `pnpm entity-change:revision-guard:regression` | Done |
+| 2026-06-05 | Phase 16 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 完成 Phase 16 最终验证；compare-and-swap 从未来扩展移动到已落地范围 | `pnpm build`, `pnpm prisma validate`, `pnpm entity-change:revision-guard:regression`, `pnpm entity-change:core:regression`, `pnpm entity-change:event:regression`, `pnpm entity-change:dj:regression`, `pnpm entity-change:brand:regression`, `pnpm entity-change:dj-set:regression`, `pnpm entity-change:snapshot-archive:regression`, `pnpm entity-change:news-post:regression`, `pnpm entity-change:label:regression` | Done |
+| 2026-06-05 | Phase 16 | `docs/ENTITY_CHANGE_DIFF_DOMAIN_SERVICE_DESIGN.md` | 收敛未来扩展文案，明确当前暂无下一阶段保留项，后续新增实体或回滚 UI 再开 Phase 17 | checklist 搜索无未完成项 | Done |
 
 ## 24. 验收标准
 
@@ -1579,15 +1778,19 @@ payload diff 只能说明“用户提交了什么”，不能说明“最终数�
 
 ## 26. 未来扩展
 
-暂不纳入第一波，但架构应保留能力：
+已从未来扩展提升并落地：
 
-- `djSet`：曲目列表和视频元数据 diff。
-- `news/post`：内容绑定和正文摘要 diff。
-- `label`：厂牌资料 diff。
-- Snapshot 短期归档与回滚。
-- App 内“查看完整修改详情”页面。
-- 多语言 summary：英文、日文。
-- 操作冲突检测：基于 revision 的 compare-and-swap。
+- `djSet`：曲目列表和视频元数据 diff，见 Phase 11。
+- App 内“查看完整修改详情”页面，见 Phase 12。
+- 多语言 summary：英文、日文，见 Phase 12。
+- `news/post`：内容绑定和正文摘要 diff，见 Phase 13。
+- `label`：厂牌资料 diff，见 Phase 14。
+- Snapshot 短期归档与回滚基础：独立短期归档表、TTL 与清理脚本，见 Phase 15。
+- 操作冲突检测：基于 revision 的 compare-and-swap，见 Phase 16。
+
+当前暂未排入下一阶段的保留项：
+
+- 暂无。后续新增实体或回滚 UI 需求出现时，再新增 Phase 17。
 
 ## 27. 最终结论
 

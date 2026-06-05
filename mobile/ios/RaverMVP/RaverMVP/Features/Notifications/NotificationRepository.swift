@@ -2,6 +2,7 @@ import Foundation
 
 protocol NotificationRepository {
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
+    func fetchEntityChangePublicDetail(changeLogID: String) async throws -> EntityChangePublicDetail
     func markNotificationRead(notificationID: String) async throws
 }
 
@@ -10,6 +11,10 @@ struct NotificationRepositoryAdapter: NotificationRepository {
 
     func fetchNotifications(limit: Int) async throws -> NotificationInbox {
         try await service.fetchNotifications(limit: limit)
+    }
+
+    func fetchEntityChangePublicDetail(changeLogID: String) async throws -> EntityChangePublicDetail {
+        try await service.fetchEntityChangePublicDetail(changeLogID: changeLogID)
     }
 
     func markNotificationRead(notificationID: String) async throws {
@@ -32,6 +37,10 @@ final class MockNotificationRepository: NotificationRepository {
             unreadCount: inbox.items.filter { !$0.isRead }.count,
             items: Array(inbox.items.prefix(normalizedLimit))
         )
+    }
+
+    func fetchEntityChangePublicDetail(changeLogID: String) async throws -> EntityChangePublicDetail {
+        try await MockSocialService().fetchEntityChangePublicDetail(changeLogID: changeLogID)
     }
 
     func markNotificationRead(notificationID: String) async throws {

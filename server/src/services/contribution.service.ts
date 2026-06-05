@@ -142,6 +142,8 @@ export type RecordContributionInput = {
   metadata?: Prisma.JsonObject | Prisma.JsonArray | null | undefined;
 };
 
+type ContributionRecordLogEvent = 'record_write_started' | 'record_write_succeeded' | 'record_write_failed';
+
 export class InvalidContributionHistoryCursorError extends Error {
   constructor() {
     super('Invalid contribution history cursor');
@@ -406,6 +408,42 @@ export const attachContributionInfoList = async (
 const jsonValueSql = (value: Prisma.JsonObject | Prisma.JsonArray | null | undefined) =>
   value == null ? Prisma.sql`NULL` : Prisma.sql`${JSON.stringify(value)}::jsonb`;
 
+const contributionLog = (
+  event: ContributionRecordLogEvent,
+  entityType: ContributionEntityType,
+  input: RecordContributionInput,
+  detail?: Record<string, unknown>
+): void => {
+  const metadataValue = input.metadata;
+  const metadataShape = Array.isArray(metadataValue)
+    ? 'array'
+    : metadataValue && typeof metadataValue === 'object'
+      ? 'object'
+      : 'none';
+  const metadataSize = Array.isArray(metadataValue)
+    ? metadataValue.length
+    : metadataValue && typeof metadataValue === 'object'
+      ? Object.keys(metadataValue).length
+      : 0;
+
+  console.info('[contribution-module]', event, {
+    entityType,
+    entityId: input.entityId,
+    userId: input.userId,
+    role: input.role,
+    actionType: input.actionType,
+    source: input.source,
+    submissionId: input.submissionId ?? null,
+    occurredAt: input.occurredAt?.toISOString() ?? null,
+    approvedAt: input.approvedAt?.toISOString() ?? null,
+    versionAfter: input.versionAfter ?? null,
+    hasChangeSummary: Boolean(input.changeSummary?.trim()),
+    metadataShape,
+    metadataSize,
+    ...detail,
+  });
+};
+
 const upsertContributorRegistry = async (
   db: DBClient,
   entityType: ContributionEntityType,
@@ -560,8 +598,22 @@ const recordContribution = async (
   entityType: ContributionEntityType,
   input: RecordContributionInput
 ): Promise<void> => {
-  await upsertContributorRegistry(db, entityType, input);
-  await insertContributionHistory(db, entityType, input);
+  const startedAt = Date.now();
+  contributionLog('record_write_started', entityType, input);
+
+  try {
+    await upsertContributorRegistry(db, entityType, input);
+    await insertContributionHistory(db, entityType, input);
+    contributionLog('record_write_succeeded', entityType, input, {
+      elapsedMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    contributionLog('record_write_failed', entityType, input, {
+      elapsedMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 };
 
 export const recordDJContribution = async (

@@ -1735,11 +1735,93 @@ struct AppNotification: Codable, Identifiable, Hashable {
     var actor: UserSummary?
     var text: String
     var target: AppNotificationTarget?
+    var changeLogId: String? = nil
 }
 
 struct NotificationInbox: Codable {
     var unreadCount: Int
     var items: [AppNotification]
+}
+
+struct EntityChangeSummaryBundle: Codable, Hashable {
+    var zh: String?
+    var en: String?
+    var ja: String?
+
+    var localizedText: String? {
+        let candidates: [String?]
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .en:
+            candidates = [en, zh, ja]
+        case .ja:
+            candidates = [ja, zh, en]
+        case .zh, .system:
+            candidates = [zh, en, ja]
+        }
+        return candidates
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+}
+
+struct EntityChangePublicChange: Codable, Identifiable, Hashable {
+    var id: String { path + kind + (before ?? "") + (after ?? "") }
+    var path: String
+    var label: String
+    var labelZh: String?
+    var labelEn: String?
+    var labelJa: String?
+    var kind: String
+    var before: String?
+    var after: String?
+    var beforeEn: String?
+    var afterEn: String?
+    var beforeJa: String?
+    var afterJa: String?
+
+    var localizedLabel: String {
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .en:
+            return labelEn ?? label
+        case .ja:
+            return labelJa ?? label
+        case .zh, .system:
+            return labelZh ?? label
+        }
+    }
+
+    var localizedBefore: String? {
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .en:
+            return beforeEn ?? before
+        case .ja:
+            return beforeJa ?? before
+        case .zh, .system:
+            return before
+        }
+    }
+
+    var localizedAfter: String? {
+        switch AppLanguagePreference.current.effectiveLanguage {
+        case .en:
+            return afterEn ?? after
+        case .ja:
+            return afterJa ?? after
+        case .zh, .system:
+            return after
+        }
+    }
+}
+
+struct EntityChangePublicDetail: Codable, Hashable {
+    var id: String
+    var entityType: String
+    var entityId: String
+    var operationType: String
+    var changeCount: Int
+    var summaries: EntityChangeSummaryBundle
+    var publicChanges: [EntityChangePublicChange]
+    var createdAt: Date
 }
 
 struct NotificationUnreadCount: Codable {

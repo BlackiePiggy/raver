@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
-import { changeSummaryTextFromPayload } from '../services/content-submission-change-summary.service';
 
 const prisma = new PrismaClient();
 
@@ -521,7 +520,7 @@ const buildApprovedSubmissionBackfillRecords = async (
       submissionId: submission.id,
       occurredAt,
       approvedAt: submission.reviewedAt ?? occurredAt,
-      changeSummary: changeSummaryTextFromPayload(payload),
+      changeSummary: null,
       metadata: {
         backfillModule: BACKFILL_MODULE_KEY,
         backfillKey,

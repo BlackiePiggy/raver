@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { attachContentSubmissionChangeSummary } from '../services/content-submission-change-summary.service';
 import { processContentSubmission } from '../services/content-submission-processing.service';
 import { createOrUpdateDJFromSubmission } from '../services/content-submission-dj.service';
 
@@ -126,7 +125,7 @@ const buildEditPayload = (
   },
   suffix: string
 ): Prisma.InputJsonObject =>
-  attachContentSubmissionChangeSummary('dj', {
+  ({
     targetDJId: dj.id,
     name: `Regression DJ ${suffix} Updated`,
     aliases: ['Regression Alias Updated', `Regression DJ ${suffix}`],
@@ -219,10 +218,6 @@ const runManualApprovalRegression = async (): Promise<void> => {
   });
   assert(reviewing.status === 'reviewing', 'submission status should be reviewing after processing');
   const reviewingPayload = reviewing.payload as Prisma.JsonObject;
-  assert(
-    Boolean((reviewingPayload.changeSummary as Record<string, unknown> | undefined)?.zh),
-    'DJ edit submission should carry changeSummary before manual approval'
-  );
 
   const approvedDJ = await createOrUpdateDJFromSubmission(prisma, reviewingPayload, submitterId);
   assert(approvedDJ.id === dj.id, 'manual approval created a duplicate DJ instead of updating original');

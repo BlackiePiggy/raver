@@ -1978,6 +1978,38 @@ actor MockSocialService: SocialService {
         return NotificationInbox(unreadCount: unread, items: limited)
     }
 
+    func fetchEntityChangePublicDetail(changeLogID: String) async throws -> EntityChangePublicDetail {
+        EntityChangePublicDetail(
+            id: changeLogID,
+            entityType: "event",
+            entityId: "event_preview",
+            operationType: "update",
+            changeCount: 2,
+            summaries: EntityChangeSummaryBundle(
+                zh: "活动「Preview」更新了：场地由「Room A」改为「Room B」。",
+                en: "Event \"Preview\" was updated: changed Venue from \"Room A\" to \"Room B\".",
+                ja: "イベント「Preview」が更新されました：会場を「Room A」から「Room B」に変更。"
+            ),
+            publicChanges: [
+                EntityChangePublicChange(
+                    path: "location.venue",
+                    label: "场地",
+                    labelZh: "场地",
+                    labelEn: "Venue",
+                    labelJa: "会場",
+                    kind: "updated",
+                    before: "Room A",
+                    after: "Room B",
+                    beforeEn: "Room A",
+                    afterEn: "Room B",
+                    beforeJa: "Room A",
+                    afterJa: "Room B"
+                )
+            ],
+            createdAt: Date()
+        )
+    }
+
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount {
         let unreadItems = notifications.filter { !$0.isRead }
         return NotificationUnreadCount(

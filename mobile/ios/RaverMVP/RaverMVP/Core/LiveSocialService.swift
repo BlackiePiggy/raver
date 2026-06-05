@@ -1174,6 +1174,15 @@ final class LiveSocialService: SocialService {
         return NotificationInbox(unreadCount: effectiveTotal, items: items)
     }
 
+    func fetchEntityChangePublicDetail(changeLogID: String) async throws -> EntityChangePublicDetail {
+        let encodedID = changeLogID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? changeLogID
+        let response: EntityChangePublicDetailEnvelope = try await request(
+            path: "/v1/entity-change-logs/\(encodedID)/public",
+            method: "GET"
+        )
+        return response.data
+    }
+
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount {
         let response: NotificationCenterUnreadCountResponse = try await request(
             path: "/v1/notification-center/inbox/unread-count",
@@ -1717,6 +1726,8 @@ final class LiveSocialService: SocialService {
         }
 
         let text = item.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.title : item.body
+        let changeLogId = (item.metadata?.changeLogId ?? item.metadata?.changeLogID)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return AppNotification(
             id: item.id,
             type: appType,
@@ -1724,9 +1735,10 @@ final class LiveSocialService: SocialService {
             isRead: item.isRead,
             actor: nil,
             text: text,
-            target: target
+            target: target,
+            changeLogId: changeLogId?.isEmpty == false ? changeLogId : nil
         )
-    }
+        }
 
     private func mapNotificationCenterSourceToAppType(_ source: String?) -> AppNotificationType? {
         guard let normalized = source?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !normalized.isEmpty else {
@@ -2010,6 +2022,12 @@ private struct NotificationCenterInboxMetadata: Decodable {
     let squadId: String?
     let squadName: String?
     let squadTitle: String?
+    let changeLogId: String?
+    let changeLogID: String?
+}
+
+private struct EntityChangePublicDetailEnvelope: Decodable {
+    let data: EntityChangePublicDetail
 }
 
 private struct NotificationCenterUnreadCountResponse: Decodable {

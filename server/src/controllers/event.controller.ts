@@ -31,6 +31,11 @@ import {
   EventAdminContractGuardrailError,
   validateEventAdminContractPayload,
 } from '../services/event-admin-contract-guardrail.service';
+import {
+  EntityChangeInvalidRevisionError,
+  EntityChangeRevisionConflictError,
+  entityChangeService,
+} from '../modules/entity-change';
 
 const cityTimezones = require('city-timezones') as {
   lookupViaCity: (city: string) => unknown[];
@@ -1199,6 +1204,9 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       status,
     } = req.body;
     const requestBody = req.body as Record<string, unknown>;
+    const expectedEventRevision = entityChangeService.parseExpectedRevision(
+      requestBody.expectedRevision ?? requestBody.baseRevision ?? requestBody.revision
+    );
     const hasCoverImageUrl = hasOwn(requestBody, 'coverImageUrl');
     const hasLineupImageUrl = hasOwn(requestBody, 'lineupImageUrl');
     const clearCityI18n = requestBody.clearCityI18n === true;
@@ -1241,6 +1249,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         endTime: true,
         dayRolloverHour: true,
         status: true,
+        revision: true,
       },
     });
     if (!existing) {
@@ -1251,6 +1260,18 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       res.status(403).json({ error: 'You can only edit your own event' });
       return;
     }
+    const beforeChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'event',
+      entityId: id as string,
+    });
+    const currentEventRevision = beforeChangeSnapshot?.revision ?? existing.revision;
+    entityChangeService.assertRevisionMatch({
+      entityType: 'event',
+      entityId: id as string,
+      expectedRevision: expectedEventRevision,
+      currentRevision: currentEventRevision,
+      message: '活动在你编辑期间已被更新，请刷新最新内容后重新提交',
+    });
 
     if (timeZone !== undefined && !isValidEventTimeZone(timeZone)) {
       res.status(400).json({ error: 'Valid event timeZone is required' });
@@ -1362,72 +1383,91 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
 
     await prisma.$transaction(async (tx) => {
-      await tx.event.update({
-        where: { id: id as string },
-        data: {
-          name: name ?? undefined,
-          slug: slug ?? undefined,
-          wikiFestivalId: clearWikiFestivalId ? null : wikiFestivalId,
-          description: description ?? undefined,
-          nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
-          descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
-          coverImageUrl: hasCoverImageUrl ? (typeof coverImageUrl === 'string' && coverImageUrl.trim() ? coverImageUrl.trim() : null) : undefined,
-          lineupImageUrl: hasLineupImageUrl ? (typeof lineupImageUrl === 'string' && lineupImageUrl.trim() ? lineupImageUrl.trim() : null) : undefined,
-          eventType: eventType ?? undefined,
-          organizerName: organizerName ?? undefined,
-          venueName: venueName,
-          venueAddress: venueAddress,
-          referenceLinks: referenceLinks !== undefined ? referenceLinks : undefined,
-          socialLinks: clearSocialLinks ? Prisma.JsonNull : socialLinks,
-          sourceProvider: sourceProvider,
-          sourceEventUrl: sourceEventUrl,
-          city: city ?? undefined,
-          cityI18n: clearCityI18n ? Prisma.DbNull : cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
-          country: country ?? undefined,
-          countryI18n: clearCountryI18n ? Prisma.DbNull : countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
-          manualLocation: clearManualLocation
-            ? Prisma.JsonNull
-            : hasOwn(requestBody, 'manualLocation')
-              ? ((manualLocation as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+      try {
+        await tx.event.update({
+          where: { id: id as string, revision: currentEventRevision },
+          data: {
+            name: name ?? undefined,
+            slug: slug ?? undefined,
+            wikiFestivalId: clearWikiFestivalId ? null : wikiFestivalId,
+            description: description ?? undefined,
+            nameI18n: req.body.nameI18n !== undefined ? (normalizedNameI18n ?? Prisma.DbNull) : undefined,
+            descriptionI18n: req.body.descriptionI18n !== undefined ? (normalizedDescriptionI18n ?? Prisma.DbNull) : undefined,
+            coverImageUrl: hasCoverImageUrl ? (typeof coverImageUrl === 'string' && coverImageUrl.trim() ? coverImageUrl.trim() : null) : undefined,
+            lineupImageUrl: hasLineupImageUrl ? (typeof lineupImageUrl === 'string' && lineupImageUrl.trim() ? lineupImageUrl.trim() : null) : undefined,
+            eventType: eventType ?? undefined,
+            organizerName: organizerName ?? undefined,
+            venueName: venueName,
+            venueAddress: venueAddress,
+            referenceLinks: referenceLinks !== undefined ? referenceLinks : undefined,
+            socialLinks: clearSocialLinks ? Prisma.JsonNull : socialLinks,
+            sourceProvider: sourceProvider,
+            sourceEventUrl: sourceEventUrl,
+            city: city ?? undefined,
+            cityI18n: clearCityI18n ? Prisma.DbNull : cityI18n !== undefined ? (normalizedCityI18n ?? Prisma.DbNull) : undefined,
+            country: country ?? undefined,
+            countryI18n: clearCountryI18n ? Prisma.DbNull : countryI18n !== undefined ? (normalizedCountryI18n ?? Prisma.DbNull) : undefined,
+            manualLocation: clearManualLocation
+              ? Prisma.JsonNull
+              : hasOwn(requestBody, 'manualLocation')
+                ? ((manualLocation as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+                : undefined,
+            locationPoint: clearLocationPoint
+              ? Prisma.JsonNull
+              : hasOwn(requestBody, 'locationPoint')
+                ? ((locationPoint as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+                : undefined,
+            latitude: clearLatitude ? null : hasOwn(requestBody, 'latitude') ? toNumberOrNull(latitude) : undefined,
+            longitude: clearLongitude ? null : hasOwn(requestBody, 'longitude') ? toNumberOrNull(longitude) : undefined,
+            startDate: startDate ? nextStartDate ?? undefined : undefined,
+            endDate: endDate ? nextEndDate ?? undefined : undefined,
+            timeZone: timeZone !== undefined ? nextTimeZone : undefined,
+            startTime: startTime !== undefined ? nextStartTime : undefined,
+            endTime: endTime !== undefined ? nextEndTime : undefined,
+            dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
+            ticketUrl: ticketUrl ?? undefined,
+            ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
+            ticketPriceMax: ticketPriceMax !== undefined ? toNumberOrNull(ticketPriceMax) : undefined,
+            ticketCurrency: ticketCurrency ?? undefined,
+            ticketNotes: ticketNotes ?? undefined,
+            ticketTiers: Array.isArray(ticketTiers)
+              ? {
+                  deleteMany: {},
+                  create: normalizedTicketTiers.map((tier, index) => ({
+                    name: String(tier.name).trim(),
+                    price: Number(tier.price),
+                    currency: tier.currency || ticketCurrency || null,
+                    sortOrder: tier.sortOrder ?? index + 1,
+                  })),
+                }
               : undefined,
-          locationPoint: clearLocationPoint
-            ? Prisma.JsonNull
-            : hasOwn(requestBody, 'locationPoint')
-              ? ((locationPoint as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
-              : undefined,
-          latitude: clearLatitude ? null : hasOwn(requestBody, 'latitude') ? toNumberOrNull(latitude) : undefined,
-          longitude: clearLongitude ? null : hasOwn(requestBody, 'longitude') ? toNumberOrNull(longitude) : undefined,
-          startDate: startDate ? nextStartDate ?? undefined : undefined,
-          endDate: endDate ? nextEndDate ?? undefined : undefined,
-          timeZone: timeZone !== undefined ? nextTimeZone : undefined,
-          startTime: startTime !== undefined ? nextStartTime : undefined,
-          endTime: endTime !== undefined ? nextEndTime : undefined,
-          dayRolloverHour: dayRolloverHour !== undefined ? nextDayRolloverHour : undefined,
-          ticketUrl: ticketUrl ?? undefined,
-          ticketPriceMin: ticketPriceMin !== undefined ? toNumberOrNull(ticketPriceMin) : undefined,
-          ticketPriceMax: ticketPriceMax !== undefined ? toNumberOrNull(ticketPriceMax) : undefined,
-          ticketCurrency: ticketCurrency ?? undefined,
-          ticketNotes: ticketNotes ?? undefined,
-          ticketTiers: Array.isArray(ticketTiers)
-            ? {
-                deleteMany: {},
-                create: normalizedTicketTiers.map((tier, index) => ({
-                  name: String(tier.name).trim(),
-                  price: Number(tier.price),
-                  currency: tier.currency || ticketCurrency || null,
-                  sortOrder: tier.sortOrder ?? index + 1,
-                })),
-              }
-            : undefined,
-          officialWebsite: normalizedOfficialWebsite ?? undefined,
-          status: resolveEventStatus(
-            effectiveStartDate,
-            effectiveEndDate,
-            typeof status === 'string' ? status : existing.status
-          ),
-          revision: { increment: 1 },
-        },
-      });
+            officialWebsite: normalizedOfficialWebsite ?? undefined,
+            status: resolveEventStatus(
+              effectiveStartDate,
+              effectiveEndDate,
+              typeof status === 'string' ? status : existing.status
+            ),
+            revision: { increment: 1 },
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          const current = await tx.event.findUnique({
+            where: { id: id as string },
+            select: { revision: true },
+          });
+          throw new EntityChangeRevisionConflictError(
+            '活动在你编辑期间已被更新，请刷新最新内容后重新提交',
+            {
+              entityType: 'event',
+              entityId: id as string,
+              expectedRevision: currentEventRevision,
+              currentRevision: current?.revision ?? null,
+            }
+          );
+        }
+        throw error;
+      }
       await syncStructuredEventSchedule(tx, id as string, scheduleContext);
       if (shouldSyncLineupArtists) {
         await syncCanonicalEventLineupAndTimetable(
@@ -1492,7 +1532,34 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    res.json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
+    const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'event',
+      entityId: id as string,
+    });
+    const change = await entityChangeService.diffSnapshots({
+      entityType: 'event',
+      entityId: id as string,
+      operationType: 'update',
+      before: beforeChangeSnapshot,
+      after: afterChangeSnapshot,
+    });
+    const changeLog = await entityChangeService.persistChange({
+      result: change,
+      snapshots: {
+        before: beforeChangeSnapshot,
+        after: afterChangeSnapshot,
+      },
+      actorId: userId,
+      actorRole: role ?? null,
+      source: 'event_admin_api',
+      sourceRoute: 'PUT /api/events/:id',
+    });
+    const eventWithLineup = withDerivedStatus(await attachCanonicalLineupToEvent(event));
+
+    res.json({
+      ...eventWithLineup,
+      change: entityChangeService.toResponse({ change, changeLog }),
+    });
   } catch (error) {
     if (
       error instanceof EventInputValidationError
@@ -1500,6 +1567,22 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       || error instanceof EventAdminContractGuardrailError
     ) {
       res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof EntityChangeInvalidRevisionError) {
+      res.status(400).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+      return;
+    }
+    if (error instanceof EntityChangeRevisionConflictError) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
       return;
     }
     console.error('Update event error:', error);

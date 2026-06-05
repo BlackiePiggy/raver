@@ -8343,6 +8343,60 @@ router.get('/profile/me/posts', optionalAuth, async (req: Request, res: Response
   }
 });
 
+router.get('/entity-change-logs/:id/public', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  const userId = requireAuth(req as BFFAuthRequest, res);
+  if (!userId) return;
+
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) {
+      res.status(400).json({ error: 'Missing change log id' });
+      return;
+    }
+
+    const row = await prisma.entityChangeLog.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        entityType: true,
+        entityId: true,
+        operationType: true,
+        changeCount: true,
+        publicSummaryZh: true,
+        publicSummaryEn: true,
+        publicSummaryJa: true,
+        publicChanges: true,
+        createdAt: true,
+      },
+    });
+
+    if (!row) {
+      res.status(404).json({ error: 'Entity change log not found' });
+      return;
+    }
+
+    res.json({
+      data: {
+        id: row.id,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        operationType: row.operationType,
+        changeCount: row.changeCount,
+        summaries: {
+          zh: row.publicSummaryZh,
+          en: row.publicSummaryEn ?? row.publicSummaryZh,
+          ja: row.publicSummaryJa ?? row.publicSummaryZh,
+        },
+        publicChanges: Array.isArray(row.publicChanges) ? row.publicChanges : [],
+        createdAt: row.createdAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('BFF entity change public detail error:', error);
+    res.status(500).json({ error: 'Failed to load change detail' });
+  }
+});
+
 router.get('/notifications/unread-count', optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = requireAuth(req as BFFAuthRequest, res);

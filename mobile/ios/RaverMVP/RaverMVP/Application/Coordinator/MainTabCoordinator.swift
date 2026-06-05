@@ -17,6 +17,7 @@ enum AppRoute: Hashable {
     case followedDJsInbox
     case followedBrandsInbox
     case contentReviewsInbox
+    case entityChangeDetail(changeLogID: String)
     case postDetail(postID: String)
     case eventDetail(eventID: String)
     case newsDetail(articleID: String)
@@ -64,6 +65,7 @@ extension AppRoute {
              .followedDJsInbox,
              .followedBrandsInbox,
              .contentReviewsInbox,
+             .entityChangeDetail,
              .postDetail,
              .eventDetail,
              .newsDetail,
@@ -101,6 +103,7 @@ extension AppRoute {
              .followedDJsInbox,
              .followedBrandsInbox,
              .contentReviewsInbox,
+             .entityChangeDetail,
              .postDetail,
              .eventDetail,
              .newsDetail,
@@ -146,6 +149,8 @@ extension AppRoute {
             return "followed.brands.inbox"
         case .contentReviewsInbox:
             return "content.reviews.inbox"
+        case .entityChangeDetail:
+            return "entity.change.detail"
         case .postDetail:
             return "post.detail"
         case .eventDetail:
@@ -210,6 +215,8 @@ extension AppRoute {
         case .followedBrandsInbox:
             return .messages
         case .contentReviewsInbox:
+            return .messages
+        case .entityChangeDetail:
             return .messages
         case .postDetail, .squadProfile, .squadManage, .circleIDDetail, .ratingEventDetail, .ratingUnitDetail:
             return .circle
@@ -298,6 +305,8 @@ final class AppRouter: ObservableObject {
                 return "followedBrandsInbox"
             case .contentReviewsInbox:
                 return "contentReviewsInbox"
+            case .entityChangeDetail(let changeLogID):
+                return "entityChangeDetail(\(changeLogID))"
             case .newsDetail(let articleID):
                 return "newsDetail(\(articleID))"
             case .eventSchedule(let eventID):
@@ -735,6 +744,12 @@ struct MainTabCoordinatorView: View {
 
         case .contentReviewsInbox:
             ContentReviewsInboxView(repository: appContainer.messageNotificationRepository)
+
+        case let .entityChangeDetail(changeLogID):
+            EntityChangeDetailView(
+                changeLogID: changeLogID,
+                repository: appContainer.notificationRepository
+            )
 
         case let .postDetail(postID):
             PostDetailLoaderView(
@@ -1247,6 +1262,8 @@ struct MainTabCoordinatorView: View {
             return "followedBrandsInbox"
         case .contentReviewsInbox:
             return "contentReviewsInbox"
+        case .entityChangeDetail(let changeLogID):
+            return "entityChangeDetail(\(changeLogID))"
         case .eventDetail(let eventID):
             return "eventDetail(\(eventID))"
         case .newsDetail(let articleID):

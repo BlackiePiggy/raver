@@ -4231,6 +4231,11 @@ struct DJDetailView: View {
                     summary: dj.contributorSummary,
                     fallbackUsers: contributorUsers
                 ) {
+                    ContributionModuleTelemetry.contributorSummaryTapped(
+                        entityType: "dj",
+                        entityID: dj.id,
+                        totalCount: max(dj.contributorSummary?.totalCount ?? 0, contributorUsers.count)
+                    )
                     showContributorList = true
                 }
             }

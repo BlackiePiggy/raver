@@ -2801,6 +2801,67 @@ model PreRegistrationNotification {
   @@map("pre_registration_notifications")
 }
 
+model EntityChangeLog {
+  id                    String   @id @default(uuid())
+  entityType            String   @map("entity_type")
+  entityId              String   @map("entity_id")
+  operationType         String   @map("operation_type")
+  actorId               String?  @map("actor_id")
+  actorRole             String?  @map("actor_role")
+  source                String?
+  sourceRoute           String?  @map("source_route")
+  requestId             String?  @map("request_id")
+  snapshotSchemaVersion Int      @map("snapshot_schema_version")
+  diffSchemaVersion     Int      @map("diff_schema_version")
+  revisionBefore        Int?     @map("revision_before")
+  revisionAfter         Int?     @map("revision_after")
+  beforeHash            String?  @map("before_hash")
+  afterHash             String?  @map("after_hash")
+  changed               Boolean  @default(true)
+  changeCount           Int      @default(0) @map("change_count")
+  privateSummaryZh      String?  @map("private_summary_zh") @db.Text
+  operatorSummaryZh     String?  @map("operator_summary_zh") @db.Text
+  publicSummaryZh       String?  @map("public_summary_zh") @db.Text
+  privateSummaryEn      String?  @map("private_summary_en") @db.Text
+  operatorSummaryEn     String?  @map("operator_summary_en") @db.Text
+  publicSummaryEn       String?  @map("public_summary_en") @db.Text
+  privateSummaryJa      String?  @map("private_summary_ja") @db.Text
+  operatorSummaryJa     String?  @map("operator_summary_ja") @db.Text
+  publicSummaryJa       String?  @map("public_summary_ja") @db.Text
+  changes               Json
+  publicChanges         Json     @map("public_changes")
+  metadata              Json?
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  snapshotArchives EntityChangeSnapshotArchive[]
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([operationType, createdAt])
+  @@index([changed, createdAt])
+  @@map("entity_change_logs")
+}
+
+model EntityChangeSnapshotArchive {
+  id                    String   @id @default(uuid())
+  changeLogId           String   @map("change_log_id")
+  entityType            String   @map("entity_type")
+  entityId              String   @map("entity_id")
+  snapshotRole          String   @map("snapshot_role")
+  snapshotSchemaVersion Int      @map("snapshot_schema_version")
+  snapshotHash          String   @map("snapshot_hash")
+  snapshot              Json
+  expiresAt             DateTime @map("expires_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  changeLog EntityChangeLog @relation(fields: [changeLogId], references: [id], onDelete: Cascade)
+
+  @@unique([changeLogId, snapshotRole])
+  @@index([entityType, entityId, createdAt])
+  @@index([expiresAt])
+  @@map("entity_change_snapshot_archives")
+}
+
 model AdminAuditLog {
   id         String   @id @default(uuid())
   actorId    String   @map("actor_id")

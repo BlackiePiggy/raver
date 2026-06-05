@@ -324,6 +324,7 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
         input: SquadOfflineLocationUploadInput
     ) async throws
     func fetchNotifications(limit: Int) async throws -> NotificationInbox
+    func fetchEntityChangePublicDetail(changeLogID: String) async throws -> EntityChangePublicDetail
     func fetchNotificationUnreadCount() async throws -> NotificationUnreadCount
     func markNotificationRead(notificationID: String) async throws
     func markNotificationsRead(type: AppNotificationType) async throws

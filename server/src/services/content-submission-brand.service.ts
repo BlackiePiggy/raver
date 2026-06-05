@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { normalizeCountryBiTextPayload } from '../utils/country-i18n';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
+import { entityChangeService } from '../modules/entity-change';
 
 const cleanText = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -638,6 +639,11 @@ export const createOrUpdateBrandFromSubmission = async (
   const targetBrandId = cleanText(payload.targetBrandId) || cleanText(payload.editTargetBrandId) || null;
 
   if (targetBrandId) {
+    const beforeChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'brand',
+      entityId: targetBrandId,
+      db,
+    });
     const existing = await db.wikiFestival.findUnique({
       where: { id: targetBrandId },
     });
@@ -751,68 +757,109 @@ export const createOrUpdateBrandFromSubmission = async (
           )
         : null;
 
-    const updated = await db.wikiFestival.update({
-      where: { id: existing.id },
-      data: {
-        sourceRowId: hasOwn(payload, 'sourceRowId')
-          ? integerOrNull(payload.sourceRowId)
-          : existing.sourceRowId,
-        name: (hasNameField || hasNameI18nField) ? (nextName || existing.name) : name,
-        nameI18n: nextNameI18n === undefined
-          ? existing.nameI18n
-          : nextNameI18n,
-        abbreviation: hasOwn(payload, 'abbreviation')
-          ? (cleanText(payload.abbreviation) || '')
-          : (existing.abbreviation ?? ''),
-        aliases: hasOwn(payload, 'aliases')
-          ? stringArray(payload.aliases)
-          : existing.aliases,
-        country: (hasCountryField || hasCountryI18nField) ? nextCountry : resolveRequiredText(payload, 'country', existing.country),
-        countryI18n: nextCountryI18n === undefined
-          ? existing.countryI18n
-          : nextCountryI18n,
-        city: (hasCityField || hasCityI18nField) ? nextCity : resolveRequiredText(payload, 'city', existing.city),
-        cityI18n: nextCityI18n === undefined
-          ? existing.cityI18n
-          : nextCityI18n,
-        foundedYear: hasOwn(payload, 'foundedYear')
-          ? resolveRequiredText(payload, 'foundedYear', existing.foundedYear)
-          : existing.foundedYear,
-        frequency: (hasFrequencyField || hasFrequencyI18nField)
-          ? nextFrequency
-          : existing.frequency,
-        frequencyI18n: nextFrequencyI18n === undefined
-          ? existing.frequencyI18n
-          : nextFrequencyI18n,
-        tagline: hasOwn(payload, 'tagline')
-          ? resolveRequiredText(payload, 'tagline', existing.tagline)
-          : existing.tagline,
-        introduction: (hasIntroductionField || hasDescriptionField || hasDescriptionI18nField)
-          ? nextIntroduction
-          : existing.introduction,
-        descriptionI18n: nextDescriptionI18n === undefined
-          ? existing.descriptionI18n
-          : nextDescriptionI18n,
-        officialWebsite: nextOfficialWebsite,
-        facebookUrl: nextFacebookUrl,
-        instagramUrl: nextInstagramUrl,
-        twitterUrl: nextTwitterUrl,
-        youtubeUrl: nextYoutubeUrl,
-        tiktokUrl: nextTiktokUrl,
-        avatarUrl: resolveOptionalString(payload, 'avatarUrl', existing.avatarUrl),
-        backgroundUrl: resolveOptionalString(payload, 'backgroundUrl', existing.backgroundUrl),
-        revision: { increment: 1 },
-        links: nextLinks === null
-          ? (existing.links ?? undefined)
-          : (nextLinks as unknown as Prisma.InputJsonValue),
-      } as any,
-    });
+    let updated;
+    try {
+      updated = await db.wikiFestival.update({
+        where: { id: existing.id, revision: existing.revision },
+        data: {
+          sourceRowId: hasOwn(payload, 'sourceRowId')
+            ? integerOrNull(payload.sourceRowId)
+            : existing.sourceRowId,
+          name: (hasNameField || hasNameI18nField) ? (nextName || existing.name) : name,
+          nameI18n: nextNameI18n === undefined
+            ? existing.nameI18n
+            : nextNameI18n,
+          abbreviation: hasOwn(payload, 'abbreviation')
+            ? (cleanText(payload.abbreviation) || '')
+            : (existing.abbreviation ?? ''),
+          aliases: hasOwn(payload, 'aliases')
+            ? stringArray(payload.aliases)
+            : existing.aliases,
+          country: (hasCountryField || hasCountryI18nField) ? nextCountry : resolveRequiredText(payload, 'country', existing.country),
+          countryI18n: nextCountryI18n === undefined
+            ? existing.countryI18n
+            : nextCountryI18n,
+          city: (hasCityField || hasCityI18nField) ? nextCity : resolveRequiredText(payload, 'city', existing.city),
+          cityI18n: nextCityI18n === undefined
+            ? existing.cityI18n
+            : nextCityI18n,
+          foundedYear: hasOwn(payload, 'foundedYear')
+            ? resolveRequiredText(payload, 'foundedYear', existing.foundedYear)
+            : existing.foundedYear,
+          frequency: (hasFrequencyField || hasFrequencyI18nField)
+            ? nextFrequency
+            : existing.frequency,
+          frequencyI18n: nextFrequencyI18n === undefined
+            ? existing.frequencyI18n
+            : nextFrequencyI18n,
+          tagline: hasOwn(payload, 'tagline')
+            ? resolveRequiredText(payload, 'tagline', existing.tagline)
+            : existing.tagline,
+          introduction: (hasIntroductionField || hasDescriptionField || hasDescriptionI18nField)
+            ? nextIntroduction
+            : existing.introduction,
+          descriptionI18n: nextDescriptionI18n === undefined
+            ? existing.descriptionI18n
+            : nextDescriptionI18n,
+          officialWebsite: nextOfficialWebsite,
+          facebookUrl: nextFacebookUrl,
+          instagramUrl: nextInstagramUrl,
+          twitterUrl: nextTwitterUrl,
+          youtubeUrl: nextYoutubeUrl,
+          tiktokUrl: nextTiktokUrl,
+          avatarUrl: resolveOptionalString(payload, 'avatarUrl', existing.avatarUrl),
+          backgroundUrl: resolveOptionalString(payload, 'backgroundUrl', existing.backgroundUrl),
+          revision: { increment: 1 },
+          links: nextLinks === null
+            ? (existing.links ?? undefined)
+            : (nextLinks as unknown as Prisma.InputJsonValue),
+        } as any,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        const current = await db.wikiFestival.findUnique({
+          where: { id: existing.id },
+          select: { revision: true },
+        });
+        throw new BrandSubmissionConflictError('主办方在你编辑期间已被更新，请刷新最新内容后重新编辑提交', {
+          targetBrandId: existing.id,
+          baseBrandRevision: existing.revision,
+          currentBrandRevision: current?.revision ?? null,
+        });
+      }
+      throw error;
+    }
 
     await ensureBrandContributor(db, updated.id, submitterId);
     if (options.submissionId) {
       await rebindBrandSubmissionMediaToBrand(db, payload, options.submissionId, updated.id);
     }
     await bindBrandToEvents(db, updated.id, payload);
+    const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+      entityType: 'brand',
+      entityId: updated.id,
+      db,
+    });
+    const change = await entityChangeService.diffSnapshots({
+      entityType: 'brand',
+      entityId: updated.id,
+      operationType: 'update',
+      before: beforeChangeSnapshot,
+      after: afterChangeSnapshot,
+    });
+    await entityChangeService.persistChange({
+      result: change,
+      snapshots: {
+        before: beforeChangeSnapshot,
+        after: afterChangeSnapshot,
+      },
+      actorId: submitterId,
+      source: 'content_submission_brand_apply',
+      sourceRoute: 'content-submission:brand:update',
+      metadata: {
+        submissionId: options.submissionId ?? null,
+      },
+    });
     return updated;
   }
 
@@ -890,5 +937,30 @@ export const createOrUpdateBrandFromSubmission = async (
     await rebindBrandSubmissionMediaToBrand(db, payload, options.submissionId, created.id);
   }
   await bindBrandToEvents(db, created.id, payload);
+  const afterChangeSnapshot = await entityChangeService.captureSnapshot({
+    entityType: 'brand',
+    entityId: created.id,
+    db,
+  });
+  const change = await entityChangeService.diffSnapshots({
+    entityType: 'brand',
+    entityId: created.id,
+    operationType: 'create',
+    before: null,
+    after: afterChangeSnapshot,
+  });
+  await entityChangeService.persistChange({
+    result: change,
+    snapshots: {
+      before: null,
+      after: afterChangeSnapshot,
+    },
+    actorId: submitterId,
+    source: 'content_submission_brand_apply',
+    sourceRoute: 'content-submission:brand:create',
+    metadata: {
+      submissionId: options.submissionId ?? null,
+    },
+  });
   return created;
 };

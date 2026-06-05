@@ -3,6 +3,7 @@
 关联方案：
 
 - [EVENT_DJ_CONTRIBUTOR_LIST_PLAN.md](/Users/blackie/Projects/raver/docs/EVENT_DJ_CONTRIBUTOR_LIST_PLAN.md)
+- [CONTRIBUTION_MODULE_RELEASE_CHECKLIST.md](/Users/blackie/Projects/raver/docs/CONTRIBUTION_MODULE_RELEASE_CHECKLIST.md)
 
 ---
 
@@ -355,7 +356,7 @@
 - [x] 新增 `event_contributors`。
 - [x] 新增 `contribution_history_entries`。
 - [x] 为上述表补齐唯一约束、排序索引、用户维度索引。
-- [ ] 输出 migration 风险说明。
+- [x] 输出 migration 风险说明。
 
 ### Phase 2. 写链路接入
 
@@ -422,28 +423,33 @@
 
 ### Phase 8. 回填与校验
 
-- [ ] DJ contributor 历史字段回填脚本完成。
-- [ ] event contributor relation 回填脚本完成。
-- [ ] contribution history 回填策略明确。
-- [ ] 无法高置信回推 creator 的历史 event 有明确兜底处理。
+- [x] DJ contributor 历史字段回填脚本完成。
+- [x] event contributor relation 回填脚本完成。
+- [x] contribution history 回填策略明确。
+- [x] 无法高置信回推 creator 的历史 event 有明确兜底处理。
 - [ ] 抽样校验 20 个 DJ / 20 个 event。
+
+说明：
+
+- 本地已完成 `dry-run` 验证，并补齐独立 `verify` 脚本。
+- 正式回填执行后置到更接近线上数据规模的环境，不作为当前开发阻塞项。
 
 ### Phase 9. 埋点与监控
 
-- [ ] contributor summary 点击埋点完成。
-- [ ] contributor list profile 点击埋点完成。
-- [ ] contribution center 曝光与筛选埋点完成。
-- [ ] contribution record 写入日志完成。
-- [ ] 回填脚本输出统计日志完成。
+- [x] contributor summary 点击埋点完成。
+- [x] contributor list profile 点击埋点完成。
+- [x] contribution center 曝光与筛选埋点完成。
+- [x] contribution record 写入日志完成。
+- [x] 回填脚本输出统计日志完成。
 
 ### Phase 10. QA 与发布门禁
 
 - [ ] 后端单测补齐。
-- [ ] iOS 交互 smoke checklist 补齐。
+- [x] iOS 交互 smoke checklist 补齐。
 - [ ] 个人主页入口回归完成。
 - [ ] event / DJ 详情页贡献者展示回归完成。
 - [ ] contribution center 历史链路回归完成。
-- [ ] 文档与 tracker 状态同步。
+- [x] 文档与 tracker 状态同步。
 
 ---
 
@@ -455,7 +461,7 @@
 - [x] 扩展 `DJContributor` Prisma model。
 - [x] 定义 `ContributionHistoryEntry` Prisma model。
 - [x] 增加 migration SQL。
-- [ ] 增加数据库回滚说明。
+- [x] 增加数据库回滚说明。
 
 ## 10.2 Backend 写入任务
 
@@ -557,6 +563,56 @@
 - [ ] 对象改名后历史页快照与当前标题不一致。
 - [ ] profile 首页入口过多导致视觉拥挤。
 
+## 12.1 回填 / 发布门禁补充
+
+- 正式回填不要求在本地开发环境先执行完成。
+- 本地环境只要求：
+  - `backfill` 脚本可编译
+  - `dry-run` 可跑通
+  - `verify` 脚本可抽样校验
+- 正式回填建议放到准线上或线上窗口执行，原因：
+  - 本地数据库连接与 I/O 性能不代表真实环境
+  - `content_submissions.payload` 与历史 DJ contributor 扫描在本地耗时显著更高
+  - 正式回填后更适合同环境直接做抽样校验与问题回滚
+
+## 12.2 数据库回滚说明
+
+如果贡献模块 cutover 后需要回滚，建议按以下顺序执行：
+
+1. 先停用正式回填脚本与相关发布窗口操作，避免继续写入新回填数据。
+2. 仅回滚“贡献模块读路径”时：
+   - 可以先在服务端关闭贡献模块读取入口或回退到旧版本应用代码
+   - 不必立即删除新表数据
+3. 需要回滚“回填写入结果”时：
+   - 删除 `contribution_history_entries` 中 `source = backfill` 或 `metadata.backfillModule = contribution_module_phase8` 的历史数据
+   - 重建 `event_contributors` / `dj_contributors` 到回滚目标状态
+4. 需要回滚 schema 时：
+   - 必须确认线上代码已不再依赖 `event_contributors`、扩展后的 `dj_contributors` 字段、`contribution_history_entries`
+   - 再执行单独 migration 回滚或人工 DDL
+
+注意：
+
+- 数据回滚与代码回滚应拆开执行，不建议直接把 schema 回滚作为第一步。
+- `dj_contributors` 已被新逻辑复用，回滚前必须先确认是否仍有旧 DJ 编辑权限逻辑依赖该表。
+
+## 12.3 Migration 风险说明
+
+- `event_contributors` 是新增表，风险主要在 migration deploy 顺序而不是历史兼容。
+- `dj_contributors` 是扩字段升级，风险主要在：
+  - 旧代码若假设表内只有 `dj_id / user_id / created_at` 等简化结构，可能出现读写口径不一致。
+  - 正式回填前如果新代码已上线但 migration 未完整部署，DJ 贡献写链路会直接失败。
+- `contribution_history_entries` 是新增追加式流水表，风险主要在：
+  - 如果写链路先上线但表未创建，event / DJ 审核生效路径会因写 history 失败而中断。
+  - 如果后续发现 `no-op` 判定不严谨，会放大历史脏数据，需要依赖 source / metadata 做定向清理。
+- 因为贡献模块读写已经接入 event / DJ 生效链路，正式发布顺序必须是：
+  1. 先 deploy migration
+  2. 再 deploy 服务端代码
+  3. 最后在窗口内执行正式 backfill
+- 回填窗口内不建议并发运行其他同表 repair / backfill，避免：
+  - `contribution_count` 统计被重复放大
+  - `last_contributed_at` 被不同批任务交错刷新
+  - verify 抽样时难以判断问题归因
+
 ---
 
 ## 13. 建议的实现顺序
@@ -586,3 +642,17 @@
 - [x] 服务端补齐 event / DJ submission 生效写链路的统一 `no-op` 判定，避免未生效重复提交写入 contributor relation / contribution history。
 - [x] iOS 个人主页已接入 `贡献中心` 快捷入口与历史贡献页首版。
 - [x] iOS event / DJ 详情页已接入贡献者摘要与独立贡献者列表页首版。
+- [x] Phase 8 回填脚本补齐 `dry-run` 范围控制、分页读取、重试与统计日志。
+- [x] 新增 `contribution-module:verify` 抽样校验脚本。
+- [x] 确认正式回填后置到准线上 / 线上环境执行，不阻塞当前开发。
+- [x] 服务端补齐 contribution record 写入成功 / 失败日志。
+
+### 2026-06-05
+
+- [x] iOS 详情页 contributor summary 点击埋点接入 event / DJ 两侧入口。
+- [x] iOS 贡献者列表 profile 点击埋点接入。
+- [x] iOS `贡献中心` 曝光、筛选、入口点击埋点接入。
+- [x] web `贡献` tab exposure 与 contributor profile 点击埋点接入。
+- [x] 增补 `Migration 风险说明`，明确 migration -> code -> backfill 发布顺序。
+- [x] 新增 `contribution-module:regression` 后端回归脚本，用于覆盖贡献写入、列表排序、历史分页与筛选。
+- [x] 发布清单补齐 iOS / web / backend smoke 与本地门禁说明。

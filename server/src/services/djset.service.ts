@@ -6,6 +6,7 @@ import {
   USER_ENTITY_TARGET_DJ,
 } from './user-entity-follow.service';
 import { resolveUserGenrePreferences } from './user-genre-preference.service';
+import { entityChangeService, type EntitySnapshot } from '../modules/entity-change';
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,7 @@ interface CreateDJSetInput {
 
 interface CreateTrackInput {
   setId: string;
+  actorId?: string | null;
   position: number;
   startTime: number;
   endTime?: number;
@@ -408,6 +410,7 @@ export class DJSetService {
 
     const slug = await this.generateUniqueSlug(input.title);
 
+    let afterSnapshot: EntitySnapshot | null = null;
     const created = await prisma.$transaction(async (tx) => {
       const set = await tx.dJSet.create({
         data: {
@@ -439,38 +442,89 @@ export class DJSetService {
         djIds: normalizedDjIds,
         customDjNames,
       });
+      afterSnapshot = await entityChangeService.captureSnapshot({
+        entityType: 'djSet',
+        entityId: set.id,
+        db: tx,
+      });
       return set;
     });
 
-    return this.attachLineupInfo(created as any);
+    const change = await entityChangeService.diffSnapshots({
+      entityType: 'djSet',
+      entityId: created.id,
+      operationType: 'create',
+      before: null,
+      after: afterSnapshot,
+    });
+    const changeLog = await entityChangeService.persistChange({
+      result: change,
+      snapshots: {
+        before: null,
+        after: afterSnapshot,
+      },
+      actorId: input.uploadedById ?? null,
+      actorRole: 'uploader',
+      source: 'api',
+      sourceRoute: 'POST /api/dj-sets',
+      metadata: {
+        uploadedById: input.uploadedById ?? null,
+      },
+    });
+    const withLineup = await this.attachLineupInfo(created as any);
+    return {
+      ...withLineup,
+      change: entityChangeService.toResponse({ change, changeLog }),
+    };
   }
 
   /**
    * Add track to a DJ set
    */
   async addTrack(input: CreateTrackInput) {
-    return await prisma.track.create({
-      data: {
-        setId: input.setId,
-        position: input.position,
-        startTime: input.startTime,
-        endTime: input.endTime,
-        title: input.title,
-        artist: input.artist,
-        status: input.status || 'released',
-        spotifyUrl: input.spotifyUrl,
-        spotifyId: input.spotifyId,
-        spotifyUri: input.spotifyUri,
-        neteaseUrl: input.neteaseUrl,
-        neteaseId: input.neteaseId,
+    const tracked = await entityChangeService.trackUpdate({
+      entityType: 'djSet',
+      entityId: input.setId,
+      operationType: 'update',
+      actorId: input.actorId ?? null,
+      actorRole: input.actorId ? 'uploader' : null,
+      source: 'api',
+      sourceRoute: 'POST /api/dj-sets/:id/tracks',
+      update: async (tx) => tx.track.create({
+        data: {
+          setId: input.setId,
+          position: input.position,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          title: input.title,
+          artist: input.artist,
+          status: input.status || 'released',
+          spotifyUrl: input.spotifyUrl,
+          spotifyId: input.spotifyId,
+          spotifyUri: input.spotifyUri,
+          neteaseUrl: input.neteaseUrl,
+          neteaseId: input.neteaseId,
+        },
+      }),
+      metadata: {
+        trackPosition: input.position,
+        trackTitle: input.title,
+        trackArtist: input.artist,
       },
     });
+    return {
+      ...tracked.value,
+      change: entityChangeService.toResponse({
+        change: tracked.change,
+        changeLog: tracked.changeLog,
+      }),
+    };
   }
 
   /**
    * Batch add tracks to a DJ set
    */
-  async batchAddTracks(setId: string, tracks: Omit<CreateTrackInput, 'setId'>[]) {
+  async batchAddTracks(setId: string, tracks: Omit<CreateTrackInput, 'setId'>[], actorId?: string | null) {
     const trackData = tracks.map(track => ({
       setId,
       position: track.position,
@@ -486,9 +540,28 @@ export class DJSetService {
       neteaseId: track.neteaseId,
     }));
 
-    return await prisma.track.createMany({
-      data: trackData,
+    const tracked = await entityChangeService.trackUpdate({
+      entityType: 'djSet',
+      entityId: setId,
+      operationType: 'update',
+      actorId: actorId ?? null,
+      actorRole: actorId ? 'uploader' : null,
+      source: 'api',
+      sourceRoute: 'POST /api/dj-sets/:id/tracks/batch',
+      update: async (tx) => tx.track.createMany({
+        data: trackData,
+      }),
+      metadata: {
+        trackCount: trackData.length,
+      },
     });
+    return {
+      ...tracked.value,
+      change: entityChangeService.toResponse({
+        change: tracked.change,
+        changeLog: tracked.changeLog,
+      }),
+    };
   }
 
   /**
@@ -833,7 +906,15 @@ export class DJSetService {
         ? this.normalizeCustomDjNames(input.customDjNames)
         : current.customDjNames;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const tracked = await entityChangeService.trackUpdate({
+      entityType: 'djSet',
+      entityId: setId,
+      operationType: 'update',
+      actorId: userId,
+      actorRole: 'uploader',
+      source: 'api',
+      sourceRoute: 'PUT /api/dj-sets/:id',
+      update: async (tx) => {
       const set = await tx.dJSet.update({
         where: { id: setId },
         data: {
@@ -875,8 +956,21 @@ export class DJSetService {
         customDjNames,
       });
       return set;
+      },
+      metadata: {
+        updateFields: Object.entries(input)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key),
+      },
     });
-    return this.attachLineupInfo(updated as any);
+    const withLineup = await this.attachLineupInfo(tracked.value as any);
+    return {
+      ...withLineup,
+      change: entityChangeService.toResponse({
+        change: tracked.change,
+        changeLog: tracked.changeLog,
+      }),
+    };
   }
 
   async replaceTracksByUploader(
@@ -910,12 +1004,35 @@ export class DJSetService {
       neteaseId: track.neteaseId,
     }));
 
-    await prisma.$transaction([
-      prisma.track.deleteMany({ where: { setId } }),
-      ...(normalized.length > 0 ? [prisma.track.createMany({ data: normalized })] : []),
-    ]);
+    const tracked = await entityChangeService.trackUpdate({
+      entityType: 'djSet',
+      entityId: setId,
+      operationType: 'update',
+      actorId: userId,
+      actorRole: 'uploader',
+      source: 'api',
+      sourceRoute: 'PUT /api/dj-sets/:id/tracks',
+      update: async (tx) => {
+        await tx.track.deleteMany({ where: { setId } });
+        if (normalized.length > 0) {
+          await tx.track.createMany({ data: normalized });
+        }
+        return true;
+      },
+      metadata: {
+        trackCount: normalized.length,
+      },
+    });
 
-    return await this.getDJSet(setId);
+    const updated = await this.getDJSet(setId);
+    if (!updated) return updated;
+    return {
+      ...updated,
+      change: entityChangeService.toResponse({
+        change: tracked.change,
+        changeLog: tracked.changeLog,
+      }),
+    };
   }
 
   private normalizeDjIds(primaryDjId?: string | null, candidateIds?: string[]): string[] {
@@ -1033,8 +1150,34 @@ export class DJSetService {
       throw new Error('Forbidden');
     }
 
-    await prisma.dJSet.delete({
-      where: { id: setId },
+    let before: EntitySnapshot | null = null;
+    await prisma.$transaction(async (tx) => {
+      before = await entityChangeService.captureSnapshot({
+        entityType: 'djSet',
+        entityId: setId,
+        db: tx,
+      });
+      await tx.dJSet.delete({
+        where: { id: setId },
+      });
+    });
+    const change = await entityChangeService.diffSnapshots({
+      entityType: 'djSet',
+      entityId: setId,
+      operationType: 'delete',
+      before,
+      after: null,
+    });
+    await entityChangeService.persistChange({
+      result: change,
+      snapshots: {
+        before,
+        after: null,
+      },
+      actorId: userId,
+      actorRole: role === 'admin' ? 'admin' : 'uploader',
+      source: 'api',
+      sourceRoute: 'DELETE /api/dj-sets/:id',
     });
     return current;
   }

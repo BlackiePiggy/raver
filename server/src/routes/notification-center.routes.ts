@@ -21,6 +21,49 @@ import {
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+
+const emptyEntityChangeNotificationMetadata = {
+  changeLogId: null,
+  publicSummaryZh: null,
+  publicSummaryEn: null,
+  publicSummaryJa: null,
+  publicChanges: [],
+};
+
+const fetchLatestEntityChangeNotificationMetadata = async (
+  entityType: 'event' | 'dj' | 'brand',
+  entityId: string
+): Promise<{
+  changeLogId: string | null;
+  publicSummaryZh: string | null;
+  publicSummaryEn: string | null;
+  publicSummaryJa: string | null;
+  publicChanges: Prisma.JsonValue;
+}> => {
+  const row = await prisma.entityChangeLog.findFirst({
+    where: {
+      entityType,
+      entityId,
+      changed: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      publicSummaryZh: true,
+      publicSummaryEn: true,
+      publicSummaryJa: true,
+      publicChanges: true,
+    },
+  });
+  if (!row) return emptyEntityChangeNotificationMetadata;
+  return {
+    changeLogId: row.id,
+    publicSummaryZh: row.publicSummaryZh,
+    publicSummaryEn: row.publicSummaryEn,
+    publicSummaryJa: row.publicSummaryJa,
+    publicChanges: row.publicChanges,
+  };
+};
 const TEMPLATE_CHANNELS = new Set(['in_app', 'apns', 'email', 'sms']);
 const DELIVERABLE_CHANNELS = new Set(['in_app', 'apns']);
 
@@ -1182,6 +1225,7 @@ const executeAdminEventPublish = async (input: {
 
   const audienceKeys = input.audienceKeys?.length ? input.audienceKeys : ['followed_dj_event', 'followed_brand_event'];
   const dedupeSalt = input.dedupeSalt?.trim() || runtime.event.updatedAt.slice(0, 13);
+  const changeMetadata = await fetchLatestEntityChangeNotificationMetadata('event', runtime.event.id);
   const publicationResults: AdminPublishExecutionAudienceResult[] = [];
 
   for (const key of audienceKeys) {
@@ -1207,6 +1251,7 @@ const executeAdminEventPublish = async (input: {
         route: 'event_update',
         primaryUpdateKind: 'event',
         updateKind: 'event',
+        ...changeMetadata,
       };
       let dedupeKey = '';
 
@@ -1241,7 +1286,7 @@ const executeAdminEventPublish = async (input: {
         dedupeKey,
         payload: {
           title,
-          body: runtime.event.title,
+          body: changeMetadata.publicSummaryZh || runtime.event.title,
           deeplink: runtime.event.deeplink,
           metadata,
         },
@@ -1299,6 +1344,7 @@ const executeAdminDJPublish = async (input: {
 
   const audienceKeys = input.audienceKeys?.length ? input.audienceKeys : ['followed_dj_info'];
   const dedupeSalt = input.dedupeSalt?.trim() || runtime.dj.updatedAt.slice(0, 13);
+  const changeMetadata = await fetchLatestEntityChangeNotificationMetadata('dj', runtime.dj.id);
   const publicationResults: AdminPublishExecutionAudienceResult[] = [];
 
   for (const key of audienceKeys) {
@@ -1320,7 +1366,7 @@ const executeAdminDJPublish = async (input: {
         dedupeKey,
         payload: {
           title: `${row.name} profile updated`,
-          body: runtime.dj.title,
+          body: changeMetadata.publicSummaryZh || runtime.dj.title,
           deeplink: runtime.dj.deeplink,
           metadata: {
             route: 'dj_update',
@@ -1334,6 +1380,7 @@ const executeAdminDJPublish = async (input: {
             djSummary: runtime.dj.summary,
             djCoverImageURL: runtime.dj.coverImageURL,
             occurredAt: runtime.dj.updatedAt,
+            ...changeMetadata,
           },
         },
       });
@@ -1391,6 +1438,7 @@ const executeAdminBrandPublish = async (input: {
 
   const audienceKeys = input.audienceKeys?.length ? input.audienceKeys : ['followed_brand_info'];
   const dedupeSalt = input.dedupeSalt?.trim() || runtime.brand.updatedAt.slice(0, 13);
+  const changeMetadata = await fetchLatestEntityChangeNotificationMetadata('brand', runtime.brand.id);
   const publicationResults: AdminPublishExecutionAudienceResult[] = [];
 
   for (const key of audienceKeys) {
@@ -1412,7 +1460,7 @@ const executeAdminBrandPublish = async (input: {
         dedupeKey,
         payload: {
           title: `${row.name} profile updated`,
-          body: runtime.brand.title,
+          body: changeMetadata.publicSummaryZh || runtime.brand.title,
           deeplink: runtime.brand.deeplink,
           metadata: {
             route: 'brand_update',
@@ -1427,6 +1475,7 @@ const executeAdminBrandPublish = async (input: {
             brandSummary: runtime.brand.summary,
             brandCoverImageURL: runtime.brand.coverImageURL,
             occurredAt: runtime.brand.updatedAt,
+            ...changeMetadata,
           },
         },
       });

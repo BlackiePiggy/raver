@@ -1,6 +1,46 @@
 import SwiftUI
 import UIKit
 
+enum ContributionModuleTelemetry {
+    static func track(_ name: String, properties: [String: String] = [:]) {
+        #if DEBUG
+        print("[ContributionModuleTelemetry] \(name) \(properties)")
+        #endif
+    }
+
+    static func contributorSummaryTapped(entityType: String, entityID: String, totalCount: Int) {
+        track("contributor_summary_tapped", properties: [
+            "entityType": entityType,
+            "entityId": entityID,
+            "totalCount": "\(max(0, totalCount))"
+        ])
+    }
+
+    static func contributorListProfileTapped(entityType: String, entityID: String, targetUserID: String) {
+        track("contributor_list_profile_tapped", properties: [
+            "entityType": entityType,
+            "entityId": entityID,
+            "targetUserId": targetUserID
+        ])
+    }
+
+    static func contributionCenterExposure(filter: String) {
+        track("contribution_center_exposure", properties: [
+            "filter": filter
+        ])
+    }
+
+    static func contributionCenterFilterTapped(filter: String) {
+        track("contribution_center_filter_tapped", properties: [
+            "filter": filter
+        ])
+    }
+
+    static func contributionCenterEntryTapped() {
+        track("contribution_center_entry_tapped")
+    }
+}
+
 private final class HorizontalAxisLockedUIScrollView: UIScrollView {
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard
@@ -388,6 +428,11 @@ struct EntityContributorListView: View {
             LazyVStack(spacing: 12) {
                 ForEach(items) { item in
                     Button {
+                        ContributionModuleTelemetry.contributorListProfileTapped(
+                            entityType: entityType,
+                            entityID: entityID,
+                            targetUserID: item.user.id
+                        )
                         appPush(.userProfile(userID: item.user.id))
                     } label: {
                         contributorRow(item)

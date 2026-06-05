@@ -132,6 +132,11 @@ private struct NotificationsScreen: View {
 
     private func handleTap(_ item: AppNotification) async {
         await viewModel.markRead(item)
+        if let changeLogID = item.changeLogId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !changeLogID.isEmpty {
+            appPush(.entityChangeDetail(changeLogID: changeLogID))
+            return
+        }
         guard let target = item.target else { return }
         switch target.type {
         case "user":

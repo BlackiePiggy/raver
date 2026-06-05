@@ -76,10 +76,6 @@ import {
   scheduleContentSubmissionProcessingBestEffort,
 } from '../services/content-submission-processing.service';
 import {
-  attachContentSubmissionChangeSummary,
-  changeSummaryTextFromPayload,
-} from '../services/content-submission-change-summary.service';
-import {
   attachContributionInfo,
   buildContributorSummary,
   emptyContributorInfo,
@@ -1220,10 +1216,7 @@ const createPendingContentSubmission = async (input: {
       : input.entityType === 'brand'
       ? normalizeBrandSubmissionPayload(input.payload as Prisma.InputJsonObject)
       : (input.payload as Prisma.InputJsonObject);
-  const payloadWithSummary = attachContentSubmissionChangeSummary(
-    input.entityType,
-    normalizedPayload
-  );
+  const payloadWithSummary = normalizedPayload;
   let orphanedBrandDraftObjectKeys: string[] = [];
   const submission = await prisma.$transaction(async (tx) => {
     if (input.idempotencyKey) {
@@ -1306,10 +1299,7 @@ const createPendingContentSubmission = async (input: {
     rating: '打分',
   };
   const typeLabel = typeLabelMap[input.entityType] || '内容';
-  const changeSummary = changeSummaryTextFromPayload(payloadWithSummary);
-  const processingBody = changeSummary
-    ? `你提交的「${input.title}」已进入处理队列。\n变更摘要：${changeSummary}`
-    : `你提交的「${input.title}」已进入处理队列。`;
+  const processingBody = `你提交的「${input.title}」已进入处理队列。`;
   await scheduleContentSubmissionProcessingBestEffort(submission.id);
   await notificationCenterService.publish({
     category: 'content_review',
@@ -1452,10 +1442,7 @@ const createDirectEventApplySubmission = async (input: {
   idempotencyKey?: string | null;
 }) => {
   const normalizedPayload = await normalizeEventSubmissionPayloadForMutation(input.payload);
-  const payloadWithSummary = attachContentSubmissionChangeSummary(
-    'event',
-    normalizedPayload
-  );
+  const payloadWithSummary = normalizedPayload;
 
   return prisma.$transaction(async (tx) => {
     if (input.idempotencyKey) {
@@ -16536,6 +16523,40 @@ const uniqueGenreSlug = async (name: string, requestedSlug?: string, excludeId?:
   }
 };
 
+const fetchLatestEntityChangePayloadForHistory = async (
+  entityType: 'event' | 'dj' | 'brand',
+  entityId: string
+): Promise<{
+  changeLogId: string | null;
+  publicSummaryZh: string | null;
+  publicSummaryEn: string | null;
+  publicSummaryJa: string | null;
+  publicChanges: Prisma.JsonValue;
+}> => {
+  const row = await prisma.entityChangeLog.findFirst({
+    where: {
+      entityType,
+      entityId,
+      changed: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      publicSummaryZh: true,
+      publicSummaryEn: true,
+      publicSummaryJa: true,
+      publicChanges: true,
+    },
+  });
+  return {
+    changeLogId: row?.id ?? null,
+    publicSummaryZh: row?.publicSummaryZh ?? null,
+    publicSummaryEn: row?.publicSummaryEn ?? null,
+    publicSummaryJa: row?.publicSummaryJa ?? null,
+    publicChanges: row?.publicChanges ?? [],
+  };
+};
+
 const upsertEventReleasePublishTaskBestEffort = async (input: {
   actorUserId: string;
   operationType: 'create' | 'edit';
@@ -16555,6 +16576,7 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
   };
 }): Promise<void> => {
   try {
+    const changePayload = await fetchLatestEntityChangePayloadForHistory('event', input.event.id);
     const djIds = Array.from(
       new Set(
         (Array.isArray(input.event.lineupArtists) ? input.event.lineupArtists : []).flatMap((artist) => {
@@ -16591,6 +16613,7 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
               : null,
         wikiFestivalId: input.event.wikiFestivalId ?? null,
         djIds,
+        ...changePayload,
       },
     });
     await notificationCenterService.createAdminContentHistory({
@@ -16617,6 +16640,7 @@ const upsertEventReleasePublishTaskBestEffort = async (input: {
               : null,
         wikiFestivalId: input.event.wikiFestivalId ?? null,
         djIds,
+        ...changePayload,
       },
       sourceRoute: input.sourceRoute,
       createdBy: input.actorUserId,
@@ -16642,6 +16666,7 @@ const upsertDJReleasePublishTaskBestEffort = async (input: {
   };
 }): Promise<void> => {
   try {
+    const changePayload = await fetchLatestEntityChangePayloadForHistory('dj', input.dj.id);
     const task = await notificationCenterService.upsertAdminPublishTask({
       taskType: 'dj_release',
       entityType: 'dj',
@@ -16654,6 +16679,7 @@ const upsertDJReleasePublishTaskBestEffort = async (input: {
         title: input.dj.name,
         summary: (typeof input.dj.bio === 'string' && input.dj.bio.trim()) || input.dj.name,
         coverImageURL: input.dj.avatarUrl ?? null,
+        ...changePayload,
       },
     });
     await notificationCenterService.createAdminContentHistory({
@@ -16670,6 +16696,7 @@ const upsertDJReleasePublishTaskBestEffort = async (input: {
         title: input.dj.name,
         summary: (typeof input.dj.bio === 'string' && input.dj.bio.trim()) || input.dj.name,
         coverImageURL: input.dj.avatarUrl ?? null,
+        ...changePayload,
       },
       sourceRoute: input.sourceRoute,
       createdBy: input.actorUserId,
@@ -16696,6 +16723,15 @@ const upsertBrandReleasePublishTaskBestEffort = async (input: {
   entityType: 'festival' | 'label';
 }): Promise<void> => {
   try {
+    const changePayload = input.entityType === 'festival'
+      ? await fetchLatestEntityChangePayloadForHistory('brand', input.brand.id)
+      : {
+          changeLogId: null,
+          publicSummaryZh: null,
+          publicSummaryEn: null,
+          publicSummaryJa: null,
+          publicChanges: [],
+        };
     const task = await notificationCenterService.upsertAdminPublishTask({
       taskType: 'brand_release',
       entityType: input.entityType,
@@ -16709,6 +16745,7 @@ const upsertBrandReleasePublishTaskBestEffort = async (input: {
         title: input.brand.name,
         summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
         coverImageURL: input.brand.coverImageURL ?? null,
+        ...changePayload,
       },
     });
     await notificationCenterService.createAdminContentHistory({
@@ -16726,6 +16763,7 @@ const upsertBrandReleasePublishTaskBestEffort = async (input: {
         title: input.brand.name,
         summary: (typeof input.brand.summary === 'string' && input.brand.summary.trim()) || input.brand.name,
         coverImageURL: input.brand.coverImageURL ?? null,
+        ...changePayload,
       },
       sourceRoute: input.sourceRoute,
       createdBy: input.actorUserId,

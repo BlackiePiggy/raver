@@ -333,8 +333,9 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response): Pro
  * POST /api/dj-sets/:id/tracks
  * Add a track to a DJ set
  */
-router.post('/:id/tracks', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/tracks', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.userId;
     const {
       position,
       startTime,
@@ -356,6 +357,7 @@ router.post('/:id/tracks', authenticate, async (req: Request, res: Response): Pr
 
     const track = await djSetService.addTrack({
       setId: req.params.id as string,
+      actorId: userId ?? null,
       position,
       startTime,
       endTime,
@@ -380,8 +382,9 @@ router.post('/:id/tracks', authenticate, async (req: Request, res: Response): Pr
  * POST /api/dj-sets/:id/tracks/batch
  * Batch add tracks to a DJ set
  */
-router.post('/:id/tracks/batch', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/tracks/batch', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.userId;
     const { tracks } = req.body;
 
     if (!Array.isArray(tracks) || tracks.length === 0) {
@@ -389,8 +392,8 @@ router.post('/:id/tracks/batch', authenticate, async (req: Request, res: Respons
       return;
     }
 
-    await djSetService.batchAddTracks(req.params.id as string, tracks);
-    res.status(201).json({ message: 'Tracks added successfully' });
+    const result = await djSetService.batchAddTracks(req.params.id as string, tracks, userId ?? null);
+    res.status(201).json({ message: 'Tracks added successfully', ...result });
   } catch (error) {
     console.error('Batch add tracks error:', error);
     res.status(500).json({ error: (error as Error).message });

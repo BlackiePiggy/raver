@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { contributionModuleApi } from './api';
+import { trackContributionModuleEvent } from './telemetry';
 import type {
   ContributionEntityType,
   ContributionListItem,
@@ -87,13 +88,28 @@ function ContributionPreviewStack({ users }: { users: ContributionUserLite[] }) 
   );
 }
 
-function ContributionListRow({ item }: { item: ContributionListItem }) {
+function ContributionListRow({
+  entityType,
+  entityId,
+  item,
+}: {
+  entityType: ContributionEntityType;
+  entityId: string;
+  item: ContributionListItem;
+}) {
   const user = item.user;
   const userName = displayContributorName(user);
 
   return (
     <Link
       href={`/users/${user.id}`}
+      onClick={() => {
+        trackContributionModuleEvent('contributor_list_profile_tapped', {
+          entityType,
+          entityId,
+          targetUserId: user.id,
+        });
+      }}
       className="flex gap-4 rounded-[20px] border border-[#edf0f2] bg-[#fafbfb] p-4 transition hover:bg-white"
     >
       <ContributionAvatar user={user} size={52} />
@@ -143,6 +159,13 @@ export default function ContributionTabPanel({
   const [data, setData] = useState<ContributionListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    trackContributionModuleEvent('contribution_tab_exposure', {
+      entityType,
+      entityId,
+    });
+  }, [entityId, entityType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,6 +248,8 @@ export default function ContributionTabPanel({
           <div className="mt-4 space-y-3">
             {items.map((item) => (
               <ContributionListRow
+                entityType={entityType}
+                entityId={entityId}
                 key={`${item.user.id}-${item.role}-${item.lastContributedAt}`}
                 item={item}
               />
