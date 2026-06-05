@@ -152,6 +152,12 @@ const PANEL_ITEMS: Array<{
   },
 ];
 
+const aiCompactInputClass =
+  'admin-studio-input h-9 min-h-9 rounded-[14px] px-3 py-1.5 text-[13px] leading-5';
+
+const aiCompactSelectClass =
+  'admin-studio-input h-9 min-h-9 rounded-[14px] px-3 py-1.5 pr-8 text-[13px] leading-5';
+
 const ACT_TYPE_ITEMS: Array<{ value: EventStudioAIActType; label: string; count: number }> = [
   { value: 'solo', label: 'Solo', count: 1 },
   { value: 'b2b', label: 'B2B', count: 2 },
@@ -1373,8 +1379,8 @@ export default function EventStudioAIImportDock({
     const avatar = item.performerAvatarURLs[performerIndex];
 
     return (
-      <div key={`${item.id}-${performerIndex}`} className="rounded-[18px] border border-[#e8eceb] bg-white/70 p-3">
-        <div className="mb-2 flex items-center gap-2 text-xs text-black/45">
+      <div key={`${item.id}-${performerIndex}`} className="rounded-[16px] border border-[#e8eceb] bg-white/70 p-2.5">
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] text-black/45">
           <span>Performer {performerIndex + 1}</span>
           {avatar ? (
             <span className="inline-flex h-7 w-7 overflow-hidden rounded-full border border-[#e8eceb] bg-[#f4f6f3]">
@@ -1384,7 +1390,7 @@ export default function EventStudioAIImportDock({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
-            className="admin-studio-input min-w-[180px] flex-1"
+            className={`${aiCompactInputClass} min-w-[160px] flex-1`}
             value={item.performerDJIDs[performerIndex] || ''}
             onChange={(event) =>
               scope === 'lineup'
@@ -1624,9 +1630,10 @@ export default function EventStudioAIImportDock({
       ) : null}
 
       {panel ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-3 sm:items-center">
-          <div className="w-full max-w-6xl overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-[#e8eceb] px-5 py-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 p-3">
+          <div className="flex min-h-full items-end justify-center sm:items-center">
+            <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+              <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-[#e8eceb] px-5 py-4">
               <div>
                 <div className="admin-studio-label">{PANEL_ITEMS.find((item) => item.kind === panel.kind)?.title}</div>
                 <div className="mt-2 text-sm leading-6 text-black/52">{panel.errorText || panel.statusText}</div>
@@ -1646,85 +1653,86 @@ export default function EventStudioAIImportDock({
                   {panel.running ? 'Running...' : 'Start Recognition'}
                 </button>
               </div>
-            </div>
-
-            <div className="grid gap-5 p-5 lg:grid-cols-[0.88fr_1.12fr]">
-              <div className="space-y-4">
-                <div className="admin-reference-card p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-[#071110]">Choose Images</div>
-                    <div className="text-xs text-black/40">{selectedCountLabel(panel)}</div>
-                  </div>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {selectedImageOptions.map((image) => {
-                      const checked = panel.selectedImageIds.includes(image.id);
-                      const toggle = () => {
-                        setPanel((current) => {
-                          if (!current) return current;
-                          if (current.kind === 'poster') {
-                            return { ...current, selectedImageIds: [image.id] };
-                          }
-                          const nextSelected = checked
-                            ? current.selectedImageIds.filter((id) => id !== image.id)
-                            : [...current.selectedImageIds, image.id];
-                          return { ...current, selectedImageIds: nextSelected };
-                        });
-                      };
-
-                      return (
-                        <button
-                          key={image.id}
-                          type="button"
-                          onClick={toggle}
-                          className={`overflow-hidden rounded-[22px] border text-left ${
-                            checked ? 'border-[#3aa66b]' : 'border-[#e8eceb]'
-                          } bg-white`}
-                        >
-                          <div className="relative aspect-[4/3] bg-[#f2f3ef]">
-                            <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="420px" />
-                          </div>
-                          <div className="flex items-start justify-between gap-3 px-4 py-3">
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-medium text-[#071110]">{image.fileName}</div>
-                              <div className="mt-1 text-xs text-black/40">{imageOriginLabel(image.origin)}</div>
-                            </div>
-                            <input readOnly type={panel.kind === 'poster' ? 'radio' : 'checkbox'} checked={checked} />
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="admin-reference-card p-4">
-                  <div className="text-sm font-semibold text-[#071110]">Task Progress</div>
-                  {panel.taskEntries.length ? (
-                    <div className="mt-3 space-y-2">
-                      {panel.taskEntries.map((task) => (
-                        <div key={task.id} className="rounded-[18px] border border-[#e8eceb] bg-white/80 p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-medium text-[#071110]">{task.imageFileName}</div>
-                              <div className="mt-1 text-xs text-black/40">{imageOriginLabel(task.imageOrigin)}</div>
-                            </div>
-                            <div className="rounded-full bg-[#f4f6f3] px-3 py-1 text-xs text-[#071110]">{taskPhaseLabel(task)}</div>
-                          </div>
-                          <div className="mt-2 text-xs leading-5 text-black/52">{task.message}</div>
-                          {task.resultCount || task.warningCount ? (
-                            <div className="mt-2 text-xs text-black/38">
-                              Results: {task.resultCount} / Warnings: {task.warningCount}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 text-sm text-black/48">No recognition task has started yet.</div>
-                  )}
-                </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="grid gap-5 p-5 lg:grid-cols-[0.88fr_1.12fr]">
+                  <div className="space-y-4">
+                    <div className="admin-reference-card p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-[#071110]">Choose Images</div>
+                        <div className="text-xs text-black/40">{selectedCountLabel(panel)}</div>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {selectedImageOptions.map((image) => {
+                          const checked = panel.selectedImageIds.includes(image.id);
+                          const toggle = () => {
+                            setPanel((current) => {
+                              if (!current) return current;
+                              if (current.kind === 'poster') {
+                                return { ...current, selectedImageIds: [image.id] };
+                              }
+                              const nextSelected = checked
+                                ? current.selectedImageIds.filter((id) => id !== image.id)
+                                : [...current.selectedImageIds, image.id];
+                              return { ...current, selectedImageIds: nextSelected };
+                            });
+                          };
+
+                          return (
+                            <button
+                              key={image.id}
+                              type="button"
+                              onClick={toggle}
+                              className={`overflow-hidden rounded-[22px] border text-left ${
+                                checked ? 'border-[#3aa66b]' : 'border-[#e8eceb]'
+                              } bg-white`}
+                            >
+                              <div className="relative aspect-[4/3] bg-[#f2f3ef]">
+                                <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="420px" />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 px-4 py-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-[#071110]">{image.fileName}</div>
+                                  <div className="mt-1 text-xs text-black/40">{imageOriginLabel(image.origin)}</div>
+                                </div>
+                                <input readOnly type={panel.kind === 'poster' ? 'radio' : 'checkbox'} checked={checked} />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="admin-reference-card p-4">
+                      <div className="text-sm font-semibold text-[#071110]">Task Progress</div>
+                      {panel.taskEntries.length ? (
+                        <div className="mt-3 space-y-2">
+                          {panel.taskEntries.map((task) => (
+                            <div key={task.id} className="rounded-[18px] border border-[#e8eceb] bg-white/80 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-[#071110]">{task.imageFileName}</div>
+                                  <div className="mt-1 text-xs text-black/40">{imageOriginLabel(task.imageOrigin)}</div>
+                                </div>
+                                <div className="rounded-full bg-[#f4f6f3] px-3 py-1 text-xs text-[#071110]">{taskPhaseLabel(task)}</div>
+                              </div>
+                              <div className="mt-2 text-xs leading-5 text-black/52">{task.message}</div>
+                              {task.resultCount || task.warningCount ? (
+                                <div className="mt-2 text-xs text-black/38">
+                                  Results: {task.resultCount} / Warnings: {task.warningCount}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-sm text-black/48">No recognition task has started yet.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
                 <div className="admin-reference-card p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -2156,16 +2164,16 @@ export default function EventStudioAIImportDock({
                         const count = actTypePerformerCount(item.actType);
                         const names = splitPerformerNames(item.performerNamesText);
                         return (
-                          <div key={item.id} className="admin-reference-card p-4">
+                          <div key={item.id} className="admin-reference-card p-3.5">
                             <div className="flex items-start justify-between gap-3">
                               <div className="text-sm font-semibold text-[#071110]">Lineup #{index + 1}</div>
                               <button type="button" onClick={() => removeLineupItem(item.id)} className="admin-studio-button-danger px-3 py-1.5 text-xs">
                                 Remove
                               </button>
                             </div>
-                            <div className="mt-3 grid gap-3 lg:grid-cols-5">
+                            <div className="mt-2.5 grid gap-2 lg:grid-cols-5">
                               <select
-                                className="admin-studio-input"
+                                className={aiCompactSelectClass}
                                 value={item.actType}
                                 onChange={(event) =>
                                   updateLineupItem(item.id, (current) =>
@@ -2183,7 +2191,7 @@ export default function EventStudioAIImportDock({
                                 ))}
                               </select>
                               <input
-                                className="admin-studio-input lg:col-span-2"
+                                className={`${aiCompactInputClass} lg:col-span-2`}
                                 value={item.performerNamesText}
                                 onChange={(event) =>
                                   updateLineupItem(item.id, (current) =>
@@ -2195,7 +2203,7 @@ export default function EventStudioAIImportDock({
                                 }
                               />
                               <input
-                                className="admin-studio-input"
+                                className={aiCompactInputClass}
                                 value={String(item.confidence ?? '')}
                                 onChange={(event) =>
                                   updateLineupItem(item.id, (current) => ({
@@ -2205,11 +2213,11 @@ export default function EventStudioAIImportDock({
                                 }
                                 placeholder="Confidence"
                               />
-                              <div className="rounded-[16px] border border-[#e8eceb] bg-[#f8faf8] px-3 py-2 text-xs text-black/45">
+                              <div className="rounded-[14px] border border-[#e8eceb] bg-[#f8faf8] px-3 py-2 text-[11px] leading-5 text-black/45">
                                 {names.join(' / ')}
                               </div>
                             </div>
-                            <div className="mt-3 grid gap-2">
+                            <div className="mt-2.5 grid gap-1.5">
                               {Array.from({ length: count }).map((_, performerIndex) => renderDJBindingControls('lineup', item, performerIndex))}
                             </div>
                             <div className="mt-2 text-xs text-black/40">{item.notes.join(' / ') || 'No notes'}</div>
@@ -2224,7 +2232,7 @@ export default function EventStudioAIImportDock({
                   )
                 ) : panel.timetableSlots.length ? (
                   <div className="space-y-3">
-                    <div className="admin-reference-card p-4">
+                    <div className="admin-reference-card p-3.5">
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -2261,11 +2269,11 @@ export default function EventStudioAIImportDock({
                           Clean Empty Items
                         </button>
                       </div>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      <div className="mt-2.5 grid gap-2 lg:grid-cols-2">
                         <label className="space-y-1 text-xs text-black/45">
                           <span>Target Event Day</span>
                           <select
-                            className="admin-studio-input"
+                            className={aiCompactSelectClass}
                             value={panel.targetEventDayId}
                             onChange={(event) => updatePanel({ targetEventDayId: event.target.value })}
                           >
@@ -2279,7 +2287,7 @@ export default function EventStudioAIImportDock({
                         <label className="space-y-1 text-xs text-black/45">
                           <span>Target Stage</span>
                           <select
-                            className="admin-studio-input"
+                            className={aiCompactSelectClass}
                             value={panel.targetStageName}
                             onChange={(event) => updatePanel({ targetStageName: event.target.value })}
                           >
@@ -2294,7 +2302,7 @@ export default function EventStudioAIImportDock({
                     </div>
 
                     {panel.timetableSlots.map((slot) => (
-                      <div key={slot.id} className="admin-reference-card p-4">
+                      <div key={slot.id} className="admin-reference-card p-3.5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <input
@@ -2329,9 +2337,9 @@ export default function EventStudioAIImportDock({
                             </button>
                           </div>
                         </div>
-                        <div className="mt-3 grid gap-3 lg:grid-cols-5">
+                        <div className="mt-2.5 grid gap-2 lg:grid-cols-5">
                           <select
-                            className="admin-studio-input"
+                            className={aiCompactSelectClass}
                             value={slot.actType}
                             onChange={(event) =>
                               updateTimetableSlot(slot.id, (current) =>
@@ -2349,7 +2357,7 @@ export default function EventStudioAIImportDock({
                             ))}
                           </select>
                           <select
-                            className="admin-studio-input"
+                            className={aiCompactSelectClass}
                             value={slot.eventDayId}
                             onChange={(event) =>
                               updateTimetableSlot(slot.id, (current) => {
@@ -2378,30 +2386,30 @@ export default function EventStudioAIImportDock({
                             ))}
                           </select>
                           <input
-                            className="admin-studio-input"
+                            className={aiCompactInputClass}
                             value={slot.stageName}
                             onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, stageName: event.target.value }))}
                             placeholder="Stage"
                           />
                           <input
-                            className="admin-studio-input lg:col-span-2"
+                            className={`${aiCompactInputClass} lg:col-span-2`}
                             value={slot.performerNamesText}
                             onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, performerNamesText: event.target.value }))}
                           />
                           <input
-                            className="admin-studio-input"
+                            className={aiCompactInputClass}
                             value={slot.startTimeText}
                             onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, startTimeText: event.target.value }))}
                             placeholder="Start"
                           />
                           <input
-                            className="admin-studio-input"
+                            className={aiCompactInputClass}
                             value={slot.endTimeText}
                             onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, endTimeText: event.target.value }))}
                             placeholder="End"
                           />
                           <select
-                            className="admin-studio-input"
+                            className={aiCompactSelectClass}
                             value={String(slot.startDayOffset)}
                             onChange={(event) =>
                               updateTimetableSlot(slot.id, (current) => ({ ...current, startDayOffset: Number(event.target.value) || 0 }))
@@ -2411,7 +2419,7 @@ export default function EventStudioAIImportDock({
                             <option value="1">Start next day</option>
                           </select>
                           <select
-                            className="admin-studio-input"
+                            className={aiCompactSelectClass}
                             value={String(slot.endDayOffset)}
                             onChange={(event) =>
                               updateTimetableSlot(slot.id, (current) => ({ ...current, endDayOffset: Number(event.target.value) || 0 }))
@@ -2427,7 +2435,7 @@ export default function EventStudioAIImportDock({
                             {slot.eventDayResolutionConfidence != null ? ` / Confidence ${slot.eventDayResolutionConfidence}` : ''}
                           </div>
                         ) : null}
-                        <div className="mt-3 grid gap-2">
+                        <div className="mt-2.5 grid gap-1.5">
                           {Array.from({ length: actTypePerformerCount(slot.actType) }).map((_, performerIndex) =>
                             renderDJBindingControls('timetable', slot, performerIndex)
                           )}
@@ -2440,6 +2448,8 @@ export default function EventStudioAIImportDock({
                     Start timetable recognition to append editable timetable results here.
                   </div>
                 )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
