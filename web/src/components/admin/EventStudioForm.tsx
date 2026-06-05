@@ -78,6 +78,8 @@ type LocalizedFieldOverlayState = {
   clearable?: boolean;
 };
 
+type EventStudioFormDJSearchResult = Awaited<ReturnType<typeof eventStudioApi.searchDJs>>[number];
+
 const LOCALIZED_LOCALE_ITEMS: Array<{ key: LocalizedLocaleKey; label: string; hint: string }> = [
   { key: 'zh', label: '中文', hint: '用于中文展示和搜索回填。' },
   { key: 'en', label: 'English', hint: '用于英文展示和国际化回退。' },
@@ -954,6 +956,8 @@ export default function EventStudioForm({
   const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
   const [activeLineupArtistEditorId, setActiveLineupArtistEditorId] = useState<string | null>(null);
   const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
+  const [lineupDJSearchResults, setLineupDJSearchResults] = useState<Record<string, EventStudioFormDJSearchResult[]>>({});
+  const [lineupDJSearchLoadingKeys, setLineupDJSearchLoadingKeys] = useState<Record<string, boolean>>({});
   const draftRef = useRef(draft);
   const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
   const objectUrlsRef = useRef<Set<string>>(new Set());
@@ -1306,21 +1310,37 @@ export default function EventStudioForm({
     });
   };
 
-  const buildLineupPerformerBindingItems = (
-    artist: EventStudioLineupArtistDraft,
-    performerIndex: number
-  ): EntityBindingValue[] => {
-    const boundDjId = getLineupArtistBoundDjId(artist, performerIndex);
-    if (!boundDjId) return [];
-    const performerName = getLineupArtistPerformerNames(artist)[performerIndex] || boundDjId;
-    return [
-      {
-        id: boundDjId,
-        name: performerName,
-        subtitle: boundDjId,
-        imageUrl: null,
-      },
-    ];
+  const lineupSearchKey = (artistId: string, performerIndex: number) => `${artistId}-${performerIndex}`;
+
+  const searchLineupArtistDJ = async (artistId: string, performerIndex: number, query: string) => {
+    const key = lineupSearchKey(artistId, performerIndex);
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setLineupDJSearchResults((current) => ({ ...current, [key]: [] }));
+      return;
+    }
+    setLineupDJSearchLoadingKeys((current) => ({ ...current, [key]: true }));
+    try {
+      const items = await eventStudioApi.searchDJs(trimmed);
+      setLineupDJSearchResults((current) => ({
+        ...current,
+        [key]: items.filter((item) => Boolean(item.id)),
+      }));
+    } catch {
+      setLineupDJSearchResults((current) => ({ ...current, [key]: [] }));
+    } finally {
+      setLineupDJSearchLoadingKeys((current) => ({ ...current, [key]: false }));
+    }
+  };
+
+  const bindLineupArtistDJ = (
+    artistId: string,
+    performerIndex: number,
+    dj: EventStudioFormDJSearchResult
+  ) => {
+    updateLineupArtistPerformerBinding(artistId, performerIndex, dj.id);
+    const key = lineupSearchKey(artistId, performerIndex);
+    setLineupDJSearchResults((current) => ({ ...current, [key]: [] }));
   };
 
   const materializeEditableLineupArtists = (current: EventStudioDraft): EventStudioLineupArtistDraft[] => {
@@ -4033,7 +4053,15 @@ export default function EventStudioForm({
 
               <div className="mt-4 grid gap-3">
                 {lineupPreviewArtists.length ? (
-                  lineupPreviewArtists.map((artist, index) => {
+                  <>
+                    <div className="hidden items-center gap-3 border border-[#eef1ee] bg-[#fafcf9] px-3.5 py-2.5 text-[11px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[40px_minmax(0,1.9fr)_92px_116px_148px]">
+                      <span>#</span>
+                      <span>DJ / 艺人</span>
+                      <span>演出形式</span>
+                      <span>匹配状态</span>
+                      <span>操作</span>
+                    </div>
+                    {lineupPreviewArtists.map((artist, index) => {
                     const artistKey = eventStudioLineupArtistIdentityKey(artist);
                     const hasTimetableMatch = Boolean(artistKey && timetableIdentityKeys.has(artistKey)) ||
                       draft.timetableSlots.some((slot) => Boolean(artist.canonicalArtistId && slot.lineupArtistId === artist.canonicalArtistId));
@@ -4044,7 +4072,7 @@ export default function EventStudioForm({
                     const isEditing = activeLineupArtistEditorId === artist.id;
                     return (
                       <div key={artist.id} className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-                        <div className="grid gap-3 px-3.5 py-3 lg:grid-cols-[40px_minmax(0,1.9fr)_92px_104px_116px_148px] lg:items-center">
+                        <div className="grid gap-3 px-3.5 py-3 lg:grid-cols-[40px_minmax(0,1.9fr)_92px_116px_148px] lg:items-center">
                           <div className="text-sm font-semibold text-black/65">{index + 1}</div>
                           <div className="flex min-w-0 items-center gap-2.5">
                             {renderLineupArtistAvatarGroup(artist)}
@@ -4062,17 +4090,10 @@ export default function EventStudioForm({
                               {normalizeActType(artist.actType).toUpperCase()}
                             </span>
                           </div>
-                          <div className="space-y-1">
-                            <div className="text-sm font-semibold leading-5 text-[#071110]">sort {artist.sortOrder}</div>
-                            <div className="text-[11px] text-black/42">{artist.canonicalArtistId || '未绑定 canonical'}</div>
-                          </div>
                           <div className="space-y-1.5">
                             <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${lineupArtistStatusClassName(artist)}`}>
                               {lineupArtistStatusLabel(artist)}
                             </span>
-                            <div className={`text-[11px] ${hasTimetableMatch ? 'text-[#23724a]' : 'text-[#a6621a]'}`}>
-                              {hasTimetableMatch ? '已在时间表中出现' : '待补齐到时间表'}
-                            </div>
                           </div>
                           <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
                             <button
@@ -4185,87 +4206,110 @@ export default function EventStudioForm({
                             </div>
 
                             <div className={`mt-3 grid gap-3 ${performerCount >= 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
-                              {Array.from({ length: performerCount }).map((_, performerIndex) => (
-                                <div
-                                  key={`${artist.id}-binding-${performerIndex}`}
-                                  className="rounded-[16px] border border-[#e8eceb] bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
-                                >
-                                  <div className="mb-2.5 flex items-center justify-between gap-3">
-                                    <div>
-                                      <div className="text-xs font-semibold text-[#071110]">
-                                        {normalizeActType(artist.actType) === 'solo' ? '艺人信息' : `成员 ${performerIndex + 1}`}
+                              {Array.from({ length: performerCount }).map((_, performerIndex) => {
+                                const searchKey = lineupSearchKey(artist.id, performerIndex);
+                                const boundDjId = getLineupArtistBoundDjId(artist, performerIndex);
+                                const isSearching = Boolean(lineupDJSearchLoadingKeys[searchKey]);
+                                const results = lineupDJSearchResults[searchKey] || [];
+                                const query = performerNames[performerIndex] || performerNames[0] || '';
+                                const isSolo = normalizeActType(artist.actType) === 'solo';
+                                return (
+                                  <div
+                                    key={`${artist.id}-binding-${performerIndex}`}
+                                    className="rounded-[16px] border border-[#e8eceb] bg-white p-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
+                                  >
+                                    <div className="mb-2.5 flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#d9e4ff] bg-[#eef4ff] text-xs font-semibold text-[#3567d6]">
+                                          {(query.trim()[0] || `${performerIndex + 1}`).toUpperCase()}
+                                        </span>
+                                        <div>
+                                          <div className="text-xs font-semibold text-[#071110]">{isSolo ? '艺人信息' : `成员 ${performerIndex + 1}`}</div>
+                                          <div className="mt-0.5 text-[11px] text-black/42">{boundDjId ? '已绑定 DJ' : '未绑定 DJ'}</div>
+                                        </div>
                                       </div>
-                                      <div className="mt-0.5 text-[11px] text-black/42">
-                                        {getLineupArtistBoundDjId(artist, performerIndex) ? '已绑定 DJ' : '未绑定 DJ'}
-                                      </div>
+                                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${boundDjId ? 'bg-[#e8f7ee] text-[#1f8f57]' : 'bg-[#fff4e8] text-[#a6621a]'}`}>
+                                        {boundDjId ? '已匹配' : '待匹配'}
+                                      </span>
                                     </div>
-                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${getLineupArtistBoundDjId(artist, performerIndex) ? 'bg-[#e8f7ee] text-[#1f8f57]' : 'bg-[#fff4e8] text-[#a6621a]'}`}>
-                                      {getLineupArtistBoundDjId(artist, performerIndex) ? '已匹配' : '待匹配'}
-                                    </span>
+                                    <label className="block space-y-1">
+                                      <span className="text-[11px] text-black/42">
+                                        {isSolo ? '艺人名称' : `成员名称 ${performerIndex + 1}`}
+                                      </span>
+                                      <input
+                                        value={performerNames[performerIndex] || ''}
+                                        onChange={(event) => updateLineupArtistPerformerName(artist.id, performerIndex, event.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={isSolo ? '输入艺人名称' : `输入成员 ${performerIndex + 1} 名称`}
+                                      />
+                                    </label>
+                                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                                      <input
+                                        className={`${textInputClassName} min-w-[160px] flex-1`}
+                                        value={boundDjId}
+                                        onChange={(event) => updateLineupArtistPerformerBinding(artist.id, performerIndex, event.target.value)}
+                                        placeholder={`绑定 DJ ID ${performerIndex + 1}`}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => void searchLineupArtistDJ(artist.id, performerIndex, query)}
+                                        disabled={isSearching || !query}
+                                        className="admin-studio-button-secondary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        {isSearching ? '搜索中' : '搜索'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateLineupArtistPerformerBinding(artist.id, performerIndex, '')}
+                                        className="admin-studio-button-secondary px-3 py-2 text-xs"
+                                      >
+                                        清空
+                                      </button>
+                                    </div>
+                                    {results.length ? (
+                                      <div className="mt-2 space-y-1">
+                                        {results.slice(0, 5).map((dj) => (
+                                          <button
+                                            key={dj.id}
+                                            type="button"
+                                            onClick={() => bindLineupArtistDJ(artist.id, performerIndex, dj)}
+                                            className="flex w-full items-center justify-between gap-3 rounded-[12px] bg-[#f4f6f3] px-3 py-2 text-left text-xs text-[#071110]"
+                                          >
+                                            <span className="flex min-w-0 items-center gap-2">
+                                              {dj.avatarSmallUrl || dj.avatarMediumUrl || dj.avatarUrl || dj.avatarOriginalUrl ? (
+                                                <span className="inline-flex h-7 w-7 overflow-hidden rounded-full border border-[#e8eceb] bg-white">
+                                                  <Image
+                                                    src={dj.avatarSmallUrl || dj.avatarMediumUrl || dj.avatarUrl || dj.avatarOriginalUrl || ''}
+                                                    alt=""
+                                                    width={28}
+                                                    height={28}
+                                                    className="h-7 w-7 object-cover"
+                                                  />
+                                                </span>
+                                              ) : null}
+                                              <span className="truncate">{dj.name || dj.slug || dj.id}</span>
+                                            </span>
+                                            <span className="shrink-0 text-black/38">{dj.country || dj.id}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : null}
                                   </div>
-                                  <label className="block space-y-1">
-                                    <span className="text-[11px] text-black/42">
-                                      {normalizeActType(artist.actType) === 'solo' ? '艺人名称' : `成员名称 ${performerIndex + 1}`}
-                                    </span>
-                                    <input
-                                      value={performerNames[performerIndex] || ''}
-                                      onChange={(event) => updateLineupArtistPerformerName(artist.id, performerIndex, event.target.value)}
-                                      className={textInputClassName}
-                                      placeholder={normalizeActType(artist.actType) === 'solo' ? '输入艺人名称' : `输入成员 ${performerIndex + 1} 名称`}
-                                    />
-                                  </label>
-                                  <div className="mt-2.5">
-                                    <EntityBindingField
-                                      kind="dj"
-                                      mode="single"
-                                      seedQuery={performerNames[performerIndex] || ''}
-                                      items={buildLineupPerformerBindingItems(artist, performerIndex)}
-                                      title={normalizeActType(artist.actType) === 'solo' ? '绑定 DJ' : `成员 ${performerIndex + 1} 绑定`}
-                                      emptyLabel="搜索并绑定一个 DJ。"
-                                      onAdd={(value) => updateLineupArtistPerformerBinding(artist.id, performerIndex, value.id)}
-                                      onRemove={() => updateLineupArtistPerformerBinding(artist.id, performerIndex, '')}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
 
-                            <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                              <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3">
-                                <label className="block space-y-1">
-                                  <span className="text-[11px] text-black/38">canonical artist id</span>
-                                  <input
-                                    value={artist.canonicalArtistId || ''}
-                                    onChange={(event) =>
-                                      updateLineupDraft((current) => ({
-                                        ...current,
-                                        lineupArtists: materializeEditableLineupArtists(current).map((currentArtist) =>
-                                          currentArtist.id === artist.id
-                                            ? { ...currentArtist, canonicalArtistId: event.target.value.trim() || null }
-                                            : currentArtist
-                                        ),
-                                      }))
-                                    }
-                                    className={textInputClassName}
-                                    placeholder="canonical artist id"
-                                  />
-                                </label>
+                            {hasTimetableMatch ? (
+                              <div className="mt-3 rounded-[14px] border border-[#dcefdc] bg-[#effaf0] px-3 py-2 text-xs text-[#23724a]">
+                                该阵容对象已在时间表中出现。
                               </div>
-                              <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3 text-sm text-black/56">
-                                <div className="text-[11px] text-black/38">绑定摘要</div>
-                                <div className="mt-2 text-xs text-black/52">
-                                  主 DJ ID：{artist.djId || '未绑定'}
-                                </div>
-                                <div className="mt-1 text-xs text-black/52">
-                                  Member IDs：{artist.memberDjIds.filter(Boolean).join(' / ') || '未绑定'}
-                                </div>
-                              </div>
-                            </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
                     );
-                  })
+                  })}
+                  </>
                 ) : (
                   <div className="admin-reference-soft-card p-4 text-sm text-black/48">
                     当前还没有读取到阵容艺人。若后端有 lineupArtists，这里会直接显示；否则会尝试从 timetable 自动推导。
