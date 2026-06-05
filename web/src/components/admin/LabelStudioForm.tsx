@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import Image from 'next/image';
+import { type ChangeEvent, useMemo, useState } from 'react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
@@ -55,6 +56,55 @@ function Field({
   );
 }
 
+function LabelImageField({
+  label,
+  imageUrl,
+  uploading,
+  onChange,
+  onClear,
+}: {
+  label: string;
+  imageUrl: string;
+  uploading: boolean;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+}) {
+  const hasImage = imageUrl.trim().length > 0;
+
+  return (
+    <div className="admin-studio-soft w-full max-w-[240px] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-[#071110]">{label}</p>
+        {hasImage ? (
+          <button type="button" onClick={onClear} className="text-xs text-black/48">
+            清空
+          </button>
+        ) : null}
+      </div>
+      <div className="relative mt-3 aspect-square overflow-hidden rounded-[20px] border border-[#e8eceb] bg-[linear-gradient(135deg,#edf7f2,#f7efda)]">
+        {hasImage ? (
+          <Image src={imageUrl} alt={label} fill className="object-cover" sizes="240px" />
+        ) : (
+          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">暂无图片</div>
+        )}
+      </div>
+      <div className="mt-3 min-h-[44px] rounded-[16px] border border-[#e8eceb] bg-white px-3 py-2 text-xs text-black/55">
+        {hasImage ? (
+          <a href={imageUrl} target="_blank" rel="noreferrer" className="line-clamp-2 break-all hover:underline">
+            {imageUrl}
+          </a>
+        ) : (
+          '上传后会在这里展示当前图片链接'
+        )}
+      </div>
+      <label className="admin-studio-button-secondary mt-4 flex cursor-pointer items-center justify-center px-4 py-3 text-sm">
+        {uploading ? '上传中...' : hasImage ? '更换图片' : '上传图片'}
+        <input type="file" accept="image/*" className="hidden" onChange={onChange} />
+      </label>
+    </div>
+  );
+}
+
 const textInputClassName = 'admin-studio-input';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
 
@@ -76,6 +126,9 @@ export default function LabelStudioForm({
   submitButtonText,
 }: LabelStudioFormProps) {
   const [errors, setErrors] = useState<LabelStudioValidationErrors>({});
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -158,6 +211,54 @@ export default function LabelStudioForm({
     }
   };
 
+  const handleImageUpload = async (
+    event: ChangeEvent<HTMLInputElement>,
+    field: 'logoUrl' | 'avatarUrl' | 'backgroundUrl',
+    usage: 'poster' | 'avatar' | 'background'
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const setUploading =
+      field === 'logoUrl'
+        ? setUploadingLogo
+        : field === 'avatarUrl'
+          ? setUploadingAvatar
+          : setUploadingBackground;
+
+    try {
+      setUploading(true);
+      setSubmitError(null);
+      const previousUrl = draft[field].trim();
+      const uploaded = await labelStudioApi.uploadImage(file, {
+        usage,
+        draftId: draft.id,
+      });
+      updateDraft(field, uploaded.url);
+      if (previousUrl && previousUrl !== uploaded.url) {
+        await labelStudioApi.deleteImages({
+          draftId: draft.id,
+          urls: [previousUrl],
+        }).catch(() => undefined);
+      }
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '厂牌图片上传失败');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageClear = async (field: 'logoUrl' | 'avatarUrl' | 'backgroundUrl') => {
+    const currentUrl = draft[field].trim();
+    updateDraft(field, '');
+    if (!currentUrl) return;
+    await labelStudioApi.deleteImages({
+      draftId: draft.id,
+      urls: [currentUrl],
+    }).catch(() => undefined);
+  };
+
   return (
     <div className="space-y-5">
       {submitError ? (
@@ -193,11 +294,11 @@ export default function LabelStudioForm({
         </div>
 
         <div className="admin-studio-pastel-mint p-6">
-          <div className="admin-studio-label">Profile Focus</div>
+          <div className="admin-studio-label">编辑重点</div>
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">重点区域</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-black/52">
             <p>这一版把厂牌名称、简介、视觉和官方链接做成主要操作区，次级统计信息放在后段。</p>
-            <p>视觉素材先用 URL 模式，便于先把后台编辑链路完整打通。</p>
+            <p>视觉素材现在支持直接上传替换，并保留当前图片链接方便核对。</p>
           </div>
         </div>
       </section>
@@ -245,30 +346,31 @@ export default function LabelStudioForm({
               placeholder="community://afterlife"
             />
           </Field>
-          <Field label="Logo URL">
-            <input
-              value={draft.logoUrl}
-              onChange={(event) => updateDraft('logoUrl', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://..."
-            />
-          </Field>
-          <Field label="Avatar URL">
-            <input
-              value={draft.avatarUrl}
-              onChange={(event) => updateDraft('avatarUrl', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://..."
-            />
-          </Field>
           <div className="lg:col-span-2">
-            <Field label="Background URL">
-              <input
-                value={draft.backgroundUrl}
-                onChange={(event) => updateDraft('backgroundUrl', event.target.value)}
-                className={textInputClassName}
-                placeholder="https://..."
-              />
+            <Field label="视觉图片" hint="上传后会直接回填图片链接；也可以点击链接在新窗口检查原图。">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <LabelImageField
+                  label="Logo"
+                  imageUrl={draft.logoUrl}
+                  uploading={uploadingLogo}
+                  onChange={(event) => void handleImageUpload(event, 'logoUrl', 'poster')}
+                  onClear={() => void handleImageClear('logoUrl')}
+                />
+                <LabelImageField
+                  label="头像"
+                  imageUrl={draft.avatarUrl}
+                  uploading={uploadingAvatar}
+                  onChange={(event) => void handleImageUpload(event, 'avatarUrl', 'avatar')}
+                  onClear={() => void handleImageClear('avatarUrl')}
+                />
+                <LabelImageField
+                  label="背景图"
+                  imageUrl={draft.backgroundUrl}
+                  uploading={uploadingBackground}
+                  onChange={(event) => void handleImageUpload(event, 'backgroundUrl', 'background')}
+                  onClear={() => void handleImageClear('backgroundUrl')}
+                />
+              </div>
             </Field>
           </div>
         </div>
@@ -469,7 +571,7 @@ export default function LabelStudioForm({
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={submitting || !canSubmit}
+            disabled={submitting || uploadingLogo || uploadingAvatar || uploadingBackground || !canSubmit}
             className="admin-studio-button-primary px-6 py-3 text-sm"
           >
             {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '创建厂牌' : '保存厂牌')}

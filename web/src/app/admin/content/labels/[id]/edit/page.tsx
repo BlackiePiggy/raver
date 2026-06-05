@@ -94,7 +94,7 @@ export default function AdminContentLabelEditPage() {
         />
       ) : null}
 
-      {savedLabelId && !loading && !error ? (
+      {notice && savedLabelId && !loading && !error ? (
         <AdminPublishTaskActions
           taskType="brand_release"
           entityType="label"

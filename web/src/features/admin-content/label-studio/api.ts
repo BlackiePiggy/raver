@@ -1,4 +1,4 @@
-import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
+import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
 import {
   LabelStudioCreateInput,
@@ -14,7 +14,52 @@ type LabelListEnvelope = {
   pagination: LabelStudioListResponse['pagination'];
 };
 
+type LabelStudioImageUploadResponse = {
+  url: string;
+  originalUrl?: string | null;
+  fileName?: string | null;
+};
+
 export const labelStudioApi = {
+  async uploadImage(
+    file: File,
+    options: {
+      usage: 'avatar' | 'background' | 'poster';
+      draftId: string;
+    }
+  ): Promise<LabelStudioImageUploadResponse> {
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('usage', options.usage);
+    formData.append('draftId', options.draftId);
+
+    const response = await authenticatedFetch(getApiUrl('/v1/wiki/brands/upload-image'), {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error?.error || '厂牌图片上传失败');
+    }
+
+    return response.json();
+  },
+
+  async deleteImages(input: {
+    draftId: string;
+    urls: string[];
+  }): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(
+      getApiUrl('/v1/wiki/brands/delete-images'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
+  },
+
   async listLabels(
     page = 1,
     limit = 12,
