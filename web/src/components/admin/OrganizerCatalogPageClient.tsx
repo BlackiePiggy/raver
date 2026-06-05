@@ -1019,14 +1019,6 @@ export default function OrganizerCatalogPageClient() {
                           {item.city ? <span>{` / ${item.city}`}</span> : null}
                         </div>
                       </div>
-                      <p className="mt-1 truncate text-[12px] font-medium text-[#6b7280]">
-                        {item.abbreviation ? ` 路 ${item.abbreviation}` : ''}
-                        {typeof item.revision === 'number' ? ` 路 rev ${item.revision}` : ''}
-                      </p>
-                      {item.tagline ? <p className="mt-1 line-clamp-1 text-[12px] leading-5 text-black/55">{item.tagline}</p> : null}
-                      {item.aliases?.length ? (
-                        <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-black/48">别名：{item.aliases.slice(0, 4).join('、')}</p>
-                      ) : null}
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-[#7d8592]">
                         <span>更新于 {formatDateTime(item.updatedAt)}</span>
                         <span>创建于 {formatDateTime(item.createdAt)}</span>
