@@ -3796,14 +3796,14 @@ actor MockWebFeatureService: WebFeatureService {
     }
 
     func fetchMyContributionCenterSummary() async throws -> WebContributionCenterSummary {
-        let page = try await fetchMyContributionHistory(entityType: "all", cursor: nil, limit: 3)
-        let allItems = try await fetchMyContributionHistory(entityType: "all", cursor: nil, limit: 20).items
+        let allItems = mockContributionHistoryItems()
+        let recentItems = Array(allItems.prefix(3))
         return WebContributionCenterSummary(
             totalContributionCount: allItems.count,
             contributedEventCount: Set(allItems.filter { $0.entity.type == "event" }.map(\.entity.id)).count,
             contributedDJCount: Set(allItems.filter { $0.entity.type == "dj" }.map(\.entity.id)).count,
             lastContributionAt: allItems.first?.occurredAt,
-            recentItems: page.items
+            recentItems: recentItems
         )
     }
 
@@ -3812,84 +3812,74 @@ actor MockWebFeatureService: WebFeatureService {
         cursor: String?,
         limit: Int
     ) async throws -> WebContributionHistoryPage {
-        _ = cursor
-        let now = Date()
-        let items: [WebContributionHistoryItem] = [
-            WebContributionHistoryItem(
-                id: "contribution_evt_create",
-                entity: WebContributionHistoryEntity(
-                    id: "evt_shanghai_001",
-                    type: "event",
-                    title: "Raver Night Shanghai",
-                    coverImageUrl: nil
-                ),
-                role: "creator",
-                actionType: "create",
-                source: "submission_create",
-                submissionId: "submission_evt_create",
-                occurredAt: now.addingTimeInterval(-86400 * 3),
-                approvedAt: now.addingTimeInterval(-86400 * 3 + 1200),
-                versionAfter: 1,
-                changeSummary: "创建了活动基础信息与初版 lineup",
-                metadata: nil,
-                createdAt: now.addingTimeInterval(-86400 * 3)
-            ),
-            WebContributionHistoryItem(
-                id: "contribution_dj_edit",
-                entity: WebContributionHistoryEntity(
-                    id: "dj_charlotte",
-                    type: "dj",
-                    title: "Charlotte de Witte",
-                    coverImageUrl: djs.first(where: { $0.id == "dj_charlotte" })?.avatarUrl
-                ),
-                role: "editor",
-                actionType: "edit",
-                source: "submission_edit",
-                submissionId: "submission_dj_edit",
-                occurredAt: now.addingTimeInterval(-86400 * 2),
-                approvedAt: now.addingTimeInterval(-86400 * 2 + 1800),
-                versionAfter: 3,
-                changeSummary: "补充了 DJ 简介和社交平台链接",
-                metadata: nil,
-                createdAt: now.addingTimeInterval(-86400 * 2)
-            ),
-            WebContributionHistoryItem(
-                id: "contribution_evt_edit",
-                entity: WebContributionHistoryEntity(
-                    id: "evt_shanghai_001",
-                    type: "event",
-                    title: "Raver Night Shanghai",
-                    coverImageUrl: nil
-                ),
-                role: "editor",
-                actionType: "edit",
-                source: "submission_edit",
-                submissionId: "submission_evt_edit",
-                occurredAt: now.addingTimeInterval(-86400),
-                approvedAt: now.addingTimeInterval(-86400 + 900),
-                versionAfter: 2,
-                changeSummary: "修正了 timetable 的演出时间",
-                metadata: nil,
-                createdAt: now.addingTimeInterval(-86400)
-            ),
-        ]
-
-        let filtered = items
+        let filtered = mockContributionHistoryItems()
             .filter { entityType == "all" || $0.entity.type == entityType }
             .sorted {
                 if $0.occurredAt != $1.occurredAt { return $0.occurredAt > $1.occurredAt }
                 return $0.createdAt > $1.createdAt
             }
-        let capped = Array(filtered.prefix(max(1, limit)))
+        let normalizedLimit = max(1, limit)
+        let startIndex = min(max(Int(cursor ?? "0") ?? 0, 0), filtered.count)
+        let endIndex = min(startIndex + normalizedLimit, filtered.count)
+        let capped = Array(filtered[startIndex..<endIndex])
+        let hasMore = endIndex < filtered.count
         return WebContributionHistoryPage(
             items: capped,
             filter: WebContributionHistoryFilterPayload(entityType: entityType),
             pageInfo: WebContributionHistoryPageInfo(
-                limit: max(1, limit),
-                nextCursor: nil,
-                hasMore: false
+                limit: normalizedLimit,
+                nextCursor: hasMore ? "\(endIndex)" : nil,
+                hasMore: hasMore
             )
         )
+    }
+
+    private func mockContributionHistoryItems() -> [WebContributionHistoryItem] {
+        let now = Date()
+        let templates: [(id: String, entityID: String, entityType: String, title: String, role: String, action: String, source: String, daysAgo: Double, version: Int, summary: String, cover: String?)] = [
+            ("contribution_evt_001", "evt_shanghai_001", "event", "Raver Night Shanghai", "editor", "edit", "submission_edit", 0.5, 7, "更新了活动介绍和票务说明", nil),
+            ("contribution_dj_001", "dj_charlotte", "dj", "Charlotte de Witte", "editor", "edit", "submission_edit", 0.9, 4, "补充了 DJ 的最新社交链接", djs.first(where: { $0.id == "dj_charlotte" })?.avatarUrl),
+            ("contribution_evt_002", "evt_hangzhou_002", "event", "Warehouse Pulse Hangzhou", "creator", "create", "submission_create", 1.2, 1, "创建了活动基础信息和主视觉", nil),
+            ("contribution_dj_002", "dj_amelie", "dj", "Amelie Lens", "editor", "edit", "submission_edit", 1.6, 6, "修正了艺名翻译和封面图", djs.first(where: { $0.id == "dj_amelie" })?.avatarUrl),
+            ("contribution_evt_003", "evt_tokyo_003", "event", "Tokyo Circuit Weekender", "editor", "edit", "submission_edit", 2.0, 3, "补上了 timetable 的舞台信息", nil),
+            ("contribution_dj_003", "dj_sara", "dj", "Sara Landry", "creator", "create", "submission_create", 2.4, 1, "新增 DJ 档案并上传头像", djs.first(where: { $0.id == "dj_sara" })?.avatarUrl),
+            ("contribution_evt_004", "evt_seoul_004", "event", "Seoul Afterhours", "editor", "edit", "submission_edit", 2.8, 5, "调整了活动开始时间和地址", nil),
+            ("contribution_dj_004", "dj_peggy", "dj", "Peggy Gou", "editor", "edit", "submission_edit", 3.1, 8, "完善了简介、国家和风格标签", djs.first(where: { $0.id == "dj_peggy" })?.avatarUrl),
+            ("contribution_evt_005", "evt_bangkok_005", "event", "Bangkok Rooftop Session", "creator", "create", "submission_create", 3.5, 1, "创建了活动并导入首批 lineup", nil),
+            ("contribution_dj_005", "dj_nina", "dj", "Nina Kraviz", "editor", "edit", "submission_edit", 4.0, 2, "补充了外文名和演出城市信息", djs.first(where: { $0.id == "dj_nina" })?.avatarUrl),
+            ("contribution_evt_006", "evt_osaka_006", "event", "Osaka Industrial Signal", "editor", "edit", "submission_edit", 4.4, 2, "修正了 ticket 链接和票种名称", nil),
+            ("contribution_dj_006", "dj_skrillex", "dj", "Skrillex", "editor", "edit", "submission_edit", 4.8, 5, "同步了新头像和平台链接", djs.first(where: { $0.id == "dj_skrillex" })?.avatarUrl),
+            ("contribution_evt_007", "evt_phuket_007", "event", "Phuket Beach Pulse", "editor", "edit", "submission_edit", 5.2, 4, "更新了地址、城市和时区信息", nil),
+            ("contribution_dj_007", "dj_mochakk", "dj", "Mochakk", "creator", "create", "submission_create", 5.7, 1, "新建 DJ 条目并补充风格说明", djs.first(where: { $0.id == "dj_mochakk" })?.avatarUrl)
+        ]
+
+        return templates.map { template in
+            let occurredAt = now.addingTimeInterval(-86400 * template.daysAgo)
+            let approvedAt = occurredAt.addingTimeInterval(900)
+            return WebContributionHistoryItem(
+                id: template.id,
+                entity: WebContributionHistoryEntity(
+                    id: template.entityID,
+                    type: template.entityType,
+                    title: template.title,
+                    coverImageUrl: template.cover
+                ),
+                role: template.role,
+                actionType: template.action,
+                source: template.source,
+                submissionId: "submission_\(template.id)",
+                occurredAt: occurredAt,
+                approvedAt: approvedAt,
+                versionAfter: template.version,
+                changeSummary: template.summary,
+                metadata: nil,
+                createdAt: occurredAt
+            )
+        }
+        .sorted {
+            if $0.occurredAt != $1.occurredAt { return $0.occurredAt > $1.occurredAt }
+            return $0.createdAt > $1.createdAt
+        }
     }
 
     func fetchMyContentSubmissions() async throws -> [ContentSubmissionSummary] {

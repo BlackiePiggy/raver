@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   eventStudioApi,
   normalizeEventStudioDateInput,
@@ -102,7 +102,15 @@ type EventStudioAIImportTaskEntry = {
   updatedAt: number;
   resultCount: number;
   warningCount: number;
+  matchSuccessCount: number;
+  matchFailedCount: number;
   message: string;
+};
+
+type EventStudioAIMatchSummary = {
+  attempted: number;
+  matched: number;
+  failed: number;
 };
 
 type ImportPanelState = {
@@ -123,6 +131,9 @@ type ImportPanelState = {
   taskEntries: EventStudioAIImportTaskEntry[];
   autoMatching: boolean;
   autoMatchStartedAt: number | null;
+  manualMatchSummary: EventStudioAIMatchSummary | null;
+  expandedResultItemIds: string[];
+  resultSearchQuery: string;
   warningsExpanded: boolean;
 };
 
@@ -193,23 +204,98 @@ const mergeUniqueStrings = (base: string[], incoming: string[]): string[] => {
   return result;
 };
 
-const normalizeActType = (value: unknown, performerCount = 0): EventStudioAIActType => {
-  const normalized = safeString(value).toLowerCase();
-  if (normalized === 'b3b') return 'b3b';
-  if (normalized === 'b2b') return 'b2b';
+const inferActTypeFromPerformerCount = (performerCount = 0): EventStudioAIActType => {
   if (performerCount >= 3) return 'b3b';
   if (performerCount === 2) return 'b2b';
   return 'solo';
 };
 
+const normalizeActType = (value: unknown, performerCount = 0): EventStudioAIActType => {
+  const normalized = safeString(value).toLowerCase();
+  if (normalized === 'b3b') return 'b3b';
+  if (normalized === 'b2b') return 'b2b';
+  if (normalized === 'solo') return 'solo';
+  return inferActTypeFromPerformerCount(performerCount);
+};
+
 const actTypePerformerCount = (value: unknown): number =>
   ACT_TYPE_ITEMS.find((item) => item.value === normalizeActType(value))?.count ?? 1;
 
-const splitPerformerNames = (value: string): string[] =>
-  value
-    .split(/[\/,&]/)
+const splitActNamesByKeyword = (value: string, keyword: 'B2B' | 'B3B'): string[] | null => {
+  const trimmed = safeString(value);
+  if (!trimmed) return null;
+  const token = `__EVENT_STUDIO_${keyword}_TOKEN__`;
+  const replaced = trimmed.replace(new RegExp(`\\s*${keyword}\\s*`, 'gi'), token);
+  const parts = replaced
+    .split(token)
     .map((item) => item.trim())
     .filter(Boolean);
+  return parts.length > 1 ? parts : null;
+};
+
+const parseExplicitActNamesFromText = (
+  value: string
+): { actType: EventStudioAIActType; names: string[] } | null => {
+  const b3bNames = splitActNamesByKeyword(value, 'B3B');
+  if (b3bNames?.length) return { actType: 'b3b', names: b3bNames };
+  const b2bNames = splitActNamesByKeyword(value, 'B2B');
+  if (b2bNames?.length) return { actType: 'b2b', names: b2bNames };
+  return null;
+};
+
+const splitPerformerNames = (value: string, preferredActType?: unknown): string[] => {
+  const trimmed = safeString(value);
+  if (!trimmed) return [];
+  const explicit = parseExplicitActNamesFromText(trimmed);
+  if (explicit) return explicit.names;
+
+  const actType = normalizeActType(preferredActType);
+  if (actType === 'solo') return [trimmed];
+
+  return trimmed
+    .split(/\s*(?:\/|,|，|、|\r?\n)\s*/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const formatPerformerNamesText = (names: string[], actType: EventStudioAIActType): string => {
+  const compact = names.map((item) => safeString(item)).filter(Boolean).slice(0, actTypePerformerCount(actType));
+  if (!compact.length) return '';
+  return actType === 'solo' ? compact[0] : compact.join(' / ');
+};
+
+const resolveImportedAct = (input: {
+  performerType: unknown;
+  performerNames: string[];
+  displayName?: unknown;
+  rawText?: unknown;
+}): { actType: EventStudioAIActType; performerNames: string[] } => {
+  const displayName = firstFilledText(input.displayName as string | undefined | null, input.rawText as string | undefined | null);
+  const explicitTextAct = parseExplicitActNamesFromText(displayName);
+  const performerType = safeString(input.performerType).toLowerCase();
+
+  if (performerType === 'b3b' || explicitTextAct?.actType === 'b3b') {
+    const names = input.performerNames.length >= 3 ? input.performerNames : explicitTextAct?.names ?? input.performerNames;
+    return {
+      actType: 'b3b',
+      performerNames: names.slice(0, actTypePerformerCount('b3b')),
+    };
+  }
+
+  if (performerType === 'b2b' || explicitTextAct?.actType === 'b2b') {
+    const names = input.performerNames.length >= 2 ? input.performerNames : explicitTextAct?.names ?? input.performerNames;
+    return {
+      actType: 'b2b',
+      performerNames: names.slice(0, actTypePerformerCount('b2b')),
+    };
+  }
+
+  const soloName = displayName || input.performerNames.join(' / ');
+  return {
+    actType: 'solo',
+    performerNames: soloName ? [soloName] : [],
+  };
+};
 
 const editableClockText = (value: unknown): string => {
   const text = safeString(value);
@@ -412,20 +498,22 @@ const parseLineupEditableItems = (raw: Record<string, any>): EventStudioAIEditab
     .slice()
     .sort((left: any, right: any) => safeNumber(left?.order) - safeNumber(right?.order))
     .map((item: any, index: number) => {
-      const names = Array.isArray(item?.performerNames)
+      const performerNames = Array.isArray(item?.performerNames)
         ? item.performerNames.map((name: unknown) => safeString(name)).filter(Boolean)
         : [];
-      const fallbackNames = names.length
-        ? names
-        : splitPerformerNames(firstFilledText(item?.displayName, item?.rawText).replace(/\bB2B\b|\bB3B\b/gi, '/'));
-      const actType = normalizeActType(item?.performerType, fallbackNames.length);
-      const count = actTypePerformerCount(actType);
-      const normalizedNames = fallbackNames.slice(0, count);
+      const resolved = resolveImportedAct({
+        performerType: item?.performerType,
+        performerNames,
+        displayName: item?.displayName,
+        rawText: item?.rawText,
+      });
+      const count = actTypePerformerCount(resolved.actType);
+      const normalizedNames = resolved.performerNames.slice(0, count);
       if (!normalizedNames.length) return null;
       return {
         id: crypto.randomUUID(),
-        actType,
-        performerNamesText: normalizedNames.join(' / '),
+        actType: resolved.actType,
+        performerNamesText: formatPerformerNamesText(normalizedNames, resolved.actType),
         performerDJIDs: normalizePerformerIds(item?.performerDJIDs ?? item?.performerDjIds ?? item?.memberDjIds, count),
         performerAvatarURLs: normalizePerformerAvatarURLs(item?.performerAvatarURLs ?? item?.performerAvatarUrls, count),
         confidence: Number.isFinite(Number(item?.confidence)) ? Number(item.confidence) : null,
@@ -463,12 +551,14 @@ const parseTimetableEditableSlots = (
                         const rawNames = Array.isArray(slot?.performerNames)
                           ? slot.performerNames.map((name: unknown) => safeString(name)).filter(Boolean)
                           : [];
-                        const fallbackNames = rawNames.length
-                          ? rawNames
-                          : splitPerformerNames(firstFilledText(slot?.displayName, slot?.rawText).replace(/\bB2B\b|\bB3B\b/gi, '/'));
-                        const actType = normalizeActType(slot?.performerType, fallbackNames.length);
-                        const count = actTypePerformerCount(actType);
-                        const names = fallbackNames.slice(0, count);
+                        const resolvedAct = resolveImportedAct({
+                          performerType: slot?.performerType,
+                          performerNames: rawNames,
+                          displayName: slot?.displayName,
+                          rawText: slot?.rawText,
+                        });
+                        const count = actTypePerformerCount(resolvedAct.actType);
+                        const names = resolvedAct.performerNames.slice(0, count);
                         if (!names.length) return null;
                         const startSource =
                           slot?.normalizedStartTime ?? slot?.normalized_start_time ?? slot?.startTimeText ?? slot?.start_time_text;
@@ -483,8 +573,8 @@ const parseTimetableEditableSlots = (
                           localDate: resolvedEventDay?.date || requestedDate,
                           dayLabel: safeString(day?.dayLabel || day?.day_label) || resolvedEventDay?.label || '',
                           stageName: safeString(stage?.stageName || stage?.stage_name) || 'Main Stage',
-                          actType,
-                          performerNamesText: names.join(' / '),
+                          actType: resolvedAct.actType,
+                          performerNamesText: formatPerformerNamesText(names, resolvedAct.actType),
                           performerDJIDs: normalizePerformerIds(slot?.performerDJIDs ?? slot?.performerDjIds ?? slot?.memberDjIds, count),
                           performerAvatarURLs: normalizePerformerAvatarURLs(
                             slot?.performerAvatarURLs ?? slot?.performerAvatarUrls,
@@ -518,13 +608,13 @@ const parseTimetableEditableSlots = (
 };
 
 const normalizeEditableAct = <T extends EventStudioAIEditableLineupItem | EventStudioAIEditableTimetableSlot>(item: T): T => {
-  const actType = normalizeActType(item.actType, splitPerformerNames(item.performerNamesText).length);
+  const actType = normalizeActType(item.actType, splitPerformerNames(item.performerNamesText, item.actType).length);
   const count = actTypePerformerCount(actType);
-  const names = splitPerformerNames(item.performerNamesText).slice(0, count);
+  const names = splitPerformerNames(item.performerNamesText, actType).slice(0, count);
   return {
     ...item,
     actType,
-    performerNamesText: names.join(' / '),
+    performerNamesText: formatPerformerNamesText(names, actType),
     performerDJIDs: normalizePerformerIds(item.performerDJIDs, count),
     performerAvatarURLs: normalizePerformerAvatarURLs(item.performerAvatarURLs, count),
   } as T;
@@ -532,7 +622,7 @@ const normalizeEditableAct = <T extends EventStudioAIEditableLineupItem | EventS
 
 const compactEditableAct = <T extends EventStudioAIEditableLineupItem | EventStudioAIEditableTimetableSlot>(item: T): T | null => {
   const normalized = normalizeEditableAct(item);
-  const names = splitPerformerNames(normalized.performerNamesText);
+  const names = splitPerformerNames(normalized.performerNamesText, normalized.actType);
   const performerCount = actTypePerformerCount(normalized.actType);
   const compactNames: string[] = [];
   const compactDjIds: Array<string | null> = [];
@@ -550,12 +640,12 @@ const compactEditableAct = <T extends EventStudioAIEditableLineupItem | EventStu
 
   if (!compactNames.length) return null;
 
-  const nextActType = normalizeActType(normalized.actType, compactNames.length);
+  const nextActType = inferActTypeFromPerformerCount(compactNames.length);
   const nextCount = actTypePerformerCount(nextActType);
   return {
     ...normalized,
     actType: nextActType,
-    performerNamesText: compactNames.join(' / '),
+    performerNamesText: formatPerformerNamesText(compactNames, nextActType),
     performerDJIDs: normalizePerformerIds(compactDjIds, nextCount),
     performerAvatarURLs: normalizePerformerAvatarURLs(compactAvatarURLs, nextCount),
   } as T;
@@ -637,19 +727,19 @@ const jobContextForPanel = (draft: EventStudioDraft, kind: ImportPanelKind) => {
 const taskPhaseLabel = (task: EventStudioAIImportTaskEntry): string => {
   switch (task.phase) {
     case 'preparing':
-      return 'Preparing';
+      return '准备中';
     case 'polling':
-      return task.pollStatus === 'running' ? 'Recognizing' : 'Queued';
+      return task.pollStatus === 'running' ? '识别中' : '排队中';
     case 'auto_matching':
-      return 'Auto matching DJs';
+      return '自动匹配 DJ';
     case 'succeeded':
-      return 'Completed';
+      return '已完成';
     case 'failed':
-      return 'Failed';
+      return '失败';
     case 'cancelled':
-      return 'Cancelled';
+      return '已取消';
     default:
-      return 'Pending';
+      return '等待中';
   }
 };
 
@@ -662,6 +752,102 @@ const imageOriginLabel = (origin: EventStudioImageState['origin']): string => {
 const selectedCountLabel = (panel: ImportPanelState | null): string => {
   if (!panel) return '0 selected';
   return `${panel.selectedImageIds.length} selected`;
+};
+
+const formatDurationMs = (durationMs: number): string => {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const taskDurationText = (task: EventStudioAIImportTaskEntry, now: number): string =>
+  formatDurationMs((task.phase === 'preparing' || task.phase === 'polling' || task.phase === 'auto_matching' ? now : task.updatedAt) - task.startedAt);
+
+const taskPhaseClassName = (task: EventStudioAIImportTaskEntry): string => {
+  switch (task.phase) {
+    case 'succeeded':
+      return 'bg-[#e8f6ee] text-[#23724a]';
+    case 'failed':
+      return 'bg-[#fff1f1] text-[#a43f3f]';
+    case 'cancelled':
+      return 'bg-[#f1f3f1] text-[#5c6762]';
+    case 'auto_matching':
+      return 'bg-[#edf6ff] text-[#2c699b]';
+    default:
+      return 'bg-[#f4f6f3] text-[#071110]';
+  }
+};
+
+const emptyMatchSummary = (): EventStudioAIMatchSummary => ({
+  attempted: 0,
+  matched: 0,
+  failed: 0,
+});
+
+const aggregateTaskMatchSummary = (tasks: EventStudioAIImportTaskEntry[]): EventStudioAIMatchSummary =>
+  tasks.reduce(
+    (summary, task) => ({
+      attempted: summary.attempted + task.matchSuccessCount + task.matchFailedCount,
+      matched: summary.matched + task.matchSuccessCount,
+      failed: summary.failed + task.matchFailedCount,
+    }),
+    emptyMatchSummary()
+  );
+
+type EventStudioAIEditableAct = EventStudioAIEditableLineupItem | EventStudioAIEditableTimetableSlot;
+
+const actTypeLabel = (value: EventStudioAIActType): string =>
+  ACT_TYPE_ITEMS.find((item) => item.value === value)?.label || value.toUpperCase();
+
+const performerNamesForDisplay = (item: EventStudioAIEditableAct): string[] =>
+  splitPerformerNames(item.performerNamesText, item.actType).slice(0, actTypePerformerCount(item.actType));
+
+const performerDisplayName = (item: EventStudioAIEditableAct): string =>
+  formatPerformerNamesText(performerNamesForDisplay(item), item.actType) || '未命名演出';
+
+const matchedPerformerCount = (item: EventStudioAIEditableAct): number =>
+  item.performerDJIDs.slice(0, actTypePerformerCount(item.actType)).filter(Boolean).length;
+
+const isResultItemFullyMatched = (item: EventStudioAIEditableAct): boolean =>
+  matchedPerformerCount(item) >= actTypePerformerCount(item.actType);
+
+const resultItemStatusLabel = (item: EventStudioAIEditableAct): string => (isResultItemFullyMatched(item) ? '已匹配' : '待确认');
+
+const resultItemStatusClassName = (item: EventStudioAIEditableAct): string =>
+  isResultItemFullyMatched(item)
+    ? 'bg-[#e8f7ee] text-[#1f8f57]'
+    : 'bg-[#fff4e8] text-[#a6621a]';
+
+const defaultExpandedResultItemIds = <T extends EventStudioAIEditableAct>(items: T[]): string[] =>
+  items.filter((item) => !isResultItemFullyMatched(item)).map((item) => item.id);
+
+const mergeExpandedResultItemIds = <T extends EventStudioAIEditableAct>(baseIds: string[], items: T[]): string[] => {
+  const next = new Set(baseIds);
+  for (const id of defaultExpandedResultItemIds(items)) next.add(id);
+  return Array.from(next);
+};
+
+const resultConfidenceValue = (value: number | null | undefined): number | null => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(1, numeric));
+};
+
+const resultSearchMatches = (item: EventStudioAIEditableAct, query: string): boolean => {
+  const keyword = query.trim().toLocaleLowerCase();
+  if (!keyword) return true;
+  const haystacks = [
+    performerDisplayName(item),
+    item.performerNamesText,
+    item.notes.join(' '),
+    item.actType,
+    'stageName' in item ? item.stageName : '',
+    'stageName' in item ? item.dayLabel : '',
+    'stageName' in item ? item.localDate : '',
+    'stageName' in item ? `${item.startTimeText} ${item.endTimeText}` : '',
+  ];
+  return haystacks.some((value) => value.toLocaleLowerCase().includes(keyword));
 };
 
 export default function EventStudioAIImportDock({
@@ -683,6 +869,7 @@ export default function EventStudioAIImportDock({
   const [timezoneResults, setTimezoneResults] = useState<NonNullable<EventStudioDraft['timeZoneSelection']>[]>([]);
   const [timezoneSearching, setTimezoneSearching] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const runTokenRef = useRef(0);
   const cancelRequestedRef = useRef(false);
 
@@ -707,9 +894,40 @@ export default function EventStudioAIImportDock({
   }, [panel, selectedImageOptions, selectedImages]);
 
   const unresolvedTimetableSlots = panel?.kind === 'timetable' ? panel.timetableSlots.filter(hasUnresolvedTimetableDay) : [];
+  const recognitionMatchSummary = useMemo(() => (panel ? aggregateTaskMatchSummary(panel.taskEntries) : emptyMatchSummary()), [panel]);
+  const visibleMatchSummary = panel?.manualMatchSummary && panel.manualMatchSummary.attempted > 0 ? panel.manualMatchSummary : recognitionMatchSummary;
+  const visibleLineupItems = useMemo(
+    () => (panel?.kind === 'lineup' ? panel.lineupItems.filter((item) => resultSearchMatches(item, panel.resultSearchQuery)) : []),
+    [panel]
+  );
+  const visibleTimetableSlots = useMemo(
+    () => (panel?.kind === 'timetable' ? panel.timetableSlots.filter((item) => resultSearchMatches(item, panel.resultSearchQuery)) : []),
+    [panel]
+  );
+
+  useEffect(() => {
+    if (!panel) return undefined;
+    const hasActiveTask = panel.running || panel.autoMatching || panel.taskEntries.some((task) => ['preparing', 'polling', 'auto_matching'].includes(task.phase));
+    if (!hasActiveTask) return undefined;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [panel]);
 
   const updatePanel = (patch: Partial<ImportPanelState>) => {
     setPanel((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const toggleExpandedResultItem = (itemId: string) => {
+    setPanel((current) => {
+      if (!current) return current;
+      const expanded = current.expandedResultItemIds.includes(itemId);
+      return {
+        ...current,
+        expandedResultItemIds: expanded
+          ? current.expandedResultItemIds.filter((id) => id !== itemId)
+          : [...current.expandedResultItemIds, itemId],
+      };
+    });
   };
 
   const updateTaskEntry = (taskId: string, patch: Partial<EventStudioAIImportTaskEntry>) => {
@@ -750,6 +968,9 @@ export default function EventStudioAIImportDock({
       taskEntries: [],
       autoMatching: false,
       autoMatchStartedAt: null,
+      manualMatchSummary: null,
+      expandedResultItemIds: [],
+      resultSearchQuery: '',
       warningsExpanded: false,
     });
   };
@@ -781,19 +1002,30 @@ export default function EventStudioAIImportDock({
     }
   };
 
-  const exactMatchLineupItems = async (items: EventStudioAIEditableLineupItem[]): Promise<EventStudioAIEditableLineupItem[]> => {
+  const exactMatchLineupItems = async (
+    items: EventStudioAIEditableLineupItem[]
+  ): Promise<{ items: EventStudioAIEditableLineupItem[]; summary: EventStudioAIMatchSummary }> => {
     const unresolvedNames = items.flatMap((item) =>
-      splitPerformerNames(item.performerNamesText)
+      splitPerformerNames(item.performerNamesText, item.actType)
         .slice(0, actTypePerformerCount(item.actType))
         .flatMap((name, performerIndex) => {
           const bound = item.performerDJIDs[performerIndex];
           return bound ? [] : [name];
         })
     );
-    if (!unresolvedNames.length) return items;
+    if (!unresolvedNames.length) return { items, summary: emptyMatchSummary() };
 
     const matches = await eventStudioApi.matchExactDJs(unresolvedNames);
-    if (!matches.length) return items;
+    if (!matches.length) {
+      return {
+        items,
+        summary: {
+          attempted: unresolvedNames.length,
+          matched: 0,
+          failed: unresolvedNames.length,
+        },
+      };
+    }
 
     const lookup = new Map<string, (typeof matches)[number]>();
     for (const match of matches) {
@@ -804,14 +1036,20 @@ export default function EventStudioAIImportDock({
       }
     }
 
-    return items.map((item) => {
-      const performerNames = splitPerformerNames(item.performerNamesText).slice(0, actTypePerformerCount(item.actType));
+    let matchedCount = 0;
+    let failedCount = 0;
+    const nextItems = items.map((item) => {
+      const performerNames = splitPerformerNames(item.performerNamesText, item.actType).slice(0, actTypePerformerCount(item.actType));
       const performerDJIDs = [...item.performerDJIDs];
       const performerAvatarURLs = [...item.performerAvatarURLs];
       performerNames.forEach((name, performerIndex) => {
         if (performerDJIDs[performerIndex]) return;
         const match = lookup.get(normalizeDJLookupKey(name));
-        if (!match) return;
+        if (!match) {
+          failedCount += 1;
+          return;
+        }
+        matchedCount += 1;
         performerDJIDs[performerIndex] = match.djId;
         performerAvatarURLs[performerIndex] =
           match.avatarSmallUrl || match.avatarMediumUrl || match.avatarUrl || match.avatarOriginalUrl || null;
@@ -822,23 +1060,40 @@ export default function EventStudioAIImportDock({
         performerAvatarURLs,
       });
     });
+    return {
+      items: nextItems,
+      summary: {
+        attempted: matchedCount + failedCount,
+        matched: matchedCount,
+        failed: failedCount,
+      },
+    };
   };
 
   const exactMatchTimetableSlots = async (
     slots: EventStudioAIEditableTimetableSlot[]
-  ): Promise<EventStudioAIEditableTimetableSlot[]> => {
+  ): Promise<{ items: EventStudioAIEditableTimetableSlot[]; summary: EventStudioAIMatchSummary }> => {
     const unresolvedNames = slots.flatMap((slot) =>
-      splitPerformerNames(slot.performerNamesText)
+      splitPerformerNames(slot.performerNamesText, slot.actType)
         .slice(0, actTypePerformerCount(slot.actType))
         .flatMap((name, performerIndex) => {
           const bound = slot.performerDJIDs[performerIndex];
           return bound ? [] : [name];
         })
     );
-    if (!unresolvedNames.length) return slots;
+    if (!unresolvedNames.length) return { items: slots, summary: emptyMatchSummary() };
 
     const matches = await eventStudioApi.matchExactDJs(unresolvedNames);
-    if (!matches.length) return slots;
+    if (!matches.length) {
+      return {
+        items: slots,
+        summary: {
+          attempted: unresolvedNames.length,
+          matched: 0,
+          failed: unresolvedNames.length,
+        },
+      };
+    }
 
     const lookup = new Map<string, (typeof matches)[number]>();
     for (const match of matches) {
@@ -849,14 +1104,20 @@ export default function EventStudioAIImportDock({
       }
     }
 
-    return slots.map((slot) => {
-      const performerNames = splitPerformerNames(slot.performerNamesText).slice(0, actTypePerformerCount(slot.actType));
+    let matchedCount = 0;
+    let failedCount = 0;
+    const nextSlots = slots.map((slot) => {
+      const performerNames = splitPerformerNames(slot.performerNamesText, slot.actType).slice(0, actTypePerformerCount(slot.actType));
       const performerDJIDs = [...slot.performerDJIDs];
       const performerAvatarURLs = [...slot.performerAvatarURLs];
       performerNames.forEach((name, performerIndex) => {
         if (performerDJIDs[performerIndex]) return;
         const match = lookup.get(normalizeDJLookupKey(name));
-        if (!match) return;
+        if (!match) {
+          failedCount += 1;
+          return;
+        }
+        matchedCount += 1;
         performerDJIDs[performerIndex] = match.djId;
         performerAvatarURLs[performerIndex] =
           match.avatarSmallUrl || match.avatarMediumUrl || match.avatarUrl || match.avatarOriginalUrl || null;
@@ -867,6 +1128,14 @@ export default function EventStudioAIImportDock({
         performerAvatarURLs,
       });
     });
+    return {
+      items: nextSlots,
+      summary: {
+        attempted: matchedCount + failedCount,
+        matched: matchedCount,
+        failed: failedCount,
+      },
+    };
   };
 
   const appendPosterResult = (rawJson: unknown) => {
@@ -898,6 +1167,7 @@ export default function EventStudioAIImportDock({
         ...current,
         resultJson: rawJson,
         lineupItems: nextItems,
+        expandedResultItemIds: mergeExpandedResultItemIds(current.expandedResultItemIds, items),
         warnings: mergeUniqueStrings(current.warnings, warnings),
         unparsedTexts: mergeUniqueStrings(current.unparsedTexts, unparsedTexts),
       };
@@ -923,6 +1193,7 @@ export default function EventStudioAIImportDock({
         ...current,
         resultJson: rawJson,
         timetableSlots: nextSlots,
+        expandedResultItemIds: mergeExpandedResultItemIds(current.expandedResultItemIds, slots),
         warnings: mergeUniqueStrings(current.warnings, warnings),
         unparsedTexts: mergeUniqueStrings(current.unparsedTexts, unparsedTexts),
       };
@@ -993,6 +1264,8 @@ export default function EventStudioAIImportDock({
       updatedAt: Date.now(),
       resultCount: 0,
       warningCount: 0,
+      matchSuccessCount: 0,
+      matchFailedCount: 0,
       message: 'Preparing image and request payload.',
     }));
     const taskIdByImageId = new Map(nextTaskEntries.map((task) => [task.imageId, task.id]));
@@ -1007,6 +1280,7 @@ export default function EventStudioAIImportDock({
             ? 'Poster recognition started.'
             : `Started ${images.length} recognition task${images.length > 1 ? 's' : ''}.`,
         taskEntries: nextTaskEntries,
+        manualMatchSummary: null,
         ...(current.kind === 'poster'
           ? {
               resultJson: null,
@@ -1087,27 +1361,31 @@ export default function EventStudioAIImportDock({
 
           if (panel.kind === 'lineup') {
             const parsed = parseLineupEditableItems(rawRecord);
-            const matched = await exactMatchLineupItems(parsed);
+            const matchedResult = await exactMatchLineupItems(parsed);
             if (cancelRequestedRef.current || runToken !== runTokenRef.current) return;
-            appendLineupItems(matched, warnings, unparsedTexts, snapshot.result?.rawJson ?? null);
+            appendLineupItems(matchedResult.items, warnings, unparsedTexts, snapshot.result?.rawJson ?? null);
             updateTaskEntry(taskId, {
               phase: 'succeeded',
-              resultCount: matched.length,
+              resultCount: matchedResult.items.length,
               warningCount: warnings.length,
-              message: `Imported ${matched.length} lineup item${matched.length === 1 ? '' : 's'}.`,
+              matchSuccessCount: matchedResult.summary.matched,
+              matchFailedCount: matchedResult.summary.failed,
+              message: `Imported ${matchedResult.items.length} lineup item${matchedResult.items.length === 1 ? '' : 's'}${matchedResult.summary.attempted ? ` · matched ${matchedResult.summary.matched}, failed ${matchedResult.summary.failed}` : ''}.`,
             });
             return;
           }
 
           const parsed = parseTimetableEditableSlots(rawRecord, draft);
-          const matched = await exactMatchTimetableSlots(parsed);
+          const matchedResult = await exactMatchTimetableSlots(parsed);
           if (cancelRequestedRef.current || runToken !== runTokenRef.current) return;
-          appendTimetableSlots(matched, warnings, unparsedTexts, snapshot.result?.rawJson ?? null);
+          appendTimetableSlots(matchedResult.items, warnings, unparsedTexts, snapshot.result?.rawJson ?? null);
           updateTaskEntry(taskId, {
             phase: 'succeeded',
-            resultCount: matched.length,
+            resultCount: matchedResult.items.length,
             warningCount: warnings.length,
-            message: `Imported ${matched.length} timetable slot${matched.length === 1 ? '' : 's'}.`,
+            matchSuccessCount: matchedResult.summary.matched,
+            matchFailedCount: matchedResult.summary.failed,
+            message: `Imported ${matchedResult.items.length} timetable slot${matchedResult.items.length === 1 ? '' : 's'}${matchedResult.summary.attempted ? ` · matched ${matchedResult.summary.matched}, failed ${matchedResult.summary.failed}` : ''}.`,
           });
         } catch (error) {
           updateTaskEntry(taskId, {
@@ -1191,6 +1469,7 @@ export default function EventStudioAIImportDock({
       return {
         ...current,
         lineupItems: current.lineupItems.filter((item) => item.id !== itemId).map((item, index) => ({ ...item, sortOrder: index + 1 })),
+        expandedResultItemIds: current.expandedResultItemIds.filter((id) => id !== itemId),
       };
     });
   };
@@ -1203,6 +1482,7 @@ export default function EventStudioAIImportDock({
         ...current,
         timetableSlots: nextSlots,
         selectedTimetableSlotIds: current.selectedTimetableSlotIds.filter((id) => id !== slotId),
+        expandedResultItemIds: current.expandedResultItemIds.filter((id) => id !== slotId),
       };
     });
   };
@@ -1244,9 +1524,11 @@ export default function EventStudioAIImportDock({
     if (panel.kind === 'lineup') {
       setPanel((current) => {
         if (!current) return current;
+        const cleaned = compactEditableLineupItems(current.lineupItems);
         return {
           ...current,
-          lineupItems: compactEditableLineupItems(current.lineupItems),
+          lineupItems: cleaned,
+          expandedResultItemIds: current.expandedResultItemIds.filter((id) => cleaned.some((item) => item.id === id)),
         };
       });
       return;
@@ -1259,6 +1541,7 @@ export default function EventStudioAIImportDock({
           ...current,
           timetableSlots: cleaned,
           selectedTimetableSlotIds: current.selectedTimetableSlotIds.filter((id) => cleaned.some((slot) => slot.id === id)),
+          expandedResultItemIds: current.expandedResultItemIds.filter((id) => cleaned.some((slot) => slot.id === id)),
         };
       });
     }
@@ -1269,25 +1552,55 @@ export default function EventStudioAIImportDock({
     updatePanel({
       autoMatching: true,
       autoMatchStartedAt: Date.now(),
+      manualMatchSummary: null,
       errorText: null,
-      statusText: 'Running exact DJ matching.',
+      statusText: '正在执行精确 DJ 匹配。',
     });
     try {
       if (panel.kind === 'lineup') {
         const matched = await exactMatchLineupItems(panel.lineupItems);
-        setPanel((current) => (current && current.kind === 'lineup' ? { ...current, lineupItems: matched } : current));
+        setPanel((current) =>
+          current && current.kind === 'lineup'
+            ? {
+                ...current,
+                lineupItems: matched.items,
+                manualMatchSummary: matched.summary,
+                expandedResultItemIds: defaultExpandedResultItemIds(matched.items),
+              }
+            : current
+        );
+        updatePanel({
+          autoMatching: false,
+          autoMatchStartedAt: null,
+          statusText: matched.summary.attempted
+            ? `精确 DJ 匹配完成：成功 ${matched.summary.matched}，失败 ${matched.summary.failed}。`
+            : '精确 DJ 匹配完成，没有需要继续匹配的未绑定对象。',
+        });
       } else {
         const matched = await exactMatchTimetableSlots(panel.timetableSlots);
-        setPanel((current) => (current && current.kind === 'timetable' ? { ...current, timetableSlots: matched } : current));
+        setPanel((current) =>
+          current && current.kind === 'timetable'
+            ? {
+                ...current,
+                timetableSlots: matched.items,
+                manualMatchSummary: matched.summary,
+                expandedResultItemIds: defaultExpandedResultItemIds(matched.items),
+              }
+            : current
+        );
+        updatePanel({
+          autoMatching: false,
+          autoMatchStartedAt: null,
+          statusText: matched.summary.attempted
+            ? `精确 DJ 匹配完成：成功 ${matched.summary.matched}，失败 ${matched.summary.failed}。`
+            : '精确 DJ 匹配完成，没有需要继续匹配的未绑定对象。',
+        });
       }
-      updatePanel({
-        autoMatching: false,
-        statusText: 'Exact DJ matching completed.',
-      });
     } catch (error) {
       updatePanel({
         autoMatching: false,
-        errorText: error instanceof Error ? error.message : 'Exact DJ matching failed.',
+        autoMatchStartedAt: null,
+        errorText: error instanceof Error ? error.message : '精确 DJ 匹配失败。',
       });
     }
   };
@@ -1372,7 +1685,7 @@ export default function EventStudioAIImportDock({
     performerIndex: number
   ) => {
     const key = aiSearchKey(scope, item.id, performerIndex);
-    const names = splitPerformerNames(item.performerNamesText);
+    const names = splitPerformerNames(item.performerNamesText, item.actType);
     const query = names[performerIndex] || names[0] || '';
     const results = djSearchResults[key] || [];
     const isSearching = Boolean(djSearchLoadingKeys[key]);
@@ -1381,7 +1694,7 @@ export default function EventStudioAIImportDock({
     return (
       <div key={`${item.id}-${performerIndex}`} className="rounded-[16px] border border-[#e8eceb] bg-white/70 p-2.5">
         <div className="mb-1.5 flex items-center gap-2 text-[11px] text-black/45">
-          <span>Performer {performerIndex + 1}</span>
+          <span>成员 {performerIndex + 1}</span>
           {avatar ? (
             <span className="inline-flex h-7 w-7 overflow-hidden rounded-full border border-[#e8eceb] bg-[#f4f6f3]">
               <Image src={avatar} alt="" width={28} height={28} className="h-7 w-7 object-cover" />
@@ -1413,7 +1726,7 @@ export default function EventStudioAIImportDock({
                     })
                   )
             }
-            placeholder={`DJ ID ${performerIndex + 1}`}
+            placeholder={`绑定 DJ ID ${performerIndex + 1}`}
           />
           <button
             type="button"
@@ -1421,14 +1734,14 @@ export default function EventStudioAIImportDock({
             disabled={isSearching || !query}
             className="admin-studio-button-secondary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSearching ? 'Searching' : 'Search'}
+            {isSearching ? '搜索中' : '搜索'}
           </button>
           <button
             type="button"
             onClick={() => clearAIImportDJBinding(scope, item.id, performerIndex)}
             className="admin-studio-button-secondary px-3 py-2 text-xs"
           >
-            Clear
+            清空
           </button>
         </div>
         {results.length ? (
@@ -1462,6 +1775,269 @@ export default function EventStudioAIImportDock({
       </div>
     );
   };
+
+  const renderResultAvatarGroup = (item: EventStudioAIEditableAct) => {
+    const names = performerNamesForDisplay(item);
+    return (
+      <div className="flex -space-x-2">
+        {names.slice(0, 3).map((name, index) => {
+          const avatar = item.performerAvatarURLs[index];
+          const initial = (name.trim()[0] || '?').toUpperCase();
+          return avatar ? (
+            <span
+              key={`${item.id}-avatar-${index}`}
+              className="inline-flex h-11 w-11 overflow-hidden rounded-full border-2 border-white bg-[#eef1ec] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+            >
+              <Image src={avatar} alt="" width={44} height={44} className="h-11 w-11 object-cover" />
+            </span>
+          ) : (
+            <span
+              key={`${item.id}-avatar-${index}`}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-[#eef4ff] text-sm font-semibold text-[#3567d6] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+            >
+              {initial}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderResultToolbar = (
+    totalCount: number,
+    matchedCount: number,
+    unresolvedCount: number,
+    searchPlaceholder: string
+  ) => (
+    <div className="admin-reference-card p-4">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <label className="flex min-w-0 flex-1 items-center gap-3 rounded-[20px] border border-[#e7ece7] bg-white px-4 py-3">
+          <span className="text-black/35">⌕</span>
+          <input
+            className="min-w-0 flex-1 bg-transparent text-sm text-[#071110] outline-none placeholder:text-black/35"
+            value={panel?.resultSearchQuery || ''}
+            onChange={(event) => updatePanel({ resultSearchQuery: event.target.value })}
+            placeholder={searchPlaceholder}
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: '全部', count: totalCount, className: 'border-[#dce7ff] bg-[#f4f7ff] text-[#3567d6]' },
+            { label: '成功', count: matchedCount, className: 'border-[#dcefdc] bg-[#effaf0] text-[#24945b]' },
+            { label: '待确认', count: unresolvedCount, className: 'border-[#f3e1ca] bg-[#fff7ef] text-[#b56b1b]' },
+          ].map((chip) => (
+            <div
+              key={chip.label}
+              className={`inline-flex items-center gap-2 rounded-[16px] border px-4 py-2 text-sm font-medium ${chip.className}`}
+            >
+              <span>{chip.label}</span>
+              <span>{chip.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderLineupEditPanel = (item: EventStudioAIEditableLineupItem) => {
+    const count = actTypePerformerCount(item.actType);
+    const names = performerNamesForDisplay(item);
+    return (
+      <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
+        <div className="grid gap-3 xl:grid-cols-[150px_minmax(0,1fr)_140px]">
+          <label className="space-y-1 text-xs text-black/45">
+            <span>演出形式</span>
+            <select
+              className={aiCompactSelectClass}
+              value={item.actType}
+              onChange={(event) =>
+                updateLineupItem(item.id, (current) =>
+                  normalizeEditableAct({
+                    ...current,
+                    actType: normalizeActType(event.target.value),
+                  })
+                )
+              }
+            >
+              {ACT_TYPE_ITEMS.map((act) => (
+                <option key={act.value} value={act.value}>
+                  {act.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-black/45">
+            <span>DJ / 艺人</span>
+            <input
+              className={aiCompactInputClass}
+              value={item.performerNamesText}
+              onChange={(event) =>
+                updateLineupItem(item.id, (current) =>
+                  normalizeEditableAct({
+                    ...current,
+                    performerNamesText: event.target.value,
+                  })
+                )
+              }
+            />
+          </label>
+          <label className="space-y-1 text-xs text-black/45">
+            <span>置信度</span>
+            <input
+              className={aiCompactInputClass}
+              value={String(item.confidence ?? '')}
+              onChange={(event) =>
+                updateLineupItem(item.id, (current) => ({
+                  ...current,
+                  confidence: event.target.value ? Number(event.target.value) : null,
+                }))
+              }
+              placeholder="0.95"
+            />
+          </label>
+        </div>
+        <div className="mt-3 grid gap-2 xl:grid-cols-2">
+          {Array.from({ length: count }).map((_, performerIndex) => renderDJBindingControls('lineup', item, performerIndex))}
+        </div>
+        <div className="mt-3 rounded-[14px] border border-[#edf1ee] bg-white px-3 py-2 text-xs text-black/45">
+          当前展示名：{names.join(' / ') || '未命名'}
+        </div>
+        {item.notes.length ? <div className="mt-2 text-xs text-black/40">备注：{item.notes.join(' / ')}</div> : null}
+      </div>
+    );
+  };
+
+  const renderTimetableEditPanel = (slot: EventStudioAIEditableTimetableSlot) => (
+    <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
+      <div className="grid gap-3 xl:grid-cols-2">
+        <label className="space-y-1 text-xs text-black/45">
+          <span>演出形式</span>
+          <select
+            className={aiCompactSelectClass}
+            value={slot.actType}
+            onChange={(event) =>
+              updateTimetableSlot(slot.id, (current) =>
+                normalizeEditableAct({
+                  ...current,
+                  actType: normalizeActType(event.target.value),
+                })
+              )
+            }
+          >
+            {ACT_TYPE_ITEMS.map((act) => (
+              <option key={act.value} value={act.value}>
+                {act.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>DJ / 艺人</span>
+          <input
+            className={aiCompactInputClass}
+            value={slot.performerNamesText}
+            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, performerNamesText: event.target.value }))}
+          />
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>活动日</span>
+          <select
+            className={aiCompactSelectClass}
+            value={slot.eventDayId}
+            onChange={(event) =>
+              updateTimetableSlot(slot.id, (current) => {
+                const matchedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value) || draft.eventDays[0];
+                return matchedDay
+                  ? {
+                      ...current,
+                      eventDayId: matchedDay.eventDayId,
+                      weekIndex: matchedDay.weekIndex,
+                      dayIndexInWeek: matchedDay.dayIndexInWeek,
+                      overallDayIndex: matchedDay.overallDayIndex,
+                      localDate: matchedDay.date,
+                      dayLabel: matchedDay.label,
+                      unresolvedEventDay: false,
+                      eventDayResolutionReason: '已在网页编辑器中手动修正。',
+                      eventDayResolutionConfidence: 1,
+                    }
+                  : current;
+              })
+            }
+          >
+            {eventDayTargets(draft).map((day) => (
+              <option key={day.eventDayId} value={day.eventDayId}>
+                {day.label} / {day.date}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>舞台</span>
+          <input
+            className={aiCompactInputClass}
+            value={slot.stageName}
+            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, stageName: event.target.value }))}
+            placeholder="舞台名称"
+          />
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>开始时间</span>
+          <input
+            className={aiCompactInputClass}
+            value={slot.startTimeText}
+            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, startTimeText: event.target.value }))}
+            placeholder="18:00"
+          />
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>结束时间</span>
+          <input
+            className={aiCompactInputClass}
+            value={slot.endTimeText}
+            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, endTimeText: event.target.value }))}
+            placeholder="19:00"
+          />
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>开始跨天</span>
+          <select
+            className={aiCompactSelectClass}
+            value={String(slot.startDayOffset)}
+            onChange={(event) =>
+              updateTimetableSlot(slot.id, (current) => ({ ...current, startDayOffset: Number(event.target.value) || 0 }))
+            }
+          >
+            <option value="0">当天</option>
+            <option value="1">次日</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs text-black/45">
+          <span>结束跨天</span>
+          <select
+            className={aiCompactSelectClass}
+            value={String(slot.endDayOffset)}
+            onChange={(event) =>
+              updateTimetableSlot(slot.id, (current) => ({ ...current, endDayOffset: Number(event.target.value) || 0 }))
+            }
+          >
+            <option value="0">当天</option>
+            <option value="1">次日</option>
+          </select>
+        </label>
+      </div>
+      {slot.eventDayResolutionReason ? (
+        <div className="mt-3 rounded-[14px] border border-[#f0e1cc] bg-[#fffaf4] px-3 py-2 text-xs text-[#9a6334]">
+          修正说明：{slot.eventDayResolutionReason}
+          {slot.eventDayResolutionConfidence != null ? ` / 置信度 ${slot.eventDayResolutionConfidence}` : ''}
+        </div>
+      ) : null}
+      <div className="mt-3 grid gap-2 xl:grid-cols-2">
+        {Array.from({ length: actTypePerformerCount(slot.actType) }).map((_, performerIndex) =>
+          renderDJBindingControls('timetable', slot, performerIndex)
+        )}
+      </div>
+    </div>
+  );
 
   const applyResult = () => {
     if (!panel) return;
@@ -1509,7 +2085,7 @@ export default function EventStudioAIImportDock({
     if (panel.kind === 'lineup') {
       const nextLineup = compactEditableLineupItems(panel.lineupItems)
         .map((item, index): EventStudioDraft['lineupArtists'][number] | null => {
-          const names = splitPerformerNames(item.performerNamesText).slice(0, actTypePerformerCount(item.actType));
+          const names = splitPerformerNames(item.performerNamesText, item.actType).slice(0, actTypePerformerCount(item.actType));
           if (!names.length) return null;
           return {
             id: crypto.randomUUID(),
@@ -1543,7 +2119,7 @@ export default function EventStudioAIImportDock({
 
     const nextSlots = compactEditableTimetableSlots(panel.timetableSlots)
       .map((slot, index): EventStudioDraft['timetableSlots'][number] | null => {
-        const names = splitPerformerNames(slot.performerNamesText).slice(0, actTypePerformerCount(slot.actType));
+        const names = splitPerformerNames(slot.performerNamesText, slot.actType).slice(0, actTypePerformerCount(slot.actType));
         if (!names.length) return null;
         const eventDay = draft.eventDays.find((day) => day.eventDayId === slot.eventDayId);
         if (!eventDay) return null;
@@ -1640,7 +2216,7 @@ export default function EventStudioAIImportDock({
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => void cancelRecognition()} className="admin-studio-button-secondary px-4 py-2 text-sm">
-                  {panel.running ? 'Cancel' : 'Close'}
+                  {panel.running ? '取消' : '关闭'}
                 </button>
                 <button
                   type="button"
@@ -1650,20 +2226,20 @@ export default function EventStudioAIImportDock({
                     panel.running ? 'admin-ai-action-button-running' : ''
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  {panel.running ? 'Running...' : 'Start Recognition'}
+                  {panel.running ? '识别中...' : '开始识别'}
                 </button>
               </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="grid gap-5 p-5 lg:grid-cols-[0.88fr_1.12fr]">
+                <div className="grid gap-5 p-5 lg:grid-cols-[300px_minmax(0,1fr)]">
                   <div className="space-y-4">
                     <div className="admin-reference-card p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-[#071110]">Choose Images</div>
+                        <div className="text-sm font-semibold text-[#071110]">选择图片</div>
                         <div className="text-xs text-black/40">{selectedCountLabel(panel)}</div>
                       </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="mt-3 grid gap-2">
                         {selectedImageOptions.map((image) => {
                           const checked = panel.selectedImageIds.includes(image.id);
                           const toggle = () => {
@@ -1684,17 +2260,17 @@ export default function EventStudioAIImportDock({
                               key={image.id}
                               type="button"
                               onClick={toggle}
-                              className={`overflow-hidden rounded-[22px] border text-left ${
+                              className={`overflow-hidden rounded-[18px] border text-left ${
                                 checked ? 'border-[#3aa66b]' : 'border-[#e8eceb]'
                               } bg-white`}
                             >
-                              <div className="relative aspect-[4/3] bg-[#f2f3ef]">
-                                <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="420px" />
+                              <div className="relative aspect-[16/9] bg-[#f2f3ef]">
+                                <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="300px" />
                               </div>
-                              <div className="flex items-start justify-between gap-3 px-4 py-3">
+                              <div className="flex items-start justify-between gap-3 px-3 py-2.5">
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium text-[#071110]">{image.fileName}</div>
-                                  <div className="mt-1 text-xs text-black/40">{imageOriginLabel(image.origin)}</div>
+                                  <div className="truncate text-[13px] font-medium text-[#071110]">{image.fileName}</div>
+                                  <div className="mt-1 text-[11px] text-black/40">{imageOriginLabel(image.origin)}</div>
                                 </div>
                                 <input readOnly type={panel.kind === 'poster' ? 'radio' : 'checkbox'} checked={checked} />
                               </div>
@@ -1705,7 +2281,7 @@ export default function EventStudioAIImportDock({
                     </div>
 
                     <div className="admin-reference-card p-4">
-                      <div className="text-sm font-semibold text-[#071110]">Task Progress</div>
+                      <div className="text-sm font-semibold text-[#071110]">任务进度</div>
                       {panel.taskEntries.length ? (
                         <div className="mt-3 space-y-2">
                           {panel.taskEntries.map((task) => (
@@ -1715,19 +2291,27 @@ export default function EventStudioAIImportDock({
                                   <div className="truncate text-sm font-medium text-[#071110]">{task.imageFileName}</div>
                                   <div className="mt-1 text-xs text-black/40">{imageOriginLabel(task.imageOrigin)}</div>
                                 </div>
-                                <div className="rounded-full bg-[#f4f6f3] px-3 py-1 text-xs text-[#071110]">{taskPhaseLabel(task)}</div>
+                                <div className={`rounded-full px-3 py-1 text-xs ${taskPhaseClassName(task)}`}>{taskPhaseLabel(task)}</div>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-black/38">
+                                <span>{task.phase === 'preparing' || task.phase === 'polling' || task.phase === 'auto_matching' ? '已耗时' : '总耗时'}: {taskDurationText(task, clockNow)}</span>
+                                {task.matchSuccessCount || task.matchFailedCount ? (
+                                  <span>
+                                    匹配 成功 {task.matchSuccessCount} / 失败 {task.matchFailedCount}
+                                  </span>
+                                ) : null}
                               </div>
                               <div className="mt-2 text-xs leading-5 text-black/52">{task.message}</div>
                               {task.resultCount || task.warningCount ? (
                                 <div className="mt-2 text-xs text-black/38">
-                                  Results: {task.resultCount} / Warnings: {task.warningCount}
+                                  结果数：{task.resultCount} / 警告：{task.warningCount}
                                 </div>
                               ) : null}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="mt-3 text-sm text-black/48">No recognition task has started yet.</div>
+                        <div className="mt-3 text-sm text-black/48">尚未开始识别任务。</div>
                       )}
                     </div>
                   </div>
@@ -1736,8 +2320,13 @@ export default function EventStudioAIImportDock({
                 <div className="admin-reference-card p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-[#071110]">Recognition Result</div>
-                      <div className="mt-1 text-xs text-black/40">Review the editable result first, then apply it into the draft.</div>
+                      <div className="text-sm font-semibold text-[#071110]">识别结果</div>
+                      <div className="mt-1 text-xs text-black/40">先确认识别结果，再将它们应用到当前草稿。</div>
+                      {panel.kind !== 'poster' && visibleMatchSummary.attempted ? (
+                        <div className="mt-2 text-xs text-black/45">
+                          自动匹配：成功 {visibleMatchSummary.matched} / 失败 {visibleMatchSummary.failed}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {panel.kind !== 'poster' ? (
@@ -1747,7 +2336,7 @@ export default function EventStudioAIImportDock({
                           disabled={panel.autoMatching || panel.running}
                           className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {panel.autoMatching ? 'Matching...' : 'Auto Match DJs'}
+                          {panel.autoMatching ? '匹配中...' : '自动匹配 DJ'}
                         </button>
                       ) : null}
                       <button
@@ -1761,7 +2350,7 @@ export default function EventStudioAIImportDock({
                         }
                         className="admin-studio-button-primary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Apply Result
+                        应用结果
                       </button>
                     </div>
                   </div>
@@ -2154,80 +2743,88 @@ export default function EventStudioAIImportDock({
                     </div>
                   ) : (
                     <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                      Start poster recognition to get an editable result here.
+                      开始识别海报后，这里会出现可编辑的识别结果。
                     </div>
                   )
                 ) : panel.kind === 'lineup' ? (
                   panel.lineupItems.length ? (
                     <div className="space-y-3">
-                      {panel.lineupItems.map((item, index) => {
-                        const count = actTypePerformerCount(item.actType);
-                        const names = splitPerformerNames(item.performerNamesText);
-                        return (
-                          <div key={item.id} className="admin-reference-card p-3.5">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="text-sm font-semibold text-[#071110]">Lineup #{index + 1}</div>
-                              <button type="button" onClick={() => removeLineupItem(item.id)} className="admin-studio-button-danger px-3 py-1.5 text-xs">
-                                Remove
-                              </button>
-                            </div>
-                            <div className="mt-2.5 grid gap-2 lg:grid-cols-5">
-                              <select
-                                className={aiCompactSelectClass}
-                                value={item.actType}
-                                onChange={(event) =>
-                                  updateLineupItem(item.id, (current) =>
-                                    normalizeEditableAct({
-                                      ...current,
-                                      actType: normalizeActType(event.target.value, splitPerformerNames(current.performerNamesText).length),
-                                    })
-                                  )
-                                }
-                              >
-                                {ACT_TYPE_ITEMS.map((act) => (
-                                  <option key={act.value} value={act.value}>
-                                    {act.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <input
-                                className={`${aiCompactInputClass} lg:col-span-2`}
-                                value={item.performerNamesText}
-                                onChange={(event) =>
-                                  updateLineupItem(item.id, (current) =>
-                                    normalizeEditableAct({
-                                      ...current,
-                                      performerNamesText: event.target.value,
-                                    })
-                                  )
-                                }
-                              />
-                              <input
-                                className={aiCompactInputClass}
-                                value={String(item.confidence ?? '')}
-                                onChange={(event) =>
-                                  updateLineupItem(item.id, (current) => ({
-                                    ...current,
-                                    confidence: event.target.value ? Number(event.target.value) : null,
-                                  }))
-                                }
-                                placeholder="Confidence"
-                              />
-                              <div className="rounded-[14px] border border-[#e8eceb] bg-[#f8faf8] px-3 py-2 text-[11px] leading-5 text-black/45">
-                                {names.join(' / ')}
+                      {renderResultToolbar(
+                        panel.lineupItems.length,
+                        panel.lineupItems.filter(isResultItemFullyMatched).length,
+                        panel.lineupItems.filter((item) => !isResultItemFullyMatched(item)).length,
+                        '搜索 DJ 名称'
+                      )}
+                      <div className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+                        <div className="hidden items-center gap-3 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[50px_minmax(0,2.1fr)_140px_140px_130px_150px]">
+                          <span>#</span>
+                          <span>DJ / 艺人</span>
+                          <span>演出形式</span>
+                          <span>置信度</span>
+                          <span>匹配状态</span>
+                          <span>操作</span>
+                        </div>
+                        {visibleLineupItems.length ? (
+                          visibleLineupItems.map((item, index) => {
+                            const expanded = panel.expandedResultItemIds.includes(item.id);
+                            const confidence = resultConfidenceValue(item.confidence);
+                            return (
+                              <div key={item.id} className="border-t border-[#f1f3f0] first:border-t-0">
+                                <div className="grid gap-4 px-4 py-4 lg:grid-cols-[50px_minmax(0,2.1fr)_140px_140px_130px_150px] lg:items-center">
+                                  <div className="text-sm font-semibold text-black/65">{index + 1}</div>
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    {renderResultAvatarGroup(item)}
+                                    <div className="min-w-0">
+                                      <div className="truncate text-[15px] font-semibold text-[#071110]">{performerDisplayName(item)}</div>
+                                      <div className="mt-1 text-xs text-black/42">
+                                        {matchedPerformerCount(item)} / {actTypePerformerCount(item.actType)} 已绑定
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="inline-flex rounded-full border border-[#dbe6ff] bg-[#f4f7ff] px-3 py-1 text-xs font-semibold text-[#3567d6]">
+                                      {actTypeLabel(item.actType)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-semibold text-[#071110]">{confidence == null ? '--' : confidence.toFixed(2)}</div>
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#edf1ee]">
+                                      <div
+                                        className="h-full rounded-full bg-[#23a35d]"
+                                        style={{ width: `${Math.round((confidence ?? 0) * 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${resultItemStatusClassName(item)}`}>
+                                      {resultItemStatusLabel(item)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandedResultItem(item.id)}
+                                      className="admin-studio-button-secondary px-3 py-2 text-xs"
+                                    >
+                                      {expanded ? '收起' : '编辑'}
+                                    </button>
+                                    <button type="button" onClick={() => removeLineupItem(item.id)} className="admin-studio-button-danger px-3 py-2 text-xs">
+                                      删除
+                                    </button>
+                                  </div>
+                                </div>
+                                {expanded ? renderLineupEditPanel(item) : null}
                               </div>
-                            </div>
-                            <div className="mt-2.5 grid gap-1.5">
-                              {Array.from({ length: count }).map((_, performerIndex) => renderDJBindingControls('lineup', item, performerIndex))}
-                            </div>
-                            <div className="mt-2 text-xs text-black/40">{item.notes.join(' / ') || 'No notes'}</div>
-                          </div>
-                        );
-                      })}
+                            );
+                          })
+                        ) : (
+                          <div className="px-5 py-10 text-center text-sm text-black/45">当前搜索条件下没有匹配的识别结果。</div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                      Start lineup recognition to append editable lineup results here.
+                      开始识别 lineup 后，这里会追加可确认、可编辑的结果列表。
                     </div>
                   )
                 ) : panel.timetableSlots.length ? (
@@ -2250,7 +2847,7 @@ export default function EventStudioAIImportDock({
                           }
                           className="admin-studio-button-secondary px-3 py-2 text-xs"
                         >
-                          {panel.selectedTimetableSlotIds.length ? 'Clear Selection' : 'Select All'}
+                          {panel.selectedTimetableSlotIds.length ? '清空选择' : '全选'}
                         </button>
                         <button
                           type="button"
@@ -2263,15 +2860,15 @@ export default function EventStudioAIImportDock({
                           disabled={!panel.selectedTimetableSlotIds.length}
                           className="admin-studio-button-secondary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Move Selected
+                          批量移动
                         </button>
                         <button type="button" onClick={cleanVisibleAIItems} className="admin-studio-button-secondary px-3 py-2 text-xs">
-                          Clean Empty Items
+                          清理空白项
                         </button>
                       </div>
                       <div className="mt-2.5 grid gap-2 lg:grid-cols-2">
                         <label className="space-y-1 text-xs text-black/45">
-                          <span>Target Event Day</span>
+                          <span>目标活动日</span>
                           <select
                             className={aiCompactSelectClass}
                             value={panel.targetEventDayId}
@@ -2285,7 +2882,7 @@ export default function EventStudioAIImportDock({
                           </select>
                         </label>
                         <label className="space-y-1 text-xs text-black/45">
-                          <span>Target Stage</span>
+                          <span>目标舞台</span>
                           <select
                             className={aiCompactSelectClass}
                             value={panel.targetStageName}
@@ -2300,152 +2897,108 @@ export default function EventStudioAIImportDock({
                         </label>
                       </div>
                     </div>
-
-                    {panel.timetableSlots.map((slot) => (
-                      <div key={slot.id} className="admin-reference-card p-3.5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={panel.selectedTimetableSlotIds.includes(slot.id)}
-                              onChange={() =>
-                                setPanel((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        selectedTimetableSlotIds: current.selectedTimetableSlotIds.includes(slot.id)
-                                          ? current.selectedTimetableSlotIds.filter((id) => id !== slot.id)
-                                          : [...current.selectedTimetableSlotIds, slot.id],
-                                      }
-                                    : current
-                                )
-                              }
-                            />
-                            <div>
-                              <div className="text-sm font-semibold text-[#071110]">Timetable #{slot.sortOrder}</div>
-                              <div className="mt-1 text-xs text-black/40">
-                                {slot.dayLabel || slot.localDate} / {slot.stageName}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {slot.unresolvedEventDay ? (
-                              <span className="rounded-full bg-[#fff3f3] px-3 py-1 text-xs text-[#8a3e3e]">Unresolved Day</span>
-                            ) : null}
-                            <button type="button" onClick={() => removeTimetableSlot(slot.id)} className="admin-studio-button-danger px-3 py-1.5 text-xs">
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-2.5 grid gap-2 lg:grid-cols-5">
-                          <select
-                            className={aiCompactSelectClass}
-                            value={slot.actType}
-                            onChange={(event) =>
-                              updateTimetableSlot(slot.id, (current) =>
-                                normalizeEditableAct({
-                                  ...current,
-                                  actType: normalizeActType(event.target.value, splitPerformerNames(current.performerNamesText).length),
-                                })
-                              )
-                            }
-                          >
-                            {ACT_TYPE_ITEMS.map((act) => (
-                              <option key={act.value} value={act.value}>
-                                {act.label}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            className={aiCompactSelectClass}
-                            value={slot.eventDayId}
-                            onChange={(event) =>
-                              updateTimetableSlot(slot.id, (current) => {
-                                const matchedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value) || draft.eventDays[0];
-                                return matchedDay
-                                  ? {
-                                      ...current,
-                                      eventDayId: matchedDay.eventDayId,
-                                      weekIndex: matchedDay.weekIndex,
-                                      dayIndexInWeek: matchedDay.dayIndexInWeek,
-                                      overallDayIndex: matchedDay.overallDayIndex,
-                                      localDate: matchedDay.date,
-                                      dayLabel: matchedDay.label,
-                                      unresolvedEventDay: false,
-                                      eventDayResolutionReason: 'Resolved manually in web editor.',
-                                      eventDayResolutionConfidence: 1,
-                                    }
-                                  : current;
-                              })
-                            }
-                          >
-                            {eventDayTargets(draft).map((day) => (
-                              <option key={day.eventDayId} value={day.eventDayId}>
-                                {day.label} / {day.date}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            className={aiCompactInputClass}
-                            value={slot.stageName}
-                            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, stageName: event.target.value }))}
-                            placeholder="Stage"
-                          />
-                          <input
-                            className={`${aiCompactInputClass} lg:col-span-2`}
-                            value={slot.performerNamesText}
-                            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, performerNamesText: event.target.value }))}
-                          />
-                          <input
-                            className={aiCompactInputClass}
-                            value={slot.startTimeText}
-                            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, startTimeText: event.target.value }))}
-                            placeholder="Start"
-                          />
-                          <input
-                            className={aiCompactInputClass}
-                            value={slot.endTimeText}
-                            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, endTimeText: event.target.value }))}
-                            placeholder="End"
-                          />
-                          <select
-                            className={aiCompactSelectClass}
-                            value={String(slot.startDayOffset)}
-                            onChange={(event) =>
-                              updateTimetableSlot(slot.id, (current) => ({ ...current, startDayOffset: Number(event.target.value) || 0 }))
-                            }
-                          >
-                            <option value="0">Start same day</option>
-                            <option value="1">Start next day</option>
-                          </select>
-                          <select
-                            className={aiCompactSelectClass}
-                            value={String(slot.endDayOffset)}
-                            onChange={(event) =>
-                              updateTimetableSlot(slot.id, (current) => ({ ...current, endDayOffset: Number(event.target.value) || 0 }))
-                            }
-                          >
-                            <option value="0">End same day</option>
-                            <option value="1">End next day</option>
-                          </select>
-                        </div>
-                        {slot.eventDayResolutionReason ? (
-                          <div className="mt-2 text-xs text-black/40">
-                            Resolution: {slot.eventDayResolutionReason}
-                            {slot.eventDayResolutionConfidence != null ? ` / Confidence ${slot.eventDayResolutionConfidence}` : ''}
-                          </div>
-                        ) : null}
-                        <div className="mt-2.5 grid gap-1.5">
-                          {Array.from({ length: actTypePerformerCount(slot.actType) }).map((_, performerIndex) =>
-                            renderDJBindingControls('timetable', slot, performerIndex)
-                          )}
-                        </div>
+                    {renderResultToolbar(
+                      panel.timetableSlots.length,
+                      panel.timetableSlots.filter(isResultItemFullyMatched).length,
+                      panel.timetableSlots.filter((item) => !isResultItemFullyMatched(item)).length,
+                      '搜索 DJ 名称、舞台或时间'
+                    )}
+                    <div className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+                      <div className="hidden items-center gap-3 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[52px_52px_minmax(0,2fr)_180px_120px_130px_160px]">
+                        <span />
+                        <span>#</span>
+                        <span>DJ / 艺人</span>
+                        <span>舞台 / 时间</span>
+                        <span>置信度</span>
+                        <span>匹配状态</span>
+                        <span>操作</span>
                       </div>
-                    ))}
+                      {visibleTimetableSlots.length ? (
+                        visibleTimetableSlots.map((slot, index) => {
+                          const expanded = panel.expandedResultItemIds.includes(slot.id);
+                          const confidence = resultConfidenceValue(slot.confidence);
+                          return (
+                            <div key={slot.id} className="border-t border-[#f1f3f0] first:border-t-0">
+                              <div className="grid gap-4 px-4 py-4 lg:grid-cols-[52px_52px_minmax(0,2fr)_180px_120px_130px_160px] lg:items-center">
+                                <div className="flex justify-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={panel.selectedTimetableSlotIds.includes(slot.id)}
+                                    onChange={() =>
+                                      setPanel((current) =>
+                                        current
+                                          ? {
+                                              ...current,
+                                              selectedTimetableSlotIds: current.selectedTimetableSlotIds.includes(slot.id)
+                                                ? current.selectedTimetableSlotIds.filter((id) => id !== slot.id)
+                                                : [...current.selectedTimetableSlotIds, slot.id],
+                                            }
+                                          : current
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="text-sm font-semibold text-black/65">{index + 1}</div>
+                                <div className="flex min-w-0 items-center gap-3">
+                                  {renderResultAvatarGroup(slot)}
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[15px] font-semibold text-[#071110]">{performerDisplayName(slot)}</div>
+                                    <div className="mt-1 text-xs text-black/42">
+                                      {slot.dayLabel || slot.localDate}
+                                      {slot.unresolvedEventDay ? ' · 活动日待确认' : ''}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="inline-flex rounded-full border border-[#dbe6ff] bg-[#f4f7ff] px-3 py-1 text-xs font-semibold text-[#3567d6]">
+                                    {slot.stageName || 'Main Stage'}
+                                  </div>
+                                  <div className="text-xs text-black/45">
+                                    {slot.startTimeText || '--'} - {slot.endTimeText || '--'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-[#071110]">{confidence == null ? '--' : confidence.toFixed(2)}</div>
+                                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#edf1ee]">
+                                    <div
+                                      className="h-full rounded-full bg-[#23a35d]"
+                                      style={{ width: `${Math.round((confidence ?? 0) * 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${resultItemStatusClassName(slot)}`}>
+                                    {resultItemStatusLabel(slot)}
+                                  </span>
+                                  {slot.unresolvedEventDay ? (
+                                    <div className="text-xs text-[#a6621a]">日期待确认</div>
+                                  ) : null}
+                                </div>
+                                <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpandedResultItem(slot.id)}
+                                    className="admin-studio-button-secondary px-3 py-2 text-xs"
+                                  >
+                                    {expanded ? '收起' : '编辑'}
+                                  </button>
+                                  <button type="button" onClick={() => removeTimetableSlot(slot.id)} className="admin-studio-button-danger px-3 py-2 text-xs">
+                                    删除
+                                  </button>
+                                </div>
+                              </div>
+                              {expanded ? renderTimetableEditPanel(slot) : null}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="px-5 py-10 text-center text-sm text-black/45">当前搜索条件下没有匹配的识别结果。</div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="admin-reference-soft-card p-4 text-sm text-black/48">
-                    Start timetable recognition to append editable timetable results here.
+                    开始识别 timetable 后，这里会追加可确认、可编辑的结果列表。
                   </div>
                 )}
                   </div>

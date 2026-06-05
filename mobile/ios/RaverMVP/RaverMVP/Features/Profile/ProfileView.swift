@@ -4303,6 +4303,8 @@ private final class ContributionCenterViewModel: ObservableObject {
     @Published var summary: WebContributionCenterSummary?
     @Published var items: [WebContributionHistoryItem] = []
     @Published var selectedFilter: Filter = .all
+    @Published var currentPage = 1
+    @Published var requestedPageText = "1"
     @Published var phase: LoadPhase = .idle
     @Published var isLoading = false
     @Published var isLoadingMore = false
@@ -4313,18 +4315,57 @@ private final class ContributionCenterViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let contentRepository: ProfileContentRepository
-    private let pageSize = 20
-    private let offlineSnapshotStorageKey = "raver.profile.contributionCenter.offlineSnapshot.v1"
-    private var nextCursor: String?
-    private var hasMore = false
+    private let pageSize = 10
+    private let offlineSnapshotStorageKey = "raver.profile.contributionCenter.offlineSnapshot.v2"
     private var loadedInitial = false
+    private var loadedPages: [Int: ContributionCenterLoadedPage] = [:]
+    private var pendingPageRequest: Int?
 
     init(contentRepository: ProfileContentRepository) {
         self.contentRepository = contentRepository
     }
 
     var hasVisibleContent: Bool {
-        summary != nil || !items.isEmpty
+        summary != nil || !loadedPages.isEmpty || !items.isEmpty
+    }
+
+    var canGoToPreviousPage: Bool {
+        currentPage > 1
+    }
+
+    var canGoToNextPage: Bool {
+        guard let page = loadedPages[currentPage] else { return false }
+        return currentPage < maxLoadedPage || page.hasMore
+    }
+
+    var pageIndicatorText: String {
+        if let totalPages {
+            return LT(
+                "第 \(currentPage) / \(totalPages) 页",
+                "Page \(currentPage) / \(totalPages)",
+                "\(currentPage) / \(totalPages) ページ"
+            )
+        }
+        return LT(
+            "第 \(currentPage) 页",
+            "Page \(currentPage)",
+            "\(currentPage) ページ"
+        )
+    }
+
+    var pageSizeText: String {
+        LT("每页 10 条", "10 items per page", "1ページ 10 件")
+    }
+
+    private var maxLoadedPage: Int {
+        loadedPages.keys.max() ?? 0
+    }
+
+    private var totalPages: Int? {
+        guard let lastPage = loadedPages[maxLoadedPage], !lastPage.hasMore else {
+            return nil
+        }
+        return maxLoadedPage
     }
 
     func loadIfNeeded() async {
@@ -4354,9 +4395,9 @@ private final class ContributionCenterViewModel: ObservableObject {
             )
             let (loadedSummary, page) = try await (summaryTask, pageTask)
             summary = loadedSummary
-            items = page.items
-            nextCursor = page.pageInfo.nextCursor
-            hasMore = page.pageInfo.hasMore
+            loadedPages = [1: ContributionCenterLoadedPage(page: 1, payload: page)]
+            applyLoadedPage(1)
+            pendingPageRequest = nil
             loadedInitial = true
             phase = .success
             bannerMessage = nil
@@ -4413,42 +4454,36 @@ private final class ContributionCenterViewModel: ObservableObject {
         await reload()
     }
 
-    func loadMoreIfNeeded(currentItem item: WebContributionHistoryItem) async {
-        guard hasMore,
-              !isLoadingMore,
-              !isLoading,
-              items.last?.id == item.id else { return }
-        guard let nextCursor, !nextCursor.isEmpty else { return }
+    func goToPreviousPage() {
+        guard canGoToPreviousPage else { return }
+        applyLoadedPage(currentPage - 1)
+    }
 
-        isLoadingMore = true
-        loadMoreErrorMessage = nil
-        defer { isLoadingMore = false }
+    func goToNextPage() async {
+        guard canGoToNextPage else { return }
+        await goToPage(currentPage + 1)
+    }
 
-        do {
-            let page = try await contentRepository.fetchMyContributionHistory(
-                entityType: selectedFilter.rawValue,
-                cursor: nextCursor,
-                limit: pageSize
+    func jumpToRequestedPage() async {
+        let trimmed = requestedPageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let targetPage = Int(trimmed), targetPage > 0 else {
+            errorMessage = LT(
+                "请输入大于 0 的页码。",
+                "Enter a page number greater than 0.",
+                "0 より大きいページ番号を入力してください。"
             )
-            items.append(contentsOf: page.items.filter { candidate in
-                !items.contains(where: { $0.id == candidate.id })
-            })
-            self.nextCursor = page.pageInfo.nextCursor
-            hasMore = page.pageInfo.hasMore
-            persistOfflineSnapshot(for: selectedFilter)
-        } catch {
-            guard !error.isUserInitiatedCancellation else { return }
-            loadMoreErrorMessage = error.userFacingMessage ?? LT(
-                "更多贡献记录加载失败，请稍后重试。",
-                "Failed to load more contributions. Please try again later.",
-                "追加の貢献履歴を読み込めませんでした。時間をおいて再試行してください。"
-            )
+            requestedPageText = "\(currentPage)"
+            return
         }
+        await goToPage(targetPage)
     }
 
     func retryLoadMore() async {
-        guard let item = items.last else { return }
-        await loadMoreIfNeeded(currentItem: item)
+        if let pendingPageRequest {
+            await goToPage(pendingPageRequest)
+        } else if canGoToNextPage {
+            await goToNextPage()
+        }
     }
 
     func dismissBanner() {
@@ -4458,33 +4493,41 @@ private final class ContributionCenterViewModel: ObservableObject {
 
     private func applyCachedPageIfAvailable(for filter: Filter) {
         guard let snapshot = loadOfflineSnapshot(),
-              let cachedPage = snapshot.pages.first(where: { $0.filter == filter.rawValue }) else {
-            items = []
-            nextCursor = nil
-            hasMore = false
-            loadMoreErrorMessage = nil
+              let cachedFilter = snapshot.filters.first(where: { $0.filter == filter.rawValue }) else {
+            resetPaginationState()
             return
         }
 
         summary = snapshot.summary ?? summary
-        items = cachedPage.items
-        nextCursor = cachedPage.nextCursor
-        hasMore = cachedPage.hasMore
+        loadedPages = Dictionary(uniqueKeysWithValues: cachedFilter.pages.map {
+            ($0.page, ContributionCenterLoadedPage(page: $0.page, items: $0.items, nextCursor: $0.nextCursor, hasMore: $0.hasMore))
+        })
+        let fallbackPage = cachedFilter.pages.map(\.page).max() ?? 1
+        applyLoadedPage(min(max(cachedFilter.currentPage, 1), fallbackPage))
         phase = .success
     }
 
     private func persistOfflineSnapshot(for filter: Filter) {
-        var snapshot = loadOfflineSnapshot() ?? ContributionCenterOfflineSnapshot(summary: nil, pages: [], cachedAt: Date())
+        guard !loadedPages.isEmpty || summary != nil else { return }
+
+        var snapshot = loadOfflineSnapshot() ?? ContributionCenterOfflineSnapshot(summary: nil, filters: [], cachedAt: Date())
         snapshot.summary = summary
         snapshot.cachedAt = Date()
-        let nextPage = ContributionCenterOfflinePageSnapshot(
+        let filterSnapshot = ContributionCenterOfflineFilterSnapshot(
             filter: filter.rawValue,
-            items: items,
-            nextCursor: nextCursor,
-            hasMore: hasMore
+            currentPage: currentPage,
+            pages: loadedPages.keys.sorted().compactMap { page in
+                guard let payload = loadedPages[page] else { return nil }
+                return ContributionCenterOfflinePageSnapshot(
+                    page: page,
+                    items: payload.items,
+                    nextCursor: payload.nextCursor,
+                    hasMore: payload.hasMore
+                )
+            }
         )
-        snapshot.pages.removeAll { $0.filter == filter.rawValue }
-        snapshot.pages.append(nextPage)
+        snapshot.filters.removeAll { $0.filter == filter.rawValue }
+        snapshot.filters.append(filterSnapshot)
 
         do {
             let data = try JSONEncoder.raver.encode(snapshot)
@@ -4503,17 +4546,122 @@ private final class ContributionCenterViewModel: ObservableObject {
 
     private func restoreOfflineSnapshot(for filter: Filter) -> Bool {
         guard let snapshot = loadOfflineSnapshot(),
-              let cachedPage = snapshot.pages.first(where: { $0.filter == filter.rawValue }) else {
+              let cachedFilter = snapshot.filters.first(where: { $0.filter == filter.rawValue }) else {
             return false
         }
 
         summary = snapshot.summary
-        items = cachedPage.items
-        nextCursor = cachedPage.nextCursor
-        hasMore = cachedPage.hasMore
+        loadedPages = Dictionary(uniqueKeysWithValues: cachedFilter.pages.map {
+            ($0.page, ContributionCenterLoadedPage(page: $0.page, items: $0.items, nextCursor: $0.nextCursor, hasMore: $0.hasMore))
+        })
+        let fallbackPage = cachedFilter.pages.map(\.page).max() ?? 1
+        applyLoadedPage(min(max(cachedFilter.currentPage, 1), fallbackPage))
         phase = .success
         loadMoreErrorMessage = nil
         return true
+    }
+
+    private func resetPaginationState() {
+        loadedPages = [:]
+        items = []
+        currentPage = 1
+        requestedPageText = "1"
+        pendingPageRequest = nil
+        loadMoreErrorMessage = nil
+    }
+
+    private func applyLoadedPage(_ page: Int) {
+        guard let payload = loadedPages[page] else {
+            return
+        }
+        currentPage = page
+        requestedPageText = "\(page)"
+        items = payload.items
+        pendingPageRequest = nil
+        loadMoreErrorMessage = nil
+        persistOfflineSnapshot(for: selectedFilter)
+    }
+
+    private func goToPage(_ targetPage: Int) async {
+        guard targetPage > 0 else { return }
+        if loadedPages[targetPage] != nil {
+            applyLoadedPage(targetPage)
+            return
+        }
+        guard !isLoadingMore, !isLoading else { return }
+
+        isLoadingMore = true
+        loadMoreErrorMessage = nil
+        pendingPageRequest = targetPage
+        defer { isLoadingMore = false }
+
+        do {
+            let resolution = try await ensurePageLoaded(targetPage)
+            applyLoadedPage(resolution.page)
+            if resolution.exact {
+                errorMessage = nil
+            } else {
+                errorMessage = LT(
+                    "当前只有 \(resolution.page) 页。",
+                    "Only \(resolution.page) pages are available.",
+                    "現在利用できるのは \(resolution.page) ページまでです。"
+                )
+            }
+        } catch {
+            guard !error.isUserInitiatedCancellation else { return }
+            loadMoreErrorMessage = error.userFacingMessage ?? LT(
+                "指定页加载失败，请稍后重试。",
+                "Failed to load the requested page. Please try again later.",
+                "指定したページを読み込めませんでした。時間をおいて再試行してください。"
+            )
+        }
+    }
+
+    private func ensurePageLoaded(_ targetPage: Int) async throws -> ContributionCenterPageResolution {
+        if loadedPages[targetPage] != nil {
+            return ContributionCenterPageResolution(page: targetPage, exact: true)
+        }
+
+        var pageToLoad = maxLoadedPage + 1
+        if pageToLoad <= 0 {
+            pageToLoad = 1
+        }
+
+        while pageToLoad <= targetPage {
+            let cursor: String?
+            if pageToLoad == 1 {
+                cursor = nil
+            } else {
+                guard let previousPage = loadedPages[pageToLoad - 1] else {
+                    break
+                }
+                guard previousPage.hasMore, let nextCursor = previousPage.nextCursor, !nextCursor.isEmpty else {
+                    return ContributionCenterPageResolution(page: previousPage.page, exact: false)
+                }
+                cursor = nextCursor
+            }
+
+            let page = try await contentRepository.fetchMyContributionHistory(
+                entityType: selectedFilter.rawValue,
+                cursor: cursor,
+                limit: pageSize
+            )
+            loadedPages[pageToLoad] = ContributionCenterLoadedPage(page: pageToLoad, payload: page)
+            persistOfflineSnapshot(for: selectedFilter)
+
+            if pageToLoad == targetPage {
+                return ContributionCenterPageResolution(page: pageToLoad, exact: true)
+            }
+
+            if !page.pageInfo.hasMore {
+                return ContributionCenterPageResolution(page: pageToLoad, exact: false)
+            }
+
+            pageToLoad += 1
+        }
+
+        let resolvedPage = min(maxLoadedPage, max(1, targetPage))
+        return ContributionCenterPageResolution(page: resolvedPage, exact: loadedPages[resolvedPage] != nil && resolvedPage == targetPage)
     }
 
     private func isRequestTimeoutError(_ error: Error) -> Bool {
@@ -4562,15 +4710,47 @@ private final class ContributionCenterViewModel: ObservableObject {
 
     private struct ContributionCenterOfflineSnapshot: Codable {
         var summary: WebContributionCenterSummary?
-        var pages: [ContributionCenterOfflinePageSnapshot]
+        var filters: [ContributionCenterOfflineFilterSnapshot]
         var cachedAt: Date
     }
 
-    private struct ContributionCenterOfflinePageSnapshot: Codable {
+    private struct ContributionCenterOfflineFilterSnapshot: Codable {
         var filter: String
+        var currentPage: Int
+        var pages: [ContributionCenterOfflinePageSnapshot]
+    }
+
+    private struct ContributionCenterOfflinePageSnapshot: Codable {
+        var page: Int
         var items: [WebContributionHistoryItem]
         var nextCursor: String?
         var hasMore: Bool
+    }
+
+    private struct ContributionCenterLoadedPage {
+        var page: Int
+        var items: [WebContributionHistoryItem]
+        var nextCursor: String?
+        var hasMore: Bool
+
+        init(page: Int, payload: WebContributionHistoryPage) {
+            self.page = page
+            self.items = payload.items
+            self.nextCursor = payload.pageInfo.nextCursor
+            self.hasMore = payload.pageInfo.hasMore
+        }
+
+        init(page: Int, items: [WebContributionHistoryItem], nextCursor: String?, hasMore: Bool) {
+            self.page = page
+            self.items = items
+            self.nextCursor = nextCursor
+            self.hasMore = hasMore
+        }
+    }
+
+    private struct ContributionCenterPageResolution {
+        var page: Int
+        var exact: Bool
     }
 }
 
@@ -4774,27 +4954,108 @@ struct ContributionCenterView: View {
                             contributionHistoryRow(item)
                         }
                         .buttonStyle(.plain)
-                        .task {
-                            await viewModel.loadMoreIfNeeded(currentItem: item)
-                        }
                     }
 
+                    historyPaginationControls
+                }
+            }
+        }
+    }
+
+    private var historyPaginationControls: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(viewModel.pageIndicatorText)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(viewModel.pageSizeText)
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    Spacer()
                     if viewModel.isLoadingMore {
                         ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
+                            .controlSize(.small)
                     }
+                }
 
-                    if let loadMoreErrorMessage = viewModel.loadMoreErrorMessage {
-                        ScreenStatusBanner(
-                            message: loadMoreErrorMessage,
-                            style: .error,
-                            actionTitle: LT("重试", "Retry", "再試行"),
-                            action: {
-                                Task { await viewModel.retryLoadMore() }
-                            }
-                        )
+                HStack(spacing: 10) {
+                    Button {
+                        viewModel.goToPreviousPage()
+                    } label: {
+                        Text(LT("上一页", "Previous", "前へ"))
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(viewModel.canGoToPreviousPage ? RaverTheme.primaryText : RaverTheme.secondaryText.opacity(0.55))
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(RaverTheme.card)
+                    )
+                    .disabled(!viewModel.canGoToPreviousPage || viewModel.isLoadingMore || viewModel.isLoading)
+
+                    Button {
+                        Task { await viewModel.goToNextPage() }
+                    } label: {
+                        Text(LT("下一页", "Next", "次へ"))
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(viewModel.canGoToNextPage ? .white : .white.opacity(0.7))
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(viewModel.canGoToNextPage ? RaverTheme.accent : RaverTheme.accent.opacity(0.45))
+                    )
+                    .disabled(!viewModel.canGoToNextPage || viewModel.isLoadingMore || viewModel.isLoading)
+                }
+
+                HStack(spacing: 10) {
+                    TextField(LT("页码", "Page", "ページ"), text: $viewModel.requestedPageText)
+                        .keyboardType(.numberPad)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .multilineTextAlignment(.center)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(RaverTheme.card)
+                        )
+
+                    Button {
+                        Task { await viewModel.jumpToRequestedPage() }
+                    } label: {
+                        Text(LT("跳转", "Go", "移動"))
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(RaverTheme.primaryText)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(RaverTheme.card)
+                    )
+                    .disabled(viewModel.isLoadingMore || viewModel.isLoading)
+                }
+
+                if let loadMoreErrorMessage = viewModel.loadMoreErrorMessage {
+                    ScreenStatusBanner(
+                        message: loadMoreErrorMessage,
+                        style: .error,
+                        actionTitle: LT("重试", "Retry", "再試行"),
+                        action: {
+                            Task { await viewModel.retryLoadMore() }
+                        }
+                    )
                 }
             }
         }

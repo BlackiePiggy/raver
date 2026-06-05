@@ -5925,7 +5925,7 @@ const runCozeLineupWorker = async (
       items?: Array<{ displayName?: string; performerNames?: string[] }>;
     };
     lineupInfo = (normalized.items ?? []).flatMap((item, index) => {
-      const musician = sanitizeOptionalText(item.displayName) || (item.performerNames ?? []).join(' b2b ');
+      const musician = sanitizeOptionalText(item.displayName) || (item.performerNames ?? [])[0] || (item.performerNames ?? []).join(' / ');
       return musician
         ? [{ id: `lineup-ai-${index + 1}`, musician, time: null, stage: null, date: null }]
         : [];
@@ -6002,6 +6002,41 @@ const extractLineupV2RawJson = (value: unknown): unknown => {
   return walk(parsed) ?? parsed;
 };
 
+const splitLineupActNamesByKeyword = (value: string, keyword: 'B2B' | 'B3B'): string[] | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const token = `__LINEUP_${keyword}_TOKEN__`;
+  const replaced = trimmed.replace(new RegExp(`\\s*${keyword}\\s*`, 'gi'), token);
+  const parts = replaced
+    .split(token)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parts.length > 1 ? parts : null;
+};
+
+const parseExplicitLineupActFromText = (
+  value: string
+): { performerType: 'solo' | 'b2b' | 'b3b'; performerNames: string[] } | null => {
+  const b3bNames = splitLineupActNamesByKeyword(value, 'B3B');
+  if (b3bNames?.length) return { performerType: 'b3b', performerNames: b3bNames.slice(0, 3) };
+  const b2bNames = splitLineupActNamesByKeyword(value, 'B2B');
+  if (b2bNames?.length) return { performerType: 'b2b', performerNames: b2bNames.slice(0, 2) };
+  return null;
+};
+
+const composeLineupDisplayName = (performerType: 'solo' | 'b2b' | 'b3b', performerNames: string[]): string => {
+  const names = performerNames.map((item) => item.trim()).filter(Boolean);
+  if (!names.length) return '';
+  switch (performerType) {
+    case 'b3b':
+      return names.slice(0, 3).join(' B3B ');
+    case 'b2b':
+      return names.slice(0, 2).join(' B2B ');
+    default:
+      return names[0];
+  }
+};
+
 const normalizeLineupAIResult = (value: unknown): unknown => {
   if (!value || typeof value !== 'object') return { items: [], warnings: [], unparsedTexts: [] };
   const input = value as Record<string, unknown>;
@@ -6014,22 +6049,34 @@ const normalizeLineupAIResult = (value: unknown): unknown => {
       const performerNames = Array.isArray(performerNamesRaw)
         ? performerNamesRaw.map((name) => (typeof name === 'string' ? name.trim() : '')).filter(Boolean)
         : [];
-      const displayName = sanitizeOptionalText(record.display_name ?? record.displayName) || performerNames.join(' b2b ');
-      if (!displayName && performerNames.length === 0) return null;
+      const rawDisplayName = sanitizeOptionalText(record.display_name ?? record.displayName);
+      const rawText = sanitizeOptionalText(record.raw_text ?? record.rawText) ?? rawDisplayName ?? '';
       const performerTypeRaw = sanitizeOptionalText(record.performer_type ?? record.performerType)?.toLowerCase();
-      const performerType = performerTypeRaw === 'b3b' || performerNames.length >= 3
-        ? 'b3b'
-        : performerTypeRaw === 'b2b' || performerNames.length === 2
-          ? 'b2b'
-          : 'solo';
+      const explicitAct = parseExplicitLineupActFromText(rawDisplayName ?? rawText);
+      let performerType: 'solo' | 'b2b' | 'b3b' = 'solo';
+      let normalizedPerformerNames: string[] = [];
+
+      if (performerTypeRaw === 'b3b' || explicitAct?.performerType === 'b3b') {
+        performerType = 'b3b';
+        normalizedPerformerNames = (performerNames.length >= 3 ? performerNames : explicitAct?.performerNames ?? performerNames).slice(0, 3);
+      } else if (performerTypeRaw === 'b2b' || explicitAct?.performerType === 'b2b') {
+        performerType = 'b2b';
+        normalizedPerformerNames = (performerNames.length >= 2 ? performerNames : explicitAct?.performerNames ?? performerNames).slice(0, 2);
+      } else {
+        const soloName = rawDisplayName || rawText || performerNames.join(' / ');
+        normalizedPerformerNames = soloName ? [soloName] : [];
+      }
+
+      const displayName = rawDisplayName || composeLineupDisplayName(performerType, normalizedPerformerNames);
+      if (!displayName && normalizedPerformerNames.length === 0) return null;
       const orderRaw = Number(record.order);
       const confidenceRaw = Number(record.confidence);
       return {
         order: Number.isFinite(orderRaw) ? Math.max(1, Math.floor(orderRaw)) : index + 1,
         performerType,
-        performerNames,
+        performerNames: normalizedPerformerNames,
         displayName,
-        rawText: sanitizeOptionalText(record.raw_text ?? record.rawText) ?? displayName,
+        rawText: rawText || displayName,
         confidence: Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : null,
         notes: Array.isArray(record.notes)
           ? record.notes.map((note) => (typeof note === 'string' ? note.trim() : '')).filter(Boolean)
