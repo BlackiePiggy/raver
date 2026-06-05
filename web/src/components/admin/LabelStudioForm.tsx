@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
@@ -89,6 +90,36 @@ export default function LabelStudioForm({
     });
   };
 
+  const updateGenres = (updater: (current: string[]) => string[]) => {
+    setDraft((current) => ({
+      ...current,
+      genres: updater(current.genres),
+    }));
+    setErrors((current) => {
+      if (!current.name) return current;
+      const next = { ...current };
+      delete next.name;
+      return next;
+    });
+  };
+
+  const handleGenreChange = (index: number, value: string) => {
+    updateGenres((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+  };
+
+  const handleGenreAdd = () => {
+    updateGenres((current) =>
+      current.length >= INPUT_LIMITS.label.genresMaxItems ? current : [...current, '']
+    );
+  };
+
+  const handleGenreRemove = (index: number) => {
+    updateGenres((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length ? next : [''];
+    });
+  };
+
   const handleSubmit = async () => {
     const nextErrors = validateLabelStudioDraft(draft);
     setErrors(nextErrors);
@@ -148,10 +179,7 @@ export default function LabelStudioForm({
             <div className="admin-studio-pastel-sand px-4 py-3 text-sm">
               <div className="text-black/42">风格标签</div>
               <div className="mt-1 font-semibold text-[#071110]">
-                {draft.genresText
-                  .split(',')
-                  .map((item) => item.trim())
-                  .filter(Boolean).length || 0}
+                {draft.genres.map((item) => item.trim()).filter(Boolean).length}
               </div>
             </div>
             <div className="admin-studio-pastel-rose px-4 py-3 text-sm">
@@ -241,15 +269,17 @@ export default function LabelStudioForm({
 
       <Section title="品牌资料" description="把厂牌简介、预览文案、风格和时间地点信息集中维护。">
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="风格 Tags" hint={`${countText(draft.genresText)}/${INPUT_LIMITS.label.genre * 10}`}>
-            <input
-              value={draft.genresText}
-              onChange={(event) => updateDraft('genresText', event.target.value)}
-              className={textInputClassName}
-              placeholder="melodic techno, house"
-              maxLength={INPUT_LIMITS.label.genre * 10}
-            />
-          </Field>
+          <DynamicStringListField
+            label="风格 Tags"
+            items={draft.genres}
+            placeholder="例如：Melodic Techno"
+            hint="逐条维护风格标签，避免依赖逗号或换行拆分。"
+            itemMax={INPUT_LIMITS.label.genre}
+            maxItems={INPUT_LIMITS.label.genresMaxItems}
+            onChange={handleGenreChange}
+            onAdd={handleGenreAdd}
+            onRemove={handleGenreRemove}
+          />
           <Field label="Genres Preview" hint={`${countText(draft.genresPreview)}/${INPUT_LIMITS.label.genresPreview}`}>
             <input
               value={draft.genresPreview}

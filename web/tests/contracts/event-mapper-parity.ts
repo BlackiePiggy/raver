@@ -1062,7 +1062,7 @@ const tests: TestCase[] = [
       assert.equal(draft.backgroundUrl, "https://cdn.example.com/label/background.jpg");
       assert.equal(draft.soundcloudFollowers, "12345");
       assert.equal(draft.likes, "54321");
-      assert.equal(draft.genresText, "techno, melodic techno");
+      assert.deepEqual(draft.genres, ["techno", "melodic techno"]);
 
       const payload = mapLabelStudioDraftToCreateInput({
         ...draft,

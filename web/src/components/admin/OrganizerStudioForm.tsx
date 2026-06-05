@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ChangeEvent, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import {
   LocalizedTextField,
   MultilingualEditorOverlay,
@@ -70,6 +71,7 @@ function ImageDropZone({
   onChange,
   onRemove,
   acceptMultiple = false,
+  compact = false,
 }: {
   label: string;
   previewUrl?: string;
@@ -77,11 +79,12 @@ function ImageDropZone({
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemove?: () => void;
   acceptMultiple?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="admin-studio-soft p-4">
+    <div className={compact ? 'admin-studio-soft max-w-[200px] p-3' : 'admin-studio-soft p-4'}>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-black/48">{label}</p>
+        <p className={compact ? 'text-xs text-black/48' : 'text-sm text-black/48'}>{label}</p>
         {previewUrl && onRemove ? (
           <button type="button" onClick={onRemove} className="text-xs text-black/48">
             移除
@@ -89,15 +92,33 @@ function ImageDropZone({
         ) : null}
       </div>
       {previewUrl ? (
-        <div className="relative mt-3 aspect-video overflow-hidden rounded-[20px] border border-[#e8eceb]">
-          <Image src={previewUrl} alt={label} fill className="object-cover" sizes="640px" />
+        <div
+          className={
+            compact
+              ? 'relative mt-2 aspect-[4/3] overflow-hidden rounded-2xl border border-[#e8eceb]'
+              : 'relative mt-3 aspect-video overflow-hidden rounded-[20px] border border-[#e8eceb]'
+          }
+        >
+          <Image src={previewUrl} alt={label} fill className="object-cover" sizes={compact ? '200px' : '640px'} />
         </div>
       ) : (
-        <div className="mt-3 flex aspect-video items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#edf7f2,#f7efda)] text-sm text-black/42">
+        <div
+          className={
+            compact
+              ? 'mt-2 flex aspect-[4/3] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#edf7f2,#f7efda)] px-3 text-center text-xs text-black/42'
+              : 'mt-3 flex aspect-video items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#edf7f2,#f7efda)] text-sm text-black/42'
+          }
+        >
           暂无图片
         </div>
       )}
-      <label className="admin-studio-button-secondary mt-4 inline-flex cursor-pointer px-4 py-3 text-sm">
+      <label
+        className={
+          compact
+            ? 'admin-studio-button-secondary mt-3 inline-flex cursor-pointer px-3 py-2 text-xs'
+            : 'admin-studio-button-secondary mt-4 inline-flex cursor-pointer px-4 py-3 text-sm'
+        }
+      >
         {uploading ? '上传中...' : acceptMultiple ? '选择图片' : '上传图片'}
         <input
           type="file"
@@ -112,7 +133,6 @@ function ImageDropZone({
 }
 
 const textInputClassName = 'admin-studio-input';
-const textAreaClassName = 'admin-studio-textarea min-h-28';
 const commonUrlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
 
 type OrganizerStudioFormProps = {
@@ -210,6 +230,30 @@ export default function OrganizerStudioForm({
       ...current,
       extraLinks: current.extraLinks.filter((item) => item.id !== id),
     }));
+  };
+
+  const updateAliases = (updater: (current: string[]) => string[]) => {
+    setDraft((current) => ({
+      ...current,
+      aliases: updater(current.aliases),
+    }));
+  };
+
+  const handleAliasChange = (index: number, value: string) => {
+    updateAliases((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+  };
+
+  const handleAliasAdd = () => {
+    updateAliases((current) =>
+      current.length >= INPUT_LIMITS.organizer.aliasesMaxItems ? current : [...current, '']
+    );
+  };
+
+  const handleAliasRemove = (index: number) => {
+    updateAliases((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length ? next : [''];
+    });
   };
 
   const handleSingleImageUpload = async (
@@ -386,8 +430,8 @@ export default function OrganizerStudioForm({
       ) : null}
 
       <Section
-        title="媒体与证明"
-        description="先对齐头像、背景图和证明图片上传。头像是必填主视觉；官方链接和证明图片满足其一即可通过基础校验。"
+        title="媒体素材"
+        description="先对齐头像和背景图。头像是必填主视觉，用于目录列表和详情页的基础展示。"
       >
         <div className="grid gap-4 xl:grid-cols-2">
           <Field label="主办方头像" error={errors.avatarImage}>
@@ -416,47 +460,6 @@ export default function OrganizerStudioForm({
             {draft.backgroundImage?.origin === 'persisted' ? (
               <div className="mt-2 text-xs text-black/40">
                 当前为已持久化背景图。移除会解除本次编辑中的引用，但不会直接删除历史资源文件。
-              </div>
-            ) : null}
-          </Field>
-        </div>
-
-        <div className="mt-5">
-          <Field label="证明图片" error={errors.links}>
-            <ImageDropZone
-              label="可上传营业执照、官方截图、海报或其他可验证主办方身份的素材"
-              uploading={uploadingProof}
-              onChange={(event) => void handleProofUpload(event)}
-              acceptMultiple
-            />
-            {draft.proofImages.length ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {draft.proofImages.map((image, index) => (
-                  <div key={`${image.remoteUrl}-${index}`} className="admin-reference-soft-card p-3">
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-border-secondary">
-                      <Image
-                        src={image.remoteUrl}
-                        alt={image.fileName}
-                        fill
-                        className="object-cover"
-                        sizes="320px"
-                      />
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0 text-xs text-black/42">
-                        <div className="truncate">{image.fileName}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleProofRemove(index)}
-                        disabled={deletingProofIndexes.includes(index)}
-                        className="text-xs text-black/48 hover:text-[#071110]"
-                      >
-                        {deletingProofIndexes.includes(index) ? '移除中...' : '移除'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             ) : null}
           </Field>
@@ -490,15 +493,17 @@ export default function OrganizerStudioForm({
             />
           </Field>
 
-          <Field label="别名（逗号或换行分隔）" hint={`${countText(draft.aliasesText, true)}/${INPUT_LIMITS.organizer.alias * 10}`}>
-            <textarea
-              value={draft.aliasesText}
-              onChange={(event) => updateDraft('aliasesText', event.target.value)}
-              className={textAreaClassName}
-              placeholder={'Tomorrowland Belgium\nTomorrowland Brasil'}
-              maxLength={INPUT_LIMITS.organizer.alias * 10}
-            />
-          </Field>
+          <DynamicStringListField
+            label="别名"
+            items={draft.aliases}
+            placeholder="例如：Tomorrowland Belgium"
+            hint="点击加号新增一行，支持按条目单独删除。"
+            itemMax={INPUT_LIMITS.organizer.alias}
+            maxItems={INPUT_LIMITS.organizer.aliasesMaxItems}
+            onChange={handleAliasChange}
+            onAdd={handleAliasAdd}
+            onRemove={handleAliasRemove}
+          />
 
           <LocalizedTextField
             label="国家"
@@ -710,6 +715,56 @@ export default function OrganizerStudioForm({
             </div>
           )}
         </div>
+      </Section>
+
+      <Section
+        title="证明材料"
+        description="证明图片放在提交确认前集中检查。可上传营业执照、官方截图、海报或其他可验证主办方身份的素材。"
+      >
+        <Field label="证明图片" error={errors.links}>
+          <div className="flex flex-wrap items-start gap-4">
+            <ImageDropZone
+              label="补充主办方证明素材"
+              uploading={uploadingProof}
+              onChange={(event) => void handleProofUpload(event)}
+              acceptMultiple
+              compact
+            />
+            {draft.proofImages.length ? (
+              <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {draft.proofImages.map((image, index) => (
+                  <div
+                    key={`${image.remoteUrl}-${index}`}
+                    className="admin-reference-soft-card max-w-[180px] p-2"
+                  >
+                    <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border-secondary">
+                      <Image
+                        src={image.remoteUrl}
+                        alt={image.fileName}
+                        fill
+                        className="object-cover"
+                        sizes="180px"
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0 text-[11px] text-black/42">
+                        <div className="truncate">{image.fileName}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleProofRemove(index)}
+                        disabled={deletingProofIndexes.includes(index)}
+                        className="text-[11px] text-black/48 hover:text-[#071110]"
+                      >
+                        {deletingProofIndexes.includes(index) ? '移除中...' : '移除'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </Field>
       </Section>
 
       <Section

@@ -8,7 +8,7 @@ export type LabelStudioDraft = {
   founderName: string;
   foundedAt: string;
   founderDjId: string;
-  genresText: string;
+  genres: string[];
   genresPreview: string;
   latestReleaseListing: string;
   locationPeriod: string;

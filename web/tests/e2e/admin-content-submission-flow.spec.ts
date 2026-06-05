@@ -449,9 +449,11 @@ test('Web Admin brand create -> review -> edit detail backfill flow works', asyn
   await page.locator('input[type="file"]').nth(1).setInputFiles(createImageFile('brand-background.png'));
   await page.locator('input[type="file"]').nth(2).setInputFiles(createImageFile('brand-proof.png'));
 
-  await page.getByPlaceholder('例如：Tomorrowland').fill('回填测试主办方');
+  await page.getByPlaceholder('例如：Tomorrowland').nth(0).fill('回填测试主办方');
   await page.getByLabel('简称').fill('RBT');
-  await page.getByLabel('别名（逗号或换行分隔）').fill('RBT One\nRBT Two');
+  await page.getByPlaceholder('例如：Tomorrowland Belgium').fill('RBT One');
+  await page.getByRole('button', { name: '添加一行' }).click();
+  await page.getByPlaceholder('例如：Tomorrowland Belgium').nth(1).fill('RBT Two');
   await page.getByPlaceholder('例如：比利时').fill('日本');
   await page.getByPlaceholder('例如：Boom').fill('东京');
   await page.getByLabel('成立年份').fill('2018');
@@ -483,9 +485,10 @@ test('Web Admin brand create -> review -> edit detail backfill flow works', asyn
   await page.getByRole('link', { name: '打开已入库内容' }).click();
 
   await expect(page).toHaveURL(/\/admin\/content\/organizers\/brand-approved-001\/edit/);
-  await expect(page.getByPlaceholder('例如：Tomorrowland')).toHaveValue('回填测试主办方');
+  await expect(page.getByPlaceholder('例如：Tomorrowland').nth(0)).toHaveValue('回填测试主办方');
   await expect(page.getByLabel('简称')).toHaveValue('RBT');
-  await expect(page.getByLabel('别名（逗号或换行分隔）')).toHaveValue('RBT One\nRBT Two');
+  await expect(page.getByPlaceholder('例如：Tomorrowland Belgium').nth(0)).toHaveValue('RBT One');
+  await expect(page.getByPlaceholder('例如：Tomorrowland Belgium').nth(1)).toHaveValue('RBT Two');
   await expect(page.getByPlaceholder('例如：比利时')).toHaveValue('日本');
   await expect(page.getByPlaceholder('例如：Boom')).toHaveValue('东京');
   await expect(page.getByLabel('成立年份')).toHaveValue('2018');

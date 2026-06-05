@@ -38,8 +38,8 @@ const normalizedLocalizedText = (
 const primaryText = (value: OrganizerStudioLocalizedText): string =>
   normalizeSingleLine(value.zh) || normalizeSingleLine(value.en) || normalizeSingleLine(value.ja) || normalizeSingleLine(value.enFull);
 
-const splitAliases = (value: string): string[] =>
-  trimArrayItems(value.split(/[\n,]/), INPUT_LIMITS.organizer.alias).slice(0, 20);
+const normalizeStringArray = (value: string[], itemMax: number, maxItems: number): string[] =>
+  trimArrayItems(value, itemMax).slice(0, maxItems);
 
 const inferLinkTitle = (rawUrl: string): string => {
   try {
@@ -74,7 +74,11 @@ export const mapOrganizerStudioDraftToCreateInput = (
   const countryI18n = normalizedLocalizedText(draft.country, INPUT_LIMITS.organizer.country);
   const cityI18n = normalizedLocalizedText(draft.city, INPUT_LIMITS.organizer.city);
   const descriptionI18n = normalizedLocalizedText(draft.introduction, INPUT_LIMITS.organizer.introduction, true);
-  const aliases = splitAliases(draft.aliasesText);
+  const aliases = normalizeStringArray(
+    draft.aliases,
+    INPUT_LIMITS.organizer.alias,
+    INPUT_LIMITS.organizer.aliasesMaxItems
+  );
   const links = normalizedLinks(draft.extraLinks);
   const imageAssets = [
     draft.avatarImage

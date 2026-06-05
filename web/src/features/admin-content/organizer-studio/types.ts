@@ -25,7 +25,7 @@ export type OrganizerStudioDraft = {
   id: string;
   name: OrganizerStudioLocalizedText;
   abbreviation: string;
-  aliasesText: string;
+  aliases: string[];
   country: OrganizerStudioLocalizedText;
   city: OrganizerStudioLocalizedText;
   foundedYear: string;

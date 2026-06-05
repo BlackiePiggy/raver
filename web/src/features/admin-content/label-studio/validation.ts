@@ -25,8 +25,11 @@ export const validateLabelStudioDraft = (
   if (draft.foundedAt.trim() && countText(draft.foundedAt) > INPUT_LIMITS.label.foundedAt) {
     errors.name = errors.name || `成立时间不能超过 ${INPUT_LIMITS.label.foundedAt} 个字符`;
   }
-  if (draft.genresText.trim() && countText(draft.genresText) > INPUT_LIMITS.label.genre * 10) {
-    errors.name = errors.name || '风格标签内容过长，请精简后再提交';
+  if (draft.genres.length > INPUT_LIMITS.label.genresMaxItems) {
+    errors.name = errors.name || `风格标签最多填写 ${INPUT_LIMITS.label.genresMaxItems} 项`;
+  }
+  if (draft.genres.some((item) => countText(item) > INPUT_LIMITS.label.genre)) {
+    errors.name = errors.name || `风格标签单项不能超过 ${INPUT_LIMITS.label.genre} 个字符`;
   }
   if (draft.genresPreview.trim() && countText(draft.genresPreview) > INPUT_LIMITS.label.genresPreview) {
     errors.name = errors.name || `Genres Preview 不能超过 ${INPUT_LIMITS.label.genresPreview} 个字符`;

@@ -70,8 +70,12 @@ export const validateOrganizerStudioDraft = (
     errors.name = errors.name || `简称不能超过 ${INPUT_LIMITS.organizer.abbreviation} 个字符`;
   }
 
-  if (draft.aliasesText.trim() && countText(draft.aliasesText, true) > INPUT_LIMITS.organizer.alias * 10) {
-    errors.name = errors.name || '别名内容过长，请精简后再提交';
+  if (draft.aliases.length > INPUT_LIMITS.organizer.aliasesMaxItems) {
+    errors.name = errors.name || `别名最多填写 ${INPUT_LIMITS.organizer.aliasesMaxItems} 项`;
+  }
+
+  if (draft.aliases.some((item) => countText(item) > INPUT_LIMITS.organizer.alias)) {
+    errors.name = errors.name || `别名单项不能超过 ${INPUT_LIMITS.organizer.alias} 个字符`;
   }
 
   if (country && countText(country) > INPUT_LIMITS.organizer.country) {
