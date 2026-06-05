@@ -74,6 +74,14 @@ export const INPUT_LIMITS = {
     introduction: 4000,
     demoSubmissionDisplay: 80,
   },
+  genre: {
+    name: 120,
+    slug: 80,
+    sortOrder: 20,
+    description: 4000,
+    example: 2000,
+    keyArtistName: 120,
+  },
 } as const;
 
 export const USERNAME_PATTERN = /^[a-z0-9._]+$/;

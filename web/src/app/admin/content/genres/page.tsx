@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { ChevronDown, ChevronRight, Languages, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import EditableEntityBindingCard from '@/components/admin/EditableEntityBindingCard';
 import {
   MultilingualEditorOverlay,
@@ -12,6 +13,7 @@ import {
   localizedTextFilledLocaleLabels,
 } from '@/components/admin/LocalizedTextEditor';
 import { genreAdminApi, type GenreAdminNode, type GenreKeyArtistBinding } from '@/features/admin-content/genre-admin';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 
 const flattenTree = (items: GenreAdminNode[]): GenreAdminNode[] =>
   items.flatMap((item) => [item, ...flattenTree(item.children ?? [])]);
@@ -122,14 +124,14 @@ export default function AdminGenresPage() {
     setActiveLocalizedField(field);
   };
 
-  const loadTree = async (preferredId?: string) => {
+  const loadTree = useCallback(async (preferredId?: string) => {
     setLoading(true);
     setError('');
     try {
       const payload = await genreAdminApi.fetchTree();
       setTree(payload.items);
       const nextFlat = flattenTree(payload.items);
-      const nextId = (preferredId ?? selectedId) || nextFlat[0]?.id || '';
+      const nextId = preferredId || nextFlat[0]?.id || '';
       setSelectedId(nextId);
       setExpandedIds((current) => {
         const next = new Set(current);
@@ -140,15 +142,15 @@ export default function AdminGenresPage() {
         return next;
       });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load genre tree.');
+      setError(nextError instanceof Error ? nextError.message : '加载风格树失败。');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadTree();
-  }, []);
+  }, [loadTree]);
 
   useEffect(() => {
     if (!selectedNode) return;
@@ -200,10 +202,10 @@ export default function AdminGenresPage() {
           }))
           .filter((item) => item.name),
       });
-      setNotice('Updated genre content.');
+      setNotice('风格内容已更新。');
       await loadTree(selectedNode.id);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to update genre content.');
+      setError(nextError instanceof Error ? nextError.message : '更新风格内容失败。');
     } finally {
       setSaving(false);
     }
@@ -216,10 +218,10 @@ export default function AdminGenresPage() {
     setNotice('');
     try {
       await genreAdminApi.deleteNode(selectedNode.id);
-      setNotice('Deleted genre node.');
+      setNotice('风格节点已删除。');
       await loadTree();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to delete genre node.');
+      setError(nextError instanceof Error ? nextError.message : '删除风格节点失败。');
     } finally {
       setSaving(false);
     }
@@ -231,10 +233,10 @@ export default function AdminGenresPage() {
     setNotice('');
     try {
       const result = await genreAdminApi.autoMatchKeyArtists();
-      setNotice(`Auto-match finished: matched ${result.matched} of ${result.totalArtists}, updated ${result.updatedGenres} genres.`);
+      setNotice(`自动匹配完成：共匹配 ${result.matched}/${result.totalArtists} 位艺人，更新了 ${result.updatedGenres} 条风格。`);
       await loadTree(selectedId);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to auto-match key artists.');
+      setError(nextError instanceof Error ? nextError.message : '自动匹配代表艺人失败。');
     } finally {
       setSaving(false);
     }
@@ -272,15 +274,15 @@ export default function AdminGenresPage() {
 
   return (
     <AdminContentLayout
-      title="Genre Management"
-      description="Manage hierarchical genre nodes, multilingual descriptions, and reusable DJ bindings for key artists."
+      title="风格管理"
+      description="维护风格层级树、多语言描述，以及可复用的代表艺人 DJ 绑定。"
       actions={
         <>
           <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-            Back to Content Console
+            返回内容后台
           </Link>
           <Link href="/admin/content/genres/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
-            New Genre
+            新建风格
           </Link>
         </>
       }
@@ -293,11 +295,11 @@ export default function AdminGenresPage() {
           <section className="admin-reference-card p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-[20px] font-semibold text-[#111827]">Genre Tree</h2>
-                <div className="mt-1 text-sm text-black/48">Expand multiple levels and inspect full genre paths.</div>
+                <h2 className="text-[20px] font-semibold text-[#111827]">风格树</h2>
+                <div className="mt-1 text-sm text-black/48">支持展开多级节点并查看完整路径。</div>
               </div>
               <button type="button" className="rounded-full border border-[#d7ded9] px-4 py-2 text-sm" onClick={handleAutoMatch} disabled={saving}>
-                Auto-match Key Artists
+                自动匹配代表艺人
               </button>
             </div>
 
@@ -316,7 +318,7 @@ export default function AdminGenresPage() {
                   ))}
                 </div>
               ) : (
-                <div className="admin-reference-soft-card p-4 text-sm text-black/48">{loading ? 'Loading...' : 'No genre data yet.'}</div>
+                <div className="admin-reference-soft-card p-4 text-sm text-black/48">{loading ? '加载中...' : '暂无风格数据。'}</div>
               )}
             </div>
           </section>
@@ -324,28 +326,28 @@ export default function AdminGenresPage() {
           <section className="admin-reference-card p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-[20px] font-semibold text-[#111827]">Node Editor</h2>
-                <div className="mt-1 text-sm text-black/48">{selectedNode ? selectedNode.path : 'Select a node from the tree.'}</div>
+                <h2 className="text-[20px] font-semibold text-[#111827]">节点编辑</h2>
+                <div className="mt-1 text-sm text-black/48">{selectedNode ? selectedNode.path : '请先从左侧风格树中选择一个节点。'}</div>
               </div>
               <button type="button" className="rounded-full border border-[#e8eceb] bg-white px-4 py-2 text-sm" disabled={!selectedNode || saving} onClick={handleDeleteNode}>
-                Delete Node
+                删除节点
               </button>
             </div>
 
             {selectedNode ? (
               <div className="mt-4 space-y-5">
                 <div className="admin-reference-soft-card p-4 text-sm text-black/65">
-                  <div>Name: {selectedNode.name}</div>
-                  <div className="mt-1">Path: {selectedNode.path}</div>
+                  <div>名称：{selectedNode.name}</div>
+                  <div className="mt-1">路径：{selectedNode.path}</div>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
                   <div className="admin-reference-soft-card p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-[#111827]">Description</div>
+                        <div className="text-sm font-semibold text-[#111827]">风格描述</div>
                         <div className="mt-1 text-xs text-black/48">
-                          Filled locales: {localizedTextFilledLocaleLabels(descriptionValue).join(' / ') || 'None'}
+                          已填写语言：{localizedTextFilledLocaleLabels(descriptionValue).join(' / ') || '暂无'}
                         </div>
                       </div>
                       <button
@@ -355,21 +357,21 @@ export default function AdminGenresPage() {
                       >
                         <span className="inline-flex items-center gap-2">
                           <Languages className="h-4 w-4" />
-                          Languages
+                          多语言
                         </span>
                       </button>
                     </div>
                     <div className="mt-3 rounded-[16px] border border-[#e8eceb] bg-white px-4 py-3 text-sm leading-7 text-[#111827]">
-                      {descriptionValue.zh || 'No Chinese description yet.'}
+                      {descriptionValue.zh || '还没有中文描述。'}
                     </div>
                   </div>
 
                   <div className="admin-reference-soft-card p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-[#111827]">Example</div>
+                        <div className="text-sm font-semibold text-[#111827]">风格示例</div>
                         <div className="mt-1 text-xs text-black/48">
-                          Filled locales: {localizedTextFilledLocaleLabels(exampleValue).join(' / ') || 'None'}
+                          已填写语言：{localizedTextFilledLocaleLabels(exampleValue).join(' / ') || '暂无'}
                         </div>
                       </div>
                       <button
@@ -379,47 +381,53 @@ export default function AdminGenresPage() {
                       >
                         <span className="inline-flex items-center gap-2">
                           <Languages className="h-4 w-4" />
-                          Languages
+                          多语言
                         </span>
                       </button>
                     </div>
                     <div className="mt-3 rounded-[16px] border border-[#e8eceb] bg-white px-4 py-3 text-sm leading-7 text-[#111827]">
-                      {exampleValue.zh || 'No example yet.'}
+                      {exampleValue.zh || '还没有示例内容。'}
                     </div>
                   </div>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
                   <label className="block">
-                    <div className="mb-2 text-sm font-semibold text-[#111827]">Spotify Track URL</div>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="Spotify track URL"
-                      value={spotifyTrackURL}
-                      onChange={(event) => setSpotifyTrackURL(event.target.value)}
-                    />
+                    <div className="mb-2 text-sm font-semibold text-[#111827]">Spotify 曲目链接</div>
+                    <AdminCountedControl count={countText(spotifyTrackURL)} maxLength={INPUT_LIMITS.common.url}>
+                      <input
+                        className="admin-studio-input"
+                        placeholder="Spotify 曲目链接"
+                        value={spotifyTrackURL}
+                        maxLength={INPUT_LIMITS.common.url}
+                        onChange={(event) => setSpotifyTrackURL(event.target.value)}
+                      />
+                    </AdminCountedControl>
                   </label>
                   <label className="block">
-                    <div className="mb-2 text-sm font-semibold text-[#111827]">Wikipedia URL</div>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="Wikipedia URL"
-                      value={wikipediaURL}
-                      onChange={(event) => setWikipediaURL(event.target.value)}
-                    />
+                    <div className="mb-2 text-sm font-semibold text-[#111827]">Wikipedia 链接</div>
+                    <AdminCountedControl count={countText(wikipediaURL)} maxLength={INPUT_LIMITS.common.url}>
+                      <input
+                        className="admin-studio-input"
+                        placeholder="Wikipedia 链接"
+                        value={wikipediaURL}
+                        maxLength={INPUT_LIMITS.common.url}
+                        onChange={(event) => setWikipediaURL(event.target.value)}
+                      />
+                    </AdminCountedControl>
                   </label>
                 </div>
 
                 <div className="admin-reference-soft-card p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-[#111827]">Key Artists</div>
-                      <div className="mt-1 text-xs text-black/48">Each row keeps its own artist name and a single DJ binding.</div>
+                      <div className="text-sm font-semibold text-[#111827]">代表艺人</div>
+                      <div className="mt-1 text-xs text-black/48">每一行保留一个艺人名称，并绑定一个 DJ。</div>
                     </div>
                     <button type="button" className="rounded-full border border-[#d7ded9] bg-white px-3 py-2 text-sm text-[#18211f]" onClick={addKeyArtistDraft}>
                       <span className="inline-flex items-center gap-2">
                         <Plus className="h-4 w-4" />
-                        Add Artist
+                        添加艺人
                       </span>
                     </button>
                   </div>
@@ -438,18 +446,19 @@ export default function AdminGenresPage() {
                       return (
                         <EditableEntityBindingCard
                           key={item.id}
-                          header={`Key Artist #${index + 1}`}
+                          header={`代表艺人 #${index + 1}`}
                           name={item.name}
                           nameValue={item.name}
-                          namePlaceholder="Artist name"
+                          namePlaceholder="艺人名称"
+                          nameMaxLength={INPUT_LIMITS.genre.keyArtistName}
                           bindingKind="dj"
                           binding={currentBinding}
                           seedQuery={item.name}
-                          bindingTitle="Bound DJ"
-                          bindingEmptyLabel="This key artist is not linked to a DJ yet."
+                          bindingTitle="已绑定 DJ"
+                          bindingEmptyLabel="当前代表艺人还没有关联到库内 DJ。"
                           confirmedMeta={null}
-                          boundLabel="Bound"
-                          unboundLabel="Unbound"
+                          boundLabel="已绑定"
+                          unboundLabel="未绑定"
                           onNameChange={(value) => updateKeyArtistDraft(item.id, { name: value })}
                           onAddBinding={(value) =>
                             updateKeyArtistDraft(item.id, {
@@ -475,18 +484,18 @@ export default function AdminGenresPage() {
 
                     {!keyArtistDrafts.length ? (
                       <div className="rounded-[16px] border border-dashed border-[#d7ded9] px-4 py-6 text-sm text-black/48">
-                        No key artists yet. Use the button above to add one.
+                        暂无代表艺人，可通过上方按钮按需添加。
                       </div>
                     ) : null}
                   </div>
                 </div>
 
                 <button type="button" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white" disabled={saving} onClick={handleSaveContent}>
-                  {saving ? 'Saving...' : 'Save node content'}
+                  {saving ? '保存中...' : '保存节点内容'}
                 </button>
               </div>
             ) : (
-              <div className="admin-reference-soft-card mt-4 p-4 text-sm text-black/48">{loading ? 'Loading...' : 'Select a genre node to inspect details.'}</div>
+              <div className="admin-reference-soft-card mt-4 p-4 text-sm text-black/48">{loading ? '加载中...' : '请先选择一个风格节点查看详情。'}</div>
             )}
           </section>
         </div>
@@ -494,18 +503,20 @@ export default function AdminGenresPage() {
 
       <MultilingualEditorOverlay
         open={activeLocalizedField === 'description'}
-        title="Genre Description"
+        title="风格描述"
         kind="textarea"
         value={descriptionValue}
+        maxLength={INPUT_LIMITS.genre.description}
         onChange={(locale, value) => updateLocalizedValue('description', locale, value)}
         onClose={() => setActiveLocalizedField(null)}
       />
 
       <MultilingualEditorOverlay
         open={activeLocalizedField === 'example'}
-        title="Genre Example"
+        title="风格示例"
         kind="textarea"
         value={exampleValue}
+        maxLength={INPUT_LIMITS.genre.example}
         onChange={(locale, value) => updateLocalizedValue('example', locale, value)}
         onClose={() => setActiveLocalizedField(null)}
       />

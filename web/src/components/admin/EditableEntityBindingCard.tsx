@@ -2,8 +2,10 @@
 
 import { Pencil, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import type { EntityBindingKind, EntityBindingValue } from '@/components/admin/EntityBindingSearch';
+import { countText } from '@/lib/input-rules';
 
 type EditableEntityBindingCardProps = {
   header: ReactNode;
@@ -11,6 +13,7 @@ type EditableEntityBindingCardProps = {
   name: string;
   nameValue: string;
   namePlaceholder: string;
+  nameMaxLength?: number;
   bindingKind: EntityBindingKind;
   binding: EntityBindingValue | null;
   seedQuery?: string;
@@ -39,6 +42,7 @@ export default function EditableEntityBindingCard({
   name,
   nameValue,
   namePlaceholder,
+  nameMaxLength,
   bindingKind,
   binding,
   seedQuery = '',
@@ -125,12 +129,24 @@ export default function EditableEntityBindingCard({
             {badge}
           </div>
 
-          <input
-            className="w-full rounded-[16px] border border-[#e8eceb] bg-white px-3 py-3 text-sm"
-            placeholder={namePlaceholder}
-            value={nameValue}
-            onChange={(event) => onNameChange(event.target.value)}
-          />
+          {typeof nameMaxLength === 'number' ? (
+            <AdminCountedControl count={countText(nameValue)} maxLength={nameMaxLength}>
+              <input
+                className="w-full rounded-[16px] border border-[#e8eceb] bg-white px-3 py-3 text-sm"
+                placeholder={namePlaceholder}
+                value={nameValue}
+                onChange={(event) => onNameChange(event.target.value)}
+                maxLength={nameMaxLength}
+              />
+            </AdminCountedControl>
+          ) : (
+            <input
+              className="w-full rounded-[16px] border border-[#e8eceb] bg-white px-3 py-3 text-sm"
+              placeholder={namePlaceholder}
+              value={nameValue}
+              onChange={(event) => onNameChange(event.target.value)}
+            />
+          )}
 
           <EntityBindingField
             kind={bindingKind}

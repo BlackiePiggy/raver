@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import {
   LocalizedTextField,
@@ -16,6 +17,7 @@ import {
   type GenreAdminNode,
   type GenreKeyArtistBinding,
 } from '@/features/admin-content/genre-admin';
+import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 
 type ParentMode = 'root' | 'existing' | 'new';
 type ParentPlacementMode = 'root' | 'existing';
@@ -124,7 +126,7 @@ export default function AdminGenreCreatePage() {
       const payload = await genreAdminApi.fetchTree();
       setTree(payload.items);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load genre tree.');
+      setError(nextError instanceof Error ? nextError.message : '加载风格树失败。');
     } finally {
       setLoadingTree(false);
     }
@@ -166,11 +168,11 @@ export default function AdminGenreCreatePage() {
   };
 
   const validateBeforeSubmit = (): string | null => {
-    if (!draft.name.trim()) return 'Genre name is required.';
-    if (draft.parentMode === 'existing' && !draft.parentId) return 'Please select an existing parent genre.';
-    if (draft.parentMode === 'new' && !newParentDraft.name.trim()) return 'Please enter the new parent genre name.';
+    if (!draft.name.trim()) return '请先填写风格名称。';
+    if (draft.parentMode === 'existing' && !draft.parentId) return '请选择一个现有父风格。';
+    if (draft.parentMode === 'new' && !newParentDraft.name.trim()) return '请先填写新父风格名称。';
     if (draft.parentMode === 'new' && newParentDraft.placementMode === 'existing' && !newParentDraft.ancestorParentId) {
-      return 'Please select where the new parent genre should be placed.';
+      return '请先选择新父风格要挂载到哪个现有节点下。';
     }
     return null;
   };
@@ -246,7 +248,7 @@ export default function AdminGenreCreatePage() {
 
       await loadTree();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to create genre.');
+      setError(nextError instanceof Error ? nextError.message : '创建风格失败。');
     } finally {
       setSaving(false);
     }
@@ -254,21 +256,21 @@ export default function AdminGenreCreatePage() {
 
   return (
     <AdminContentLayout
-      title="New Genre"
-      description="Create a root node, create under an existing parent, or create a brand-new parent first, then finish the new genre with localized content and DJ bindings."
+      title="新建风格"
+      description="支持直接创建根节点、挂到现有父节点下，或先新建一个父节点，再继续完成多语言内容和 DJ 绑定。"
       actions={
         <>
           <Link
             href="/admin/content"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            Back to Content Console
+            返回内容后台
           </Link>
           <Link
             href="/admin/content/genres"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
-            Back to Genres
+            返回风格目录
           </Link>
         </>
       }
@@ -276,15 +278,15 @@ export default function AdminGenreCreatePage() {
       {created ? (
         <section className="space-y-5">
           <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#edf7f2_0%,#ffffff_100%)] p-6 text-[#2f4027]">
-            <div className="text-xs uppercase tracking-[0.14em] text-[#52705c]">Created</div>
+            <div className="text-xs uppercase tracking-[0.14em] text-[#52705c]">已创建</div>
             <div className="mt-3 text-[30px] font-semibold tracking-[-0.04em] text-[#111827]">
-              Genre created successfully
+              风格创建成功
             </div>
             <div className="mt-4 space-y-2 text-sm leading-7 text-[#4a5b52]">
-              <div>Name: {created.genre.name}</div>
-              <div>Path: {created.genre.path}</div>
+              <div>名称：{created.genre.name}</div>
+              <div>路径：{created.genre.path}</div>
               <div>ID: {created.genre.id}</div>
-              {created.parent ? <div>New parent created: {created.parent.path}</div> : null}
+              {created.parent ? <div>同步创建父节点：{created.parent.path}</div> : null}
             </div>
           </div>
 
@@ -293,14 +295,14 @@ export default function AdminGenreCreatePage() {
               href="/admin/content/genres"
               className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
             >
-              Back to Genres
+              返回风格目录
             </Link>
             <button
               type="button"
               onClick={resetForm}
               className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
             >
-              Create another genre
+              继续创建下一条
             </button>
           </div>
         </section>
@@ -315,10 +317,10 @@ export default function AdminGenreCreatePage() {
           <section className="admin-reference-card p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-xs uppercase tracking-[0.14em] text-black/38">Structure</div>
-                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">Placement and hierarchy</h2>
+                <div className="text-xs uppercase tracking-[0.14em] text-black/38">结构</div>
+                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">挂载位置与层级</h2>
                 <div className="mt-1 text-sm text-black/48">
-                  Choose whether this genre is a root node, a child of an existing node, or a child of a new parent created in the same flow.
+                  选择把当前风格创建为根节点、挂到现有节点下，或在同一流程里先创建一个新的父节点。
                 </div>
               </div>
               <button
@@ -327,7 +329,7 @@ export default function AdminGenreCreatePage() {
                 disabled={!canSubmit}
                 className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? 'Creating...' : 'Create genre'}
+                {saving ? '创建中...' : '创建风格'}
               </button>
             </div>
 
@@ -335,18 +337,18 @@ export default function AdminGenreCreatePage() {
               {[
                 {
                   key: 'root',
-                  title: 'Root genre',
-                  description: 'Create this genre at the top level of the tree.',
+                  title: '根节点',
+                  description: '把这条风格直接创建在树的顶层。',
                 },
                 {
                   key: 'existing',
-                  title: 'Existing parent',
-                  description: 'Attach the new genre to a current node in the tree.',
+                  title: '现有父节点',
+                  description: '把新风格挂到当前树中的某个已有节点下。',
                 },
                 {
                   key: 'new',
-                  title: 'Create parent first',
-                  description: 'Create a parent node in this flow, then create the new genre under it.',
+                  title: '先创建父节点',
+                  description: '先在本流程里新建一个父节点，再在其下创建当前风格。',
                 },
               ].map((item) => (
                 <button
@@ -374,13 +376,13 @@ export default function AdminGenreCreatePage() {
             {draft.parentMode === 'existing' ? (
               <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <label className="block">
-                  <div className="mb-2 admin-studio-label">Parent genre</div>
+                  <div className="mb-2 admin-studio-label">父风格</div>
                   <select
                     value={draft.parentId}
                     onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))}
                     className="admin-studio-input"
                   >
-                    <option value="">{loadingTree ? 'Loading genre tree...' : 'Select a parent genre'}</option>
+                    <option value="">{loadingTree ? '正在加载风格树...' : '选择一个父风格'}</option>
                     {flatNodes.map((item) => (
                       <option key={item.id} value={item.id}>
                         {`${'— '.repeat(item.depth)}${item.name}`}
@@ -389,67 +391,76 @@ export default function AdminGenreCreatePage() {
                   </select>
                 </label>
                 <div className="admin-reference-soft-card p-4 text-sm text-black/55">
-                  <div className="text-xs uppercase tracking-[0.14em] text-black/38">Selected parent</div>
-                  <div className="mt-2 font-medium text-[#111827]">{selectedParent?.name || 'No parent selected yet'}</div>
-                  <div className="mt-1 break-words leading-6">{selectedParent?.path || 'Choose a node from the tree to place this genre underneath it.'}</div>
+                  <div className="text-xs uppercase tracking-[0.14em] text-black/38">当前父节点</div>
+                  <div className="mt-2 font-medium text-[#111827]">{selectedParent?.name || '尚未选择父节点'}</div>
+                  <div className="mt-1 break-words leading-6">{selectedParent?.path || '从左侧风格树里选择要挂载到的节点。'}</div>
                 </div>
               </div>
             ) : null}
 
             {draft.parentMode === 'new' ? (
               <div className="mt-5 rounded-[24px] border border-[#e8eceb] bg-[#fbfcfb] p-5">
-                <div className="text-sm font-semibold text-[#111827]">New parent genre</div>
+                <div className="text-sm font-semibold text-[#111827]">新父风格</div>
                 <div className="mt-1 text-sm text-black/48">
-                  This parent will be created first, then the new genre will be created underneath it.
+                  会先创建这个父节点，然后再继续创建当前新风格。
                 </div>
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                  <input
-                    className="admin-studio-input"
-                    placeholder="Parent genre name"
-                    value={newParentDraft.name}
-                    onChange={(event) =>
-                      setNewParentDraft((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="admin-studio-input"
-                    placeholder="Parent slug (optional)"
-                    value={newParentDraft.slug}
-                    onChange={(event) =>
-                      setNewParentDraft((current) => ({
-                        ...current,
-                        slug: event.target.value,
-                      }))
-                    }
-                  />
-                  <input
-                    className="admin-studio-input"
-                    placeholder="Parent sort order (optional)"
-                    value={newParentDraft.sortOrder}
-                    onChange={(event) =>
-                      setNewParentDraft((current) => ({
-                        ...current,
-                        sortOrder: event.target.value,
-                      }))
-                    }
-                  />
+                  <AdminCountedControl count={countText(newParentDraft.name)} maxLength={INPUT_LIMITS.genre.name}>
+                    <input
+                      className="admin-studio-input"
+                      placeholder="父风格名称"
+                      value={newParentDraft.name}
+                      maxLength={INPUT_LIMITS.genre.name}
+                      onChange={(event) =>
+                        setNewParentDraft((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </AdminCountedControl>
+                  <AdminCountedControl count={countText(newParentDraft.slug)} maxLength={INPUT_LIMITS.genre.slug}>
+                    <input
+                      className="admin-studio-input"
+                      placeholder="父风格 slug（可选）"
+                      value={newParentDraft.slug}
+                      maxLength={INPUT_LIMITS.genre.slug}
+                      onChange={(event) =>
+                        setNewParentDraft((current) => ({
+                          ...current,
+                          slug: event.target.value,
+                        }))
+                      }
+                    />
+                  </AdminCountedControl>
+                  <AdminCountedControl count={countText(newParentDraft.sortOrder)} maxLength={INPUT_LIMITS.genre.sortOrder}>
+                    <input
+                      className="admin-studio-input"
+                      placeholder="父风格排序值（可选）"
+                      value={newParentDraft.sortOrder}
+                      maxLength={INPUT_LIMITS.genre.sortOrder}
+                      onChange={(event) =>
+                        setNewParentDraft((current) => ({
+                          ...current,
+                          sortOrder: event.target.value,
+                        }))
+                      }
+                    />
+                  </AdminCountedControl>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {[
                     {
                       key: 'root',
-                      title: 'New root parent',
-                      description: 'Create the new parent at the root level.',
+                      title: '创建为根父节点',
+                      description: '把这个新父节点直接创建到顶层。',
                     },
                     {
                       key: 'existing',
-                      title: 'Place parent under existing node',
-                      description: 'Create the parent under an existing node, then place this genre below it.',
+                      title: '挂到现有节点下',
+                      description: '先把父节点挂到现有节点下，再在其下创建当前风格。',
                     },
                   ].map((item) => (
                     <button
@@ -477,7 +488,7 @@ export default function AdminGenreCreatePage() {
                 {newParentDraft.placementMode === 'existing' ? (
                   <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <label className="block">
-                      <div className="mb-2 admin-studio-label">Parent for the new parent</div>
+                      <div className="mb-2 admin-studio-label">新父节点的上级节点</div>
                       <select
                         value={newParentDraft.ancestorParentId}
                         onChange={(event) =>
@@ -488,7 +499,7 @@ export default function AdminGenreCreatePage() {
                         }
                         className="admin-studio-input"
                       >
-                        <option value="">{loadingTree ? 'Loading genre tree...' : 'Select an existing node'}</option>
+                        <option value="">{loadingTree ? '正在加载风格树...' : '选择一个现有节点'}</option>
                         {flatNodes.map((item) => (
                           <option key={item.id} value={item.id}>
                             {`${'— '.repeat(item.depth)}${item.name}`}
@@ -497,12 +508,12 @@ export default function AdminGenreCreatePage() {
                       </select>
                     </label>
                     <div className="admin-reference-soft-card p-4 text-sm text-black/55">
-                      <div className="text-xs uppercase tracking-[0.14em] text-black/38">New parent will live under</div>
+                      <div className="text-xs uppercase tracking-[0.14em] text-black/38">新父节点将挂载到</div>
                       <div className="mt-2 font-medium text-[#111827]">
-                        {selectedAncestorParent?.name || 'No node selected yet'}
+                        {selectedAncestorParent?.name || '尚未选择节点'}
                       </div>
                       <div className="mt-1 break-words leading-6">
-                        {selectedAncestorParent?.path || 'Choose an existing node if the new parent should not live at the root level.'}
+                        {selectedAncestorParent?.path || '如果新父节点不在顶层，请先选择它要挂载到的现有节点。'}
                       </div>
                     </div>
                   </div>
@@ -512,55 +523,71 @@ export default function AdminGenreCreatePage() {
           </section>
 
           <section className="admin-reference-card p-6">
-            <div className="text-xs uppercase tracking-[0.14em] text-black/38">Details</div>
-            <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">Genre profile</h2>
+            <div className="text-xs uppercase tracking-[0.14em] text-black/38">详情</div>
+            <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">风格资料</h2>
             <div className="mt-1 text-sm text-black/48">
-              Fill the structural fields, multilingual content, and reference links that should exist at create time.
+              在创建时补齐基础结构字段、多语言文案和参考链接。
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-3">
-              <input
-                className="admin-studio-input"
-                placeholder="Genre name"
-                value={draft.name}
-                onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-              />
-              <input
-                className="admin-studio-input"
-                placeholder="Slug (optional)"
-                value={draft.slug}
-                onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))}
-              />
-              <input
-                className="admin-studio-input"
-                placeholder="Sort order (optional)"
-                value={draft.sortOrder}
-                onChange={(event) => setDraft((current) => ({ ...current, sortOrder: event.target.value }))}
-              />
+              <AdminCountedControl count={countText(draft.name)} maxLength={INPUT_LIMITS.genre.name}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="风格名称"
+                  value={draft.name}
+                  maxLength={INPUT_LIMITS.genre.name}
+                  onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                />
+              </AdminCountedControl>
+              <AdminCountedControl count={countText(draft.slug)} maxLength={INPUT_LIMITS.genre.slug}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="Slug（可选）"
+                  value={draft.slug}
+                  maxLength={INPUT_LIMITS.genre.slug}
+                  onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))}
+                />
+              </AdminCountedControl>
+              <AdminCountedControl count={countText(draft.sortOrder)} maxLength={INPUT_LIMITS.genre.sortOrder}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="排序值（可选）"
+                  value={draft.sortOrder}
+                  maxLength={INPUT_LIMITS.genre.sortOrder}
+                  onChange={(event) => setDraft((current) => ({ ...current, sortOrder: event.target.value }))}
+                />
+              </AdminCountedControl>
             </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <input
-                className="admin-studio-input"
-                placeholder="Spotify track URL (optional)"
-                value={draft.spotifyTrackURL}
-                onChange={(event) => setDraft((current) => ({ ...current, spotifyTrackURL: event.target.value }))}
-              />
-              <input
-                className="admin-studio-input"
-                placeholder="Wikipedia URL (optional)"
-                value={draft.wikipediaURL}
-                onChange={(event) => setDraft((current) => ({ ...current, wikipediaURL: event.target.value }))}
-              />
+              <AdminCountedControl count={countText(draft.spotifyTrackURL)} maxLength={INPUT_LIMITS.common.url}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="Spotify 曲目链接（可选）"
+                  value={draft.spotifyTrackURL}
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={(event) => setDraft((current) => ({ ...current, spotifyTrackURL: event.target.value }))}
+                />
+              </AdminCountedControl>
+              <AdminCountedControl count={countText(draft.wikipediaURL)} maxLength={INPUT_LIMITS.common.url}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="Wikipedia 链接（可选）"
+                  value={draft.wikipediaURL}
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={(event) => setDraft((current) => ({ ...current, wikipediaURL: event.target.value }))}
+                />
+              </AdminCountedControl>
             </div>
 
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
               <LocalizedTextField
-                label="Description"
+                label="风格描述"
                 kind="textarea"
                 value={draft.descriptionValue}
-                placeholder="Primary Chinese description"
-                hint="Use the language button to add English, Japanese, and full English variants."
+                placeholder="先填写中文描述"
+                hint="右侧按钮可继续补充英文、日文和英文全称版本。"
+                maxLength={INPUT_LIMITS.genre.description}
                 onPrimaryChange={(value) =>
                   setDraft((current) => ({
                     ...current,
@@ -570,11 +597,12 @@ export default function AdminGenreCreatePage() {
                 onOpenOverlay={() => setActiveLocalizedField('description')}
               />
               <LocalizedTextField
-                label="Example"
+                label="示例"
                 kind="textarea"
                 value={draft.exampleValue}
-                placeholder="Primary Chinese example"
-                hint="Add example phrases or representative context for this genre."
+                placeholder="填写中文示例或代表性语境"
+                hint="用于补充典型表达、代表作品或场景。"
+                maxLength={INPUT_LIMITS.genre.example}
                 onPrimaryChange={(value) =>
                   setDraft((current) => ({
                     ...current,
@@ -589,10 +617,10 @@ export default function AdminGenreCreatePage() {
           <section className="admin-reference-card p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs uppercase tracking-[0.14em] text-black/38">Bindings</div>
-                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">Key artists</h2>
+                <div className="text-xs uppercase tracking-[0.14em] text-black/38">绑定</div>
+                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">代表艺人</h2>
                 <div className="mt-1 text-sm text-black/48">
-                  Keep one artist per row, preserve the visible artist name, and optionally bind each row to a DJ in the library.
+                  每行保留一个艺人名称，并可选绑定到库内 DJ。
                 </div>
               </div>
               <button
@@ -602,7 +630,7 @@ export default function AdminGenreCreatePage() {
               >
                 <span className="inline-flex items-center gap-2">
                   <Plus className="h-4 w-4" />
-                  Add artist
+                  添加艺人
                 </span>
               </button>
             </div>
@@ -621,23 +649,28 @@ export default function AdminGenreCreatePage() {
                 return (
                   <div key={item.id} className="rounded-[18px] border border-[#e8eceb] bg-white p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-[#111827]">Key artist #{index + 1}</div>
+                      <div className="text-sm font-semibold text-[#111827]">代表艺人 #{index + 1}</div>
                       <button
                         type="button"
                         className="rounded-full border border-[#ead6d6] bg-white p-2 text-[#8b3a3a]"
                         onClick={() => removeKeyArtistDraft(item.id)}
-                        aria-label="Remove key artist"
+                        aria-label="删除代表艺人"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
 
-                    <input
-                      className="admin-reference-soft-card mt-3 w-full px-4 py-3 text-sm"
-                      placeholder="Artist name"
-                      value={item.name}
-                      onChange={(event) => updateKeyArtistDraft(item.id, { name: event.target.value })}
-                    />
+                    <div className="mt-3">
+                      <AdminCountedControl count={countText(item.name)} maxLength={INPUT_LIMITS.genre.keyArtistName}>
+                        <input
+                          className="admin-reference-soft-card w-full px-4 py-3 text-sm"
+                          placeholder="艺人名称"
+                          value={item.name}
+                          maxLength={INPUT_LIMITS.genre.keyArtistName}
+                          onChange={(event) => updateKeyArtistDraft(item.id, { name: event.target.value })}
+                        />
+                      </AdminCountedControl>
+                    </div>
 
                     <div className="mt-3">
                       <EntityBindingField
@@ -645,8 +678,8 @@ export default function AdminGenreCreatePage() {
                         mode="single"
                         seedQuery={item.name}
                         items={currentBinding ? [currentBinding] : []}
-                        title="Bound DJ"
-                        emptyLabel="This artist is not bound to a DJ yet."
+                        title="已绑定 DJ"
+                        emptyLabel="当前艺人还没有绑定到库内 DJ。"
                         onAdd={(value) =>
                           updateKeyArtistDraft(item.id, {
                             djId: value.id,
@@ -672,7 +705,7 @@ export default function AdminGenreCreatePage() {
 
               {!keyArtistDrafts.length ? (
                 <div className="rounded-[16px] border border-dashed border-[#d7ded9] px-4 py-6 text-sm text-black/48">
-                  No key artists yet. Add rows only if this genre needs representative artists at create time.
+                  暂无代表艺人。如确有需要，再为当前风格补充代表艺人行。
                 </div>
               ) : null}
             </div>
@@ -682,18 +715,20 @@ export default function AdminGenreCreatePage() {
 
       <MultilingualEditorOverlay
         open={activeLocalizedField === 'description'}
-        title="Genre Description"
+        title="风格描述"
         kind="textarea"
         value={draft.descriptionValue}
+        maxLength={INPUT_LIMITS.genre.description}
         onChange={(locale, value) => updateLocalizedValue('description', locale, value)}
         onClose={() => setActiveLocalizedField(null)}
       />
 
       <MultilingualEditorOverlay
         open={activeLocalizedField === 'example'}
-        title="Genre Example"
+        title="风格示例"
         kind="textarea"
         value={draft.exampleValue}
+        maxLength={INPUT_LIMITS.genre.example}
         onChange={(locale, value) => updateLocalizedValue('example', locale, value)}
         onClose={() => setActiveLocalizedField(null)}
       />

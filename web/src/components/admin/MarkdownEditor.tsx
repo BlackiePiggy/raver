@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, type Ref } from 'react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import { countText } from '@/lib/input-rules';
 
 type MarkdownEditorProps = {
   label?: string;
@@ -191,16 +193,18 @@ export default function MarkdownEditor({
       </div>
 
       <div className={gridClassName || 'grid gap-4 xl:grid-cols-2'}>
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          maxLength={maxLength}
-          className={`admin-studio-textarea ${minHeightClassName} ${
-            scrollablePanels ? 'resize-none overflow-y-auto' : ''
-          }`}
-          placeholder={placeholder}
-        />
+        <AdminCountedControl count={countText(value, true)} maxLength={maxLength} multiline>
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            maxLength={maxLength}
+            className={`admin-studio-textarea ${minHeightClassName} ${
+              scrollablePanels ? 'resize-none overflow-y-auto' : ''
+            }`}
+            placeholder={placeholder}
+          />
+        </AdminCountedControl>
 
         <div
           className={`overflow-hidden rounded-[24px] border border-[#e8eceb] bg-white ${

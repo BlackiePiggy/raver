@@ -1,6 +1,7 @@
 'use client';
 
 import { Plus, Trash2 } from 'lucide-react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import { countText } from '@/lib/input-rules';
 
 const countFilledItems = (items: string[]) => items.map((item) => item.trim()).filter(Boolean).length;
@@ -32,7 +33,7 @@ export default function DynamicStringListField({
   error,
   addLabel = '添加一行',
 }: DynamicStringListFieldProps) {
-  const combinedHint = [hint, `已填写 ${countFilledItems(items)}/${maxItems} 项，每项最多 ${itemMax} 个字符`]
+  const combinedHint = [hint, `已填写 ${countFilledItems(items)}/${maxItems} 项`]
     .filter(Boolean)
     .join(' ');
 
@@ -43,14 +44,15 @@ export default function DynamicStringListField({
         {items.map((item, index) => (
           <div key={`${label}-${index}`} className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <input
-                value={item}
-                onChange={(event) => onChange(index, event.target.value)}
-                className="admin-studio-input"
-                placeholder={placeholder}
-                maxLength={itemMax}
-              />
-              <div className="mt-2 text-xs text-black/40">{countText(item)}/{itemMax}</div>
+              <AdminCountedControl count={countText(item)} maxLength={itemMax}>
+                <input
+                  value={item}
+                  onChange={(event) => onChange(index, event.target.value)}
+                  className="admin-studio-input"
+                  placeholder={placeholder}
+                  maxLength={itemMax}
+                />
+              </AdminCountedControl>
             </div>
             <button
               type="button"

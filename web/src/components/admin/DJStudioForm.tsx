@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import { LocalizedTextField, MultilingualEditorOverlay, type LocalizedFieldKind, type LocalizedLocaleKey } from '@/components/admin/LocalizedTextEditor';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
@@ -188,9 +189,6 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
 };
 
 const countFilledItems = (items: string[]) => items.map((item) => item.trim()).filter(Boolean).length;
-const commonUrlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
-const commonIdHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.externalId}`;
-
 type DJStudioFormProps = {
   mode: 'create' | 'edit';
   djId?: string;
@@ -541,44 +539,70 @@ export default function DJStudioForm({
       {currentStep === 1 ? (
         <Section title="平台链接" description="尽量补齐官方平台入口和关键统计。证明图作为素材已经统一放在资料页管理。">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Spotify 编号" hint={commonIdHint(draft.spotifyId)}>
-              <input value={draft.spotifyId} onChange={(event) => updateDraft('spotifyId', event.target.value)} className={textInputClassName} placeholder="spotify artist id" maxLength={INPUT_LIMITS.common.externalId} />
+            <Field label="Spotify 编号">
+              <AdminCountedControl count={countText(draft.spotifyId)} maxLength={INPUT_LIMITS.common.externalId}>
+                <input value={draft.spotifyId} onChange={(event) => updateDraft('spotifyId', event.target.value)} className={textInputClassName} placeholder="spotify artist id" maxLength={INPUT_LIMITS.common.externalId} />
+              </AdminCountedControl>
             </Field>
-            <Field label="Spotify 链接" error={errors.links} hint={commonUrlHint(draft.spotifyUrl)}>
-              <input value={draft.spotifyUrl} onChange={(event) => updateDraft('spotifyUrl', event.target.value)} className={textInputClassName} placeholder="https://open.spotify.com/artist/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="Spotify 链接" error={errors.links}>
+              <AdminCountedControl count={countText(draft.spotifyUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.spotifyUrl} onChange={(event) => updateDraft('spotifyUrl', event.target.value)} className={textInputClassName} placeholder="https://open.spotify.com/artist/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="Apple Music 编号" hint={commonIdHint(draft.appleMusicId)}>
-              <input value={draft.appleMusicId} onChange={(event) => updateDraft('appleMusicId', event.target.value)} className={textInputClassName} placeholder="apple music id" maxLength={INPUT_LIMITS.common.externalId} />
+            <Field label="Apple Music 编号">
+              <AdminCountedControl count={countText(draft.appleMusicId)} maxLength={INPUT_LIMITS.common.externalId}>
+                <input value={draft.appleMusicId} onChange={(event) => updateDraft('appleMusicId', event.target.value)} className={textInputClassName} placeholder="apple music id" maxLength={INPUT_LIMITS.common.externalId} />
+              </AdminCountedControl>
             </Field>
-            <Field label="Instagram 链接" hint={commonUrlHint(draft.instagramUrl)}>
-              <input value={draft.instagramUrl} onChange={(event) => updateDraft('instagramUrl', event.target.value)} className={textInputClassName} placeholder="https://instagram.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="Instagram 链接">
+              <AdminCountedControl count={countText(draft.instagramUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.instagramUrl} onChange={(event) => updateDraft('instagramUrl', event.target.value)} className={textInputClassName} placeholder="https://instagram.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="Facebook 链接" hint={commonUrlHint(draft.facebookUrl)}>
-              <input value={draft.facebookUrl} onChange={(event) => updateDraft('facebookUrl', event.target.value)} className={textInputClassName} placeholder="https://facebook.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="Facebook 链接">
+              <AdminCountedControl count={countText(draft.facebookUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.facebookUrl} onChange={(event) => updateDraft('facebookUrl', event.target.value)} className={textInputClassName} placeholder="https://facebook.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="SoundCloud 链接" hint={commonUrlHint(draft.soundcloudUrl)}>
-              <input value={draft.soundcloudUrl} onChange={(event) => updateDraft('soundcloudUrl', event.target.value)} className={textInputClassName} placeholder="https://soundcloud.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="SoundCloud 链接">
+              <AdminCountedControl count={countText(draft.soundcloudUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.soundcloudUrl} onChange={(event) => updateDraft('soundcloudUrl', event.target.value)} className={textInputClassName} placeholder="https://soundcloud.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="SoundCloud 编号" hint={commonIdHint(draft.soundcloudId)}>
-              <input value={draft.soundcloudId} onChange={(event) => updateDraft('soundcloudId', event.target.value)} className={textInputClassName} placeholder="soundcloud user id" maxLength={INPUT_LIMITS.common.externalId} />
+            <Field label="SoundCloud 编号">
+              <AdminCountedControl count={countText(draft.soundcloudId)} maxLength={INPUT_LIMITS.common.externalId}>
+                <input value={draft.soundcloudId} onChange={(event) => updateDraft('soundcloudId', event.target.value)} className={textInputClassName} placeholder="soundcloud user id" maxLength={INPUT_LIMITS.common.externalId} />
+              </AdminCountedControl>
             </Field>
-            <Field label="X / Twitter 链接" hint={commonUrlHint(draft.twitterUrl)}>
-              <input value={draft.twitterUrl} onChange={(event) => updateDraft('twitterUrl', event.target.value)} className={textInputClassName} placeholder="https://x.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="X / Twitter 链接">
+              <AdminCountedControl count={countText(draft.twitterUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.twitterUrl} onChange={(event) => updateDraft('twitterUrl', event.target.value)} className={textInputClassName} placeholder="https://x.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="YouTube 链接" hint={commonUrlHint(draft.youtubeUrl)}>
-              <input value={draft.youtubeUrl} onChange={(event) => updateDraft('youtubeUrl', event.target.value)} className={textInputClassName} placeholder="https://youtube.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="YouTube 链接">
+              <AdminCountedControl count={countText(draft.youtubeUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.youtubeUrl} onChange={(event) => updateDraft('youtubeUrl', event.target.value)} className={textInputClassName} placeholder="https://youtube.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="网易云 URL" hint={commonUrlHint(draft.neteaseUrl)}>
-              <input value={draft.neteaseUrl} onChange={(event) => updateDraft('neteaseUrl', event.target.value)} className={textInputClassName} placeholder="https://music.163.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="网易云 URL">
+              <AdminCountedControl count={countText(draft.neteaseUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.neteaseUrl} onChange={(event) => updateDraft('neteaseUrl', event.target.value)} className={textInputClassName} placeholder="https://music.163.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="QQ 音乐 URL" hint={commonUrlHint(draft.qqMusicUrl)}>
-              <input value={draft.qqMusicUrl} onChange={(event) => updateDraft('qqMusicUrl', event.target.value)} className={textInputClassName} placeholder="https://y.qq.com/..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="QQ 音乐 URL">
+              <AdminCountedControl count={countText(draft.qqMusicUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.qqMusicUrl} onChange={(event) => updateDraft('qqMusicUrl', event.target.value)} className={textInputClassName} placeholder="https://y.qq.com/..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="官网 URL" hint={commonUrlHint(draft.website)}>
-              <input value={draft.website} onChange={(event) => updateDraft('website', event.target.value)} className={textInputClassName} placeholder="https://..." maxLength={INPUT_LIMITS.common.url} />
+            <Field label="官网 URL">
+              <AdminCountedControl count={countText(draft.website)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.website} onChange={(event) => updateDraft('website', event.target.value)} className={textInputClassName} placeholder="https://..." maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
-            <Field label="其他平台 URL" hint={commonUrlHint(draft.otherPlatformUrl)}>
-              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="其他平台链接" maxLength={INPUT_LIMITS.common.url} />
+            <Field label="其他平台 URL">
+              <AdminCountedControl count={countText(draft.otherPlatformUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="其他平台链接" maxLength={INPUT_LIMITS.common.url} />
+              </AdminCountedControl>
             </Field>
             <Field label="Spotify Followers" error={errors.stats}>
               <input value={draft.spotifyFollowers} onChange={(event) => updateDraft('spotifyFollowers', event.target.value)} className={textInputClassName} placeholder="123456" />

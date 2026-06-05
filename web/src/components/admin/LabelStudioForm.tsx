@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
@@ -204,31 +205,37 @@ export default function LabelStudioForm({
       <Section title="身份与视觉" description="先确定厂牌的主名称、slug、国家和三张核心视觉图。">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="厂牌名称" error={errors.name}>
-            <input
-              value={draft.name}
-              onChange={(event) => updateDraft('name', event.target.value)}
-              className={textInputClassName}
-              placeholder="例如：Afterlife"
-              maxLength={INPUT_LIMITS.label.name}
-            />
+            <AdminCountedControl count={countText(draft.name)} maxLength={INPUT_LIMITS.label.name}>
+              <input
+                value={draft.name}
+                onChange={(event) => updateDraft('name', event.target.value)}
+                className={textInputClassName}
+                placeholder="例如：Afterlife"
+                maxLength={INPUT_LIMITS.label.name}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="Slug">
-            <input
-              value={draft.slug}
-              onChange={(event) => updateDraft('slug', event.target.value)}
-              className={textInputClassName}
-              placeholder="afterlife"
-              maxLength={INPUT_LIMITS.label.slug}
-            />
+            <AdminCountedControl count={countText(draft.slug)} maxLength={INPUT_LIMITS.label.slug}>
+              <input
+                value={draft.slug}
+                onChange={(event) => updateDraft('slug', event.target.value)}
+                className={textInputClassName}
+                placeholder="afterlife"
+                maxLength={INPUT_LIMITS.label.slug}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="国家 / 地区">
-            <input
-              value={draft.nation}
-              onChange={(event) => updateDraft('nation', event.target.value)}
-              className={textInputClassName}
-              placeholder="Italy"
-              maxLength={INPUT_LIMITS.label.nation}
-            />
+            <AdminCountedControl count={countText(draft.nation)} maxLength={INPUT_LIMITS.label.nation}>
+              <input
+                value={draft.nation}
+                onChange={(event) => updateDraft('nation', event.target.value)}
+                className={textInputClassName}
+                placeholder="Italy"
+                maxLength={INPUT_LIMITS.label.nation}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="Profile URL">
             <input
@@ -280,53 +287,63 @@ export default function LabelStudioForm({
             onAdd={handleGenreAdd}
             onRemove={handleGenreRemove}
           />
-          <Field label="Genres Preview" hint={`${countText(draft.genresPreview)}/${INPUT_LIMITS.label.genresPreview}`}>
-            <input
-              value={draft.genresPreview}
-              onChange={(event) => updateDraft('genresPreview', event.target.value)}
-              className={textInputClassName}
-              placeholder="Melodic Techno / House"
-              maxLength={INPUT_LIMITS.label.genresPreview}
-            />
+          <Field label="Genres Preview">
+            <AdminCountedControl count={countText(draft.genresPreview)} maxLength={INPUT_LIMITS.label.genresPreview}>
+              <input
+                value={draft.genresPreview}
+                onChange={(event) => updateDraft('genresPreview', event.target.value)}
+                className={textInputClassName}
+                placeholder="Melodic Techno / House"
+                maxLength={INPUT_LIMITS.label.genresPreview}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="Latest Release" hint={`${countText(draft.latestReleaseListing)}/${INPUT_LIMITS.label.latestReleaseListing}`}>
-            <input
-              value={draft.latestReleaseListing}
-              onChange={(event) => updateDraft('latestReleaseListing', event.target.value)}
-              className={textInputClassName}
-              placeholder="Anyma - Genesys"
-              maxLength={INPUT_LIMITS.label.latestReleaseListing}
-            />
+          <Field label="Latest Release">
+            <AdminCountedControl count={countText(draft.latestReleaseListing)} maxLength={INPUT_LIMITS.label.latestReleaseListing}>
+              <input
+                value={draft.latestReleaseListing}
+                onChange={(event) => updateDraft('latestReleaseListing', event.target.value)}
+                className={textInputClassName}
+                placeholder="Anyma - Genesys"
+                maxLength={INPUT_LIMITS.label.latestReleaseListing}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="Location Period" hint={`${countText(draft.locationPeriod)}/${INPUT_LIMITS.label.locationPeriod}`}>
-            <input
-              value={draft.locationPeriod}
-              onChange={(event) => updateDraft('locationPeriod', event.target.value)}
-              className={textInputClassName}
-              placeholder="Milan / 2016-now"
-              maxLength={INPUT_LIMITS.label.locationPeriod}
-            />
+          <Field label="Location Period">
+            <AdminCountedControl count={countText(draft.locationPeriod)} maxLength={INPUT_LIMITS.label.locationPeriod}>
+              <input
+                value={draft.locationPeriod}
+                onChange={(event) => updateDraft('locationPeriod', event.target.value)}
+                className={textInputClassName}
+                placeholder="Milan / 2016-now"
+                maxLength={INPUT_LIMITS.label.locationPeriod}
+              />
+            </AdminCountedControl>
           </Field>
           <div className="lg:col-span-2">
-            <Field label="Introduction Preview" hint={`${countText(draft.introductionPreview, true)}/${INPUT_LIMITS.label.introductionPreview}`}>
-              <textarea
-                value={draft.introductionPreview}
-                onChange={(event) => updateDraft('introductionPreview', event.target.value)}
-                className={textAreaClassName}
-                placeholder="用于列表或卡片的简版简介"
-                maxLength={INPUT_LIMITS.label.introductionPreview}
-              />
+            <Field label="Introduction Preview">
+              <AdminCountedControl count={countText(draft.introductionPreview, true)} maxLength={INPUT_LIMITS.label.introductionPreview} multiline>
+                <textarea
+                  value={draft.introductionPreview}
+                  onChange={(event) => updateDraft('introductionPreview', event.target.value)}
+                  className={textAreaClassName}
+                  placeholder="用于列表或卡片的简版简介"
+                  maxLength={INPUT_LIMITS.label.introductionPreview}
+                />
+              </AdminCountedControl>
             </Field>
           </div>
           <div className="lg:col-span-2">
-            <Field label="Introduction" hint={`${countText(draft.introduction, true)}/${INPUT_LIMITS.label.introduction}`}>
-              <textarea
-                value={draft.introduction}
-                onChange={(event) => updateDraft('introduction', event.target.value)}
-                className="admin-studio-textarea min-h-[260px]"
-                placeholder="完整厂牌介绍"
-                maxLength={INPUT_LIMITS.label.introduction}
-              />
+            <Field label="Introduction">
+              <AdminCountedControl count={countText(draft.introduction, true)} maxLength={INPUT_LIMITS.label.introduction} multiline>
+                <textarea
+                  value={draft.introduction}
+                  onChange={(event) => updateDraft('introduction', event.target.value)}
+                  className="admin-studio-textarea min-h-[260px]"
+                  placeholder="完整厂牌介绍"
+                  maxLength={INPUT_LIMITS.label.introduction}
+                />
+              </AdminCountedControl>
             </Field>
           </div>
         </div>
@@ -383,13 +400,15 @@ export default function LabelStudioForm({
             />
           </Field>
           <Field label="Demo Submission Display">
-            <input
-              value={draft.demoSubmissionDisplay}
-              onChange={(event) => updateDraft('demoSubmissionDisplay', event.target.value)}
-              className={textInputClassName}
-              placeholder="Open / Invite Only"
-              maxLength={INPUT_LIMITS.label.demoSubmissionDisplay}
-            />
+            <AdminCountedControl count={countText(draft.demoSubmissionDisplay)} maxLength={INPUT_LIMITS.label.demoSubmissionDisplay}>
+              <input
+                value={draft.demoSubmissionDisplay}
+                onChange={(event) => updateDraft('demoSubmissionDisplay', event.target.value)}
+                className={textInputClassName}
+                placeholder="Open / Invite Only"
+                maxLength={INPUT_LIMITS.label.demoSubmissionDisplay}
+              />
+            </AdminCountedControl>
           </Field>
         </div>
       </Section>
@@ -397,22 +416,26 @@ export default function LabelStudioForm({
       <Section title="创始人与统计" description="最后维护创始人信息和较弱的关注度统计。">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="Founder Name">
-            <input
-              value={draft.founderName}
-              onChange={(event) => updateDraft('founderName', event.target.value)}
-              className={textInputClassName}
-              placeholder="Carmine Conte"
-              maxLength={INPUT_LIMITS.label.founderName}
-            />
+            <AdminCountedControl count={countText(draft.founderName)} maxLength={INPUT_LIMITS.label.founderName}>
+              <input
+                value={draft.founderName}
+                onChange={(event) => updateDraft('founderName', event.target.value)}
+                className={textInputClassName}
+                placeholder="Carmine Conte"
+                maxLength={INPUT_LIMITS.label.founderName}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="Founded At">
-            <input
-              value={draft.foundedAt}
-              onChange={(event) => updateDraft('foundedAt', event.target.value)}
-              className={textInputClassName}
-              placeholder="2016"
-              maxLength={INPUT_LIMITS.label.foundedAt}
-            />
+            <AdminCountedControl count={countText(draft.foundedAt)} maxLength={INPUT_LIMITS.label.foundedAt}>
+              <input
+                value={draft.foundedAt}
+                onChange={(event) => updateDraft('foundedAt', event.target.value)}
+                className={textInputClassName}
+                placeholder="2016"
+                maxLength={INPUT_LIMITS.label.foundedAt}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="Founder DJ ID">
             <input

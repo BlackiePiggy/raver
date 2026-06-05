@@ -386,6 +386,45 @@
   resize: vertical;
 }
 
+.admin-studio-counted-shell {
+  position: relative;
+  width: 100%;
+}
+
+.admin-studio-counted-control {
+  padding-right: 88px;
+}
+
+.admin-studio-counted-control.is-textarea {
+  padding-right: 96px;
+}
+
+.admin-studio-counted-badge {
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  max-width: 76px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(247, 249, 248, 0.98) 0%, rgba(238, 242, 240, 0.98) 100%);
+  color: rgba(7, 17, 16, 0.4);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.admin-studio-counted-badge.is-textarea {
+  top: 14px;
+  transform: none;
+}
+
 .admin-localized-field-shell {
   display: flex;
   align-items: center;

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ChangeEvent, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import {
   LocalizedTextField,
@@ -133,8 +134,6 @@ function ImageDropZone({
 }
 
 const textInputClassName = 'admin-studio-input';
-const commonUrlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
-
 type OrganizerStudioFormProps = {
   mode: 'create' | 'edit';
   organizerId?: string;
@@ -483,14 +482,16 @@ export default function OrganizerStudioForm({
             onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: '主办方名称', kind: 'input' })}
           />
 
-          <Field label="简称" hint={`${countText(draft.abbreviation)}/${INPUT_LIMITS.organizer.abbreviation}`}>
-            <input
-              value={draft.abbreviation}
-              onChange={(event) => updateDraft('abbreviation', event.target.value)}
-              className={textInputClassName}
-              placeholder="例如：TML"
-              maxLength={INPUT_LIMITS.organizer.abbreviation}
-            />
+          <Field label="简称">
+            <AdminCountedControl count={countText(draft.abbreviation)} maxLength={INPUT_LIMITS.organizer.abbreviation}>
+              <input
+                value={draft.abbreviation}
+                onChange={(event) => updateDraft('abbreviation', event.target.value)}
+                className={textInputClassName}
+                placeholder="例如：TML"
+                maxLength={INPUT_LIMITS.organizer.abbreviation}
+              />
+            </AdminCountedControl>
           </Field>
 
           <DynamicStringListField
@@ -525,24 +526,28 @@ export default function OrganizerStudioForm({
             onOpenOverlay={() => setActiveLocalizedField({ key: 'city', label: '城市', kind: 'input' })}
           />
 
-          <Field label="成立年份" hint={`${countText(draft.foundedYear)}/${INPUT_LIMITS.organizer.foundedYear}`}>
-            <input
-              value={draft.foundedYear}
-              onChange={(event) => updateDraft('foundedYear', event.target.value)}
-              className={textInputClassName}
-              placeholder="例如：2005"
-              maxLength={INPUT_LIMITS.organizer.foundedYear}
-            />
+          <Field label="成立年份">
+            <AdminCountedControl count={countText(draft.foundedYear)} maxLength={INPUT_LIMITS.organizer.foundedYear}>
+              <input
+                value={draft.foundedYear}
+                onChange={(event) => updateDraft('foundedYear', event.target.value)}
+                className={textInputClassName}
+                placeholder="例如：2005"
+                maxLength={INPUT_LIMITS.organizer.foundedYear}
+              />
+            </AdminCountedControl>
           </Field>
 
-          <Field label="举办频率" hint={`${countText(draft.frequency)}/${INPUT_LIMITS.organizer.frequency}`}>
-            <input
-              value={draft.frequency}
-              onChange={(event) => updateDraft('frequency', event.target.value)}
-              className={textInputClassName}
-              placeholder="例如：Annual"
-              maxLength={INPUT_LIMITS.organizer.frequency}
-            />
+          <Field label="举办频率">
+            <AdminCountedControl count={countText(draft.frequency)} maxLength={INPUT_LIMITS.organizer.frequency}>
+              <input
+                value={draft.frequency}
+                onChange={(event) => updateDraft('frequency', event.target.value)}
+                className={textInputClassName}
+                placeholder="例如：Annual"
+                maxLength={INPUT_LIMITS.organizer.frequency}
+              />
+            </AdminCountedControl>
           </Field>
         </div>
       </Section>
@@ -552,14 +557,16 @@ export default function OrganizerStudioForm({
         description="主办方详情描述会作为品牌档案和详情页的核心资料来源。多语言介绍使用和 event / DJ 相同的共享编辑方式。"
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="一句话标签" hint={`${countText(draft.tagline)}/${INPUT_LIMITS.organizer.tagline}`}>
-            <input
-              value={draft.tagline}
-              onChange={(event) => updateDraft('tagline', event.target.value)}
-              className={textInputClassName}
-              placeholder="例如：Global electronic music festival"
-              maxLength={INPUT_LIMITS.organizer.tagline}
-            />
+          <Field label="一句话标签">
+            <AdminCountedControl count={countText(draft.tagline)} maxLength={INPUT_LIMITS.organizer.tagline}>
+              <input
+                value={draft.tagline}
+                onChange={(event) => updateDraft('tagline', event.target.value)}
+                className={textInputClassName}
+                placeholder="例如：Global electronic music festival"
+                maxLength={INPUT_LIMITS.organizer.tagline}
+              />
+            </AdminCountedControl>
           </Field>
 
           <div className="admin-reference-soft-card px-4 py-3 text-sm leading-6 text-black/48">
@@ -594,59 +601,71 @@ export default function OrganizerStudioForm({
         description="至少提供一个官方链接，或上传一张以上证明图片。额外链接会一起进入最终 links payload。"
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="官方网站" error={errors.links} hint={commonUrlHint(draft.officialWebsite)}>
-            <input
-              value={draft.officialWebsite}
-              onChange={(event) => updateDraft('officialWebsite', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://..."
-              maxLength={INPUT_LIMITS.common.url}
-            />
+          <Field label="官方网站" error={errors.links}>
+            <AdminCountedControl count={countText(draft.officialWebsite)} maxLength={INPUT_LIMITS.common.url}>
+              <input
+                value={draft.officialWebsite}
+                onChange={(event) => updateDraft('officialWebsite', event.target.value)}
+                className={textInputClassName}
+                placeholder="https://..."
+                maxLength={INPUT_LIMITS.common.url}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="Instagram" hint={commonUrlHint(draft.instagram)}>
-            <input
-              value={draft.instagram}
-              onChange={(event) => updateDraft('instagram', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://instagram.com/..."
-              maxLength={INPUT_LIMITS.common.url}
-            />
+          <Field label="Instagram">
+            <AdminCountedControl count={countText(draft.instagram)} maxLength={INPUT_LIMITS.common.url}>
+              <input
+                value={draft.instagram}
+                onChange={(event) => updateDraft('instagram', event.target.value)}
+                className={textInputClassName}
+                placeholder="https://instagram.com/..."
+                maxLength={INPUT_LIMITS.common.url}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="Facebook" hint={commonUrlHint(draft.facebook)}>
-            <input
-              value={draft.facebook}
-              onChange={(event) => updateDraft('facebook', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://facebook.com/..."
-              maxLength={INPUT_LIMITS.common.url}
-            />
+          <Field label="Facebook">
+            <AdminCountedControl count={countText(draft.facebook)} maxLength={INPUT_LIMITS.common.url}>
+              <input
+                value={draft.facebook}
+                onChange={(event) => updateDraft('facebook', event.target.value)}
+                className={textInputClassName}
+                placeholder="https://facebook.com/..."
+                maxLength={INPUT_LIMITS.common.url}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="X / Twitter" hint={commonUrlHint(draft.twitter)}>
-            <input
-              value={draft.twitter}
-              onChange={(event) => updateDraft('twitter', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://x.com/..."
-              maxLength={INPUT_LIMITS.common.url}
-            />
+          <Field label="X / Twitter">
+            <AdminCountedControl count={countText(draft.twitter)} maxLength={INPUT_LIMITS.common.url}>
+              <input
+                value={draft.twitter}
+                onChange={(event) => updateDraft('twitter', event.target.value)}
+                className={textInputClassName}
+                placeholder="https://x.com/..."
+                maxLength={INPUT_LIMITS.common.url}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="YouTube" hint={commonUrlHint(draft.youtube)}>
-            <input
-              value={draft.youtube}
-              onChange={(event) => updateDraft('youtube', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://youtube.com/..."
-              maxLength={INPUT_LIMITS.common.url}
-            />
+          <Field label="YouTube">
+            <AdminCountedControl count={countText(draft.youtube)} maxLength={INPUT_LIMITS.common.url}>
+              <input
+                value={draft.youtube}
+                onChange={(event) => updateDraft('youtube', event.target.value)}
+                className={textInputClassName}
+                placeholder="https://youtube.com/..."
+                maxLength={INPUT_LIMITS.common.url}
+              />
+            </AdminCountedControl>
           </Field>
-          <Field label="TikTok" hint={commonUrlHint(draft.tiktok)}>
-            <input
-              value={draft.tiktok}
-              onChange={(event) => updateDraft('tiktok', event.target.value)}
-              className={textInputClassName}
-              placeholder="https://tiktok.com/@..."
-              maxLength={INPUT_LIMITS.common.url}
-            />
+          <Field label="TikTok">
+            <AdminCountedControl count={countText(draft.tiktok)} maxLength={INPUT_LIMITS.common.url}>
+              <input
+                value={draft.tiktok}
+                onChange={(event) => updateDraft('tiktok', event.target.value)}
+                className={textInputClassName}
+                placeholder="https://tiktok.com/@..."
+                maxLength={INPUT_LIMITS.common.url}
+              />
+            </AdminCountedControl>
           </Field>
         </div>
 
@@ -684,27 +703,33 @@ export default function OrganizerStudioForm({
                     </button>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-3">
-                    <input
-                      value={item.title}
-                      onChange={(event) => updateExtraLink(item.id, 'title', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="标题，例如 Ticket"
-                      maxLength={INPUT_LIMITS.organizer.extraLinkTitle}
-                    />
-                    <input
-                      value={item.icon}
-                      onChange={(event) => updateExtraLink(item.id, 'icon', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="icon，例如 link / ticket"
-                      maxLength={INPUT_LIMITS.common.linkIcon}
-                    />
-                    <input
-                      value={item.url}
-                      onChange={(event) => updateExtraLink(item.id, 'url', event.target.value)}
-                      className={textInputClassName}
-                      placeholder="https://..."
-                      maxLength={INPUT_LIMITS.common.url}
-                    />
+                    <AdminCountedControl count={countText(item.title)} maxLength={INPUT_LIMITS.organizer.extraLinkTitle}>
+                      <input
+                        value={item.title}
+                        onChange={(event) => updateExtraLink(item.id, 'title', event.target.value)}
+                        className={textInputClassName}
+                        placeholder="标题，例如 Ticket"
+                        maxLength={INPUT_LIMITS.organizer.extraLinkTitle}
+                      />
+                    </AdminCountedControl>
+                    <AdminCountedControl count={countText(item.icon)} maxLength={INPUT_LIMITS.common.linkIcon}>
+                      <input
+                        value={item.icon}
+                        onChange={(event) => updateExtraLink(item.id, 'icon', event.target.value)}
+                        className={textInputClassName}
+                        placeholder="icon，例如 link / ticket"
+                        maxLength={INPUT_LIMITS.common.linkIcon}
+                      />
+                    </AdminCountedControl>
+                    <AdminCountedControl count={countText(item.url)} maxLength={INPUT_LIMITS.common.url}>
+                      <input
+                        value={item.url}
+                        onChange={(event) => updateExtraLink(item.id, 'url', event.target.value)}
+                        className={textInputClassName}
+                        placeholder="https://..."
+                        maxLength={INPUT_LIMITS.common.url}
+                      />
+                    </AdminCountedControl>
                   </div>
                 </div>
               ))}

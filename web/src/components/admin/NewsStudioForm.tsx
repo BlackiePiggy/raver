@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Expand, ImagePlus, Star, Trash2 } from 'lucide-react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import AdminToast, { type AdminToastTone } from '@/components/admin/AdminToast';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import MarkdownEditor from '@/components/admin/MarkdownEditor';
@@ -477,24 +478,26 @@ export default function NewsStudioForm({
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="资讯标题" error={errors.title}>
-            <input
-              value={draft.title}
-              onChange={(event) => updateDraft('title', event.target.value)}
-              className={textInputClassName}
-              placeholder="填写资讯标题"
-              maxLength={INPUT_LIMITS.news.title}
-            />
-            <div className="mt-2 text-xs text-black/40">{countText(draft.title)}/{INPUT_LIMITS.news.title}</div>
+            <AdminCountedControl count={countText(draft.title)} maxLength={INPUT_LIMITS.news.title}>
+              <input
+                value={draft.title}
+                onChange={(event) => updateDraft('title', event.target.value)}
+                className={textInputClassName}
+                placeholder="填写资讯标题"
+                maxLength={INPUT_LIMITS.news.title}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="来源">
-            <input
-              value={draft.source}
-              onChange={(event) => updateDraft('source', event.target.value)}
-              className={textInputClassName}
-              placeholder="Raver / Billboard / Resident Advisor"
-              maxLength={INPUT_LIMITS.news.source}
-            />
-            <div className="mt-2 text-xs text-black/40">{countText(draft.source)}/{INPUT_LIMITS.news.source}</div>
+            <AdminCountedControl count={countText(draft.source)} maxLength={INPUT_LIMITS.news.source}>
+              <input
+                value={draft.source}
+                onChange={(event) => updateDraft('source', event.target.value)}
+                className={textInputClassName}
+                placeholder="Raver / Billboard / Resident Advisor"
+                maxLength={INPUT_LIMITS.news.source}
+              />
+            </AdminCountedControl>
           </Field>
           <Field label="资讯分类">
             <select
@@ -527,14 +530,15 @@ export default function NewsStudioForm({
         <div className="space-y-5">
           <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
             <Field label="摘要">
-              <textarea
-                value={draft.summary}
-                onChange={(event) => updateDraft('summary', event.target.value)}
-                className={`${textAreaClassName} min-h-[148px]`}
-                placeholder="写一个适合列表展示的摘要"
-                maxLength={INPUT_LIMITS.news.summary}
-              />
-              <div className="mt-2 text-xs text-black/40">{countText(draft.summary, true)}/{INPUT_LIMITS.news.summary}</div>
+              <AdminCountedControl count={countText(draft.summary, true)} maxLength={INPUT_LIMITS.news.summary} multiline>
+                <textarea
+                  value={draft.summary}
+                  onChange={(event) => updateDraft('summary', event.target.value)}
+                  className={`${textAreaClassName} min-h-[148px]`}
+                  placeholder="写一个适合列表展示的摘要"
+                  maxLength={INPUT_LIMITS.news.summary}
+                />
+              </AdminCountedControl>
             </Field>
 
             <div className="grid gap-4">
@@ -737,7 +741,7 @@ export default function NewsStudioForm({
                 value={draft.body}
                 onChange={updateBody}
                 placeholder="填写资讯正文，支持 Markdown"
-                helperText={`${countText(draft.body, true)}/${INPUT_LIMITS.news.body} · 支持标题、列表、引用、链接、图片与代码块`}
+                helperText="支持标题、列表、引用、链接、图片与代码块"
                 maxLength={INPUT_LIMITS.news.body}
                 error={errors.body}
                 textareaRef={bodyTextareaRef}

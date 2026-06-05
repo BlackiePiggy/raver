@@ -1,6 +1,7 @@
 'use client';
 
 import { Languages, X } from 'lucide-react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import { countText } from '@/lib/input-rules';
 
 export type LocalizedLocaleKey = 'zh' | 'en' | 'ja' | 'enFull';
@@ -50,10 +51,8 @@ export function LocalizedTextField({
 }) {
   const filledLocales = localizedTextFilledLocaleLabels(value);
   const extraLocales = filledLocales.filter((item) => item !== '中文');
-  const primaryCount = countText(value.zh, kind === 'textarea');
   const combinedHint = [
     hint,
-    typeof maxLength === 'number' ? `${primaryCount}/${maxLength}` : null,
     extraLocales.length ? `已填写：${extraLocales.join(' / ')}` : '点击右侧按钮展开编辑英文、日文等多语言内容。',
   ]
     .filter(Boolean)
@@ -64,21 +63,25 @@ export function LocalizedTextField({
       <div className="mb-2 admin-studio-label">{label}</div>
       <div className={`admin-localized-field-shell ${kind === 'textarea' ? 'is-textarea' : ''}`}>
         {kind === 'textarea' ? (
-          <textarea
-            value={value.zh}
-            onChange={(event) => onPrimaryChange(event.target.value)}
-            className="admin-studio-textarea min-h-28"
-            placeholder={placeholder}
-            maxLength={maxLength}
-          />
+          <AdminCountedControl count={countText(value.zh, true)} maxLength={maxLength} multiline>
+            <textarea
+              value={value.zh}
+              onChange={(event) => onPrimaryChange(event.target.value)}
+              className="admin-studio-textarea min-h-28"
+              placeholder={placeholder}
+              maxLength={maxLength}
+            />
+          </AdminCountedControl>
         ) : (
-          <input
-            value={value.zh}
-            onChange={(event) => onPrimaryChange(event.target.value)}
-            className="admin-studio-input"
-            placeholder={placeholder}
-            maxLength={maxLength}
-          />
+          <AdminCountedControl count={countText(value.zh)} maxLength={maxLength}>
+            <input
+              value={value.zh}
+              onChange={(event) => onPrimaryChange(event.target.value)}
+              className="admin-studio-input"
+              placeholder={placeholder}
+              maxLength={maxLength}
+            />
+          </AdminCountedControl>
         )}
         <button
           type="button"
@@ -146,26 +149,27 @@ export function MultilingualEditorOverlay({
             <label key={`${title}-${item.key}`} className="block">
               <div className="mb-2 admin-studio-label">{item.label}</div>
               {kind === 'textarea' ? (
-                <textarea
-                  value={value[item.key]}
-                  onChange={(event) => onChange(item.key, event.target.value)}
-                  className="admin-studio-textarea min-h-28"
-                  placeholder={`${title}${item.label}`}
-                  maxLength={maxLength}
-                />
+                <AdminCountedControl count={countText(value[item.key], true)} maxLength={maxLength} multiline>
+                  <textarea
+                    value={value[item.key]}
+                    onChange={(event) => onChange(item.key, event.target.value)}
+                    className="admin-studio-textarea min-h-28"
+                    placeholder={`${title}${item.label}`}
+                    maxLength={maxLength}
+                  />
+                </AdminCountedControl>
               ) : (
-                <input
-                  value={value[item.key]}
-                  onChange={(event) => onChange(item.key, event.target.value)}
-                  className="admin-studio-input"
-                  placeholder={`${title}${item.label}`}
-                  maxLength={maxLength}
-                />
+                <AdminCountedControl count={countText(value[item.key])} maxLength={maxLength}>
+                  <input
+                    value={value[item.key]}
+                    onChange={(event) => onChange(item.key, event.target.value)}
+                    className="admin-studio-input"
+                    placeholder={`${title}${item.label}`}
+                    maxLength={maxLength}
+                  />
+                </AdminCountedControl>
               )}
-              <div className="mt-2 text-xs text-black/40">
-                {item.hint}
-                {typeof maxLength === 'number' ? ` ${countText(value[item.key], kind === 'textarea')}/${maxLength}` : ''}
-              </div>
+              <div className="mt-2 text-xs text-black/40">{item.hint}</div>
             </label>
           ))}
         </div>

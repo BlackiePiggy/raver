@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Languages, Pencil, Plus, Trash2, X } from 'lucide-react';
+import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import type { EntityBindingValue } from '@/components/admin/EntityBindingSearch';
 import EventLocationPickerModal, {
@@ -379,10 +380,8 @@ function LocalizedTextField({
 }) {
   const filledLocales = localizedTextFilledLocaleLabels(value);
   const extraLocales = filledLocales.filter((item) => item !== '中文');
-  const primaryCount = countText(value.zh, kind === 'textarea');
   const combinedHint = [
     hint,
-    typeof maxLength === 'number' ? `${primaryCount}/${maxLength}` : null,
     extraLocales.length ? `已填写：${extraLocales.join(' / ')}` : '右侧图标可展开编辑英文、日文等多语言内容。',
   ]
     .filter(Boolean)
@@ -392,21 +391,25 @@ function LocalizedTextField({
     <Field label={label} error={error} hint={combinedHint}>
       <div className={`admin-localized-field-shell ${kind === 'textarea' ? 'is-textarea' : ''}`}>
         {kind === 'textarea' ? (
-          <textarea
-            value={value.zh}
-            onChange={(event) => onPrimaryChange(event.target.value)}
-            className={textAreaClassName}
-            placeholder={placeholder}
-            maxLength={maxLength}
-          />
+          <AdminCountedControl count={countText(value.zh, true)} maxLength={maxLength} multiline>
+            <textarea
+              value={value.zh}
+              onChange={(event) => onPrimaryChange(event.target.value)}
+              className={textAreaClassName}
+              placeholder={placeholder}
+              maxLength={maxLength}
+            />
+          </AdminCountedControl>
         ) : (
-          <input
-            value={value.zh}
-            onChange={(event) => onPrimaryChange(event.target.value)}
-            className={textInputClassName}
-            placeholder={placeholder}
-            maxLength={maxLength}
-          />
+          <AdminCountedControl count={countText(value.zh)} maxLength={maxLength}>
+            <input
+              value={value.zh}
+              onChange={(event) => onPrimaryChange(event.target.value)}
+              className={textInputClassName}
+              placeholder={placeholder}
+              maxLength={maxLength}
+            />
+          </AdminCountedControl>
         )}
         <button
           type="button"
@@ -423,7 +426,6 @@ function LocalizedTextField({
   );
 }
 
-const urlHint = (value: string) => `${countText(value)}/${INPUT_LIMITS.common.url}`;
 const localizedFieldMaxLength = (key: LocalizedFieldKey): number => {
   if (key === 'name') return INPUT_LIMITS.event.name;
   if (key === 'city') return INPUT_LIMITS.event.city;
@@ -2631,74 +2633,88 @@ export default function EventStudioForm({
                   ))}
                 </select>
               </Field>
-              <Field label="活动简称" hint={`${countText(draft.abbreviation)}/${INPUT_LIMITS.event.abbreviation}`}>
-                <input
-                  value={draft.abbreviation}
-                  onChange={(event) => updateDraft('abbreviation', event.target.value)}
-                  className={textInputClassName}
-                  placeholder="例如：ASOT"
-                  maxLength={INPUT_LIMITS.event.abbreviation}
-                />
+              <Field label="活动简称">
+                <AdminCountedControl count={countText(draft.abbreviation)} maxLength={INPUT_LIMITS.event.abbreviation}>
+                  <input
+                    value={draft.abbreviation}
+                    onChange={(event) => updateDraft('abbreviation', event.target.value)}
+                    className={textInputClassName}
+                    placeholder="例如：ASOT"
+                    maxLength={INPUT_LIMITS.event.abbreviation}
+                  />
+                </AdminCountedControl>
               </Field>
-              <Field label="场馆名（可选）" hint={`${countText(draft.venueName)}/${INPUT_LIMITS.event.venueName}`}>
-                <input
-                  value={draft.venueName}
-                  onChange={(event) => updateDraft('venueName', event.target.value)}
-                  className={textInputClassName}
-                  placeholder="例如：National Stadium"
-                  maxLength={INPUT_LIMITS.event.venueName}
-                />
+              <Field label="场馆名（可选）">
+                <AdminCountedControl count={countText(draft.venueName)} maxLength={INPUT_LIMITS.event.venueName}>
+                  <input
+                    value={draft.venueName}
+                    onChange={(event) => updateDraft('venueName', event.target.value)}
+                    className={textInputClassName}
+                    placeholder="例如：National Stadium"
+                    maxLength={INPUT_LIMITS.event.venueName}
+                  />
+                </AdminCountedControl>
               </Field>
-              <Field label="场馆地址（可选）" hint={`${countText(draft.venueAddress)}/${INPUT_LIMITS.event.venueAddress}`}>
-                <input
-                  value={draft.venueAddress}
-                  onChange={(event) => updateDraft('venueAddress', event.target.value)}
-                  className={textInputClassName}
-                  placeholder="例如：88 Xuhui Riverside"
-                  maxLength={INPUT_LIMITS.event.venueAddress}
-                />
+              <Field label="场馆地址（可选）">
+                <AdminCountedControl count={countText(draft.venueAddress)} maxLength={INPUT_LIMITS.event.venueAddress}>
+                  <input
+                    value={draft.venueAddress}
+                    onChange={(event) => updateDraft('venueAddress', event.target.value)}
+                    className={textInputClassName}
+                    placeholder="例如：88 Xuhui Riverside"
+                    maxLength={INPUT_LIMITS.event.venueAddress}
+                  />
+                </AdminCountedControl>
               </Field>
-              <Field label="来源链接" hint={urlHint(draft.sourceEventUrl)}>
-                <input
-                  value={draft.sourceEventUrl}
-                  onChange={(event) => updateDraft('sourceEventUrl', event.target.value)}
-                  className={textInputClassName}
-                  placeholder="https://..."
-                  maxLength={INPUT_LIMITS.common.url}
-                />
+              <Field label="来源链接">
+                <AdminCountedControl count={countText(draft.sourceEventUrl)} maxLength={INPUT_LIMITS.common.url}>
+                  <input
+                    value={draft.sourceEventUrl}
+                    onChange={(event) => updateDraft('sourceEventUrl', event.target.value)}
+                    className={textInputClassName}
+                    placeholder="https://..."
+                    maxLength={INPUT_LIMITS.common.url}
+                  />
+                </AdminCountedControl>
               </Field>
 
-              <Field label="来源平台（可选）" hint={`${countText(draft.sourceProvider)}/${INPUT_LIMITS.event.sourceProvider}`}>
-                <input
-                  value={draft.sourceProvider}
-                  onChange={(event) => updateDraft('sourceProvider', event.target.value)}
-                  className={textInputClassName}
-                  placeholder="例如：official_website / instagram / manual"
-                  maxLength={INPUT_LIMITS.event.sourceProvider}
-                />
+              <Field label="来源平台（可选）">
+                <AdminCountedControl count={countText(draft.sourceProvider)} maxLength={INPUT_LIMITS.event.sourceProvider}>
+                  <input
+                    value={draft.sourceProvider}
+                    onChange={(event) => updateDraft('sourceProvider', event.target.value)}
+                    className={textInputClassName}
+                    placeholder="例如：official_website / instagram / manual"
+                    maxLength={INPUT_LIMITS.event.sourceProvider}
+                  />
+                </AdminCountedControl>
               </Field>
 
               <div className="lg:col-span-2">
-                <Field label="参考链接（每行一个，可选）" hint={`${countText(draft.referenceLinksText, true)}/${INPUT_LIMITS.event.referenceLinksText}`}>
-                  <textarea
-                    value={draft.referenceLinksText}
-                    onChange={(event) => updateDraft('referenceLinksText', event.target.value)}
-                    className={textAreaClassName}
-                    placeholder="https://example.com/page-1&#10;https://example.com/page-2"
-                    maxLength={INPUT_LIMITS.event.referenceLinksText}
-                  />
+                <Field label="参考链接（每行一个，可选）">
+                  <AdminCountedControl count={countText(draft.referenceLinksText, true)} maxLength={INPUT_LIMITS.event.referenceLinksText} multiline>
+                    <textarea
+                      value={draft.referenceLinksText}
+                      onChange={(event) => updateDraft('referenceLinksText', event.target.value)}
+                      className={textAreaClassName}
+                      placeholder="https://example.com/page-1&#10;https://example.com/page-2"
+                      maxLength={INPUT_LIMITS.event.referenceLinksText}
+                    />
+                  </AdminCountedControl>
                 </Field>
               </div>
 
               <div className="lg:col-span-2">
-                <Field label="社交链接 JSON（可选）" hint={`${countText(draft.socialLinksText, true)}/${INPUT_LIMITS.event.socialLinksText}`}>
-                  <textarea
-                    value={draft.socialLinksText}
-                    onChange={(event) => updateDraft('socialLinksText', event.target.value)}
-                    className={textAreaClassName}
-                    placeholder='[{"type":"instagram","url":"https://instagram.com/example"}]'
-                    maxLength={INPUT_LIMITS.event.socialLinksText}
-                  />
+                <Field label="社交链接 JSON（可选）">
+                  <AdminCountedControl count={countText(draft.socialLinksText, true)} maxLength={INPUT_LIMITS.event.socialLinksText} multiline>
+                    <textarea
+                      value={draft.socialLinksText}
+                      onChange={(event) => updateDraft('socialLinksText', event.target.value)}
+                      className={textAreaClassName}
+                      placeholder='[{"type":"instagram","url":"https://instagram.com/example"}]'
+                      maxLength={INPUT_LIMITS.event.socialLinksText}
+                    />
+                  </AdminCountedControl>
                   {errors.socialLinks ? <div className="mt-2 text-xs text-[#6a3530]">{errors.socialLinks}</div> : null}
                 </Field>
               </div>
@@ -2707,19 +2723,21 @@ export default function EventStudioForm({
                 <Field label="主办方绑定">
                   <div className="space-y-3">
                     <div className="flex flex-col gap-3 lg:flex-row">
-                      <input
-                        value={draft.organizerName}
-                        onChange={(event) =>
-                          updateDraftState((current) => ({
-                            ...current,
-                            organizerName: event.target.value,
-                            organizerFestivalId: current.organizerFestivalId ? '' : current.organizerFestivalId,
-                          }))
-                        }
-                        className={textInputClassName}
-                        placeholder="输入主办方名称，或作为手动主办方文本保留"
-                        maxLength={INPUT_LIMITS.event.organizerName}
-                      />
+                      <AdminCountedControl count={countText(draft.organizerName)} maxLength={INPUT_LIMITS.event.organizerName}>
+                        <input
+                          value={draft.organizerName}
+                          onChange={(event) =>
+                            updateDraftState((current) => ({
+                              ...current,
+                              organizerName: event.target.value,
+                              organizerFestivalId: current.organizerFestivalId ? '' : current.organizerFestivalId,
+                            }))
+                          }
+                          className={textInputClassName}
+                          placeholder="输入主办方名称，或作为手动主办方文本保留"
+                          maxLength={INPUT_LIMITS.event.organizerName}
+                        />
+                      </AdminCountedControl>
                       <Link
                         href={
                           draft.organizerName.trim()
@@ -2759,14 +2777,16 @@ export default function EventStudioForm({
               </div>
 
               <div className="lg:col-span-2">
-                <Field label="活动描述" hint={`${countText(draft.description, true)}/${INPUT_LIMITS.event.description}`}>
-                  <textarea
-                    value={draft.description}
-                    onChange={(event) => updateDraft('description', event.target.value)}
-                    className={textAreaClassName}
-                    placeholder="填写活动简介、风格或亮点说明"
-                    maxLength={INPUT_LIMITS.event.description}
-                  />
+                <Field label="活动描述">
+                  <AdminCountedControl count={countText(draft.description, true)} maxLength={INPUT_LIMITS.event.description} multiline>
+                    <textarea
+                      value={draft.description}
+                      onChange={(event) => updateDraft('description', event.target.value)}
+                      className={textAreaClassName}
+                      placeholder="填写活动简介、风格或亮点说明"
+                      maxLength={INPUT_LIMITS.event.description}
+                    />
+                  </AdminCountedControl>
                 </Field>
               </div>
             </div>
@@ -2829,23 +2849,27 @@ export default function EventStudioForm({
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <Field label="地图地点名（可选）" hint={`${countText(draft.pickedPlaceName)}/${INPUT_LIMITS.event.venueName}`}>
-                      <input
-                        value={draft.pickedPlaceName}
-                        onChange={(event) => updateDraft('pickedPlaceName', event.target.value)}
-                        className={textInputClassName}
-                        placeholder="例如：National Stadium"
-                        maxLength={INPUT_LIMITS.event.venueName}
-                      />
+                    <Field label="地图地点名（可选）">
+                      <AdminCountedControl count={countText(draft.pickedPlaceName)} maxLength={INPUT_LIMITS.event.venueName}>
+                        <input
+                          value={draft.pickedPlaceName}
+                          onChange={(event) => updateDraft('pickedPlaceName', event.target.value)}
+                          className={textInputClassName}
+                          placeholder="例如：National Stadium"
+                          maxLength={INPUT_LIMITS.event.venueName}
+                        />
+                      </AdminCountedControl>
                     </Field>
-                    <Field label="地图地址（可选）" hint={`${countText(draft.pickedMapAddress)}/${INPUT_LIMITS.event.detailAddress}`}>
-                      <input
-                        value={draft.pickedMapAddress}
-                        onChange={(event) => updateDraft('pickedMapAddress', event.target.value)}
-                        className={textInputClassName}
-                        placeholder="用于 locationPoint 回填"
-                        maxLength={INPUT_LIMITS.event.detailAddress}
-                      />
+                    <Field label="地图地址（可选）">
+                      <AdminCountedControl count={countText(draft.pickedMapAddress)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                        <input
+                          value={draft.pickedMapAddress}
+                          onChange={(event) => updateDraft('pickedMapAddress', event.target.value)}
+                          className={textInputClassName}
+                          placeholder="用于 locationPoint 回填"
+                          maxLength={INPUT_LIMITS.event.detailAddress}
+                        />
+                      </AdminCountedControl>
                     </Field>
                   </div>
                 </div>
@@ -3042,14 +3066,16 @@ export default function EventStudioForm({
               </>
             ) : null}
 
-            <Field label="官网链接" hint={urlHint(draft.officialWebsite)}>
-              <input
-                value={draft.officialWebsite}
-                onChange={(event) => updateDraft('officialWebsite', event.target.value)}
-                className={textInputClassName}
-                placeholder="https://..."
-                maxLength={INPUT_LIMITS.common.url}
-              />
+            <Field label="官网链接">
+              <AdminCountedControl count={countText(draft.officialWebsite)} maxLength={INPUT_LIMITS.common.url}>
+                <input
+                  value={draft.officialWebsite}
+                  onChange={(event) => updateDraft('officialWebsite', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="https://..."
+                  maxLength={INPUT_LIMITS.common.url}
+                />
+              </AdminCountedControl>
             </Field>
           </div>
 
@@ -4082,34 +4108,40 @@ export default function EventStudioForm({
       {currentStep === 5 ? (
         <Section title="票务" description="票务相关信息单独收纳到一个分页里，让主要操作区域保持聚焦。">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="购票链接" hint={urlHint(draft.ticketUrl)}>
-              <input
-                value={draft.ticketUrl}
-                onChange={(event) => updateDraft('ticketUrl', event.target.value)}
-                className={textInputClassName}
-                placeholder="https://..."
-                maxLength={INPUT_LIMITS.common.url}
-              />
+            <Field label="购票链接">
+              <AdminCountedControl count={countText(draft.ticketUrl)} maxLength={INPUT_LIMITS.common.url}>
+                <input
+                  value={draft.ticketUrl}
+                  onChange={(event) => updateDraft('ticketUrl', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="https://..."
+                  maxLength={INPUT_LIMITS.common.url}
+                />
+              </AdminCountedControl>
               {errors.ticketUrl ? <div className="mt-2 text-xs text-[#6a3530]">{errors.ticketUrl}</div> : null}
             </Field>
-            <Field label="票务币种" hint={`${countText(draft.ticketCurrency)}/${INPUT_LIMITS.common.currency}`}>
-              <input
-                value={draft.ticketCurrency}
-                onChange={(event) => updateDraft('ticketCurrency', event.target.value)}
-                className={textInputClassName}
-                placeholder="CNY"
-                maxLength={INPUT_LIMITS.common.currency}
-              />
+            <Field label="票务币种">
+              <AdminCountedControl count={countText(draft.ticketCurrency)} maxLength={INPUT_LIMITS.common.currency}>
+                <input
+                  value={draft.ticketCurrency}
+                  onChange={(event) => updateDraft('ticketCurrency', event.target.value)}
+                  className={textInputClassName}
+                  placeholder="CNY"
+                  maxLength={INPUT_LIMITS.common.currency}
+                />
+              </AdminCountedControl>
             </Field>
             <div className="lg:col-span-2">
-              <Field label="票务备注" hint={`${countText(draft.ticketNotes, true)}/${INPUT_LIMITS.event.ticketNotes}`}>
-                <textarea
-                  value={draft.ticketNotes}
-                  onChange={(event) => updateDraft('ticketNotes', event.target.value)}
-                  className={textAreaClassName}
-                  placeholder="例如：早鸟票已售罄，预售票次日开售"
-                  maxLength={INPUT_LIMITS.event.ticketNotes}
-                />
+              <Field label="票务备注">
+                <AdminCountedControl count={countText(draft.ticketNotes, true)} maxLength={INPUT_LIMITS.event.ticketNotes} multiline>
+                  <textarea
+                    value={draft.ticketNotes}
+                    onChange={(event) => updateDraft('ticketNotes', event.target.value)}
+                    className={textAreaClassName}
+                    placeholder="例如：早鸟票已售罄，预售票次日开售"
+                    maxLength={INPUT_LIMITS.event.ticketNotes}
+                  />
+                </AdminCountedControl>
               </Field>
             </div>
           </div>
@@ -4335,24 +4367,35 @@ export default function EventStudioForm({
                 <Field
                   key={`${activeLocalizedField.key}-${item.key}`}
                   label={item.label}
-                  hint={`${item.hint} ${countText(activeLocalizedValue[item.key], activeLocalizedField.kind === 'textarea')}/${localizedFieldMaxLength(activeLocalizedField.key)}`}
+                  hint={item.hint}
                 >
                   {activeLocalizedField.kind === 'textarea' ? (
-                    <textarea
-                      value={activeLocalizedValue[item.key]}
-                      onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
-                      className={textAreaClassName}
-                      placeholder={`${activeLocalizedField.label}${item.label}`}
+                    <AdminCountedControl
+                      count={countText(activeLocalizedValue[item.key], true)}
                       maxLength={localizedFieldMaxLength(activeLocalizedField.key)}
-                    />
+                      multiline
+                    >
+                      <textarea
+                        value={activeLocalizedValue[item.key]}
+                        onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
+                        className={textAreaClassName}
+                        placeholder={`${activeLocalizedField.label}${item.label}`}
+                        maxLength={localizedFieldMaxLength(activeLocalizedField.key)}
+                      />
+                    </AdminCountedControl>
                   ) : (
-                    <input
-                      value={activeLocalizedValue[item.key]}
-                      onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
-                      className={textInputClassName}
-                      placeholder={`${activeLocalizedField.label}${item.label}`}
+                    <AdminCountedControl
+                      count={countText(activeLocalizedValue[item.key])}
                       maxLength={localizedFieldMaxLength(activeLocalizedField.key)}
-                    />
+                    >
+                      <input
+                        value={activeLocalizedValue[item.key]}
+                        onChange={(event) => updateLocalizedField(activeLocalizedField.key, item.key, event.target.value)}
+                        className={textInputClassName}
+                        placeholder={`${activeLocalizedField.label}${item.label}`}
+                        maxLength={localizedFieldMaxLength(activeLocalizedField.key)}
+                      />
+                    </AdminCountedControl>
                   )}
                 </Field>
               ))}
