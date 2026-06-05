@@ -31,6 +31,7 @@ import {
   EventAdminContractGuardrailError,
   validateEventAdminContractPayload,
 } from '../services/event-admin-contract-guardrail.service';
+import { recordEventContribution } from '../services/contribution.service';
 import {
   EntityChangeInvalidRevisionError,
   EntityChangeRevisionConflictError,
@@ -1135,6 +1136,27 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
         normalizedLineupArtists,
         stageOrder
       );
+      const persisted = await tx.event.findUniqueOrThrow({
+        where: { id: created.id },
+        select: {
+          id: true,
+          name: true,
+          coverImageUrl: true,
+          revision: true,
+        },
+      });
+      await recordEventContribution(tx, {
+        entityId: persisted.id,
+        userId,
+        title: persisted.name,
+        coverImageUrl: persisted.coverImageUrl ?? null,
+        role: 'creator',
+        actionType: 'create',
+        source: 'direct_commit',
+        approvedAt: new Date(),
+        versionAfter: persisted.revision ?? null,
+        changeSummary: null,
+      });
       return tx.event.findUniqueOrThrow({
         where: { id: created.id },
         include: {
@@ -1151,7 +1173,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           },
         },
       });
-    });
+    }, { timeout: 20_000, maxWait: 10_000 });
 
     res.status(201).json(withDerivedStatus(await attachCanonicalLineupToEvent(event)));
   } catch (error) {
@@ -1478,7 +1500,28 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           stageOrder
         );
       }
-    });
+      const persisted = await tx.event.findUniqueOrThrow({
+        where: { id: id as string },
+        select: {
+          id: true,
+          name: true,
+          coverImageUrl: true,
+          revision: true,
+        },
+      });
+      await recordEventContribution(tx, {
+        entityId: persisted.id,
+        userId,
+        title: persisted.name,
+        coverImageUrl: persisted.coverImageUrl ?? null,
+        role: 'editor',
+        actionType: 'edit',
+        source: 'direct_commit',
+        approvedAt: new Date(),
+        versionAfter: persisted.revision ?? null,
+        changeSummary: null,
+      });
+    }, { timeout: 20_000, maxWait: 10_000 });
 
     if (shouldRebaseExistingLineupSlots) {
       await prisma.$transaction(async (tx) => {
@@ -1507,7 +1550,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
           }),
           snapshot.artists
         );
-      });
+      }, { timeout: 20_000, maxWait: 10_000 });
     }
 
     const event = await prisma.event.findUnique({

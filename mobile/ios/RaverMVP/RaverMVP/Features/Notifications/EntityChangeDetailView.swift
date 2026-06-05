@@ -95,7 +95,7 @@ struct EntityChangeDetailView: View {
             HStack(alignment: .top, spacing: 10) {
                 valueColumn(title: LT("修改前", "Before", "変更前"), value: change.localizedBefore)
                 Image(systemName: "arrow.right")
-                    .font(.caption.weight(.bold()))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(RaverTheme.secondaryText)
                     .padding(.top, 27)
                 valueColumn(title: LT("修改后", "After", "変更後"), value: change.localizedAfter)

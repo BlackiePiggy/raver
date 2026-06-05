@@ -103,6 +103,7 @@
     "contribution-module:backfill:apply": "CONTRIBUTION_MODULE_BACKFILL_APPLY=1 ts-node src/scripts/backfill-contribution-module.ts",
     "contribution-module:verify": "ts-node src/scripts/verify-contribution-module-backfill.ts",
     "contribution-module:regression": "ts-node src/scripts/contribution-module-regression.ts",
+    "contribution-module:event-direct-regression": "ts-node src/scripts/event-direct-contribution-regression.ts",
     "phase6:cutover:db": "pnpm prisma:generate && DIRECT_URL=\"${DIRECT_URL:-$DATABASE_URL}\" pnpm prisma migrate deploy && pnpm canonical:validate",
     "phase6:readonly:smoke": "ts-node src/scripts/phase6-readonly-smoke.ts",
     "account-deletion:run": "NODE_OPTIONS='--use-env-proxy' ts-node src/scripts/account-deletion-run.ts",

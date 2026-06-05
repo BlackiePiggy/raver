@@ -118,6 +118,13 @@ type BuildBackfillResult = {
   };
 };
 
+type RegistryReferenceValidationResult = {
+  validRows: RegistryAggregate[];
+  skippedRows: RegistryAggregate[];
+  missingEntityIds: string[];
+  missingUserIds: string[];
+};
+
 const logStep = (step: string, detail?: Record<string, unknown>): void => {
   console.log('[backfill-contribution-module]', step, detail || {});
 };
@@ -991,6 +998,72 @@ const mergeLegacyDJSeeds = (
   }
 };
 
+const validateRegistryReferences = async (
+  tx: Prisma.TransactionClient,
+  entityType: BackfillEntityType,
+  rows: RegistryAggregate[]
+): Promise<RegistryReferenceValidationResult> => {
+  if (rows.length === 0) {
+    return {
+      validRows: [],
+      skippedRows: [],
+      missingEntityIds: [],
+      missingUserIds: [],
+    };
+  }
+
+  const entityIds = uniqueValues(rows.map((row) => row.entityId));
+  const userIds = uniqueValues(rows.map((row) => row.userId));
+
+  const [existingEntityRows, existingUserRows] = await Promise.all([
+    entityType === 'event'
+      ? tx.event.findMany({
+          where: { id: { in: entityIds } },
+          select: { id: true },
+        })
+      : tx.dJ.findMany({
+          where: { id: { in: entityIds } },
+          select: { id: true },
+        }),
+    tx.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true },
+    }),
+  ]);
+
+  const existingEntityIds = new Set(existingEntityRows.map((row) => row.id));
+  const existingUserIds = new Set(existingUserRows.map((row) => row.id));
+
+  const validRows: RegistryAggregate[] = [];
+  const skippedRows: RegistryAggregate[] = [];
+
+  for (const row of rows) {
+    if (!existingEntityIds.has(row.entityId) || !existingUserIds.has(row.userId)) {
+      skippedRows.push(row);
+      continue;
+    }
+    validRows.push(row);
+  }
+
+  const missingEntityIds = uniqueValues(
+    skippedRows
+      .filter((row) => !existingEntityIds.has(row.entityId))
+      .map((row) => row.entityId)
+  );
+  const missingUserIds = uniqueValues(
+    skippedRows
+      .filter((row) => !existingUserIds.has(row.userId))
+      .map((row) => row.userId)
+  );
+
+  return {
+    validRows,
+    skippedRows,
+    missingEntityIds,
+    missingUserIds,
+  };
+};
+
 const rebuildContributorRegistries = async (
   tx: Prisma.TransactionClient,
   aggregates: Map<string, RegistryAggregate>
@@ -998,7 +1071,17 @@ const rebuildContributorRegistries = async (
   if (selectedEntityTypes.includes('event')) {
     await tx.eventContributor.deleteMany({});
     const eventRows = Array.from(aggregates.values()).filter((item) => item.entityType === 'event');
-    for (const batch of chunk(eventRows, batchSize)) {
+    const validated = await validateRegistryReferences(tx, 'event', eventRows);
+    logStep('registry_event_reference_validation_done', {
+      rawRowCount: eventRows.length,
+      validRowCount: validated.validRows.length,
+      skippedRowCount: validated.skippedRows.length,
+      missingEntityCount: validated.missingEntityIds.length,
+      missingUserCount: validated.missingUserIds.length,
+      missingEntitySample: validated.missingEntityIds.slice(0, 10),
+      missingUserSample: validated.missingUserIds.slice(0, 10),
+    });
+    for (const batch of chunk(validated.validRows, batchSize)) {
       await tx.eventContributor.createMany({
         data: batch.map((row) => ({
           id: crypto.randomUUID(),
@@ -1021,7 +1104,17 @@ const rebuildContributorRegistries = async (
   if (selectedEntityTypes.includes('dj')) {
     await tx.dJContributor.deleteMany({});
     const djRows = Array.from(aggregates.values()).filter((item) => item.entityType === 'dj');
-    for (const batch of chunk(djRows, batchSize)) {
+    const validated = await validateRegistryReferences(tx, 'dj', djRows);
+    logStep('registry_dj_reference_validation_done', {
+      rawRowCount: djRows.length,
+      validRowCount: validated.validRows.length,
+      skippedRowCount: validated.skippedRows.length,
+      missingEntityCount: validated.missingEntityIds.length,
+      missingUserCount: validated.missingUserIds.length,
+      missingEntitySample: validated.missingEntityIds.slice(0, 10),
+      missingUserSample: validated.missingUserIds.slice(0, 10),
+    });
+    for (const batch of chunk(validated.validRows, batchSize)) {
       await tx.dJContributor.createMany({
         data: batch.map((row) => ({
           id: crypto.randomUUID(),

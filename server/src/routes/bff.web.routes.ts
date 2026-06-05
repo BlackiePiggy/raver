@@ -88,6 +88,7 @@ import {
   recordDJContribution,
   type ContributionHistoryFilter,
   type ContributorInfo,
+  type ContributorRegistryEntry,
 } from '../services/contribution.service';
 import {
   assertBrandSubmissionBaseRevision,
@@ -6963,6 +6964,59 @@ const mapUserLite = (row: any) => {
   };
 };
 
+const buildContributorInfoFromEntries = (entries: ContributorRegistryEntry[]): ContributorInfo => ({
+  userIds: entries.map((item) => item.id),
+  usernames: entries
+    .map((item) => item.username.trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index),
+  users: entries.map((item) => ({
+    id: item.id,
+    username: item.username,
+    displayName: item.displayName,
+    avatarUrl: item.avatarUrl,
+  })),
+  uploadedByUsername: entries[0]?.username ?? null,
+  entries,
+  summary: buildContributorSummary(entries),
+});
+
+const buildLegacyEventOrganizerContributorInfo = (row: any): ContributorInfo => {
+  const organizer = row?.organizer;
+  if (!organizer?.id || !organizer?.username) {
+    return emptyContributorInfo;
+  }
+
+  const createdAt = row?.createdAt instanceof Date ? row.createdAt : new Date(row?.createdAt ?? Date.now());
+  const updatedAt = row?.updatedAt instanceof Date ? row.updatedAt : new Date(row?.updatedAt ?? createdAt);
+  const entry: ContributorRegistryEntry = {
+    id: organizer.id,
+    username: organizer.username,
+    displayName: organizer.displayName ?? organizer.username,
+    avatarUrl: organizer.avatarUrl ?? null,
+    entityId: String(row?.id ?? ''),
+    role: 'creator',
+    firstContributedAt: createdAt,
+    lastContributedAt: updatedAt,
+    contributionCount: 1,
+    firstSubmissionId: null,
+    lastSubmissionId: null,
+    lastContributionSource: 'legacy_organizer_fallback',
+    createdAt,
+    updatedAt,
+  };
+
+  return buildContributorInfoFromEntries([entry]);
+};
+
+const eventContributorInfoFromRow = (row: any): ContributorInfo => {
+  const info = contributorInfoFromRow(row);
+  if (info.userIds.length > 0) {
+    return info;
+  }
+  return buildLegacyEventOrganizerContributorInfo(row);
+};
+
 const normalizeContributionHistoryFilter = (value: unknown): ContributionHistoryFilter => {
   if (value === 'event' || value === 'dj') return value;
   return 'all';
@@ -7291,7 +7345,7 @@ const mapEvent = (
   const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
   const mappedCanonicalArtists = mapEventLineupArtists(row.canonicalArtists);
   const mappedCanonicalSlots = mapEventTimetableSlots(row.performances);
-  const contributorInfo = contributorInfoFromRow(row);
+  const contributorInfo = eventContributorInfoFromRow(row);
   const contributors = contributorInfo.users.map((user) => mapUserLite(user)).filter(Boolean);
   const isContributor = !!viewerId && contributorInfo.userIds.includes(viewerId);
   const isOrganizer = !!viewerId && row?.organizer?.id === viewerId;
@@ -9861,7 +9915,19 @@ router.get('/events/:id/contributors', optionalAuth, async (req: Request, res: R
     const eventId = req.params.id as string;
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true },
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        organizer: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
     });
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
@@ -9869,8 +9935,11 @@ router.get('/events/:id/contributors', optionalAuth, async (req: Request, res: R
     }
 
     const contributors = await fetchContributorEntriesForEntity(prisma, 'event', eventId);
+    const resolvedContributors = contributors.length > 0
+      ? contributors
+      : eventContributorInfoFromRow(event).entries;
     ok(res, {
-      items: contributors.map((item) => ({
+      items: resolvedContributors.map((item) => ({
         user: mapUserLite(item),
         role: item.role,
         firstContributedAt: item.firstContributedAt,
@@ -9882,7 +9951,7 @@ router.get('/events/:id/contributors', optionalAuth, async (req: Request, res: R
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       })),
-      summary: buildContributorSummary(contributors),
+      summary: buildContributorSummary(resolvedContributors),
     });
   } catch (error) {
     console.error('BFF event contributors error:', error);

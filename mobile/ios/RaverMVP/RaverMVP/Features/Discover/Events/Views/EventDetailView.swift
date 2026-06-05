@@ -3516,40 +3516,6 @@ struct EventDetailView: View {
             .frame(width: cardWidth, alignment: .leading)
         }
 
-        if let organizer = event.organizer {
-            GlassCard {
-                Button {
-                    appPush(.userProfile(userID: organizer.id))
-                } label: {
-                    HStack(spacing: 10) {
-                        ImageLoaderView(urlString: organizer.avatarUrl, resizingMode: .fill)
-                            .background(organizerAvatarFallback(organizer))
-                            .frame(width: 38, height: 38)
-                            .clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(LT("发布方", "发布方", "公開元"))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(organizer.displayName ?? organizer.username)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RaverTheme.primaryText)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-            .frame(width: cardWidth, alignment: .leading)
-        } else if let organizerName = event.organizerName, !organizerName.isEmpty {
-            GlassCard {
-                eventInfoRow(icon: "person.2", title: LT("发布方", "Publisher", "公開元"), value: organizerName)
-            }
-            .frame(width: cardWidth, alignment: .leading)
-        }
-
         let contributorUsers = (event.contributors ?? []).filter { !$0.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if event.contributorSummary != nil || !contributorUsers.isEmpty {
             GlassCard {
@@ -6077,10 +6043,6 @@ struct EventDetailView: View {
 
     private func eventSlotTimeRangeText(_ slot: WebEventLineupSlot, event: WebEvent) -> String {
         EventTimeZoneDisplay.slotTimeRange(slot, event: event)
-    }
-
-    private func organizerAvatarFallback(_ organizer: WebUserLite) -> some View {
-        AvatarPlaceholderView(size: 32, backgroundColor: RaverTheme.card)
     }
 
     @ViewBuilder
