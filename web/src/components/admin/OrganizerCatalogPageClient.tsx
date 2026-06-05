@@ -990,10 +990,10 @@ export default function OrganizerCatalogPageClient() {
                       void openDetailOverlay(item);
                     }
                   }}
-                  className="flex cursor-pointer flex-col gap-3 px-6 py-4 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-4"
+                  className="flex cursor-pointer flex-col gap-3 px-6 py-3 transition-colors hover:bg-[#fbfcfb] focus:outline-none focus:ring-2 focus:ring-[#d9e7dd] lg:flex-row lg:items-center lg:gap-4"
                 >
                   <div className="flex min-w-0 flex-1 gap-4">
-                    <div className="relative h-[92px] w-[92px] shrink-0 overflow-hidden rounded-[16px] bg-[#f3f5f7]">
+                    <div className="relative h-[80px] w-[80px] shrink-0 overflow-hidden rounded-[16px] bg-[#f3f5f7]">
                       {visualUrl ? (
                         <Image
                           src={visualUrl}
@@ -1010,31 +1010,31 @@ export default function OrganizerCatalogPageClient() {
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="admin-reference-chip">{item.country || '未知国家'}</span>
-                        {item.city ? <span className="admin-reference-chip">{item.city}</span> : null}
+                      <div className="flex items-end justify-between gap-3">
+                        <h3 className="min-w-0 truncate text-[18px] font-semibold tracking-[-0.025em] text-[#071110]">
+                          {item.name}
+                        </h3>
+                        <div className="shrink-0 text-right text-[12px] font-medium text-[#7d8592]">
+                          <span>{item.country || '未知国家'}</span>
+                          {item.city ? <span>{` / ${item.city}`}</span> : null}
+                        </div>
                       </div>
-                      <h3 className="mt-1.5 truncate text-[18px] font-semibold tracking-[-0.025em] text-[#071110]">{item.name}</h3>
                       <p className="mt-1 truncate text-[12px] font-medium text-[#6b7280]">
-                        {item.city || '未知城市'} / {item.country || '未知国家'}
                         {item.abbreviation ? ` 路 ${item.abbreviation}` : ''}
                         {typeof item.revision === 'number' ? ` 路 rev ${item.revision}` : ''}
                       </p>
-                      {item.tagline ? <p className="mt-1.5 line-clamp-1 text-[12px] leading-5 text-black/55">{item.tagline}</p> : null}
+                      {item.tagline ? <p className="mt-1 line-clamp-1 text-[12px] leading-5 text-black/55">{item.tagline}</p> : null}
                       {item.aliases?.length ? (
                         <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-black/48">别名：{item.aliases.slice(0, 4).join('、')}</p>
                       ) : null}
-                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-[#7d8592]">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-[#7d8592]">
                         <span>更新于 {formatDateTime(item.updatedAt)}</span>
                         <span>创建于 {formatDateTime(item.createdAt)}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:w-auto lg:max-w-[560px] lg:justify-end">
-                    <div className="shrink-0 rounded-[12px] bg-[#f4f5f7] px-3 py-2 text-[11px] leading-4 text-[#6b7280]">
-                      目录中心承接查找和跳转，深入资料处理继续进入编辑与绑定工作流。
-                    </div>
+                  <div className="flex shrink-0 items-center gap-2 lg:w-auto lg:justify-end">
                     <Link
                       href={`/admin/content/organizers/${item.id}/edit`}
                       onClick={(event) => {
@@ -1055,24 +1055,6 @@ export default function OrganizerCatalogPageClient() {
                     >
                       打开绑定中心
                     </Link>
-                    {item.officialWebsite ? (
-                      <a
-                        href={item.officialWebsite}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setMenuOpenOrganizerId(null);
-                        }}
-                        className="inline-flex h-[36px] shrink-0 items-center justify-center rounded-full border border-[#e7ebef] bg-white px-4 text-center text-sm font-semibold text-[#111827]"
-                      >
-                        官方链接
-                      </a>
-                    ) : (
-                      <div className="shrink-0 rounded-full border border-[#e7ebef] bg-white px-4 py-2 text-center text-sm text-black/42">
-                        暂无官方链接
-                      </div>
-                    )}
                     <div className="relative" ref={menuOpenOrganizerId === item.id ? actionMenuRef : null}>
                       <button
                         type="button"
