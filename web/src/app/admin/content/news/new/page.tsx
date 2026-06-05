@@ -1,27 +1,31 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
-import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import NewsStudioForm from '@/components/admin/NewsStudioForm';
 import {
   createNewsStudioDraft,
   type NewsStudioCreateResult,
   type NewsStudioDraft,
 } from '@/features/admin-content/news-studio';
+import { buildAdminContentSubmitResultHref } from '@/features/admin-content/submit-result';
 
 export default function AdminContentNewsCreatePage() {
+  const router = useRouter();
   const [draft, setDraft] = useState<NewsStudioDraft>(() => createNewsStudioDraft());
-  const [submitNotice, setSubmitNotice] = useState<string | null>(null);
-  const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
-  const [savedNewsId, setSavedNewsId] = useState<string | null>(null);
 
   const handleSubmitResult = (result: NewsStudioCreateResult) => {
-    setSubmitNotice(`资讯创建成功：${result.article.title}`);
-    setSubmitResultLink(`/admin/content/news/${result.article.id}/edit`);
-    setSavedNewsId(result.article.id);
+    router.replace(
+      buildAdminContentSubmitResultHref({
+        entityType: 'news_article',
+        flow: 'create',
+        outcome: 'created',
+        entityId: result.article.id,
+        entityName: result.article.title,
+      })
+    );
   };
 
   return (
@@ -45,37 +49,6 @@ export default function AdminContentNewsCreatePage() {
         </>
       }
     >
-      {submitNotice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
-          <div>{submitNotice}</div>
-          {submitResultLink ? (
-            <div className="mt-3">
-              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
-                打开结果页面
-              </Link>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {savedNewsId ? (
-        <NotificationContentHistoryPrompt
-          entityType="news_article"
-          entityId={savedNewsId}
-          secondaryHref="/admin/content/news"
-          secondaryLabel="稍后处理，先回到资讯目录"
-        />
-      ) : null}
-
-      {savedNewsId ? (
-        <AdminPublishTaskActions
-          taskType="news_release"
-          entityType="news_article"
-          entityId={savedNewsId}
-          mode="create"
-        />
-      ) : null}
-
       <NewsStudioForm mode="create" draft={draft} setDraft={setDraft} onSubmit={handleSubmitResult} />
     </AdminContentLayout>
   );

@@ -1,10 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
 import DJStudioForm from '@/components/admin/DJStudioForm';
 import {
   createDJStudioDraft,
@@ -13,16 +12,15 @@ import {
   type DJStudioCreateResult,
   type DJStudioDraft,
 } from '@/features/admin-content/dj-studio';
+import { buildAdminContentSubmitResultHref } from '@/features/admin-content/submit-result';
 
 export default function DJStudioEditPageClient() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const djId = typeof params?.id === 'string' ? params.id : '';
   const [draft, setDraft] = useState<DJStudioDraft>(() => createDJStudioDraft());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [resultLink, setResultLink] = useState<string | null>(null);
-  const [savedDJId, setSavedDJId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!djId) {
@@ -39,7 +37,6 @@ export default function DJStudioEditPageClient() {
         const dj = await djStudioApi.fetchDJ(djId);
         if (cancelled) return;
         setDraft(hydrateDJStudioDraftFromDJ(dj));
-        setSavedDJId(djId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载 DJ 失败');
@@ -63,14 +60,28 @@ export default function DJStudioEditPageClient() {
 
   const handleSubmitResult = (result: DJStudioCreateResult) => {
     if (result.kind === 'created') {
-      setNotice(`DJ 更新已提交成功：${result.dj.name}`);
-      setResultLink(`/admin/content/djs/${result.dj.id}/edit`);
-      setSavedDJId(result.dj.id);
+      router.replace(
+        buildAdminContentSubmitResultHref({
+          entityType: 'dj',
+          flow: 'edit',
+          outcome: 'created',
+          entityId: result.dj.id,
+          entityName: result.dj.name,
+        })
+      );
       return;
     }
-    setNotice(result.payload.message || 'DJ 编辑已进入审核队列');
-    setResultLink('/admin/content/reviews');
-    setSavedDJId(null);
+
+    router.replace(
+      buildAdminContentSubmitResultHref({
+        entityType: 'dj',
+        flow: 'edit',
+        outcome: 'submitted',
+        entityId: djId,
+        submissionId: result.payload.submission.id,
+        message: result.payload.message,
+      })
+    );
   };
 
   return (
@@ -94,29 +105,6 @@ export default function DJStudioEditPageClient() {
         </>
       }
     >
-      {notice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
-          <div>{notice}</div>
-          {resultLink ? (
-            <div className="mt-3">
-              <Link href={resultLink} className="font-semibold text-[#071110] hover:underline">
-                打开结果页面
-              </Link>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {notice && savedDJId ? (
-        <NotificationContentHistoryPrompt
-          entityType="dj"
-          entityId={savedDJId}
-          secondaryHref="/admin/content/djs/catalog"
-          secondaryLabel="稍后处理，先回到 DJ 目录"
-          description="这次 DJ 资料更新已经保存成功。你可以现在去统一内容历史页继续决定是否推送给用户，也可以稍后再处理。"
-        />
-      ) : null}
-
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">
           正在加载 DJ 详情并回填编辑表单...

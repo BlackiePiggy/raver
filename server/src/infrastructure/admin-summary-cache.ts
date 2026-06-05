@@ -130,6 +130,24 @@ class AdminSummaryCacheService {
       console.warn('Admin summary cache write failed:', error);
     }
   }
+
+  async invalidateNamespace(namespace: string): Promise<void> {
+    const prefix = `${namespace}:`;
+    for (const entryId of this.memory.keys()) {
+      if (entryId.startsWith(prefix)) {
+        this.memory.delete(entryId);
+      }
+    }
+
+    if (!this.diskEnabled) return;
+
+    const namespaceDir = path.join(this.cacheDir, namespace);
+    try {
+      await fs.rm(namespaceDir, { recursive: true, force: true });
+    } catch (error) {
+      console.warn('Admin summary cache namespace invalidation failed:', error);
+    }
+  }
 }
 
 export const adminSummaryCache = new AdminSummaryCacheService();

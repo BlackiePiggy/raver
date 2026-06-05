@@ -8529,6 +8529,19 @@ const ADMIN_DJ_CATALOG_SNAPSHOT_VERSION = 'admin-dj-catalog-summary-v1';
 const ADMIN_EVENT_ARCHIVE_YEAR_SUMMARY_VERSION = 'admin-event-archive-year-summary-v1';
 const ADMIN_CATALOG_MEMORY_TTL_MS = 5 * 60 * 1000;
 
+const invalidateEventAdminSummaryCachesBestEffort = async (): Promise<void> => {
+  await Promise.allSettled([
+    adminSummaryCache.invalidateNamespace('event-catalog-summary'),
+    adminSummaryCache.invalidateNamespace('event-archive-year-summary'),
+  ]);
+};
+
+const invalidateDJAdminSummaryCachesBestEffort = async (): Promise<void> => {
+  await Promise.allSettled([
+    adminSummaryCache.invalidateNamespace('dj-catalog-summary'),
+  ]);
+};
+
 type DailyEventRecommendationSnapshot = {
   userId: string;
   dateKey: string;
@@ -10605,6 +10618,7 @@ router.post('/events', optionalAuth, async (req: Request, res: Response): Promis
         payload: normalizedBody,
         idempotencyKey,
       });
+      await invalidateEventAdminSummaryCachesBestEffort();
       await upsertEventReleasePublishTaskBestEffort({
         actorUserId: userId,
         operationType: 'create',
@@ -10721,6 +10735,7 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         payload: normalizedBody,
         idempotencyKey,
       });
+      await invalidateEventAdminSummaryCachesBestEffort();
       await upsertEventReleasePublishTaskBestEffort({
         actorUserId: userId,
         operationType: 'edit',
@@ -10807,6 +10822,7 @@ router.delete('/events/:id', optionalAuth, async (req: Request, res: Response): 
       entityType: 'event',
       entityId: eventId,
     });
+    await invalidateEventAdminSummaryCachesBestEffort();
     await mediaAssetService.markDeletedByUrl(eventAssets?.coverImageUrl);
     await mediaAssetService.markDeletedByUrl(eventAssets?.lineupImageUrl);
     const imageAssets = Array.isArray(eventAssets?.imageAssets) ? eventAssets?.imageAssets : [];
@@ -13418,6 +13434,7 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
         avatarUrl: mapped.avatarUrl ?? null,
       },
     });
+    await invalidateDJAdminSummaryCachesBestEffort();
 
     ok(res, {
       action,
@@ -13706,6 +13723,7 @@ router.post('/djs/upload-image', optionalAuth, djImageUpload.single('image'), as
       'edit',
       'direct_media_upload'
     );
+    await invalidateDJAdminSummaryCachesBestEffort();
 
     ok(res, uploaded);
   } catch (error) {
@@ -14191,6 +14209,7 @@ router.delete('/djs/:id', optionalAuth, async (req: Request, res: Response): Pro
       entityType: 'dj',
       entityId: djId,
     });
+    await invalidateDJAdminSummaryCachesBestEffort();
     for (const url of urlsToDelete) {
       await mediaAssetService.markDeletedByUrl(url);
       await deleteSingleDJMediaOssObjectIfOwned(url, djId);

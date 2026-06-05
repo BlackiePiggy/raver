@@ -17,7 +17,8 @@ export const normalizeLabelFounders = (value: unknown): LabelFounderRecord[] => 
   if (!Array.isArray(value)) return [];
 
   const founders: LabelFounderRecord[] = [];
-  const seen = new Set<string>();
+  const seenByDjId = new Map<string, number>();
+  const seenByName = new Set<string>();
 
   for (const item of value) {
     if (!isRecord(item)) continue;
@@ -27,11 +28,27 @@ export const normalizeLabelFounders = (value: unknown): LabelFounderRecord[] => 
 
     if (!name && !djId) continue;
 
-    const identityKey = `${djId ?? ''}::${(name ?? '').toLowerCase()}`;
-    if (seen.has(identityKey)) continue;
-    seen.add(identityKey);
+    if (djId) {
+      const existingIndex = seenByDjId.get(djId);
+      if (existingIndex != null) {
+        const existing = founders[existingIndex];
+        if ((!existing.name || !existing.name.trim()) && name) {
+          founders[existingIndex] = { ...existing, name };
+        }
+        continue;
+      }
+    } else {
+      const nameKey = (name ?? '').toLowerCase();
+      if (!nameKey) continue;
+      if (seenByName.has(nameKey)) continue;
+      seenByName.add(nameKey);
+    }
 
     founders.push({ name, djId });
+    const pushedIndex = founders.length - 1;
+    if (djId) {
+      seenByDjId.set(djId, pushedIndex);
+    }
 
     if (founders.length >= INPUT_LIMITS.label.foundersMaxItems) {
       break;

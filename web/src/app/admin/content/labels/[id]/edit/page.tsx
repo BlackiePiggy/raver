@@ -1,11 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
-import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import LabelStudioForm from '@/components/admin/LabelStudioForm';
 import {
   createLabelStudioDraft,
@@ -14,15 +12,15 @@ import {
   type LabelStudioCreateResult,
   type LabelStudioDraft,
 } from '@/features/admin-content/label-studio';
+import { buildAdminContentSubmitResultHref } from '@/features/admin-content/submit-result';
 
 export default function AdminContentLabelEditPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const labelId = typeof params?.id === 'string' ? params.id : '';
   const [draft, setDraft] = useState<LabelStudioDraft>(() => createLabelStudioDraft());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [savedLabelId, setSavedLabelId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!labelId) {
@@ -40,7 +38,6 @@ export default function AdminContentLabelEditPage() {
         const label = await labelStudioApi.fetchLabel(labelId);
         if (cancelled) return;
         setDraft(hydrateLabelStudioDraftFromLabel(label));
-        setSavedLabelId(labelId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载厂牌失败');
@@ -57,8 +54,15 @@ export default function AdminContentLabelEditPage() {
   }, [labelId]);
 
   const handleSubmitResult = (result: LabelStudioCreateResult) => {
-    setNotice(`厂牌已保存：${result.label.name}`);
-    setSavedLabelId(result.label.id);
+    router.replace(
+      buildAdminContentSubmitResultHref({
+        entityType: 'label',
+        flow: 'edit',
+        outcome: 'created',
+        entityId: result.label.id,
+        entityName: result.label.name,
+      })
+    );
   };
 
   return (
@@ -82,27 +86,6 @@ export default function AdminContentLabelEditPage() {
         </>
       }
     >
-      {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
-
-      {notice && savedLabelId && !loading && !error ? (
-        <NotificationContentHistoryPrompt
-          entityType="label"
-          entityId={savedLabelId}
-          secondaryHref="/admin/content/labels"
-          secondaryLabel="稍后处理，先回到厂牌目录"
-          description="这次厂牌资料更新已经保存成功。你可以现在去统一内容历史页继续决定是否推送，也可以先返回目录稍后处理。"
-        />
-      ) : null}
-
-      {notice && savedLabelId && !loading && !error ? (
-        <AdminPublishTaskActions
-          taskType="brand_release"
-          entityType="label"
-          entityId={savedLabelId}
-          mode="edit"
-        />
-      ) : null}
-
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">正在加载厂牌详情...</section>
       ) : error ? (

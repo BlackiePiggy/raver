@@ -1,27 +1,31 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
-import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import LabelStudioForm from '@/components/admin/LabelStudioForm';
 import {
   createLabelStudioDraft,
   type LabelStudioCreateResult,
   type LabelStudioDraft,
 } from '@/features/admin-content/label-studio';
+import { buildAdminContentSubmitResultHref } from '@/features/admin-content/submit-result';
 
 export default function AdminContentLabelCreatePage() {
+  const router = useRouter();
   const [draft, setDraft] = useState<LabelStudioDraft>(() => createLabelStudioDraft());
-  const [submitNotice, setSubmitNotice] = useState<string | null>(null);
-  const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
-  const [savedLabelId, setSavedLabelId] = useState<string | null>(null);
 
   const handleSubmitResult = (result: LabelStudioCreateResult) => {
-    setSubmitNotice(`厂牌创建成功：${result.label.name}`);
-    setSubmitResultLink(`/admin/content/labels/${result.label.id}/edit`);
-    setSavedLabelId(result.label.id);
+    router.replace(
+      buildAdminContentSubmitResultHref({
+        entityType: 'label',
+        flow: 'create',
+        outcome: 'created',
+        entityId: result.label.id,
+        entityName: result.label.name,
+      })
+    );
   };
 
   return (
@@ -45,37 +49,6 @@ export default function AdminContentLabelCreatePage() {
         </>
       }
     >
-      {submitNotice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
-          <div>{submitNotice}</div>
-          {submitResultLink ? (
-            <div className="mt-3">
-              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
-                打开结果页面
-              </Link>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {savedLabelId ? (
-        <NotificationContentHistoryPrompt
-          entityType="label"
-          entityId={savedLabelId}
-          secondaryHref="/admin/content/labels"
-          secondaryLabel="稍后处理，先回到厂牌目录"
-        />
-      ) : null}
-
-      {savedLabelId ? (
-        <AdminPublishTaskActions
-          taskType="brand_release"
-          entityType="label"
-          entityId={savedLabelId}
-          mode="create"
-        />
-      ) : null}
-
       <LabelStudioForm mode="create" draft={draft} setDraft={setDraft} onSubmit={handleSubmitResult} />
     </AdminContentLayout>
   );

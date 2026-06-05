@@ -1,38 +1,48 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
-import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import DJStudioForm from '@/components/admin/DJStudioForm';
 import {
   createDJStudioDraft,
   type DJStudioCreateResult,
   type DJStudioDraft,
 } from '@/features/admin-content/dj-studio';
+import { buildAdminContentSubmitResultHref } from '@/features/admin-content/submit-result';
 
 export default function DJStudioCreatePageClient({
   initialName,
 }: {
   initialName: string;
 }) {
+  const router = useRouter();
   const [draft, setDraft] = useState<DJStudioDraft>(() => createDJStudioDraft(initialName));
-  const [submitNotice, setSubmitNotice] = useState<string | null>(null);
-  const [submitResultLink, setSubmitResultLink] = useState<string | null>(null);
-  const [savedDJId, setSavedDJId] = useState<string | null>(null);
 
   const handleSubmitResult = (result: DJStudioCreateResult) => {
     if (result.kind === 'created') {
-      setSubmitNotice(`DJ 已创建成功：${result.dj.name}`);
-      setSubmitResultLink(result.dj.id ? `/djs/${result.dj.id}` : '/admin/content/djs/catalog');
-      setSavedDJId(result.dj.id ?? null);
+      router.replace(
+        buildAdminContentSubmitResultHref({
+          entityType: 'dj',
+          flow: 'create',
+          outcome: 'created',
+          entityId: result.dj.id,
+          entityName: result.dj.name,
+        })
+      );
       return;
     }
 
-    setSubmitNotice(result.payload.message || 'DJ 已进入审核队列');
-    setSubmitResultLink('/admin/content/reviews');
-    setSavedDJId(null);
+    router.replace(
+      buildAdminContentSubmitResultHref({
+        entityType: 'dj',
+        flow: 'create',
+        outcome: 'submitted',
+        submissionId: result.payload.submission.id,
+        message: result.payload.message,
+      })
+    );
   };
 
   return (
@@ -56,37 +66,6 @@ export default function DJStudioCreatePageClient({
         </>
       }
     >
-      {submitNotice ? (
-        <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">
-          <div>{submitNotice}</div>
-          {submitResultLink ? (
-            <div className="mt-3">
-              <Link href={submitResultLink} className="font-semibold text-[#071110] hover:underline">
-                打开结果页面
-              </Link>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {savedDJId ? (
-        <NotificationContentHistoryPrompt
-          entityType="dj"
-          entityId={savedDJId}
-          secondaryHref="/admin/content/djs/catalog"
-          secondaryLabel="稍后处理，先回到 DJ 目录"
-        />
-      ) : null}
-
-      {savedDJId ? (
-        <AdminPublishTaskActions
-          taskType="dj_release"
-          entityType="dj"
-          entityId={savedDJId}
-          mode="create"
-        />
-      ) : null}
-
       <DJStudioForm
         mode="create"
         draft={draft}

@@ -1,11 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
-import NotificationContentHistoryPrompt from '@/components/admin/NotificationContentHistoryPrompt';
-import AdminPublishTaskActions from '@/components/admin/AdminPublishTaskActions';
 import NewsStudioForm from '@/components/admin/NewsStudioForm';
 import {
   createNewsStudioDraft,
@@ -14,15 +12,15 @@ import {
   type NewsStudioCreateResult,
   type NewsStudioDraft,
 } from '@/features/admin-content/news-studio';
+import { buildAdminContentSubmitResultHref } from '@/features/admin-content/submit-result';
 
 export default function AdminContentNewsEditPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const newsId = typeof params?.id === 'string' ? params.id : '';
   const [draft, setDraft] = useState<NewsStudioDraft>(() => createNewsStudioDraft());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [savedNewsId, setSavedNewsId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!newsId) {
@@ -39,7 +37,6 @@ export default function AdminContentNewsEditPage() {
         const article = await newsStudioApi.fetchNews(newsId);
         if (cancelled) return;
         setDraft(hydrateNewsStudioDraftFromArticle(article));
-        setSavedNewsId(newsId);
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError instanceof Error ? loadError.message : '加载资讯失败。');
@@ -55,8 +52,15 @@ export default function AdminContentNewsEditPage() {
   }, [newsId]);
 
   const handleSubmitResult = (result: NewsStudioCreateResult) => {
-    setNotice(`资讯已保存：${result.article.title}`);
-    setSavedNewsId(result.article.id);
+    router.replace(
+      buildAdminContentSubmitResultHref({
+        entityType: 'news_article',
+        flow: 'edit',
+        outcome: 'created',
+        entityId: result.article.id,
+        entityName: result.article.title,
+      })
+    );
   };
 
   return (
@@ -80,27 +84,6 @@ export default function AdminContentNewsEditPage() {
         </>
       }
     >
-      {notice ? <section className="admin-studio-pastel-mint p-4 text-sm text-[#2f4027]">{notice}</section> : null}
-
-      {notice && savedNewsId && !loading && !error ? (
-        <NotificationContentHistoryPrompt
-          entityType="news_article"
-          entityId={savedNewsId}
-          secondaryHref="/admin/content/news"
-          secondaryLabel="稍后处理，先回到资讯目录"
-          description="这次资讯更新已经保存成功。你可以现在去统一内容历史页预览推送内容并继续处理，也可以先回目录稍后再决定。"
-        />
-      ) : null}
-
-      {savedNewsId && !loading && !error ? (
-        <AdminPublishTaskActions
-          taskType="news_release"
-          entityType="news_article"
-          entityId={savedNewsId}
-          mode="edit"
-        />
-      ) : null}
-
       {loading ? (
         <section className="admin-studio-section p-6 text-sm text-black/48">正在加载资讯详情...</section>
       ) : error ? (
