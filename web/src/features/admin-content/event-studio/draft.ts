@@ -120,6 +120,25 @@ const splitMemberNamesText = (value: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const composeActDisplayName = (actType?: string | null, memberNamesText?: string | null): string => {
+  const normalizedActType = normalizeActType(actType);
+  const names = splitMemberNamesText(String(memberNamesText || ''));
+  if (!names.length) return '';
+  if (normalizedActType === 'b3b') return names.slice(0, 3).join(' B3B ');
+  if (normalizedActType === 'b2b') return names.slice(0, 2).join(' B2B ');
+  return names[0] || '';
+};
+
+const resolveDisplayNameOverride = (
+  actType: string | null | undefined,
+  memberNamesText: string,
+  displayName?: string | null
+): string | undefined => {
+  const normalizedDisplayName = String(displayName || '').trim();
+  if (!normalizedDisplayName) return undefined;
+  return normalizedDisplayName === composeActDisplayName(actType, memberNamesText) ? undefined : normalizedDisplayName;
+};
+
 const defaultMemberNamesText = (members?: string[] | null, fallback?: string | null): string => {
   const normalizedMembers = Array.isArray(members)
     ? members.flatMap((item) => splitMemberNamesText(String(item || '')))
@@ -214,6 +233,7 @@ export const buildLineupArtistsFromTimetableSlots = (
       djId: normalizedDjId,
       memberDjIds: normalizedMemberDjIds,
       memberNamesText,
+      displayNameOverride: slot.displayNameOverride,
       actType: inferActType(slot.actType, Math.max(memberNamesText ? memberNamesText.split(/[\/,&]/).map((item) => item.trim()).filter(Boolean).length : 0, normalizedMemberDjIds.filter(Boolean).length)),
       sortOrder: artistsByKey.size + 1 || index + 1,
     });
@@ -270,6 +290,7 @@ const buildLineupArtistsFromInput = (
       djId,
       memberDjIds,
       memberNamesText,
+      displayNameOverride: resolveDisplayNameOverride((artist as { performerType?: string | null }).performerType, memberNamesText, artist.djName),
       actType: inferActType((artist as { performerType?: string | null }).performerType, Math.max(memberNamesText ? memberNamesText.split(/[\/,&]/).map((item) => item.trim()).filter(Boolean).length : 0, memberDjIds.filter(Boolean).length, djId ? 1 : 0)),
       sortOrder: artist.sortOrder ?? index + 1,
     });
@@ -739,6 +760,11 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
       djId: slot.djId || '',
       memberDjIds: Array.isArray(slot.memberDjIds) ? slot.memberDjIds : (slot.djId ? [slot.djId] : []),
       memberNamesText: defaultMemberNamesText(slot.memberNames, slot.djName),
+      displayNameOverride: resolveDisplayNameOverride(
+        (slot as { performerType?: string | null }).performerType,
+        defaultMemberNamesText(slot.memberNames, slot.djName),
+        slot.djName
+      ),
       stageName: String(slot.stageName || '').trim(),
       sortOrder: slot.sortOrder ?? index + 1,
       startTime: timePartFromValueInTimeZone(slot.startTime, eventTimeZone),

@@ -134,6 +134,7 @@ export type EventStudioLineupArtistDraft = {
   djId: string;
   memberDjIds: Array<string | null>;
   memberNamesText: string;
+  displayNameOverride?: string;
   actType?: 'solo' | 'b2b' | 'b3b';
   sortOrder: number;
 };
@@ -151,6 +152,7 @@ export type EventStudioTimetableSlotDraft = {
   djId: string;
   memberDjIds: Array<string | null>;
   memberNamesText: string;
+  displayNameOverride?: string;
   stageName: string;
   sortOrder: number;
   startTime: string;

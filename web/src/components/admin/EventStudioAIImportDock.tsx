@@ -24,6 +24,7 @@ type EventStudioAIEditableLineupItem = {
   id: string;
   actType: EventStudioAIActType;
   performerNamesText: string;
+  displayNameOverrideText: string;
   performerDJIDs: Array<string | null>;
   performerAvatarURLs: Array<string | null>;
   confidence?: number | null;
@@ -262,6 +263,16 @@ const formatPerformerNamesText = (names: string[], actType: EventStudioAIActType
   const compact = names.map((item) => safeString(item)).filter(Boolean).slice(0, actTypePerformerCount(actType));
   if (!compact.length) return '';
   return actType === 'solo' ? compact[0] : compact.join(' / ');
+};
+
+const normalizeDisplayNameOverrideText = (
+  value: string,
+  names: string[],
+  actType: EventStudioAIActType
+): string => {
+  const trimmed = safeString(value);
+  if (!trimmed) return '';
+  return trimmed === formatPerformerNamesText(names, actType) ? '' : trimmed;
 };
 
 const resolveImportedAct = (input: {
@@ -510,10 +521,17 @@ const parseLineupEditableItems = (raw: Record<string, any>): EventStudioAIEditab
       const count = actTypePerformerCount(resolved.actType);
       const normalizedNames = resolved.performerNames.slice(0, count);
       if (!normalizedNames.length) return null;
+      const defaultDisplayName = formatPerformerNamesText(normalizedNames, resolved.actType);
+      const displayNameOverrideText = normalizeDisplayNameOverrideText(
+        firstFilledText(item?.displayName, item?.rawText),
+        normalizedNames,
+        resolved.actType
+      );
       return {
         id: crypto.randomUUID(),
         actType: resolved.actType,
         performerNamesText: formatPerformerNamesText(normalizedNames, resolved.actType),
+        displayNameOverrideText: displayNameOverrideText || (defaultDisplayName !== firstFilledText(item?.displayName, item?.rawText) ? '' : ''),
         performerDJIDs: normalizePerformerIds(item?.performerDJIDs ?? item?.performerDjIds ?? item?.memberDjIds, count),
         performerAvatarURLs: normalizePerformerAvatarURLs(item?.performerAvatarURLs ?? item?.performerAvatarUrls, count),
         confidence: Number.isFinite(Number(item?.confidence)) ? Number(item.confidence) : null,
@@ -560,6 +578,12 @@ const parseTimetableEditableSlots = (
                         const count = actTypePerformerCount(resolvedAct.actType);
                         const names = resolvedAct.performerNames.slice(0, count);
                         if (!names.length) return null;
+                        const defaultDisplayName = formatPerformerNamesText(names, resolvedAct.actType);
+                        const displayNameOverrideText = normalizeDisplayNameOverrideText(
+                          firstFilledText(slot?.displayName, slot?.rawText),
+                          names,
+                          resolvedAct.actType
+                        );
                         const startSource =
                           slot?.normalizedStartTime ?? slot?.normalized_start_time ?? slot?.startTimeText ?? slot?.start_time_text;
                         const endSource =
@@ -575,6 +599,7 @@ const parseTimetableEditableSlots = (
                           stageName: safeString(stage?.stageName || stage?.stage_name) || 'Main Stage',
                           actType: resolvedAct.actType,
                           performerNamesText: formatPerformerNamesText(names, resolvedAct.actType),
+                          displayNameOverrideText: displayNameOverrideText || (defaultDisplayName !== firstFilledText(slot?.displayName, slot?.rawText) ? '' : ''),
                           performerDJIDs: normalizePerformerIds(slot?.performerDJIDs ?? slot?.performerDjIds ?? slot?.memberDjIds, count),
                           performerAvatarURLs: normalizePerformerAvatarURLs(
                             slot?.performerAvatarURLs ?? slot?.performerAvatarUrls,
@@ -615,6 +640,7 @@ const normalizeEditableAct = <T extends EventStudioAIEditableLineupItem | EventS
     ...item,
     actType,
     performerNamesText: formatPerformerNamesText(names, actType),
+    displayNameOverrideText: normalizeDisplayNameOverrideText(item.displayNameOverrideText, names, actType),
     performerDJIDs: normalizePerformerIds(item.performerDJIDs, count),
     performerAvatarURLs: normalizePerformerAvatarURLs(item.performerAvatarURLs, count),
   } as T;
@@ -646,6 +672,7 @@ const compactEditableAct = <T extends EventStudioAIEditableLineupItem | EventStu
     ...normalized,
     actType: nextActType,
     performerNamesText: formatPerformerNamesText(compactNames, nextActType),
+    displayNameOverrideText: normalizeDisplayNameOverrideText(normalized.displayNameOverrideText, compactNames, nextActType),
     performerDJIDs: normalizePerformerIds(compactDjIds, nextCount),
     performerAvatarURLs: normalizePerformerAvatarURLs(compactAvatarURLs, nextCount),
   } as T;
@@ -804,7 +831,7 @@ const performerNamesForDisplay = (item: EventStudioAIEditableAct): string[] =>
   splitPerformerNames(item.performerNamesText, item.actType).slice(0, actTypePerformerCount(item.actType));
 
 const performerDisplayName = (item: EventStudioAIEditableAct): string =>
-  formatPerformerNamesText(performerNamesForDisplay(item), item.actType) || '未命名演出';
+  safeString(item.displayNameOverrideText) || formatPerformerNamesText(performerNamesForDisplay(item), item.actType) || '未命名演出';
 
 const matchedPerformerCount = (item: EventStudioAIEditableAct): number =>
   item.performerDJIDs.slice(0, actTypePerformerCount(item.actType)).filter(Boolean).length;
@@ -1516,6 +1543,25 @@ export default function EventStudioAIImportDock({
     updateTimetableSlot(itemId, (current) => applyUpdate(current));
   };
 
+  const updateAIImportDisplayName = (
+    scope: 'lineup' | 'timetable',
+    itemId: string,
+    value: string
+  ) => {
+    const applyUpdate = <T extends EventStudioAIEditableAct>(current: T): T => {
+      const names = performerNamesForDisplay(current);
+      return {
+        ...current,
+        displayNameOverrideText: normalizeDisplayNameOverrideText(value, names, current.actType),
+      };
+    };
+    if (scope === 'lineup') {
+      updateLineupItem(itemId, (current) => applyUpdate(current));
+      return;
+    }
+    updateTimetableSlot(itemId, (current) => applyUpdate(current));
+  };
+
   const moveSelectedTimetableSlots = (target: EventStudioAIResultTarget) => {
     setPanel((current) => {
       if (!current || !current.selectedTimetableSlotIds.length) return current;
@@ -1893,33 +1939,46 @@ export default function EventStudioAIImportDock({
     </div>
   );
 
+  const renderActTypeToggle = (
+    value: EventStudioAIActType,
+    onChange: (next: EventStudioAIActType) => void
+  ) => (
+    <div className="grid grid-cols-3 gap-1 rounded-[16px] border border-[#e7ece7] bg-white p-1">
+      {ACT_TYPE_ITEMS.map((act) => {
+        const active = act.value === value;
+        return (
+          <button
+            key={act.value}
+            type="button"
+            onClick={() => onChange(act.value)}
+            className={`rounded-[12px] px-3 py-2 text-sm font-semibold transition ${
+              active ? 'bg-[#eef4ff] text-[#3567d6]' : 'text-black/45 hover:bg-[#f5f7f5]'
+            }`}
+          >
+            {act.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const renderLineupEditPanel = (item: EventStudioAIEditableLineupItem) => {
     const count = actTypePerformerCount(item.actType);
     const names = performerNamesForDisplay(item);
     return (
       <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
-        <div className="grid gap-3 xl:grid-cols-[160px_140px_minmax(0,1fr)]">
-          <label className="space-y-1 text-xs text-black/45">
+        <div className="grid gap-3 xl:grid-cols-[220px_140px_minmax(0,1fr)]">
+          <div className="space-y-1 text-xs text-black/45">
             <span>演出形式</span>
-            <select
-              className={aiCompactSelectClass}
-              value={item.actType}
-              onChange={(event) =>
-                updateLineupItem(item.id, (current) =>
-                  normalizeEditableAct({
-                    ...current,
-                    actType: normalizeActType(event.target.value),
-                  })
-                )
-              }
-            >
-              {ACT_TYPE_ITEMS.map((act) => (
-                <option key={act.value} value={act.value}>
-                  {act.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            {renderActTypeToggle(item.actType, (nextActType) =>
+              updateLineupItem(item.id, (current) =>
+                normalizeEditableAct({
+                  ...current,
+                  actType: nextActType,
+                })
+              )
+            )}
+          </div>
           <label className="space-y-1 text-xs text-black/45">
             <span>置信度</span>
             <input
@@ -1935,8 +1994,15 @@ export default function EventStudioAIImportDock({
             />
           </label>
           <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3 text-sm text-black/56">
-            <div className="text-[11px] text-black/38">当前展示名</div>
-            <div className="mt-1 font-medium text-[#071110]">{names.join(' / ') || '未命名'}</div>
+            <label className="block space-y-1">
+              <span className="text-[11px] text-black/38">当前展示名</span>
+              <input
+                className={`${aiCompactInputClass} mt-1`}
+                value={item.displayNameOverrideText || formatPerformerNamesText(names, item.actType)}
+                onChange={(event) => updateAIImportDisplayName('lineup', item.id, event.target.value)}
+                placeholder="输入展示名称"
+              />
+            </label>
           </div>
         </div>
         <div className={`mt-3 grid gap-3 ${count >= 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
@@ -1950,27 +2016,17 @@ export default function EventStudioAIImportDock({
   const renderTimetableEditPanel = (slot: EventStudioAIEditableTimetableSlot) => (
     <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
       <div className="grid gap-3 xl:grid-cols-2">
-        <label className="space-y-1 text-xs text-black/45">
+        <div className="space-y-1 text-xs text-black/45">
           <span>演出形式</span>
-          <select
-            className={aiCompactSelectClass}
-            value={slot.actType}
-            onChange={(event) =>
-              updateTimetableSlot(slot.id, (current) =>
-                normalizeEditableAct({
-                  ...current,
-                  actType: normalizeActType(event.target.value),
-                })
-              )
-            }
-          >
-            {ACT_TYPE_ITEMS.map((act) => (
-              <option key={act.value} value={act.value}>
-                {act.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          {renderActTypeToggle(slot.actType, (nextActType) =>
+            updateTimetableSlot(slot.id, (current) =>
+              normalizeEditableAct({
+                ...current,
+                actType: nextActType,
+              })
+            )
+          )}
+        </div>
         <label className="space-y-1 text-xs text-black/45">
           <span>活动日</span>
           <select
@@ -2004,8 +2060,15 @@ export default function EventStudioAIImportDock({
           </select>
         </label>
         <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3 text-sm text-black/56">
-          <div className="text-[11px] text-black/38">当前展示名</div>
-          <div className="mt-1 font-medium text-[#071110]">{performerDisplayName(slot)}</div>
+          <label className="block space-y-1">
+            <span className="text-[11px] text-black/38">当前展示名</span>
+            <input
+              className={`${aiCompactInputClass} mt-1`}
+              value={slot.displayNameOverrideText || formatPerformerNamesText(performerNamesForDisplay(slot), slot.actType)}
+              onChange={(event) => updateAIImportDisplayName('timetable', slot.id, event.target.value)}
+              placeholder="输入展示名称"
+            />
+          </label>
         </div>
         <label className="space-y-1 text-xs text-black/45">
           <span>舞台</span>
@@ -2129,6 +2192,7 @@ export default function EventStudioAIImportDock({
             djId: item.performerDJIDs.find(Boolean) || '',
             memberDjIds: normalizePerformerIds(item.performerDJIDs, actTypePerformerCount(item.actType)),
             memberNamesText: names.join(' / '),
+            displayNameOverride: normalizeDisplayNameOverrideText(item.displayNameOverrideText, names, item.actType) || undefined,
             actType: item.actType,
             sortOrder: draft.lineupArtists.length + index + 1,
           };
@@ -2172,6 +2236,7 @@ export default function EventStudioAIImportDock({
           djId: slot.performerDJIDs.find(Boolean) || '',
           memberDjIds: normalizePerformerIds(slot.performerDJIDs, actTypePerformerCount(slot.actType)),
           memberNamesText: names.join(' / '),
+          displayNameOverride: normalizeDisplayNameOverrideText(slot.displayNameOverrideText, names, slot.actType) || undefined,
           stageName: slot.stageName || 'Main Stage',
           sortOrder: draft.timetableSlots.length + index + 1,
           startTime: slot.startTimeText,
@@ -2251,14 +2316,14 @@ export default function EventStudioAIImportDock({
                 <div className="mt-2 text-sm leading-6 text-black/52">{panel.errorText || panel.statusText}</div>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => void cancelRecognition()} className="admin-studio-button-secondary px-4 py-2 text-sm">
+                <button type="button" onClick={() => void cancelRecognition()} className="admin-studio-button-secondary min-w-[84px] whitespace-nowrap px-4 py-2 text-sm">
                   {panel.running ? '取消' : '关闭'}
                 </button>
                 <button
                   type="button"
                   onClick={() => void startRecognition()}
                   disabled={(panel.kind === 'poster' ? !selectedPosterImage : !selectedImages.length) || panel.running}
-                  className={`admin-ai-action-button px-4 py-2 text-sm ${
+                  className={`admin-ai-action-button min-w-[148px] whitespace-nowrap px-4 py-2 text-sm ${
                     panel.running ? 'admin-ai-action-button-running' : ''
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
@@ -2327,7 +2392,7 @@ export default function EventStudioAIImportDock({
                                   <div className="truncate text-sm font-medium text-[#071110]">{task.imageFileName}</div>
                                   <div className="mt-1 text-xs text-black/40">{imageOriginLabel(task.imageOrigin)}</div>
                                 </div>
-                                <div className={`rounded-full px-3 py-1 text-xs ${taskPhaseClassName(task)}`}>{taskPhaseLabel(task)}</div>
+                                <div className={`min-w-[68px] whitespace-nowrap rounded-full px-3 py-1 text-center text-xs ${taskPhaseClassName(task)}`}>{taskPhaseLabel(task)}</div>
                               </div>
                               <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-black/38">
                                 <span>{task.phase === 'preparing' || task.phase === 'polling' || task.phase === 'auto_matching' ? '已耗时' : '总耗时'}: {taskDurationText(task, clockNow)}</span>
@@ -2840,11 +2905,11 @@ export default function EventStudioAIImportDock({
                                     <button
                                       type="button"
                                       onClick={() => toggleExpandedResultItem(item.id)}
-                                      className="admin-studio-button-secondary px-3 py-2 text-xs"
+                                      className="admin-studio-button-secondary min-w-[68px] whitespace-nowrap px-3 py-2 text-xs"
                                     >
-                                      {expanded ? '收起' : '编辑'}
+                                      {expanded ? '确认' : '编辑'}
                                     </button>
-                                    <button type="button" onClick={() => removeLineupItem(item.id)} className="admin-studio-button-danger px-3 py-2 text-xs">
+                                    <button type="button" onClick={() => removeLineupItem(item.id)} className="admin-studio-button-danger min-w-[68px] whitespace-nowrap px-3 py-2 text-xs">
                                       删除
                                     </button>
                                   </div>
@@ -3014,11 +3079,11 @@ export default function EventStudioAIImportDock({
                                   <button
                                     type="button"
                                     onClick={() => toggleExpandedResultItem(slot.id)}
-                                    className="admin-studio-button-secondary px-3 py-2 text-xs"
+                                    className="admin-studio-button-secondary min-w-[68px] whitespace-nowrap px-3 py-2 text-xs"
                                   >
-                                    {expanded ? '收起' : '编辑'}
+                                    {expanded ? '确认' : '编辑'}
                                   </button>
-                                  <button type="button" onClick={() => removeTimetableSlot(slot.id)} className="admin-studio-button-danger px-3 py-2 text-xs">
+                                  <button type="button" onClick={() => removeTimetableSlot(slot.id)} className="admin-studio-button-danger min-w-[68px] whitespace-nowrap px-3 py-2 text-xs">
                                     删除
                                   </button>
                                 </div>

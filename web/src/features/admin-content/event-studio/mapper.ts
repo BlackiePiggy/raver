@@ -288,7 +288,14 @@ const actTypePerformerCount = (value?: string | null): number => {
   return 1;
 };
 
-const composeActDisplayName = (actType: string | undefined, memberNames: string[], fallback: string): string => {
+const composeActDisplayName = (
+  actType: string | undefined,
+  memberNames: string[],
+  fallback: string,
+  override?: string | null
+): string => {
+  const normalizedOverride = trimSingleLineOrNull(override, INPUT_LIMITS.dj.name);
+  if (normalizedOverride) return normalizedOverride;
   const normalizedActType = normalizeActType(actType);
   const count = actTypePerformerCount(normalizedActType);
   const names = memberNames.slice(0, count).filter(Boolean);
@@ -406,7 +413,7 @@ const lineupArtistPayload = (artist: EventStudioLineupArtistDraft) => {
   if (!memberNames.length && !normalizedDjId) return null;
 
   const normalizedMemberDjIds = normalizeMemberDjIds(artist.memberDjIds).slice(0, performerCount);
-  const displayName = composeActDisplayName(artist.actType, memberNames, normalizedDjId || '');
+  const displayName = composeActDisplayName(artist.actType, memberNames, normalizedDjId || '', artist.displayNameOverride);
   if (!displayName) return null;
 
   return {
@@ -435,7 +442,7 @@ const lineupSlotPayload = (
   if (memberNames.length < performerCount) return null;
 
   const normalizedMemberDjIds = normalizeMemberDjIds(slot.memberDjIds).slice(0, performerCount);
-  const displayName = composeActDisplayName(slot.actType, memberNames, normalizedDjId || '');
+  const displayName = composeActDisplayName(slot.actType, memberNames, normalizedDjId || '', slot.displayNameOverride);
   if (!displayName) return null;
   const startDayOffset = Math.max(0, Math.floor(Number(slot.startDayOffset) || 0));
   const inferredEndOffset = slot.endTime.trim() > slot.startTime.trim() ? startDayOffset : startDayOffset + 1;
