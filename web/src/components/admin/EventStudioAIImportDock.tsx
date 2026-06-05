@@ -954,6 +954,27 @@ export default function EventStudioAIImportDock({
   }, [panel]);
 
   useEffect(() => {
+    if (!panel) return undefined;
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = documentElement.style.overflow;
+    const previousBodyOverscrollBehavior = body.style.overscrollBehavior;
+    const previousHtmlOverscrollBehavior = documentElement.style.overscrollBehavior;
+
+    body.style.overflow = 'hidden';
+    documentElement.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'contain';
+    documentElement.style.overscrollBehavior = 'contain';
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousHtmlOverflow;
+      body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+      documentElement.style.overscrollBehavior = previousHtmlOverscrollBehavior;
+    };
+  }, [panel]);
+
+  useEffect(() => {
     if (previewAssetIndex === null) return;
     if (previewAssetIndex < previewAssets.length) return;
     setPreviewAssetIndex(null);
@@ -2370,7 +2391,7 @@ export default function EventStudioAIImportDock({
       ) : null}
 
       {panel ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 p-3">
+        <div className="fixed inset-0 z-50 overflow-hidden overscroll-contain bg-black/45 p-3">
           <div className="flex min-h-full items-end justify-center sm:items-center">
             <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl sm:max-h-[calc(100vh-3rem)]">
               <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-[#e8eceb] px-5 py-4">
@@ -2401,7 +2422,7 @@ export default function EventStudioAIImportDock({
 
               <div className="min-h-0 flex-1 overflow-hidden">
                 <div className="grid h-full min-h-0 gap-5 p-5 lg:grid-cols-[248px_minmax(0,1fr)]">
-                  <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                  <div className="min-h-0 space-y-4 overflow-y-auto overscroll-contain pr-1">
                     <div className="admin-reference-card p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-semibold text-[#071110]">选择图片</div>
@@ -2496,7 +2517,7 @@ export default function EventStudioAIImportDock({
                     </div>
                   </div>
 
-                  <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                  <div className="min-h-0 space-y-4 overflow-y-auto overscroll-contain pr-1">
                     <div className="admin-reference-card p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
