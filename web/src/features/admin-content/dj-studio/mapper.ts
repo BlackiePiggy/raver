@@ -91,6 +91,7 @@ export const mapDJStudioDraftToUpdateInput = (draft: DJStudioDraft): DJStudioUpd
   bioI18n: normalizedLocalizedText(draft.bio, INPUT_LIMITS.dj.bio, true),
   avatarUrl: trimUrlOrNull(draft.avatarImage?.remoteUrl),
   bannerUrl: trimUrlOrNull(draft.bannerImage?.remoteUrl),
+  proofImageUrl: trimUrlOrNull(draft.proofImage?.remoteUrl),
   country: trimSingleLineOrNull(primaryText(draft.country), INPUT_LIMITS.dj.country),
   countryI18n: normalizedLocalizedText(draft.country, INPUT_LIMITS.dj.country),
   spotifyId: trimIdOrNull(draft.spotifyId),

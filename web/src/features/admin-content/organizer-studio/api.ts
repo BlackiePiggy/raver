@@ -26,6 +26,16 @@ type BffEnvelope<T> = {
   nextCursor?: string | null;
 };
 
+const unwrapBffData = <T>(payload: T | BffEnvelope<T>): T => {
+  if (payload && typeof payload === 'object' && 'data' in (payload as Record<string, unknown>)) {
+    const envelope = payload as BffEnvelope<T>;
+    if (envelope.data !== undefined) {
+      return envelope.data;
+    }
+  }
+  return payload as T;
+};
+
 type OrganizerDeleteImagesInput =
   | {
       draftId: string;
@@ -86,10 +96,10 @@ export const organizerStudioApi = {
   },
 
   async createOrganizer(input: OrganizerStudioCreateInput): Promise<OrganizerStudioCreateResult> {
-    const payload = await authenticatedJsonFetch<unknown>(getApiUrl('/v1/learn/festivals'), {
+    const payload = unwrapBffData(await authenticatedJsonFetch<unknown>(getApiUrl('/v1/learn/festivals'), {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
 
     if (isSubmissionPayload(payload)) {
       return { kind: 'submitted', payload };
@@ -109,13 +119,13 @@ export const organizerStudioApi = {
     id: string,
     input: OrganizerStudioUpdateInput
   ): Promise<OrganizerStudioCreateResult> {
-    const payload = await authenticatedJsonFetch<unknown>(
+    const payload = unwrapBffData(await authenticatedJsonFetch<unknown>(
       getApiUrl(`/v1/learn/festivals/${id}`),
       {
         method: 'PATCH',
         body: JSON.stringify(input),
       }
-    );
+    ));
 
     if (isSubmissionPayload(payload)) {
       return { kind: 'submitted', payload };
@@ -141,8 +151,10 @@ export const organizerStudioApi = {
   },
 
   async fetchOrganizer(id: string): Promise<OrganizerStudioLoadedOrganizer> {
-    return authenticatedJsonFetch<OrganizerStudioLoadedOrganizer>(
-      getApiUrl(`/v1/learn/festivals/${id}`)
+    return unwrapBffData(
+      await authenticatedJsonFetch<
+        OrganizerStudioLoadedOrganizer | BffEnvelope<OrganizerStudioLoadedOrganizer>
+      >(getApiUrl(`/v1/learn/festivals/${id}`))
     );
   },
 

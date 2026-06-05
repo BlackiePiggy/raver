@@ -263,6 +263,7 @@ export type DJStudioUpdateInput = {
   bioI18n?: DJStudioLocalizedText | null;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
+  proofImageUrl?: string | null;
   country?: string | null;
   countryI18n?: DJStudioLocalizedText | null;
   spotifyId?: string | null;

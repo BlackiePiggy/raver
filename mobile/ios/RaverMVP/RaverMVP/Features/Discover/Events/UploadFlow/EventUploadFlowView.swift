@@ -304,7 +304,7 @@ struct EventUploadFlowView: View {
                     content
                 }
                 .padding(20)
-                .padding(.bottom, 84 + keyboardCandidateSpacing)
+                .padding(.bottom, 56 + keyboardCandidateSpacing)
             }
             .safeAreaInset(edge: .bottom) {
                 Color.clear
@@ -316,6 +316,8 @@ struct EventUploadFlowView: View {
             .onTapGesture {
                 hideKeyboard()
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             EventUploadBottomBar(
                 canGoBack: viewModel.draft.currentStep.previous != nil,
                 isFinalStep: viewModel.draft.currentStep == .review,

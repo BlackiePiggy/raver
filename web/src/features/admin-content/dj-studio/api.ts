@@ -27,6 +27,16 @@ type BffEnvelope<T> = {
   nextCursor?: string | null;
 };
 
+const unwrapBffData = <T>(payload: T | BffEnvelope<T>): T => {
+  if (payload && typeof payload === 'object' && 'data' in (payload as Record<string, unknown>)) {
+    const envelope = payload as BffEnvelope<T>;
+    if (envelope.data !== undefined) {
+      return envelope.data;
+    }
+  }
+  return payload as T;
+};
+
 const isSubmissionPayload = (
   value: unknown
 ): value is DJStudioSubmissionAcceptedPayload => {
@@ -94,10 +104,10 @@ export const djStudioApi = {
   },
 
   async createDJ(input: DJStudioCreateInput): Promise<DJStudioCreateResult> {
-    const payload = await authenticatedJsonFetch<unknown>(getApiUrl('/v1/djs/manual/import'), {
+    const payload = unwrapBffData(await authenticatedJsonFetch<unknown>(getApiUrl('/v1/djs/manual/import'), {
       method: 'POST',
       body: JSON.stringify(input),
-    });
+    }));
 
     if (isSubmissionPayload(payload)) {
       return { kind: 'submitted', payload };
@@ -120,10 +130,10 @@ export const djStudioApi = {
   },
 
   async updateDJ(id: string, input: DJStudioUpdateInput): Promise<DJStudioCreateResult> {
-    const payload = await authenticatedJsonFetch<unknown>(getApiUrl(`/v1/djs/${id}`), {
+    const payload = unwrapBffData(await authenticatedJsonFetch<unknown>(getApiUrl(`/v1/djs/${id}`), {
       method: 'PATCH',
       body: JSON.stringify(input),
-    });
+    }));
 
     if (isSubmissionPayload(payload)) {
       return { kind: 'submitted', payload };
@@ -149,7 +159,9 @@ export const djStudioApi = {
   },
 
   async fetchDJ(id: string): Promise<DJStudioLoadedDJ> {
-    return authenticatedJsonFetch<DJStudioLoadedDJ>(getApiUrl(`/v1/djs/${id}`));
+    return unwrapBffData(
+      await authenticatedJsonFetch<DJStudioLoadedDJ | BffEnvelope<DJStudioLoadedDJ>>(getApiUrl(`/v1/djs/${id}`))
+    );
   },
 
   async fetchDJSets(

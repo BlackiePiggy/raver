@@ -18,9 +18,9 @@ import {
 } from '@/features/admin-content/dj-studio';
 
 const DJ_STUDIO_STEPS = [
-  { key: 'profile', eyebrow: 'Step 1', title: '资料', description: '身份、多语言、图片、别名和 Genres' },
-  { key: 'links', eyebrow: 'Step 2', title: '平台', description: '官方链接、平台 ID 和统计' },
-  { key: 'review', eyebrow: 'Step 3', title: '检查', description: '最终核对并提交' },
+  { key: 'profile', eyebrow: '第 1 步', title: '资料', description: '身份、多语言、图片、别名和风格' },
+  { key: 'links', eyebrow: '第 2 步', title: '平台', description: '官方链接、平台 ID 和统计' },
+  { key: 'review', eyebrow: '第 3 步', title: '检查', description: '最终核对并提交' },
 ] as const;
 
 type DJStudioStepKey = (typeof DJ_STUDIO_STEPS)[number]['key'];
@@ -158,7 +158,7 @@ function ImageDropZone({
         <p className="text-sm font-medium text-[#071110]">{label}</p>
         {previewUrl && onRemove ? (
           <button type="button" onClick={onRemove} className="text-xs text-black/48">
-            绉婚櫎
+            移除
           </button>
         ) : null}
       </div>
@@ -166,11 +166,11 @@ function ImageDropZone({
         {previewUrl ? (
           <Image src={previewUrl} alt={label} fill className="object-cover" sizes="220px" />
         ) : (
-          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">鏆傛棤鍥剧墖</div>
+          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">暂无图片</div>
         )}
       </div>
       <label className="admin-studio-button-secondary mt-4 flex cursor-pointer items-center justify-center px-4 py-3 text-sm">
-        {uploading ? '涓婁紶涓?..' : '涓婁紶鍥剧墖'}
+        {uploading ? '上传中...' : '上传图片'}
         <input type="file" accept="image/*" className="hidden" onChange={onChange} />
       </label>
     </div>
@@ -221,7 +221,7 @@ function DynamicStringListField({
               type="button"
               onClick={() => onRemove(index)}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#e8eceb] bg-white text-black/48 hover:text-[#071110]"
-              aria-label={`鍒犻櫎${label}${index + 1}`}
+              aria-label={`删除${label}${index + 1}`}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -234,7 +234,8 @@ function DynamicStringListField({
           className="inline-flex items-center gap-2 rounded-full border border-[#d9e7dd] bg-[#f6fbf7] px-4 py-2 text-sm font-semibold text-[#071110]"
         >
           <Plus className="h-4 w-4" />
-          娣诲姞涓€琛?        </button>
+          添加一行
+        </button>
       </div>
     </Field>
   );
@@ -292,7 +293,7 @@ export default function DJStudioForm({
   const canSubmit = useMemo(() => Object.keys(validateDJStudioDraft(draft)).length === 0, [draft]);
   const currentStepItem = DJ_STUDIO_STEPS[currentStep];
   const totalSteps = DJ_STUDIO_STEPS.length;
-  const displayName = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull) || 'DJ 鑽夌';
+  const displayName = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull) || 'DJ 草稿';
   const hasPlatformLink = [
     draft.spotifyUrl,
     draft.instagramUrl,
@@ -400,7 +401,7 @@ export default function DJStudioForm({
       if (usage === 'banner') updateDraft('bannerImage', nextImage);
       if (usage === 'proof') updateDraft('proofImage', nextImage);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'DJ 鍥剧墖涓婁紶澶辫触');
+      setSubmitError(error instanceof Error ? error.message : 'DJ 图片上传失败');
     } finally {
       if (usage === 'avatar') setUploadingAvatar(false);
       if (usage === 'banner') setUploadingBanner(false);
@@ -426,7 +427,7 @@ export default function DJStudioForm({
       if (usage === 'banner') updateDraft('bannerImage', null);
       if (usage === 'proof') updateDraft('proofImage', null);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '鍒犻櫎 DJ 鍥剧墖澶辫触');
+      setSubmitError(error instanceof Error ? error.message : '删除 DJ 图片失败');
     }
   };
 
@@ -474,7 +475,7 @@ export default function DJStudioForm({
           },
         })
         .catch(() => undefined);
-      setSubmitError(error instanceof Error ? error.message : 'DJ 鎻愪氦澶辫触');
+      setSubmitError(error instanceof Error ? error.message : 'DJ 提交失败');
     } finally {
       setSubmitting(false);
     }
@@ -486,62 +487,63 @@ export default function DJStudioForm({
 
       <section className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
         <div className="admin-studio-section p-6">
-          <div className="admin-studio-label">{mode === 'create' ? 'DJ Studio' : 'Edit DJ Session'}</div>
+          <div className="admin-studio-label">{mode === 'create' ? 'DJ 工作台' : '编辑 DJ'}</div>
           <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">{displayName}</h2>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             <SummaryCard label="头像" value={draft.avatarImage ? '已上传' : '待上传'} tone="mint" />
             <SummaryCard label="平台链接" value={hasPlatformLink ? '已填写' : '待补齐'} tone="sand" />
-            <SummaryCard label="Proof" value={draft.proofImage ? '已上传' : '可选'} tone="rose" />
+            <SummaryCard label="证明图" value={draft.proofImage ? '已上传' : '可选'} tone="rose" />
             <SummaryCard label="当前步骤" value={`${currentStep + 1}/${totalSteps} / ${currentStepItem.title}`} />
           </div>
         </div>
 
         <div className="admin-studio-pastel-mint p-6">
-          <div className="admin-studio-label">Aligned Flow</div>
-          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">璧勬枡浼樺厛</h2>
+          <div className="admin-studio-label">流程对齐</div>
+          <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#071110]">资料优先</h2>
           <p className="mt-4 text-sm leading-6 text-black/52">
-            Web 绔?DJ 涓婁紶鐜板湪鍏堥泦涓鐞嗚祫鏂欎笌韬唤锛屽啀杩涘叆骞冲彴閾炬帴鍜屾渶缁堟鏌ャ€傚璇█瀛楁缁熶竴閲囩敤鍜?event 涓€鏍风殑鎸夐挳寮?overlay 缂栬緫銆?          </p>
+            Web 端 DJ 编辑现在先集中处理资料和身份，再进入平台链接和最终检查。多语言字段统一采用和 event 一样的按钮打开 overlay 编辑。
+          </p>
         </div>
       </section>
 
       <StepNavigation currentStep={currentStep} onSelect={goToStep} />
 
       {currentStep === 0 ? (
-        <Section title="DJ ?????" description="?????????????????????Genres???????">
+        <Section title="DJ 资料" description="集中编辑 DJ 名称、多语言文案、图片、别名和 Genres。">
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="lg:col-span-2">
               <LocalizedTextField
-                label="DJ 鍚嶇О"
+                label="DJ 名称"
                 value={draft.name}
                 kind="input"
                 error={errors.name}
-                placeholder="渚嬪锛歁artin Garrix"
+                placeholder="例如：Martin Garrix"
                 hint="主输入默认编辑中文。"
                 maxLength={INPUT_LIMITS.dj.name}
                 onPrimaryChange={(value) => updateLocalizedField('name', 'zh', value)}
-                onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: 'DJ 鍚嶇О', kind: 'input' })}
+                onOpenOverlay={() => setActiveLocalizedField({ key: 'name', label: 'DJ 名称', kind: 'input' })}
               />
             </div>
 
             <div className="lg:col-span-2">
-              <Field label="图片素材" error={errors.avatarImage} hint="头像、Banner 和 proof 都使用更紧凑的正方形素材卡片管理。">
+              <Field label="图片素材" error={errors.avatarImage} hint="头像、横幅和证明图都使用更紧凑的正方形素材卡片管理。">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <ImageDropZone
-                    label="Avatar"
+                    label="头像"
                     previewUrl={draft.avatarImage?.remoteUrl}
                     uploading={uploadingAvatar}
                     onChange={(event) => void handleImageUpload(event, 'avatar')}
                     onRemove={() => void handleRemoveImage('avatar')}
                   />
                   <ImageDropZone
-                    label="Banner"
+                    label="横幅"
                     previewUrl={draft.bannerImage?.remoteUrl}
                     uploading={uploadingBanner}
                     onChange={(event) => void handleImageUpload(event, 'banner')}
                     onRemove={() => void handleRemoveImage('banner')}
                   />
                   <ImageDropZone
-                    label="Proof"
+                    label="证明图"
                     previewUrl={draft.proofImage?.remoteUrl}
                     uploading={uploadingProof}
                     onChange={(event) => void handleImageUpload(event, 'proof')}
@@ -552,9 +554,9 @@ export default function DJStudioForm({
             </div>
 
             <DynamicStringListField
-              label="鍒悕"
+              label="别名"
               items={draft.aliases}
-              placeholder="渚嬪锛歒tram"
+              placeholder="例如：Ytram"
               hint="每点击一次加号按钮新增一行。"
               itemMax={INPUT_LIMITS.dj.alias}
               maxItems={INPUT_LIMITS.dj.aliasesMaxItems}
@@ -564,10 +566,10 @@ export default function DJStudioForm({
             />
 
             <DynamicStringListField
-              label="Genres"
+              label="风格（Genres）"
               items={draft.genres}
-              placeholder="渚嬪锛歅rogressive House"
-              hint="Genres 也按显式加号新增，不再依赖换行。"
+              placeholder="例如：Progressive House"
+              hint="风格也按显式加号新增，不再依赖换行。"
               itemMax={INPUT_LIMITS.dj.genre}
               maxItems={INPUT_LIMITS.dj.genresMaxItems}
               onChange={(index, value) => handleListChange('genres', index, value)}
@@ -576,13 +578,13 @@ export default function DJStudioForm({
             />
 
             <LocalizedTextField
-              label="鍥藉 / 鍦板尯"
+              label="国家 / 地区"
               value={draft.country}
               kind="input"
               placeholder="例如：荷兰"
               maxLength={INPUT_LIMITS.dj.country}
               onPrimaryChange={(value) => updateLocalizedField('country', 'zh', value)}
-              onOpenOverlay={() => setActiveLocalizedField({ key: 'country', label: '鍥藉 / 鍦板尯', kind: 'input' })}
+              onOpenOverlay={() => setActiveLocalizedField({ key: 'country', label: '国家 / 地区', kind: 'input' })}
             />
 
             <div className="lg:col-span-2">
@@ -601,88 +603,88 @@ export default function DJStudioForm({
       ) : null}
 
       {currentStep === 1 ? (
-        <Section title="平台链接" description="尽量补齐官方平台入口和关键统计。proof 作为素材已经统一放在资料页管理。">
+        <Section title="平台链接" description="尽量补齐官方平台入口和关键统计。证明图作为素材已经统一放在资料页管理。">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Spotify ID" hint={commonIdHint(draft.spotifyId)}>
+            <Field label="Spotify 编号" hint={commonIdHint(draft.spotifyId)}>
               <input value={draft.spotifyId} onChange={(event) => updateDraft('spotifyId', event.target.value)} className={textInputClassName} placeholder="spotify artist id" maxLength={INPUT_LIMITS.common.externalId} />
             </Field>
-            <Field label="Spotify URL" error={errors.links} hint={commonUrlHint(draft.spotifyUrl)}>
+            <Field label="Spotify 链接" error={errors.links} hint={commonUrlHint(draft.spotifyUrl)}>
               <input value={draft.spotifyUrl} onChange={(event) => updateDraft('spotifyUrl', event.target.value)} className={textInputClassName} placeholder="https://open.spotify.com/artist/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="Apple Music ID" hint={commonIdHint(draft.appleMusicId)}>
+            <Field label="Apple Music 编号" hint={commonIdHint(draft.appleMusicId)}>
               <input value={draft.appleMusicId} onChange={(event) => updateDraft('appleMusicId', event.target.value)} className={textInputClassName} placeholder="apple music id" maxLength={INPUT_LIMITS.common.externalId} />
             </Field>
-            <Field label="Instagram URL" hint={commonUrlHint(draft.instagramUrl)}>
+            <Field label="Instagram 链接" hint={commonUrlHint(draft.instagramUrl)}>
               <input value={draft.instagramUrl} onChange={(event) => updateDraft('instagramUrl', event.target.value)} className={textInputClassName} placeholder="https://instagram.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="Facebook URL" hint={commonUrlHint(draft.facebookUrl)}>
+            <Field label="Facebook 链接" hint={commonUrlHint(draft.facebookUrl)}>
               <input value={draft.facebookUrl} onChange={(event) => updateDraft('facebookUrl', event.target.value)} className={textInputClassName} placeholder="https://facebook.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="SoundCloud URL" hint={commonUrlHint(draft.soundcloudUrl)}>
+            <Field label="SoundCloud 链接" hint={commonUrlHint(draft.soundcloudUrl)}>
               <input value={draft.soundcloudUrl} onChange={(event) => updateDraft('soundcloudUrl', event.target.value)} className={textInputClassName} placeholder="https://soundcloud.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="SoundCloud ID" hint={commonIdHint(draft.soundcloudId)}>
+            <Field label="SoundCloud 编号" hint={commonIdHint(draft.soundcloudId)}>
               <input value={draft.soundcloudId} onChange={(event) => updateDraft('soundcloudId', event.target.value)} className={textInputClassName} placeholder="soundcloud user id" maxLength={INPUT_LIMITS.common.externalId} />
             </Field>
-            <Field label="Twitter / X URL" hint={commonUrlHint(draft.twitterUrl)}>
+            <Field label="X / Twitter 链接" hint={commonUrlHint(draft.twitterUrl)}>
               <input value={draft.twitterUrl} onChange={(event) => updateDraft('twitterUrl', event.target.value)} className={textInputClassName} placeholder="https://x.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="YouTube URL" hint={commonUrlHint(draft.youtubeUrl)}>
+            <Field label="YouTube 链接" hint={commonUrlHint(draft.youtubeUrl)}>
               <input value={draft.youtubeUrl} onChange={(event) => updateDraft('youtubeUrl', event.target.value)} className={textInputClassName} placeholder="https://youtube.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="缃戞槗浜?URL" hint={commonUrlHint(draft.neteaseUrl)}>
+            <Field label="网易云 URL" hint={commonUrlHint(draft.neteaseUrl)}>
               <input value={draft.neteaseUrl} onChange={(event) => updateDraft('neteaseUrl', event.target.value)} className={textInputClassName} placeholder="https://music.163.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="QQ 闊充箰 URL" hint={commonUrlHint(draft.qqMusicUrl)}>
+            <Field label="QQ 音乐 URL" hint={commonUrlHint(draft.qqMusicUrl)}>
               <input value={draft.qqMusicUrl} onChange={(event) => updateDraft('qqMusicUrl', event.target.value)} className={textInputClassName} placeholder="https://y.qq.com/..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="瀹樼綉 URL" hint={commonUrlHint(draft.website)}>
+            <Field label="官网 URL" hint={commonUrlHint(draft.website)}>
               <input value={draft.website} onChange={(event) => updateDraft('website', event.target.value)} className={textInputClassName} placeholder="https://..." maxLength={INPUT_LIMITS.common.url} />
             </Field>
-            <Field label="鍏朵粬骞冲彴 URL" hint={commonUrlHint(draft.otherPlatformUrl)}>
-              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="鍏朵粬骞冲彴閾炬帴" maxLength={INPUT_LIMITS.common.url} />
+            <Field label="其他平台 URL" hint={commonUrlHint(draft.otherPlatformUrl)}>
+              <input value={draft.otherPlatformUrl} onChange={(event) => updateDraft('otherPlatformUrl', event.target.value)} className={textInputClassName} placeholder="其他平台链接" maxLength={INPUT_LIMITS.common.url} />
             </Field>
             <Field label="Spotify Followers" error={errors.stats}>
               <input value={draft.spotifyFollowers} onChange={(event) => updateDraft('spotifyFollowers', event.target.value)} className={textInputClassName} placeholder="123456" />
             </Field>
-            <Field label="Track Count" error={errors.stats}>
+            <Field label="曲目数" error={errors.stats}>
               <input value={draft.trackCount} onChange={(event) => updateDraft('trackCount', event.target.value)} className={textInputClassName} placeholder="0" />
             </Field>
-            <Field label="Playlist Count" error={errors.stats}>
+            <Field label="歌单数" error={errors.stats}>
               <input value={draft.playlistCount} onChange={(event) => updateDraft('playlistCount', event.target.value)} className={textInputClassName} placeholder="0" />
             </Field>
-            <Field label="SoundCloud Followers" error={errors.stats}>
+            <Field label="SoundCloud 粉丝数" error={errors.stats}>
               <input value={draft.soundCloudFollowers} onChange={(event) => updateDraft('soundCloudFollowers', event.target.value)} className={textInputClassName} placeholder="0" />
             </Field>
-            <Field label="SoundCloud Favorites" error={errors.stats}>
+            <Field label="SoundCloud 收藏数" error={errors.stats}>
               <input value={draft.soundCloudFavorites} onChange={(event) => updateDraft('soundCloudFavorites', event.target.value)} className={textInputClassName} placeholder="0" />
             </Field>
           </div>
         </Section>
       ) : null}
       {currentStep === 2 ? (
-        <Section title="?????" description="???????????????????????????">
+        <Section title="最终检查" description="提交前确认核心资料、素材和平台链接是否完整。">
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="admin-reference-card p-4">
-              <div className="text-sm font-semibold text-[#071110]">????</div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <SummaryCard label="??" value={displayName} />
-                <SummaryCard label="??" value={draft.avatarImage ? "???? OSS" : "???"} tone={draft.avatarImage ? "mint" : "rose"} />
-                <SummaryCard label="????" value={hasPlatformLink ? "???" : "???"} tone={hasPlatformLink ? "mint" : "sand"} />
-                <SummaryCard label="Proof" value={draft.proofImage ? "???" : "???"} tone={draft.proofImage ? "mint" : "soft"} />
-                <SummaryCard label="??" value={`${countFilledItems(draft.aliases)} ?`} />
-                <SummaryCard label="Genres" value={`${countFilledItems(draft.genres)} ?`} />
+              <div className="text-sm font-semibold text-[#071110]">资料摘要</div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <SummaryCard label="名称" value={displayName} />
+                <SummaryCard label="头像" value={draft.avatarImage ? '已上传到 OSS' : '待补充'} tone={draft.avatarImage ? 'mint' : 'rose'} />
+                <SummaryCard label="平台链接" value={hasPlatformLink ? '已填写' : '待补充'} tone={hasPlatformLink ? 'mint' : 'sand'} />
+                <SummaryCard label="证明图" value={draft.proofImage ? '已上传' : '未上传'} tone={draft.proofImage ? 'mint' : 'soft'} />
+                <SummaryCard label="别名" value={`${countFilledItems(draft.aliases)} 项`} />
+                <SummaryCard label="风格" value={`${countFilledItems(draft.genres)} 项`} />
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="admin-studio-pastel-mint p-5">
-                <div className="admin-studio-label">Ready To Submit</div>
+                <div className="admin-studio-label">准备提交</div>
                 <div className="mt-2 text-lg font-semibold text-[#071110]">
-                  {canSubmit ? "?? DJ ??????????" : "??????????????????"}
+                  {canSubmit ? '当前 DJ 信息已经可以提交' : '还有字段未完成，请先补齐'}
                 </div>
                 <div className="mt-3 text-sm leading-6 text-black/52">
-                  {mode === "create" ? "?????? DJ???????????" : "?????? DJ ?????????????"}
+                  {mode === 'create' ? '提交后会创建新的 DJ 内容记录。' : '提交后会进入 DJ 编辑审核或更新流程。'}
                 </div>
               </div>
               {Object.values(errors)
@@ -704,17 +706,19 @@ export default function DJStudioForm({
           disabled={currentStep === 0}
           className="admin-studio-button-secondary px-5 py-3 text-sm disabled:opacity-50"
         >
-          涓婁竴姝?        </button>
+          上一步
+        </button>
         <div className="text-sm text-black/45">
           {currentStepItem.eyebrow} / {currentStepItem.title}
         </div>
         {currentStep < totalSteps - 1 ? (
           <button type="button" onClick={handleAdvance} className="admin-studio-button-primary px-5 py-3 text-sm">
-            涓嬩竴姝?          </button>
+            下一步
+          </button>
         ) : (
           <div className="flex flex-wrap gap-3">
             <Link href="/admin/content/djs/catalog" className="admin-studio-button-secondary px-5 py-3 text-sm">
-              ?? DJ ??
+              返回 DJ 目录
             </Link>
             <button
               type="button"
@@ -722,7 +726,7 @@ export default function DJStudioForm({
               disabled={submitting || uploadingAvatar || uploadingBanner || uploadingProof}
               className="admin-studio-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? '鎻愪氦涓?..' : submitButtonText || (mode === 'create' ? '鎻愪氦 DJ' : '鎻愪氦缂栬緫')}
+              {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交 DJ' : '提交编辑')}
             </button>
           </div>
         )}

@@ -19,9 +19,9 @@ export const LOCALIZED_LOCALE_ITEMS: Array<{
   hint: string;
 }> = [
   { key: 'zh', label: '中文', hint: '用于中文展示与检索回填。' },
-  { key: 'en', label: 'English', hint: '用于英文展示与国际化回退。' },
+  { key: 'en', label: '英文', hint: '用于英文展示与国际化回退。' },
   { key: 'ja', label: '日本語', hint: '用于日文展示。' },
-  { key: 'enFull', label: 'English Full', hint: '可选，用于更完整的英文全称或地址。' },
+  { key: 'enFull', label: '英文全称', hint: '可选，用于更完整的英文全称或地址。' },
 ];
 
 export const localizedTextFilledLocaleLabels = (value: LocalizedTextValue): string[] =>
@@ -127,7 +127,7 @@ export function MultilingualEditorOverlay({
       <div className="admin-localized-overlay-card" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="admin-studio-label">Multilingual Editor</div>
+            <div className="admin-studio-label">多语言编辑</div>
             <div className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">{title}</div>
             <div className="mt-2 text-sm leading-6 text-black/48">{description}</div>
           </div>

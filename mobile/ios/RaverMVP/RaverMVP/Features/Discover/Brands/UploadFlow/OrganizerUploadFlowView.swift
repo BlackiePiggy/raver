@@ -254,13 +254,15 @@ struct OrganizerUploadFlowView: View {
                     stepContent
                 }
                 .padding(16)
-                .padding(.bottom, 84)
+                .padding(.bottom, 56)
             }
             .scrollDismissesKeyboard(.interactively)
             .contentShape(Rectangle())
             .onTapGesture {
                 hideKeyboard()
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             OrganizerUploadBottomBar(
                 canGoBack: viewModel.draft.currentStep.previous != nil,
                 isFinalStep: viewModel.draft.currentStep == .review,

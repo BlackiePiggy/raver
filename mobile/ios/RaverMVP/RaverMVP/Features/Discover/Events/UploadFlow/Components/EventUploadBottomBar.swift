@@ -11,12 +11,11 @@ struct EventUploadBottomBar: View {
         HStack(spacing: 12) {
             Button(action: onBack) {
                 Text(LT("上一步", "Back", "戻る"))
-                    .font(.headline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
             }
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(RaverTheme.background)
             )
             .disabled(!canGoBack)
@@ -26,13 +25,11 @@ struct EventUploadBottomBar: View {
                 if isBusy {
                     ProgressView()
                         .tint(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 } else {
                     Text(isFinalStep ? LT("提交", "Submit", "送信") : LT("下一步", "Next", "次へ"))
-                        .font(.headline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
             }
             .background(
@@ -41,14 +38,17 @@ struct EventUploadBottomBar: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
             .foregroundStyle(.white)
             .disabled(isBusy)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 18)
-        .background(RaverTheme.card)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(
+            RaverTheme.card
+                .ignoresSafeArea(edges: .bottom)
+        )
     }
 }
