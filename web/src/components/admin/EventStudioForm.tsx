@@ -12,6 +12,7 @@ import EventLocationPickerModal, {
   type EventLocationProvider,
 } from '@/components/admin/EventLocationPickerModal';
 import EventStudioAIImportDock from '@/components/admin/EventStudioAIImportDock';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import { formatClockTimeInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
@@ -869,6 +870,7 @@ export default function EventStudioForm({
   const draftRef = useRef(draft);
   const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  useOverlayBodyLock(Boolean(activeLocalizedField));
   const organizerBindingItems = useMemo<EntityBindingValue[]>(() => {
     if (!draft.organizerFestivalId.trim()) return [];
     return [

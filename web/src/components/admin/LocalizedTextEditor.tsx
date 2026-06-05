@@ -2,6 +2,7 @@
 
 import { Languages, X } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { countText } from '@/lib/input-rules';
 
 export type LocalizedLocaleKey = 'zh' | 'en' | 'ja' | 'enFull';
@@ -123,6 +124,8 @@ export function MultilingualEditorOverlay({
   clearLabel?: string;
   description?: string;
 }) {
+  useOverlayBodyLock(open);
+
   if (!open) return null;
 
   return (

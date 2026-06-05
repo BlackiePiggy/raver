@@ -473,11 +473,14 @@
   justify-content: center;
   padding: 20px;
   background: rgba(7, 17, 16, 0.42);
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 .admin-localized-overlay-card {
   width: min(760px, 100%);
-  max-height: min(88vh, 920px);
+  height: min(88vh, 920px);
+  min-height: min(88vh, 920px);
   overflow: auto;
   border: 1px solid rgba(232, 236, 235, 0.92);
   border-radius: 30px;

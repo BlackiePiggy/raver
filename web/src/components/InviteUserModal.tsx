@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { authAPI } from '@/lib/api/auth';
 import { squadApi } from '@/lib/api/squad';
 
@@ -11,6 +12,8 @@ interface InviteUserModalProps {
 }
 
 export default function InviteUserModal({ squadId, onClose, onSuccess }: InviteUserModalProps) {
+  useOverlayBodyLock(true);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{
     id: string;
@@ -50,8 +53,8 @@ export default function InviteUserModal({ squadId, onClose, onSuccess }: InviteU
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-bg-secondary rounded-xl p-6 border border-bg-tertiary max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-bg-secondary rounded-xl p-6 border border-bg-tertiary max-w-md w-full h-[min(80vh,620px)] min-h-[min(80vh,620px)] overflow-y-auto overscroll-contain" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-2xl font-bold text-text-primary mb-4">
           邀请用户
         </h2>

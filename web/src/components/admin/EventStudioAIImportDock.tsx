@@ -15,6 +15,7 @@ import {
   type EventStudioScheduleMode,
   type EventStudioWeekDraft,
 } from '@/features/admin-content/event-studio';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 
 type ImportPanelKind = EventStudioImportJobKind;
 type EventStudioAIEntryMode = 'all' | 'single' | 'hidden';
@@ -945,33 +946,14 @@ export default function EventStudioAIImportDock({
     [panel]
   );
 
+  useOverlayBodyLock(Boolean(panel));
+
   useEffect(() => {
     if (!panel) return undefined;
     const hasActiveTask = panel.running || panel.autoMatching || panel.taskEntries.some((task) => ['preparing', 'polling', 'auto_matching'].includes(task.phase));
     if (!hasActiveTask) return undefined;
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [panel]);
-
-  useEffect(() => {
-    if (!panel) return undefined;
-    const { body, documentElement } = document;
-    const previousBodyOverflow = body.style.overflow;
-    const previousHtmlOverflow = documentElement.style.overflow;
-    const previousBodyOverscrollBehavior = body.style.overscrollBehavior;
-    const previousHtmlOverscrollBehavior = documentElement.style.overscrollBehavior;
-
-    body.style.overflow = 'hidden';
-    documentElement.style.overflow = 'hidden';
-    body.style.overscrollBehavior = 'contain';
-    documentElement.style.overscrollBehavior = 'contain';
-
-    return () => {
-      body.style.overflow = previousBodyOverflow;
-      documentElement.style.overflow = previousHtmlOverflow;
-      body.style.overscrollBehavior = previousBodyOverscrollBehavior;
-      documentElement.style.overscrollBehavior = previousHtmlOverscrollBehavior;
-    };
   }, [panel]);
 
   useEffect(() => {
@@ -2392,8 +2374,8 @@ export default function EventStudioAIImportDock({
 
       {panel ? (
         <div className="fixed inset-0 z-50 overflow-hidden overscroll-contain bg-black/45 p-3">
-          <div className="flex min-h-full items-end justify-center sm:items-center">
-            <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+          <div className="flex h-full items-center justify-center">
+            <div className="flex h-[calc(100vh-1.5rem)] min-h-[calc(100vh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl sm:h-[calc(100vh-3rem)] sm:min-h-[calc(100vh-3rem)]">
               <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-[#e8eceb] px-5 py-4">
                 <div className="min-w-0 flex-1">
                   <div className="admin-studio-label">{PANEL_ITEMS.find((item) => item.kind === panel.kind)?.title}</div>

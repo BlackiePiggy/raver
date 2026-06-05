@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { getApiUrl } from '@/lib/config';
 import { formatDateWithSystemTimeZoneLabel } from '@/lib/timezone';
 
@@ -47,6 +48,8 @@ export default function TracklistSelectorModal({
   onSelect,
   onClose,
 }: TracklistSelectorModalProps) {
+  useOverlayBodyLock(true);
+
   const [tracklists, setTracklists] = useState<Tracklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,11 +147,11 @@ export default function TracklistSelectorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain bg-black/80 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="bg-bg-secondary rounded-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden border border-bg-tertiary shadow-2xl"
+        className="bg-bg-secondary rounded-2xl max-w-4xl w-full h-[85vh] min-h-[85vh] overflow-hidden border border-bg-tertiary shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -189,7 +192,7 @@ export default function TracklistSelectorModal({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(85vh-140px)] p-6">
+        <div className="h-[calc(85vh-140px)] overflow-y-auto overscroll-contain p-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-text-secondary">加载中...</div>

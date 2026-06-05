@@ -8,6 +8,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import {
   organizerCatalogApi,
   OrganizerCatalogItem,
@@ -207,6 +208,8 @@ function OrganizerDetailOverlay({
   error: string;
   onClose: () => void;
 }) {
+  useOverlayBodyLock(Boolean(item));
+
   const [activeTab, setActiveTab] = useState<OrganizerTabKey>('info');
   const [eventsState, setEventsState] = useState<OrganizerEventsState>(() => createOrganizerEventsState());
   const [postsState, setPostsState] = useState<OrganizerPostsState>(() => createOrganizerPostsState());
@@ -374,9 +377,9 @@ function OrganizerDetailOverlay({
   });
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden overscroll-contain bg-black/45 p-4" onClick={onClose}>
       <div
-        className="relative max-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
+        className="relative h-[92vh] min-h-[92vh] w-full max-w-[1360px] overflow-hidden rounded-[28px] border border-white/70 bg-[#f7f5ef] shadow-[0_30px_120px_rgba(7,17,16,0.24)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="absolute right-6 top-6 z-10 flex items-center gap-2">
@@ -396,8 +399,8 @@ function OrganizerDetailOverlay({
           </button>
         </div>
 
-        <div className="grid max-h-[92vh] overflow-y-auto lg:grid-cols-[380px_minmax(0,1fr)]">
-          <div className="border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
+        <div className="grid h-full min-h-0 lg:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="overflow-y-auto overscroll-contain border-b border-[#e8eceb] bg-[linear-gradient(180deg,#eef4f0_0%,#f7f5ef_100%)] p-6 lg:border-b-0 lg:border-r">
             <button
               type="button"
               onClick={() => {
@@ -452,7 +455,7 @@ function OrganizerDetailOverlay({
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="overflow-y-auto overscroll-contain p-6">
             <div className="flex items-center justify-between gap-3 pr-[184px]">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9aa1ad]">Organizer Profile</div>
@@ -716,6 +719,7 @@ export default function OrganizerCatalogPageClient() {
   const [menuOpenOrganizerId, setMenuOpenOrganizerId] = useState<string | null>(null);
   const [pendingDeleteOrganizer, setPendingDeleteOrganizer] = useState<OrganizerCatalogItem | null>(null);
   const [deletingOrganizerId, setDeletingOrganizerId] = useState<string | null>(null);
+  useOverlayBodyLock(Boolean(pendingDeleteOrganizer));
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const countryOptions = useMemo(
     () =>
@@ -1146,7 +1150,7 @@ export default function OrganizerCatalogPageClient() {
         onClose={closeDetailOverlay}
       />
       {pendingDeleteOrganizer ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" onClick={() => setPendingDeleteOrganizer(null)}>
+        <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden overscroll-contain bg-black/45 p-4" onClick={() => setPendingDeleteOrganizer(null)}>
           <div
             className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
             onClick={(event) => event.stopPropagation()}

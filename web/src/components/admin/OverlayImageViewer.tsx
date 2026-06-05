@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 
 export type OverlayImageViewerAsset = {
   url: string;
@@ -29,6 +30,8 @@ export default function OverlayImageViewer({
   const resolvedActiveIndex = activeIndex ?? 0;
   const hasCarousel = assets.length > 1;
 
+  useOverlayBodyLock(activeIndex !== null);
+
   useEffect(() => {
     if (activeIndex === null) return;
 
@@ -54,14 +57,14 @@ export default function OverlayImageViewer({
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-6"
+      className="fixed inset-0 z-[95] flex items-center justify-center overflow-hidden overscroll-contain bg-black/80 p-6"
       onClick={(event) => {
         event.stopPropagation();
         onClose();
       }}
     >
       <div
-        className="relative flex h-full w-full max-w-[1440px] overflow-hidden rounded-[28px] border border-white/10 bg-[#101414] shadow-[0_30px_120px_rgba(0,0,0,0.45)]"
+        className="relative flex h-full min-h-0 w-full max-w-[1440px] overflow-hidden rounded-[28px] border border-white/10 bg-[#101414] shadow-[0_30px_120px_rgba(0,0,0,0.45)]"
         onClick={(event) => event.stopPropagation()}
       >
         {hasCarousel ? (
@@ -102,7 +105,7 @@ export default function OverlayImageViewer({
               sizes="1600px"
             />
           </div>
-          <div className="space-y-3 overflow-y-auto bg-[#111827] p-6 text-white">
+          <div className="space-y-3 overflow-y-auto overscroll-contain bg-[#111827] p-6 text-white">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-white/45">Media Detail</div>
             <div className="text-lg font-semibold">{activeAsset.title || activeAsset.fileName || 'Asset'}</div>
             {activeAsset.subtitle ? <div className="text-sm text-white/70">{activeAsset.subtitle}</div> : null}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { getApiUrl } from '@/lib/config';
 
 interface TrackInput {
@@ -66,6 +67,8 @@ const parseTrackLine = (line: string) => {
 };
 
 export default function TracklistUploadModal({ setId, token, onClose, onSuccess }: TracklistUploadModalProps) {
+  useOverlayBodyLock(true);
+
   const [title, setTitle] = useState('');
   const [bulkTrackText, setBulkTrackText] = useState('');
   const [tracks, setTracks] = useState<TrackInput[]>([]);
@@ -152,8 +155,8 @@ export default function TracklistUploadModal({ setId, token, onClose, onSuccess 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="bg-bg-secondary rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 border border-bg-tertiary" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain bg-black/70 p-4" onClick={onClose}>
+      <div className="bg-bg-secondary rounded-xl max-w-3xl w-full h-[90vh] min-h-[90vh] overflow-y-auto overscroll-contain p-6 border border-bg-tertiary" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-text-primary">上传我的 Tracklist</h2>
           <button onClick={onClose} className="text-text-secondary hover:text-text-primary text-2xl">&times;</button>

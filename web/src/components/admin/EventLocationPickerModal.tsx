@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 
 export type EventLocationProvider = 'amap' | 'mapkit' | 'mapbox' | 'geoapify';
 export type EventLocationSourceMode =
@@ -168,6 +169,8 @@ export default function EventLocationPickerModal({
   onClose,
   onConfirm,
 }: EventLocationPickerModalProps) {
+  useOverlayBodyLock(open);
+
   const [provider, setProvider] = useState<EventLocationProvider>(initialProvider);
   const [selectedPoint, setSelectedPoint] = useState<EventLocationPoint | null>(initialPoint);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -288,8 +291,8 @@ export default function EventLocationPickerModal({
   if (!open || !frame) return null;
 
   return (
-    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4">
-      <div className="flex h-[88vh] w-full max-w-[1480px] overflow-hidden rounded-[32px] border border-white/70 bg-[#f6f3ea] shadow-[0_30px_120px_rgba(7,17,16,0.24)]">
+    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 p-4">
+      <div className="flex h-[88vh] min-h-[88vh] w-full max-w-[1480px] overflow-hidden rounded-[32px] border border-white/70 bg-[#f6f3ea] shadow-[0_30px_120px_rgba(7,17,16,0.24)]">
         <aside className="hidden w-[320px] border-r border-black/8 bg-[linear-gradient(180deg,#f7f0df_0%,#fbf8ef_100%)] p-6 lg:flex lg:flex-col">
           <div className="admin-studio-label">Location Picker</div>
           <h2 className="mt-3 text-[26px] font-semibold tracking-[-0.03em] text-[#071110]">地图选点</h2>
