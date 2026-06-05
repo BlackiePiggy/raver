@@ -1222,14 +1222,14 @@ export default function EventStudioAIImportDock({
         pollStatus: snapshot.status,
         message:
           snapshot.status === 'pending'
-            ? 'Queued in Coze.'
+            ? '已进入 Coze 队列。'
             : snapshot.status === 'running'
-              ? 'Recognition is running.'
+              ? '识别进行中。'
               : snapshot.status === 'succeeded'
-                ? 'Recognition completed.'
+                ? '识别已完成。'
                 : snapshot.status === 'cancelled'
-                  ? 'Recognition cancelled.'
-                  : snapshot.error || 'Recognition failed.',
+                  ? '识别已取消。'
+                  : snapshot.error || '识别失败。',
       });
       if (snapshot.status === 'succeeded' || snapshot.status === 'failed' || snapshot.status === 'cancelled') {
         return snapshot;
@@ -1266,7 +1266,7 @@ export default function EventStudioAIImportDock({
       warningCount: 0,
       matchSuccessCount: 0,
       matchFailedCount: 0,
-      message: 'Preparing image and request payload.',
+      message: '正在准备图片和识别请求。',
     }));
     const taskIdByImageId = new Map(nextTaskEntries.map((task) => [task.imageId, task.id]));
     setPanel((current) => {
@@ -1277,8 +1277,8 @@ export default function EventStudioAIImportDock({
         errorText: null,
         statusText:
           current.kind === 'poster'
-            ? 'Poster recognition started.'
-            : `Started ${images.length} recognition task${images.length > 1 ? 's' : ''}.`,
+            ? '已开始海报识别。'
+            : `已开始 ${images.length} 个识别任务。`,
         taskEntries: nextTaskEntries,
         manualMatchSummary: null,
         ...(current.kind === 'poster'
@@ -1300,7 +1300,7 @@ export default function EventStudioAIImportDock({
         try {
           updateTaskEntry(taskId, {
             phase: 'preparing',
-            message: 'Creating import job.',
+            message: '正在创建识别任务。',
           });
           const job = await eventStudioApi.createImportImageJob({
             kind: panel.kind,
@@ -1314,7 +1314,7 @@ export default function EventStudioAIImportDock({
             jobId: job.jobId,
             phase: 'polling',
             pollStatus: job.status,
-            message: 'Job created. Polling result.',
+            message: '任务已创建，正在轮询结果。',
           });
 
           const snapshot = await pollJob(panel.kind, job.jobId, taskId, runToken);
@@ -1323,7 +1323,7 @@ export default function EventStudioAIImportDock({
           if (snapshot.status === 'failed') {
             updateTaskEntry(taskId, {
               phase: 'failed',
-              message: snapshot.error || 'Recognition failed.',
+              message: snapshot.error || '识别失败。',
             });
             return;
           }
@@ -1331,7 +1331,7 @@ export default function EventStudioAIImportDock({
           if (snapshot.status === 'cancelled') {
             updateTaskEntry(taskId, {
               phase: 'cancelled',
-              message: 'Recognition cancelled.',
+              message: '识别已取消。',
             });
             return;
           }
@@ -1349,14 +1349,14 @@ export default function EventStudioAIImportDock({
               phase: 'succeeded',
               resultCount: 1,
               warningCount: warnings.length,
-              message: 'Poster result is ready for review.',
+              message: '海报识别结果已生成，可继续确认。',
             });
             return;
           }
 
           updateTaskEntry(taskId, {
             phase: 'auto_matching',
-            message: 'Running exact DJ matching.',
+            message: '正在执行精确 DJ 匹配。',
           });
 
           if (panel.kind === 'lineup') {
@@ -1370,7 +1370,7 @@ export default function EventStudioAIImportDock({
               warningCount: warnings.length,
               matchSuccessCount: matchedResult.summary.matched,
               matchFailedCount: matchedResult.summary.failed,
-              message: `Imported ${matchedResult.items.length} lineup item${matchedResult.items.length === 1 ? '' : 's'}${matchedResult.summary.attempted ? ` · matched ${matchedResult.summary.matched}, failed ${matchedResult.summary.failed}` : ''}.`,
+              message: `已导入 ${matchedResult.items.length} 条 lineup 结果${matchedResult.summary.attempted ? `，匹配成功 ${matchedResult.summary.matched}，失败 ${matchedResult.summary.failed}` : ''}。`,
             });
             return;
           }
@@ -1385,12 +1385,12 @@ export default function EventStudioAIImportDock({
             warningCount: warnings.length,
             matchSuccessCount: matchedResult.summary.matched,
             matchFailedCount: matchedResult.summary.failed,
-            message: `Imported ${matchedResult.items.length} timetable slot${matchedResult.items.length === 1 ? '' : 's'}${matchedResult.summary.attempted ? ` · matched ${matchedResult.summary.matched}, failed ${matchedResult.summary.failed}` : ''}.`,
+            message: `已导入 ${matchedResult.items.length} 条 timetable 结果${matchedResult.summary.attempted ? `，匹配成功 ${matchedResult.summary.matched}，失败 ${matchedResult.summary.failed}` : ''}。`,
           });
         } catch (error) {
           updateTaskEntry(taskId, {
             phase: 'failed',
-            message: error instanceof Error ? error.message : 'Recognition failed.',
+            message: error instanceof Error ? error.message : '识别失败。',
           });
         }
       })
@@ -1408,8 +1408,8 @@ export default function EventStudioAIImportDock({
         running: false,
         statusText:
           cancelledCount === current.taskEntries.length
-            ? 'All recognition tasks were cancelled.'
-            : `Recognition finished: ${succeededCount} succeeded, ${failedCount + current.taskEntries.filter((task) => task.phase === 'failed').length} failed${cancelledCount ? `, ${cancelledCount} cancelled` : ''}.`,
+            ? '所有识别任务均已取消。'
+            : `识别完成：成功 ${succeededCount}，失败 ${failedCount + current.taskEntries.filter((task) => task.phase === 'failed').length}${cancelledCount ? `，取消 ${cancelledCount}` : ''}。`,
       };
     });
   };
@@ -1430,11 +1430,11 @@ export default function EventStudioAIImportDock({
       return {
         ...current,
         running: false,
-        statusText: 'Recognition cancelled.',
+        statusText: '识别已取消。',
         taskEntries: current.taskEntries.map((task) =>
           task.phase === 'succeeded' || task.phase === 'failed'
             ? task
-            : { ...task, phase: 'cancelled', message: 'Recognition cancelled.', updatedAt: Date.now() }
+            : { ...task, phase: 'cancelled', message: '识别已取消。', updatedAt: Date.now() }
         ),
       };
     });
@@ -1485,6 +1485,35 @@ export default function EventStudioAIImportDock({
         expandedResultItemIds: current.expandedResultItemIds.filter((id) => id !== slotId),
       };
     });
+  };
+
+  const updateAIImportPerformerName = (
+    scope: 'lineup' | 'timetable',
+    itemId: string,
+    performerIndex: number,
+    nextName: string
+  ) => {
+    const applyUpdate = <T extends EventStudioAIEditableAct>(current: T): T => {
+      const count = actTypePerformerCount(current.actType);
+      const names = Array.from({ length: count }, (_, index) => performerNamesForDisplay(current)[index] || '');
+      names[performerIndex] = nextName;
+      const performerDJIDs = [...normalizePerformerIds(current.performerDJIDs, count)];
+      const performerAvatarURLs = [...normalizePerformerAvatarURLs(current.performerAvatarURLs, count)];
+      performerDJIDs[performerIndex] = null;
+      performerAvatarURLs[performerIndex] = null;
+      return normalizeEditableAct({
+        ...current,
+        performerNamesText: formatPerformerNamesText(names, current.actType),
+        performerDJIDs,
+        performerAvatarURLs,
+      }) as T;
+    };
+
+    if (scope === 'lineup') {
+      updateLineupItem(itemId, (current) => applyUpdate(current));
+      return;
+    }
+    updateTimetableSlot(itemId, (current) => applyUpdate(current));
   };
 
   const moveSelectedTimetableSlots = (target: EventStudioAIResultTarget) => {
@@ -1687,21 +1716,46 @@ export default function EventStudioAIImportDock({
     const key = aiSearchKey(scope, item.id, performerIndex);
     const names = splitPerformerNames(item.performerNamesText, item.actType);
     const query = names[performerIndex] || names[0] || '';
+    const bound = Boolean(item.performerDJIDs[performerIndex]);
     const results = djSearchResults[key] || [];
     const isSearching = Boolean(djSearchLoadingKeys[key]);
     const avatar = item.performerAvatarURLs[performerIndex];
+    const title = item.actType === 'solo' ? '艺人信息' : `成员 ${performerIndex + 1}`;
 
     return (
-      <div key={`${item.id}-${performerIndex}`} className="rounded-[16px] border border-[#e8eceb] bg-white/70 p-2.5">
-        <div className="mb-1.5 flex items-center gap-2 text-[11px] text-black/45">
-          <span>成员 {performerIndex + 1}</span>
-          {avatar ? (
-            <span className="inline-flex h-7 w-7 overflow-hidden rounded-full border border-[#e8eceb] bg-[#f4f6f3]">
-              <Image src={avatar} alt="" width={28} height={28} className="h-7 w-7 object-cover" />
-            </span>
-          ) : null}
+      <div key={`${item.id}-${performerIndex}`} className="rounded-[18px] border border-[#e8eceb] bg-white p-3 shadow-[0_10px_26px_rgba(15,23,42,0.04)]">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {avatar ? (
+              <span className="inline-flex h-9 w-9 overflow-hidden rounded-full border border-[#e8eceb] bg-[#f4f6f3]">
+                <Image src={avatar} alt="" width={36} height={36} className="h-9 w-9 object-cover" />
+              </span>
+            ) : (
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#d9e4ff] bg-[#eef4ff] text-sm font-semibold text-[#3567d6]">
+                {(query.trim()[0] || `${performerIndex + 1}`).toUpperCase()}
+              </span>
+            )}
+            <div>
+              <div className="text-xs font-semibold text-[#071110]">{title}</div>
+              <div className="mt-0.5 text-[11px] text-black/42">{bound ? '已绑定 DJ' : '未绑定 DJ'}</div>
+            </div>
+          </div>
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${bound ? 'bg-[#e8f7ee] text-[#1f8f57]' : 'bg-[#fff4e8] text-[#a6621a]'}`}>
+            {bound ? '已匹配' : '待匹配'}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-3">
+          <label className="block space-y-1">
+            <span className="text-[11px] text-black/42">{item.actType === 'solo' ? '艺人名称' : `成员名称 ${performerIndex + 1}`}</span>
+            <input
+              className={`${aiCompactInputClass} w-full`}
+              value={names[performerIndex] || ''}
+              onChange={(event) => updateAIImportPerformerName(scope, item.id, performerIndex, event.target.value)}
+              placeholder={item.actType === 'solo' ? '输入艺人名称' : `输入成员 ${performerIndex + 1} 名称`}
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className={`${aiCompactInputClass} min-w-[160px] flex-1`}
             value={item.performerDJIDs[performerIndex] || ''}
@@ -1779,7 +1833,7 @@ export default function EventStudioAIImportDock({
   const renderResultAvatarGroup = (item: EventStudioAIEditableAct) => {
     const names = performerNamesForDisplay(item);
     return (
-      <div className="flex -space-x-2">
+      <div className="flex shrink-0 -space-x-2">
         {names.slice(0, 3).map((name, index) => {
           const avatar = item.performerAvatarURLs[index];
           const initial = (name.trim()[0] || '?').toUpperCase();
@@ -1844,7 +1898,7 @@ export default function EventStudioAIImportDock({
     const names = performerNamesForDisplay(item);
     return (
       <div className="border-t border-[#eef1ee] bg-[#fbfcfa] px-4 py-4">
-        <div className="grid gap-3 xl:grid-cols-[150px_minmax(0,1fr)_140px]">
+        <div className="grid gap-3 xl:grid-cols-[160px_140px_minmax(0,1fr)]">
           <label className="space-y-1 text-xs text-black/45">
             <span>演出形式</span>
             <select
@@ -1867,21 +1921,6 @@ export default function EventStudioAIImportDock({
             </select>
           </label>
           <label className="space-y-1 text-xs text-black/45">
-            <span>DJ / 艺人</span>
-            <input
-              className={aiCompactInputClass}
-              value={item.performerNamesText}
-              onChange={(event) =>
-                updateLineupItem(item.id, (current) =>
-                  normalizeEditableAct({
-                    ...current,
-                    performerNamesText: event.target.value,
-                  })
-                )
-              }
-            />
-          </label>
-          <label className="space-y-1 text-xs text-black/45">
             <span>置信度</span>
             <input
               className={aiCompactInputClass}
@@ -1895,12 +1934,13 @@ export default function EventStudioAIImportDock({
               placeholder="0.95"
             />
           </label>
+          <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3 text-sm text-black/56">
+            <div className="text-[11px] text-black/38">当前展示名</div>
+            <div className="mt-1 font-medium text-[#071110]">{names.join(' / ') || '未命名'}</div>
+          </div>
         </div>
-        <div className="mt-3 grid gap-2 xl:grid-cols-2">
+        <div className={`mt-3 grid gap-3 ${count >= 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
           {Array.from({ length: count }).map((_, performerIndex) => renderDJBindingControls('lineup', item, performerIndex))}
-        </div>
-        <div className="mt-3 rounded-[14px] border border-[#edf1ee] bg-white px-3 py-2 text-xs text-black/45">
-          当前展示名：{names.join(' / ') || '未命名'}
         </div>
         {item.notes.length ? <div className="mt-2 text-xs text-black/40">备注：{item.notes.join(' / ')}</div> : null}
       </div>
@@ -1930,14 +1970,6 @@ export default function EventStudioAIImportDock({
               </option>
             ))}
           </select>
-        </label>
-        <label className="space-y-1 text-xs text-black/45">
-          <span>DJ / 艺人</span>
-          <input
-            className={aiCompactInputClass}
-            value={slot.performerNamesText}
-            onChange={(event) => updateTimetableSlot(slot.id, (current) => ({ ...current, performerNamesText: event.target.value }))}
-          />
         </label>
         <label className="space-y-1 text-xs text-black/45">
           <span>活动日</span>
@@ -1971,6 +2003,10 @@ export default function EventStudioAIImportDock({
             ))}
           </select>
         </label>
+        <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3 text-sm text-black/56">
+          <div className="text-[11px] text-black/38">当前展示名</div>
+          <div className="mt-1 font-medium text-[#071110]">{performerDisplayName(slot)}</div>
+        </div>
         <label className="space-y-1 text-xs text-black/45">
           <span>舞台</span>
           <input
@@ -2031,7 +2067,7 @@ export default function EventStudioAIImportDock({
           {slot.eventDayResolutionConfidence != null ? ` / 置信度 ${slot.eventDayResolutionConfidence}` : ''}
         </div>
       ) : null}
-      <div className="mt-3 grid gap-2 xl:grid-cols-2">
+      <div className={`mt-3 grid gap-3 ${actTypePerformerCount(slot.actType) >= 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
         {Array.from({ length: actTypePerformerCount(slot.actType) }).map((_, performerIndex) =>
           renderDJBindingControls('timetable', slot, performerIndex)
         )}
@@ -2232,14 +2268,14 @@ export default function EventStudioAIImportDock({
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="grid gap-5 p-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+                <div className="grid gap-5 p-5 lg:grid-cols-[280px_minmax(0,1fr)]">
                   <div className="space-y-4">
                     <div className="admin-reference-card p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-semibold text-[#071110]">选择图片</div>
                         <div className="text-xs text-black/40">{selectedCountLabel(panel)}</div>
                       </div>
-                      <div className="mt-3 grid gap-2">
+                      <div className="mt-3 grid grid-cols-2 gap-2.5">
                         {selectedImageOptions.map((image) => {
                           const checked = panel.selectedImageIds.includes(image.id);
                           const toggle = () => {
@@ -2260,17 +2296,17 @@ export default function EventStudioAIImportDock({
                               key={image.id}
                               type="button"
                               onClick={toggle}
-                              className={`overflow-hidden rounded-[18px] border text-left ${
+                              className={`overflow-hidden rounded-[16px] border text-left ${
                                 checked ? 'border-[#3aa66b]' : 'border-[#e8eceb]'
                               } bg-white`}
                             >
-                              <div className="relative aspect-[16/9] bg-[#f2f3ef]">
-                                <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="300px" />
+                              <div className="relative aspect-[4/3] bg-[#f2f3ef]">
+                                <Image src={image.remoteUrl} alt={image.fileName} fill className="object-cover" sizes="140px" />
                               </div>
-                              <div className="flex items-start justify-between gap-3 px-3 py-2.5">
+                              <div className="flex items-start justify-between gap-2 px-2.5 py-2">
                                 <div className="min-w-0">
-                                  <div className="truncate text-[13px] font-medium text-[#071110]">{image.fileName}</div>
-                                  <div className="mt-1 text-[11px] text-black/40">{imageOriginLabel(image.origin)}</div>
+                                  <div className="truncate text-[12px] font-medium text-[#071110]">{image.fileName}</div>
+                                  <div className="mt-1 text-[10px] text-black/40">{imageOriginLabel(image.origin)}</div>
                                 </div>
                                 <input readOnly type={panel.kind === 'poster' ? 'radio' : 'checkbox'} checked={checked} />
                               </div>
@@ -2756,7 +2792,7 @@ export default function EventStudioAIImportDock({
                         '搜索 DJ 名称'
                       )}
                       <div className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-                        <div className="hidden items-center gap-3 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[50px_minmax(0,2.1fr)_140px_140px_130px_150px]">
+                        <div className="hidden items-center gap-4 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[56px_minmax(280px,1.8fr)_110px_150px_120px_130px]">
                           <span>#</span>
                           <span>DJ / 艺人</span>
                           <span>演出形式</span>
@@ -2770,13 +2806,13 @@ export default function EventStudioAIImportDock({
                             const confidence = resultConfidenceValue(item.confidence);
                             return (
                               <div key={item.id} className="border-t border-[#f1f3f0] first:border-t-0">
-                                <div className="grid gap-4 px-4 py-4 lg:grid-cols-[50px_minmax(0,2.1fr)_140px_140px_130px_150px] lg:items-center">
+                                <div className="grid gap-4 px-4 py-4 lg:grid-cols-[56px_minmax(280px,1.8fr)_110px_150px_120px_130px] lg:items-center">
                                   <div className="text-sm font-semibold text-black/65">{index + 1}</div>
                                   <div className="flex min-w-0 items-center gap-3">
                                     {renderResultAvatarGroup(item)}
-                                    <div className="min-w-0">
-                                      <div className="truncate text-[15px] font-semibold text-[#071110]">{performerDisplayName(item)}</div>
-                                      <div className="mt-1 text-xs text-black/42">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate text-[15px] font-semibold leading-6 text-[#071110]">{performerDisplayName(item)}</div>
+                                      <div className="mt-1 whitespace-nowrap text-xs text-black/42">
                                         {matchedPerformerCount(item)} / {actTypePerformerCount(item.actType)} 已绑定
                                       </div>
                                     </div>
@@ -2904,7 +2940,7 @@ export default function EventStudioAIImportDock({
                       '搜索 DJ 名称、舞台或时间'
                     )}
                     <div className="overflow-hidden rounded-[26px] border border-[#e8eceb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
-                      <div className="hidden items-center gap-3 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[52px_52px_minmax(0,2fr)_180px_120px_130px_160px]">
+                      <div className="hidden items-center gap-4 border-b border-[#eef1ee] bg-[#fafcf9] px-4 py-3 text-[12px] font-semibold tracking-[0.02em] text-black/45 lg:grid lg:grid-cols-[52px_56px_minmax(320px,2fr)_180px_120px_120px_140px]">
                         <span />
                         <span>#</span>
                         <span>DJ / 艺人</span>
@@ -2919,7 +2955,7 @@ export default function EventStudioAIImportDock({
                           const confidence = resultConfidenceValue(slot.confidence);
                           return (
                             <div key={slot.id} className="border-t border-[#f1f3f0] first:border-t-0">
-                              <div className="grid gap-4 px-4 py-4 lg:grid-cols-[52px_52px_minmax(0,2fr)_180px_120px_130px_160px] lg:items-center">
+                              <div className="grid gap-4 px-4 py-4 lg:grid-cols-[52px_56px_minmax(320px,2fr)_180px_120px_120px_140px] lg:items-center">
                                 <div className="flex justify-center">
                                   <input
                                     type="checkbox"
@@ -2941,9 +2977,9 @@ export default function EventStudioAIImportDock({
                                 <div className="text-sm font-semibold text-black/65">{index + 1}</div>
                                 <div className="flex min-w-0 items-center gap-3">
                                   {renderResultAvatarGroup(slot)}
-                                  <div className="min-w-0">
-                                    <div className="truncate text-[15px] font-semibold text-[#071110]">{performerDisplayName(slot)}</div>
-                                    <div className="mt-1 text-xs text-black/42">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[15px] font-semibold leading-6 text-[#071110]">{performerDisplayName(slot)}</div>
+                                    <div className="mt-1 whitespace-nowrap text-xs text-black/42">
                                       {slot.dayLabel || slot.localDate}
                                       {slot.unresolvedEventDay ? ' · 活动日待确认' : ''}
                                     </div>
