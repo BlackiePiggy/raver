@@ -2267,6 +2267,7 @@ export default function EventStudioAIImportDock({
 
       setDraft((current) => ({
         ...current,
+        lineupSyncMode: 'incremental_fill',
         lineupArtists: [...current.lineupArtists, ...nextLineup].map((artist, index) => ({
           ...artist,
           sortOrder: index + 1,
