@@ -50,6 +50,7 @@ server/.env.*
 # Database
 *.db
 *.sqlite
+server/.cache/
 server/prisma/.cache/
 
 # Logs

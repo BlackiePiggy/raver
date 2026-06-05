@@ -17,6 +17,10 @@ echo "branch: $BRANCH"
 echo ""
 
 cd "$ROOT_DIR"
+echo "🧹 clean runtime caches"
+rm -rf "$ROOT_DIR/server/.cache/admin-summary"
+git restore --worktree --staged -- server/.cache 2>/dev/null || true
+
 git fetch origin
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
