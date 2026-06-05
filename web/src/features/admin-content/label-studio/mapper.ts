@@ -4,6 +4,9 @@ import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine, trimArrayItems }
 const normalizeStringArray = (value: string[]): string[] =>
   trimArrayItems(value, INPUT_LIMITS.label.genre).slice(0, INPUT_LIMITS.label.genresMaxItems);
 
+const normalizeFounderDjIds = (value: string[]): string[] =>
+  trimArrayItems(value, INPUT_LIMITS.common.externalId).slice(0, INPUT_LIMITS.label.founderDjMaxItems);
+
 const parseOptionalNumber = (value: string): number | null => {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -21,7 +24,7 @@ export const mapLabelStudioDraftToCreateInput = (
   nation: normalizeSingleLine(draft.nation).slice(0, INPUT_LIMITS.label.nation) || null,
   founderName: normalizeSingleLine(draft.founderName).slice(0, INPUT_LIMITS.label.founderName) || null,
   foundedAt: normalizeSingleLine(draft.foundedAt).slice(0, INPUT_LIMITS.label.foundedAt) || null,
-  founderDjId: draft.founderDjId.trim() || null,
+  founderDjIds: normalizeFounderDjIds(draft.founderDjIds),
   genres: normalizeStringArray(draft.genres),
   genresPreview: normalizeSingleLine(draft.genresPreview).slice(0, INPUT_LIMITS.label.genresPreview) || null,
   latestReleaseListing: normalizeSingleLine(draft.latestReleaseListing).slice(0, INPUT_LIMITS.label.latestReleaseListing) || null,

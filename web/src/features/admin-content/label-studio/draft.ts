@@ -11,7 +11,8 @@ export const createLabelStudioDraft = (): LabelStudioDraft => ({
   nation: '',
   founderName: '',
   foundedAt: '',
-  founderDjId: '',
+  founderDjIds: [],
+  founderDjs: [],
   genres: [''],
   genresPreview: '',
   latestReleaseListing: '',
@@ -43,7 +44,12 @@ export const hydrateLabelStudioDraftFromLabel = (
   nation: fromNullable(label.nation),
   founderName: fromNullable(label.founderName),
   foundedAt: fromNullable(label.foundedAt),
-  founderDjId: fromNullable(label.founderDjId),
+  founderDjIds: Array.isArray(label.founderDjIds)
+    ? label.founderDjIds.filter((item) => typeof item === 'string' && item.trim())
+    : [],
+  founderDjs: Array.isArray(label.founderDjs) && label.founderDjs.length
+    ? label.founderDjs
+    : [],
   genres: (label.genres || []).length ? [...(label.genres || [])] : [''],
   genresPreview: fromNullable(label.genresPreview),
   latestReleaseListing: fromNullable(label.latestReleaseListing),

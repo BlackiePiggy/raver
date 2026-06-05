@@ -64,14 +64,17 @@ export const labelChangePaths: Record<string, ChangePathConfig> = {
   'links.officialWebsiteUrl': publicScalar('官网', 'Official website', 'links'),
   'founder.founderName': publicScalar('创始人', 'Founder', 'founder'),
   'founder.foundedAt': publicScalar('创立时间', 'Founded at', 'founder'),
-  'founder.founderDjId': publicScalar('创始人 DJ', 'Founder DJ', 'founder'),
+  'founder.founderDjIds': {
+    ...publicScalar('创始人 DJ 列表', 'Founder DJs', 'founder'),
+    arrayStrategy: { type: 'set' },
+  },
   'stats.soundcloudFollowers': operatorScalar('SoundCloud 粉丝数', 'SoundCloud followers', 'stats'),
   'stats.likes': operatorScalar('点赞数', 'Likes', 'stats'),
 };
 
 registerEntityChangeDefinition({
   entityType: 'label',
-  snapshotSchemaVersion: 1,
+  snapshotSchemaVersion: 2,
   buildSnapshot: buildLabelChangeSnapshot,
   paths: labelChangePaths,
 });

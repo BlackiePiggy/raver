@@ -2031,7 +2031,7 @@ struct LearnLabel: Codable, Identifiable, Hashable {
     var officialWebsiteUrl: String?
     var founderName: String?
     var foundedAt: String?
-    var founderDj: WebDJ?
+    var founderDjs: [WebDJ]
 }
 
 struct MyPublishes: Codable, Hashable {

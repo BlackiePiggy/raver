@@ -120,9 +120,10 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
     const founderDjIds = Array.from(
       new Set(
-        rows
-          .map((item) => item.founderDjId)
-          .filter((id): id is string => Boolean(id))
+        rows.flatMap((item) => {
+          const nextIds = item.founderDjIds;
+          return nextIds.filter((id): id is string => Boolean(id));
+        })
       )
     );
     const founderDjs = founderDjIds.length > 0
@@ -133,7 +134,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const founderDjById = new Map(founderDjs.map((item: { id: string }) => [item.id, item]));
     const hydratedRows = rows.map((item) => ({
       ...item,
-      founderDj: item.founderDjId ? founderDjById.get(item.founderDjId) ?? null : null,
+      founderDjs: item.founderDjIds
+        .map((id) => founderDjById.get(id) ?? null)
+        .filter(Boolean),
     }));
 
     res.json({
@@ -175,16 +178,17 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    let founderDj = null;
-    if (label.founderDjId) {
-      founderDj = await prisma.dJ.findUnique({
-        where: { id: label.founderDjId },
-      });
-    }
+    const founderDjIds = label.founderDjIds;
+    const founderDjs = founderDjIds.length
+      ? await prisma.dJ.findMany({
+          where: { id: { in: founderDjIds } },
+        })
+      : [];
+    const founderDjById = new Map(founderDjs.map((item: { id: string }) => [item.id, item]));
 
     res.json({
       ...label,
-      founderDj,
+      founderDjs: founderDjIds.map((id) => founderDjById.get(id) ?? null).filter(Boolean),
     });
   } catch (error) {
     console.error('Get label detail error:', error);

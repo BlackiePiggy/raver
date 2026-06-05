@@ -856,7 +856,6 @@ model DJ {
   genreBindings      DJGenreBinding[]
   postBindings       PostDJBinding[]
   newsBindings       NewsDJBinding[]
-  foundedLabels     Label[]              @relation("LabelFounderDJ")
 
   @@map("djs")
 }
@@ -1118,18 +1117,15 @@ model Label {
   officialWebsiteUrl String? @map("official_website_url")
   founderName        String? @map("founder_name")
   foundedAt          String? @map("founded_at")
-  founderDjId        String? @map("founder_dj_id")
+  founderDjIds       String[] @default([]) @map("founder_dj_ids")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  founderDj DJ? @relation("LabelFounderDJ", fields: [founderDjId], references: [id], onDelete: SetNull)
 
   @@index([name])
   @@index([nation])
   @@index([soundcloudFollowers])
   @@index([likes])
-  @@index([founderDjId])
   @@map("labels")
 }
 

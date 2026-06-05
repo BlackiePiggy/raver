@@ -3356,7 +3356,7 @@ actor MockWebFeatureService: WebFeatureService {
                 officialWebsiteUrl: "https://www.monstercat.com",
                 founderName: "Amelie Lens",
                 foundedAt: "2011",
-                founderDj: djs.first(where: { $0.id == "dj_amelie" })
+                founderDjs: djs.filter { $0.id == "dj_amelie" }
             ),
             LearnLabel(
                 id: "label-foolsgold",
@@ -3383,7 +3383,7 @@ actor MockWebFeatureService: WebFeatureService {
                 officialWebsiteUrl: "http://foolsgoldrecs.com",
                 founderName: "A-Trak",
                 foundedAt: "2007",
-                founderDj: nil
+                founderDjs: []
             ),
             LearnLabel(
                 id: "label-mad-decent",
@@ -3410,7 +3410,7 @@ actor MockWebFeatureService: WebFeatureService {
                 officialWebsiteUrl: "https://www.maddecent.com",
                 founderName: "Diplo",
                 foundedAt: "2005",
-                founderDj: djs.first(where: { $0.name.lowercased() == "diplo" })
+                founderDjs: djs.filter { $0.name.lowercased() == "diplo" }
             )
         ]
 
@@ -3559,7 +3559,7 @@ actor MockWebFeatureService: WebFeatureService {
             officialWebsiteUrl: nil,
             founderName: nil,
             foundedAt: nil,
-            founderDj: nil
+            founderDjs: []
         )
         return .created(label)
     }

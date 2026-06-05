@@ -67,7 +67,7 @@ const labelData = (genres: string[] = ['techno', 'house']): Record<string, unkno
   founder: {
     founderName: 'Founder Name',
     foundedAt: '2012',
-    founderDjId: 'dj-founder',
+    founderDjIds: ['dj-founder'],
   },
   stats: {
     soundcloudFollowers: 1000,

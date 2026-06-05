@@ -364,12 +364,21 @@ const run = async (): Promise<void> => {
       || safeString(raw.founded)
       || safeString(raw.founding_time)
       || safeString(raw.founding_year);
+    const explicitFounderDjIds = safeStringArray(row.founder_dj_ids);
     const explicitFounderDjId = safeString(row.founder_dj_id);
     const inferredFounderDjId =
       founderName
         ? founderDjByName.get(normalizeLookupKey(founderName)) ?? null
         : null;
-    const founderDjId = explicitFounderDjId ?? inferredFounderDjId;
+    const founderDjIds = Array.from(
+      new Set(
+        [
+          ...explicitFounderDjIds,
+          explicitFounderDjId,
+          inferredFounderDjId,
+        ].filter((value): value is string => Boolean(value))
+      )
+    );
 
     let avatarUrl = avatarSourceUrl;
     let backgroundUrl = backgroundSourceUrl;
@@ -436,7 +445,7 @@ const run = async (): Promise<void> => {
         officialWebsiteUrl: mappedLinks.officialWebsiteUrl,
         founderName,
         foundedAt,
-        founderDjId,
+        founderDjIds,
       };
 
       await prisma.label.upsert({

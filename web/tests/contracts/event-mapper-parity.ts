@@ -1052,11 +1052,11 @@ const tests: TestCase[] = [
         officialWebsiteUrl: "https://after.life",
         founderName: "Tale Of Us",
         foundedAt: "2016",
-        founderDjId: "dj_afterlife",
+        founderDjIds: ["dj_afterlife"],
       } as any;
 
       const draft = hydrateLabelStudioDraftFromLabel(label);
-      assert.equal(draft.founderDjId, "dj_afterlife");
+      assert.deepEqual(draft.founderDjIds, ["dj_afterlife"]);
       assert.equal(draft.logoUrl, "https://cdn.example.com/label/logo.jpg");
       assert.equal(draft.avatarUrl, "https://cdn.example.com/label/avatar.jpg");
       assert.equal(draft.backgroundUrl, "https://cdn.example.com/label/background.jpg");
@@ -1066,10 +1066,10 @@ const tests: TestCase[] = [
 
       const payload = mapLabelStudioDraftToCreateInput({
         ...draft,
-        founderDjId: "dj_afterlife",
+        founderDjIds: ["dj_afterlife"],
       });
 
-      assert.equal(payload.founderDjId, "dj_afterlife");
+      assert.deepEqual(payload.founderDjIds, ["dj_afterlife"]);
       assert.equal(payload.profileUrl, "https://raver.example.com/labels/afterlife");
       assert.equal(payload.profileSlug, "afterlife");
       assert.equal(payload.logoUrl, "https://cdn.example.com/label/logo.jpg");

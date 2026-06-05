@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { type ChangeEvent, useMemo, useState } from 'react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
+import EntityBindingField from '@/components/admin/EntityBindingField';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
@@ -12,6 +13,7 @@ import {
   validateLabelStudioDraft,
   type LabelStudioCreateResult,
   type LabelStudioDraft,
+  type LabelStudioFounderDJBinding,
   type LabelStudioValidationErrors,
 } from '@/features/admin-content/label-studio';
 
@@ -108,6 +110,14 @@ function LabelImageField({
 const textInputClassName = 'admin-studio-input';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
 
+const appendUniqueFounderBinding = (
+  current: LabelStudioFounderDJBinding[],
+  next: LabelStudioFounderDJBinding
+): LabelStudioFounderDJBinding[] => {
+  if (current.some((item) => item.id === next.id)) return current;
+  return [...current, next];
+};
+
 type LabelStudioFormProps = {
   mode: 'create' | 'edit';
   labelId?: string;
@@ -155,6 +165,15 @@ export default function LabelStudioForm({
       delete next.name;
       return next;
     });
+  };
+
+  const updateFounderBindings = (founderDjs: LabelStudioFounderDJBinding[]) => {
+    const founderDjIds = founderDjs.map((item) => item.id);
+    setDraft((current) => ({
+      ...current,
+      founderDjs,
+      founderDjIds,
+    }));
   };
 
   const handleGenreChange = (index: number, value: string) => {
@@ -517,37 +536,57 @@ export default function LabelStudioForm({
 
       <Section title="创始人与统计" description="最后维护创始人信息和较弱的关注度统计。">
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Founder Name">
+          <Field label="创始人名称">
             <AdminCountedControl count={countText(draft.founderName)} maxLength={INPUT_LIMITS.label.founderName}>
               <input
                 value={draft.founderName}
                 onChange={(event) => updateDraft('founderName', event.target.value)}
                 className={textInputClassName}
-                placeholder="Carmine Conte"
+                placeholder="例如：Carmine Conte"
                 maxLength={INPUT_LIMITS.label.founderName}
               />
             </AdminCountedControl>
           </Field>
-          <Field label="Founded At">
+          <Field label="创立时间">
             <AdminCountedControl count={countText(draft.foundedAt)} maxLength={INPUT_LIMITS.label.foundedAt}>
               <input
                 value={draft.foundedAt}
                 onChange={(event) => updateDraft('foundedAt', event.target.value)}
                 className={textInputClassName}
-                placeholder="2016"
+                placeholder="例如：2016"
                 maxLength={INPUT_LIMITS.label.foundedAt}
               />
             </AdminCountedControl>
           </Field>
-          <Field label="Founder DJ ID">
-            <input
-              value={draft.founderDjId}
-              onChange={(event) => updateDraft('founderDjId', event.target.value)}
-              className={textInputClassName}
-              placeholder="dj_001"
-            />
-          </Field>
-          <Field label="SoundCloud Followers">
+          <div className="lg:col-span-2">
+            <Field
+              label="创始人 DJ 绑定"
+              hint={`支持绑定多位 DJ，最多 ${INPUT_LIMITS.label.founderDjMaxItems} 位。`}
+            >
+              <EntityBindingField
+                kind="dj"
+                mode="multiple"
+                seedQuery={draft.founderName}
+                items={draft.founderDjs}
+                title="已绑定创始人 DJ"
+                emptyLabel="当前还没有绑定创始人 DJ。"
+                onAdd={(value) =>
+                  updateFounderBindings(
+                    appendUniqueFounderBinding(draft.founderDjs, {
+                      id: value.id,
+                      name: value.name,
+                      subtitle: value.subtitle ?? null,
+                      imageUrl: value.imageUrl ?? null,
+                    })
+                  )
+                }
+                onRemove={(value) =>
+                  updateFounderBindings(draft.founderDjs.filter((item) => item.id !== value.id))
+                }
+              />
+            </Field>
+          </div>
+          <Field label="SoundCloud 粉丝数">
             <input
               value={draft.soundcloudFollowers}
               onChange={(event) => updateDraft('soundcloudFollowers', event.target.value)}
@@ -555,7 +594,7 @@ export default function LabelStudioForm({
               placeholder="100000"
             />
           </Field>
-          <Field label="Likes">
+          <Field label="点赞数">
             <input
               value={draft.likes}
               onChange={(event) => updateDraft('likes', event.target.value)}

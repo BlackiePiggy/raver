@@ -3314,50 +3314,57 @@ struct LearnLabelDetailView: View {
 
     @ViewBuilder
     private var founderSection: some View {
-        HStack(alignment: .center, spacing: 10) {
-            if let founderDj = label.founderDj {
-                Button {
-                    appPush(.djDetail(djID: founderDj.id))
-                } label: {
-                    HStack(spacing: 10) {
-                        LearnLabelFounderAvatar(urlString: founderDj.avatarUrl)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(LT("创始人", "创始人", "創設者"))
-                                .font(.caption)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                            Text(founderDisplayName)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RaverTheme.primaryText)
-                                .lineLimit(1)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(RaverTheme.secondaryText)
+        if !label.founderDjs.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(label.founderDjs, id: \.id) { founderDj in
+                        founderButton(founderDj)
                     }
                 }
-                .buttonStyle(.plain)
-            } else {
-                HStack(spacing: 10) {
-                    LearnLabelFounderAvatar(urlString: nil)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(LT("创始人", "创始人", "創設者"))
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        Text(founderDisplayName)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .lineLimit(1)
-                    }
-                }
+                .padding(.trailing, 2)
             }
-            Spacer(minLength: 0)
+        } else {
+            HStack(alignment: .center, spacing: 10) {
+                LearnLabelFounderAvatar(urlString: nil)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(LT("创始人", "创始人", "創設者"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Text(founderDisplayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
         }
     }
 
-    private var founderDisplayName: String {
-        if let founderDj = label.founderDj {
-            return founderDj.name
+    private func founderButton(_ founderDj: WebDJ) -> some View {
+        Button {
+            appPush(.djDetail(djID: founderDj.id))
+        } label: {
+            HStack(spacing: 10) {
+                LearnLabelFounderAvatar(urlString: founderDj.avatarUrl)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(LT("创始人", "创始人", "創設者"))
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    Text(founderDj.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(RaverTheme.secondaryText)
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
+        .buttonStyle(.plain)
+    }
+
+    private var founderDisplayName: String {
         return (label.founderName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
     }
 
@@ -3366,7 +3373,7 @@ struct LearnLabelDetailView: View {
     }
 
     private var hasFounderDisplay: Bool {
-        if label.founderDj != nil { return true }
+        if !label.founderDjs.isEmpty { return true }
         return !founderDisplayName.isEmpty
     }
 

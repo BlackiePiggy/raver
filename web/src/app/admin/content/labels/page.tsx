@@ -56,6 +56,11 @@ const renderDetailText = (label: string, value?: string | null) => (
   </div>
 );
 
+const renderFounderDjNames = (item: LabelStudioLoadedLabel): string =>
+  item.founderDjs?.length
+    ? item.founderDjs.map((dj) => dj.name).filter(Boolean).join(' / ')
+    : 'Not set';
+
 function LabelDetailOverlay({
   item,
   detail,
@@ -156,7 +161,7 @@ function LabelDetailOverlay({
               {renderDetailText('Latest Release', resolved.latestReleaseListing)}
               {renderDetailText('Profile URL', resolved.profileUrl)}
               {renderDetailText('Profile Slug', resolved.profileSlug)}
-              {renderDetailText('Founder DJ ID', resolved.founderDjId)}
+              {renderDetailText('Founder DJs', renderFounderDjNames(resolved))}
             </div>
           </div>
         </section>

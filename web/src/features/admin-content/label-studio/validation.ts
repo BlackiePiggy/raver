@@ -25,6 +25,9 @@ export const validateLabelStudioDraft = (
   if (draft.foundedAt.trim() && countText(draft.foundedAt) > INPUT_LIMITS.label.foundedAt) {
     errors.name = errors.name || `成立时间不能超过 ${INPUT_LIMITS.label.foundedAt} 个字符`;
   }
+  if (draft.founderDjIds.length > INPUT_LIMITS.label.founderDjMaxItems) {
+    errors.name = errors.name || `创始人 DJ 最多绑定 ${INPUT_LIMITS.label.founderDjMaxItems} 位`;
+  }
   if (draft.genres.length > INPUT_LIMITS.label.genresMaxItems) {
     errors.name = errors.name || `风格标签最多填写 ${INPUT_LIMITS.label.genresMaxItems} 项`;
   }

@@ -16,7 +16,7 @@ export const buildLabelChangeSnapshot = async (input: {
     entityId: label.id,
     displayName: label.name,
     revision: null,
-    schemaVersion: 1,
+    schemaVersion: 2,
     capturedAt: new Date().toISOString(),
     data: {
       profile: {
@@ -66,7 +66,7 @@ export const buildLabelChangeSnapshot = async (input: {
       founder: {
         founderName: label.founderName,
         foundedAt: label.foundedAt,
-        founderDjId: label.founderDjId,
+        founderDjIds: sortedStrings(label.founderDjIds),
       },
       stats: {
         soundcloudFollowers: label.soundcloudFollowers,

@@ -1,3 +1,10 @@
+export type LabelStudioFounderDJBinding = {
+  id: string;
+  name: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+};
+
 export type LabelStudioDraft = {
   id: string;
   name: string;
@@ -7,7 +14,8 @@ export type LabelStudioDraft = {
   nation: string;
   founderName: string;
   foundedAt: string;
-  founderDjId: string;
+  founderDjIds: string[];
+  founderDjs: LabelStudioFounderDJBinding[];
   genres: string[];
   genresPreview: string;
   latestReleaseListing: string;
@@ -57,7 +65,8 @@ export type LabelStudioLoadedLabel = {
   officialWebsiteUrl: string | null;
   founderName: string | null;
   foundedAt: string | null;
-  founderDjId: string | null;
+  founderDjIds: string[];
+  founderDjs: LabelStudioFounderDJBinding[];
 };
 
 export type LabelStudioCreateInput = {
@@ -68,7 +77,7 @@ export type LabelStudioCreateInput = {
   nation?: string | null;
   founderName?: string | null;
   foundedAt?: string | null;
-  founderDjId?: string | null;
+  founderDjIds?: string[];
   genres?: string[];
   genresPreview?: string | null;
   latestReleaseListing?: string | null;

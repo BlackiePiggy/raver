@@ -65,6 +65,7 @@ export const INPUT_LIMITS = {
     nation: 80,
     founderName: 120,
     foundedAt: 40,
+    founderDjMaxItems: 20,
     genre: 40,
     genresMaxItems: 20,
     genresPreview: 160,
