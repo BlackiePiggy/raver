@@ -2029,9 +2029,21 @@ struct LearnLabel: Codable, Identifiable, Hashable {
     var soundcloudUrl: String?
     var musicPurchaseUrl: String?
     var officialWebsiteUrl: String?
-    var founderName: String?
     var foundedAt: String?
-    var founderDjs: [WebDJ]
+    var founders: [LearnLabelFounder]
+}
+
+struct LearnLabelFounder: Codable, Identifiable, Hashable {
+    var name: String?
+    var djId: String?
+    var dj: WebDJ?
+
+    var id: String {
+        if let djID = dj?.id, !djID.isEmpty { return "dj:\(djID)" }
+        if let djId, !djId.isEmpty { return "ref:\(djId)" }
+        if let name, !name.isEmpty { return "name:\(name)" }
+        return "founder:unknown"
+    }
 }
 
 struct MyPublishes: Codable, Hashable {

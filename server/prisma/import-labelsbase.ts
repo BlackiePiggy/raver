@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import OSS from 'ali-oss';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { labelFoundersToJson, normalizeLabelFounders } from '../src/utils/label-founders';
 
 type RawContact = {
   label: string | null;
@@ -43,6 +44,7 @@ type RawLabel = {
   founder_name?: string | null;
   founded_at?: string | null;
   founded_year?: string | number | null;
+  founder_dj_ids?: string[] | null;
   founder_dj_id?: string | null;
 };
 
@@ -370,15 +372,16 @@ const run = async (): Promise<void> => {
       founderName
         ? founderDjByName.get(normalizeLookupKey(founderName)) ?? null
         : null;
-    const founderDjIds = Array.from(
-      new Set(
-        [
-          ...explicitFounderDjIds,
-          explicitFounderDjId,
-          inferredFounderDjId,
-        ].filter((value): value is string => Boolean(value))
-      )
-    );
+    const founders = normalizeLabelFounders([
+      ...[
+        ...explicitFounderDjIds,
+        explicitFounderDjId,
+        inferredFounderDjId,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((djId) => ({ name: null, djId })),
+      ...(founderName ? [{ name: founderName, djId: null }] : []),
+    ]);
 
     let avatarUrl = avatarSourceUrl;
     let backgroundUrl = backgroundSourceUrl;
@@ -443,9 +446,8 @@ const run = async (): Promise<void> => {
         soundcloudUrl: mappedLinks.soundcloudUrl,
         musicPurchaseUrl: mappedLinks.musicPurchaseUrl,
         officialWebsiteUrl: mappedLinks.officialWebsiteUrl,
-        founderName,
         foundedAt,
-        founderDjIds,
+        founders: labelFoundersToJson(founders),
       };
 
       await prisma.label.upsert({

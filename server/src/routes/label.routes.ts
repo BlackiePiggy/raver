@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Router, Request, Response } from 'express';
+import { collectLabelFounderDjIds, hydrateLabelFounders, normalizeLabelFounders } from '../utils/label-founders';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -121,7 +122,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const founderDjIds = Array.from(
       new Set(
         rows.flatMap((item) => {
-          const nextIds = item.founderDjIds;
+          const nextIds = collectLabelFounderDjIds(normalizeLabelFounders(item.founders));
           return nextIds.filter((id): id is string => Boolean(id));
         })
       )
@@ -134,9 +135,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const founderDjById = new Map(founderDjs.map((item: { id: string }) => [item.id, item]));
     const hydratedRows = rows.map((item) => ({
       ...item,
-      founderDjs: item.founderDjIds
-        .map((id) => founderDjById.get(id) ?? null)
-        .filter(Boolean),
+      founders: hydrateLabelFounders(normalizeLabelFounders(item.founders), founderDjById),
     }));
 
     res.json({
@@ -178,7 +177,8 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const founderDjIds = label.founderDjIds;
+    const normalizedFounders = normalizeLabelFounders(label.founders);
+    const founderDjIds = collectLabelFounderDjIds(normalizedFounders);
     const founderDjs = founderDjIds.length
       ? await prisma.dJ.findMany({
           where: { id: { in: founderDjIds } },
@@ -188,7 +188,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       ...label,
-      founderDjs: founderDjIds.map((id) => founderDjById.get(id) ?? null).filter(Boolean),
+      founders: hydrateLabelFounders(normalizedFounders, founderDjById),
     });
   } catch (error) {
     console.error('Get label detail error:', error);

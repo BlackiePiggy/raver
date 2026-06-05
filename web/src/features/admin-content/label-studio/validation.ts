@@ -19,14 +19,14 @@ export const validateLabelStudioDraft = (
   if (draft.nation.trim() && countText(draft.nation) > INPUT_LIMITS.label.nation) {
     errors.name = errors.name || `国家/地区不能超过 ${INPUT_LIMITS.label.nation} 个字符`;
   }
-  if (draft.founderName.trim() && countText(draft.founderName) > INPUT_LIMITS.label.founderName) {
-    errors.name = errors.name || `创始人名称不能超过 ${INPUT_LIMITS.label.founderName} 个字符`;
-  }
   if (draft.foundedAt.trim() && countText(draft.foundedAt) > INPUT_LIMITS.label.foundedAt) {
     errors.name = errors.name || `成立时间不能超过 ${INPUT_LIMITS.label.foundedAt} 个字符`;
   }
-  if (draft.founderDjIds.length > INPUT_LIMITS.label.founderDjMaxItems) {
-    errors.name = errors.name || `创始人 DJ 最多绑定 ${INPUT_LIMITS.label.founderDjMaxItems} 位`;
+  if (draft.founders.length > INPUT_LIMITS.label.foundersMaxItems) {
+    errors.name = errors.name || `创始人最多填写 ${INPUT_LIMITS.label.foundersMaxItems} 位`;
+  }
+  if (draft.founders.some((item) => item.name.trim() && countText(item.name) > INPUT_LIMITS.label.founderName)) {
+    errors.name = errors.name || `创始人名称单项不能超过 ${INPUT_LIMITS.label.founderName} 个字符`;
   }
   if (draft.genres.length > INPUT_LIMITS.label.genresMaxItems) {
     errors.name = errors.name || `风格标签最多填写 ${INPUT_LIMITS.label.genresMaxItems} 项`;

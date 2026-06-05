@@ -1,8 +1,26 @@
-export type LabelStudioFounderDJBinding = {
+export type LabelStudioFounderBinding = {
   id: string;
   name: string;
   subtitle?: string | null;
   imageUrl?: string | null;
+};
+
+export type LabelStudioLoadedFounderItem = {
+  name: string | null;
+  djId: string | null;
+  dj: LabelStudioFounderBinding | null;
+};
+
+export type LabelStudioFounderDraftItem = {
+  id: string;
+  name: string;
+  djId: string | null;
+  dj: LabelStudioFounderBinding | null;
+};
+
+export type LabelStudioFounderCreateItem = {
+  name: string | null;
+  djId: string | null;
 };
 
 export type LabelStudioDraft = {
@@ -12,10 +30,8 @@ export type LabelStudioDraft = {
   profileUrl: string;
   profileSlug: string;
   nation: string;
-  founderName: string;
   foundedAt: string;
-  founderDjIds: string[];
-  founderDjs: LabelStudioFounderDJBinding[];
+  founders: LabelStudioFounderDraftItem[];
   genres: string[];
   genresPreview: string;
   latestReleaseListing: string;
@@ -63,10 +79,8 @@ export type LabelStudioLoadedLabel = {
   soundcloudUrl: string | null;
   musicPurchaseUrl: string | null;
   officialWebsiteUrl: string | null;
-  founderName: string | null;
   foundedAt: string | null;
-  founderDjIds: string[];
-  founderDjs: LabelStudioFounderDJBinding[];
+  founders: LabelStudioLoadedFounderItem[];
 };
 
 export type LabelStudioCreateInput = {
@@ -75,9 +89,8 @@ export type LabelStudioCreateInput = {
   profileUrl?: string | null;
   profileSlug?: string | null;
   nation?: string | null;
-  founderName?: string | null;
   foundedAt?: string | null;
-  founderDjIds?: string[];
+  founders?: LabelStudioFounderCreateItem[];
   genres?: string[];
   genresPreview?: string | null;
   latestReleaseListing?: string | null;

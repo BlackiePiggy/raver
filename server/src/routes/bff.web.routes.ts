@@ -62,6 +62,12 @@ import {
   normalizeStringArray,
 } from '../utils/input-rules';
 import {
+  collectLabelFounderDjIds,
+  hydrateLabelFounders,
+  labelFoundersToJson,
+  normalizeLabelFounders,
+} from '../utils/label-founders';
+import {
   saveBufferToLocalUploads,
   shouldAllowLocalUploadFallback,
 } from '../services/media-storage.service';
@@ -914,7 +920,6 @@ const validateLabelPayload = (payload: Record<string, unknown>): string | null =
   const slug = normalizeSubmittedSingleLine(payload.slug, INPUT_LIMITS.label.slug);
   const profileSlug = normalizeSubmittedSingleLine(payload.profileSlug, INPUT_LIMITS.label.profileSlug);
   const nation = firstFilledSubmittedText(payload.nation, payload.country);
-  const founderName = normalizeSubmittedSingleLine(payload.founderName, INPUT_LIMITS.label.founderName);
   const foundedAt = normalizeSubmittedSingleLine(payload.foundedAt, INPUT_LIMITS.label.foundedAt);
   const genresPreview = normalizeSubmittedSingleLine(payload.genresPreview, INPUT_LIMITS.label.genresPreview);
   const latestReleaseListing = normalizeSubmittedSingleLine(payload.latestReleaseListing, INPUT_LIMITS.label.latestReleaseListing);
@@ -926,10 +931,7 @@ const validateLabelPayload = (payload: Record<string, unknown>): string | null =
     itemMax: INPUT_LIMITS.label.genre,
     maxItems: 20,
   });
-  const founderDjIds = normalizeSubmittedStringArray(payload.founderDjIds, {
-    itemMax: INPUT_LIMITS.common.externalId,
-    maxItems: INPUT_LIMITS.label.founderDjMaxItems,
-  });
+  const founders = normalizeLabelFounders(payload.founders);
 
   if (!name) {
     return 'name is required';
@@ -946,11 +948,8 @@ const validateLabelPayload = (payload: Record<string, unknown>): string | null =
   if (nation.length > INPUT_LIMITS.label.nation) {
     return `nation must be at most ${INPUT_LIMITS.label.nation} characters`;
   }
-  if (founderName.length > INPUT_LIMITS.label.founderName) {
-    return `founderName must be at most ${INPUT_LIMITS.label.founderName} characters`;
-  }
-  if (founderDjIds.length > INPUT_LIMITS.label.founderDjMaxItems) {
-    return `founderDjIds must contain at most ${INPUT_LIMITS.label.founderDjMaxItems} items`;
+  if (founders.length > INPUT_LIMITS.label.foundersMaxItems) {
+    return `founders must contain at most ${INPUT_LIMITS.label.foundersMaxItems} items`;
   }
   if (foundedAt.length > INPUT_LIMITS.label.foundedAt) {
     return `foundedAt must be at most ${INPUT_LIMITS.label.foundedAt} characters`;
@@ -18262,9 +18261,8 @@ const learnLabelListSelect = {
   soundcloudUrl: true,
   musicPurchaseUrl: true,
   officialWebsiteUrl: true,
-  founderName: true,
   foundedAt: true,
-  founderDjIds: true,
+  founders: true,
   createdAt: true,
 } satisfies Prisma.LabelSelect;
 
@@ -18366,7 +18364,7 @@ router.get('/learn/labels', async (req: Request, res: Response): Promise<void> =
     const founderDjIds = Array.from(
       new Set(
         labels.flatMap((item) => {
-          const nextIds = item.founderDjIds;
+          const nextIds = collectLabelFounderDjIds(normalizeLabelFounders(item.founders));
           return nextIds.filter((id): id is string => Boolean(id));
         })
       )
@@ -18379,9 +18377,7 @@ router.get('/learn/labels', async (req: Request, res: Response): Promise<void> =
     const founderDjById = new Map(founderDjs.map((item: { id: string }) => [item.id, item]));
     const hydratedLabels = labels.map((item) => ({
       ...item,
-      founderDjs: item.founderDjIds
-        .map((id) => founderDjById.get(id) ?? null)
-        .filter(Boolean),
+      founders: hydrateLabelFounders(normalizeLabelFounders(item.founders), founderDjById),
     }));
 
     ok(
@@ -18419,7 +18415,8 @@ router.get('/learn/labels/:id', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const founderDjIds = label.founderDjIds;
+    const normalizedFounders = normalizeLabelFounders(label.founders);
+    const founderDjIds = collectLabelFounderDjIds(normalizedFounders);
     const founderDjs = founderDjIds.length
       ? await prisma.dJ.findMany({ where: { id: { in: founderDjIds } } })
       : [];
@@ -18427,7 +18424,7 @@ router.get('/learn/labels/:id', async (req: Request, res: Response): Promise<voi
 
     ok(res, {
       ...label,
-      founderDjs: founderDjIds.map((id) => founderDjById.get(id) ?? null).filter(Boolean),
+      founders: hydrateLabelFounders(normalizedFounders, founderDjById),
     });
   } catch (error) {
     console.error('BFF web learn label detail error:', error);
@@ -18455,10 +18452,7 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
       return;
     }
 
-    const founderDjIds = normalizeSubmittedStringArray(body.founderDjIds, {
-      itemMax: INPUT_LIMITS.common.externalId,
-      maxItems: INPUT_LIMITS.label.founderDjMaxItems,
-    });
+    const founders = normalizeLabelFounders(body.founders);
 
     if (!canBypassContentReview(viewerRole)) {
       const normalizedSubmissionPayload = {
@@ -18480,9 +18474,8 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
           itemMax: INPUT_LIMITS.label.genre,
           maxItems: 20,
         }),
-        founderName: normalizeOptionalSingleLine(body.founderName, INPUT_LIMITS.label.founderName),
         foundedAt: normalizeOptionalSingleLine(body.foundedAt, INPUT_LIMITS.label.foundedAt),
-        founderDjIds,
+        founders,
         demoSubmissionUrl: normalizeSubmittedUrl(body.demoSubmissionUrl),
         demoSubmissionDisplay: normalizeOptionalSingleLine(body.demoSubmissionDisplay, INPUT_LIMITS.label.demoSubmissionDisplay),
         facebookUrl: normalizeSubmittedUrl(body.facebookUrl),
@@ -18528,9 +18521,8 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
         soundcloudUrl: normalizeSubmittedUrl(body.soundcloudUrl),
         musicPurchaseUrl: normalizeSubmittedUrl(body.musicPurchaseUrl),
         officialWebsiteUrl: normalizeSubmittedUrl(body.officialWebsiteUrl ?? body.officialWebsite),
-        founderName: normalizeOptionalSingleLine(body.founderName, INPUT_LIMITS.label.founderName),
         foundedAt: normalizeOptionalSingleLine(body.foundedAt, INPUT_LIMITS.label.foundedAt),
-        founderDjIds,
+        founders: labelFoundersToJson(founders),
         soundcloudFollowers: Object.prototype.hasOwnProperty.call(body, 'soundcloudFollowers')
           ? parseOptionalNonNegativeInt(body.soundcloudFollowers, 'soundcloudFollowers')
           : null,
@@ -18553,7 +18545,18 @@ router.post('/learn/labels', optionalAuth, async (req: Request, res: Response): 
       },
     });
 
-    ok(res, created);
+    const founderDjById = new Map(
+      (
+        founders.length
+          ? await prisma.dJ.findMany({ where: { id: { in: collectLabelFounderDjIds(founders) } } })
+          : []
+      ).map((item: { id: string }) => [item.id, item])
+    );
+
+    ok(res, {
+      ...created,
+      founders: hydrateLabelFounders(founders, founderDjById),
+    });
   } catch (error) {
     console.error('BFF web create learn label error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -18600,9 +18603,8 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
       introductionPreview: hasField('introductionPreview') ? body.introductionPreview : existing.introductionPreview,
       introduction: hasField('introduction') ? body.introduction : (hasField('description') ? body.description : existing.introduction),
       genres: hasField('genres') ? body.genres : existing.genres,
-      founderName: hasField('founderName') ? body.founderName : existing.founderName,
       foundedAt: hasField('foundedAt') ? body.foundedAt : existing.foundedAt,
-      founderDjIds: hasField('founderDjIds') ? body.founderDjIds : existing.founderDjIds,
+      founders: hasField('founders') ? body.founders : existing.founders,
       demoSubmissionDisplay: hasField('demoSubmissionDisplay') ? body.demoSubmissionDisplay : existing.demoSubmissionDisplay,
       demoSubmissionUrl: hasField('demoSubmissionUrl') ? body.demoSubmissionUrl : existing.demoSubmissionUrl,
       facebookUrl: hasField('facebookUrl') ? body.facebookUrl : existing.facebookUrl,
@@ -18675,14 +18677,9 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
     if (hasField('musicPurchaseUrl')) updateData.musicPurchaseUrl = normalizeSubmittedUrl(body.musicPurchaseUrl);
     if (hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = normalizeSubmittedUrl(body.officialWebsiteUrl);
     if (hasField('officialWebsite') && !hasField('officialWebsiteUrl')) updateData.officialWebsiteUrl = normalizeSubmittedUrl(body.officialWebsite);
-    if (hasField('founderName')) updateData.founderName = normalizeOptionalSingleLine(body.founderName, INPUT_LIMITS.label.founderName);
     if (hasField('foundedAt')) updateData.foundedAt = normalizeOptionalSingleLine(body.foundedAt, INPUT_LIMITS.label.foundedAt);
-    if (hasField('founderDjIds')) {
-      const founderDjIds = normalizeSubmittedStringArray(body.founderDjIds, {
-        itemMax: INPUT_LIMITS.common.externalId,
-        maxItems: INPUT_LIMITS.label.founderDjMaxItems,
-      });
-      updateData.founderDjIds = founderDjIds;
+    if (hasField('founders')) {
+      updateData.founders = labelFoundersToJson(normalizeLabelFounders(body.founders));
     }
     if (hasField('soundcloudFollowers')) {
       const value = body.soundcloudFollowers;
@@ -18704,7 +18701,8 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
       data: updateData,
     });
 
-    const founderDjIds = updated.founderDjIds;
+    const normalizedFounders = normalizeLabelFounders(updated.founders);
+    const founderDjIds = collectLabelFounderDjIds(normalizedFounders);
     const founderDjs = founderDjIds.length
       ? await prisma.dJ.findMany({ where: { id: { in: founderDjIds } } })
       : [];
@@ -18725,7 +18723,7 @@ router.patch('/learn/labels/:id', optionalAuth, async (req: Request, res: Respon
 
     ok(res, {
       ...updated,
-      founderDjs: founderDjIds.map((id) => founderDjById.get(id) ?? null).filter(Boolean),
+      founders: hydrateLabelFounders(normalizedFounders, founderDjById),
     });
   } catch (error) {
     console.error('BFF web update learn label error:', error);

@@ -3,17 +3,19 @@
 import Image from 'next/image';
 import { type ChangeEvent, useMemo, useState } from 'react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import DynamicEntityNameListField from '@/components/admin/DynamicEntityNameListField';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
-import EntityBindingField from '@/components/admin/EntityBindingField';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
+  appendBoundFounderDraftItem,
+  createEmptyFounderDraftItem,
   labelStudioApi,
   mapLabelStudioDraftToCreateInput,
   validateLabelStudioDraft,
   type LabelStudioCreateResult,
   type LabelStudioDraft,
-  type LabelStudioFounderDJBinding,
+  type LabelStudioFounderBinding,
   type LabelStudioValidationErrors,
 } from '@/features/admin-content/label-studio';
 
@@ -110,14 +112,6 @@ function LabelImageField({
 const textInputClassName = 'admin-studio-input';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
 
-const appendUniqueFounderBinding = (
-  current: LabelStudioFounderDJBinding[],
-  next: LabelStudioFounderDJBinding
-): LabelStudioFounderDJBinding[] => {
-  if (current.some((item) => item.id === next.id)) return current;
-  return [...current, next];
-};
-
 type LabelStudioFormProps = {
   mode: 'create' | 'edit';
   labelId?: string;
@@ -167,13 +161,17 @@ export default function LabelStudioForm({
     });
   };
 
-  const updateFounderBindings = (founderDjs: LabelStudioFounderDJBinding[]) => {
-    const founderDjIds = founderDjs.map((item) => item.id);
+  const updateFounders = (updater: (current: LabelStudioDraft['founders']) => LabelStudioDraft['founders']) => {
     setDraft((current) => ({
       ...current,
-      founderDjs,
-      founderDjIds,
+      founders: updater(current.founders),
     }));
+    setErrors((current) => {
+      if (!current.name) return current;
+      const next = { ...current };
+      delete next.name;
+      return next;
+    });
   };
 
   const handleGenreChange = (index: number, value: string) => {
@@ -190,6 +188,38 @@ export default function LabelStudioForm({
     updateGenres((current) => {
       const next = current.filter((_, itemIndex) => itemIndex !== index);
       return next.length ? next : [''];
+    });
+  };
+
+  const handleFounderNameChange = (index: number, value: string) => {
+    updateFounders((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, name: value } : item))
+    );
+  };
+
+  const handleFounderAddManual = () => {
+    updateFounders((current) =>
+      current.length >= INPUT_LIMITS.label.foundersMaxItems
+        ? current
+        : [...current, createEmptyFounderDraftItem()]
+    );
+  };
+
+  const handleFounderAddBinding = (value: LabelStudioFounderBinding) => {
+    updateFounders((current) =>
+      appendBoundFounderDraftItem(current, {
+        id: value.id,
+        name: value.name,
+        subtitle: value.subtitle ?? null,
+        imageUrl: value.imageUrl ?? null,
+      })
+    );
+  };
+
+  const handleFounderRemove = (index: number) => {
+    updateFounders((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length ? next : [];
     });
   };
 
@@ -536,17 +566,6 @@ export default function LabelStudioForm({
 
       <Section title="创始人与统计" description="最后维护创始人信息和较弱的关注度统计。">
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="创始人名称">
-            <AdminCountedControl count={countText(draft.founderName)} maxLength={INPUT_LIMITS.label.founderName}>
-              <input
-                value={draft.founderName}
-                onChange={(event) => updateDraft('founderName', event.target.value)}
-                className={textInputClassName}
-                placeholder="例如：Carmine Conte"
-                maxLength={INPUT_LIMITS.label.founderName}
-              />
-            </AdminCountedControl>
-          </Field>
           <Field label="创立时间">
             <AdminCountedControl count={countText(draft.foundedAt)} maxLength={INPUT_LIMITS.label.foundedAt}>
               <input
@@ -559,32 +578,35 @@ export default function LabelStudioForm({
             </AdminCountedControl>
           </Field>
           <div className="lg:col-span-2">
-            <Field
-              label="创始人 DJ 绑定"
-              hint={`支持绑定多位 DJ，最多 ${INPUT_LIMITS.label.founderDjMaxItems} 位。`}
-            >
-              <EntityBindingField
-                kind="dj"
-                mode="multiple"
-                seedQuery={draft.founderName}
-                items={draft.founderDjs}
-                title="已绑定创始人 DJ"
-                emptyLabel="当前还没有绑定创始人 DJ。"
-                onAdd={(value) =>
-                  updateFounderBindings(
-                    appendUniqueFounderBinding(draft.founderDjs, {
-                      id: value.id,
-                      name: value.name,
-                      subtitle: value.subtitle ?? null,
-                      imageUrl: value.imageUrl ?? null,
-                    })
-                  )
-                }
-                onRemove={(value) =>
-                  updateFounderBindings(draft.founderDjs.filter((item) => item.id !== value.id))
-                }
-              />
-            </Field>
+            <DynamicEntityNameListField
+              label="创始人列表"
+              items={draft.founders.map((item) => ({
+                id: item.id,
+                name: item.name,
+                binding: item.dj
+                  ? {
+                      id: item.dj.id,
+                      name: item.dj.name,
+                      subtitle: item.dj.subtitle ?? null,
+                      imageUrl: item.dj.imageUrl ?? null,
+                    }
+                  : null,
+              }))}
+              placeholder="例如：Carmine Conte"
+              kind="dj"
+              itemMax={INPUT_LIMITS.label.founderName}
+              maxItems={INPUT_LIMITS.label.foundersMaxItems}
+              hint={`支持多位绑定 DJ、未绑定姓名，或混合填写；最多 ${INPUT_LIMITS.label.foundersMaxItems} 位。`}
+              error={errors.name}
+              addManualLabel="添加未绑定创始人"
+              bindingTitle="搜索并添加绑定创始人"
+              emptyLabel="当前还没有添加创始人。"
+              searchSeedQuery={draft.name}
+              onChangeName={handleFounderNameChange}
+              onAddManual={handleFounderAddManual}
+              onAddBinding={handleFounderAddBinding}
+              onRemove={handleFounderRemove}
+            />
           </div>
           <Field label="SoundCloud 粉丝数">
             <input

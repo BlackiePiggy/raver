@@ -1,5 +1,6 @@
 import type { EntityChangeDb, EntitySnapshot } from '../entity-change.types';
 import { normalizeJson, sortedStrings } from './snapshot-utils';
+import { normalizeLabelFounders, type LabelFounderRecord } from '../../../utils/label-founders';
 
 export const buildLabelChangeSnapshot = async (input: {
   entityId: string;
@@ -10,6 +11,12 @@ export const buildLabelChangeSnapshot = async (input: {
   });
 
   if (!label) return null;
+
+  const founders = normalizeLabelFounders(label.founders).map((item: LabelFounderRecord, index: number) => ({
+    identityKey: item.djId ? `dj:${item.djId}` : `manual:${(item.name ?? '').toLowerCase()}:${index}`,
+    name: item.name,
+    djId: item.djId,
+  }));
 
   return {
     entityType: 'label',
@@ -64,9 +71,8 @@ export const buildLabelChangeSnapshot = async (input: {
         officialWebsiteUrl: label.officialWebsiteUrl,
       },
       founder: {
-        founderName: label.founderName,
         foundedAt: label.foundedAt,
-        founderDjIds: sortedStrings(label.founderDjIds),
+        founders,
       },
       stats: {
         soundcloudFollowers: label.soundcloudFollowers,

@@ -1,3 +1,4 @@
+import { createEmptyFounderDraftItem, hydrateFounderDraftItems } from './founders';
 import { LabelStudioDraft, LabelStudioLoadedLabel } from './types';
 
 const fromNullable = (value?: string | null): string => value || '';
@@ -9,10 +10,8 @@ export const createLabelStudioDraft = (): LabelStudioDraft => ({
   profileUrl: '',
   profileSlug: '',
   nation: '',
-  founderName: '',
   foundedAt: '',
-  founderDjIds: [],
-  founderDjs: [],
+  founders: [],
   genres: [''],
   genresPreview: '',
   latestReleaseListing: '',
@@ -42,14 +41,10 @@ export const hydrateLabelStudioDraftFromLabel = (
   profileUrl: label.profileUrl || '',
   profileSlug: label.profileSlug || '',
   nation: fromNullable(label.nation),
-  founderName: fromNullable(label.founderName),
   foundedAt: fromNullable(label.foundedAt),
-  founderDjIds: Array.isArray(label.founderDjIds)
-    ? label.founderDjIds.filter((item) => typeof item === 'string' && item.trim())
-    : [],
-  founderDjs: Array.isArray(label.founderDjs) && label.founderDjs.length
-    ? label.founderDjs
-    : [],
+  founders: Array.isArray(label.founders) && label.founders.length
+    ? hydrateFounderDraftItems(label.founders)
+    : [createEmptyFounderDraftItem()],
   genres: (label.genres || []).length ? [...(label.genres || [])] : [''],
   genresPreview: fromNullable(label.genresPreview),
   latestReleaseListing: fromNullable(label.latestReleaseListing),

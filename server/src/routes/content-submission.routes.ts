@@ -30,6 +30,7 @@ import {
 } from '../services/content-submission-brand.service';
 import { djEventBindingReviewService } from '../services/dj-event-binding-review.service';
 import { scheduleContentSubmissionProcessingBestEffort } from '../services/content-submission-processing.service';
+import { labelFoundersToJson, normalizeLabelFounders } from '../utils/label-founders';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -621,12 +622,7 @@ const createLabelFromSubmission = async (
   if (!name) throw new Error('厂牌名称不能为空');
   const slug = await uniqueLabelSlug(name, cleanText(payload.slug));
   const profileUrl = cleanText(payload.profileUrl) || `community://${slug}`;
-  const founderDjIds = Array.from(
-    new Set(
-      stringArray(payload.founderDjIds)
-        .filter(Boolean)
-    )
-  );
+  const founders = normalizeLabelFounders(payload.founders);
   let afterSnapshot: EntitySnapshot | null = null;
   const label = await prisma.$transaction(async (tx) => {
     const label = await tx.label.create({
@@ -654,9 +650,8 @@ const createLabelFromSubmission = async (
         soundcloudUrl: cleanText(payload.soundcloudUrl) || null,
         musicPurchaseUrl: cleanText(payload.musicPurchaseUrl) || null,
         officialWebsiteUrl: cleanText(payload.officialWebsiteUrl) || cleanText(payload.officialWebsite) || null,
-        founderName: cleanText(payload.founderName) || null,
         foundedAt: cleanText(payload.foundedAt) || null,
-        founderDjIds,
+        founders: labelFoundersToJson(founders),
       } as any,
     });
     afterSnapshot = await entityChangeService.captureSnapshot({

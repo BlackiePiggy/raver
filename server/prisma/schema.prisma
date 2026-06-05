@@ -1115,9 +1115,8 @@ model Label {
   soundcloudUrl      String? @map("soundcloud_url")
   musicPurchaseUrl   String? @map("music_purchase_url")
   officialWebsiteUrl String? @map("official_website_url")
-  founderName        String? @map("founder_name")
   foundedAt          String? @map("founded_at")
-  founderDjIds       String[] @default([]) @map("founder_dj_ids")
+  founders           Json    @default("[]")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

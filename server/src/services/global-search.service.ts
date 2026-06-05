@@ -1311,7 +1311,6 @@ const searchLabels = async (query: string, limit: number, locale: GlobalSearchLo
         { genresPreview: containsInsensitive(query) },
         { introductionPreview: containsInsensitive(query) },
         { introduction: containsInsensitive(query) },
-        { founderName: containsInsensitive(query) },
         { genres: { has: query } },
       ],
     },

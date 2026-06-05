@@ -56,10 +56,20 @@ const renderDetailText = (label: string, value?: string | null) => (
   </div>
 );
 
-const renderFounderDjNames = (item: LabelStudioLoadedLabel): string =>
-  item.founderDjs?.length
-    ? item.founderDjs.map((dj) => dj.name).filter(Boolean).join(' / ')
-    : 'Not set';
+const renderFounderNames = (item: LabelStudioLoadedLabel): string => {
+  const names = (item.founders || [])
+    .map((founder) => founder.name || founder.dj?.name || '')
+    .filter(Boolean);
+  return names.length ? names.join(' / ') : 'Not set';
+};
+
+const renderBoundFounderNames = (item: LabelStudioLoadedLabel): string => {
+  const names = (item.founders || [])
+    .filter((founder) => founder.dj)
+    .map((founder) => founder.dj?.name || founder.name || '')
+    .filter(Boolean);
+  return names.length ? names.join(' / ') : 'Not set';
+};
 
 function LabelDetailOverlay({
   item,
@@ -150,7 +160,7 @@ function LabelDetailOverlay({
               {renderDetailText('Slug', resolved.slug)}
               {renderDetailText('Nation', resolved.nation)}
               {renderDetailText('Founded', resolved.foundedAt)}
-              {renderDetailText('Founder', resolved.founderName)}
+              {renderDetailText('Founder', renderFounderNames(resolved))}
             </div>
           </div>
 
@@ -161,7 +171,7 @@ function LabelDetailOverlay({
               {renderDetailText('Latest Release', resolved.latestReleaseListing)}
               {renderDetailText('Profile URL', resolved.profileUrl)}
               {renderDetailText('Profile Slug', resolved.profileSlug)}
-              {renderDetailText('Founder DJs', renderFounderDjNames(resolved))}
+              {renderDetailText('Bound Founders', renderBoundFounderNames(resolved))}
             </div>
           </div>
         </section>
@@ -283,7 +293,7 @@ function LabelDetailOverlay({
                 ['Followers', formatNumber(resolved.soundcloudFollowers)],
                 ['Likes', formatNumber(resolved.likes)],
                 ['Genres', resolved.genres.length.toLocaleString()],
-                ['Founder', resolved.founderName || 'Not set'],
+                ['Founder', renderFounderNames(resolved)],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-[20px] border border-[#e8eceb] bg-white px-4 py-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">{label}</div>

@@ -62,11 +62,10 @@ export const labelChangePaths: Record<string, ChangePathConfig> = {
   'links.soundcloudUrl': publicScalar('SoundCloud', 'SoundCloud', 'links'),
   'links.musicPurchaseUrl': publicScalar('购买链接', 'Music purchase URL', 'links'),
   'links.officialWebsiteUrl': publicScalar('官网', 'Official website', 'links'),
-  'founder.founderName': publicScalar('创始人', 'Founder', 'founder'),
   'founder.foundedAt': publicScalar('创立时间', 'Founded at', 'founder'),
-  'founder.founderDjIds': {
-    ...publicScalar('创始人 DJ 列表', 'Founder DJs', 'founder'),
-    arrayStrategy: { type: 'set' },
+  'founder.founders': {
+    ...publicScalar('创始人列表', 'Founders', 'founder'),
+    arrayStrategy: { type: 'keyed-list', keyPath: 'identityKey', orderMatters: true },
   },
   'stats.soundcloudFollowers': operatorScalar('SoundCloud 粉丝数', 'SoundCloud followers', 'stats'),
   'stats.likes': operatorScalar('点赞数', 'Likes', 'stats'),

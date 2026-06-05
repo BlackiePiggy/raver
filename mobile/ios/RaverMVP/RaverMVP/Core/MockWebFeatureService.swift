@@ -3354,9 +3354,8 @@ actor MockWebFeatureService: WebFeatureService {
                 soundcloudUrl: "https://soundcloud.com/monstercat",
                 musicPurchaseUrl: "https://www.beatport.com/label/monstercat/12345",
                 officialWebsiteUrl: "https://www.monstercat.com",
-                founderName: "Amelie Lens",
                 foundedAt: "2011",
-                founderDjs: djs.filter { $0.id == "dj_amelie" }
+                founders: djs.filter { $0.id == "dj_amelie" }.map { LearnLabelFounder(name: $0.name, djId: $0.id, dj: $0) }
             ),
             LearnLabel(
                 id: "label-foolsgold",
@@ -3381,9 +3380,11 @@ actor MockWebFeatureService: WebFeatureService {
                 soundcloudUrl: "https://soundcloud.com/foolsgoldrecs",
                 musicPurchaseUrl: "https://www.beatport.com/label/fools-gold-records/5550",
                 officialWebsiteUrl: "http://foolsgoldrecs.com",
-                founderName: "A-Trak",
                 foundedAt: "2007",
-                founderDjs: []
+                founders: [
+                    LearnLabelFounder(name: "A-Trak", djId: nil, dj: nil),
+                    LearnLabelFounder(name: "Nick Catchdubs", djId: nil, dj: nil),
+                ]
             ),
             LearnLabel(
                 id: "label-mad-decent",
@@ -3408,9 +3409,8 @@ actor MockWebFeatureService: WebFeatureService {
                 soundcloudUrl: "https://soundcloud.com/maddecent",
                 musicPurchaseUrl: "https://www.beatport.com/label/mad-decent/414",
                 officialWebsiteUrl: "https://www.maddecent.com",
-                founderName: "Diplo",
                 foundedAt: "2005",
-                founderDjs: djs.filter { $0.name.lowercased() == "diplo" }
+                founders: djs.filter { $0.name.lowercased() == "diplo" }.map { LearnLabelFounder(name: $0.name, djId: $0.id, dj: $0) }
             )
         ]
 
@@ -3557,9 +3557,8 @@ actor MockWebFeatureService: WebFeatureService {
             soundcloudUrl: nil,
             musicPurchaseUrl: nil,
             officialWebsiteUrl: nil,
-            founderName: nil,
             foundedAt: nil,
-            founderDjs: []
+            founders: []
         )
         return .created(label)
     }

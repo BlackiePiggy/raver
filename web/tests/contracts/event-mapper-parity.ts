@@ -1050,13 +1050,26 @@ const tests: TestCase[] = [
         soundcloudUrl: "https://soundcloud.com/afterlife",
         musicPurchaseUrl: "https://bandcamp.com/afterlife",
         officialWebsiteUrl: "https://after.life",
-        founderName: "Tale Of Us",
         foundedAt: "2016",
-        founderDjIds: ["dj_afterlife"],
+        founders: [
+          {
+            name: "Tale Of Us",
+            djId: "dj_afterlife",
+            dj: {
+              id: "dj_afterlife",
+              name: "Tale Of Us",
+              subtitle: null,
+              imageUrl: null,
+            },
+          },
+        ],
       } as any;
 
       const draft = hydrateLabelStudioDraftFromLabel(label);
-      assert.deepEqual(draft.founderDjIds, ["dj_afterlife"]);
+      assert.deepEqual(
+        draft.founders.map((item) => ({ name: item.name, djId: item.djId })),
+        [{ name: "Tale Of Us", djId: "dj_afterlife" }],
+      );
       assert.equal(draft.logoUrl, "https://cdn.example.com/label/logo.jpg");
       assert.equal(draft.avatarUrl, "https://cdn.example.com/label/avatar.jpg");
       assert.equal(draft.backgroundUrl, "https://cdn.example.com/label/background.jpg");
@@ -1066,10 +1079,10 @@ const tests: TestCase[] = [
 
       const payload = mapLabelStudioDraftToCreateInput({
         ...draft,
-        founderDjIds: ["dj_afterlife"],
+        founders: draft.founders,
       });
 
-      assert.deepEqual(payload.founderDjIds, ["dj_afterlife"]);
+      assert.deepEqual(payload.founders, [{ name: "Tale Of Us", djId: "dj_afterlife" }]);
       assert.equal(payload.profileUrl, "https://raver.example.com/labels/afterlife");
       assert.equal(payload.profileSlug, "afterlife");
       assert.equal(payload.logoUrl, "https://cdn.example.com/label/logo.jpg");

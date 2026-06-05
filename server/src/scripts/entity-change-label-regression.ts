@@ -65,9 +65,11 @@ const labelData = (genres: string[] = ['techno', 'house']): Record<string, unkno
     officialWebsiteUrl: 'https://label.example.com',
   },
   founder: {
-    founderName: 'Founder Name',
     foundedAt: '2012',
-    founderDjIds: ['dj-founder'],
+    founders: [
+      { name: 'Founder Name', djId: 'dj-founder' },
+      { name: 'Manual Founder', djId: null },
+    ],
   },
   stats: {
     soundcloudFollowers: 1000,
@@ -88,7 +90,7 @@ const run = (): void => {
   assert(createDiff.publicChanges.some((change) => change.path === 'profile.introduction'), 'label introduction should be public');
   assert(createDiff.publicChanges.some((change) => change.path === 'media.avatarUrl'), 'label avatar should be public');
   assert(createDiff.publicChanges.some((change) => change.path === 'music.genres'), 'label genres should be public');
-  assert(createDiff.publicChanges.some((change) => change.path === 'founder.founderName'), 'label founder should be public');
+  assert(createDiff.publicChanges.some((change) => change.path.startsWith('founder.founders')), 'label founders should be public');
   assert(!createDiff.publicChanges.some((change) => change.path.startsWith('source.')), 'label source fields must not be public');
   assert(!createDiff.publicChanges.some((change) => change.path.startsWith('contact.contacts')), 'label contacts must stay private');
 
