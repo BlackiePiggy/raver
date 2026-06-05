@@ -42,6 +42,13 @@ export type AdminContentSubmitResultContent = {
         mode: AdminContentSubmitFlow;
       }
     | null;
+  supplementaryAction:
+    | {
+        href: string;
+        label: string;
+        description: string;
+      }
+    | null;
 };
 
 type AdminContentSubmitEntityConfig = {
@@ -175,6 +182,18 @@ export const resolveAdminContentSubmitResultContent = (
         }
       : null;
 
+  const supplementaryAction =
+    state.entityType === 'dj' && entityId
+      ? {
+          href: `/admin/content/reviews/dj-bindings?djId=${encodeURIComponent(entityId)}`,
+          label: state.flow === 'create' ? '去处理活动绑定' : '查看新的绑定候选',
+          description:
+            state.flow === 'create'
+              ? '系统只会生成同名或近似名候选，不会自动绑定；请在绑定审核台手动勾选后再一键导入。'
+              : '如这次资料变更产生了新的候选，也仍然需要你手动勾选确认后再导入。',
+        }
+      : null;
+
   if (state.outcome === 'created' && state.flow === 'create') {
     return {
       entityType: state.entityType,
@@ -189,6 +208,7 @@ export const resolveAdminContentSubmitResultContent = (
       secondaryLabel: config.catalogLabel,
       historyPrompt,
       publishTask,
+      supplementaryAction,
     };
   }
 
@@ -206,6 +226,7 @@ export const resolveAdminContentSubmitResultContent = (
       secondaryLabel: config.catalogLabel,
       historyPrompt,
       publishTask,
+      supplementaryAction,
     };
   }
 
@@ -223,6 +244,7 @@ export const resolveAdminContentSubmitResultContent = (
       secondaryLabel: config.catalogLabel,
       historyPrompt: null,
       publishTask: null,
+      supplementaryAction: null,
     };
   }
 
@@ -239,5 +261,6 @@ export const resolveAdminContentSubmitResultContent = (
     secondaryLabel: entityId ? `返回${config.label}编辑页` : config.catalogLabel,
     historyPrompt: null,
     publishTask: null,
+    supplementaryAction: null,
   };
 };

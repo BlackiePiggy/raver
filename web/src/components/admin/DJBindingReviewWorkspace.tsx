@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminAppShell from '@/components/admin/AdminAppShell';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
@@ -54,8 +55,10 @@ type DJBindingReviewWorkspaceProps = {
 };
 
 export default function DJBindingReviewWorkspace({ embedded = false }: DJBindingReviewWorkspaceProps) {
+  const searchParams = useSearchParams();
   const { user, token, isLoading } = useAuth();
   const canOperate = user?.role === 'admin' || user?.role === 'operator';
+  const focusDjId = useMemo(() => searchParams.get('djId')?.trim() || '', [searchParams]);
 
   const [jobs, setJobs] = useState<DJEventBindingReviewJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>('');
@@ -81,6 +84,10 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
       setJobs(result.items);
       setSelectedJobId((current) => {
         if (current && result.items.some((item) => item.id === current)) return current;
+        if (focusDjId) {
+          const focused = result.items.find((item) => item.djId === focusDjId);
+          if (focused) return focused.id;
+        }
         return result.items[0]?.id ?? '';
       });
     } catch (loadError) {
@@ -88,7 +95,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
     } finally {
       setListLoading(false);
     }
-  }, [canOperate, statusFilter, token]);
+  }, [canOperate, focusDjId, statusFilter, token]);
 
   const loadJobDetail = useCallback(async () => {
     if (!token || !selectedJobId || !canOperate) {
@@ -116,6 +123,18 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
   useEffect(() => {
     void loadJobDetail();
   }, [loadJobDetail]);
+
+  useEffect(() => {
+    if (!focusDjId) return;
+    if (!jobs.length) return;
+    const focused = jobs.find((item) => item.djId === focusDjId);
+    if (!focused) {
+      setNotice('已打开绑定审核台，但当前列表里还没有这个 DJ 的候选任务。');
+      return;
+    }
+    setSelectedJobId((current) => (current === focused.id ? current : focused.id));
+    setNotice(`已定位到 ${focused.dj.name} 的绑定候选。系统只会列出候选，不会自动绑定。`);
+  }, [focusDjId, jobs]);
 
   const refreshAll = useCallback(async () => {
     await loadJobs();
@@ -191,7 +210,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm text-black/45">任务列表</div>
-              <div className="mt-1 text-lg font-semibold text-[#071110]">Binding Review Jobs</div>
+              <div className="mt-1 text-lg font-semibold text-[#071110]">绑定审核任务</div>
             </div>
             <select
               value={statusFilter}
@@ -257,7 +276,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
               <section className="admin-reference-dark-card p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <div className="text-sm text-white/45">Review Action Panel</div>
+                    <div className="text-sm text-white/45">人工绑定导入</div>
                     <h2 className="mt-1 text-2xl font-semibold text-white">{selectedJob.dj.name}</h2>
                     <div className="mt-2 flex flex-wrap gap-2 text-sm text-white/58">
                       <span>状态 {selectedJob.status}</span>
@@ -269,15 +288,13 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                     <button
                       type="button"
                       disabled={!exactPendingCandidates.length || actionLoading}
-                      onClick={() =>
-                        void handleAction(
-                          async () => djEventBindingReviewApi.applyExact(token || '', selectedJob.id),
-                          '已应用全部 exact 候选'
-                        )
-                      }
+                      onClick={() => {
+                        setSelectedCandidateIds(exactPendingCandidates.map((candidate) => candidate.id));
+                        setNotice('已勾选全部 exact 候选，请确认后再导入。');
+                      }}
                       className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#071110] disabled:opacity-50"
                     >
-                      Apply Exact
+                      勾选 Exact 候选
                     </button>
                     <button
                       type="button"
@@ -285,12 +302,12 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                       onClick={() =>
                         void handleAction(
                           async () => djEventBindingReviewApi.applyCandidates(token || '', selectedJob.id, selectedCandidateIds),
-                          '已应用所选候选'
+                          '已导入所选绑定'
                         )
                       }
                       className="rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                      Apply Selected
+                      导入所选绑定
                     </button>
                     <button
                       type="button"
@@ -306,7 +323,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                       }
                       className="rounded-full border border-white/10 bg-[#6a3530] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                      Dismiss Selected
+                      忽略所选候选
                     </button>
                   </div>
                 </div>
@@ -330,7 +347,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                   <div>
                     <div className="text-sm font-semibold text-white">候选列表</div>
                     <div className="mt-1 text-xs text-white/45">
-                      pending 候选可批量勾选。Exact 命中通常可以直接点 `Apply Exact`。
+                      系统不会自动绑定任何候选。请先勾选需要的项，再点击“导入所选绑定”。
                     </div>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-white/55">
@@ -389,12 +406,12 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                                 onClick={() =>
                                   void handleAction(
                                     async () => djEventBindingReviewApi.applyCandidates(token || '', selectedJob.id, [candidate.id]),
-                                    '已应用该候选'
+                                    '已导入该候选绑定'
                                   )
                                 }
                                 className="rounded-full bg-[#071110] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                               >
-                                Apply
+                                导入此项
                               </button>
                               <button
                                 type="button"
@@ -410,7 +427,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                                 }
                                 className="rounded-full border border-[#efdad8] bg-[#f7e3e0] px-3 py-2 text-xs font-semibold text-[#6a3530] disabled:opacity-50"
                               >
-                                Dismiss
+                                忽略
                               </button>
                             </>
                           )}

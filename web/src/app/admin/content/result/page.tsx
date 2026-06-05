@@ -91,6 +91,23 @@ function AdminContentSubmitResultPageContent() {
             </Link>
           </div>
 
+          {content.supplementaryAction ? (
+            <div className="mt-5 w-full max-w-2xl rounded-[24px] border border-[#dff0df] bg-[#f4fbf4] px-5 py-4 text-left">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-[#12351f]">{content.supplementaryAction.label}</div>
+                  <div className="mt-1 text-sm leading-6 text-[#355244]">{content.supplementaryAction.description}</div>
+                </div>
+                <Link
+                  href={content.supplementaryAction.href}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#c5e0c7] bg-white px-5 py-3 text-sm font-semibold text-[#12351f]"
+                >
+                  {content.supplementaryAction.label}
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
           {content.historyPrompt ? (
             <div className="mt-8 w-full max-w-3xl">
               <NotificationContentHistoryPrompt
