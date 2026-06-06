@@ -3065,13 +3065,6 @@ const ossDjsPrefix = (cleanEnv(process.env.OSS_DJS_PREFIX) || 'wen-jasonlee/djs'
 const ossDjSetsPrefix = (cleanEnv(process.env.OSS_DJ_SETS_PREFIX) || 'wen-jasonlee/dj-sets').replace(/^\/+|\/+$/g, '');
 const ossRatingsPrefix = (cleanEnv(process.env.OSS_RATINGS_PREFIX) || 'wen-jasonlee/ratings').replace(/^\/+|\/+$/g, '');
 const ossWikiBrandsPrefix = (cleanEnv(process.env.OSS_WIKI_BRANDS_PREFIX) || 'wiki/brands').replace(/^\/+|\/+$/g, '');
-const parseCozeTimeoutMs = (value: unknown): number | null => {
-  const parsed = Number(value);
-  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
-    return Math.floor(parsed);
-  }
-  return null;
-};
 const getRuntimeCozeConfig = () =>
   getServerCozeRuntimeConfig({
     ossBucket,
@@ -11376,6 +11369,9 @@ router.post('/events/lineup/import-image', optionalAuth, lineupImportImageUpload
       res.status(503).json({ error: 'OSS is not configured for lineup image import' });
       return;
     }
+    const runtimeCozeConfig = getRuntimeCozeConfig();
+    const cozeLineupWorkflowRunUrl = runtimeCozeConfig.lineup.runUrl;
+    const cozeLineupWorkflowToken = runtimeCozeConfig.lineup.token;
     if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
       await fs.promises.unlink(file.path).catch(() => undefined);
       res.status(503).json({ error: 'COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured' });
@@ -20225,6 +20221,9 @@ router.post('/events/timetable/import-image', optionalAuth, async (req: Request,
     const userId = requireAuth(authReq, res);
     if (!userId) return;
 
+    const runtimeCozeConfig = getRuntimeCozeConfig();
+    const cozeTimetableWorkflowRunUrl = runtimeCozeConfig.timetable.runUrl;
+    const cozeTimetableWorkflowToken = runtimeCozeConfig.timetable.token;
     if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
       res.status(503).json({ error: 'COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured' });
       return;
@@ -20272,6 +20271,9 @@ router.post('/events/timetable/import-image/jobs', optionalAuth, async (req: Req
     const userId = requireAuth(authReq, res);
     if (!userId) return;
 
+    const runtimeCozeConfig = getRuntimeCozeConfig();
+    const cozeTimetableWorkflowRunUrl = runtimeCozeConfig.timetable.runUrl;
+    const cozeTimetableWorkflowToken = runtimeCozeConfig.timetable.token;
     if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
       res.status(503).json({ error: 'COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured' });
       return;
@@ -20468,6 +20470,9 @@ router.post('/events/lineup/import-image/jobs', optionalAuth, async (req: Reques
     const userId = requireAuth(authReq, res);
     if (!userId) return;
 
+    const runtimeCozeConfig = getRuntimeCozeConfig();
+    const cozeLineupWorkflowRunUrl = runtimeCozeConfig.lineup.runUrl;
+    const cozeLineupWorkflowToken = runtimeCozeConfig.lineup.token;
     if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
       res.status(503).json({ error: 'COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured' });
       return;
@@ -20664,6 +20669,9 @@ router.post('/events/poster/import-image/jobs', optionalAuth, async (req: Reques
     const userId = requireAuth(authReq, res);
     if (!userId) return;
 
+    const runtimeCozeConfig = getRuntimeCozeConfig();
+    const cozePosterWorkflowRunUrl = runtimeCozeConfig.poster.runUrl;
+    const cozePosterWorkflowToken = runtimeCozeConfig.poster.token;
     if (!cozePosterWorkflowRunUrl || !cozePosterWorkflowToken) {
       res.status(503).json({ error: 'COZE_POSTER_WORKFLOW_RUN_URL or COZE_POSTER_WORKFLOW_TOKEN is not configured' });
       return;
