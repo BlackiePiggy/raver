@@ -1156,6 +1156,13 @@
   box-shadow: 0 8px 18px rgba(33, 52, 47, 0.05);
 }
 
+.admin-event-stage-order-chip span {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-event-stage-order-chip b {
   display: inline-flex;
   align-items: center;
@@ -1176,11 +1183,52 @@
   border-radius: 999px;
   font-size: 13px;
   font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .admin-event-stage-order-chip button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.admin-event-stage-order-input {
+  width: 132px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #071110;
+  font-size: 12px;
+  font-weight: 800;
+  outline: none;
+}
+
+.admin-event-stage-order-input::placeholder {
+  color: rgba(7, 17, 16, 0.32);
+}
+
+.admin-event-stage-order-add {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px dashed rgba(7, 17, 16, 0.2);
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(7, 17, 16, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.admin-event-stage-order-add:hover {
+  border-color: rgba(7, 17, 16, 0.4);
+  color: #071110;
+  background: white;
+  transform: translateY(-1px);
 }
 
 .admin-event-time-axis {

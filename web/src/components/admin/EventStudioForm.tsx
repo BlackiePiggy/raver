@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Languages, Plus, X } from 'lucide-react';
+import { Check, Languages, Pencil, Plus, Trash2, X } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import EntityBindingField from '@/components/admin/EntityBindingField';
@@ -80,6 +80,10 @@ type LocalizedFieldOverlayState = {
 };
 
 type EventStudioFormDJSearchResult = Awaited<ReturnType<typeof eventStudioApi.searchDJs>>[number];
+type PendingDeleteTimetableStage = {
+  stageName: string;
+  relatedSlotCount: number;
+};
 
 const LOCALIZED_LOCALE_ITEMS: Array<{ key: LocalizedLocaleKey; label: string; hint: string }> = [
   { key: 'zh', label: '中文', hint: '用于中文展示和搜索回填。' },
@@ -956,6 +960,10 @@ export default function EventStudioForm({
     mode === 'edit' ? draft.timetableSlots.map((slot) => slot.id) : []
   );
   const [selectedTimetableStageFilter, setSelectedTimetableStageFilter] = useState('all');
+  const [editingTimetableStageKey, setEditingTimetableStageKey] = useState<string | null>(null);
+  const [editingTimetableStageName, setEditingTimetableStageName] = useState('');
+  const [timetableStageError, setTimetableStageError] = useState<string | null>(null);
+  const [pendingDeleteTimetableStage, setPendingDeleteTimetableStage] = useState<PendingDeleteTimetableStage | null>(null);
   const [activeLineupArtistEditorId, setActiveLineupArtistEditorId] = useState<string | null>(null);
   const [draggedTimetableStage, setDraggedTimetableStage] = useState<string | null>(null);
   const [lineupDJSearchResults, setLineupDJSearchResults] = useState<Record<string, EventStudioFormDJSearchResult[]>>({});
@@ -963,7 +971,7 @@ export default function EventStudioForm({
   const draftRef = useRef(draft);
   const uploadTasksRef = useRef<Map<string, { promise: Promise<void>; controller: AbortController }>>(new Map());
   const objectUrlsRef = useRef<Set<string>>(new Set());
-  useOverlayBodyLock(Boolean(activeLocalizedField));
+  useOverlayBodyLock(Boolean(activeLocalizedField) || Boolean(pendingDeleteTimetableStage));
   const organizerBindingItems = useMemo<EntityBindingValue[]>(() => {
     if (!draft.organizerFestivalId.trim()) return [];
     return [
@@ -1055,6 +1063,17 @@ export default function EventStudioForm({
     setSelectedTimetableSlotIds((current) => current.filter((id) => validIds.has(id)));
     setFocusedTimetableSlotId((current) => (current && validIds.has(current) ? current : null));
   }, [draft.timetableSlots]);
+
+  useEffect(() => {
+    if (!editingTimetableStageKey) return;
+    const matchedStage = draft.stageOrder.find((stage) => stageKey(stage) === editingTimetableStageKey);
+    if (!matchedStage) {
+      setEditingTimetableStageKey(null);
+      setEditingTimetableStageName('');
+      return;
+    }
+    setEditingTimetableStageName(matchedStage);
+  }, [draft.stageOrder, editingTimetableStageKey]);
 
   useEffect(() => {
     if (currentStep === 3) {
@@ -2244,6 +2263,7 @@ export default function EventStudioForm({
   };
 
   const addTimetableStage = () => {
+    setTimetableStageError(null);
     updateScheduleDerivedDraft((current) => {
       const nextIndex = current.stageOrder.length + 1;
       let stageName = `Stage ${nextIndex}`;
@@ -2257,6 +2277,101 @@ export default function EventStudioForm({
         stageOrder: [...current.stageOrder, stageName],
       };
     });
+  };
+
+  const startEditingTimetableStage = (stage: string) => {
+    setEditingTimetableStageKey(stageKey(stage));
+    setEditingTimetableStageName(stage);
+    setTimetableStageError(null);
+  };
+
+  const cancelEditingTimetableStage = () => {
+    setEditingTimetableStageKey(null);
+    setEditingTimetableStageName('');
+    setTimetableStageError(null);
+  };
+
+  const renameTimetableStage = (stage: string) => {
+    const originalKey = stageKey(stage);
+    const trimmedName = editingTimetableStageName.trim();
+    if (!trimmedName) {
+      setTimetableStageError('舞台名称不能为空。');
+      return;
+    }
+    const targetKey = stageKey(trimmedName);
+    if (draft.stageOrder.some((item) => stageKey(item) === targetKey && stageKey(item) !== originalKey)) {
+      setTimetableStageError(`舞台「${trimmedName}」已存在，请使用其他名称。`);
+      return;
+    }
+    setTimetableStageError(null);
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      stageOrder: current.stageOrder.map((item) => (stageKey(item) === originalKey ? trimmedName : item)),
+      timetableSlots: current.timetableSlots.map((slot) =>
+        stageKey(slot.stageName) === originalKey
+          ? {
+              ...slot,
+              stageName: trimmedName,
+            }
+          : slot
+      ),
+    }));
+    if (selectedTimetableStageFilter === originalKey) {
+      setSelectedTimetableStageFilter(targetKey);
+    }
+    setEditingTimetableStageKey(null);
+    setEditingTimetableStageName('');
+  };
+
+  const removeTimetableStage = (stage: string) => {
+    const normalizedStage = normalizeStageName(stage);
+    const targetKey = stageKey(normalizedStage);
+    const relatedSlotCount = draft.timetableSlots.filter((slot) => stageKey(slot.stageName) === targetKey).length;
+    setPendingDeleteTimetableStage({
+      stageName: normalizedStage,
+      relatedSlotCount,
+    });
+  };
+
+  const confirmRemoveTimetableStage = () => {
+    if (!pendingDeleteTimetableStage) return;
+    const normalizedStage = normalizeStageName(pendingDeleteTimetableStage.stageName);
+    const targetKey = stageKey(normalizedStage);
+    setTimetableStageError(null);
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      stageOrder: current.stageOrder.filter((item) => stageKey(item) !== targetKey),
+      timetableSlots: current.timetableSlots
+        .filter((slot) => stageKey(slot.stageName) !== targetKey)
+        .map((slot, index) => ({
+          ...slot,
+          sortOrder: index + 1,
+        })),
+    }));
+    setSelectedTimetableSlotIds((current) =>
+      current.filter((slotId) => {
+        const slot = draft.timetableSlots.find((item) => item.id === slotId);
+        return slot ? stageKey(slot.stageName) !== targetKey : false;
+      })
+    );
+    setConfirmedTimetableSlotIds((current) =>
+      current.filter((slotId) => {
+        const slot = draft.timetableSlots.find((item) => item.id === slotId);
+        return slot ? stageKey(slot.stageName) !== targetKey : false;
+      })
+    );
+    setFocusedTimetableSlotId((current) => {
+      if (!current) return null;
+      const slot = draft.timetableSlots.find((item) => item.id === current);
+      return slot && stageKey(slot.stageName) === targetKey ? null : current;
+    });
+    if (selectedTimetableStageFilter === targetKey) {
+      setSelectedTimetableStageFilter('all');
+    }
+    if (editingTimetableStageKey === targetKey) {
+      cancelEditingTimetableStage();
+    }
+    setPendingDeleteTimetableStage(null);
   };
 
   const addTimetableSlot = (stageName?: string) => {
@@ -2342,12 +2457,16 @@ export default function EventStudioForm({
   const deleteAllTimetableSlots = () => {
     updateScheduleDerivedDraft((current) => ({
       ...current,
+      stageOrder: [],
       timetableSlots: [],
     }));
     setSelectedTimetableSlotIds([]);
     setTimetableSelectionMode(false);
     setFocusedTimetableSlotId(null);
     setConfirmedTimetableSlotIds([]);
+    setSelectedTimetableStageFilter('all');
+    cancelEditingTimetableStage();
+    setDraggedTimetableStage(null);
   };
 
   const removeTimetableSlot = (slotId: string) => {
@@ -3709,9 +3828,6 @@ export default function EventStudioForm({
                 >
                   一键清理当前页
                 </button>
-                <button type="button" onClick={addTimetableStage} className="admin-studio-button-secondary px-4 py-3 text-sm">
-                  添加舞台
-                </button>
                 {timetableSelectionMode ? (
                   <>
                     <button
@@ -3821,7 +3937,27 @@ export default function EventStudioForm({
                       setDraggedTimetableStage(null);
                     }}
                   >
-                    <span>{stage}</span>
+                    {editingTimetableStageKey === stageKey(stage) ? (
+                      <input
+                        value={editingTimetableStageName}
+                        onChange={(event) => setEditingTimetableStageName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            renameTimetableStage(stage);
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            cancelEditingTimetableStage();
+                          }
+                        }}
+                        className="admin-event-stage-order-input"
+                        autoFocus
+                        placeholder="舞台名称"
+                      />
+                    ) : (
+                      <span>{stage}</span>
+                    )}
                     <b>{visibleTimetableSlots.filter((slot) => stageKey(slot.stageName) === stageKey(stage)).length}</b>
                     <button type="button" onClick={() => moveStageOrder(stage, -1)} disabled={index === 0}>
                       ↑
@@ -3829,10 +3965,33 @@ export default function EventStudioForm({
                     <button type="button" onClick={() => moveStageOrder(stage, 1)} disabled={index === visibleStageOrder.length - 1}>
                       ↓
                     </button>
+                    {editingTimetableStageKey === stageKey(stage) ? (
+                      <>
+                        <button type="button" onClick={() => renameTimetableStage(stage)} aria-label={`确认舞台 ${stage} 的新名称`}>
+                          <Check size={14} />
+                        </button>
+                        <button type="button" onClick={cancelEditingTimetableStage} aria-label={`取消编辑舞台 ${stage}`}>
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => startEditingTimetableStage(stage)} aria-label={`编辑舞台 ${stage}`}>
+                          <Pencil size={13} />
+                        </button>
+                        <button type="button" onClick={() => removeTimetableStage(stage)} aria-label={`删除舞台 ${stage}`}>
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
+                <button type="button" onClick={addTimetableStage} className="admin-event-stage-order-add" aria-label="添加舞台">
+                  <span>+</span>
+                </button>
               </div>
             </div>
+            {timetableStageError ? <div className="mt-3 text-xs text-[#6a3530]">{timetableStageError}</div> : null}
 
             <div className="admin-event-stage-filter-bar mt-4">
               <button
@@ -4835,6 +4994,44 @@ export default function EventStudioForm({
                   完成
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingDeleteTimetableStage ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden overscroll-contain bg-black/45 p-4"
+          onClick={() => setPendingDeleteTimetableStage(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-[28px] border border-[#e8eceb] bg-white p-6 shadow-[0_24px_72px_rgba(17,24,39,0.18)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#b42318]">删除舞台</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#111827]">确认删除这个舞台吗？</div>
+            <p className="mt-3 text-sm leading-6 text-[#6b7280]">
+              {pendingDeleteTimetableStage.stageName}
+              <br />
+              {pendingDeleteTimetableStage.relatedSlotCount > 0
+                ? `删除后会同时移除该舞台下的 ${pendingDeleteTimetableStage.relatedSlotCount} 条时间表信息，请再次确认。`
+                : '删除后该舞台将从当前活动时间表中移除。'}
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteTimetableStage(null)}
+                className="inline-flex h-[44px] items-center justify-center rounded-full border border-[#e7ebef] bg-white px-5 text-sm font-semibold text-[#111827]"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveTimetableStage}
+                className="inline-flex h-[44px] items-center justify-center rounded-full bg-[#b42318] px-5 text-sm font-semibold text-white"
+              >
+                确认删除
+              </button>
             </div>
           </div>
         </div>
