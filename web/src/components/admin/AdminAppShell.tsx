@@ -22,6 +22,7 @@ type AdminAppShellProps = {
   description?: string;
   eyebrow?: string;
   actions?: ReactNode;
+  hidePageHeader?: boolean;
   children: ReactNode;
 };
 
@@ -301,8 +302,10 @@ function Topbar({
   eyebrow,
   description,
   actions,
+  hidePageHeader,
   setMobileOpen,
 }: Pick<AdminAppShellProps, 'title' | 'eyebrow' | 'description' | 'actions'> & {
+  hidePageHeader?: boolean;
   setMobileOpen: (next: boolean) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -346,14 +349,16 @@ function Topbar({
         </div>
       </div>
 
-      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-black/35">{eyebrow || 'Raver Admin'}</p>
-          <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em] text-[#071110]">{title}</h1>
-          {description ? <p className="mt-3 max-w-3xl text-[14px] leading-7 text-black/48">{description}</p> : null}
+      {!hidePageHeader ? (
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-black/35">{eyebrow || 'Raver Admin'}</p>
+            <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em] text-[#071110]">{title}</h1>
+            {description ? <p className="mt-3 max-w-3xl text-[14px] leading-7 text-black/48">{description}</p> : null}
+          </div>
+          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
         </div>
-        {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
-      </div>
+      ) : null}
     </>
   );
 }
@@ -363,6 +368,7 @@ export default function AdminAppShell({
   description,
   eyebrow = 'Raver Admin',
   actions,
+  hidePageHeader = false,
   children,
 }: AdminAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -391,6 +397,7 @@ export default function AdminAppShell({
               eyebrow={eyebrow}
               description={description}
               actions={actions}
+              hidePageHeader={hidePageHeader}
               setMobileOpen={setMobileOpen}
             />
             <div className="admin-shell-page pb-8">

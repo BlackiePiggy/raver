@@ -288,8 +288,8 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
   // ── Candidate grouping ──────────────────────────────────────────────────────
 
   const allCandidates    = selectedJob?.candidates ?? [];
-  const exactCandidates  = allCandidates.filter((c) => c.matchTier === 'exact' && c.status !== 'applied');
-  const fuzzyCandidates  = allCandidates.filter((c) => c.matchTier !== 'exact' && c.status !== 'applied');
+  const exactCandidates  = allCandidates.filter((c) => c.matchTier === 'exact');
+  const fuzzyCandidates  = allCandidates.filter((c) => c.matchTier !== 'exact');
   const appliedCandidates = allCandidates.filter((c) => c.status === 'applied');
   const pendingCandidates = allCandidates.filter((c) => c.status === 'pending');
   const exactPendingCandidates = pendingCandidates.filter((c) => c.matchTier === 'exact');
@@ -301,6 +301,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
   };
 
   const currentTabCandidates = tabCandidates[detailTab];
+  const currentTabSelectableCandidates = currentTabCandidates.filter((candidate) => candidate.status === 'pending');
   const candidateTotal = currentTabCandidates.length;
   const candidateTotalPages = Math.max(1, Math.ceil(candidateTotal / candidatePageSize));
   const pagedCandidates = currentTabCandidates.slice(
@@ -325,7 +326,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
     setSelectedCandidateIds((cur) => checked ? [...new Set([...cur, id])] : cur.filter((x) => x !== id));
 
   const toggleAllPending = (checked: boolean) =>
-    setSelectedCandidateIds(checked ? pendingCandidates.map((c) => c.id) : []);
+    setSelectedCandidateIds(checked ? currentTabSelectableCandidates.map((c) => c.id) : []);
 
   // ─── Content ─────────────────────────────────────────────────────────────────
 
@@ -381,10 +382,10 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
       </div>
 
       {/* Two-column body */}
-      <div className="grid gap-4 xl:grid-cols-[300px_1fr] xl:items-start">
+      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start">
 
         {/* ── Left: job list ── */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="min-w-0 rounded-xl border border-gray-200 bg-white shadow-sm">
           {/* List header */}
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-900">任务列表</h2>
@@ -463,7 +464,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         </div>
 
         {/* ── Right: detail ── */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           {!selectedJob ? (
             <div className="py-24 text-center text-sm text-gray-400">
               请选择左侧一个 DJ 绑定审核任务
@@ -492,7 +493,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                     }}
                     className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-40"
                   >
-                    勾略所选候选
+                    勾选 Exact 候选
                   </button>
                   {/* Apply selected */}
                   <button
@@ -553,8 +554,8 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
               </div>
 
               {/* Candidate table */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+              <div className="min-w-0 overflow-x-hidden">
+                <table className="w-full table-fixed text-left text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/70">
                       {detailTab !== 'applied' && (
@@ -562,8 +563,8 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                           <input
                             type="checkbox"
                             checked={
-                              pendingCandidates.length > 0 &&
-                              selectedCandidateIds.length === pendingCandidates.length
+                              currentTabSelectableCandidates.length > 0 &&
+                              currentTabSelectableCandidates.every((candidate) => selectedCandidateIds.includes(candidate.id))
                             }
                             onChange={(e) => toggleAllPending(e.target.checked)}
                             className="h-3.5 w-3.5 rounded border-gray-300"
@@ -620,7 +621,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
 
                             {/* 候选名称 / 已绑定名称 */}
                             <td className="px-4 py-3.5">
-                              <div className="text-xs font-semibold text-gray-800">{candidate.rawName}</div>
+                              <div className="break-words text-xs font-semibold text-gray-800">{candidate.rawName}</div>
                               {detailTab !== 'applied' && (
                                 <div className="mt-1.5 flex flex-wrap gap-1">
                                   <TierBadge tier={candidate.matchTier} />
@@ -630,8 +631,8 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                             </td>
 
                             {/* 事件信息 */}
-                            <td className="px-4 py-3.5 min-w-[180px]">
-                              <div className="text-xs font-semibold text-gray-900 leading-snug">
+                            <td className="px-4 py-3.5">
+                              <div className="break-words text-xs font-semibold leading-snug text-gray-900">
                                 {candidate.eventNameSnapshot}
                               </div>
                               <div className="mt-1 space-y-0.5 text-[11px] text-gray-400">
@@ -644,9 +645,9 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                             </td>
 
                             {/* 匹配信息 / 绑定信息 */}
-                            <td className="px-4 py-3.5 min-w-[220px]">
+                            <td className="px-4 py-3.5">
                               {detailTab === 'applied' ? (
-                                <div className="space-y-0.5 text-[11px] text-gray-500 font-mono">
+                                <div className="space-y-0.5 break-all font-mono text-[11px] text-gray-500">
                                   <div>DJ {candidate.rawName}</div>
                                   {candidate.eventArtistMemberId && (
                                     <div>memberId {candidate.eventArtistMemberId}</div>
@@ -656,7 +657,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
                                   )}
                                 </div>
                               ) : (
-                                <div className="space-y-0.5 text-[11px] text-gray-500 font-mono">
+                                <div className="space-y-0.5 break-all font-mono text-[11px] text-gray-500">
                                   <div className="text-gray-700 font-sans font-medium">{candidate.matchReason}</div>
                                   <div>eventId {candidate.eventId}</div>
                                   {candidate.eventArtistId && <div>artist {candidate.eventArtistId}</div>}
@@ -683,7 +684,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
 
                             {/* 操作 */}
                             <td className="px-4 py-3.5">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 {/* View icon */}
                                 <button
                                   type="button"
@@ -845,6 +846,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
       title="DJ 绑定审核"
       eyebrow="Raver Admin / Content Ops"
       description="管理 DJ 与 Event 阵容、member 和 timetable slot 的自动命中结果，优先处理 exact 命中与批量 apply。"
+      hidePageHeader
     >
       <section className="space-y-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
