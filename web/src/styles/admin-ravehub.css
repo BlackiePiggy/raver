@@ -389,6 +389,7 @@
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+  cursor: pointer;
   background-image:
     linear-gradient(45deg, transparent 50%, rgba(7, 17, 16, 0.72) 50%),
     linear-gradient(135deg, rgba(7, 17, 16, 0.72) 50%, transparent 50%);
@@ -401,6 +402,11 @@
 
 .admin-studio-select option {
   color: #071110;
+}
+
+.admin-studio-select:hover {
+  border-color: rgba(22, 44, 40, 0.28);
+  background-color: rgba(255, 255, 255, 0.98);
 }
 
 .admin-studio-textarea {

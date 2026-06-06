@@ -172,6 +172,9 @@ const aiCompactInputClass =
 const aiCompactSelectClass =
   'admin-studio-select h-9 min-h-9 rounded-[14px] pr-8 text-[13px]';
 
+const aiCompactSelectorChipClass =
+  'inline-flex min-w-0 shrink-0 items-center rounded-[14px] border px-3 py-2 text-[13px] font-semibold tracking-[0.01em] transition whitespace-nowrap';
+
 const ACT_TYPE_ITEMS: Array<{ value: EventStudioAIActType; label: string; count: number }> = [
   { value: 'solo', label: 'Solo', count: 1 },
   { value: 'b2b', label: 'B2B', count: 2 },
@@ -3050,34 +3053,50 @@ export default function EventStudioAIImportDock({
                           清理空白项
                         </button>
                       </div>
-                      <div className="mt-2.5 grid gap-2 lg:grid-cols-2">
+                      <div className="mt-2.5 grid gap-3">
                         <label className="space-y-1 text-xs text-black/45">
                           <span>目标活动日</span>
-                          <select
-                            className={aiCompactSelectClass}
-                            value={panel.targetEventDayId}
-                            onChange={(event) => updatePanel({ targetEventDayId: event.target.value })}
-                          >
-                            {eventDayTargets(draft).map((day) => (
-                              <option key={day.eventDayId} value={day.eventDayId}>
-                                {day.label} / {day.date}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex gap-2 overflow-x-auto pb-1">
+                            {eventDayTargets(draft).map((day) => {
+                              const active = panel.targetEventDayId === day.eventDayId;
+                              return (
+                                <button
+                                  key={day.eventDayId}
+                                  type="button"
+                                  onClick={() => updatePanel({ targetEventDayId: day.eventDayId })}
+                                  className={`${aiCompactSelectorChipClass} ${
+                                    active
+                                      ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
+                                      : 'border-[#e7ece7] bg-white text-black/55 hover:bg-[#f5f7f5]'
+                                  }`}
+                                >
+                                  {day.label} / {day.date}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </label>
                         <label className="space-y-1 text-xs text-black/45">
                           <span>目标舞台</span>
-                          <select
-                            className={aiCompactSelectClass}
-                            value={panel.targetStageName}
-                            onChange={(event) => updatePanel({ targetStageName: event.target.value })}
-                          >
-                            {availableStageNames(draft, panel.timetableSlots).map((stage) => (
-                              <option key={stage} value={stage}>
-                                {stage}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex gap-2 overflow-x-auto pb-1">
+                            {availableStageNames(draft, panel.timetableSlots).map((stage) => {
+                              const active = panel.targetStageName === stage;
+                              return (
+                                <button
+                                  key={stage}
+                                  type="button"
+                                  onClick={() => updatePanel({ targetStageName: stage })}
+                                  className={`${aiCompactSelectorChipClass} ${
+                                    active
+                                      ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
+                                      : 'border-[#e7ece7] bg-white text-black/55 hover:bg-[#f5f7f5]'
+                                  }`}
+                                >
+                                  {stage}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </label>
                       </div>
                     </div>
