@@ -899,6 +899,10 @@ export default function EventStudioAIImportDock({
   entryKind?: ImportPanelKind;
 }) {
   const [panel, setPanel] = useState<ImportPanelState | null>(null);
+  const [jsonImportOverlayOpen, setJsonImportOverlayOpen] = useState(false);
+  const [jsonImportText, setJsonImportText] = useState('');
+  const [jsonImportError, setJsonImportError] = useState<string | null>(null);
+  const [jsonImportSubmitting, setJsonImportSubmitting] = useState(false);
   const [djSearchResults, setDJSearchResults] = useState<Record<string, EventStudioAIDJSearchResult[]>>({});
   const [djSearchLoadingKeys, setDJSearchLoadingKeys] = useState<Record<string, boolean>>({});
   const [timezoneResults, setTimezoneResults] = useState<NonNullable<EventStudioDraft['timeZoneSelection']>[]>([]);
@@ -992,6 +996,14 @@ export default function EventStudioAIImportDock({
     if (previewAssetIndex < previewAssets.length) return;
     setPreviewAssetIndex(null);
   }, [previewAssetIndex, previewAssets.length]);
+
+  useEffect(() => {
+    if (panel?.kind === 'timetable') return;
+    setJsonImportOverlayOpen(false);
+    setJsonImportText('');
+    setJsonImportError(null);
+    setJsonImportSubmitting(false);
+  }, [panel?.kind]);
 
   const updatePanel = (patch: Partial<ImportPanelState>) => {
     setPanel((current) => (current ? { ...current, ...patch } : current));
@@ -1278,6 +1290,71 @@ export default function EventStudioAIImportDock({
         unparsedTexts: mergeUniqueStrings(current.unparsedTexts, unparsedTexts),
       };
     });
+  };
+
+  const importTimetableJson = async () => {
+    if (!panel || panel.kind !== 'timetable') return;
+    const trimmed = jsonImportText.trim();
+    if (!trimmed) {
+      setJsonImportError('请先粘贴 JSON 内容。');
+      return;
+    }
+
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(trimmed);
+    } catch {
+      setJsonImportError('JSON 格式不正确，请检查后再导入。');
+      return;
+    }
+
+    if (!parsedJson || typeof parsedJson !== 'object' || Array.isArray(parsedJson)) {
+      setJsonImportError('当前只支持导入对象类型的 Coze timetable JSON。');
+      return;
+    }
+
+    const rawRecord = parsedJson as Record<string, any>;
+    const timetableSlots = parseTimetableEditableSlots(rawRecord, draft);
+    if (!timetableSlots.length) {
+      setJsonImportError('没有从这份 JSON 中解析出任何 timetable 条目，请确认结构与 Coze 返回一致。');
+      return;
+    }
+
+    setJsonImportSubmitting(true);
+    setJsonImportError(null);
+    try {
+      const matchedResult = await exactMatchTimetableSlots(timetableSlots);
+      setPanel((current) => {
+        if (!current || current.kind !== 'timetable') return current;
+        return {
+          ...current,
+          running: false,
+          errorText: null,
+          statusText: `JSON 导入完成：共 ${matchedResult.items.length} 条结果${matchedResult.summary.attempted ? `，匹配成功 ${matchedResult.summary.matched}，失败 ${matchedResult.summary.failed}` : ''}。`,
+          resultJson: parsedJson,
+          timetableSlots: matchedResult.items.map((slot, index) => ({
+            ...slot,
+            sortOrder: index + 1,
+          })),
+          selectedTimetableSlotIds: [],
+          warnings: normalizeWarnings(rawRecord),
+          unparsedTexts: normalizeUnparsedTexts(rawRecord),
+          taskEntries: [],
+          autoMatching: false,
+          autoMatchStartedAt: null,
+          manualMatchSummary: matchedResult.summary,
+          expandedResultItemIds: defaultExpandedResultItemIds(matchedResult.items),
+          resultSearchQuery: '',
+          warningsExpanded: false,
+        };
+      });
+      setJsonImportText(JSON.stringify(parsedJson, null, 2));
+      setJsonImportOverlayOpen(false);
+    } catch (error) {
+      setJsonImportError(error instanceof Error ? error.message : 'JSON 导入后的自动匹配失败。');
+    } finally {
+      setJsonImportSubmitting(false);
+    }
   };
 
   const pollJob = async (
@@ -2439,6 +2516,20 @@ export default function EventStudioAIImportDock({
                   <div className="mt-2 text-sm leading-6 text-black/52">{panel.errorText || panel.statusText}</div>
                 </div>
                 <div className="flex shrink-0 flex-nowrap items-center gap-2">
+                  {panel.kind === 'timetable' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setJsonImportError(null);
+                        setJsonImportText(panel.resultJson ? JSON.stringify(panel.resultJson, null, 2) : '');
+                        setJsonImportOverlayOpen(true);
+                      }}
+                      disabled={panel.running || jsonImportSubmitting}
+                      className="admin-studio-button-secondary h-9 min-w-[94px] whitespace-nowrap px-3 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      JSON Import
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void cancelRecognition()}
@@ -3307,6 +3398,92 @@ export default function EventStudioAIImportDock({
             onClose={() => setPreviewAssetIndex(null)}
             onChange={setPreviewAssetIndex}
           />
+          {jsonImportOverlayOpen && panel?.kind === 'timetable' ? (
+            <div className="fixed inset-0 z-[70] overflow-hidden overscroll-contain bg-black/50 p-4">
+              <div className="flex h-full items-center justify-center">
+                <div className="flex h-[min(88vh,820px)] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-[#e8eceb] bg-[#fbfcfa] shadow-2xl">
+                  <div className="flex items-start justify-between gap-4 border-b border-[#e8eceb] px-5 py-4">
+                    <div className="min-w-0">
+                      <div className="admin-studio-label">Timetable JSON Import</div>
+                      <div className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">粘贴并校验 Coze JSON</div>
+                      <div className="mt-2 text-sm leading-6 text-black/48">
+                        导入成功后，会直接把这份 JSON 当作 Coze 返回结果，并继续执行自动匹配流程。
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (jsonImportSubmitting) return;
+                        setJsonImportOverlayOpen(false);
+                      }}
+                      className="admin-studio-button-secondary px-4 py-2 text-sm"
+                    >
+                      关闭
+                    </button>
+                  </div>
+
+                  <div className="min-h-0 flex-1 p-5">
+                    <div className="flex h-full min-h-0 flex-col gap-3">
+                      <div className="text-xs text-black/45">
+                        支持直接粘贴完整返回 JSON。这里会先做格式化和结构校验，再进入 timetable 结果编辑区。
+                      </div>
+                      <textarea
+                        value={jsonImportText}
+                        onChange={(event) => {
+                          setJsonImportText(event.target.value);
+                          if (jsonImportError) setJsonImportError(null);
+                        }}
+                        placeholder="在这里粘贴 Coze timetable JSON"
+                        className="min-h-0 flex-1 rounded-[22px] border border-[#dfe5df] bg-white px-4 py-4 font-mono text-[12px] leading-6 text-[#071110] outline-none transition focus:border-[#9cc3ff] focus:ring-2 focus:ring-[#d7e6ff]"
+                      />
+                      {jsonImportError ? (
+                        <div className="rounded-[18px] border border-[#f0d0d0] bg-[#fff3f3] px-4 py-3 text-sm text-[#8a3e3e]">
+                          {jsonImportError}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8eceb] px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const parsed = JSON.parse(jsonImportText.trim());
+                          setJsonImportText(JSON.stringify(parsed, null, 2));
+                          setJsonImportError(null);
+                        } catch {
+                          setJsonImportError('JSON 格式不正确，暂时无法格式化。');
+                        }
+                      }}
+                      disabled={!jsonImportText.trim() || jsonImportSubmitting}
+                      className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      格式化 JSON
+                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setJsonImportOverlayOpen(false)}
+                        disabled={jsonImportSubmitting}
+                        className="admin-studio-button-secondary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void importTimetableJson()}
+                        disabled={!jsonImportText.trim() || jsonImportSubmitting}
+                        className="admin-studio-button-primary px-5 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {jsonImportSubmitting ? '导入中...' : '确定导入'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

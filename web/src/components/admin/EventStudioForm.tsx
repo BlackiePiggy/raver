@@ -935,6 +935,8 @@ export default function EventStudioForm({
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldOverlayState | null>(null);
+  const [showTimetableDebugDrawer, setShowTimetableDebugDrawer] = useState(false);
+  const [timetableDebugTab, setTimetableDebugTab] = useState<'draft' | 'focused' | 'payload'>('draft');
   const [hasLoadedTimetableStep, setHasLoadedTimetableStep] = useState(false);
   const [hasLoadedLineupStep, setHasLoadedLineupStep] = useState(false);
   const [alignmentPreviewLoading, setAlignmentPreviewLoading] = useState(false);
@@ -2776,6 +2778,81 @@ export default function EventStudioForm({
     selectedTimetableStageFilter === 'all'
       ? '全部舞台'
       : visibleStageOrder.find((stage) => stageKey(stage) === selectedTimetableStageFilter) || '当前舞台';
+  const focusedTimetableSlot = useMemo(
+    () => draft.timetableSlots.find((slot) => slot.id === focusedTimetableSlotId) || null,
+    [draft.timetableSlots, focusedTimetableSlotId]
+  );
+  const timetableDraftJsonPreview = useMemo(
+    () =>
+      JSON.stringify(
+        draft.timetableSlots.map((slot) => ({
+          id: slot.id,
+          canonicalSlotId: slot.canonicalSlotId || null,
+          lineupArtistId: slot.lineupArtistId || null,
+          actType: normalizeActType(slot.actType),
+          eventDayId: slot.eventDayId,
+          weekIndex: slot.weekIndex,
+          dayIndexInWeek: slot.dayIndexInWeek,
+          overallDayIndex: slot.overallDayIndex,
+          localDate: slot.localDate,
+          djId: slot.djId,
+          memberDjIds: slot.memberDjIds,
+          memberNamesText: slot.memberNamesText,
+          displayNameOverride: slot.displayNameOverride || '',
+          stageName: slot.stageName,
+          sortOrder: slot.sortOrder,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          startDayOffset: Number(slot.startDayOffset) || 0,
+          endDayOffset: Number(slot.endDayOffset) || 0,
+        })),
+        null,
+        2
+      ),
+    [draft.timetableSlots]
+  );
+  const focusedTimetableSlotJsonPreview = useMemo(
+    () =>
+      JSON.stringify(
+        focusedTimetableSlot
+          ? {
+              id: focusedTimetableSlot.id,
+              canonicalSlotId: focusedTimetableSlot.canonicalSlotId || null,
+              lineupArtistId: focusedTimetableSlot.lineupArtistId || null,
+              actType: normalizeActType(focusedTimetableSlot.actType),
+              eventDayId: focusedTimetableSlot.eventDayId,
+              weekIndex: focusedTimetableSlot.weekIndex,
+              dayIndexInWeek: focusedTimetableSlot.dayIndexInWeek,
+              overallDayIndex: focusedTimetableSlot.overallDayIndex,
+              localDate: focusedTimetableSlot.localDate,
+              djId: focusedTimetableSlot.djId,
+              memberDjIds: focusedTimetableSlot.memberDjIds,
+              memberNamesText: focusedTimetableSlot.memberNamesText,
+              displayNameOverride: focusedTimetableSlot.displayNameOverride || '',
+              stageName: focusedTimetableSlot.stageName,
+              sortOrder: focusedTimetableSlot.sortOrder,
+              startTime: focusedTimetableSlot.startTime,
+              endTime: focusedTimetableSlot.endTime,
+              startDayOffset: Number(focusedTimetableSlot.startDayOffset) || 0,
+              endDayOffset: Number(focusedTimetableSlot.endDayOffset) || 0,
+            }
+          : { message: '当前还没有聚焦的时间表条目。点击下方任意一条时间表卡片后，这里会实时显示该条数据。' },
+        null,
+        2
+      ),
+    [focusedTimetableSlot]
+  );
+  const timetablePayloadJsonPreview = useMemo(() => {
+    const payload = mode === 'create' ? mapEventStudioDraftToCreateInput(draft) : mapEventStudioDraftToUpdateInput(draft);
+    return JSON.stringify(
+      {
+        stageOrder: payload.stageOrder ?? [],
+        lineupSlots: payload.lineupSlots ?? [],
+      },
+      null,
+      2
+    );
+  }, [draft, mode]);
   const formatTimetableSlotClock = (slot: EventStudioTimetableSlotDraft, field: 'startTime' | 'endTime') => {
     const value = slot[field];
     const extracted = extractTimeValue(value);
@@ -3603,10 +3680,12 @@ export default function EventStudioForm({
 
       {currentStep === 3 ? (
         <Section title="时间表" description="按 iOS 的活动日、舞台和演出时段组织，主视图优先展示可视化排期板。">
-          <div className="mb-5">
-            <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="timetable" onOpenStep={() => setCurrentStep(3)} />
-          </div>
-          <div className="admin-event-timetable-board">
+          <div className={`grid gap-5 ${showTimetableDebugDrawer ? 'xl:grid-cols-[minmax(0,1fr)_420px]' : ''}`}>
+            <div className="min-w-0">
+              <div className="mb-5">
+                <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="timetable" onOpenStep={() => setCurrentStep(3)} />
+              </div>
+              <div className="admin-event-timetable-board">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="admin-studio-label">Timetable Board</div>
@@ -3663,6 +3742,13 @@ export default function EventStudioForm({
                   className="admin-studio-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   新增时间块
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTimetableDebugDrawer((current) => !current)}
+                  className="admin-studio-button-secondary px-4 py-3 text-sm"
+                >
+                  {showTimetableDebugDrawer ? '隐藏调试面板' : '查看 JSON'}
                 </button>
                 <button
                   type="button"
@@ -3939,6 +4025,73 @@ export default function EventStudioForm({
                 </div>
               ) : null}
             </div>
+          </div>
+            </div>
+
+            {showTimetableDebugDrawer ? (
+              <aside className="admin-event-debug-drawer">
+                <div className="admin-event-debug-drawer-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="admin-studio-label">Timetable Debug</div>
+                      <div className="mt-2 text-lg font-semibold text-[#071110]">实时编辑态数据</div>
+                      <div className="mt-2 text-sm leading-6 text-black/48">
+                        这里会实时显示当前时间表编辑态、当前聚焦条目，以及提交前映射出来的 payload。
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTimetableDebugDrawer(false)}
+                      className="admin-studio-button-secondary px-3 py-2 text-xs"
+                    >
+                      收起
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {[
+                      { key: 'draft', label: '全部 draft' },
+                      { key: 'focused', label: '当前条目' },
+                      { key: 'payload', label: '提交态' },
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setTimetableDebugTab(item.key as 'draft' | 'focused' | 'payload')}
+                        className={`rounded-full px-3 py-2 text-xs font-semibold ${
+                          timetableDebugTab === item.key
+                            ? 'bg-[#eaf2ff] text-[#3567d6]'
+                            : 'bg-[#f3f5f2] text-black/52'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/40">
+                    <span>时间表条目：{draft.timetableSlots.length}</span>
+                    <span>当前聚焦：{focusedTimetableSlot ? focusedTimetableSlot.id : '无'}</span>
+                    <span>
+                      当前标签：
+                      {timetableDebugTab === 'draft' ? ' 全部 draft' : timetableDebugTab === 'focused' ? ' 当前条目' : ' 提交态 payload'}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 overflow-hidden rounded-[24px] border border-[#dfe5df] bg-[#0f1720]">
+                    <pre className="admin-event-debug-drawer-pre">
+                      <code>
+                        {timetableDebugTab === 'draft'
+                          ? timetableDraftJsonPreview
+                          : timetableDebugTab === 'focused'
+                            ? focusedTimetableSlotJsonPreview
+                            : timetablePayloadJsonPreview}
+                      </code>
+                    </pre>
+                  </div>
+                </div>
+              </aside>
+            ) : null}
           </div>
         </Section>
       ) : null}
