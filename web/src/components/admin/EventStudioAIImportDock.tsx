@@ -945,7 +945,17 @@ export default function EventStudioAIImportDock({
     [panel]
   );
   const visibleTimetableSlots = useMemo(
-    () => (panel?.kind === 'timetable' ? panel.timetableSlots.filter((item) => resultSearchMatches(item, panel.resultSearchQuery)) : []),
+    () =>
+      panel?.kind === 'timetable'
+        ? panel.timetableSlots.filter((item) => {
+            if (!resultSearchMatches(item, panel.resultSearchQuery)) return false;
+            const matchesDay = panel.targetEventDayId ? item.eventDayId === panel.targetEventDayId : true;
+            const normalizedTargetStage = panel.targetStageName.trim().toLocaleLowerCase();
+            const normalizedItemStage = item.stageName.trim().toLocaleLowerCase();
+            const matchesStage = normalizedTargetStage ? normalizedItemStage === normalizedTargetStage : true;
+            return matchesDay && matchesStage;
+          })
+        : [],
     [panel]
   );
 
@@ -2098,35 +2108,37 @@ export default function EventStudioAIImportDock({
         </div>
         <label className="space-y-1 text-xs text-black/45">
           <span>活动日</span>
-          <select
-            className={aiCompactSelectClass}
-            value={slot.eventDayId}
-            onChange={(event) =>
-              updateTimetableSlot(slot.id, (current) => {
-                const matchedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value) || draft.eventDays[0];
-                return matchedDay
-                  ? {
-                      ...current,
-                      eventDayId: matchedDay.eventDayId,
-                      weekIndex: matchedDay.weekIndex,
-                      dayIndexInWeek: matchedDay.dayIndexInWeek,
-                      overallDayIndex: matchedDay.overallDayIndex,
-                      localDate: matchedDay.date,
-                      dayLabel: matchedDay.label,
-                      unresolvedEventDay: false,
-                      eventDayResolutionReason: '已在网页编辑器中手动修正。',
-                      eventDayResolutionConfidence: 1,
-                    }
-                  : current;
-              })
-            }
-          >
-            {eventDayTargets(draft).map((day) => (
-              <option key={day.eventDayId} value={day.eventDayId}>
-                {day.label} / {day.date}
-              </option>
-            ))}
-          </select>
+          <div className="admin-studio-select-shell">
+            <select
+              className={aiCompactSelectClass}
+              value={slot.eventDayId}
+              onChange={(event) =>
+                updateTimetableSlot(slot.id, (current) => {
+                  const matchedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value) || draft.eventDays[0];
+                  return matchedDay
+                    ? {
+                        ...current,
+                        eventDayId: matchedDay.eventDayId,
+                        weekIndex: matchedDay.weekIndex,
+                        dayIndexInWeek: matchedDay.dayIndexInWeek,
+                        overallDayIndex: matchedDay.overallDayIndex,
+                        localDate: matchedDay.date,
+                        dayLabel: matchedDay.label,
+                        unresolvedEventDay: false,
+                        eventDayResolutionReason: '已在网页编辑器中手动修正。',
+                        eventDayResolutionConfidence: 1,
+                      }
+                    : current;
+                })
+              }
+            >
+              {eventDayTargets(draft).map((day) => (
+                <option key={day.eventDayId} value={day.eventDayId}>
+                  {day.label} / {day.date}
+                </option>
+              ))}
+            </select>
+          </div>
         </label>
         <div className="rounded-[16px] border border-[#edf1ee] bg-white px-4 py-3 text-sm text-black/56">
           <label className="block space-y-1">
@@ -2168,29 +2180,33 @@ export default function EventStudioAIImportDock({
         </label>
         <label className="space-y-1 text-xs text-black/45">
           <span>开始跨天</span>
-          <select
-            className={aiCompactSelectClass}
-            value={String(slot.startDayOffset)}
-            onChange={(event) =>
-              updateTimetableSlot(slot.id, (current) => ({ ...current, startDayOffset: Number(event.target.value) || 0 }))
-            }
-          >
-            <option value="0">当天</option>
-            <option value="1">次日</option>
-          </select>
+          <div className="admin-studio-select-shell">
+            <select
+              className={aiCompactSelectClass}
+              value={String(slot.startDayOffset)}
+              onChange={(event) =>
+                updateTimetableSlot(slot.id, (current) => ({ ...current, startDayOffset: Number(event.target.value) || 0 }))
+              }
+            >
+              <option value="0">当天</option>
+              <option value="1">次日</option>
+            </select>
+          </div>
         </label>
         <label className="space-y-1 text-xs text-black/45">
           <span>结束跨天</span>
-          <select
-            className={aiCompactSelectClass}
-            value={String(slot.endDayOffset)}
-            onChange={(event) =>
-              updateTimetableSlot(slot.id, (current) => ({ ...current, endDayOffset: Number(event.target.value) || 0 }))
-            }
-          >
-            <option value="0">当天</option>
-            <option value="1">次日</option>
-          </select>
+          <div className="admin-studio-select-shell">
+            <select
+              className={aiCompactSelectClass}
+              value={String(slot.endDayOffset)}
+              onChange={(event) =>
+                updateTimetableSlot(slot.id, (current) => ({ ...current, endDayOffset: Number(event.target.value) || 0 }))
+              }
+            >
+              <option value="0">当天</option>
+              <option value="1">次日</option>
+            </select>
+          </div>
         </label>
       </div>
       {slot.eventDayResolutionReason ? (

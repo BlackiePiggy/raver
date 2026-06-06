@@ -2665,17 +2665,19 @@ export default function EventStudioForm({
                 />
               </div>
               <Field label="活动类型">
-                <select
-                  value={draft.eventType}
-                  onChange={(event) => updateDraft('eventType', event.target.value)}
-                  className={selectInputClassName}
-                >
-                  {EVENT_TYPES.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
+                <div className="admin-studio-select-shell">
+                  <select
+                    value={draft.eventType}
+                    onChange={(event) => updateDraft('eventType', event.target.value)}
+                    className={selectInputClassName}
+                  >
+                    {EVENT_TYPES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </Field>
               <Field label="活动简称">
                 <AdminCountedControl count={countText(draft.abbreviation)} maxLength={INPUT_LIMITS.event.abbreviation}>
@@ -3054,17 +3056,19 @@ export default function EventStudioForm({
         <Section title="活动周期" description="这里决定活动的日期结构，提交时会同步生成 weeks / eventDays，供 timetable 和 lineup 共用。">
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="排期模式">
-              <select
-                value={draft.scheduleMode}
-                onChange={(event) => setScheduleMode(event.target.value as EventStudioDraft['scheduleMode'])}
-                className={selectInputClassName}
-              >
-                {SCHEDULE_MODE_ITEMS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              <div className="admin-studio-select-shell">
+                <select
+                  value={draft.scheduleMode}
+                  onChange={(event) => setScheduleMode(event.target.value as EventStudioDraft['scheduleMode'])}
+                  className={selectInputClassName}
+                >
+                  {SCHEDULE_MODE_ITEMS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="mt-2 text-xs text-text-secondary">
                 {SCHEDULE_MODE_ITEMS.find((item) => item.value === draft.scheduleMode)?.description}
               </div>
@@ -3606,46 +3610,50 @@ export default function EventStudioForm({
                             {isExpanded ? (
                               <div className="mt-4 grid gap-3 lg:grid-cols-3">
                                 <Field label="演出形式">
-                                  <select
-                                    value={normalizeActType(slot.actType)}
-                                    onChange={(event) =>
-                                      mutateTimetableSlot(slot.id, (currentSlot) =>
-                                        normalizeTimetableSlotActType(currentSlot, normalizeActType(event.target.value))
-                                      )
-                                    }
-                                    className={selectInputClassName}
-                                  >
-                                    {EVENT_STUDIO_ACT_TYPES.map((item) => (
-                                      <option key={item.value} value={item.value}>
-                                        {item.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <div className="admin-studio-select-shell">
+                                    <select
+                                      value={normalizeActType(slot.actType)}
+                                      onChange={(event) =>
+                                        mutateTimetableSlot(slot.id, (currentSlot) =>
+                                          normalizeTimetableSlotActType(currentSlot, normalizeActType(event.target.value))
+                                        )
+                                      }
+                                      className={selectInputClassName}
+                                    >
+                                      {EVENT_STUDIO_ACT_TYPES.map((item) => (
+                                        <option key={item.value} value={item.value}>
+                                          {item.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </Field>
 
                                 <Field label="演出日">
-                                  <select
-                                    value={slot.eventDayId}
-                                    onChange={(event) => {
-                                      const selectedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value);
-                                      if (!selectedDay) return;
-                                      mutateTimetableSlot(slot.id, (currentSlot) => ({
-                                        ...currentSlot,
-                                        eventDayId: selectedDay.eventDayId,
-                                        weekIndex: selectedDay.weekIndex,
-                                        dayIndexInWeek: selectedDay.dayIndexInWeek,
-                                        overallDayIndex: selectedDay.overallDayIndex,
-                                        localDate: selectedDay.date,
-                                      }));
-                                    }}
-                                    className={selectInputClassName}
-                                  >
-                                    {draft.eventDays.map((day) => (
-                                      <option key={day.id} value={day.eventDayId}>
-                                        {formatEventDayLabel(day)}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <div className="admin-studio-select-shell">
+                                    <select
+                                      value={slot.eventDayId}
+                                      onChange={(event) => {
+                                        const selectedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value);
+                                        if (!selectedDay) return;
+                                        mutateTimetableSlot(slot.id, (currentSlot) => ({
+                                          ...currentSlot,
+                                          eventDayId: selectedDay.eventDayId,
+                                          weekIndex: selectedDay.weekIndex,
+                                          dayIndexInWeek: selectedDay.dayIndexInWeek,
+                                          overallDayIndex: selectedDay.overallDayIndex,
+                                          localDate: selectedDay.date,
+                                        }));
+                                      }}
+                                      className={selectInputClassName}
+                                    >
+                                      {draft.eventDays.map((day) => (
+                                        <option key={day.id} value={day.eventDayId}>
+                                          {formatEventDayLabel(day)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </Field>
 
                                 <Field label="舞台名">
@@ -3654,7 +3662,7 @@ export default function EventStudioForm({
                                     onChange={(event) =>
                                       mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, stageName: event.target.value }))
                                     }
-                                    className={selectInputClassName}
+                                    className={textInputClassName}
                                     placeholder="Main Stage"
                                   />
                                 </Field>
@@ -3724,7 +3732,7 @@ export default function EventStudioForm({
                                     onChange={(event) =>
                                       mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, startTime: event.target.value }))
                                     }
-                                    className={selectInputClassName}
+                                    className={textInputClassName}
                                   />
                                 </Field>
 
@@ -3744,35 +3752,39 @@ export default function EventStudioForm({
                                 </Field>
 
                                 <Field label="开始跨天">
-                                  <select
-                                    value={String(Math.max(0, Math.floor(Number(slot.startDayOffset) || 0)))}
-                                    onChange={(event) =>
-                                      mutateTimetableSlot(slot.id, (currentSlot) => ({
-                                        ...currentSlot,
-                                        startDayOffset: Number(event.target.value) || 0,
-                                      }))
-                                    }
-                                    className={textInputClassName}
-                                  >
-                                    <option value="0">同日</option>
-                                    <option value="1">次日</option>
-                                  </select>
+                                  <div className="admin-studio-select-shell">
+                                    <select
+                                      value={String(Math.max(0, Math.floor(Number(slot.startDayOffset) || 0)))}
+                                      onChange={(event) =>
+                                        mutateTimetableSlot(slot.id, (currentSlot) => ({
+                                          ...currentSlot,
+                                          startDayOffset: Number(event.target.value) || 0,
+                                        }))
+                                      }
+                                      className={selectInputClassName}
+                                    >
+                                      <option value="0">同日</option>
+                                      <option value="1">次日</option>
+                                    </select>
+                                  </div>
                                 </Field>
 
                                 <Field label="结束跨天">
-                                  <select
-                                    value={String(Math.max(0, Math.floor(Number(slot.endDayOffset) || 0)))}
-                                    onChange={(event) =>
-                                      mutateTimetableSlot(slot.id, (currentSlot) => ({
-                                        ...currentSlot,
-                                        endDayOffset: Number(event.target.value) || 0,
-                                      }))
-                                    }
-                                    className={textInputClassName}
-                                  >
-                                    <option value="0">同日</option>
-                                    <option value="1">次日</option>
-                                  </select>
+                                  <div className="admin-studio-select-shell">
+                                    <select
+                                      value={String(Math.max(0, Math.floor(Number(slot.endDayOffset) || 0)))}
+                                      onChange={(event) =>
+                                        mutateTimetableSlot(slot.id, (currentSlot) => ({
+                                          ...currentSlot,
+                                          endDayOffset: Number(event.target.value) || 0,
+                                        }))
+                                      }
+                                      className={selectInputClassName}
+                                    >
+                                      <option value="0">同日</option>
+                                      <option value="1">次日</option>
+                                    </select>
+                                  </div>
                                 </Field>
 
                                 <div className="admin-event-slot-editor-actions lg:col-span-3">
