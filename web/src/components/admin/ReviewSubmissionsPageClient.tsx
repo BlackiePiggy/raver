@@ -612,12 +612,12 @@ export default function ReviewSubmissionsPageClient() {
         </div>
       )}
 
-      {/* ── 3-column main layout ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr_360px] lg:items-start">
+      {/* ── Review workspace layout ── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
 
         {/* ── Column 1: Queue ── */}
-        <div className="flex flex-col gap-3">
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 lg:sticky lg:top-6">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm lg:flex lg:max-h-[calc(100vh-140px)] lg:flex-col">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <h2 className="text-sm font-semibold text-gray-900">审核队列</h2>
               <button type="button" onClick={() => void loadList()} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors">
@@ -657,7 +657,7 @@ export default function ReviewSubmissionsPageClient() {
             </div>
 
             {/* List */}
-            <div className="max-h-[calc(100vh-400px)] overflow-y-auto px-3 pb-3">
+            <div className="max-h-[calc(100vh-400px)] overflow-y-auto px-3 pb-3 lg:min-h-0 lg:max-h-none lg:flex-1">
               {loadingList ? (
                 <div className="py-16 text-center text-xs text-gray-400">加载中…</div>
               ) : filteredItems.length === 0 ? (
@@ -708,176 +708,172 @@ export default function ReviewSubmissionsPageClient() {
           </div>
         </div>
 
-        {/* ── Column 2: Detail ── */}
-        <div>
-          {loadingDetail ? (
-            <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white py-32 shadow-sm">
-              <div className="text-sm text-gray-400">正在加载提交详情…</div>
-            </div>
-          ) : !selectedDetail ? (
-            <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white py-32 shadow-sm">
-              <div className="text-sm text-gray-400">请选择左侧的一条提交查看详情。</div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 className="text-xl font-bold text-gray-900 leading-tight">{selectedDetail.title}</h2>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <EntityChip type={selectedDetail.entityType} />
-                  <StatusBadge status={selectedDetail.status} />
-                  <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">版本 {selectedDetail.versions?.[0]?.version || 1}</span>
+        <div className="lg:max-h-[calc(100vh-140px)] lg:overflow-y-auto lg:pr-1">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+            {/* ── Column 2: Detail ── */}
+            <div>
+              {loadingDetail ? (
+                <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white py-32 shadow-sm">
+                  <div className="text-sm text-gray-400">正在加载提交详情…</div>
                 </div>
-
-                {/* Meta grid */}
-                <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2.5 border-t border-gray-100 pt-4 text-sm md:grid-cols-3">
-                  {[
-                    ['当前状态', <StatusBadge key="s" status={selectedDetail.status} />],
-                    ['提交人', selectedDetail.submitter?.displayName || selectedDetail.submitter?.username || selectedDetail.submitterId],
-                    ['提交时间', formatDateTime(selectedDetail.createdAt)],
-                    ['更新时间', formatDateTime(selectedDetail.updatedAt)],
-                    ['审核时间', formatDateTime(selectedDetail.reviewedAt)],
-                    ['优先级', '中'],
-                  ].map(([label, value]) => (
-                    <div key={String(label)}>
-                      <div className="text-xs text-gray-400 mb-0.5">{label}</div>
-                      <div className="font-medium text-gray-800 text-sm">{value}</div>
+              ) : !selectedDetail ? (
+                <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white py-32 shadow-sm">
+                  <div className="text-sm text-gray-400">请选择左侧的一条提交查看详情。</div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Header */}
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <h2 className="text-xl font-bold text-gray-900 leading-tight">{selectedDetail.title}</h2>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      <EntityChip type={selectedDetail.entityType} />
+                      <StatusBadge status={selectedDetail.status} />
+                      <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">版本 {selectedDetail.versions?.[0]?.version || 1}</span>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Auto review signals */}
-              {autoReviewInsights.signals.length > 0 && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-                  <div className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">自动审查提示</div>
-                  <ul className="space-y-1.5">
-                    {autoReviewInsights.signals.map((s) => (
-                      <li key={s} className="flex items-start gap-2 text-sm text-amber-800">
-                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Submission summary */}
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">提交摘要</div>
-                <div className="rounded-lg bg-gray-50 border border-gray-100 px-4 py-3 text-sm leading-relaxed text-gray-600">
-                  {(() => {
-                    const p = (selectedDetail.payload || {}) as Record<string, unknown>;
-                    return [p.changeSummaryText, p.description, p.bio, p.summary].map((v) => typeof v === 'string' ? v.trim() : '').find(Boolean) || '当前版本先展示提交摘要、payload 预览和版本历史，逐字段 diff 会在下一轮继续补齐。';
-                  })()}
-                </div>
-              </div>
-
-              {/* Version history */}
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">版本历史</div>
-                <div className="space-y-2">
-                  {(selectedDetail.versions || []).map((version, idx) => (
-                    <div key={version.id} className={`rounded-lg border p-3 ${idx === 0 ? 'border-gray-900 bg-gray-50' : 'border-gray-100 bg-white'}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-900">版本 {version.version}</span>
-                          {idx === 0 && <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-medium text-white">当前版本</span>}
+                    <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2.5 border-t border-gray-100 pt-4 text-sm md:grid-cols-3">
+                      {[
+                        ['当前状态', <StatusBadge key="s" status={selectedDetail.status} />],
+                        ['提交人', selectedDetail.submitter?.displayName || selectedDetail.submitter?.username || selectedDetail.submitterId],
+                        ['提交时间', formatDateTime(selectedDetail.createdAt)],
+                        ['更新时间', formatDateTime(selectedDetail.updatedAt)],
+                        ['审核时间', formatDateTime(selectedDetail.reviewedAt)],
+                        ['优先级', '中'],
+                      ].map(([label, value]) => (
+                        <div key={String(label)}>
+                          <div className="text-xs text-gray-400 mb-0.5">{label}</div>
+                          <div className="font-medium text-gray-800 text-sm">{value}</div>
                         </div>
-                        {idx === 0 && (
-                          <button type="button" className="rounded-md border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">查看详情</button>
-                        )}
-                      </div>
-                      <div className="mt-1 text-xs text-gray-400">
-                        提交人：{version.submittedBy || selectedDetail.submitter?.displayName || selectedDetail.submitterId} · {formatDateTime(version.submittedAt)}
-                      </div>
-                      {version.changeNote && <div className="mt-1.5 text-xs text-gray-500">{version.changeNote}</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Review log / audit trail */}
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">审核记录</div>
-                <div className="space-y-3">
-                  {[
-                    { actor: '系统', action: '提交创建', detail: `版本 1 提交创建`, time: selectedDetail.createdAt, color: 'bg-emerald-500' },
-                    { actor: '提交人', action: '提交更新', detail: '更新了基础信息和结构化数据', time: selectedDetail.updatedAt, color: 'bg-blue-500' },
-                  ].filter((e) => e.time).map((event, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className={`h-2.5 w-2.5 flex-shrink-0 rounded-full mt-1 ${event.color}`} />
-                        {i < 1 && <div className="mt-1 w-px flex-1 bg-gray-100" />}
-                      </div>
-                      <div className="pb-3 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-gray-700">{event.actor}</span>
-                          <span className="text-xs font-medium text-gray-900">{event.action}</span>
-                          <span className="ml-auto text-[10px] text-gray-400">{formatDateTime(event.time)}</span>
-                        </div>
-                        <div className="mt-0.5 text-xs text-gray-500">{event.detail}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Semantic diff + version diff */}
-              {(semanticSections.length > 0 || versionDiffRows.length > 0) && (
-                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">变更 Diff</div>
-                    <div className="flex items-center gap-2 text-[10px]">
-                      {diffStats.added > 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700">+{diffStats.added} 新增</span>}
-                      {diffStats.removed > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700">-{diffStats.removed} 移除</span>}
-                      {diffStats.changed > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">~{diffStats.changed} 变更</span>}
+                      ))}
                     </div>
                   </div>
-                  {semanticSections.length > 0 && (
-                    <div className="mb-4 space-y-3">
-                      {semanticSections.map((section) => (
-                        <div key={section.title} className="rounded-lg bg-gray-50 border border-gray-100 p-3">
-                          <div className="text-xs font-semibold text-gray-700 mb-1.5">{section.title}</div>
-                          <ul className="space-y-1">
-                            {section.rows.map((row) => <li key={row} className="text-xs text-gray-500">{row}</li>)}
-                          </ul>
+
+                  {autoReviewInsights.signals.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                      <div className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">自动审查提示</div>
+                      <ul className="space-y-1.5">
+                        {autoReviewInsights.signals.map((s) => (
+                          <li key={s} className="flex items-start gap-2 text-sm text-amber-800">
+                            <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">提交摘要</div>
+                    <div className="rounded-lg bg-gray-50 border border-gray-100 px-4 py-3 text-sm leading-relaxed text-gray-600">
+                      {(() => {
+                        const p = (selectedDetail.payload || {}) as Record<string, unknown>;
+                        return [p.changeSummaryText, p.description, p.bio, p.summary].map((v) => typeof v === 'string' ? v.trim() : '').find(Boolean) || '当前版本先展示提交摘要、payload 预览和版本历史，逐字段 diff 会在下一轮继续补齐。';
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">版本历史</div>
+                    <div className="space-y-2">
+                      {(selectedDetail.versions || []).map((version, idx) => (
+                        <div key={version.id} className={`rounded-lg border p-3 ${idx === 0 ? 'border-gray-900 bg-gray-50' : 'border-gray-100 bg-white'}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-gray-900">版本 {version.version}</span>
+                              {idx === 0 && <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-medium text-white">当前版本</span>}
+                            </div>
+                            {idx === 0 && (
+                              <button type="button" className="rounded-md border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">查看详情</button>
+                            )}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-400">
+                            提交人：{version.submittedBy || selectedDetail.submitter?.displayName || selectedDetail.submitterId} · {formatDateTime(version.submittedAt)}
+                          </div>
+                          {version.changeNote && <div className="mt-1.5 text-xs text-gray-500">{version.changeNote}</div>}
                         </div>
                       ))}
                     </div>
-                  )}
-                  {!previousVersion ? (
-                    <div className="text-xs text-gray-400">当前只有首个版本，暂时没有可对比的上一版 payload。</div>
-                  ) : versionDiffRows.length > 0 && (
-                    <div className="space-y-2">
-                      {versionDiffRows.slice(0, 8).map((row) => (
-                        <div key={row.key} className="rounded-lg border border-gray-100 bg-white p-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs font-semibold text-gray-800">{formatLabelFromKey(row.key)}</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${row.kind === 'added' ? 'bg-emerald-100 text-emerald-700' : row.kind === 'removed' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{row.kind === 'added' ? '新增' : row.kind === 'removed' ? '移除' : '变更'}</span>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">审核记录</div>
+                    <div className="space-y-3">
+                      {[
+                        { actor: '系统', action: '提交创建', detail: `版本 1 提交创建`, time: selectedDetail.createdAt, color: 'bg-emerald-500' },
+                        { actor: '提交人', action: '提交更新', detail: '更新了基础信息和结构化数据', time: selectedDetail.updatedAt, color: 'bg-blue-500' },
+                      ].filter((e) => e.time).map((event, i) => (
+                        <div key={i} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className={`h-2.5 w-2.5 flex-shrink-0 rounded-full mt-1 ${event.color}`} />
+                            {i < 1 && <div className="mt-1 w-px flex-1 bg-gray-100" />}
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-md bg-red-50 border border-red-100 px-2.5 py-2 text-[11px] text-red-600">
-                              <div className="text-[9px] uppercase tracking-wider text-red-400 mb-1">Before</div>
-                              {summarizePrimitive(row.before)}
+                          <div className="pb-3 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-gray-700">{event.actor}</span>
+                              <span className="text-xs font-medium text-gray-900">{event.action}</span>
+                              <span className="ml-auto text-[10px] text-gray-400">{formatDateTime(event.time)}</span>
                             </div>
-                            <div className="rounded-md bg-emerald-50 border border-emerald-100 px-2.5 py-2 text-[11px] text-emerald-600">
-                              <div className="text-[9px] uppercase tracking-wider text-emerald-400 mb-1">After</div>
-                              {summarizePrimitive(row.after)}
-                            </div>
+                            <div className="mt-0.5 text-xs text-gray-500">{event.detail}</div>
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  {(semanticSections.length > 0 || versionDiffRows.length > 0) && (
+                    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">变更 Diff</div>
+                        <div className="flex items-center gap-2 text-[10px]">
+                          {diffStats.added > 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700">+{diffStats.added} 新增</span>}
+                          {diffStats.removed > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700">-{diffStats.removed} 移除</span>}
+                          {diffStats.changed > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">~{diffStats.changed} 变更</span>}
+                        </div>
+                      </div>
+                      {semanticSections.length > 0 && (
+                        <div className="mb-4 space-y-3">
+                          {semanticSections.map((section) => (
+                            <div key={section.title} className="rounded-lg bg-gray-50 border border-gray-100 p-3">
+                              <div className="text-xs font-semibold text-gray-700 mb-1.5">{section.title}</div>
+                              <ul className="space-y-1">
+                                {section.rows.map((row) => <li key={row} className="text-xs text-gray-500">{row}</li>)}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!previousVersion ? (
+                        <div className="text-xs text-gray-400">当前只有首个版本，暂时没有可对比的上一版 payload。</div>
+                      ) : versionDiffRows.length > 0 && (
+                        <div className="space-y-2">
+                          {versionDiffRows.slice(0, 8).map((row) => (
+                            <div key={row.key} className="rounded-lg border border-gray-100 bg-white p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-semibold text-gray-800">{formatLabelFromKey(row.key)}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${row.kind === 'added' ? 'bg-emerald-100 text-emerald-700' : row.kind === 'removed' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{row.kind === 'added' ? '新增' : row.kind === 'removed' ? '移除' : '变更'}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="rounded-md bg-red-50 border border-red-100 px-2.5 py-2 text-[11px] text-red-600">
+                                  <div className="text-[9px] uppercase tracking-wider text-red-400 mb-1">Before</div>
+                                  {summarizePrimitive(row.before)}
+                                </div>
+                                <div className="rounded-md bg-emerald-50 border border-emerald-100 px-2.5 py-2 text-[11px] text-emerald-600">
+                                  <div className="text-[9px] uppercase tracking-wider text-emerald-400 mb-1">After</div>
+                                  {summarizePrimitive(row.after)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* ── Column 3: Preview + Actions ── */}
-        <div className="flex flex-col gap-4">
+            {/* ── Column 3: Preview + Actions ── */}
+            <div className="flex flex-col gap-4">
           {/* Preview panel */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="border-b border-gray-100 px-4 py-3">
@@ -891,7 +887,7 @@ export default function ReviewSubmissionsPageClient() {
               </div>
             </div>
 
-            <div className="p-4 max-h-[400px] overflow-y-auto">
+            <div className="p-4">
               {!selectedDetail ? (
                 <div className="py-8 text-center text-xs text-gray-400">请先选择一条提交</div>
               ) : rightTab === 'basic' ? (
@@ -1070,8 +1066,10 @@ export default function ReviewSubmissionsPageClient() {
                 <div className="mt-1 text-right text-[10px] text-gray-400">{decisionReason.length}/500</div>
               </div>
             </div>
+            </div>
           </div>
         </div>
+      </div>
 
       </div>
     </AdminContentLayout>
