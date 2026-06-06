@@ -57,8 +57,11 @@ export const SECTION_OPTIONS: Array<{
   helper: string;
 }> = [
   { key: 'event_news', label: '活动资讯通知', helper: '面向关注活动用户的资讯更新通知' },
+  { key: 'event_release', label: '活动发布通知', helper: '活动入库或发布后的统一通知记录' },
   { key: 'followed_dj_news', label: 'DJ 资讯通知', helper: '面向关注 DJ 用户的资讯更新通知' },
+  { key: 'followed_dj_event', label: 'DJ 关联活动通知', helper: '面向关注 DJ 用户的活动发布提醒' },
   { key: 'followed_brand_news', label: '品牌资讯通知', helper: '面向关注品牌用户的资讯更新通知' },
+  { key: 'followed_brand_event', label: '品牌关联活动通知', helper: '面向关注品牌用户的活动发布提醒' },
   { key: 'major_news_broadcast', label: '重大资讯广播', helper: '面向更广泛受众的重大消息广播' },
   { key: 'event_schedule', label: '活动日程提醒', helper: '倒计时、日报、路线 DJ 提醒等时程类通知' },
   { key: 'chat_and_community', label: '聊天与社区', helper: '聊天消息、互动提醒等社区通知' },

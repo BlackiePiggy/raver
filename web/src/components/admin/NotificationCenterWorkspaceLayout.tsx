@@ -91,18 +91,19 @@ export default function NotificationCenterWorkspaceLayout({
       actions={actions}
     >
       <section className="space-y-6">
-        <nav className="rounded-[28px] border border-[#e7ece8] bg-white p-3">
-          <div className="flex flex-wrap gap-2">
+        {/* 优化Tab栏样式：对齐UI，间距、圆角、排版统一 */}
+        <nav className="rounded-[28px] border border-[#e7ece8] bg-white p-4">
+          <div className="flex flex-wrap gap-3">
             {NAV_ITEMS.map((item) => {
               const active = isItemActive(pathname, item.href, item.exact);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-full px-5 py-2.5 text-sm font-medium transition-all ${
                     active
-                      ? 'bg-[#071110] text-white'
-                      : 'border border-[#d9e1de] bg-[#fbfcfb] text-[#071110] hover:bg-white'
+                      ? 'bg-[#071110] text-white shadow-sm'
+                      : 'border border-[#d9e1de] bg-[#fbfcfb] text-[#071110] hover:bg-white hover:border-[#071110]/20'
                   }`}
                 >
                   {item.label}
