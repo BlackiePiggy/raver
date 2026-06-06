@@ -912,6 +912,8 @@ export default function EventStudioAIImportDock({
   const [clockNow, setClockNow] = useState(() => Date.now());
   const runTokenRef = useRef(0);
   const cancelRequestedRef = useRef(false);
+  const timetableDaySelectorRef = useRef<HTMLDivElement | null>(null);
+  const timetableStageSelectorRef = useRef<HTMLDivElement | null>(null);
 
   const posterPreviewCount = useMemo(
     () => draft.imageZones.poster.length + draft.imageZones.cover.length,
@@ -996,6 +998,32 @@ export default function EventStudioAIImportDock({
     if (previewAssetIndex < previewAssets.length) return;
     setPreviewAssetIndex(null);
   }, [previewAssetIndex, previewAssets.length]);
+
+  const timetablePanelActive = panel?.kind === 'timetable';
+  const selectedTimetableTargetDayId = timetablePanelActive ? panel.targetEventDayId : null;
+  const selectedTimetableTargetStageName = timetablePanelActive ? panel.targetStageName : null;
+
+  useEffect(() => {
+    if (!timetablePanelActive || !timetableDaySelectorRef.current) return;
+    const container = timetableDaySelectorRef.current;
+    const activeChip = container.querySelector<HTMLElement>('[data-active="true"]');
+    if (!activeChip) return;
+    container.scrollTo({
+      left: activeChip.offsetLeft,
+      behavior: 'smooth',
+    });
+  }, [selectedTimetableTargetDayId, timetablePanelActive]);
+
+  useEffect(() => {
+    if (!timetablePanelActive || !timetableStageSelectorRef.current) return;
+    const container = timetableStageSelectorRef.current;
+    const activeChip = container.querySelector<HTMLElement>('[data-active="true"]');
+    if (!activeChip) return;
+    container.scrollTo({
+      left: activeChip.offsetLeft,
+      behavior: 'smooth',
+    });
+  }, [selectedTimetableTargetStageName, timetablePanelActive]);
 
   useEffect(() => {
     if (panel?.kind === 'timetable') return;
@@ -3215,13 +3243,17 @@ export default function EventStudioAIImportDock({
                           清理空白项
                         </button>
                       </div>
-                      <div className="mt-2.5 grid gap-3">
-                        <label className="space-y-1 text-xs text-black/45">
+                      <div className="mt-2.5 grid min-w-0 gap-3">
+                        <label className="block min-w-0 space-y-1 text-xs text-black/45">
                           <span>目标活动日</span>
-                          <div className="flex gap-2 overflow-x-auto pb-1">
+                          <div
+                            ref={timetableDaySelectorRef}
+                            className="admin-shell-scrollbar flex w-full min-w-0 max-w-full gap-2 overflow-x-auto overflow-y-hidden pb-1"
+                          >
                             <button
                               type="button"
                               onClick={() => updatePanel({ targetEventDayId: ALL_EVENT_DAYS_VALUE })}
+                              data-active={panel.targetEventDayId === ALL_EVENT_DAYS_VALUE ? 'true' : 'false'}
                               className={`${aiCompactSelectorChipClass} ${
                                 panel.targetEventDayId === ALL_EVENT_DAYS_VALUE
                                   ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
@@ -3237,6 +3269,7 @@ export default function EventStudioAIImportDock({
                                   key={day.eventDayId}
                                   type="button"
                                   onClick={() => updatePanel({ targetEventDayId: day.eventDayId })}
+                                  data-active={active ? 'true' : 'false'}
                                   className={`${aiCompactSelectorChipClass} ${
                                     active
                                       ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
@@ -3249,12 +3282,16 @@ export default function EventStudioAIImportDock({
                             })}
                           </div>
                         </label>
-                        <label className="space-y-1 text-xs text-black/45">
+                        <label className="block min-w-0 space-y-1 text-xs text-black/45">
                           <span>目标舞台</span>
-                          <div className="flex gap-2 overflow-x-auto pb-1">
+                          <div
+                            ref={timetableStageSelectorRef}
+                            className="admin-shell-scrollbar flex w-full min-w-0 max-w-full gap-2 overflow-x-auto overflow-y-hidden pb-1"
+                          >
                             <button
                               type="button"
                               onClick={() => updatePanel({ targetStageName: ALL_STAGES_VALUE })}
+                              data-active={panel.targetStageName === ALL_STAGES_VALUE ? 'true' : 'false'}
                               className={`${aiCompactSelectorChipClass} ${
                                 panel.targetStageName === ALL_STAGES_VALUE
                                   ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
@@ -3270,6 +3307,7 @@ export default function EventStudioAIImportDock({
                                   key={stage}
                                   type="button"
                                   onClick={() => updatePanel({ targetStageName: stage })}
+                                  data-active={active ? 'true' : 'false'}
                                   className={`${aiCompactSelectorChipClass} ${
                                     active
                                       ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
