@@ -828,6 +828,18 @@ const getTimetableSlotPerformerRows = (
   ];
 };
 
+const timetableSlotHasAnyValue = (slot: EventStudioTimetableSlotDraft): boolean =>
+  [
+    slot.memberNamesText,
+    slot.djId,
+    slot.actType,
+    slot.stageName,
+    slot.startTime,
+    slot.endTime,
+    slot.eventDayId,
+    slot.localDate,
+  ].some((value) => String(value || '').trim().length > 0);
+
 const compactTimetableSlot = (slot: EventStudioTimetableSlotDraft): EventStudioTimetableSlotDraft | null => {
   const names = splitPerformerNames(slot.memberNamesText, slot.actType);
   if (!names.length) return null;
@@ -2325,6 +2337,333 @@ export default function EventStudioForm({
     setSelectedTimetableSlotIds((current) => current.filter((id) => !visibleIds.has(id)));
   };
 
+  const deleteAllTimetableSlots = () => {
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      timetableSlots: [],
+    }));
+    setSelectedTimetableSlotIds([]);
+    setTimetableSelectionMode(false);
+    setFocusedTimetableSlotId(null);
+    setConfirmedTimetableSlotIds([]);
+  };
+
+  const removeTimetableSlot = (slotId: string) => {
+    updateScheduleDerivedDraft((current) => ({
+      ...current,
+      timetableSlots: current.timetableSlots
+        .filter((currentSlot) => currentSlot.id !== slotId)
+        .map((currentSlot, index) => ({
+          ...currentSlot,
+          sortOrder: index + 1,
+        })),
+    }));
+  };
+
+  const renderTimetableSlotEditorCard = (
+    slot: EventStudioTimetableSlotDraft,
+    options?: {
+      dayLabel?: string;
+      showOutOfRangeBadge?: boolean;
+    }
+  ) => {
+    const performerCount = actTypePerformerCount(slot.actType);
+    const performerNames = getTimetableSlotPerformerNames(slot);
+    const actBadge = collaborativeActBadgeLabel(slot.actType);
+    const isConfirmed = confirmedTimetableSlotIds.includes(slot.id);
+    const isExpanded = focusedTimetableSlotId === slot.id || !isConfirmed;
+    const boundCount = Array.from({ length: performerCount }, (_, index) => getTimetableSlotBoundDjId(slot, index)).filter(Boolean).length;
+    const dayLabel = options?.dayLabel || slot.localDate || selectedTimetableDay?.date || '未设置日期';
+
+    return (
+      <div
+        id={`timetable-slot-editor-${slot.id}`}
+        key={slot.id}
+        className={`admin-event-slot-editor-card rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''} ${isConfirmed ? 'is-confirmed' : 'is-draft'} ${isExpanded ? 'is-expanded' : 'is-collapsed'} ${options?.showOutOfRangeBadge ? 'is-out-of-range' : ''}`}
+      >
+        <div className="admin-event-slot-editor-summary">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <strong>{performerNames.filter(Boolean).join(' / ') || '未填写艺人'}</strong>
+              {actBadge ? <span className="admin-event-collab-badge">{actBadge}</span> : null}
+              {options?.showOutOfRangeBadge ? <span className="admin-event-slot-editor-warning-badge">超出活动日期</span> : null}
+            </div>
+            <div className="admin-event-slot-editor-summary-meta">
+              <span>{formatTimetableSlotRange(slot)}</span>
+              <span>{slot.stageName || '未命名舞台'}</span>
+              <span>{dayLabel}</span>
+              <span>{normalizeActType(slot.actType).toUpperCase()}</span>
+            </div>
+          </div>
+          <div className="admin-event-slot-editor-summary-actions">
+            <span
+              className={`admin-event-slot-editor-status-badge ${
+                isConfirmed ? 'is-confirmed' : boundCount === performerCount && performerCount > 0 ? 'is-bound' : 'is-pending'
+              }`}
+            >
+              {isConfirmed ? '已确认' : `${boundCount}/${performerCount} 已绑定`}
+            </span>
+            {isExpanded ? null : (
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => focusTimetableSlot(slot.id)}
+                  className="admin-studio-button-secondary px-4 py-2 text-sm"
+                >
+                  编辑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeTimetableSlot(slot.id)}
+                  className="admin-studio-button-danger px-4 py-2 text-sm"
+                >
+                  删除
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="admin-event-slot-editor-summary-performers">
+          {performerNames.map((performerName, performerIndex) => {
+            const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
+            const collapsedIdLabel =
+              normalizeActType(slot.actType) === 'solo'
+                ? boundDjId || '未绑定 DJ'
+                : `成员 ${performerIndex + 1} · ${boundDjId || '未绑定'}`;
+            return (
+              <div
+                key={`${slot.id}-summary-${performerIndex}`}
+                className={`admin-event-slot-editor-summary-performer ${isExpanded ? '' : 'is-id-only'}`}
+              >
+                {isExpanded ? (
+                  <span className="admin-event-slot-editor-summary-name">
+                    {performerName || `成员 ${performerIndex + 1}`}
+                  </span>
+                ) : null}
+                <span className={`admin-event-slot-editor-summary-inline-id ${boundDjId ? 'is-bound' : 'is-empty'}`}>
+                  {isExpanded ? boundDjId || '未绑定' : collapsedIdLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {isExpanded ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <Field label="演出形式">
+              <div className="admin-studio-select-shell">
+                <select
+                  value={normalizeActType(slot.actType)}
+                  onChange={(event) =>
+                    mutateTimetableSlot(slot.id, (currentSlot) =>
+                      normalizeTimetableSlotActType(currentSlot, normalizeActType(event.target.value))
+                    )
+                  }
+                  className={selectInputClassName}
+                >
+                  {EVENT_STUDIO_ACT_TYPES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </Field>
+
+            <Field label="演出日">
+              <div className="admin-studio-select-shell">
+                <select
+                  value={slot.eventDayId}
+                  onChange={(event) => {
+                    const selectedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value);
+                    if (!selectedDay) return;
+                    mutateTimetableSlot(slot.id, (currentSlot) => ({
+                      ...currentSlot,
+                      eventDayId: selectedDay.eventDayId,
+                      weekIndex: selectedDay.weekIndex,
+                      dayIndexInWeek: selectedDay.dayIndexInWeek,
+                      overallDayIndex: selectedDay.overallDayIndex,
+                      localDate: selectedDay.date,
+                    }));
+                  }}
+                  className={selectInputClassName}
+                >
+                  {draft.eventDays.map((day) => (
+                    <option key={day.id} value={day.eventDayId}>
+                      {formatEventDayLabel(day)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </Field>
+
+            <Field label="舞台名">
+              <input
+                value={slot.stageName}
+                onChange={(event) =>
+                  mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, stageName: event.target.value }))
+                }
+                className={textInputClassName}
+                placeholder="Main Stage"
+              />
+            </Field>
+
+            <div className="lg:col-span-3 grid gap-3">
+              {Array.from({ length: performerCount }).map((_, performerIndex) => {
+                const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
+                return (
+                  <div key={`${slot.id}-member-${performerIndex}`} className="admin-event-slot-binding-panel">
+                    <div className="admin-event-slot-binding-panel-head">
+                      <div>
+                        <span>{normalizeActType(slot.actType) === 'solo' ? 'DJ / 艺人名称' : `成员 ${performerIndex + 1}`}</span>
+                        <b>{boundDjId ? `已绑定 ${boundDjId}` : '尚未绑定库内 DJ'}</b>
+                      </div>
+                    </div>
+                    <div className="admin-event-slot-binding-row">
+                      <input
+                        value={performerNames[performerIndex] || ''}
+                        onChange={(event) =>
+                          mutateTimetableSlot(slot.id, (currentSlot) => {
+                            const names = getTimetableSlotPerformerNames(currentSlot);
+                            names[performerIndex] = event.target.value;
+                            return {
+                              ...currentSlot,
+                              memberNamesText: names.filter(Boolean).join(' / '),
+                            };
+                          })
+                        }
+                        className={textInputClassName}
+                        placeholder={normalizeActType(slot.actType) === 'solo' ? '输入艺人名称' : `成员 ${performerIndex + 1}`}
+                      />
+                    </div>
+                    <EntityBindingField
+                      kind="dj"
+                      mode="single"
+                      seedQuery={performerNames[performerIndex] || ''}
+                      items={
+                        boundDjId
+                          ? [
+                              {
+                                id: boundDjId,
+                                name: performerNames[performerIndex] || boundDjId,
+                                subtitle: boundDjId,
+                                imageUrl: null,
+                              },
+                            ]
+                          : []
+                      }
+                      title="Bound DJ"
+                      emptyLabel="Search and bind one DJ from the library."
+                      onAdd={(value) =>
+                        updateTimetableSlotPerformerBinding(slot.id, performerIndex, {
+                          djId: value.id,
+                        })
+                      }
+                      onRemove={() => updateTimetableSlotPerformerBinding(slot.id, performerIndex, { djId: null })}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <Field label="开始时间">
+              <input
+                type="time"
+                value={slot.startTime}
+                onChange={(event) =>
+                  mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, startTime: event.target.value }))
+                }
+                className={textInputClassName}
+              />
+            </Field>
+
+            <Field label="结束时间">
+              <input
+                type="time"
+                value={slot.endTime}
+                onChange={(event) =>
+                  mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, endTime: event.target.value }))
+                }
+                className={textInputClassName}
+              />
+            </Field>
+
+            <Field label="主 DJ ID（只读）">
+              <input value={slot.djId} readOnly className={textInputClassName} placeholder="会根据成员绑定自动生成" />
+            </Field>
+
+            <Field label="开始跨天">
+              <div className="admin-studio-select-shell">
+                <select
+                  value={String(Math.max(0, Math.floor(Number(slot.startDayOffset) || 0)))}
+                  onChange={(event) =>
+                    mutateTimetableSlot(slot.id, (currentSlot) => ({
+                      ...currentSlot,
+                      startDayOffset: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className={selectInputClassName}
+                >
+                  <option value="0">同日</option>
+                  <option value="1">次日</option>
+                </select>
+              </div>
+            </Field>
+
+            <Field label="结束跨天">
+              <div className="admin-studio-select-shell">
+                <select
+                  value={String(Math.max(0, Math.floor(Number(slot.endDayOffset) || 0)))}
+                  onChange={(event) =>
+                    mutateTimetableSlot(slot.id, (currentSlot) => ({
+                      ...currentSlot,
+                      endDayOffset: Number(event.target.value) || 0,
+                    }))
+                  }
+                  className={selectInputClassName}
+                >
+                  <option value="0">同日</option>
+                  <option value="1">次日</option>
+                </select>
+              </div>
+            </Field>
+
+            <div className="admin-event-slot-editor-actions lg:col-span-3">
+              <div className="admin-event-slot-editor-actions-meta">
+                <span className={`admin-event-slot-editor-status-badge ${isConfirmed ? 'is-bound' : 'is-pending'}`}>
+                  {isConfirmed ? '已确认' : '待确认'}
+                </span>
+                <small>
+                  {options?.showOutOfRangeBadge
+                    ? '这条时间表当前不在活动日期范围内。请改到有效活动日，或直接删除后再提交。'
+                    : '确认后会折叠成摘要卡片，便于连续编辑多条 timetable。'}
+                </small>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => confirmTimetableSlot(slot)}
+                  disabled={!canConfirmTimetableSlot(slot)}
+                  className="admin-studio-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isConfirmed ? '重新确认' : '确认此条'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeTimetableSlot(slot.id)}
+                  className="admin-studio-button-danger px-4 py-3 text-sm"
+                >
+                  删除条目
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   const currentStepItem = EVENT_STUDIO_STEP_ITEMS[currentStep];
   const timetableWeeks = useMemo(() => {
     if (draft.weeks.length) return draft.weeks;
@@ -2348,6 +2687,32 @@ export default function EventStudioForm({
     [draft.eventDays, selectedTimetableWeekIndex]
   );
   const visibleTimetableDays = timetableDaysInSelectedWeek.length ? timetableDaysInSelectedWeek : draft.eventDays;
+  const validEventDayIdSet = useMemo(
+    () => new Set(draft.eventDays.map((day) => String(day.eventDayId || '').trim()).filter(Boolean)),
+    [draft.eventDays]
+  );
+  const validEventDayDateSet = useMemo(
+    () => new Set(draft.eventDays.map((day) => String(day.date || '').trim()).filter(Boolean)),
+    [draft.eventDays]
+  );
+  const outOfRangeTimetableSlots = useMemo(
+    () =>
+      draft.timetableSlots
+        .filter((slot) => {
+          if (!timetableSlotHasAnyValue(slot)) return false;
+          const eventDayId = String(slot.eventDayId || '').trim();
+          const localDate = String(slot.localDate || '').trim();
+          if (eventDayId && validEventDayIdSet.has(eventDayId)) return false;
+          if (localDate && validEventDayDateSet.has(localDate)) return false;
+          return Boolean(eventDayId || localDate);
+        })
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    [draft.timetableSlots, validEventDayDateSet, validEventDayIdSet]
+  );
+  const outOfRangeTimetableSlotIdSet = useMemo(
+    () => new Set(outOfRangeTimetableSlots.map((slot) => slot.id)),
+    [outOfRangeTimetableSlots]
+  );
   const visibleTimetableSlots = useMemo(() => {
     const timetableSortValue = (slot: EventStudioTimetableSlotDraft) => {
       const startMinutes = minutesFromTime(slot.startTime);
@@ -2359,13 +2724,14 @@ export default function EventStudioForm({
     };
     if (!selectedTimetableDay) return draft.timetableSlots;
     return draft.timetableSlots
+      .filter((slot) => !outOfRangeTimetableSlotIdSet.has(slot.id))
       .filter((slot) =>
         slot.eventDayId === selectedTimetableDay.eventDayId ||
         slot.localDate === selectedTimetableDay.date ||
         slot.overallDayIndex === selectedTimetableDay.overallDayIndex
       )
       .sort((a, b) => timetableSortValue(a) - timetableSortValue(b) || a.sortOrder - b.sortOrder);
-  }, [draft.dayRolloverHour, draft.timetableSlots, selectedTimetableDay]);
+  }, [draft.dayRolloverHour, draft.timetableSlots, outOfRangeTimetableSlotIdSet, selectedTimetableDay]);
   const visibleStageOrder = useMemo(() => {
     const seen = new Set<string>();
     const result: string[] = [];
@@ -3298,6 +3664,14 @@ export default function EventStudioForm({
                 >
                   新增时间块
                 </button>
+                <button
+                  type="button"
+                  onClick={deleteAllTimetableSlots}
+                  disabled={!draft.timetableSlots.length}
+                  className="admin-studio-button-danger px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  删除所有时间表
+                </button>
               </div>
             </div>
 
@@ -3506,6 +3880,7 @@ export default function EventStudioForm({
               <span>当前视图：{activeTimetableStageLabel}</span>
               <span>显示时区：{eventDisplayTimeZone}</span>
               <span>展示方式：Legacy timetable columns</span>
+              {outOfRangeTimetableSlots.length ? <span className="text-[#b54737]">异常时间表：{outOfRangeTimetableSlots.length} 条</span> : null}
             </div>
 
             {errors.timetableSlots ? <div className="mt-4 text-xs text-[#6a3530]">{errors.timetableSlots}</div> : null}
@@ -3535,298 +3910,7 @@ export default function EventStudioForm({
                       </button>
                     </div>
                     <div className="space-y-3">
-                      {slots.map((slot) => {
-                        const performerCount = actTypePerformerCount(slot.actType);
-                        const performerNames = getTimetableSlotPerformerNames(slot);
-                        const actBadge = collaborativeActBadgeLabel(slot.actType);
-                        const isConfirmed = confirmedTimetableSlotIds.includes(slot.id);
-                        const isExpanded = focusedTimetableSlotId === slot.id || !isConfirmed;
-                        const boundCount = Array.from({ length: performerCount }, (_, index) => getTimetableSlotBoundDjId(slot, index)).filter(Boolean).length;
-
-                        return (
-                          <div
-                            id={`timetable-slot-editor-${slot.id}`}
-                            key={slot.id}
-                            className={`admin-event-slot-editor-card rounded-[24px] border border-[#e8eceb] bg-[#f8f9f8] p-4 ${focusedTimetableSlotId === slot.id ? 'is-focused' : ''} ${isConfirmed ? 'is-confirmed' : 'is-draft'} ${isExpanded ? 'is-expanded' : 'is-collapsed'}`}
-                          >
-                            <div className="admin-event-slot-editor-summary">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <strong>{performerNames.filter(Boolean).join(' / ') || '未填写艺人'}</strong>
-                                  {actBadge ? <span className="admin-event-collab-badge">{actBadge}</span> : null}
-                                </div>
-                                <div className="admin-event-slot-editor-summary-meta">
-                                  <span>{formatTimetableSlotRange(slot)}</span>
-                                  <span>{slot.stageName || '未命名舞台'}</span>
-                                  <span>{slot.localDate || selectedTimetableDay?.date || '未设置日期'}</span>
-                                  <span>{normalizeActType(slot.actType).toUpperCase()}</span>
-                                </div>
-                              </div>
-                              <div className="admin-event-slot-editor-summary-actions">
-                                <span
-                                  className={`admin-event-slot-editor-status-badge ${
-                                    isConfirmed ? 'is-confirmed' : boundCount === performerCount && performerCount > 0 ? 'is-bound' : 'is-pending'
-                                  }`}
-                                >
-                                  {isConfirmed ? '已确认' : `${boundCount}/${performerCount} 已绑定`}
-                                </span>
-                                {isExpanded ? null : (
-                                  <button
-                                    type="button"
-                                    onClick={() => focusTimetableSlot(slot.id)}
-                                    className="admin-studio-button-secondary px-4 py-2 text-sm"
-                                  >
-                                    编辑
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="admin-event-slot-editor-summary-performers">
-                              {performerNames.map((performerName, performerIndex) => {
-                                const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
-                                const collapsedIdLabel =
-                                  normalizeActType(slot.actType) === 'solo'
-                                    ? boundDjId || '未绑定 DJ'
-                                    : `成员 ${performerIndex + 1} · ${boundDjId || '未绑定'}`;
-                                return (
-                                  <div
-                                    key={`${slot.id}-summary-${performerIndex}`}
-                                    className={`admin-event-slot-editor-summary-performer ${isExpanded ? '' : 'is-id-only'}`}
-                                  >
-                                    {isExpanded ? (
-                                      <span className="admin-event-slot-editor-summary-name">
-                                        {performerName || `成员 ${performerIndex + 1}`}
-                                      </span>
-                                    ) : null}
-                                    <span className={`admin-event-slot-editor-summary-inline-id ${boundDjId ? 'is-bound' : 'is-empty'}`}>
-                                      {isExpanded ? boundDjId || '未绑定' : collapsedIdLabel}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {isExpanded ? (
-                              <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                                <Field label="演出形式">
-                                  <div className="admin-studio-select-shell">
-                                    <select
-                                      value={normalizeActType(slot.actType)}
-                                      onChange={(event) =>
-                                        mutateTimetableSlot(slot.id, (currentSlot) =>
-                                          normalizeTimetableSlotActType(currentSlot, normalizeActType(event.target.value))
-                                        )
-                                      }
-                                      className={selectInputClassName}
-                                    >
-                                      {EVENT_STUDIO_ACT_TYPES.map((item) => (
-                                        <option key={item.value} value={item.value}>
-                                          {item.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </Field>
-
-                                <Field label="演出日">
-                                  <div className="admin-studio-select-shell">
-                                    <select
-                                      value={slot.eventDayId}
-                                      onChange={(event) => {
-                                        const selectedDay = draft.eventDays.find((day) => day.eventDayId === event.target.value);
-                                        if (!selectedDay) return;
-                                        mutateTimetableSlot(slot.id, (currentSlot) => ({
-                                          ...currentSlot,
-                                          eventDayId: selectedDay.eventDayId,
-                                          weekIndex: selectedDay.weekIndex,
-                                          dayIndexInWeek: selectedDay.dayIndexInWeek,
-                                          overallDayIndex: selectedDay.overallDayIndex,
-                                          localDate: selectedDay.date,
-                                        }));
-                                      }}
-                                      className={selectInputClassName}
-                                    >
-                                      {draft.eventDays.map((day) => (
-                                        <option key={day.id} value={day.eventDayId}>
-                                          {formatEventDayLabel(day)}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </Field>
-
-                                <Field label="舞台名">
-                                  <input
-                                    value={slot.stageName}
-                                    onChange={(event) =>
-                                      mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, stageName: event.target.value }))
-                                    }
-                                    className={textInputClassName}
-                                    placeholder="Main Stage"
-                                  />
-                                </Field>
-
-                                <div className="lg:col-span-3 grid gap-3">
-                                  {Array.from({ length: performerCount }).map((_, performerIndex) => {
-                                    const boundDjId = getTimetableSlotBoundDjId(slot, performerIndex);
-                                    return (
-                                      <div key={`${slot.id}-member-${performerIndex}`} className="admin-event-slot-binding-panel">
-                                        <div className="admin-event-slot-binding-panel-head">
-                                          <div>
-                                            <span>{normalizeActType(slot.actType) === 'solo' ? 'DJ / 艺人名称' : `成员 ${performerIndex + 1}`}</span>
-                                            <b>{boundDjId ? `已绑定 ${boundDjId}` : '尚未绑定库内 DJ'}</b>
-                                          </div>
-                                        </div>
-                                        <div className="admin-event-slot-binding-row">
-                                          <input
-                                            value={performerNames[performerIndex] || ''}
-                                            onChange={(event) =>
-                                              mutateTimetableSlot(slot.id, (currentSlot) => {
-                                                const names = getTimetableSlotPerformerNames(currentSlot);
-                                                names[performerIndex] = event.target.value;
-                                                return {
-                                                  ...currentSlot,
-                                                  memberNamesText: names.filter(Boolean).join(' / '),
-                                                };
-                                              })
-                                            }
-                                            className={textInputClassName}
-                                            placeholder={normalizeActType(slot.actType) === 'solo' ? '输入艺人名称' : `成员 ${performerIndex + 1}`}
-                                          />
-                                        </div>
-                                        <EntityBindingField
-                                          kind="dj"
-                                          mode="single"
-                                          seedQuery={performerNames[performerIndex] || ''}
-                                          items={
-                                            boundDjId
-                                              ? [
-                                                  {
-                                                    id: boundDjId,
-                                                    name: performerNames[performerIndex] || boundDjId,
-                                                    subtitle: boundDjId,
-                                                    imageUrl: null,
-                                                  },
-                                                ]
-                                              : []
-                                          }
-                                          title="Bound DJ"
-                                          emptyLabel="Search and bind one DJ from the library."
-                                          onAdd={(value) =>
-                                            updateTimetableSlotPerformerBinding(slot.id, performerIndex, {
-                                              djId: value.id,
-                                            })
-                                          }
-                                          onRemove={() => updateTimetableSlotPerformerBinding(slot.id, performerIndex, { djId: null })}
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                <Field label="开始时间">
-                                  <input
-                                    type="time"
-                                    value={slot.startTime}
-                                    onChange={(event) =>
-                                      mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, startTime: event.target.value }))
-                                    }
-                                    className={textInputClassName}
-                                  />
-                                </Field>
-
-                                <Field label="结束时间">
-                                  <input
-                                    type="time"
-                                    value={slot.endTime}
-                                    onChange={(event) =>
-                                      mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, endTime: event.target.value }))
-                                    }
-                                    className={textInputClassName}
-                                  />
-                                </Field>
-
-                                <Field label="主 DJ ID（只读）">
-                                  <input value={slot.djId} readOnly className={textInputClassName} placeholder="会根据成员绑定自动生成" />
-                                </Field>
-
-                                <Field label="开始跨天">
-                                  <div className="admin-studio-select-shell">
-                                    <select
-                                      value={String(Math.max(0, Math.floor(Number(slot.startDayOffset) || 0)))}
-                                      onChange={(event) =>
-                                        mutateTimetableSlot(slot.id, (currentSlot) => ({
-                                          ...currentSlot,
-                                          startDayOffset: Number(event.target.value) || 0,
-                                        }))
-                                      }
-                                      className={selectInputClassName}
-                                    >
-                                      <option value="0">同日</option>
-                                      <option value="1">次日</option>
-                                    </select>
-                                  </div>
-                                </Field>
-
-                                <Field label="结束跨天">
-                                  <div className="admin-studio-select-shell">
-                                    <select
-                                      value={String(Math.max(0, Math.floor(Number(slot.endDayOffset) || 0)))}
-                                      onChange={(event) =>
-                                        mutateTimetableSlot(slot.id, (currentSlot) => ({
-                                          ...currentSlot,
-                                          endDayOffset: Number(event.target.value) || 0,
-                                        }))
-                                      }
-                                      className={selectInputClassName}
-                                    >
-                                      <option value="0">同日</option>
-                                      <option value="1">次日</option>
-                                    </select>
-                                  </div>
-                                </Field>
-
-                                <div className="admin-event-slot-editor-actions lg:col-span-3">
-                                  <div className="admin-event-slot-editor-actions-meta">
-                                    <span className={`admin-event-slot-editor-status-badge ${isConfirmed ? 'is-bound' : 'is-pending'}`}>
-                                      {isConfirmed ? '已确认' : '待确认'}
-                                    </span>
-                                    <small>确认后会折叠成摘要卡片，便于连续编辑多条 timetable。</small>
-                                  </div>
-                                  <div className="flex flex-wrap justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => confirmTimetableSlot(slot)}
-                                      disabled={!canConfirmTimetableSlot(slot)}
-                                      className="admin-studio-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                      {isConfirmed ? '重新确认' : '确认此条'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        updateScheduleDerivedDraft((current) => ({
-                                          ...current,
-                                          timetableSlots: current.timetableSlots
-                                            .filter((currentSlot) => currentSlot.id !== slot.id)
-                                            .map((currentSlot, index) => ({
-                                              ...currentSlot,
-                                              sortOrder: index + 1,
-                                            })),
-                                        }))
-                                      }
-                                      className="admin-studio-button-danger px-4 py-3 text-sm"
-                                    >
-                                      删除条目
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
+                      {slots.map((slot) => renderTimetableSlotEditorCard(slot))}
                     </div>
                   </div>
                 ))
@@ -3835,6 +3919,25 @@ export default function EventStudioForm({
                   当前日期还没有时间表条目。先完成活动日期结构后，就可以开始录入演出时段。
                 </div>
               )}
+
+              {outOfRangeTimetableSlots.length ? (
+                <div className="admin-event-slot-editor-group is-warning">
+                  <div className="admin-event-slot-editor-group-head">
+                    <div>
+                      <span>异常时间表</span>
+                      <b>这些条目仍然存在于草稿里，但不在当前活动日期范围内。请改到有效活动日，或删除后再提交。</b>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {outOfRangeTimetableSlots.map((slot) =>
+                      renderTimetableSlotEditorCard(slot, {
+                        dayLabel: `${slot.localDate || '未设置日期'}${slot.eventDayId ? ` · ${slot.eventDayId}` : ''}`,
+                        showOutOfRangeBadge: true,
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </Section>

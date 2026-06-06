@@ -169,6 +169,8 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
       slot.stageName,
       slot.startTime,
       slot.endTime,
+      slot.eventDayId,
+      slot.localDate,
     ].some((value) => String(value || '').trim().length > 0);
     if (!hasAnyValue) return false;
 
@@ -195,7 +197,30 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     );
   });
 
-  if (invalidSlot) {
+  const validEventDayIdSet = new Set(draft.eventDays.map((day) => String(day.eventDayId || '').trim()).filter(Boolean));
+  const validEventDayDateSet = new Set(draft.eventDays.map((day) => String(day.date || '').trim()).filter(Boolean));
+  const hasOutOfRangeSlot = draft.timetableSlots.some((slot) => {
+    const eventDayId = String(slot.eventDayId || '').trim();
+    const localDate = String(slot.localDate || '').trim();
+    const hasAnyValue = [
+      slot.memberNamesText,
+      slot.djId,
+      slot.actType,
+      slot.stageName,
+      slot.startTime,
+      slot.endTime,
+      eventDayId,
+      localDate,
+    ].some((value) => String(value || '').trim().length > 0);
+    if (!hasAnyValue) return false;
+    if (eventDayId && validEventDayIdSet.has(eventDayId)) return false;
+    if (localDate && validEventDayDateSet.has(localDate)) return false;
+    return Boolean(eventDayId || localDate);
+  });
+
+  if (hasOutOfRangeSlot) {
+    errors.timetableSlots = '存在不在当前活动日期范围内的时间表条目，请先调整到有效活动日，或删除后再提交。';
+  } else if (invalidSlot) {
     errors.timetableSlots = '时间表条目需要完整填写演出人、eventDay、舞台、开始时间和结束时间。';
   }
 
