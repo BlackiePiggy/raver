@@ -1,6 +1,6 @@
 import fs from 'fs';
-import path from 'path';
 import { NextResponse } from 'next/server';
+import { resolveAdminEnvFilePaths } from '@/lib/server/env-file-paths';
 
 export const runtime = 'nodejs';
 
@@ -25,10 +25,6 @@ type ConfigSectionDefinition = {
   description: string;
   fields: ConfigFieldDefinition[];
 };
-
-const ROOT_DIR = path.resolve(process.cwd(), '..', '..', '..');
-const SERVER_ENV_PATH = path.join(ROOT_DIR, 'server', '.env');
-const WEB_ENV_PATH = path.join(ROOT_DIR, 'web', '.env.local');
 
 const SECTION_DEFINITIONS: ConfigSectionDefinition[] = [
   {
@@ -267,8 +263,10 @@ const serializeEnv = (entries: Record<string, string>): string =>
     .map(([key, value]) => `${key}=${String(value ?? '')}`)
     .join('\n')}\n`;
 
-const resolveEnvPath = (target: EnvFileTarget): string =>
-  target === 'server/.env' ? SERVER_ENV_PATH : WEB_ENV_PATH;
+const resolveEnvPath = (target: EnvFileTarget): string => {
+  const { serverEnvPath, webEnvPath } = resolveAdminEnvFilePaths();
+  return target === 'server/.env' ? serverEnvPath : webEnvPath;
+};
 
 const buildResponse = (): {
   sections: Array<{
@@ -294,8 +292,8 @@ const buildResponse = (): {
     restartRecommended: string[];
   };
 } => {
-  const serverEnv = readEnvFile(SERVER_ENV_PATH);
-  const webEnv = readEnvFile(WEB_ENV_PATH);
+  const serverEnv = readEnvFile(resolveEnvPath('server/.env'));
+  const webEnv = readEnvFile(resolveEnvPath('web/.env.local'));
 
   return {
     sections: SECTION_DEFINITIONS.map((section) => ({
@@ -383,8 +381,10 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'values is required' }, { status: 400 });
   }
 
-  const serverEnv = readEnvFile(SERVER_ENV_PATH);
-  const webEnv = readEnvFile(WEB_ENV_PATH);
+  const serverEnvPath = resolveEnvPath('server/.env');
+  const webEnvPath = resolveEnvPath('web/.env.local');
+  const serverEnv = readEnvFile(serverEnvPath);
+  const webEnv = readEnvFile(webEnvPath);
 
   for (const [key, rawValue] of Object.entries(values)) {
     const definition = FIELD_MAP.get(key);
@@ -394,8 +394,8 @@ export async function PUT(request: Request) {
     targetEnv[key] = value;
   }
 
-  fs.writeFileSync(SERVER_ENV_PATH, serializeEnv(serverEnv), 'utf8');
-  fs.writeFileSync(WEB_ENV_PATH, serializeEnv(webEnv), 'utf8');
+  fs.writeFileSync(serverEnvPath, serializeEnv(serverEnv), 'utf8');
+  fs.writeFileSync(webEnvPath, serializeEnv(webEnv), 'utf8');
 
   return NextResponse.json(buildResponse(), {
     headers: { 'Cache-Control': 'no-store' },

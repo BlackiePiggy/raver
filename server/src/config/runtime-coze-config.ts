@@ -2,7 +2,26 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'dotenv';
 
-const SERVER_ENV_FILE = path.resolve(process.cwd(), '.env');
+const resolveServerEnvFile = (): string => {
+  const cwd = process.cwd();
+  const candidates = [
+    path.resolve(cwd, '.env'),
+    path.resolve(cwd, 'server', '.env'),
+    path.resolve(cwd, '..', 'server', '.env'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return candidates[0];
+};
 
 const cleanEnv = (value: string | undefined | null): string | null => {
   if (typeof value !== 'string') return null;
@@ -12,8 +31,9 @@ const cleanEnv = (value: string | undefined | null): string | null => {
 
 const readServerEnvFile = (): Record<string, string> => {
   try {
-    if (!fs.existsSync(SERVER_ENV_FILE)) return {};
-    return parse(fs.readFileSync(SERVER_ENV_FILE, 'utf8'));
+    const serverEnvFile = resolveServerEnvFile();
+    if (!fs.existsSync(serverEnvFile)) return {};
+    return parse(fs.readFileSync(serverEnvFile, 'utf8'));
   } catch {
     return {};
   }
@@ -112,4 +132,3 @@ export const getServerCozeRuntimeConfig = (
       (ossBucket ? `https://${ossBucket}.oss-accelerate.aliyuncs.com` : null),
   };
 };
-

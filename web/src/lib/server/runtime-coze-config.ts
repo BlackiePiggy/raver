@@ -1,8 +1,5 @@
 import fs from 'fs';
-import path from 'path';
-
-const WEB_ENV_FILE = path.resolve(process.cwd(), '.env.local');
-const SERVER_ENV_FILE = path.resolve(process.cwd(), '..', 'server', '.env');
+import { resolveAdminEnvFilePaths } from '@/lib/server/env-file-paths';
 
 const cleanText = (value: string | undefined | null): string => String(value || '').trim();
 
@@ -72,8 +69,9 @@ export type WebCozeRuntimeConfig = {
 };
 
 export const getWebCozeRuntimeConfig = (): WebCozeRuntimeConfig => {
-  const webEnv = readEnvFile(WEB_ENV_FILE);
-  const serverEnv = readEnvFile(SERVER_ENV_FILE);
+  const { webEnvPath, serverEnvPath } = resolveAdminEnvFilePaths();
+  const webEnv = readEnvFile(webEnvPath);
+  const serverEnv = readEnvFile(serverEnvPath);
 
   const fallbackWorkflowToken = cleanText(
     resolveValue(
