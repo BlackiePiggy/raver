@@ -1047,9 +1047,27 @@ const validateManualDjPayload = (payload: Record<string, unknown>): string | nul
       ['qqMusicUrl', normalizeSubmittedUrl(payload.qqMusicUrl)],
       ['website', normalizeSubmittedUrl(payload.website ?? payload.websiteUrl ?? payload.officialWebsite)],
       ['otherPlatformUrl', normalizeSubmittedUrl(payload.otherPlatformUrl ?? payload.otherUrl)],
+      ['sourceWikipedia', normalizeSubmittedUrl(payload.sourceWikipedia)],
+      ['sourceWebsite', normalizeSubmittedUrl(payload.sourceWebsite)],
     ].forEach(([fieldName, value]) => ensureOptionalHttpUrl(value as string | null, fieldName as string));
   } catch (error) {
     return (error as Error).message;
+  }
+
+  if (payloadHasAnyKey(payload, ['sourceSameAs'])) {
+    const value = payload.sourceSameAs;
+    if (value !== null && !Array.isArray(value) && typeof value !== 'string') {
+      return 'sourceSameAs must be an array, string, or null';
+    }
+    const entries = normalizeSubmittedStringArray(value, {
+      itemMax: INPUT_LIMITS.common.url,
+      maxItems: 50,
+    });
+    try {
+      entries.forEach((entry) => ensureOptionalHttpUrl(entry, 'sourceSameAs'));
+    } catch (error) {
+      return (error as Error).message;
+    }
   }
 
   return null;
@@ -13190,6 +13208,12 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     const soundcloudIdForProof = normalizeSubmittedId(payloadValueByKeys(payload, ['soundcloudId', 'soundcloudid'])) || '';
     const website = ensureOptionalHttpUrl(normalizeSubmittedUrl(payloadValueByKeys(payload, ['website', 'websiteUrl', 'officialWebsite'])), 'website') || '';
     const otherPlatformUrl = ensureOptionalHttpUrl(normalizeSubmittedUrl(payloadValueByKeys(payload, ['otherPlatformUrl', 'otherUrl'])), 'otherPlatformUrl') || '';
+    const sourceWikipedia = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.sourceWikipedia), 'sourceWikipedia') || '';
+    const sourceWebsite = ensureOptionalHttpUrl(normalizeSubmittedUrl(payload.sourceWebsite), 'sourceWebsite') || '';
+    const sourceSameAs = normalizeSubmittedStringArray(payload.sourceSameAs, {
+      itemMax: INPUT_LIMITS.common.url,
+      maxItems: 50,
+    });
     const hasProofLink = [
       spotifyIdForProof,
       spotifyUrl,
@@ -13239,6 +13263,9 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           qqMusicUrl: qqMusicUrl || null,
           website: website || null,
           otherPlatformUrl: otherPlatformUrl || null,
+          sourceWikipedia: sourceWikipedia || null,
+          sourceWebsite: sourceWebsite || null,
+          sourceSameAs,
           bio: normalizeSubmittedMultiline(payload.bio, INPUT_LIMITS.dj.bio),
           country: normalizeOptionalSingleLine(payload.country, INPUT_LIMITS.dj.country),
           aliases: normalizeSubmittedStringArray(payload.aliases, {
@@ -13398,6 +13425,9 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           neteaseUrl: neteaseUrl || target.neteaseUrl || null,
           qqMusicUrl: qqMusicUrl || target.qqMusicUrl || null,
           website: website || target.website || null,
+          sourceWikipedia: sourceWikipedia || target.sourceWikipedia || null,
+          sourceWebsite: sourceWebsite || target.sourceWebsite || null,
+          sourceSameAs: sourceSameAs.length ? sourceSameAs : (target.sourceSameAs ?? []),
           trackCount: hasTrackCountInput ? trackCount : (target.trackCount ?? null),
           playlistCount: hasPlaylistCountInput ? playlistCount : (target.playlistCount ?? null),
           soundCloudFollowers: hasSoundCloudFollowersInput
@@ -13439,6 +13469,9 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
           neteaseUrl: neteaseUrl || null,
           qqMusicUrl: qqMusicUrl || null,
           website: website || null,
+          sourceWikipedia: sourceWikipedia || null,
+          sourceWebsite: sourceWebsite || null,
+          sourceSameAs,
           trackCount: hasTrackCountInput ? trackCount : null,
           playlistCount: hasPlaylistCountInput ? playlistCount : null,
           soundCloudFollowers: hasSoundCloudFollowersInput ? soundCloudFollowers : null,

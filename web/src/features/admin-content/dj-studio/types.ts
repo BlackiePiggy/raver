@@ -91,6 +91,9 @@ export type DJStudioDraft = {
   avatarImage: DJStudioImageState | null;
   bannerImage: DJStudioImageState | null;
   proofImage: DJStudioImageState | null;
+  sourceWikipedia: string;
+  sourceWebsite: string;
+  sourceSameAs: string[];
   spotifyId: string;
   spotifyUrl: string;
   spotifyFollowers: string;
@@ -170,6 +173,9 @@ export type DJStudioLoadedDJ = {
   qqMusicUrl?: string | null;
   website?: string | null;
   otherPlatformUrl?: string | null;
+  sourceWikipedia?: string | null;
+  sourceWebsite?: string | null;
+  sourceSameAs?: string[] | null;
   isVerified?: boolean | null;
   trackCount?: number | null;
   playlistCount?: number | null;
@@ -314,6 +320,9 @@ export type DJStudioCreateInput = {
   qqMusicUrl?: string | null;
   website?: string | null;
   otherPlatformUrl?: string | null;
+  sourceWikipedia?: string | null;
+  sourceWebsite?: string | null;
+  sourceSameAs?: string[] | string | null;
   trackCount?: number | null;
   playlistCount?: number | null;
   soundCloudFollowers?: number | null;
@@ -347,6 +356,9 @@ export type DJStudioUpdateInput = {
   qqMusicUrl?: string | null;
   website?: string | null;
   otherPlatformUrl?: string | null;
+  sourceWikipedia?: string | null;
+  sourceWebsite?: string | null;
+  sourceSameAs?: string[] | string | null;
   trackCount?: number | null;
   playlistCount?: number | null;
   soundCloudFollowers?: number | null;

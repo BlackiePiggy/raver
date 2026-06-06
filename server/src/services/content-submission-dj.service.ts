@@ -109,6 +109,21 @@ const resolveWebsite = (payload: Prisma.JsonObject, fallback?: string | null): s
   fallback ||
   null;
 
+const resolveSourceSameAs = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => cleanText(item))
+      .filter((item): item is string => Boolean(item));
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 const hasAnyProof = (
   payload: Prisma.JsonObject,
   fallback?: {
@@ -194,6 +209,11 @@ const buildResolvedDJUpdateData = (
   neteaseUrl: cleanText(payload.neteaseUrl) ?? existing.neteaseUrl ?? null,
   qqMusicUrl: cleanText(payload.qqMusicUrl) ?? existing.qqMusicUrl ?? null,
   website: resolveWebsite(payload, existing.website) ?? null,
+  sourceWikipedia: cleanText(payload.sourceWikipedia) ?? existing.sourceWikipedia ?? null,
+  sourceWebsite: cleanText(payload.sourceWebsite) ?? existing.sourceWebsite ?? null,
+  sourceSameAs: Object.prototype.hasOwnProperty.call(payload, 'sourceSameAs')
+    ? resolveSourceSameAs(payload.sourceSameAs)
+    : (existing.sourceSameAs ?? []),
   trackCount: integerOrNull(payload.trackCount) ?? existing.trackCount ?? null,
   playlistCount: integerOrNull(payload.playlistCount) ?? existing.playlistCount ?? null,
   soundCloudFollowers:
@@ -242,6 +262,9 @@ const hasDJMaterialChanges = (
   || !isEqualValue(existing.neteaseUrl ?? null, next.neteaseUrl)
   || !isEqualValue(existing.qqMusicUrl ?? null, next.qqMusicUrl)
   || !isEqualValue(existing.website ?? null, next.website)
+  || !isEqualValue(existing.sourceWikipedia ?? null, next.sourceWikipedia)
+  || !isEqualValue(existing.sourceWebsite ?? null, next.sourceWebsite)
+  || !isEqualValue(existing.sourceSameAs ?? [], next.sourceSameAs)
   || !isEqualValue(existing.trackCount ?? null, next.trackCount)
   || !isEqualValue(existing.playlistCount ?? null, next.playlistCount)
   || !isEqualValue(existing.soundCloudFollowers ?? null, next.soundCloudFollowers)
@@ -421,6 +444,9 @@ export const createOrUpdateDJFromSubmission = async (
       neteaseUrl: cleanText(payload.neteaseUrl) || null,
       qqMusicUrl: cleanText(payload.qqMusicUrl) || null,
       website: resolveWebsite(payload) || null,
+      sourceWikipedia: cleanText(payload.sourceWikipedia) || null,
+      sourceWebsite: cleanText(payload.sourceWebsite) || null,
+      sourceSameAs: resolveSourceSameAs(payload.sourceSameAs),
       trackCount: integerOrNull(payload.trackCount),
       playlistCount: integerOrNull(payload.playlistCount),
       soundCloudFollowers:

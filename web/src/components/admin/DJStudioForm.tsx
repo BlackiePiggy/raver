@@ -213,6 +213,13 @@ const sourceValueToText = (value: unknown): string => {
   if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean).join(', ');
   return String(value || '').trim();
 };
+const sourceValueToList = (value: unknown): string[] => {
+  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+  return String(value || '')
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
 
 const createInitialSourceReplaceState = (query: string): DJStudioSourceReplaceState => ({
   query,
@@ -249,9 +256,9 @@ const buildCurrentDraftFieldValueMap = (draft: DJStudioDraft): Record<DJStudioSo
   soundcloudId: draft.soundcloudId,
   neteaseUrl: draft.neteaseUrl,
   qqMusicUrl: draft.qqMusicUrl,
-  sourceWikipedia: '',
-  sourceWebsite: '',
-  sourceSameAs: '',
+  sourceWikipedia: draft.sourceWikipedia,
+  sourceWebsite: draft.sourceWebsite,
+  sourceSameAs: sourceValueToText(draft.sourceSameAs),
   trackCount: draft.trackCount,
   playlistCount: draft.playlistCount,
   soundCloudFollowers: draft.soundCloudFollowers,
@@ -425,15 +432,30 @@ export default function DJStudioForm({
     return String(getSelectedSourceCandidate(sourceKey)?.avatarUrl || '').trim();
   };
 
+  const canSelectSourceFieldFromState = (
+    state: DJStudioSourceReplaceState,
+    fieldKey: DJStudioSourceFieldKey | 'avatar',
+    sourceKey: DJStudioSourceKey
+  ): boolean => {
+    if (sourceKey === 'keep') return true;
+    if (!state.sourceEnabled[sourceKey]) return false;
+    const group = state.sources[sourceKey];
+    if (!group || group.selectedIndex < 0) return false;
+    const selected = group.items[group.selectedIndex] || null;
+    if (!selected) return false;
+    if (fieldKey === 'avatar') return Boolean(String(selected.avatarUrl || '').trim());
+    return true;
+  };
+
   const normalizeSourceSelections = (state: DJStudioSourceReplaceState): DJStudioSourceReplaceState => {
     const nextFieldSource = { ...state.fieldSource };
     for (const field of DJ_SOURCE_REPLACE_FIELDS) {
       const source = nextFieldSource[field.key];
-      if (!canSelectSourceField(field.key, source)) {
+      if (!canSelectSourceFieldFromState(state, field.key, source)) {
         nextFieldSource[field.key] = 'keep';
       }
     }
-    const nextAvatarSource = canSelectSourceField('avatar', state.avatarSource) ? state.avatarSource : 'keep';
+    const nextAvatarSource = canSelectSourceFieldFromState(state, 'avatar', state.avatarSource) ? state.avatarSource : 'keep';
     return {
       ...state,
       fieldSource: nextFieldSource,
@@ -536,24 +558,52 @@ export default function DJStudioForm({
         const selectedSource = sourceReplace.fieldSource[field.key];
         if (selectedSource === 'keep') continue;
         const value = getSourceFieldValue(field.key, selectedSource);
+        const selectedCandidate = getSelectedSourceCandidate(selectedSource);
         switch (field.key) {
           case 'name':
-            nextDraft.name = { ...nextDraft.name, en: value };
+            nextDraft.name = {
+              ...nextDraft.name,
+              en: value,
+              zh: nextDraft.name.zh.trim() ? nextDraft.name.zh : value,
+            };
             break;
           case 'aliases':
-            nextDraft.aliases = value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [''];
+            nextDraft.aliases = sourceValueToList(selectedCandidate?.aliases).length
+              ? sourceValueToList(selectedCandidate?.aliases)
+              : [''];
             break;
           case 'genres':
-            nextDraft.genres = value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [''];
+            nextDraft.genres = sourceValueToList(selectedCandidate?.genres).length
+              ? sourceValueToList(selectedCandidate?.genres)
+              : [''];
             break;
           case 'bio':
-            nextDraft.bio = { ...nextDraft.bio, en: value };
+            nextDraft.bio = {
+              ...nextDraft.bio,
+              en: value,
+              zh: nextDraft.bio.zh.trim() ? nextDraft.bio.zh : value,
+            };
             break;
           case 'country':
-            nextDraft.country = { ...nextDraft.country, en: value };
+            nextDraft.country = {
+              ...nextDraft.country,
+              en: value,
+              zh: nextDraft.country.zh.trim() ? nextDraft.country.zh : value,
+            };
             break;
           case 'countryEnFull':
             nextDraft.country = { ...nextDraft.country, enFull: value };
+            break;
+          case 'sourceWikipedia':
+            nextDraft.sourceWikipedia = value;
+            break;
+          case 'sourceWebsite':
+            nextDraft.sourceWebsite = value;
+            break;
+          case 'sourceSameAs':
+            nextDraft.sourceSameAs = sourceValueToList(selectedCandidate?.sourceSameAs).length
+              ? sourceValueToList(selectedCandidate?.sourceSameAs)
+              : [''];
             break;
           case 'website':
           case 'spotifyUrl':
