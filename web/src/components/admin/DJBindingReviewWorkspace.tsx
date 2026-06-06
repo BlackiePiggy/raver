@@ -208,7 +208,7 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
         limit: listPageSize,
       });
       setJobs(result.items);
-      setListTotal(result.total ?? result.items.length);
+      setListTotal(result.pagination?.total ?? result.items.length);
       setSelectedJobId((cur) => {
         if (cur && result.items.some((j) => j.id === cur)) return cur;
         if (focusDjId) {
@@ -311,11 +311,11 @@ export default function DJBindingReviewWorkspace({ embedded = false }: DJBinding
   // ── Summary ─────────────────────────────────────────────────────────────────
 
   const summary = useMemo(() => ({
-    total:   jobs.length,
+    total:   listTotal,
     pending: jobs.filter((j) => j.status === 'pending').length,
     partial: jobs.filter((j) => j.status === 'partially_applied').length,
     exact:   jobs.reduce((s, j) => s + j.exactCount, 0),
-  }), [jobs]);
+  }), [jobs, listTotal]);
 
   const listTotalPages = Math.max(1, Math.ceil(listTotal / listPageSize));
 
