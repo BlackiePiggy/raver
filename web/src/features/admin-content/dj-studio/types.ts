@@ -14,6 +14,73 @@ export type DJStudioImageState = {
   origin: 'draft-upload' | 'persisted';
 };
 
+export type DJStudioSourceKey = 'keep' | 'spotify' | 'discogs' | 'soundcloud';
+
+export type DJStudioSourceCandidate = {
+  source: Exclude<DJStudioSourceKey, 'keep'>;
+  name: string;
+  avatarUrl: string | null;
+  aliases: string[];
+  genres: string[];
+  bio: string;
+  country: string;
+  countryEnFull: string;
+  website: string;
+  spotifyUrl: string;
+  spotifyId: string;
+  spotifyFollowers: string;
+  appleMusicId: string;
+  instagramUrl: string;
+  facebookUrl: string;
+  twitterUrl: string;
+  youtubeUrl: string;
+  soundcloudUrl: string;
+  soundcloudId: string;
+  neteaseUrl: string;
+  qqMusicUrl: string;
+  sourceWikipedia: string;
+  sourceWebsite: string;
+  sourceSameAs: string;
+  trackCount: string;
+  playlistCount: string;
+  soundCloudFollowers: string;
+  soundCloudFavorites: string;
+  followersCount: number | null;
+  city: string;
+  existingDJId: string | null;
+  existingDJName: string | null;
+  existingMatchType: string | null;
+  raw: Record<string, unknown>;
+};
+
+export type DJStudioSourceFieldKey =
+  | 'name'
+  | 'aliases'
+  | 'genres'
+  | 'bio'
+  | 'country'
+  | 'countryEnFull'
+  | 'website'
+  | 'spotifyUrl'
+  | 'spotifyId'
+  | 'spotifyFollowers'
+  | 'appleMusicId'
+  | 'instagramUrl'
+  | 'facebookUrl'
+  | 'twitterUrl'
+  | 'youtubeUrl'
+  | 'soundcloudUrl'
+  | 'soundcloudId'
+  | 'neteaseUrl'
+  | 'qqMusicUrl'
+  | 'sourceWikipedia'
+  | 'sourceWebsite'
+  | 'sourceSameAs'
+  | 'trackCount'
+  | 'playlistCount'
+  | 'soundCloudFollowers'
+  | 'soundCloudFavorites';
+
 export type DJStudioDraft = {
   id: string;
   name: DJStudioLocalizedText;
