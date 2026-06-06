@@ -374,6 +374,35 @@
   outline: none;
 }
 
+.admin-studio-select {
+  width: 100%;
+  border: 1px solid rgba(22, 44, 40, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: #071110;
+  border-radius: 999px;
+  padding: 0 2.5rem 0 1rem;
+  min-height: 46px;
+  height: 46px;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(7, 17, 16, 0.72) 50%),
+    linear-gradient(135deg, rgba(7, 17, 16, 0.72) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.admin-studio-select option {
+  color: #071110;
+}
+
 .admin-studio-textarea {
   width: 100%;
   border: 1px solid rgba(22, 44, 40, 0.16);

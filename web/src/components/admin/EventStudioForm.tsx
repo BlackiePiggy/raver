@@ -114,6 +114,7 @@ const IMAGE_ZONE_CONFIG: Array<{
 ];
 
 const textInputClassName = 'admin-studio-input';
+const selectInputClassName = 'admin-studio-select';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
 
 const firstFilledText = (...values: Array<string | undefined | null>) => {
@@ -2667,7 +2668,7 @@ export default function EventStudioForm({
                 <select
                   value={draft.eventType}
                   onChange={(event) => updateDraft('eventType', event.target.value)}
-                  className={textInputClassName}
+                  className={selectInputClassName}
                 >
                   {EVENT_TYPES.map((item) => (
                     <option key={item} value={item}>
@@ -3056,7 +3057,7 @@ export default function EventStudioForm({
               <select
                 value={draft.scheduleMode}
                 onChange={(event) => setScheduleMode(event.target.value as EventStudioDraft['scheduleMode'])}
-                className={textInputClassName}
+                className={selectInputClassName}
               >
                 {SCHEDULE_MODE_ITEMS.map((item) => (
                   <option key={item.value} value={item.value}>
@@ -3612,7 +3613,7 @@ export default function EventStudioForm({
                                         normalizeTimetableSlotActType(currentSlot, normalizeActType(event.target.value))
                                       )
                                     }
-                                    className={textInputClassName}
+                                    className={selectInputClassName}
                                   >
                                     {EVENT_STUDIO_ACT_TYPES.map((item) => (
                                       <option key={item.value} value={item.value}>
@@ -3637,7 +3638,7 @@ export default function EventStudioForm({
                                         localDate: selectedDay.date,
                                       }));
                                     }}
-                                    className={textInputClassName}
+                                    className={selectInputClassName}
                                   >
                                     {draft.eventDays.map((day) => (
                                       <option key={day.id} value={day.eventDayId}>
@@ -3653,7 +3654,7 @@ export default function EventStudioForm({
                                     onChange={(event) =>
                                       mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, stageName: event.target.value }))
                                     }
-                                    className={textInputClassName}
+                                    className={selectInputClassName}
                                     placeholder="Main Stage"
                                   />
                                 </Field>
@@ -3723,7 +3724,7 @@ export default function EventStudioForm({
                                     onChange={(event) =>
                                       mutateTimetableSlot(slot.id, (currentSlot) => ({ ...currentSlot, startTime: event.target.value }))
                                     }
-                                    className={textInputClassName}
+                                    className={selectInputClassName}
                                   />
                                 </Field>
 

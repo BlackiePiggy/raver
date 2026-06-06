@@ -170,7 +170,7 @@ const aiCompactInputClass =
   'admin-studio-input h-9 min-h-9 rounded-[14px] px-3 py-1.5 text-[13px] leading-5';
 
 const aiCompactSelectClass =
-  'admin-studio-input h-9 min-h-9 rounded-[14px] px-3 py-1.5 pr-8 text-[13px] leading-5';
+  'admin-studio-select h-9 min-h-9 rounded-[14px] pr-8 text-[13px]';
 
 const ACT_TYPE_ITEMS: Array<{ value: EventStudioAIActType; label: string; count: number }> = [
   { value: 'solo', label: 'Solo', count: 1 },
