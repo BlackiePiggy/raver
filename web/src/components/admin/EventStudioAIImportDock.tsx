@@ -175,6 +175,9 @@ const aiCompactSelectClass =
 const aiCompactSelectorChipClass =
   'inline-flex min-w-0 shrink-0 items-center rounded-[14px] border px-3 py-2 text-[13px] font-semibold tracking-[0.01em] transition whitespace-nowrap';
 
+const ALL_EVENT_DAYS_VALUE = '__all_event_days__';
+const ALL_STAGES_VALUE = '__all_stages__';
+
 const ACT_TYPE_ITEMS: Array<{ value: EventStudioAIActType; label: string; count: number }> = [
   { value: 'solo', label: 'Solo', count: 1 },
   { value: 'b2b', label: 'B2B', count: 2 },
@@ -949,14 +952,29 @@ export default function EventStudioAIImportDock({
       panel?.kind === 'timetable'
         ? panel.timetableSlots.filter((item) => {
             if (!resultSearchMatches(item, panel.resultSearchQuery)) return false;
-            const matchesDay = panel.targetEventDayId ? item.eventDayId === panel.targetEventDayId : true;
-            const normalizedTargetStage = panel.targetStageName.trim().toLocaleLowerCase();
+            const matchesDay =
+              panel.targetEventDayId && panel.targetEventDayId !== ALL_EVENT_DAYS_VALUE
+                ? item.eventDayId === panel.targetEventDayId
+                : true;
+            const normalizedTargetStage =
+              panel.targetStageName && panel.targetStageName !== ALL_STAGES_VALUE
+                ? panel.targetStageName.trim().toLocaleLowerCase()
+                : '';
             const normalizedItemStage = item.stageName.trim().toLocaleLowerCase();
             const matchesStage = normalizedTargetStage ? normalizedItemStage === normalizedTargetStage : true;
             return matchesDay && matchesStage;
           })
         : [],
     [panel]
+  );
+  const visibleLineupItemIds = useMemo(() => visibleLineupItems.map((item) => item.id), [visibleLineupItems]);
+  const visibleTimetableSlotIds = useMemo(() => visibleTimetableSlots.map((slot) => slot.id), [visibleTimetableSlots]);
+  const allVisibleTimetableSelected = useMemo(
+    () =>
+      panel?.kind === 'timetable' &&
+      visibleTimetableSlotIds.length > 0 &&
+      visibleTimetableSlotIds.every((id) => panel.selectedTimetableSlotIds.includes(id)),
+    [panel, visibleTimetableSlotIds]
   );
 
   useOverlayBodyLock(Boolean(panel));
@@ -1023,8 +1041,8 @@ export default function EventStudioAIImportDock({
       lineupItems: [],
       timetableSlots: [],
       selectedTimetableSlotIds: [],
-      targetEventDayId: draft.eventDays[0]?.eventDayId || '',
-      targetStageName: draft.stageOrder[0] || 'Main Stage',
+      targetEventDayId: ALL_EVENT_DAYS_VALUE,
+      targetStageName: ALL_STAGES_VALUE,
       warnings: [],
       unparsedTexts: [],
       taskEntries: [],
@@ -1600,6 +1618,12 @@ export default function EventStudioAIImportDock({
   const moveSelectedTimetableSlots = (target: EventStudioAIResultTarget) => {
     setPanel((current) => {
       if (!current || !current.selectedTimetableSlotIds.length) return current;
+      if (target.targetEventDayId === ALL_EVENT_DAYS_VALUE || target.targetStageName === ALL_STAGES_VALUE) {
+        return {
+          ...current,
+          errorText: '批量移动前，请先选择具体的目标活动日和目标舞台。',
+        };
+      }
       const targetDay = draft.eventDays.find((day) => day.eventDayId === target.targetEventDayId) || draft.eventDays[0];
       if (!targetDay) return current;
       const targetStage = target.targetStageName.trim() || current.targetStageName.trim() || 'Main Stage';
@@ -1625,6 +1649,19 @@ export default function EventStudioAIImportDock({
         selectedTimetableSlotIds: [],
         targetEventDayId: targetDay.eventDayId,
         targetStageName: targetStage,
+      };
+    });
+  };
+
+  const confirmVisibleAIItems = () => {
+    if (!panel) return;
+    const idsToCollapse = panel.kind === 'lineup' ? visibleLineupItemIds : visibleTimetableSlotIds;
+    if (!idsToCollapse.length) return;
+    setPanel((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        expandedResultItemIds: current.expandedResultItemIds.filter((id) => !idsToCollapse.includes(id)),
       };
     });
   };
@@ -2952,6 +2989,18 @@ export default function EventStudioAIImportDock({
                 ) : panel.kind === 'lineup' ? (
                   panel.lineupItems.length ? (
                     <div className="space-y-3">
+                      <div className="admin-reference-card p-3.5">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={confirmVisibleAIItems}
+                            disabled={!visibleLineupItems.length}
+                            className="admin-studio-button-secondary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            一键确认当前结果
+                          </button>
+                        </div>
+                      </div>
                       {renderResultToolbar(
                         panel.lineupItems.length,
                         panel.lineupItems.filter(isResultItemFullyMatched).length,
@@ -3041,23 +3090,29 @@ export default function EventStudioAIImportDock({
                               current
                                 ? {
                                     ...current,
-                                    selectedTimetableSlotIds: current.selectedTimetableSlotIds.length
-                                      ? []
-                                      : current.timetableSlots.map((slot) => slot.id),
+                                    selectedTimetableSlotIds: allVisibleTimetableSelected ? [] : visibleTimetableSlotIds,
                                   }
                                 : current
                             )
                           }
                           className="admin-studio-button-secondary px-3 py-2 text-xs"
                         >
-                          {panel.selectedTimetableSlotIds.length ? '清空选择' : '全选'}
+                          {allVisibleTimetableSelected ? '清空选择' : '全选'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={confirmVisibleAIItems}
+                          disabled={!visibleTimetableSlots.length}
+                          className="admin-studio-button-secondary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          一键确认当前结果
                         </button>
                         <button
                           type="button"
                           onClick={() =>
                             moveSelectedTimetableSlots({
-                              targetEventDayId: panel.targetEventDayId || draft.eventDays[0]?.eventDayId || '',
-                              targetStageName: panel.targetStageName || 'Main Stage',
+                              targetEventDayId: panel.targetEventDayId || ALL_EVENT_DAYS_VALUE,
+                              targetStageName: panel.targetStageName || ALL_STAGES_VALUE,
                             })
                           }
                           disabled={!panel.selectedTimetableSlotIds.length}
@@ -3073,6 +3128,17 @@ export default function EventStudioAIImportDock({
                         <label className="space-y-1 text-xs text-black/45">
                           <span>目标活动日</span>
                           <div className="flex gap-2 overflow-x-auto pb-1">
+                            <button
+                              type="button"
+                              onClick={() => updatePanel({ targetEventDayId: ALL_EVENT_DAYS_VALUE })}
+                              className={`${aiCompactSelectorChipClass} ${
+                                panel.targetEventDayId === ALL_EVENT_DAYS_VALUE
+                                  ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
+                                  : 'border-[#e7ece7] bg-white text-black/55 hover:bg-[#f5f7f5]'
+                              }`}
+                            >
+                              全部日期
+                            </button>
                             {eventDayTargets(draft).map((day) => {
                               const active = panel.targetEventDayId === day.eventDayId;
                               return (
@@ -3095,6 +3161,17 @@ export default function EventStudioAIImportDock({
                         <label className="space-y-1 text-xs text-black/45">
                           <span>目标舞台</span>
                           <div className="flex gap-2 overflow-x-auto pb-1">
+                            <button
+                              type="button"
+                              onClick={() => updatePanel({ targetStageName: ALL_STAGES_VALUE })}
+                              className={`${aiCompactSelectorChipClass} ${
+                                panel.targetStageName === ALL_STAGES_VALUE
+                                  ? 'border-[#cfe0ff] bg-[#eef4ff] text-[#3567d6]'
+                                  : 'border-[#e7ece7] bg-white text-black/55 hover:bg-[#f5f7f5]'
+                              }`}
+                            >
+                              全部舞台
+                            </button>
                             {availableStageNames(draft, panel.timetableSlots).map((stage) => {
                               const active = panel.targetStageName === stage;
                               return (
