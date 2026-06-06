@@ -52,6 +52,7 @@ import {
   storageDateToEventDate,
 } from '../utils/event-timezone';
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
+import { getServerCozeRuntimeConfig } from '../config/runtime-coze-config';
 import { contentCompliance } from '../utils/content-compliance';
 import {
   INPUT_LIMITS,
@@ -3071,31 +3072,10 @@ const parseCozeTimeoutMs = (value: unknown): number | null => {
   }
   return null;
 };
-const cozeTimetableWorkflowRunUrl = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_RUN_URL);
-const cozeTimetableWorkflowToken = cleanEnv(process.env.COZE_TIMETABLE_WORKFLOW_TOKEN);
-const cozeTimetableWorkflowTimeoutMs =
-  parseCozeTimeoutMs(process.env.COZE_TIMETABLE_WORKFLOW_TIMEOUT_MS) ?? 480_000;
-const cozeLineupWorkflowRunUrl = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_RUN_URL);
-const cozeLineupWorkflowToken = cleanEnv(process.env.COZE_LINEUP_WORKFLOW_TOKEN);
-const cozeLineupWorkflowTimeoutMs =
-  parseCozeTimeoutMs(process.env.COZE_LINEUP_WORKFLOW_TIMEOUT_MS) ?? 480_000;
-const cozePosterWorkflowRunUrl = cleanEnv(process.env.COZE_POSTER_WORKFLOW_RUN_URL);
-const cozePosterWorkflowToken = cleanEnv(process.env.COZE_POSTER_WORKFLOW_TOKEN);
-const cozePosterWorkflowTimeoutMs =
-  parseCozeTimeoutMs(process.env.COZE_POSTER_WORKFLOW_TIMEOUT_MS) ?? 480_000;
-const cozeOssAccelerateBaseUrl = (() => {
-  const explicit =
-    cleanEnv(process.env.COZE_OSS_ACCELERATE_BASE_URL) ||
-    cleanEnv(process.env.OSS_ACCELERATE_BASE_URL) ||
-    cleanEnv(process.env.COZE_ACCELERATE_OSS_BASE_URL);
-  if (explicit) return explicit.replace(/\/+$/g, '');
-  if (!ossBucket) return null;
-  return `https://${ossBucket}.oss-accelerate.aliyuncs.com`;
-})();
-const cozePublicBaseUrl =
-  cleanEnv(process.env.COZE_PUBLIC_BASE_URL) ||
-  cleanEnv(process.env.PUBLIC_API_BASE_URL) ||
-  cleanEnv(process.env.PUBLIC_BASE_URL);
+const getRuntimeCozeConfig = () =>
+  getServerCozeRuntimeConfig({
+    ossBucket,
+  });
 
 const tryParseUrlHost = (value: string | null | undefined): string | null => {
   const trimmed = String(value || '').trim();
@@ -3116,19 +3096,8 @@ const publicOssBaseUrlForCurrentBucket = (() => {
   return `https://${bucketHost}`;
 })();
 
-const cozeAcceleratedSourceHosts = new Set(
-  [
-    publicOssBaseUrlForCurrentBucket,
-    cozeOssAccelerateBaseUrl,
-    cleanEnv(process.env.MEDIA_PUBLIC_BASE_URL),
-    cleanEnv(process.env.OSS_PUBLIC_BASE_URL),
-    cleanEnv(process.env.MEDIA_CDN_BASE_URL),
-  ]
-    .map((value) => tryParseUrlHost(value))
-    .filter((value): value is string => Boolean(value))
-);
-
 const currentRequestOrigin = (req: Request): string => {
+  const cozePublicBaseUrl = getRuntimeCozeConfig().publicBaseUrl;
   if (cozePublicBaseUrl) {
     return cozePublicBaseUrl.replace(/\/+$/g, '');
   }
@@ -3154,6 +3123,18 @@ const resolvePublicImageUrlForCoze = (req: Request, imageUrl: string): string =>
 const rewriteImageUrlToCozeAcceleratedOss = (
   imageUrl: string
 ): { url: string; rewritten: boolean; reason: 'accelerate' | 'passthrough' } => {
+  const cozeOssAccelerateBaseUrl = getRuntimeCozeConfig().ossAccelerateBaseUrl;
+  const cozeAcceleratedSourceHosts = new Set(
+    [
+      publicOssBaseUrlForCurrentBucket,
+      cozeOssAccelerateBaseUrl,
+      cleanEnv(process.env.MEDIA_PUBLIC_BASE_URL),
+      cleanEnv(process.env.OSS_PUBLIC_BASE_URL),
+      cleanEnv(process.env.MEDIA_CDN_BASE_URL),
+    ]
+      .map((value) => tryParseUrlHost(value))
+      .filter((value): value is string => Boolean(value))
+  );
   const trimmed = imageUrl.trim();
   if (!trimmed || !cozeOssAccelerateBaseUrl || !/^https?:\/\//i.test(trimmed)) {
     return { url: trimmed, rewritten: false, reason: 'passthrough' };
@@ -5870,6 +5851,10 @@ const runCozeLineupWorker = async (
   fileType: string,
   signal?: AbortSignal
 ): Promise<{ normalizedText: string; lineupInfo: ImportedLineupItem[] }> => {
+  const runtimeCozeConfig = getRuntimeCozeConfig();
+  const cozeLineupWorkflowRunUrl = runtimeCozeConfig.lineup.runUrl;
+  const cozeLineupWorkflowToken = runtimeCozeConfig.lineup.token;
+  const cozeLineupWorkflowTimeoutMs = runtimeCozeConfig.lineup.timeoutMs;
   if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
     throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
   }
@@ -6140,6 +6125,10 @@ const runCozeLineupV2Worker = async (
   context: LineupRecognitionContext,
   signal?: AbortSignal
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
+  const runtimeCozeConfig = getRuntimeCozeConfig();
+  const cozeLineupWorkflowRunUrl = runtimeCozeConfig.lineup.runUrl;
+  const cozeLineupWorkflowToken = runtimeCozeConfig.lineup.token;
+  const cozeLineupWorkflowTimeoutMs = runtimeCozeConfig.lineup.timeoutMs;
   if (!cozeLineupWorkflowRunUrl || !cozeLineupWorkflowToken) {
     throw new Error('COZE_LINEUP_WORKFLOW_RUN_URL or COZE_LINEUP_WORKFLOW_TOKEN is not configured');
   }
@@ -6366,6 +6355,10 @@ const runCozePosterWorker = async (
   fileType: string,
   signal?: AbortSignal
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
+  const runtimeCozeConfig = getRuntimeCozeConfig();
+  const cozePosterWorkflowRunUrl = runtimeCozeConfig.poster.runUrl;
+  const cozePosterWorkflowToken = runtimeCozeConfig.poster.token;
+  const cozePosterWorkflowTimeoutMs = runtimeCozeConfig.poster.timeoutMs;
   if (!cozePosterWorkflowRunUrl || !cozePosterWorkflowToken) {
     throw new Error('COZE_POSTER_WORKFLOW_RUN_URL or COZE_POSTER_WORKFLOW_TOKEN is not configured');
   }
@@ -6787,6 +6780,10 @@ const runCozeTimetableWorker = async (
   context: TimetableRecognitionContext,
   signal?: AbortSignal
 ): Promise<{ rawJson: unknown; rawResponse: unknown }> => {
+  const runtimeCozeConfig = getRuntimeCozeConfig();
+  const cozeTimetableWorkflowRunUrl = runtimeCozeConfig.timetable.runUrl;
+  const cozeTimetableWorkflowToken = runtimeCozeConfig.timetable.token;
+  const cozeTimetableWorkflowTimeoutMs = runtimeCozeConfig.timetable.timeoutMs;
   if (!cozeTimetableWorkflowRunUrl || !cozeTimetableWorkflowToken) {
     throw new Error('COZE_TIMETABLE_WORKFLOW_RUN_URL or COZE_TIMETABLE_WORKFLOW_TOKEN is not configured');
   }

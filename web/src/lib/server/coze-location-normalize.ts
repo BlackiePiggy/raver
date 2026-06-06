@@ -1,26 +1,5 @@
 type JsonRecord = Record<string, unknown>;
-
-const cozeLocationNormalizeRunUrl = String(process.env.COZE_LOCATION_NORMALIZE_RUN_URL || '').trim();
-const cozeLocationNormalizeToken = String(
-  process.env.COZE_LOCATION_NORMALIZE_TOKEN ||
-    process.env.COZE_TOKEN_LOCATION_NORMALIZE ||
-    process.env.COZE_TOKEN_TRANSLATE ||
-    process.env.COZE_WORKFLOW_TOKEN ||
-    process.env.COZE_TIMETABLE_WORKFLOW_TOKEN ||
-    process.env.COZE_LINEUP_WORKFLOW_TOKEN ||
-    ''
-).trim();
-const cozeLocationNormalizeTimeoutMs = (() => {
-  const parsed = Number(
-    process.env.COZE_LOCATION_NORMALIZE_TIMEOUT_MS ||
-      process.env.COZE_LOCATION_NORMALIZE_TIMEOUT_SEC ||
-      90_000
-  );
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return parsed < 1000 ? Math.floor(parsed * 1000) : Math.floor(parsed);
-  }
-  return 90_000;
-})();
+import { getWebCozeRuntimeConfig } from '@/lib/server/runtime-coze-config';
 
 const asRecord = (value: unknown): JsonRecord => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -300,6 +279,10 @@ const extractLocationNormalizationIssues = (payload: unknown): string[] => {
 };
 
 export const runCozeLocationNormalize = async (payload: unknown) => {
+  const runtimeConfig = getWebCozeRuntimeConfig();
+  const cozeLocationNormalizeRunUrl = runtimeConfig.locationNormalize.runUrl;
+  const cozeLocationNormalizeToken = runtimeConfig.locationNormalize.token;
+  const cozeLocationNormalizeTimeoutMs = runtimeConfig.locationNormalize.timeoutMs;
   if (!cozeLocationNormalizeRunUrl || !cozeLocationNormalizeToken) {
     throw new Error(
       'COZE_LOCATION_NORMALIZE_RUN_URL or COZE_LOCATION_NORMALIZE_TOKEN is not configured'

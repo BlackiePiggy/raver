@@ -1,42 +1,5 @@
 type JsonRecord = Record<string, unknown>;
-
-const cozeTranslateRunUrl = String(process.env.COZE_TRANSLATE_RUN_URL || '').trim();
-const cozeTranslateToken = String(
-  process.env.COZE_TOKEN_TRANSLATE ||
-    process.env.COZE_WORKFLOW_TOKEN ||
-    process.env.COZE_TIMETABLE_WORKFLOW_TOKEN ||
-    process.env.COZE_LINEUP_WORKFLOW_TOKEN ||
-    ''
-).trim();
-const cozeTranslateTimeoutMs = (() => {
-  const parsed = Number(
-    process.env.COZE_TRANSLATE_TIMEOUT_MS || process.env.COZE_TRANSLATE_TIMEOUT_SEC || 90_000
-  );
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return parsed < 1000 ? Math.floor(parsed * 1000) : Math.floor(parsed);
-  }
-  return 90_000;
-})();
-
-const cozeDjTranslateRunUrl = String(process.env.COZE_DJ_TRANS_RUN_URL || '').trim();
-const cozeDjTranslateToken = String(
-  process.env.COZE_DJ_TRANS_TOKEN ||
-    process.env.COZE_TOKEN_DJ_TRANS ||
-    process.env.COZE_TOKEN_TRANSLATE ||
-    process.env.COZE_WORKFLOW_TOKEN ||
-    process.env.COZE_TIMETABLE_WORKFLOW_TOKEN ||
-    process.env.COZE_LINEUP_WORKFLOW_TOKEN ||
-    ''
-).trim();
-const cozeDjTranslateTimeoutMs = (() => {
-  const parsed = Number(
-    process.env.COZE_DJ_TRANS_TIMEOUT_MS || process.env.COZE_DJ_TRANS_TIMEOUT_SEC || 90_000
-  );
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return parsed < 1000 ? Math.floor(parsed * 1000) : Math.floor(parsed);
-  }
-  return 90_000;
-})();
+import { getWebCozeRuntimeConfig } from '@/lib/server/runtime-coze-config';
 
 const asRecord = (value: unknown): JsonRecord => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -357,15 +320,16 @@ export const extractDjTranslationInfo = (payload: unknown) => {
 };
 
 export const runCozeFestivalTranslate = async (festival: unknown) => {
+  const runtimeConfig = getWebCozeRuntimeConfig();
   const festivalRecord = asRecord(festival);
   if (!Object.keys(festivalRecord).length) {
     throw new Error('festival object is required');
   }
   const raw = await postCozeJson(
-    cozeTranslateRunUrl,
-    cozeTranslateToken,
+    runtimeConfig.festivalTranslate.runUrl,
+    runtimeConfig.festivalTranslate.token,
     { festival: festivalRecord },
-    cozeTranslateTimeoutMs,
+    runtimeConfig.festivalTranslate.timeoutMs,
     'COZE_TRANSLATE'
   );
   return {
@@ -375,6 +339,7 @@ export const runCozeFestivalTranslate = async (festival: unknown) => {
 };
 
 export const runCozeDjFieldTranslate = async (fields: unknown) => {
+  const runtimeConfig = getWebCozeRuntimeConfig();
   const fieldRecord = asRecord(fields);
   const sourceCountry = cleanText(fieldRecord.country);
   const sourceBio = cleanText(fieldRecord.bio);
@@ -382,8 +347,8 @@ export const runCozeDjFieldTranslate = async (fields: unknown) => {
     throw new Error('fields.country or fields.bio is required');
   }
   const raw = await postCozeJson(
-    cozeDjTranslateRunUrl,
-    cozeDjTranslateToken,
+    runtimeConfig.djTranslate.runUrl,
+    runtimeConfig.djTranslate.token,
     {
       fields: {
         country: sourceCountry,
@@ -392,7 +357,7 @@ export const runCozeDjFieldTranslate = async (fields: unknown) => {
       instruction:
         'If country or bio is empty, return empty strings in fields_cn/fields_en for the corresponding fields and do not return explanatory text.',
     },
-    cozeDjTranslateTimeoutMs,
+    runtimeConfig.djTranslate.timeoutMs,
     'COZE_DJ_TRANSLATE'
   );
   const translated = extractDjTranslationInfo(raw);

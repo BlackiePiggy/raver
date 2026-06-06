@@ -2,20 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { normalizeCountryBiTextPayload } from '../utils/country-i18n';
 import { normalizeTriTextPayload } from '../utils/i18n';
-
-const cozeDjEnrichmentRunUrl = String(
-  process.env.COZE_DJ_ENRICH_RUN_URL || 'https://wd6gv5pg6k.coze.site/run'
-).trim();
-const cozeDjEnrichmentToken = String(
-  process.env.COZE_DJ_ENRICH_TOKEN || process.env.COZE_WORKFLOW_TOKEN || ''
-).trim();
-const cozeDjEnrichmentTimeoutMs = (() => {
-  const parsed = Number(process.env.COZE_DJ_ENRICH_TIMEOUT_MS || 120000);
-  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 600_000) {
-    return Math.floor(parsed);
-  }
-  return 120_000;
-})();
+import { getServerCozeRuntimeConfig } from '../config/runtime-coze-config';
 const djEnrichmentWorkerEnabled = (() => {
   const normalized = String(process.env.DJ_ENRICH_WORKER_ENABLED || '').trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
@@ -216,6 +203,10 @@ const buildCozeRequestPayload = (input: DjEnrichmentInputItem): Record<string, u
 };
 
 const runCozeDjEnrichment = async (input: DjEnrichmentInputItem): Promise<{ normalized: DjEnrichmentNormalized; raw: unknown }> => {
+  const runtimeConfig = getServerCozeRuntimeConfig();
+  const cozeDjEnrichmentRunUrl = runtimeConfig.djEnrich.runUrl;
+  const cozeDjEnrichmentToken = runtimeConfig.djEnrich.token;
+  const cozeDjEnrichmentTimeoutMs = runtimeConfig.djEnrich.timeoutMs;
   if (!cozeDjEnrichmentRunUrl || !cozeDjEnrichmentToken) {
     throw new Error('COZE_DJ_ENRICH_RUN_URL or COZE_DJ_ENRICH_TOKEN is not configured');
   }
