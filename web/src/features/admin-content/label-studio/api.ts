@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 import {
   LabelStudioCreateInput,
   LabelStudioCreateResult,
@@ -28,23 +29,16 @@ export const labelStudioApi = {
       draftId: string;
     }
   ): Promise<LabelStudioImageUploadResponse> {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('usage', options.usage);
-    formData.append('draftId', options.draftId);
-
-    const response = await authenticatedFetch(getApiUrl('/v1/wiki/brands/upload-image'), {
-      method: 'POST',
-      body: formData,
-      headers: {},
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/wiki/brands/upload-image'),
+      file,
+      fields: {
+        usage: options.usage,
+        draftId: options.draftId,
+      },
+      fallbackError: '厂牌图片上传失败',
+      invalidResponseError: '厂牌图片上传成功，但未返回有效图片地址',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error?.error || '厂牌图片上传失败');
-    }
-
-    return response.json();
   },
 
   async deleteImages(input: {

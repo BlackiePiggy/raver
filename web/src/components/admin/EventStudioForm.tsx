@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Languages, Plus, X } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import type { EntityBindingValue } from '@/components/admin/EntityBindingSearch';
 import EventLocationPickerModal, {
@@ -104,12 +105,12 @@ const IMAGE_ZONE_CONFIG: Array<{
   hint: string;
   emphasis: 'primary' | 'secondary';
 }> = [
-  { usage: 'poster', title: 'Poster', description: '活动主视觉，目录和详情页最优先。', hint: '建议上传海报主图。', emphasis: 'primary' },
-  { usage: 'cover', title: 'Cover', description: '封面横图，可作为活动详情头图。', hint: '适合横版头图。', emphasis: 'primary' },
-  { usage: 'lineup', title: 'Lineup', description: '阵容图，用于 lineup 识别和详情补充。', hint: '适合艺人阵容排版图。', emphasis: 'primary' },
-  { usage: 'timetable', title: 'Timetable', description: '时间表图，便于人工核对排期。', hint: '适合舞台排期长图。', emphasis: 'secondary' },
-  { usage: 'map', title: 'Map', description: '场地地图或区域导航图。', hint: '可上传场内导览图。', emphasis: 'secondary' },
-  { usage: 'other', title: 'Other', description: '其他视觉素材，如票务图或补充资料。', hint: '用于补充资料。', emphasis: 'secondary' },
+  { usage: 'poster', title: '海报', description: '活动主视觉，目录和详情页最优先。', hint: '建议上传海报主图。', emphasis: 'primary' },
+  { usage: 'cover', title: '封面', description: '封面横图，可作为活动详情头图。', hint: '适合横版头图。', emphasis: 'primary' },
+  { usage: 'lineup', title: '阵容', description: '阵容图，用于 lineup 识别和详情补充。', hint: '适合艺人阵容排版图。', emphasis: 'primary' },
+  { usage: 'timetable', title: '时间表', description: '时间表图，便于人工核对排期。', hint: '适合舞台排期长图。', emphasis: 'secondary' },
+  { usage: 'map', title: '地图', description: '场地地图或区域导航图。', hint: '可上传场内导览图。', emphasis: 'secondary' },
+  { usage: 'other', title: '其他', description: '其他视觉素材，如票务图或补充资料。', hint: '用于补充资料。', emphasis: 'secondary' },
 ];
 
 const textInputClassName = 'admin-studio-input';
@@ -216,10 +217,10 @@ const normalizeZoneSortOrder = (items: EventStudioImageState[]) =>
 const MAX_MEDIA_SELECTION_COUNT = 12;
 
 const imageHasVisibleAsset = (image: EventStudioImageState): boolean =>
-  image.remoteUrl.trim().length > 0 || Boolean(image.localPreviewUrl?.trim());
+  String(image.remoteUrl || '').trim().length > 0 || Boolean(image.localPreviewUrl?.trim());
 
 const imagePreviewUrl = (image: EventStudioImageState): string =>
-  image.remoteUrl.trim() || image.localPreviewUrl?.trim() || '';
+  String(image.remoteUrl || '').trim() || image.localPreviewUrl?.trim() || '';
 
 const imageOriginLabel = (origin: EventStudioImageOrigin): string => {
   if (origin === 'persisted-event') return '活动已存在资源';
@@ -241,20 +242,6 @@ const isAbortLikeError = (error: unknown): boolean =>
     : error instanceof Error
       ? error.name === 'AbortError'
       : false;
-
-function OrderArrowIcon({ direction }: { direction: 'left' | 'right' }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
-      <path
-        d={direction === 'left' ? 'M9.75 3.5L5.25 8l4.5 4.5' : 'M6.25 3.5L10.75 8l-4.5 4.5'}
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function Section({
   title,
@@ -1669,13 +1656,12 @@ export default function EventStudioForm({
     }
   };
 
-  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: EventStudioImageUsage) => {
-    const selectedFiles = Array.from(event.target.files || []);
+  const handleImageUploadFiles = async (selectedFiles: File[], usage: EventStudioImageUsage) => {
     if (!selectedFiles.length) return;
 
     const files = selectedFiles.slice(0, MAX_MEDIA_SELECTION_COUNT);
     if (selectedFiles.length > MAX_MEDIA_SELECTION_COUNT) {
-      setConflictNotice(`涓€娆℃渶澶氶€夋嫨 ${MAX_MEDIA_SELECTION_COUNT} 寮犲浘鐗囷紝宸叉寜鍓?${MAX_MEDIA_SELECTION_COUNT} 寮犲鐞嗐€?`);
+      setConflictNotice(`单次最多选择 ${MAX_MEDIA_SELECTION_COUNT} 张图片，已按前 ${MAX_MEDIA_SELECTION_COUNT} 张处理。`);
     }
 
     setSubmitError(null);
@@ -1712,7 +1698,12 @@ export default function EventStudioForm({
     pendingItems.forEach((item) => {
       void startImmediateImageUpload(usage, item);
     });
+  };
+
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: EventStudioImageUsage) => {
+    const selectedFiles = Array.from(event.target.files || []);
     event.target.value = '';
+    await handleImageUploadFiles(selectedFiles, usage);
   };
 
   const handleImageMove = (usage: EventStudioImageUsage, imageId: string, direction: number) => {
@@ -2550,105 +2541,38 @@ export default function EventStudioForm({
     if (!config) return null;
     const items = draft.imageZones[usage];
     const isPrimary = config.emphasis === 'primary';
-    const zoneUploadingCount = items.filter((item) => item.uploadState === 'uploading').length;
-
     return (
-      <div
+      <AdminImageUploadPanel
         key={usage}
-        className={`min-h-[332px] ${isPrimary ? 'admin-reference-card' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9]'} p-4`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#071110]">{config.title}</div>
-            <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-black/48">{config.description}</div>
-          </div>
-          <label className="admin-studio-button-secondary shrink-0 cursor-pointer px-3 py-2 text-[11px]">
-            {items.length ? 'Add More' : 'Choose Images'}
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              className="hidden"
-              onChange={(event) => void handleImageUpload(event, usage)}
-            />
-          </label>
-        </div>
-
-        <div className="mt-4">
-          <div className="mb-3 flex items-center justify-between gap-3 text-[11px] text-black/45">
-            <span>{items.length} images</span>
-            <span>{zoneUploadingCount ? `${zoneUploadingCount} uploading` : 'Up to 12 per pick'}</span>
-          </div>
-          {items.length ? (
-            <div className="admin-shell-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-              {items.map((image, index) => (
-                <div key={image.id} className="w-[168px] shrink-0 overflow-hidden rounded-[20px] border border-[#e8eceb] bg-white">
-                  <div className="relative h-[128px] overflow-hidden bg-[#f2f3ef]">
-                    {imagePreviewUrl(image) ? (
-                      image.remoteUrl.trim() ? (
-                        <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="240px" />
-                      ) : (
-                        <img src={imagePreviewUrl(image)} alt={`${config.title}-${index + 1}`} className="h-full w-full object-cover" />
-                      )
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-[11px] text-black/35">No preview</div>
-                    )}
-                    {image.uploadState === 'uploading' ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-[11px] font-medium text-white">Uploading...</div>
-                    ) : null}
-                    {image.uploadState === 'failed' ? (
-                      <div className="absolute right-2 top-2 rounded-full bg-[#fff4e6] px-2 py-1 text-[10px] font-semibold text-[#b25b00]">
-                        Failed
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="space-y-2 px-3 py-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-[11px] font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
-                      <div className="mt-1 truncate text-[10px] text-black/40">
-                        #{image.sortOrder} · {imageStatusLabel(image)}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleImageMove(usage, image.id, -1)}
-                          disabled={index === 0}
-                          aria-label="Move left"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#d6ddd7] text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <OrderArrowIcon direction="left" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleImageMove(usage, image.id, 1)}
-                          disabled={index === items.length - 1}
-                          aria-label="Move right"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#d6ddd7] text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <OrderArrowIcon direction="right" />
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleImageRemove(usage, image)}
-                        className="admin-studio-button-danger px-2.5 py-2 text-[10px]"
-                      >
-                        {deletingImageId === image.id ? 'Removing...' : 'Remove'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex min-h-[224px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white px-4 text-center text-[11px] leading-5 text-black/42">
-              {config.hint}
-            </div>
-          )}
-        </div>
-      </div>
+        title={config.title}
+        description={config.description}
+        hint={config.hint}
+        items={items.map((image, index) => ({
+          id: image.id,
+          previewUrl: imagePreviewUrl(image),
+          remoteUrl: String(image.remoteUrl || '').trim() || null,
+          fileName: image.fileName || `${config.title} ${index + 1}`,
+          statusText: `#${image.sortOrder} · ${imageStatusLabel(image)}`,
+          state:
+            image.uploadState === 'uploading'
+              ? 'uploading'
+              : image.uploadState === 'failed'
+                ? 'failed'
+                : 'idle',
+          removeLabel: deletingImageId === image.id ? '移除中...' : '移除',
+          onRemove: () => void handleImageRemove(usage, image),
+          onMoveLeft: () => handleImageMove(usage, image.id, -1),
+          onMoveRight: () => handleImageMove(usage, image.id, 1),
+          moveLeftDisabled: index === 0,
+          moveRightDisabled: index === items.length - 1,
+        }))}
+        multiple
+        tone={isPrimary ? 'primary' : 'secondary'}
+        previewMode="landscape"
+        populatedActionLabel="继续添加"
+        emptyActionLabel="选择图片"
+        onUpload={(files) => void handleImageUploadFiles(files, usage)}
+      />
     );
   };
 

@@ -19,8 +19,8 @@ const hasAnyLink = (draft: OrganizerStudioDraft): boolean => {
     draft.tiktok,
   ];
   return (
-    directLinks.some((item) => item.trim().length > 0) ||
-    draft.extraLinks.some((item) => item.url.trim().length > 0)
+    directLinks.some((item) => String(item || '').trim().length > 0) ||
+    draft.extraLinks.some((item) => String(item.url || '').trim().length > 0)
   );
 };
 
@@ -36,7 +36,7 @@ const hasInvalidLink = (draft: OrganizerStudioDraft): boolean => {
   ];
 
   return directLinks.some((item) => {
-    const trimmed = item.trim();
+    const trimmed = String(item || '').trim();
     if (!trimmed) return false;
     try {
       new URL(trimmed);
@@ -62,7 +62,7 @@ export const validateOrganizerStudioDraft = (
     errors.name = `主办方名称不能超过 ${INPUT_LIMITS.organizer.name} 个字符`;
   }
 
-  if (!draft.avatarImage?.remoteUrl.trim()) {
+  if (!String(draft.avatarImage?.remoteUrl || '').trim()) {
     errors.avatarImage = '请上传主办方头像';
   }
 
@@ -74,7 +74,7 @@ export const validateOrganizerStudioDraft = (
     errors.name = errors.name || `别名最多填写 ${INPUT_LIMITS.organizer.aliasesMaxItems} 项`;
   }
 
-  if (draft.aliases.some((item) => countText(item) > INPUT_LIMITS.organizer.alias)) {
+  if (draft.aliases.some((item) => countText(String(item || '')) > INPUT_LIMITS.organizer.alias)) {
     errors.name = errors.name || `别名单项不能超过 ${INPUT_LIMITS.organizer.alias} 个字符`;
   }
 
@@ -102,7 +102,7 @@ export const validateOrganizerStudioDraft = (
     errors.name = errors.name || `主办方介绍不能超过 ${INPUT_LIMITS.organizer.introduction} 个字符`;
   }
 
-  if (draft.extraLinks.some((item) => item.title.trim() && countText(item.title) > INPUT_LIMITS.organizer.extraLinkTitle)) {
+  if (draft.extraLinks.some((item) => String(item.title || '').trim() && countText(String(item.title || '')) > INPUT_LIMITS.organizer.extraLinkTitle)) {
     errors.links = '额外链接标题过长，请控制在合理范围内';
   }
 

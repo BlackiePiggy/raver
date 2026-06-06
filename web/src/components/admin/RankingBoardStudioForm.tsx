@@ -1,10 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import {
   rankingAdminApi,
   type RankingBoardDetail,
@@ -45,7 +45,6 @@ const buildDraftFromDetail = (detail: RankingBoardDetail): DraftState => ({
 
 export default function RankingBoardStudioForm({ mode, boardId }: RankingBoardStudioFormProps) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState<DraftState>(createInitialDraft);
   const [loading, setLoading] = useState(mode === 'edit');
   const [saving, setSaving] = useState(false);
@@ -240,46 +239,26 @@ export default function RankingBoardStudioForm({ mode, boardId }: RankingBoardSt
               </div>
 
               <div className="space-y-4">
-                <div className="admin-reference-soft-card p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-black/38">Cover</div>
-                  <div className="mt-3 overflow-hidden rounded-[20px] border border-[#e8eceb] bg-[#f5f6f7]">
-                    <div className="relative aspect-[1/1]">
-                      {draft.coverImageUrl.trim() ? (
-                        <Image src={draft.coverImageUrl} alt={draft.title || 'ranking cover'} fill className="object-cover" sizes="480px" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-sm text-black/45">暂无封面</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="rounded-full border border-[#d7ded9] bg-white px-4 py-2 text-sm text-[#18211f] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {uploading ? '上传中...' : '上传封面'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraft((current) => ({ ...current, coverImageUrl: '' }))}
-                      className="rounded-full border border-[#ead6d6] bg-white px-4 py-2 text-sm text-[#8b3a3a]"
-                    >
-                      清空封面
-                    </button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      event.currentTarget.value = '';
-                      void handleUploadCover(file);
-                    }}
-                  />
-                </div>
+                <AdminImageUploadPanel
+                  title="封面"
+                  description="榜单的主封面图，列表、详情和分享卡片都会优先使用。"
+                  hint="建议上传方形或主体居中的视觉图。"
+                  items={draft.coverImageUrl.trim() ? [{
+                    id: 'cover',
+                    previewUrl: draft.coverImageUrl,
+                    remoteUrl: draft.coverImageUrl,
+                    fileName: draft.title || '榜单封面',
+                    statusText: '当前已选择的封面链接',
+                    linkUrl: draft.coverImageUrl,
+                    linkLabel: '查看原图链接',
+                    onRemove: () => setDraft((current) => ({ ...current, coverImageUrl: '' })),
+                    removeLabel: '清空',
+                  }] : []}
+                  uploading={uploading}
+                  previewMode="square"
+                  tone="secondary"
+                  onUpload={(files) => void handleUploadCover(files[0] || null)}
+                />
 
                 <input
                   className="admin-reference-soft-card w-full px-4 py-3 text-sm"

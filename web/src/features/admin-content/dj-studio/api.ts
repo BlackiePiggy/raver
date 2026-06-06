@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 import {
   DJStudioCreateInput,
   DJStudioCreateResult,
@@ -71,23 +72,16 @@ export const djStudioApi = {
       draftId: string;
     }
   ): Promise<DJStudioImageUploadResponse> {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('usage', options.usage);
-    formData.append('draftId', options.draftId);
-
-    const response = await authenticatedFetch(getApiUrl('/v1/djs/upload-image'), {
-      method: 'POST',
-      body: formData,
-      headers: {},
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/djs/upload-image'),
+      file,
+      fields: {
+        usage: options.usage,
+        draftId: options.draftId,
+      },
+      fallbackError: 'DJ 图片上传失败',
+      invalidResponseError: 'DJ 图片上传成功，但未返回有效图片地址',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error?.error || 'DJ 图片上传失败');
-    }
-
-    return response.json();
   },
 
   async deleteDraftImages(input: {

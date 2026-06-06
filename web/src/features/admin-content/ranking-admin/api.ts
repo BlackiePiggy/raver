@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 
 export type RankingEntityType = 'dj' | 'festival';
 
@@ -207,22 +208,13 @@ export const rankingAdminApi = {
   },
 
   async uploadImage(file: File, boardId: string): Promise<{ url: string; originalUrl?: string | null; fileName?: string | null }> {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('boardId', boardId);
-
-    const response = await authenticatedFetch(getApiUrl('/v1/learn/rankings/upload-image'), {
-      method: 'POST',
-      body: formData,
-      headers: {},
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/learn/rankings/upload-image'),
+      file,
+      fields: { boardId },
+      fallbackError: '榜单图片上传失败',
+      invalidResponseError: '榜单图片上传成功，但未返回有效图片地址',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: string }).error || '榜单图片上传失败');
-    }
-
-    return response.json();
   },
 
   async deleteBoard(boardId: string): Promise<void> {

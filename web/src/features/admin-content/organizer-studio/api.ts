@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 import {
   OrganizerStudioCreateInput,
   OrganizerStudioCreateResult,
@@ -73,26 +74,17 @@ export const organizerStudioApi = {
       sort?: number;
     }
   ): Promise<OrganizerImageUploadResponse> {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('usage', options.usage);
-    formData.append('draftId', options.draftId);
-    if (typeof options.sort === 'number') {
-      formData.append('sort', String(options.sort));
-    }
-
-    const response = await authenticatedFetch(getApiUrl('/v1/wiki/brands/upload-image'), {
-      method: 'POST',
-      body: formData,
-      headers: {},
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/wiki/brands/upload-image'),
+      file,
+      fields: {
+        usage: options.usage,
+        draftId: options.draftId,
+        sort: typeof options.sort === 'number' ? options.sort : undefined,
+      },
+      fallbackError: '主办方图片上传失败',
+      invalidResponseError: '主办方图片上传成功，但未返回有效图片地址',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error?.error || '主办方图片上传失败');
-    }
-
-    return response.json();
   },
 
   async createOrganizer(input: OrganizerStudioCreateInput): Promise<OrganizerStudioCreateResult> {

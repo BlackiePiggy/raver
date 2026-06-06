@@ -1,8 +1,8 @@
 'use client';
 
-import Image from 'next/image';
-import { type ChangeEvent, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import DynamicEntityNameListField from '@/components/admin/DynamicEntityNameListField';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
@@ -57,55 +57,6 @@ function Field({
       {hint ? <div className="mt-2 text-xs text-black/40">{hint}</div> : null}
       {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
-  );
-}
-
-function LabelImageField({
-  label,
-  imageUrl,
-  uploading,
-  onChange,
-  onClear,
-}: {
-  label: string;
-  imageUrl: string;
-  uploading: boolean;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onClear: () => void;
-}) {
-  const hasImage = imageUrl.trim().length > 0;
-
-  return (
-    <div className="admin-studio-soft w-full max-w-[240px] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-[#071110]">{label}</p>
-        {hasImage ? (
-          <button type="button" onClick={onClear} className="text-xs text-black/48">
-            清空
-          </button>
-        ) : null}
-      </div>
-      <div className="relative mt-3 aspect-square overflow-hidden rounded-[20px] border border-[#e8eceb] bg-[linear-gradient(135deg,#edf7f2,#f7efda)]">
-        {hasImage ? (
-          <Image src={imageUrl} alt={label} fill className="object-cover" sizes="240px" />
-        ) : (
-          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">暂无图片</div>
-        )}
-      </div>
-      <div className="mt-3 min-h-[44px] rounded-[16px] border border-[#e8eceb] bg-white px-3 py-2 text-xs text-black/55">
-        {hasImage ? (
-          <a href={imageUrl} target="_blank" rel="noreferrer" className="line-clamp-2 break-all hover:underline">
-            {imageUrl}
-          </a>
-        ) : (
-          '上传后会在这里展示当前图片链接'
-        )}
-      </div>
-      <label className="admin-studio-button-secondary mt-4 flex cursor-pointer items-center justify-center px-4 py-3 text-sm">
-        {uploading ? '上传中...' : hasImage ? '更换图片' : '上传图片'}
-        <input type="file" accept="image/*" className="hidden" onChange={onChange} />
-      </label>
-    </div>
   );
 }
 
@@ -261,12 +212,10 @@ export default function LabelStudioForm({
   };
 
   const handleImageUpload = async (
-    event: ChangeEvent<HTMLInputElement>,
+    file: File | null,
     field: 'logoUrl' | 'avatarUrl' | 'backgroundUrl',
     usage: 'poster' | 'avatar' | 'background'
   ) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
     if (!file) return;
 
     const setUploading =
@@ -398,26 +347,65 @@ export default function LabelStudioForm({
           <div className="lg:col-span-2">
             <Field label="视觉图片" hint="上传后会直接回填图片链接；也可以点击链接在新窗口检查原图。">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <LabelImageField
-                  label="Logo"
-                  imageUrl={draft.logoUrl}
+                <AdminImageUploadPanel
+                  title="Logo"
+                  description="厂牌的主识别图，适合方形或规整构图。"
+                  hint="上传后会直接回填图片链接，并保留当前原图链接。"
+                  items={draft.logoUrl.trim() ? [{
+                    id: 'logo',
+                    previewUrl: draft.logoUrl,
+                    remoteUrl: draft.logoUrl,
+                    fileName: 'Logo',
+                    statusText: '当前已选择的图片链接',
+                    linkUrl: draft.logoUrl,
+                    linkLabel: '查看原图链接',
+                    onRemove: () => void handleImageClear('logoUrl'),
+                    removeLabel: '清空',
+                  }] : []}
                   uploading={uploadingLogo}
-                  onChange={(event) => void handleImageUpload(event, 'logoUrl', 'poster')}
-                  onClear={() => void handleImageClear('logoUrl')}
+                  previewMode="square"
+                  tone="secondary"
+                  onUpload={(files) => void handleImageUpload(files[0] || null, 'logoUrl', 'poster')}
                 />
-                <LabelImageField
-                  label="头像"
-                  imageUrl={draft.avatarUrl}
+                <AdminImageUploadPanel
+                  title="头像"
+                  description="用于厂牌目录和详情卡片的头像展示。"
+                  hint="适合主体明确的方形视觉图。"
+                  items={draft.avatarUrl.trim() ? [{
+                    id: 'avatar',
+                    previewUrl: draft.avatarUrl,
+                    remoteUrl: draft.avatarUrl,
+                    fileName: '头像',
+                    statusText: '当前已选择的图片链接',
+                    linkUrl: draft.avatarUrl,
+                    linkLabel: '查看原图链接',
+                    onRemove: () => void handleImageClear('avatarUrl'),
+                    removeLabel: '清空',
+                  }] : []}
                   uploading={uploadingAvatar}
-                  onChange={(event) => void handleImageUpload(event, 'avatarUrl', 'avatar')}
-                  onClear={() => void handleImageClear('avatarUrl')}
+                  previewMode="square"
+                  tone="secondary"
+                  onUpload={(files) => void handleImageUpload(files[0] || null, 'avatarUrl', 'avatar')}
                 />
-                <LabelImageField
-                  label="背景图"
-                  imageUrl={draft.backgroundUrl}
+                <AdminImageUploadPanel
+                  title="背景图"
+                  description="用于厂牌详情页头部背景，建议使用更宽的横版图。"
+                  hint="适合横向背景视觉图，便于详情页头部展示。"
+                  items={draft.backgroundUrl.trim() ? [{
+                    id: 'background',
+                    previewUrl: draft.backgroundUrl,
+                    remoteUrl: draft.backgroundUrl,
+                    fileName: '背景图',
+                    statusText: '当前已选择的图片链接',
+                    linkUrl: draft.backgroundUrl,
+                    linkLabel: '查看原图链接',
+                    onRemove: () => void handleImageClear('backgroundUrl'),
+                    removeLabel: '清空',
+                  }] : []}
                   uploading={uploadingBackground}
-                  onChange={(event) => void handleImageUpload(event, 'backgroundUrl', 'background')}
-                  onClear={() => void handleImageClear('backgroundUrl')}
+                  previewMode="landscape"
+                  tone="secondary"
+                  onUpload={(files) => void handleImageUpload(files[0] || null, 'backgroundUrl', 'background')}
                 />
               </div>
             </Field>

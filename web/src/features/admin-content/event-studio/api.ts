@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 import type { components as EventContractComponents } from '../../../../../contracts/generated/web/event-admin';
 import {
   EventStudioAlignmentPreview,
@@ -141,30 +142,25 @@ export const eventStudioApi = {
       signal?: AbortSignal;
     }
   ): Promise<UploadImageResponse> {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('usage', options.usage);
     if (options.eventId?.trim()) {
-      formData.append('eventId', options.eventId.trim());
     } else if (options.draftId?.trim()) {
-      formData.append('draftId', options.draftId.trim());
     } else {
       throw new Error('eventId or draftId is required for event image upload');
     }
-
-    const response = await authenticatedFetch(getApiUrl('/v1/events/upload-image'), {
-      method: 'POST',
-      body: formData,
-      headers: {},
-      signal: options.signal,
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/events/upload-image'),
+      file,
+      fields: {
+        usage: options.usage,
+        eventId: options.eventId?.trim() || undefined,
+        draftId: options.draftId?.trim() || undefined,
+      },
+      fallbackError: '图片上传失败',
+      invalidResponseError: '图片上传成功，但未返回有效图片地址',
+      init: {
+        signal: options.signal,
+      },
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error?.error || '图片上传失败');
-    }
-
-    return response.json();
   },
 
   async deleteImages(input: { draftId?: string; eventId?: string; urls: string[] }): Promise<void> {

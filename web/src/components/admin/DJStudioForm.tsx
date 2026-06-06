@@ -1,9 +1,9 @@
 ﻿'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import { LocalizedTextField, MultilingualEditorOverlay, type LocalizedFieldKind, type LocalizedLocaleKey } from '@/components/admin/LocalizedTextEditor';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
@@ -140,44 +140,6 @@ function StepNavigation({
   );
 }
 
-function ImageDropZone({
-  label,
-  previewUrl,
-  uploading,
-  onChange,
-  onRemove,
-}: {
-  label: string;
-  previewUrl?: string | null;
-  uploading: boolean;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="admin-studio-soft w-full max-w-[220px] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-[#071110]">{label}</p>
-        {previewUrl && onRemove ? (
-          <button type="button" onClick={onRemove} className="text-xs text-black/48">
-            移除
-          </button>
-        ) : null}
-      </div>
-      <div className="relative mt-3 aspect-square overflow-hidden rounded-[20px] border border-[#e8eceb] bg-[linear-gradient(135deg,#edf7f2,#f7efda)]">
-        {previewUrl ? (
-          <Image src={previewUrl} alt={label} fill className="object-cover" sizes="220px" />
-        ) : (
-          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-black/42">暂无图片</div>
-        )}
-      </div>
-      <label className="admin-studio-button-secondary mt-4 flex cursor-pointer items-center justify-center px-4 py-3 text-sm">
-        {uploading ? '上传中...' : '上传图片'}
-        <input type="file" accept="image/*" className="hidden" onChange={onChange} />
-      </label>
-    </div>
-  );
-}
-
 const textInputClassName = 'admin-studio-input';
 
 const firstFilledText = (...values: Array<string | undefined | null>) => {
@@ -188,7 +150,7 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
   return '';
 };
 
-const countFilledItems = (items: string[]) => items.map((item) => item.trim()).filter(Boolean).length;
+const countFilledItems = (items: string[]) => items.map((item) => String(item || '').trim()).filter(Boolean).length;
 type DJStudioFormProps = {
   mode: 'create' | 'edit';
   djId?: string;
@@ -239,7 +201,7 @@ export default function DJStudioForm({
     draft.qqMusicUrl,
     draft.website,
     draft.otherPlatformUrl,
-  ].some((item) => item.trim());
+  ].some((item) => String(item || '').trim());
   const activeLocalizedValue = activeLocalizedField ? draft[activeLocalizedField.key] : null;
 
   const goToStep = (index: number) => {
@@ -310,8 +272,7 @@ export default function DJStudioForm({
     });
   };
 
-  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>, usage: 'avatar' | 'banner' | 'proof') => {
-    const file = event.target.files?.[0];
+  const handleImageUpload = async (file: File | null, usage: 'avatar' | 'banner' | 'proof') => {
     if (!file) return;
 
     try {
@@ -340,7 +301,6 @@ export default function DJStudioForm({
       if (usage === 'avatar') setUploadingAvatar(false);
       if (usage === 'banner') setUploadingBanner(false);
       if (usage === 'proof') setUploadingProof(false);
-      event.target.value = '';
     }
   };
 
@@ -462,26 +422,56 @@ export default function DJStudioForm({
             <div className="lg:col-span-2">
               <Field label="图片素材" error={errors.avatarImage} hint="头像、横幅和证明图都使用更紧凑的正方形素材卡片管理。">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  <ImageDropZone
-                    label="头像"
-                    previewUrl={draft.avatarImage?.remoteUrl}
+                  <AdminImageUploadPanel
+                    title="头像"
+                    description="DJ 目录、详情和绑定候选里最常用的主头像图。"
+                    hint="建议上传清晰头像，便于目录和绑定流程识别。"
+                    items={draft.avatarImage ? [{
+                      id: 'avatar',
+                      previewUrl: draft.avatarImage.remoteUrl,
+                      remoteUrl: draft.avatarImage.remoteUrl,
+                      fileName: draft.avatarImage.fileName || '头像',
+                      statusText: draft.avatarImage.origin === 'persisted' ? '当前已入库资源' : '当前草稿上传',
+                      onRemove: () => void handleRemoveImage('avatar'),
+                    }] : []}
                     uploading={uploadingAvatar}
-                    onChange={(event) => void handleImageUpload(event, 'avatar')}
-                    onRemove={() => void handleRemoveImage('avatar')}
+                    previewMode="square"
+                    tone="secondary"
+                    onUpload={(files) => void handleImageUpload(files[0] || null, 'avatar')}
                   />
-                  <ImageDropZone
-                    label="横幅"
-                    previewUrl={draft.bannerImage?.remoteUrl}
+                  <AdminImageUploadPanel
+                    title="横幅"
+                    description="DJ 主页头部横图，建议保持画面完整、信息简洁。"
+                    hint="适合横版视觉图，用于 DJ 页面顶部展示。"
+                    items={draft.bannerImage ? [{
+                      id: 'banner',
+                      previewUrl: draft.bannerImage.remoteUrl,
+                      remoteUrl: draft.bannerImage.remoteUrl,
+                      fileName: draft.bannerImage.fileName || '横幅',
+                      statusText: draft.bannerImage.origin === 'persisted' ? '当前已入库资源' : '当前草稿上传',
+                      onRemove: () => void handleRemoveImage('banner'),
+                    }] : []}
                     uploading={uploadingBanner}
-                    onChange={(event) => void handleImageUpload(event, 'banner')}
-                    onRemove={() => void handleRemoveImage('banner')}
+                    previewMode="landscape"
+                    tone="secondary"
+                    onUpload={(files) => void handleImageUpload(files[0] || null, 'banner')}
                   />
-                  <ImageDropZone
-                    label="证明图"
-                    previewUrl={draft.proofImage?.remoteUrl}
+                  <AdminImageUploadPanel
+                    title="证明图"
+                    description="辅助审核身份与资料真实性的截图或官方证明素材。"
+                    hint="可上传平台后台截图、官方页面截图或其他可核验资料。"
+                    items={draft.proofImage ? [{
+                      id: 'proof',
+                      previewUrl: draft.proofImage.remoteUrl,
+                      remoteUrl: draft.proofImage.remoteUrl,
+                      fileName: draft.proofImage.fileName || '证明图',
+                      statusText: draft.proofImage.origin === 'persisted' ? '当前已入库资源' : '当前草稿上传',
+                      onRemove: () => void handleRemoveImage('proof'),
+                    }] : []}
                     uploading={uploadingProof}
-                    onChange={(event) => void handleImageUpload(event, 'proof')}
-                    onRemove={() => void handleRemoveImage('proof')}
+                    previewMode="square"
+                    tone="secondary"
+                    onUpload={(files) => void handleImageUpload(files[0] || null, 'proof')}
                   />
                 </div>
               </Field>

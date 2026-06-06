@@ -26,7 +26,7 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     b3b: 3,
   };
   const hasVisualItem = (item: EventStudioImageState) =>
-    item.remoteUrl.trim().length > 0 || Boolean(item.localFile) || Boolean(item.localPreviewUrl?.trim());
+    String(item.remoteUrl || '').trim().length > 0 || Boolean(item.localFile) || Boolean(item.localPreviewUrl?.trim());
   const hasEntryVisual =
     draft.imageZones.poster.some(hasVisualItem) ||
     draft.imageZones.lineup.some(hasVisualItem) ||

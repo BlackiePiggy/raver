@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
-import { ChangeEvent, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
 import {
   LocalizedTextField,
@@ -62,74 +62,6 @@ function Field({
       {hint ? <div className="mt-2 text-xs text-black/40">{hint}</div> : null}
       {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
-  );
-}
-
-function ImageDropZone({
-  label,
-  previewUrl,
-  uploading,
-  onChange,
-  onRemove,
-  acceptMultiple = false,
-  compact = false,
-}: {
-  label: string;
-  previewUrl?: string;
-  uploading: boolean;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onRemove?: () => void;
-  acceptMultiple?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <div className={compact ? 'admin-studio-soft max-w-[200px] p-3' : 'admin-studio-soft p-4'}>
-      <div className="flex items-center justify-between gap-3">
-        <p className={compact ? 'text-xs text-black/48' : 'text-sm text-black/48'}>{label}</p>
-        {previewUrl && onRemove ? (
-          <button type="button" onClick={onRemove} className="text-xs text-black/48">
-            移除
-          </button>
-        ) : null}
-      </div>
-      {previewUrl ? (
-        <div
-          className={
-            compact
-              ? 'relative mt-2 aspect-[4/3] overflow-hidden rounded-2xl border border-[#e8eceb]'
-              : 'relative mt-3 aspect-video overflow-hidden rounded-[20px] border border-[#e8eceb]'
-          }
-        >
-          <Image src={previewUrl} alt={label} fill className="object-cover" sizes={compact ? '200px' : '640px'} />
-        </div>
-      ) : (
-        <div
-          className={
-            compact
-              ? 'mt-2 flex aspect-[4/3] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#edf7f2,#f7efda)] px-3 text-center text-xs text-black/42'
-              : 'mt-3 flex aspect-video items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#edf7f2,#f7efda)] text-sm text-black/42'
-          }
-        >
-          暂无图片
-        </div>
-      )}
-      <label
-        className={
-          compact
-            ? 'admin-studio-button-secondary mt-3 inline-flex cursor-pointer px-3 py-2 text-xs'
-            : 'admin-studio-button-secondary mt-4 inline-flex cursor-pointer px-4 py-3 text-sm'
-        }
-      >
-        {uploading ? '上传中...' : acceptMultiple ? '选择图片' : '上传图片'}
-        <input
-          type="file"
-          accept="image/*"
-          multiple={acceptMultiple}
-          className="hidden"
-          onChange={onChange}
-        />
-      </label>
-    </div>
   );
 }
 
@@ -255,11 +187,7 @@ export default function OrganizerStudioForm({
     });
   };
 
-  const handleSingleImageUpload = async (
-    event: ChangeEvent<HTMLInputElement>,
-    usage: 'avatar' | 'background'
-  ) => {
-    const file = event.target.files?.[0];
+  const handleSingleImageUpload = async (file: File | null, usage: 'avatar' | 'background') => {
     if (!file) return;
 
     try {
@@ -292,12 +220,10 @@ export default function OrganizerStudioForm({
       } else {
         setUploadingBackground(false);
       }
-      event.target.value = '';
     }
   };
 
-  const handleProofUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
+  const handleProofUpload = async (files: File[]) => {
     if (!files.length) return;
 
     try {
@@ -332,7 +258,6 @@ export default function OrganizerStudioForm({
       setSubmitError(error instanceof Error ? error.message : '证明图片上传失败');
     } finally {
       setUploadingProof(false);
-      event.target.value = '';
     }
   };
 
@@ -434,12 +359,23 @@ export default function OrganizerStudioForm({
       >
         <div className="grid gap-4 xl:grid-cols-2">
           <Field label="主办方头像" error={errors.avatarImage}>
-            <ImageDropZone
-              label="用于目录列表和详情页的主视觉头像"
-              previewUrl={draft.avatarImage?.remoteUrl}
+            <AdminImageUploadPanel
+              title="头像"
+              description="用于目录列表和详情页展示的主视觉头像。"
+              hint="建议上传清晰主体图，便于目录和绑定结果识别。"
+              items={draft.avatarImage ? [{
+                id: 'avatar',
+                previewUrl: draft.avatarImage.remoteUrl,
+                remoteUrl: draft.avatarImage.remoteUrl,
+                fileName: draft.avatarImage.fileName || '主办方头像',
+                statusText: draft.avatarImage.origin === 'persisted' ? '当前已入库资源' : '当前草稿上传',
+                removeLabel: deletingAvatar ? '移除中...' : '移除',
+                onRemove: () => void handleSingleImageRemove('avatar'),
+              }] : []}
               uploading={uploadingAvatar || deletingAvatar}
-              onChange={(event) => void handleSingleImageUpload(event, 'avatar')}
-              onRemove={() => void handleSingleImageRemove('avatar')}
+              previewMode="square"
+              tone="secondary"
+              onUpload={(files) => void handleSingleImageUpload(files[0] || null, 'avatar')}
             />
             {draft.avatarImage?.origin === 'persisted' ? (
               <div className="mt-2 text-xs text-black/40">
@@ -449,12 +385,23 @@ export default function OrganizerStudioForm({
           </Field>
 
           <Field label="背景图">
-            <ImageDropZone
-              label="用于详情页头图或品牌背景视觉"
-              previewUrl={draft.backgroundImage?.remoteUrl}
+            <AdminImageUploadPanel
+              title="背景图"
+              description="用于详情页头图或品牌背景视觉，适合更宽的横版构图。"
+              hint="建议上传横版背景图，便于详情页头部展示。"
+              items={draft.backgroundImage ? [{
+                id: 'background',
+                previewUrl: draft.backgroundImage.remoteUrl,
+                remoteUrl: draft.backgroundImage.remoteUrl,
+                fileName: draft.backgroundImage.fileName || '背景图',
+                statusText: draft.backgroundImage.origin === 'persisted' ? '当前已入库资源' : '当前草稿上传',
+                removeLabel: deletingBackground ? '移除中...' : '移除',
+                onRemove: () => void handleSingleImageRemove('background'),
+              }] : []}
               uploading={uploadingBackground || deletingBackground}
-              onChange={(event) => void handleSingleImageUpload(event, 'background')}
-              onRemove={() => void handleSingleImageRemove('background')}
+              previewMode="landscape"
+              tone="secondary"
+              onUpload={(files) => void handleSingleImageUpload(files[0] || null, 'background')}
             />
             {draft.backgroundImage?.origin === 'persisted' ? (
               <div className="mt-2 text-xs text-black/40">
@@ -747,48 +694,39 @@ export default function OrganizerStudioForm({
         description="证明图片放在提交确认前集中检查。可上传营业执照、官方截图、海报或其他可验证主办方身份的素材。"
       >
         <Field label="证明图片" error={errors.links}>
-          <div className="flex flex-wrap items-start gap-4">
-            <ImageDropZone
-              label="补充主办方证明素材"
-              uploading={uploadingProof}
-              onChange={(event) => void handleProofUpload(event)}
-              acceptMultiple
-              compact
-            />
-            {draft.proofImages.length ? (
-              <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {draft.proofImages.map((image, index) => (
-                  <div
-                    key={`${image.remoteUrl}-${index}`}
-                    className="admin-reference-soft-card max-w-[180px] p-2"
-                  >
-                    <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border-secondary">
-                      <Image
-                        src={image.remoteUrl}
-                        alt={image.fileName}
-                        fill
-                        className="object-cover"
-                        sizes="180px"
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <div className="min-w-0 text-[11px] text-black/42">
-                        <div className="truncate">{image.fileName}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleProofRemove(index)}
-                        disabled={deletingProofIndexes.includes(index)}
-                        className="text-[11px] text-black/48 hover:text-[#071110]"
-                      >
-                        {deletingProofIndexes.includes(index) ? '移除中...' : '移除'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <AdminImageUploadPanel
+            title="证明图"
+            description="集中管理用于审核的证明素材，可上传营业执照、官方截图、海报或其他可核验材料。"
+            hint="支持一次选择多张证明图，提交前在这里统一核对。"
+            items={draft.proofImages.map((image, index) => ({
+              id: `${image.remoteUrl}-${index}`,
+              previewUrl: image.remoteUrl,
+              remoteUrl: image.remoteUrl,
+              fileName: image.fileName || `证明图 ${index + 1}`,
+              statusText: image.origin === 'persisted' ? `#${index + 1} · 当前已入库资源` : `#${index + 1} · 当前草稿上传`,
+              removeLabel: deletingProofIndexes.includes(index) ? '移除中...' : '移除',
+              onRemove: () => void handleProofRemove(index),
+              onMoveLeft: index > 0 ? () => updateDraft('proofImages', [
+                ...draft.proofImages.slice(0, index - 1),
+                draft.proofImages[index],
+                draft.proofImages[index - 1],
+                ...draft.proofImages.slice(index + 1),
+              ]) : undefined,
+              onMoveRight: index < draft.proofImages.length - 1 ? () => updateDraft('proofImages', [
+                ...draft.proofImages.slice(0, index),
+                draft.proofImages[index + 1],
+                draft.proofImages[index],
+                ...draft.proofImages.slice(index + 2),
+              ]) : undefined,
+              moveLeftDisabled: index === 0,
+              moveRightDisabled: index === draft.proofImages.length - 1,
+            }))}
+            uploading={uploadingProof}
+            multiple
+            previewMode="landscape"
+            tone="secondary"
+            onUpload={(files) => void handleProofUpload(files)}
+          />
         </Field>
       </Section>
 

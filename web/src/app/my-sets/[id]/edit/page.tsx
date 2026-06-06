@@ -7,6 +7,7 @@ import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/config';
 import { SpotifyAPI } from '@/lib/music-api';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 
 interface EditTrack {
   position: number;
@@ -454,20 +455,20 @@ export default function EditMySetPage() {
     }
     setThumbnailUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('image', file);
-      const response = await fetch(getApiUrl('/dj-sets/upload-thumbnail'), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+      const uploaded = await uploadMediaWithFetcher({
+        url: getApiUrl('/dj-sets/upload-thumbnail'),
+        file,
+        fetcher: (input, init) => fetch(input, {
+          ...init,
+          headers: {
+            ...(init?.headers || {}),
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+        fallbackError: '封面上传失败',
+        invalidResponseError: '封面上传成功，但未返回有效图片地址',
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.error || '封面上传失败');
-      }
-      setThumbnailUrl(data.url || '');
+      setThumbnailUrl(uploaded.url);
       setMessage('封面上传成功');
     } catch (err) {
       setError(err instanceof Error ? err.message : '封面上传失败');

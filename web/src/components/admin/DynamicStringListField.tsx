@@ -4,7 +4,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import { countText } from '@/lib/input-rules';
 
-const countFilledItems = (items: string[]) => items.map((item) => item.trim()).filter(Boolean).length;
+const countFilledItems = (items: string[]) => items.map((item) => String(item || '').trim()).filter(Boolean).length;
 
 type DynamicStringListFieldProps = {
   label: string;

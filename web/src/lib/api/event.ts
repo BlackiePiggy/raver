@@ -1,3 +1,5 @@
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
 
 export interface Event {
@@ -229,24 +231,19 @@ class EventAPI {
   }
 
   async uploadImage(file: File, token: string): Promise<{ url: string }> {
-    const formData = new FormData();
-    formData.append('image', file);
-
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${API_URL}/events/upload-image`, {
-      method: 'POST',
-      headers,
-      body: formData,
+    return uploadMediaWithFetcher({
+      url: `${API_URL}/events/upload-image`,
+      file,
+      fetcher: (input, init) => fetch(input, {
+        ...init,
+        headers: {
+          ...(init?.headers || {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }),
+      fallbackError: 'Failed to upload image',
+      invalidResponseError: 'Upload succeeded but no valid image URL was returned',
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || 'Failed to upload image');
-    }
-    return response.json();
   }
 }
 

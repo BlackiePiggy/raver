@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Expand, ImagePlus, Star, Trash2 } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import AdminToast, { type AdminToastTone } from '@/components/admin/AdminToast';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import MarkdownEditor from '@/components/admin/MarkdownEditor';
@@ -140,7 +141,6 @@ export default function NewsStudioForm({
   const [toast, setToast] = useState<NewsStudioToastState | null>(null);
   const [cleaningResourceUrl, setCleaningResourceUrl] = useState<string | null>(null);
   const [previewResourceIndex, setPreviewResourceIndex] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const resourceRailRef = useRef<HTMLDivElement | null>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bodySelectionRef = useRef<SelectionSnapshot | null>(null);
@@ -234,10 +234,6 @@ export default function NewsStudioForm({
 
   const preserveBodyFocus = () => {
     captureBodySelection();
-  };
-
-  const openFilePicker = () => {
-    fileInputRef.current?.click();
   };
 
   const showToast = (message: string, tone: AdminToastTone) => {
@@ -335,7 +331,7 @@ export default function NewsStudioForm({
     );
   };
 
-  const handleUploadFiles = async (fileList: FileList | null) => {
+  const handleUploadFiles = async (fileList: FileList | File[] | null) => {
     const files = Array.from(fileList || []).filter((file) => /^image\//i.test(file.type));
     if (!files.length) {
       showToast('请选择图片文件后再上传。', 'warning');
@@ -380,9 +376,6 @@ export default function NewsStudioForm({
       showToast(error instanceof Error ? error.message : '资讯资源上传失败。', 'error');
     } finally {
       setMediaUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
@@ -584,36 +577,28 @@ export default function NewsStudioForm({
                 </div>
               </div>
 
-              <div className="admin-reference-card p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="admin-studio-label">媒体资源区</div>
-                    <div className="mt-2 text-sm leading-6 text-black/48">
-                      横向管理素材，支持全屏查看、复制链接、插入正文、设为封面。可直接用鼠标滚轮横向滑动。
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={(event) => void handleUploadFiles(event.target.files)}
-                    />
-                    <button
-                      type="button"
-                      onClick={openFilePicker}
-                      disabled={mediaUploading}
-                      className="admin-studio-button-secondary px-4 py-2 text-sm disabled:opacity-60"
-                    >
-                      {mediaUploading ? '上传中...' : '上传资源'}
-                    </button>
-                  </div>
-                </div>
-
+              <AdminImageUploadPanel
+                title="媒体资源"
+                description="横向管理素材，支持全屏查看、复制链接、插入正文、设为封面。可直接用鼠标滚轮横向滑动。"
+                hint="先上传至少一张资讯资源图片，之后可以在这里插入正文或设为封面。"
+                items={orderedResourceUrls.map((url, index) => ({
+                  id: url,
+                  previewUrl: url,
+                  remoteUrl: url,
+                  fileName: draft.coverImageUrl.trim() === url ? `封面资源 ${index + 1}` : `资源 ${index + 1}`,
+                  statusText: draft.coverImageUrl.trim() === url ? '当前封面资源' : '正文资源',
+                }))}
+                multiple
+                uploading={mediaUploading}
+                previewMode="square"
+                tone="primary"
+                emptyActionLabel="上传资源"
+                populatedActionLabel="继续上传"
+                statsHint="上传后可继续管理资源与封面"
+                onUpload={(files) => void handleUploadFiles(files)}
+              >
                 {orderedResourceUrls.length ? (
-                  <div className="relative mt-4">
+                  <div className="relative mt-1">
                     <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-white via-white/82 to-transparent" />
                     <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-white via-white/82 to-transparent" />
                     <div
@@ -728,11 +713,11 @@ export default function NewsStudioForm({
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-4 rounded-[18px] border border-dashed border-[#d7ded9] px-4 py-5 text-sm text-black/48">
+                  <div className="rounded-[18px] border border-dashed border-[#d7ded9] px-4 py-5 text-sm text-black/48">
                     还没有上传任何资源。先上传图片，之后可以在这里插入正文或设为封面。
                   </div>
                 )}
-              </div>
+              </AdminImageUploadPanel>
             </div>
 
             <div className="admin-reference-card p-4">

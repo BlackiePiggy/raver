@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 
 export type RatingUnit = {
   id: string;
@@ -146,23 +147,16 @@ export const ratingAdminApi = {
   },
 
   async uploadImage(file: File, options?: { ratingEventId?: string; ratingUnitId?: string; usage?: string }): Promise<{ url: string }> {
-    const formData = new FormData();
-    formData.append('image', file);
-    if (options?.ratingEventId) formData.append('ratingEventId', options.ratingEventId);
-    if (options?.ratingUnitId) formData.append('ratingUnitId', options.ratingUnitId);
-    if (options?.usage) formData.append('usage', options.usage);
-
-    const response = await authenticatedFetch(getApiUrl('/v1/rating/upload-image'), {
-      method: 'POST',
-      body: formData,
-      headers: {},
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/rating/upload-image'),
+      file,
+      fields: {
+        ratingEventId: options?.ratingEventId,
+        ratingUnitId: options?.ratingUnitId,
+        usage: options?.usage,
+      },
+      fallbackError: '打分图片上传失败',
+      invalidResponseError: '打分图片上传成功，但未返回有效图片地址',
     });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error((error as { error?: string }).error || '打分图片上传失败');
-    }
-
-    return response.json();
   },
 };

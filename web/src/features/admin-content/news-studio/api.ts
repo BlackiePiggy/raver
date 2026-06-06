@@ -1,5 +1,6 @@
 import { authenticatedFetch, authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 import {
   NewsStudioCreateInput,
   NewsStudioCreateResult,
@@ -37,22 +38,6 @@ type NewsStudioImageUploadResponse = {
   url: string;
   mimeType?: string | null;
   fileName?: string | null;
-};
-
-const isNewsStudioImageUploadResponse = (
-  value: unknown
-): value is NewsStudioImageUploadResponse => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const row = value as Record<string, unknown>;
-  return typeof row.url === 'string' && row.url.trim().length > 0;
-};
-
-const parseJsonSafe = async (response: Response): Promise<unknown> => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
 };
 
 export const newsStudioApi = {
@@ -129,40 +114,21 @@ export const newsStudioApi = {
       draftKey?: string;
     }
   ): Promise<NewsStudioImageUploadResponse> {
-    const formData = new FormData();
-    formData.append('image', file);
     if (options.newsId?.trim()) {
-      formData.append('postId', options.newsId.trim());
     } else if (options.draftKey?.trim()) {
-      formData.append('newsKey', options.draftKey.trim());
     } else {
       throw new Error('newsId or draftKey is required for news image upload');
     }
-
-    const response = await authenticatedFetch('/api/raver/feed/upload-image', {
-      method: 'POST',
-      body: formData,
-      headers: {},
+    return uploadMediaWithFetcher({
+      url: '/api/raver/feed/upload-image',
+      file,
+      fields: {
+        postId: options.newsId?.trim() || undefined,
+        newsKey: options.draftKey?.trim() || undefined,
+      },
+      fallbackError: '资讯图片上传失败',
+      invalidResponseError: '上传成功但未返回图片地址',
     });
-
-    if (!response.ok) {
-      const error = (await parseJsonSafe(response)) as { error?: string; message?: string } | null;
-      throw new Error(error?.error || error?.message || '资讯图片上传失败');
-    }
-
-    const payload = (await parseJsonSafe(response)) as
-      | { data?: unknown }
-      | NewsStudioImageUploadResponse
-      | null;
-    const unwrapped =
-      payload && typeof payload === 'object' && 'data' in payload
-        ? payload.data
-        : payload;
-
-    if (!isNewsStudioImageUploadResponse(unwrapped)) {
-      throw new Error('上传成功但未返回图片地址');
-    }
-    return unwrapped;
   },
 
   async cleanupDraftMedia(input: { draftKey: string; urls: string[] }): Promise<{ deleted: number }> {
