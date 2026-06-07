@@ -923,6 +923,23 @@ export const syncEventStudioScheduleStructure = (
   };
 };
 
+export const rebaseEventStudioDatesPreservingWallDate = (
+  draft: EventStudioDraft
+): EventStudioDraft => {
+  const next = {
+    ...draft,
+    startDate: normalizeEventStudioDateInput(draft.startDate),
+    endDate: normalizeEventStudioDateInput(draft.endDate),
+    weeks: draft.weeks.map((week) => ({
+      ...week,
+      startDate: normalizeEventStudioDateInput(week.startDate),
+      endDate: normalizeEventStudioDateInput(week.endDate),
+    })),
+  };
+
+  return syncEventStudioScheduleStructure(next);
+};
+
 export const buildEventStudioScheduleStructureFromWeeks = (
   weeksInput: EventStudioWeekDraft[]
 ): {

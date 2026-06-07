@@ -133,9 +133,15 @@ export const eventStudioApi = {
       search: query.trim(),
       limit: '8',
     });
-    const response = await authenticatedJsonFetch<{ items?: EventStudioOrganizer[] }>(
+    const response = await authenticatedJsonFetch<{
+      data?: { items?: EventStudioOrganizer[] };
+      items?: EventStudioOrganizer[];
+    }>(
       getApiUrl(`/v1/learn/festivals?${search.toString()}`)
     );
+    if (Array.isArray(response.data?.items)) {
+      return response.data.items;
+    }
     return Array.isArray(response.items) ? response.items : [];
   },
 

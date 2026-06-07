@@ -28,6 +28,7 @@ import {
   fillLineupArtistsFromTimetableSlots,
   mapEventStudioDraftToCreateInput,
   mapEventStudioDraftToUpdateInput,
+  rebaseEventStudioDatesPreservingWallDate,
   syncEventStudioLineupState,
   syncEventStudioScheduleStructure,
   validateEventStudioDraft,
@@ -3595,11 +3596,21 @@ export default function EventStudioForm({
                         key={`${item.city}-${item.exactProvince}-${item.country}-${item.timezone}`}
                         type="button"
                         onClick={() => {
-                          updateDraft('timeZoneSelection', item);
-                          updateDraft('timeZoneQuery', item.cityAscii || item.city);
+                          updateDraftState(
+                            (current) => {
+                              const rebased = rebaseEventStudioDatesPreservingWallDate(current);
+                              return {
+                                ...rebased,
+                                timeZoneSelection: item,
+                                timeZoneQuery: item.cityAscii || item.city,
+                              };
+                            },
+                            {
+                              clearErrorKeys: ['timeZone'],
+                            }
+                          );
                           setTimezoneItems([]);
                           setTimezoneError('');
-                          clearErrors('timeZone');
                         }}
                         className="admin-reference-soft-card px-4 py-3 text-left text-sm"
                       >
