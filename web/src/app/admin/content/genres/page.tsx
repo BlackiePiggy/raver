@@ -158,30 +158,32 @@ function TreeNode({
         </span>
       </div>
 
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onRequestCreate({
-            id: item.id,
-            name: item.name,
-            parentId: item.parentId,
-          });
-        }}
-        className="absolute inset-x-0 -bottom-[9px] z-20 h-[18px] opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
-        aria-label={`在 ${item.name} 后新增节点`}
-      >
-        <span
-          className="pointer-events-none absolute top-1/2 h-px -translate-y-1/2 rounded-full bg-gradient-to-r from-[#5ee9a5] via-[#26d07c] to-[#9ef3c9] shadow-[0_0_14px_rgba(38,208,124,0.55)]"
-          style={{ left: `${insertLineLeft}px`, right: '6px' }}
-        />
-        <span
-          className="pointer-events-none absolute top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-[#78e4ab] bg-white text-[#18a957] shadow-[0_0_0_3px_rgba(255,255,255,0.92),0_0_18px_rgba(38,208,124,0.35)]"
-          style={{ left: `${insertButtonLeft}px` }}
+      <div className="pointer-events-none absolute inset-x-0 -bottom-[6px] z-20 h-[12px]">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRequestCreate({
+              id: item.id,
+              name: item.name,
+              parentId: item.parentId,
+            });
+          }}
+          className="group pointer-events-auto absolute inset-x-2 top-1/2 h-[8px] -translate-y-1/2 focus:outline-none"
+          aria-label={`在 ${item.name} 后新增节点`}
         >
-          <Plus className="h-3.5 w-3.5" />
-        </span>
-      </button>
+          <span
+            className="pointer-events-none absolute top-1/2 h-px -translate-y-1/2 rounded-full bg-gradient-to-r from-[#5ee9a5] via-[#26d07c] to-[#9ef3c9] opacity-0 shadow-[0_0_14px_rgba(38,208,124,0.55)] transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+            style={{ left: `${insertLineLeft - 8}px`, right: '0px' }}
+          />
+          <span
+            className="pointer-events-none absolute top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-[#78e4ab] bg-white text-[#18a957] opacity-0 shadow-[0_0_0_3px_rgba(255,255,255,0.92),0_0_18px_rgba(38,208,124,0.35)] transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+            style={{ left: `${insertButtonLeft - 8}px` }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </span>
+        </button>
+      </div>
 
       {hasChildren && isExpanded && (
         <div>
@@ -269,7 +271,7 @@ function BasicInfoField({
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           maxLength={maxLength}
-          className={`admin-studio-input ${monospace ? 'font-mono' : ''}`}
+          className={`w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-gray-300 focus:bg-white ${monospace ? 'font-mono' : ''}`}
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
