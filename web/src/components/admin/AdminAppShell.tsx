@@ -529,12 +529,14 @@ function Topbar({
   hidePageHeader,
   setMobileOpen,
   onOpenSettings,
+  onLogout,
   userName,
   userAvatarUrl,
 }: Pick<AdminAppShellProps, 'title' | 'eyebrow' | 'description' | 'actions'> & {
   hidePageHeader?: boolean;
   setMobileOpen: (next: boolean) => void;
   onOpenSettings: () => void;
+  onLogout: () => void;
   userName: string;
   userAvatarUrl: string | null;
 }) {
@@ -569,8 +571,15 @@ function Topbar({
                 initialsFromName(userName)
               )}
             </span>
-            <div className="min-w-0 max-w-[220px]">
-              <div className="line-clamp-2 break-words text-[13px] font-extrabold leading-5 text-[#071110]">{userName}</div>
+            <div className="flex h-10 min-w-0 max-w-[220px] flex-col justify-between">
+              <div className="truncate text-[13px] font-extrabold leading-4 text-[#071110]">{userName}</div>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="inline-flex h-5 items-center self-start rounded-full bg-[#a92b2b] px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white"
+              >
+                Sign out
+              </button>
             </div>
             <button
               type="button"
@@ -652,6 +661,7 @@ export default function AdminAppShell({
                 setSettingsTab('profile');
                 setSettingsOpen(true);
               }}
+              onLogout={logout}
               userName={resolvedUserName}
               userAvatarUrl={resolvedAvatarUrl}
             />
