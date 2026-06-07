@@ -116,9 +116,15 @@ export const eventStudioApi = {
       q: query.trim(),
       limit: '8',
     });
-    const response = await authenticatedJsonFetch<{ items?: EventStudioTimezoneLookupItem[] }>(
+    const response = await authenticatedJsonFetch<{
+      data?: { items?: EventStudioTimezoneLookupItem[] };
+      items?: EventStudioTimezoneLookupItem[];
+    }>(
       getApiUrl(`/v1/event-timezones/search?${search.toString()}`)
     );
+    if (Array.isArray(response.data?.items)) {
+      return response.data.items;
+    }
     return Array.isArray(response.items) ? response.items : [];
   },
 
