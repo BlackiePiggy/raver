@@ -9,6 +9,7 @@ import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminSearchField from '@/components/admin/AdminSearchField';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
+import { formatEventDisplayStatusText, formatEventVisibilityText } from '@/lib/event-status';
 import {
   organizerCatalogApi,
   OrganizerCatalogItem,
@@ -585,7 +586,11 @@ function OrganizerDetailOverlay({
                                     <div className="truncate text-sm font-semibold text-[#111827]">{eventItem.name}</div>
                                     <div className="mt-1 text-xs text-[#6b7280]">{formatDateOnly(eventItem.startDate)} 路 {[eventItem.city, eventItem.country].filter(Boolean).join(', ') || '地点未设置'}</div>
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                      {eventItem.status ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.status}</span> : null}
+                                      {[formatEventDisplayStatusText(eventItem), formatEventVisibilityText(eventItem)].filter(Boolean).length ? (
+                                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">
+                                          {[formatEventDisplayStatusText(eventItem), formatEventVisibilityText(eventItem)].filter(Boolean).join(' / ')}
+                                        </span>
+                                      ) : null}
                                       {eventItem.eventType ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6b7280]">{eventItem.eventType}</span> : null}
                                     </div>
                                   </div>

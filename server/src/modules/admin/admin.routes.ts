@@ -18,6 +18,7 @@ import crypto from 'crypto';
 import { notificationCenterService } from '../../modules/notifications';
 import { verifyReauthProof } from '../../utils/auth';
 import { normalizeTriTextPayload, resolveLocalizedText } from '../../utils/i18n';
+import { EventVisibility } from '../../utils/event-status';
 import {
   USER_ENTITY_RELATION_FOLLOW,
   USER_ENTITY_TARGET_DJ,
@@ -386,8 +387,8 @@ const fetchTargetModerationState = async (report: { targetType: string; targetId
     return { field: 'visibility', value: post?.visibility ?? null };
   }
   if (report.targetType === 'event') {
-    const event = await prisma.event.findUnique({ where: { id: report.targetId }, select: { status: true } });
-    return { field: 'status', value: event?.status ?? null };
+    const event = await prisma.event.findUnique({ where: { id: report.targetId }, select: { visibility: true } });
+    return { field: 'visibility', value: event?.visibility ?? null };
   }
   return { field: null, value: null };
 };
@@ -409,8 +410,8 @@ const applyContentModerationAction = async (input: {
       return { applied: true, previousState: currentState, nextState: { field: 'visibility', value: 'hidden' } };
     }
     if (input.report.targetType === 'event') {
-      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { status: 'hidden', revision: { increment: 1 } } });
-      return { applied: true, previousState: currentState, nextState: { field: 'status', value: 'hidden' } };
+      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { visibility: 'hidden', revision: { increment: 1 } } });
+      return { applied: true, previousState: currentState, nextState: { field: 'visibility', value: 'hidden' } };
     }
     return { applied: false, previousState: currentState, nextState: null };
   }
@@ -422,9 +423,12 @@ const applyContentModerationAction = async (input: {
       return { applied: true, previousState: { field: 'visibility', value: 'hidden' }, nextState: { field: 'visibility', value: restoreVisibility } };
     }
     if (input.report.targetType === 'event') {
-      const restoreStatus = previousField === 'status' && previousValue && previousValue !== 'hidden' ? previousValue : 'upcoming';
-      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { status: restoreStatus, revision: { increment: 1 } } });
-      return { applied: true, previousState: { field: 'status', value: 'hidden' }, nextState: { field: 'status', value: restoreStatus } };
+      const restoreVisibility: EventVisibility =
+        previousField === 'visibility' && previousValue === 'hidden'
+          ? 'hidden'
+          : 'visible';
+      await prisma.event.updateMany({ where: { id: input.report.targetId }, data: { visibility: restoreVisibility, revision: { increment: 1 } } });
+      return { applied: true, previousState: { field: 'visibility', value: 'hidden' }, nextState: { field: 'visibility', value: restoreVisibility } };
     }
     return { applied: false, previousState: null, nextState: null };
   }
@@ -507,7 +511,7 @@ const fetchReportTargetPreview = async (report: {
     case 'event': {
       const event = await prisma.event.findUnique({
         where: { id: report.targetId },
-        select: { id: true, name: true, description: true, status: true, startDate: true },
+        select: { id: true, name: true, description: true, isCancelled: true, visibility: true, startDate: true, endDate: true },
       });
       return event ? { kind: 'event', event } : null;
     }

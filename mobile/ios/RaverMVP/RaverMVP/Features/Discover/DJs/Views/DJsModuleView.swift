@@ -2485,9 +2485,7 @@ struct DJDetailView: View {
     }
 
     private func normalizedDJEventStatus(_ event: WebEvent) -> String {
-        event.status?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() ?? ""
+        EventVisualStatus.derivedRawValue(for: event)
     }
 
     private func splitDJEventsBySection(_ events: [WebEvent]) -> (upcoming: [WebEvent], ended: [WebEvent]) {
@@ -2501,7 +2499,7 @@ struct DJDetailView: View {
         let ended = uniqueEvents
             .filter { event in
                 let status = normalizedDJEventStatus(event)
-                return status == "ended" || status == "cancelled" || status == "canceled"
+                return status == "ended" || status == "cancelled"
             }
             .sorted(by: { $0.startDate > $1.startDate })
         return (upcoming, ended)
@@ -3290,19 +3288,7 @@ struct DJDetailView: View {
     }
 
     private func eventIsOngoing(_ event: WebEvent, at date: Date) -> Bool {
-        let normalizedStatus = event.status?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        if normalizedStatus == "cancelled" || normalizedStatus == "canceled" {
-            return false
-        }
-        if normalizedStatus == "ongoing" {
-            return true
-        }
-        if normalizedStatus == "ended" || normalizedStatus == "upcoming" {
-            return false
-        }
-        return event.startDate <= date && date <= event.endDate
+        EventVisualStatus.resolve(event: event, now: date) == .ongoing
     }
 
     private func eventLineupIncludesDJ(_ event: WebEvent, dj: WebDJ) -> Bool {

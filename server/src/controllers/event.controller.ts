@@ -17,6 +17,11 @@ import {
   zonedTimeToUtc,
 } from '../utils/event-timezone';
 import {
+  buildEventStatusWhere,
+  deriveEventStatus,
+  resolveEventTruth,
+} from '../utils/event-status';
+import {
   loadCanonicalEventLineupSnapshot,
   normalizeCanonicalLineupArtists,
   syncCanonicalEventLineupAndTimetable,
@@ -347,36 +352,27 @@ const normalizeEventStartDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE)
 const normalizeEventEndDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE): Date =>
   new Date(startOfEventDay(date, timeZone).getTime() + 86_400_000 - 1000);
 
-const resolveEventStatus = (
-  startDate: Date,
-  endDate: Date,
-  fallbackStatus?: string | null
-): 'upcoming' | 'ongoing' | 'ended' | 'cancelled' => {
-  const normalizedFallback = typeof fallbackStatus === 'string' ? fallbackStatus.trim().toLowerCase() : '';
-  if (normalizedFallback === 'cancelled' || normalizedFallback === 'canceled') {
-    return 'cancelled';
+const withDerivedStatus = <
+  T extends {
+    startDate: Date;
+    endDate: Date;
+    isCancelled?: boolean | null;
+    visibility?: unknown;
   }
+>(event: T) => {
+  const resolvedTruth = resolveEventTruth({
+    isCancelled: event.isCancelled ?? undefined,
+    visibility: event.visibility ?? undefined,
+  });
 
-  const now = Date.now();
-  const start = startDate.getTime();
-  const end = endDate.getTime();
-
-  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
-    if (now < start) return 'upcoming';
-    if (now > end) return 'ended';
-    return 'ongoing';
-  }
-
-  if (normalizedFallback === 'ongoing' || normalizedFallback === 'ended' || normalizedFallback === 'upcoming') {
-    return normalizedFallback as 'upcoming' | 'ongoing' | 'ended';
-  }
-  return 'upcoming';
+  return {
+    ...event,
+    status: deriveEventStatus(new Date(event.startDate), new Date(event.endDate), {
+      isCancelled: resolvedTruth.isCancelled,
+      visibility: resolvedTruth.visibility,
+    }),
+  };
 };
-
-const withDerivedStatus = <T extends { startDate: Date; endDate: Date; status?: string | null }>(event: T) => ({
-  ...event,
-  status: resolveEventStatus(new Date(event.startDate), new Date(event.endDate), event.status ?? null),
-});
 
 const LINEUP_DJ_ID_PLACEHOLDER = '__UNBOUND__';
 const isLineupDjIdPlaceholder = (value: string): boolean => value === LINEUP_DJ_ID_PLACEHOLDER;
@@ -747,9 +743,7 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
       year,
       status = 'upcoming'
     } = req.query;
-    const normalizedStatus = String(status || 'upcoming').trim().toLowerCase() === 'canceled'
-      ? 'cancelled'
-      : String(status || 'upcoming').trim().toLowerCase();
+    const normalizedStatus = String(status || 'upcoming').trim().toLowerCase();
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -757,22 +751,9 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
 
     const where: any = {};
     const now = new Date();
-    if (normalizedStatus === 'upcoming') {
-      where.startDate = { gt: now };
-      where.status = { not: 'cancelled' };
-    } else if (normalizedStatus === 'ongoing') {
-      where.startDate = { lte: now };
-      where.endDate = { gte: now };
-      where.status = { not: 'cancelled' };
-    } else if (normalizedStatus === 'ended') {
-      where.endDate = { lt: now };
-      where.status = { not: 'cancelled' };
-    } else if (normalizedStatus === 'cancelled') {
-      where.status = 'cancelled';
-    } else if (normalizedStatus === 'all' || normalizedStatus === '') {
-      // no status filter
-    } else if (normalizedStatus) {
-      where.status = normalizedStatus;
+    const statusWhere = buildEventStatusWhere(normalizedStatus, now);
+    if (statusWhere) {
+      Object.assign(where, statusWhere);
     }
 
     if (search) {
@@ -979,7 +960,6 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       ticketPriceMax,
       ticketTiers,
       lineupSlots,
-      status,
     } = req.body;
     const wikiFestivalId = normalizeOptionalNullableTextField(requestBody, 'wikiFestivalId');
     const description = normalizeOptionalNullableTextField(requestBody, 'description');
@@ -1074,6 +1054,10 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
+    const resolvedEventTruth = resolveEventTruth({
+      isCancelled: requestBody.isCancelled,
+      visibility: requestBody.visibility,
+    });
 
     const event = await prisma.$transaction(async (tx) => {
       const created = await tx.event.create({
@@ -1109,7 +1093,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           startTime: normalizedStartTime,
           endTime: normalizedEndTime,
           dayRolloverHour: normalizedDayRolloverHour,
-          status: resolveEventStatus(parsedStartDate, parsedEndDate, typeof status === 'string' ? status : null),
+          isCancelled: resolvedEventTruth.isCancelled,
+          visibility: resolvedEventTruth.visibility,
           ticketUrl: ticketUrl ?? undefined,
           ticketPriceMin: toNumberOrNull(ticketPriceMin),
           ticketPriceMax: toNumberOrNull(ticketPriceMax),
@@ -1223,7 +1208,6 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       ticketPriceMax,
       ticketTiers,
       lineupSlots,
-      status,
     } = req.body;
     const requestBody = req.body as Record<string, unknown>;
     const expectedEventRevision = entityChangeService.parseExpectedRevision(
@@ -1270,7 +1254,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
         startTime: true,
         endTime: true,
         dayRolloverHour: true,
-        status: true,
+        isCancelled: true,
+        visibility: true,
         revision: true,
       },
     });
@@ -1403,6 +1388,10 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
+    const resolvedEventTruth = resolveEventTruth({
+      isCancelled: hasOwn(requestBody, 'isCancelled') ? requestBody.isCancelled : existing.isCancelled,
+      visibility: hasOwn(requestBody, 'visibility') ? requestBody.visibility : existing.visibility,
+    });
 
     await prisma.$transaction(async (tx) => {
       try {
@@ -1464,11 +1453,8 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
                 }
               : undefined,
             officialWebsite: normalizedOfficialWebsite ?? undefined,
-            status: resolveEventStatus(
-              effectiveStartDate,
-              effectiveEndDate,
-              typeof status === 'string' ? status : existing.status
-            ),
+            isCancelled: resolvedEventTruth.isCancelled,
+            visibility: resolvedEventTruth.visibility,
             revision: { increment: 1 },
           },
         });

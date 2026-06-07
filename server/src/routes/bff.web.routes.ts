@@ -51,6 +51,11 @@ import {
   startOfEventDay,
   storageDateToEventDate,
 } from '../utils/event-timezone';
+import {
+  buildEventStatusWhere,
+  deriveEventStatus,
+  resolveEventTruth,
+} from '../utils/event-status';
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
 import { getServerCozeRuntimeConfig } from '../config/runtime-coze-config';
 import { contentCompliance } from '../utils/content-compliance';
@@ -2190,32 +2195,6 @@ const normalizeEventEndDate = (date: Date, timeZone = DEFAULT_EVENT_TIME_ZONE): 
   return new Date(start.getTime() + 86_400_000 - 1000);
 };
 
-const resolveEventStatus = (
-  startDate: Date,
-  endDate: Date,
-  fallbackStatus?: string | null
-): 'upcoming' | 'ongoing' | 'ended' | 'cancelled' => {
-  const normalizedFallback = typeof fallbackStatus === 'string' ? fallbackStatus.trim().toLowerCase() : '';
-  if (normalizedFallback === 'cancelled' || normalizedFallback === 'canceled') {
-    return 'cancelled';
-  }
-
-  const now = Date.now();
-  const start = startDate.getTime();
-  const end = endDate.getTime();
-
-  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
-    if (now < start) return 'upcoming';
-    if (now > end) return 'ended';
-    return 'ongoing';
-  }
-
-  if (normalizedFallback === 'ongoing' || normalizedFallback === 'ended' || normalizedFallback === 'upcoming') {
-    return normalizedFallback as 'upcoming' | 'ongoing' | 'ended';
-  }
-  return 'upcoming';
-};
-
 const EVENT_TYPE_FILTER_ALIASES: Record<string, string[]> = {
   festival: ['festival', '电音节'],
   bar_event: ['bar_event', 'bar event', 'bar-event', '酒吧活动'],
@@ -2502,7 +2481,8 @@ const selectEventDetailForWeb = {
   ticketCurrency: true,
   ticketNotes: true,
   officialWebsite: true,
-  status: true,
+  isCancelled: true,
+  visibility: true,
   isVerified: true,
   revision: true,
   createdAt: true,
@@ -2650,7 +2630,8 @@ const selectEventSummaryForIOS = {
   ticketCurrency: true,
   ticketNotes: true,
   officialWebsite: true,
-  status: true,
+  isCancelled: true,
+  visibility: true,
   isVerified: true,
   revision: true,
   createdAt: true,
@@ -2798,7 +2779,8 @@ const selectEventRecommendationCardForWeb = {
   ticketCurrency: true,
   ticketNotes: true,
   officialWebsite: true,
-  status: true,
+  isCancelled: true,
+  visibility: true,
   isVerified: true,
   createdAt: true,
   updatedAt: true,
@@ -2891,7 +2873,8 @@ const selectEventListCardForWeb = {
   ticketCurrency: true,
   ticketNotes: true,
   officialWebsite: true,
-  status: true,
+  isCancelled: true,
+  visibility: true,
   isVerified: true,
   createdAt: true,
   updatedAt: true,
@@ -7411,6 +7394,10 @@ const mapEvent = (
   const isContributor = !!viewerId && contributorInfo.userIds.includes(viewerId);
   const isOrganizer = !!viewerId && row?.organizer?.id === viewerId;
   const canEdit = viewerRole === 'admin' || isOrganizer;
+  const resolvedEventTruth = resolveEventTruth({
+    isCancelled: 'isCancelled' in row ? (row as { isCancelled?: boolean | null }).isCancelled : undefined,
+    visibility: 'visibility' in row ? (row as { visibility?: string | null }).visibility : undefined,
+  });
 
   return {
     id: row.id,
@@ -7485,7 +7472,10 @@ const mapEvent = (
     ticketCurrency: row.ticketCurrency,
     ticketNotes: row.ticketNotes,
     officialWebsite: row.officialWebsite,
-    status: resolveEventStatus(new Date(row.startDate), new Date(row.endDate), row.status),
+    status: deriveEventStatus(new Date(row.startDate), new Date(row.endDate), {
+      isCancelled: resolvedEventTruth.isCancelled,
+      visibility: resolvedEventTruth.visibility,
+    }),
     isVerified: row.isVerified,
     revision: typeof row.revision === 'number' ? row.revision : 1,
     createdAt: row.createdAt,
@@ -8645,8 +8635,7 @@ const parseEventRecommendationStatuses = (value: unknown): EventRecommendationSt
   const tokens = value
     .split(',')
     .map((item) => item.trim().toLowerCase())
-    .filter(Boolean)
-    .map((item) => (item === 'canceled' ? 'cancelled' : item));
+    .filter(Boolean);
 
   const seen = new Set<EventRecommendationStatus>();
   const parsed: EventRecommendationStatus[] = [];
@@ -8667,27 +8656,8 @@ const parseEventRecommendationStatuses = (value: unknown): EventRecommendationSt
   return eventRecommendationStatusOrder.filter((status) => parsed.includes(status));
 };
 
-const buildEventStatusWhere = (status: EventRecommendationStatus, now: Date): any => {
-  if (status === 'upcoming') {
-    return {
-      startDate: { gt: now },
-      status: { not: 'cancelled' },
-    };
-  }
-  if (status === 'ongoing') {
-    return {
-      startDate: { lte: now },
-      endDate: { gte: now },
-      status: { not: 'cancelled' },
-    };
-  }
-  if (status === 'ended') {
-    return {
-      endDate: { lt: now },
-      status: { not: 'cancelled' },
-    };
-  }
-  return { status: 'cancelled' };
+const buildRecommendationEventStatusWhere = (status: EventRecommendationStatus, now: Date): Prisma.EventWhereInput => {
+  return buildEventStatusWhere(status, now) ?? {};
 };
 
 const popRandomItem = <T>(items: T[]): T | null => {
@@ -8725,7 +8695,7 @@ const selectEventRecommendationIds = async (
   const poolEntries = await Promise.all(
     statuses.map(async (status) => {
       const rows = await prisma.event.findMany({
-        where: buildEventStatusWhere(status, now),
+        where: buildRecommendationEventStatusWhere(status, now),
         orderBy:
           status === 'upcoming'
             ? [{ startDate: 'asc' }, { id: 'asc' }]
@@ -9126,14 +9096,11 @@ router.get('/events/bootstrap', optionalAuth, async (req: Request, res: Response
 
     const ongoingWhere: Prisma.EventWhereInput = {
       ...baseWhere,
-      startDate: { lte: now },
-      endDate: { gte: now },
-      status: { not: 'cancelled' },
+      ...(buildEventStatusWhere('ongoing', now) ?? {}),
     };
     const upcomingWhere: Prisma.EventWhereInput = {
       ...baseWhere,
-      startDate: { gt: now },
-      status: { not: 'cancelled' },
+      ...(buildEventStatusWhere('upcoming', now) ?? {}),
     };
 
     const [ongoingRows, ongoingTotal, upcomingRows, upcomingTotal] = await Promise.all([
@@ -9200,26 +9167,13 @@ router.get('/events', optionalAuth, async (req: Request, res: Response): Promise
     const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim() : '';
     const wikiFestivalId = typeof req.query.wikiFestivalId === 'string' ? req.query.wikiFestivalId.trim() : '';
     const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : 'upcoming';
-    const status = statusRaw.toLowerCase() === 'canceled' ? 'cancelled' : statusRaw.toLowerCase();
+    const status = statusRaw.toLowerCase();
 
     const where: any = {};
     const now = new Date();
-    if (status === 'upcoming') {
-      where.startDate = { gt: now };
-      where.status = { not: 'cancelled' };
-    } else if (status === 'ongoing') {
-      where.startDate = { lte: now };
-      where.endDate = { gte: now };
-      where.status = { not: 'cancelled' };
-    } else if (status === 'ended') {
-      where.endDate = { lt: now };
-      where.status = { not: 'cancelled' };
-    } else if (status === 'cancelled') {
-      where.status = 'cancelled';
-    } else if (status === 'all' || status === '') {
-      // no status filter
-    } else if (status) {
-      where.status = status;
+    const statusWhere = buildEventStatusWhere(status, now);
+    if (statusWhere) {
+      Object.assign(where, statusWhere);
     }
     if (search) {
       const aliasMatchedBrands = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -9338,7 +9292,7 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
         ? sortByRaw
         : 'startDateDesc';
     const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : 'all';
-    const status = statusRaw.toLowerCase() === 'canceled' ? 'cancelled' : statusRaw.toLowerCase();
+    const status = statusRaw.toLowerCase();
     const forceRefresh = isTruthyQueryFlag(req.query.refresh);
 
     const cacheKey = JSON.stringify({
@@ -9385,22 +9339,9 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
 
     const where: any = {};
     const now = new Date();
-    if (status === 'upcoming') {
-      where.startDate = { gt: now };
-      where.status = { not: 'cancelled' };
-    } else if (status === 'ongoing') {
-      where.startDate = { lte: now };
-      where.endDate = { gte: now };
-      where.status = { not: 'cancelled' };
-    } else if (status === 'ended') {
-      where.endDate = { lt: now };
-      where.status = { not: 'cancelled' };
-    } else if (status === 'cancelled') {
-      where.status = 'cancelled';
-    } else if (status === 'all' || status === '') {
-      // no status filter
-    } else if (status) {
-      where.status = status;
+    const statusWhere = buildEventStatusWhere(status, now);
+    if (statusWhere) {
+      Object.assign(where, statusWhere);
     }
     if (search) {
       const aliasMatchedBrands = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -9488,7 +9429,8 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
           city: true,
           country: true,
           eventType: true,
-          status: true,
+          isCancelled: true,
+          visibility: true,
           isVerified: true,
           startDate: true,
           endDate: true,
@@ -9517,6 +9459,19 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
       total,
       totalPages: Math.ceil(total / limit) || 1,
     };
+    const items = rows.map((row) => {
+      const resolvedEventTruth = resolveEventTruth({
+        isCancelled: row.isCancelled,
+        visibility: row.visibility,
+      });
+      return {
+        ...row,
+        status: deriveEventStatus(new Date(row.startDate), new Date(row.endDate), {
+          isCancelled: resolvedEventTruth.isCancelled,
+          visibility: resolvedEventTruth.visibility,
+        }),
+      };
+    });
     const generatedAt = new Date().toISOString();
     await adminSummaryCache.set({
       namespace: 'event-catalog-summary',
@@ -9524,7 +9479,7 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
       ttlMs: ADMIN_CATALOG_MEMORY_TTL_MS,
       snapshotVersion: ADMIN_EVENT_CATALOG_SNAPSHOT_VERSION,
       payload: {
-        items: rows,
+        items,
         pagination,
         generatedAt,
       },
@@ -9532,7 +9487,7 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
 
     res.json({
       data: {
-        items: rows,
+        items,
         meta: {
           cache: {
             scope: 'memory',
@@ -9674,13 +9629,11 @@ router.get('/events/festival-feed', optionalAuth, async (req: Request, res: Resp
 
     const upcomingWhere: Prisma.EventWhereInput = {
       wikiFestivalId,
-      startDate: { gt: now },
-      status: { not: 'cancelled' },
+      ...(buildEventStatusWhere('upcoming', now) ?? {}),
     };
     const endedWhere: Prisma.EventWhereInput = {
       wikiFestivalId,
-      endDate: { lt: now },
-      status: { not: 'cancelled' },
+      ...(buildEventStatusWhere('ended', now) ?? {}),
     };
 
     const [
@@ -10737,7 +10690,6 @@ router.patch('/events/:id', optionalAuth, async (req: Request, res: Response): P
         startTime: true,
         endTime: true,
         dayRolloverHour: true,
-        status: true,
         coverImageUrl: true,
         lineupImageUrl: true,
         imageAssets: true,
@@ -14327,6 +14279,11 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
       .split(',')
       .map((value) => value.trim().toLowerCase())
       .filter((value) => value.length > 0);
+    const normalizedStatuses = statuses
+      .filter((value) => ['upcoming', 'ongoing', 'ended', 'cancelled'].includes(value));
+    const statusFilters = normalizedStatuses
+      .map((status) => buildEventStatusWhere(status, new Date()))
+      .filter((item): item is Prisma.EventWhereInput => Boolean(item));
     const where = {
       canonicalArtists: {
         some: {
@@ -14337,7 +14294,7 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
           },
         },
       },
-      ...(statuses.length > 0 ? { status: { in: statuses } } : {}),
+      ...(statusFilters.length > 0 ? { OR: statusFilters } : {}),
     } satisfies Prisma.EventWhereInput;
     const [rows, total] = await Promise.all([
       prisma.event.findMany({
@@ -14364,7 +14321,8 @@ router.get('/djs/:id/events', optionalAuth, async (req: Request, res: Response):
           startTime: true,
           endTime: true,
           dayRolloverHour: true,
-          status: true,
+          isCancelled: true,
+          visibility: true,
           isVerified: true,
           createdAt: true,
           updatedAt: true,
@@ -15483,7 +15441,8 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
           id: true,
           startDate: true,
           endDate: true,
-          status: true,
+          isCancelled: true,
+          visibility: true,
         },
       });
 
@@ -15492,10 +15451,13 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
         return;
       }
 
-      const resolvedStatus = resolveEventStatus(
+      const resolvedStatus = deriveEventStatus(
         targetEvent.startDate,
         targetEvent.endDate,
-        targetEvent.status ?? undefined
+        {
+          isCancelled: targetEvent.isCancelled,
+          visibility: targetEvent.visibility,
+        }
       );
       if (resolvedStatus !== 'ongoing' && resolvedStatus !== 'ended') {
         res.status(400).json({ error: '活动尚未开始或已取消，暂时不能打卡' });

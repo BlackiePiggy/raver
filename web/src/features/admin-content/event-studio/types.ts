@@ -163,6 +163,9 @@ export type EventStudioTimetableSlotDraft = {
 
 export type EventStudioDraft = {
   id: string;
+  isCancelled: boolean;
+  visibility: 'visible' | 'hidden';
+  derivedStatus: 'upcoming' | 'ongoing' | 'ended' | 'cancelled';
   name: EventStudioLocalizedText;
   description: string;
   abbreviation: string;

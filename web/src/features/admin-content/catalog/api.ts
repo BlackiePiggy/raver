@@ -1,5 +1,6 @@
 import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import type { EventDerivedStatus, EventVisibility, EventStatusFilter } from '@/lib/api/event';
 
 export type AdminCatalogPagination = {
   page: number;
@@ -31,7 +32,9 @@ export type EventCatalogItem = {
   city?: string | null;
   country?: string | null;
   eventType?: string | null;
-  status?: string | null;
+  status?: EventDerivedStatus | null;
+  isCancelled?: boolean | null;
+  visibility?: EventVisibility | null;
   isVerified?: boolean;
   startDate: string;
   endDate: string;
@@ -70,7 +73,7 @@ export type EventCatalogFilters = {
   page?: number;
   limit?: number;
   search?: string;
-  status?: string;
+  status?: EventStatusFilter;
   city?: string;
   country?: string;
   eventType?: string;

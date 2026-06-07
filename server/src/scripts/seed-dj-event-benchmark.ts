@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { EventVisibility } from '../utils/event-status';
 
 const prisma = new PrismaClient();
 
@@ -101,13 +102,13 @@ async function main(): Promise<void> {
     });
   }
 
-  const now = new Date();
   const events = Array.from({ length: count }, (_, index) => {
     const eventId = crypto.randomUUID();
     const canonicalArtistId = crypto.randomUUID();
     const startDate = new Date(baseDate.getTime() - index * 24 * 60 * 60 * 1000);
     const endDate = new Date(startDate.getTime() + 4 * 60 * 60 * 1000);
     const eventNumber = String(index + 1).padStart(3, '0');
+    const visibility: EventVisibility = 'visible';
     return {
       event: {
         id: eventId,
@@ -121,7 +122,8 @@ async function main(): Promise<void> {
         endDate,
         startTime: '20:00:00',
         endTime: '23:59:59',
-        status: endDate < now ? 'completed' : 'upcoming',
+        isCancelled: false,
+        visibility,
         organizerName: BENCHMARK_TAG,
       },
       canonicalArtist: {

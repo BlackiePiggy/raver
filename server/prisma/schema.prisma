@@ -11,6 +11,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum EventVisibility {
+  visible
+  hidden
+}
+
 model User {
   id                    String    @id @default(uuid())
   username              String    @unique
@@ -505,7 +510,8 @@ model Event {
   ticketCurrency    String?  @map("ticket_currency")
   ticketNotes       String?  @map("ticket_notes")
   officialWebsite   String?  @map("official_website")
-  status            String   @default("upcoming")
+  isCancelled       Boolean  @default(false) @map("is_cancelled")
+  visibility        EventVisibility @default(visible)
   isVerified        Boolean  @default(false) @map("is_verified")
   revision          Int      @default(1)
   createdAt         DateTime @default(now()) @map("created_at")

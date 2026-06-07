@@ -35,6 +35,8 @@ import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import type { EventStudioLoadedEvent, EventStudioOverview } from '@/features/admin-content/event-studio/types';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import type { ContributionListResponse, ContributionUserLite } from '@/features/contribution-module/types';
+import type { EventStatusFilter } from '@/lib/api/event';
+import { formatEventDisplayStatusText, formatEventVisibilityText, resolveEventDisplayStatus } from '@/lib/event-status';
 import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 
 const PAGE_SIZE = 10;
@@ -76,7 +78,8 @@ const formatDateTime = (value?: string | null): string => {
 const resolveEventStatus = (
   item: EventCatalogItem
 ): { label: string; dot: string; badgeTone: string; metricLabel: string } => {
-  if (item.status === 'ongoing') {
+  const displayStatus = resolveEventDisplayStatus(item);
+  if (displayStatus === 'ongoing') {
     return {
       label: '正在进行',
       dot: 'bg-[#22c55e]',
@@ -84,7 +87,7 @@ const resolveEventStatus = (
       metricLabel: 'ongoing',
     };
   }
-  if (item.status === 'upcoming') {
+  if (displayStatus === 'upcoming') {
     return {
       label: '即将开始',
       dot: 'bg-[#ffbe2e]',
@@ -92,7 +95,7 @@ const resolveEventStatus = (
       metricLabel: 'upcoming',
     };
   }
-  if (item.status === 'cancelled') {
+  if (displayStatus === 'cancelled') {
     return {
       label: '已取消',
       dot: 'bg-[#ef4444]',
@@ -118,7 +121,7 @@ const resolveCountryLabel = (country?: string | null): string => {
   return flag ? `${flag} ${country}` : country;
 };
 
-const resolveStatusFilterLabel = (status?: string | null): string => {
+const resolveStatusFilterLabel = (status?: EventStatusFilter | 'all' | null): string => {
   switch (status) {
     case 'upcoming':
       return '即将开始';
@@ -131,6 +134,10 @@ const resolveStatusFilterLabel = (status?: string | null): string => {
     default:
       return '全部状态';
   }
+};
+
+const formatEventStatusText = (status?: string | null): string => {
+  return formatEventDisplayStatusText({ status });
 };
 
 // ① StatCard 改为扁平横排样式
@@ -555,7 +562,10 @@ function EventDetailOverlay({
             <div className="mt-4 space-y-3 text-sm text-[#4b5563]">
               {detailText('ID', item.id)}
               {detailText('Slug', item.slug)}
-              {detailText('Status', item.status)}
+              {detailText(
+                'Status',
+                [formatEventDisplayStatusText(item), formatEventVisibilityText(item)].filter(Boolean).join(' / ')
+              )}
               {detailText('Type', eventTypeLabel)}
               {detailText('Time Zone', timeZone)}
               {detailText('Organizer', organizerLabel)}
@@ -1148,7 +1158,7 @@ function StatCard({
 export default function EventCatalogPageClient() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
+  const [status, setStatus] = useState<EventStatusFilter | 'all'>('all');
   const [eventType, setEventType] = useState('all');
   const [country, setCountry] = useState('all');
   const [sortBy, setSortBy] = useState<(typeof EVENT_SORT_OPTIONS)[number]['value']>('startDateDesc');
@@ -1179,7 +1189,7 @@ export default function EventCatalogPageClient() {
       page,
       limit: PAGE_SIZE,
       search: search || undefined,
-      status,
+      status: status === 'all' ? undefined : status,
       city: undefined,
       country: country === 'all' ? undefined : country,
       eventType: eventType === 'all' ? undefined : eventType,
@@ -1488,7 +1498,7 @@ export default function EventCatalogPageClient() {
               <span>{resolveStatusFilterLabel(status)}</span>
               <select
                 value={status}
-                onChange={(event) => { setStatus(event.target.value); setPage(1); }}
+                onChange={(event) => { setStatus(event.target.value as EventStatusFilter | 'all'); setPage(1); }}
                 className="absolute inset-0 opacity-0"
               >
                 <option value="all">全部状态</option>

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { resolveUserGenrePreferenceMap } from './user-genre-preference.service';
 import { DEFAULT_EVENT_TIME_ZONE, normalizeEventTimeZone, storageDateToEventDate } from '../utils/event-timezone';
+import { deriveEventStatus, resolveEventTruth } from '../utils/event-status';
 
 const prisma = new PrismaClient();
 
@@ -726,7 +727,8 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
           date: true,
         },
       },
-      status: true,
+      isCancelled: true,
+      visibility: true,
       isVerified: true,
       updatedAt: true,
       wikiFestival: {
@@ -777,6 +779,14 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         scoreTexts(query, lineupNames, { exact: 82, prefix: 70, contains: 52 }),
         scoreTexts(query, [row.description, description], { exact: 54, prefix: 44, contains: 34 })
       ) + (row.isVerified ? 4 : 0) + recencyBoost(row.updatedAt, 2);
+      const resolvedEventTruth = resolveEventTruth({
+        isCancelled: row.isCancelled,
+        visibility: row.visibility,
+      });
+      const derivedStatus = deriveEventStatus(row.startDate, row.endDate, {
+        isCancelled: resolvedEventTruth.isCancelled,
+        visibility: resolvedEventTruth.visibility,
+      });
       return {
         id: `event:${row.id}`,
         type: 'event',
@@ -801,7 +811,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         }),
         summary: truncate(description || lineupNames.join(', ')),
         imageUrl: row.coverImageUrl,
-        badgeText: row.status,
+        badgeText: derivedStatus,
         deeplink: `raver://event/${row.id}`,
         relevanceScore: finalizeScore(score),
         publishedAt: row.startDate,

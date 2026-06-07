@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import type { EntityBindingValue } from '@/components/admin/EntityBindingSearch';
+import type { EventStatusFilter } from '@/lib/api/event';
+import { formatEventDisplayStatusText, formatEventVisibilityText } from '@/lib/event-status';
 import {
   eventOrganizerBindingApi,
   type EventOrganizerBindingCatalogItem,
@@ -62,7 +64,7 @@ export default function EventOrganizerBindingPageClient() {
   const searchParams = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
+  const [status, setStatus] = useState<EventStatusFilter | 'all'>('all');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<EventOrganizerBindingCatalogItem[]>([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -120,7 +122,7 @@ export default function EventOrganizerBindingPageClient() {
         page,
         limit: PAGE_SIZE,
         search: search || undefined,
-        status,
+        status: status === 'all' ? undefined : status,
       });
       setItems(response.items);
       setTotalPages(response.pagination.totalPages);
@@ -400,7 +402,7 @@ export default function EventOrganizerBindingPageClient() {
                 <select
                   value={status}
                   onChange={(event) => {
-                    setStatus(event.target.value);
+                    setStatus(event.target.value as EventStatusFilter | 'all');
                     setPage(1);
                   }}
                   className="w-full rounded-full px-4 py-3 text-sm"
@@ -480,7 +482,9 @@ export default function EventOrganizerBindingPageClient() {
                       >
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="admin-reference-chip">{item.eventType || 'Unlabeled type'}</span>
-                          <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">{item.status || 'unknown'}</span>
+                          <span className="admin-reference-chip bg-[#f5f5f7] text-black/55">
+                            {[formatEventDisplayStatusText(item), formatEventVisibilityText(item)].filter(Boolean).join(' / ') || 'unknown'}
+                          </span>
                           {item.wikiFestivalId ? (
                             <span className="rounded-full border border-[#dceabf] bg-[#eef8d8] px-3 py-1 text-xs font-semibold text-[#2f4027]">
                               Bound

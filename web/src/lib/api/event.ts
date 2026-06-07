@@ -2,6 +2,10 @@ import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3901/api';
 
+export type EventDerivedStatus = 'upcoming' | 'ongoing' | 'ended' | 'cancelled';
+export type EventVisibility = 'visible' | 'hidden';
+export type EventStatusFilter = EventDerivedStatus;
+
 export interface Event {
   id: string;
   name: string;
@@ -35,7 +39,9 @@ export interface Event {
     sortOrder?: number;
   }>;
   officialWebsite: string | null;
-  status: string;
+  status: EventDerivedStatus;
+  isCancelled?: boolean | null;
+  visibility?: EventVisibility | null;
   isVerified: boolean;
   createdAt: string;
   updatedAt: string;
@@ -105,7 +111,7 @@ export interface EventFilters {
   city?: string;
   country?: string;
   eventType?: string;
-  status?: string;
+  status?: EventStatusFilter;
 }
 
 export interface EventTimezoneLookupItem {

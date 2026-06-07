@@ -18,6 +18,7 @@ import {
   normalizeSelections,
 } from '../modules/checkins';
 import { isAdminOrOperator } from '../modules/admin/admin-auth.policy';
+import { deriveEventStatus } from '../utils/event-status';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -690,7 +691,8 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
               manualLocation: true,
               startDate: true,
               endDate: true,
-              status: true,
+              isCancelled: true,
+              visibility: true,
             },
           })
         : Promise.resolve(null),
@@ -737,18 +739,10 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
     }
 
     if (type === 'event' && event) {
-      const now = new Date();
-      const normalizedStatus = String(event.status ?? '')
-        .trim()
-        .toLowerCase();
-      const resolvedStatus =
-        normalizedStatus === 'cancelled' || normalizedStatus === 'canceled'
-          ? 'cancelled'
-          : now < event.startDate
-            ? 'upcoming'
-            : now > event.endDate
-              ? 'ended'
-              : 'ongoing';
+      const resolvedStatus = deriveEventStatus(event.startDate, event.endDate, {
+        isCancelled: event.isCancelled,
+        visibility: event.visibility,
+      });
 
       if (resolvedStatus !== 'ongoing' && resolvedStatus !== 'ended') {
         res.status(400).json({ error: '活动尚未开始或已取消，暂时不能打卡' });
@@ -913,7 +907,8 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
             manualLocation: true,
             startDate: true,
             endDate: true,
-            status: true,
+            isCancelled: true,
+            visibility: true,
           },
         },
         dj: {

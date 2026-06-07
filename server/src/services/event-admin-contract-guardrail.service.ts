@@ -117,6 +117,24 @@ const ensureNoClearConflict = (body: EventAdminBody): void => {
   }
 };
 
+const ensureEventStatusTruthShape = (body: EventAdminBody): void => {
+  if (hasOwn(body, 'isCancelled') && body.isCancelled !== null && typeof body.isCancelled !== 'boolean') {
+    throw new EventAdminContractGuardrailError('isCancelled must be a boolean or null');
+  }
+  if (hasOwn(body, 'visibility') && body.visibility !== null && body.visibility !== undefined) {
+    if (typeof body.visibility !== 'string') {
+      throw new EventAdminContractGuardrailError('visibility must be visible, hidden, or null');
+    }
+    const normalizedVisibility = body.visibility.trim().toLowerCase();
+    if (normalizedVisibility !== 'visible' && normalizedVisibility !== 'hidden') {
+      throw new EventAdminContractGuardrailError('visibility must be visible, hidden, or null');
+    }
+  }
+  if (hasOwn(body, 'status')) {
+    throw new EventAdminContractGuardrailError('status is no longer accepted on event mutation payloads; use isCancelled / visibility instead');
+  }
+};
+
 export const validateEventAdminContractPayload = (
   payload: unknown,
   mode: EventAdminContractMode
@@ -134,6 +152,7 @@ export const validateEventAdminContractPayload = (
   ensureNonEmptyString(body.endDate, 'endDate');
   ensureNonEmptyString(body.timeZone, 'timeZone');
   ensureStructuredScheduleFoundation(body);
+  ensureEventStatusTruthShape(body);
 
   if (mode === 'update') {
     for (const key of REQUIRED_CLEAR_FLAGS) {

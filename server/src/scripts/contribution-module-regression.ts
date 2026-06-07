@@ -62,7 +62,8 @@ const createEvent = async (suffix: string, organizerId: string) => {
       coverImageUrl: `https://example.com/contribution-module-event-${suffix}.jpg`,
       startDate: new Date('2026-06-01T10:00:00.000Z'),
       endDate: new Date('2026-06-01T18:00:00.000Z'),
-      status: 'upcoming',
+      isCancelled: false,
+      visibility: 'visible',
     },
     select: {
       id: true,

@@ -1,3 +1,5 @@
+import type { EventDerivedStatus } from '@/lib/api/event';
+
 export type DJStudioLocalizedText = {
   zh: string;
   en: string;
@@ -128,7 +130,7 @@ export type DJStudioSubmissionSummary = {
 };
 
 export type DJStudioSubmissionAcceptedPayload = {
-  status?: string | null;
+  status?: EventDerivedStatus | null;
   message: string;
   submission: DJStudioSubmissionSummary;
 };

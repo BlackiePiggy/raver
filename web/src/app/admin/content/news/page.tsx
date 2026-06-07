@@ -46,6 +46,16 @@ const formatDateTime = (value?: string | null): string => {
   }).format(new Date(value));
 };
 
+const formatEventStatusLabel = (value?: string | null): string | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'cancelled') return '已取消';
+  if (normalized === 'ongoing') return '进行中';
+  if (normalized === 'ended') return '已结束';
+  if (normalized === 'upcoming') return '即将开始';
+  return value ?? null;
+};
+
 type NewsDetailTabKey = 'overview' | 'content' | 'bindings';
 type BindingGroupKey = 'dj' | 'brand' | 'event';
 
@@ -156,7 +166,7 @@ function NewsDetailOverlay({
                 id,
                 name: event.name || id,
                 subtitle: [event.city, event.country].filter(Boolean).join(', ') || null,
-                meta: [event.eventType, event.status, formatDateTime(event.startDate)].filter(Boolean).join(' · ') || null,
+                meta: [event.eventType, formatEventStatusLabel(event.status), formatDateTime(event.startDate)].filter(Boolean).join(' · ') || null,
                 imageUrl: event.coverImageUrl || event.cardImageUrl || null,
               };
             }

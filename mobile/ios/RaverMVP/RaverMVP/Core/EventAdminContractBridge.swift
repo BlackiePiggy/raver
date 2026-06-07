@@ -80,7 +80,8 @@ enum EventAdminContractBridge {
             lineupSlots: lineupSlots(from: legacy.lineupSlots, timeZone: resolvedTimeZone),
             lineupSyncMode: lineupSyncMode(from: legacy.lineupSyncMode),
             idempotencyKey: legacy.idempotencyKey,
-            status: mutationStatus(from: legacy.status)
+            isCancelled: legacy.isCancelled,
+            visibility: normalizedVisibility(from: legacy.visibility)
         )
     }
 
@@ -136,7 +137,8 @@ enum EventAdminContractBridge {
             lineupSlots: lineupSlots(from: legacy.lineupSlots, timeZone: resolvedTimeZone),
             lineupSyncMode: lineupSyncMode(from: legacy.lineupSyncMode),
             idempotencyKey: legacy.idempotencyKey,
-            status: mutationStatus(from: legacy.status)
+            isCancelled: legacy.isCancelled,
+            visibility: normalizedVisibility(from: legacy.visibility)
         )
     }
 
@@ -299,13 +301,18 @@ enum EventAdminContractBridge {
         return .init(rawValue: rawValue)
     }
 
-    private static func mutationStatus(
-        from legacy: String?
-    ) -> EventAdminComponents.Schemas.EventMutationBase.StatusPayload? {
-        guard let rawValue = legacy?.trimmingCharacters(in: .whitespacesAndNewlines), !rawValue.isEmpty else {
-            return nil
+    private static func normalizedVisibility(
+        from explicitValue: String?
+    ) -> EventAdminComponents.Schemas.EventMutationBase.VisibilityPayload? {
+        guard let explicitValue else { return nil }
+        let normalized = explicitValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "hidden" {
+            return .init(rawValue: "hidden")
         }
-        return .init(rawValue: rawValue)
+        if normalized == "visible" {
+            return .init(rawValue: "visible")
+        }
+        return nil
     }
 
     private static func normalizedLocationProvider(

@@ -73,20 +73,33 @@ enum EventVisualStatus: String {
         }
     }
 
-    static func resolve(startDate: Date, endDate: Date, fallbackStatus: String? = nil, now: Date = Date()) -> EventVisualStatus {
-        if let fallback = from(raw: fallbackStatus), fallback == .cancelled {
+    static func resolve(
+        startDate: Date,
+        endDate: Date,
+        derivedStatus: String? = nil,
+        isCancelled: Bool? = nil,
+        now: Date = Date()
+    ) -> EventVisualStatus {
+        if let isCancelled, isCancelled {
             return .cancelled
         }
+        let fallback = from(raw: derivedStatus)
         guard endDate >= startDate else {
-            return from(raw: fallbackStatus) ?? (now < startDate ? .upcoming : .ended)
+            return fallback ?? (now < startDate ? .upcoming : .ended)
         }
         if now < startDate { return .upcoming }
         if now > endDate { return .ended }
-        return .ongoing
+        return fallback ?? .ongoing
     }
 
     static func resolve(event: WebEvent, now: Date = Date()) -> EventVisualStatus {
-        resolve(startDate: event.startDate, endDate: event.endDate, fallbackStatus: event.status, now: now)
+        resolve(
+            startDate: event.startDate,
+            endDate: event.endDate,
+            derivedStatus: event.status,
+            isCancelled: event.isCancelled,
+            now: now
+        )
     }
 
     static func from(raw value: String?) -> EventVisualStatus? {
@@ -100,11 +113,15 @@ enum EventVisualStatus: String {
             return .ongoing
         case "ended":
             return .ended
-        case "cancelled", "canceled":
+        case "cancelled":
             return .cancelled
         default:
             return nil
         }
+    }
+
+    static func derivedRawValue(for event: WebEvent, now: Date = Date()) -> String {
+        resolve(event: event, now: now).rawValue
     }
 }
 

@@ -117,5 +117,6 @@
   "lineupArtists": null,
   "lineupSlots": null,
   "lineupSyncMode": "incremental_fill",
-  "status": "upcoming"
+  "isCancelled": false,
+  "visibility": "visible"
 }

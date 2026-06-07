@@ -13,6 +13,12 @@ import {
   storageDateToEventDate,
   zonedTimeToUtc,
 } from '../utils/event-timezone';
+import {
+  EventVisibility,
+  mapLegacyEventStatusToEventTruth,
+  normalizeEventVisibility,
+  resolveEventTruth,
+} from '../utils/event-status';
 import { normalizeTriTextPayload, triTextToJson } from '../utils/i18n';
 import {
   type CanonicalLineupSnapshot,
@@ -1336,6 +1342,43 @@ type NormalizedEventSubmissionWriteInput = {
   ticketTiers: Prisma.EventTicketTierCreateWithoutEventInput[];
 };
 
+export const resolveEventSubmissionPayloadTruth = (input: {
+  payload: Record<string, unknown>;
+  existingTruth?: {
+    isCancelled?: boolean | null;
+    visibility?: EventVisibility | null;
+  } | null;
+}): {
+  isCancelled: boolean;
+  visibility: EventVisibility;
+} => {
+  // Historical compatibility only:
+  // replay/retry may still encounter stored submission payloads that predate the
+  // truth-field cutover and only carry legacy status. New submission writers
+  // must send isCancelled / visibility explicitly instead of relying on status.
+  const { payload, existingTruth } = input;
+  const hasStatusTruthOverride =
+    hasOwn(payload, 'isCancelled')
+    || hasOwn(payload, 'visibility');
+  const legacyEventTruth =
+    hasStatusTruthOverride
+      ? null
+      : mapLegacyEventStatusToEventTruth(payload.status);
+
+  return resolveEventTruth({
+    isCancelled: hasOwn(payload, 'isCancelled')
+      ? payload.isCancelled
+      : payload.status !== undefined
+        ? legacyEventTruth?.isCancelled
+        : existingTruth?.isCancelled,
+    visibility: hasOwn(payload, 'visibility')
+      ? payload.visibility
+      : payload.status !== undefined
+        ? legacyEventTruth?.visibility
+        : existingTruth?.visibility,
+  });
+};
+
 type EventCoreComparableState = {
   name: string;
   nameI18n: unknown;
@@ -1374,7 +1417,8 @@ type EventCoreComparableState = {
   ticketCurrency: string | null;
   ticketNotes: string | null;
   officialWebsite: string | null;
-  status: string;
+  isCancelled: boolean;
+  visibility: EventVisibility;
   isVerified: boolean;
 };
 
@@ -1595,7 +1639,8 @@ const buildComparableEventCoreFromInput = (input: NormalizedEventSubmissionWrite
   ticketCurrency: cleanText(input.eventData.ticketCurrency) ?? null,
   ticketNotes: cleanText(input.eventData.ticketNotes) ?? null,
   officialWebsite: cleanText(input.eventData.officialWebsite) ?? null,
-  status: cleanText(input.eventData.status) ?? 'upcoming',
+  isCancelled: Boolean(input.eventData.isCancelled),
+  visibility: normalizeEventVisibility(input.eventData.visibility),
   isVerified: Boolean(input.eventData.isVerified),
 });
 
@@ -1637,7 +1682,8 @@ const buildComparableEventCoreFromExisting = (event: {
   ticketCurrency: string | null;
   ticketNotes: string | null;
   officialWebsite: string | null;
-  status: string;
+  isCancelled: boolean;
+  visibility: unknown;
   isVerified: boolean;
 }): EventCoreComparableState => ({
   name: event.name,
@@ -1677,7 +1723,8 @@ const buildComparableEventCoreFromExisting = (event: {
   ticketCurrency: event.ticketCurrency ?? null,
   ticketNotes: event.ticketNotes ?? null,
   officialWebsite: event.officialWebsite ?? null,
-  status: event.status,
+  isCancelled: event.isCancelled,
+  visibility: normalizeEventVisibility(event.visibility),
   isVerified: event.isVerified,
 });
 
@@ -1753,7 +1800,8 @@ const buildComparableExistingEventState = async (
       ticketCurrency: true,
       ticketNotes: true,
       officialWebsite: true,
-      status: true,
+      isCancelled: true,
+      visibility: true,
       isVerified: true,
       revision: true,
       ticketTiers: {
@@ -2043,6 +2091,24 @@ const normalizeEventSubmissionWriteInput = async (
     throw new Error('活动名称不能为空');
   }
 
+  const hasStatusTruthOverride =
+    hasOwn(payload, 'isCancelled')
+    || hasOwn(payload, 'visibility');
+  const existingStatusTruth =
+    targetEventId && !hasStatusTruthOverride && payload.status === undefined
+      ? await db.event.findUnique({
+          where: { id: targetEventId },
+          select: {
+            isCancelled: true,
+            visibility: true,
+          },
+        })
+      : null;
+  const resolvedEventTruth = resolveEventSubmissionPayloadTruth({
+    payload,
+    existingTruth: existingStatusTruth,
+  });
+
   const imageAssets = eventImageAssetsFromPayload(payload.imageAssets);
   if (!hasRequiredEventPrimaryImageAsset(imageAssets)) {
     throw new Error('至少需要上传一张海报、阵容图或封面图');
@@ -2128,7 +2194,8 @@ const normalizeEventSubmissionWriteInput = async (
       ticketCurrency,
       ticketNotes,
       officialWebsite,
-      status: cleanText(payload.status) || 'upcoming',
+      isCancelled: resolvedEventTruth.isCancelled,
+      visibility: resolvedEventTruth.visibility,
       isVerified: true,
     } satisfies Prisma.EventUncheckedUpdateInput,
   };

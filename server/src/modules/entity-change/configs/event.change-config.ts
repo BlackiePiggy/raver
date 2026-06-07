@@ -1,5 +1,5 @@
 import { registerEntityChangeDefinition } from '../entity-change.registry';
-import type { ChangePathConfig } from '../entity-change.types';
+import type { ChangePathConfig, FormattedValue, ValueFormatter } from '../entity-change.types';
 import { buildEventChangeSnapshot } from '../snapshots/event.snapshot';
 
 const publicScalar = (labelZh: string, labelEn: string, category: string, priority = 50): ChangePathConfig => ({
@@ -20,11 +20,37 @@ const privateScalar = (labelZh: string, labelEn: string, category: string): Chan
   sensitive: true,
 });
 
+const scalarValue = (zh: string | null, en: string | null, ja?: string | null): FormattedValue => ({
+  zh,
+  en,
+  ja: ja ?? null,
+});
+
+const formatCancelledState: ValueFormatter = (value) =>
+  value
+    ? scalarValue('已取消', 'Cancelled', 'キャンセル済み')
+    : scalarValue('未取消', 'Not cancelled', '未キャンセル');
+
+const formatEventVisibility: ValueFormatter = (value) => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'hidden') {
+    return scalarValue('隐藏', 'Hidden', '非表示');
+  }
+  return scalarValue('可见', 'Visible', '表示');
+};
+
 export const eventChangePaths: Record<string, ChangePathConfig> = {
   'profile.name': publicScalar('活动名称', 'Event name', 'profile', 100),
   'profile.description': publicScalar('活动介绍', 'Event description', 'profile'),
   'profile.eventType': publicScalar('活动类型', 'Event type', 'profile'),
-  'profile.status': publicScalar('活动状态', 'Event status', 'profile'),
+  'profile.isCancelled': {
+    ...publicScalar('取消状态', 'Cancellation status', 'profile', 97),
+    formatter: formatCancelledState,
+  },
+  'profile.visibility': {
+    ...publicScalar('可见性', 'Visibility', 'profile', 96),
+    formatter: formatEventVisibility,
+  },
   'profile.officialWebsite': publicScalar('活动官网', 'Official website', 'links'),
   'media.coverImageUrl': publicScalar('活动封面', 'Cover image', 'media'),
   'media.lineupImageUrl': publicScalar('阵容图', 'Lineup image', 'media'),

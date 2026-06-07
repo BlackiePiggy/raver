@@ -6,6 +6,7 @@ import { eventStudioApi } from '@/features/admin-content/event-studio/api';
 import { adminCatalogApi } from '@/features/admin-content/catalog/api';
 import { labelStudioApi } from '@/features/admin-content/label-studio/api';
 import { newsStudioApi } from '@/features/admin-content/news-studio/api';
+import { formatEventDisplayStatusText, formatEventVisibilityText } from '@/lib/event-status';
 
 export type EntityBindingKind = 'dj' | 'festival' | 'label' | 'event' | 'brand' | 'news' | 'user';
 
@@ -125,7 +126,7 @@ export default function EntityBindingSearch({
         name: item.name,
         subtitle: [item.city, item.country].filter(Boolean).join(', ') || null,
         imageUrl: item.coverImageUrl || null,
-        note: [item.status, item.eventType].filter(Boolean).join(' / ') || null,
+        note: [formatEventDisplayStatusText(item), formatEventVisibilityText(item), item.eventType].filter(Boolean).join(' / ') || null,
         entityType: 'event',
       }));
     }

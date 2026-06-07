@@ -1,3 +1,5 @@
+import type { EventDerivedStatus } from '@/lib/api/event';
+
 export type OrganizerStudioLocalizedText = {
   zh: string;
   en: string;
@@ -67,7 +69,7 @@ export type OrganizerStudioSubmissionSummary = {
 };
 
 export type OrganizerStudioSubmissionAcceptedPayload = {
-  status?: string | null;
+  status?: EventDerivedStatus | null;
   message: string;
   submission: OrganizerStudioSubmissionSummary;
 };

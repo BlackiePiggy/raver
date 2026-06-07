@@ -268,15 +268,18 @@ components:
       enum:
         - incremental_fill
         - exact_align
-    EventMutationStatus:
+    EventDerivedStatus:
       type: string
       enum:
-        - draft
         - upcoming
         - ongoing
         - ended
         - cancelled
-        - canceled
+    EventVisibility:
+      type: string
+      enum:
+        - visible
+        - hidden
     EventApiErrorCode:
       type: string
       enum:
@@ -987,17 +990,17 @@ components:
           type:
             - string
             - 'null'
-        status:
+        isCancelled:
+          type:
+            - boolean
+            - 'null'
+        visibility:
           type:
             - string
             - 'null'
           enum:
-            - draft
-            - upcoming
-            - ongoing
-            - ended
-            - cancelled
-            - canceled
+            - visible
+            - hidden
             - null
     CreateEventInput:
       allOf:
@@ -1090,9 +1093,17 @@ components:
           type: string
           format: date-time
         status:
+          anyOf:
+            - $ref: '#/components/schemas/EventDerivedStatus'
+            - type: 'null'
+        isCancelled:
           type:
-            - string
+            - boolean
             - 'null'
+        visibility:
+          anyOf:
+            - $ref: '#/components/schemas/EventVisibility'
+            - type: 'null'
     EventOverview:
       type: object
       additionalProperties: true
@@ -1288,9 +1299,17 @@ components:
             - string
             - 'null'
         status:
+          anyOf:
+            - $ref: '#/components/schemas/EventDerivedStatus'
+            - type: 'null'
+        isCancelled:
           type:
-            - string
+            - boolean
             - 'null'
+        visibility:
+          anyOf:
+            - $ref: '#/components/schemas/EventVisibility'
+            - type: 'null'
         isVerified:
           type:
             - boolean
@@ -1493,9 +1512,17 @@ components:
             - string
             - 'null'
         status:
+          anyOf:
+            - $ref: '#/components/schemas/EventDerivedStatus'
+            - type: 'null'
+        isCancelled:
           type:
-            - string
+            - boolean
             - 'null'
+        visibility:
+          anyOf:
+            - $ref: '#/components/schemas/EventVisibility'
+            - type: 'null'
         revision:
           type:
             - integer

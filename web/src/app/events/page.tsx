@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import Navigation from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveEventDisplayStatus } from '@/lib/event-status';
 import { useRouter } from 'next/navigation';
 import { getTimeZoneLabel, normalizeDisplayTimeZone } from '@/lib/timezone';
 
-type EventVisualStatus = 'upcoming' | 'ongoing' | 'ended';
+type EventVisualStatus = 'upcoming' | 'ongoing' | 'ended' | 'cancelled';
 
 export default function EventsPage() {
   const { user } = useAuth();
@@ -66,21 +67,16 @@ export default function EventsPage() {
   };
 
   const resolveEventStatus = (event: Event): EventVisualStatus => {
-    const now = Date.now();
-    const start = new Date(event.startDate).getTime();
-    const end = new Date(event.endDate).getTime();
-    if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) {
-      if (now < start) return 'upcoming';
-      if (now > end) return 'ended';
-      return 'ongoing';
-    }
-    if (event.status === 'ongoing' || event.status === 'ended') {
-      return event.status;
-    }
-    return 'upcoming';
+    return resolveEventDisplayStatus(event);
   };
 
   const statusMeta = (status: EventVisualStatus) => {
+    if (status === 'cancelled') {
+      return {
+        label: '已取消',
+        className: 'bg-red-500/10 text-red-300 border-red-300/30',
+      };
+    }
     if (status === 'ongoing') {
       return {
         label: '进行中',

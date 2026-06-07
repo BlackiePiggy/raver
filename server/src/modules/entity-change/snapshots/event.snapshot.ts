@@ -7,6 +7,7 @@ import {
   normalizeJson,
   sortedStrings,
 } from './snapshot-utils';
+import { resolveEventTruth } from '../../../utils/event-status';
 
 export const buildEventChangeSnapshot = async (input: {
   entityId: string;
@@ -42,6 +43,11 @@ export const buildEventChangeSnapshot = async (input: {
 
   if (!event) return null;
 
+  const resolvedEventTruth = resolveEventTruth({
+    isCancelled: event.isCancelled,
+    visibility: event.visibility,
+  });
+
   return {
     entityType: 'event',
     entityId: event.id,
@@ -57,7 +63,8 @@ export const buildEventChangeSnapshot = async (input: {
         description: event.description,
         descriptionI18n: normalizeJson(event.descriptionI18n),
         eventType: event.eventType,
-        status: event.status,
+        isCancelled: resolvedEventTruth.isCancelled,
+        visibility: resolvedEventTruth.visibility,
         officialWebsite: event.officialWebsite,
         isVerified: event.isVerified,
       },

@@ -1,6 +1,10 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
+
+// This regression file may exercise legacy event status payloads, but only as a
+// compatibility safety net for historical submission replay/retry. It is not a
+// production write contract and must not be used as guidance for new payloads.
 import {
   loadCanonicalEventLineupSnapshot,
   syncCanonicalEventLineupAndTimetable,
@@ -277,7 +281,8 @@ const createRegressionUserAndEvent = async (suffix: string): Promise<{ userId: s
           url: 'https://example.com/regression-poster.jpg',
         },
       ],
-      status: 'upcoming',
+      isCancelled: false,
+      visibility: 'visible',
       isVerified: true,
     },
     select: { id: true },
@@ -763,6 +768,82 @@ const runCreateSubmissionIdempotencyRegression = async (userId: string): Promise
   await prisma.event.deleteMany({ where: { id: first.id } });
 };
 
+const runLegacyStatusSubmissionReplayRegression = async (userId: string): Promise<void> => {
+  logStep('legacy status submission replay compatibility path');
+  const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
+  const schedule = buildSingleDaySchedule('2026-09-09');
+  const payload = {
+    name: `Event Legacy Status Replay ${suffix}`,
+    ...schedule,
+    status: 'hidden',
+    imageAssets: [
+      {
+        type: 'poster',
+        label: 'POSTER',
+        url: 'https://example.com/regression-hidden-poster.jpg',
+      },
+    ],
+    lineupArtists: [
+      {
+        djName: 'Legacy Hidden Replay DJ',
+        memberNames: ['Legacy Hidden Replay DJ'],
+        sortOrder: 1,
+      },
+    ],
+    lineupSlots: [
+      {
+        eventDayId: schedule.eventDays[0].eventDayId,
+        weekIndex: schedule.eventDays[0].weekIndex,
+        dayIndexInWeek: schedule.eventDays[0].dayIndexInWeek,
+        overallDayIndex: schedule.eventDays[0].overallDayIndex,
+        localDate: schedule.eventDays[0].date,
+        djName: 'Legacy Hidden Replay DJ',
+        memberDjIds: [],
+        stageName: 'Secret Stage',
+        festivalDayIndex: schedule.eventDays[0].overallDayIndex,
+        startTime: '2026-09-09T19:00:00+08:00',
+        endTime: '2026-09-09T20:00:00+08:00',
+        sortOrder: 1,
+      },
+    ],
+    stageOrder: ['Secret Stage'],
+  } as Prisma.JsonObject;
+
+  const submission = await prisma.contentSubmission.create({
+    data: {
+      submitterId: userId,
+      entityType: 'event',
+      status: 'processing',
+      title: payload.name as string,
+      payload,
+      reviewReason: null,
+    },
+    select: { id: true },
+  });
+
+  const first = await createOrUpdateEventFromSubmission(prisma, payload, userId, {
+    submissionId: submission.id,
+  });
+  const second = await createOrUpdateEventFromSubmission(prisma, payload, userId, {
+    submissionId: submission.id,
+  });
+
+  assert(first.id === second.id, 'legacy status replay should remain idempotent');
+  const replayed = await prisma.event.findUniqueOrThrow({
+    where: { id: first.id },
+    select: {
+      id: true,
+      isCancelled: true,
+      visibility: true,
+    },
+  });
+  assert(replayed.isCancelled === false, 'legacy hidden replay should not flip isCancelled');
+  assert(replayed.visibility === 'hidden', 'legacy hidden replay should preserve hidden visibility truth');
+
+  await prisma.contentSubmission.deleteMany({ where: { id: submission.id } });
+  await prisma.event.deleteMany({ where: { id: first.id } });
+};
+
 const runAutoApprovalResumeRegression = async (): Promise<void> => {
   logStep('auto approval resume path');
   const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
@@ -1017,6 +1098,7 @@ const main = async (): Promise<void> => {
     await runFullPayloadExactAlignRegression(eventId, userId);
     await runFullPayloadLargeMixedRegression(eventId, userId);
     await runCreateSubmissionIdempotencyRegression(userId);
+    await runLegacyStatusSubmissionReplayRegression(userId);
     await runCreatePayloadIncrementalFillRegression(userId);
     await runAutoApprovalResumeRegression();
     await runPhaseBFailureRecoveryRegression();

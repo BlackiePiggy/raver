@@ -13,7 +13,6 @@ import {
   eventStudioTimetableSlotIdentityKey,
 } from './draft';
 import { INPUT_LIMITS, normalizeMultiline, normalizeSingleLine, trimArrayItems } from '@/lib/input-rules';
-import { formatDateInputInTimeZone } from '@/lib/timezone';
 
 type EventLocationProvider = EventContractComponents['schemas']['EventLocationProvider'];
 type EventLocationSourceMode = EventContractComponents['schemas']['EventLocationSourceMode'];
@@ -259,17 +258,6 @@ const joinLocalizedAddress = (
     ]) || normalizedDetail.ja || normalizedDetail.en || normalizedDetail.zh,
     enFull: normalizedDetail.enFull,
   };
-};
-
-const resolveVisualStatus = (
-  startDate: string,
-  endDate: string,
-  timeZone?: string | null
-): 'upcoming' | 'ongoing' | 'ended' => {
-  const today = formatDateInputInTimeZone(new Date(), timeZone);
-  if (endDate < today) return 'ended';
-  if (startDate > today) return 'upcoming';
-  return 'ongoing';
 };
 
 const splitMemberNamesText = (value: string): string[] =>
@@ -704,7 +692,8 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     lineupArtists: lineupArtists.length ? lineupArtists : null,
     lineupSlots: lineupSlots.length ? lineupSlots : null,
     lineupSyncMode: draft.lineupSyncMode,
-    status: resolveVisualStatus(draft.startDate, draft.endDate, draft.timeZoneSelection?.timezone),
+    isCancelled: draft.isCancelled,
+    visibility: draft.visibility,
   };
 };
 

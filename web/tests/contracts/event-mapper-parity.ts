@@ -230,7 +230,8 @@ const tests: TestCase[] = [
       assert.equal(payload.lineupSlots?.[0]?.endTime, "2099-09-13T01:00:00");
       assert.equal(payload.lineupSlots?.[0]?.djName, "Anyma B2B MRAK");
       assert.equal(payload.lineupSyncMode, "exact_align");
-      assert.equal(payload.status, "upcoming");
+      assert.equal(payload.isCancelled, false);
+      assert.equal(payload.visibility, "visible");
       assert.deepEqual(
         payload.weeks?.map(({ weekIndex, startDate, endDate, sortOrder }) => ({ weekIndex, startDate, endDate, sortOrder })),
         createCrossMidnightFixture.weeks.map(({ weekIndex, startDate, endDate, sortOrder }) => ({ weekIndex, startDate, endDate, sortOrder }))

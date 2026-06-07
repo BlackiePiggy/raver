@@ -593,6 +593,9 @@ export const buildEventStudioScheduleStructure = (
 
 export const createEventStudioDraft = (): EventStudioDraft => ({
   id: crypto.randomUUID(),
+  isCancelled: false,
+  visibility: 'visible',
+  derivedStatus: 'upcoming',
   name: emptyLocalizedText(),
   description: '',
   abbreviation: '',
@@ -648,6 +651,10 @@ const fromNullableLocalizedText = (
 });
 
 export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent): EventStudioDraft => {
+  const eventWithStatusTruth = event as EventStudioLoadedEvent & {
+    isCancelled?: boolean | null;
+    visibility?: 'visible' | 'hidden' | null;
+  };
   const manualDetail = event.manualLocation?.detailAddressI18n;
   const locationAddress = event.locationPoint?.addressI18n;
   const formattedLocationAddress = event.locationPoint?.formattedAddressI18n;
@@ -704,6 +711,20 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
   const eventTimeZone = normalizeDisplayTimeZone(event.schedule?.timeZone || event.timeZone);
   const startDate = normalizeEventStudioDateInput(event.startDate, eventTimeZone);
   const endDate = normalizeEventStudioDateInput(event.endDate, eventTimeZone);
+  const normalizedDerivedStatus = String(event.status || '').trim().toLowerCase();
+  const isCancelled = eventWithStatusTruth.isCancelled === true;
+  const visibility: EventStudioDraft['visibility'] =
+    String(eventWithStatusTruth.visibility || '').trim().toLowerCase() === 'hidden'
+      ? 'hidden'
+      : 'visible';
+  const derivedStatus: EventStudioDraft['derivedStatus'] =
+    normalizedDerivedStatus === 'ongoing'
+      ? 'ongoing'
+      : normalizedDerivedStatus === 'ended'
+        ? 'ended'
+        : normalizedDerivedStatus === 'cancelled'
+          ? 'cancelled'
+          : 'upcoming';
   const scheduleMode =
     (event.schedule?.mode as EventStudioDraft['scheduleMode'] | undefined) ??
     (event.weeks && event.weeks.length > 1
@@ -798,6 +819,9 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
 
   return {
     id: crypto.randomUUID(),
+    isCancelled,
+    visibility,
+    derivedStatus,
     name: fromNullableLocalizedText(event.nameI18n, event.name),
     description: event.description ?? '',
     abbreviation: event.abbreviation ?? '',

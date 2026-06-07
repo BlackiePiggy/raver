@@ -1,5 +1,6 @@
 import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
+import type { EventDerivedStatus, EventVisibility, EventStatusFilter } from '@/lib/api/event';
 import {
   eventStudioApi,
   hydrateEventStudioDraftFromEvent,
@@ -16,7 +17,9 @@ export type EventOrganizerBindingCatalogItem = {
   city?: string | null;
   country?: string | null;
   eventType?: string | null;
-  status?: string | null;
+  status?: EventDerivedStatus | null;
+  isCancelled?: boolean | null;
+  visibility?: EventVisibility | null;
   wikiFestivalId?: string | null;
   startDate: string;
   endDate: string;
@@ -47,7 +50,7 @@ export const eventOrganizerBindingApi = {
     page: number;
     limit: number;
     search?: string;
-    status?: string;
+    status?: EventStatusFilter;
   }): Promise<EventOrganizerBindingListResponse> {
     const search = new URLSearchParams();
     search.set('page', String(input.page));

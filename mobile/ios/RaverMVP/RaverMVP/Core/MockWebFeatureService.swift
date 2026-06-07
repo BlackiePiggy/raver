@@ -147,6 +147,8 @@ actor MockWebFeatureService: WebFeatureService {
             ticketNotes: nil,
             officialWebsite: nil,
             status: "upcoming",
+            isCancelled: false,
+            visibility: "visible",
             isVerified: true,
             createdAt: now.addingTimeInterval(-86400 * 2),
             updatedAt: now.addingTimeInterval(-86400),
@@ -543,10 +545,7 @@ actor MockWebFeatureService: WebFeatureService {
 
     func fetchRecommendedEvents(limit: Int, statuses: [String]?) async throws -> [WebEvent] {
         let normalizedStatuses = (statuses ?? ["ongoing", "upcoming", "ended"])
-            .map { value -> String in
-                let lowered = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                return lowered == "canceled" ? "cancelled" : lowered
-            }
+            .map { value in value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { ["ongoing", "upcoming", "ended", "cancelled"].contains($0) }
         let requestedStatuses: [String] = {
             if normalizedStatuses.isEmpty {
@@ -1788,9 +1787,7 @@ actor MockWebFeatureService: WebFeatureService {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
                     .filter { !$0.isEmpty }
                 guard !normalized.isEmpty else { return true }
-                let eventStatus = event.status?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .lowercased() ?? ""
+                let eventStatus = resolveEventStatus(for: event)
                 return normalized.contains(eventStatus)
             }
             .sorted(by: { $0.startDate > $1.startDate })
@@ -4010,7 +4007,9 @@ actor MockWebFeatureService: WebFeatureService {
             ticketCurrency: normalizedTicketCurrency,
             ticketNotes: normalizedOptional(base.ticketNotes),
             officialWebsite: normalizedOptional(base.officialWebsite),
-            status: resolvedMutationStatus(from: base.status, startDate: startDate, endDate: endDate),
+            status: base.isCancelled == true ? "cancelled" : "upcoming",
+            isCancelled: base.isCancelled ?? false,
+            visibility: normalizedMutationVisibility(base.visibility),
             isVerified: false,
             createdAt: now,
             updatedAt: now,
@@ -4097,7 +4096,9 @@ actor MockWebFeatureService: WebFeatureService {
         events[idx].ticketTiers = normalizedTicketTiers
         events[idx].ticketPriceMin = ticketPrices.min()
         events[idx].ticketPriceMax = ticketPrices.max()
-        events[idx].status = resolvedMutationStatus(from: base.status, startDate: startDate, endDate: endDate)
+        events[idx].isCancelled = base.isCancelled ?? false
+        events[idx].visibility = normalizedMutationVisibility(base.visibility)
+        events[idx].status = EventVisualStatus.resolve(event: events[idx]).rawValue
 
         if clear.clearLineupSlots == true {
             events[idx].lineupArtists = nil
@@ -4177,36 +4178,16 @@ actor MockWebFeatureService: WebFeatureService {
         TimeZone(identifier: normalizedOptional(identifier) ?? "") ?? TimeZone(identifier: "UTC") ?? .current
     }
 
-    private func resolvedMutationStatus(
-        from status: EventAdminComponents.Schemas.EventMutationBase.StatusPayload?,
-        startDate: Date,
-        endDate: Date
+    private func normalizedMutationVisibility(
+        _ explicitValue: EventAdminComponents.Schemas.EventMutationBase.VisibilityPayload?
     ) -> String {
-        if let rawValue = status?.rawValue.trimmingCharacters(in: .whitespacesAndNewlines), !rawValue.isEmpty {
-            return rawValue
+        if let explicitValue {
+            let normalized = explicitValue.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalized == "hidden" || normalized == "visible" {
+                return normalized
+            }
         }
-        let provisional = WebEvent(
-            id: "status_probe",
-            name: "status_probe",
-            slug: "status-probe",
-            startDate: startDate,
-            endDate: endDate,
-            createdAt: startDate,
-            updatedAt: endDate,
-            ticketTiers: [],
-            lineupSlots: []
-        )
-        return resolveEventStatus(for: provisional)
-    }
-
-    private func resolveEventStatus(for event: WebEvent, now: Date = Date()) -> String {
-        if now < event.startDate {
-            return "upcoming"
-        }
-        if now > event.endDate {
-            return "ended"
-        }
-        return "ongoing"
+        return "visible"
     }
 
     private func legacyLocalizedText(from text: EventAdminLocalizedText?) -> WebBiText? {
@@ -4391,13 +4372,6 @@ actor MockWebFeatureService: WebFeatureService {
     ) -> EventLineupSyncMode? {
         guard let rawValue = mode?.rawValue, !rawValue.isEmpty else { return nil }
         return EventLineupSyncMode(rawValue: rawValue)
-    }
-
-    private func legacyMutationStatus(
-        from status: EventAdminComponents.Schemas.EventMutationBase.StatusPayload?
-    ) -> String? {
-        guard let rawValue = status?.rawValue, !rawValue.isEmpty else { return nil }
-        return rawValue
     }
 
     private func decodeISO8601Date(_ value: String?) -> Date? {

@@ -1,6 +1,10 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
+// Read-only diagnostic utility for historical event submission payloads.
+// Use this to inspect stored state during replay/debugging, not as a production
+// writer or as a source of truth for the current event mutation contract.
+
 const prisma = new PrismaClient({
   datasources: process.env.WORKER_DATABASE_URL
     ? {

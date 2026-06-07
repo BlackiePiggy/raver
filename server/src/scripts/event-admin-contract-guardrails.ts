@@ -41,8 +41,34 @@ const validateGoldenFixtures = (): void => {
   });
 };
 
+const validateEventTruthFields = (): void => {
+  const createPayload = loadFixture('create-map-poi.json');
+  const validatedCreate = validateEventAdminContractPayload(
+    {
+      ...createPayload,
+      isCancelled: true,
+      visibility: 'hidden',
+    },
+    'create'
+  );
+  assert(validatedCreate.isCancelled === true, 'create payload should accept isCancelled truth field');
+  assert(validatedCreate.visibility === 'hidden', 'create payload should accept hidden visibility truth field');
+
+  const validatedUpdate = validateEventAdminContractPayload(
+    {
+      ...baseUpdatePayload,
+      isCancelled: false,
+      visibility: 'visible',
+    },
+    'update'
+  );
+  assert(validatedUpdate.isCancelled === false, 'update payload should accept isCancelled truth field');
+  assert(validatedUpdate.visibility === 'visible', 'update payload should accept visible visibility truth field');
+};
+
 const main = (): void => {
   validateGoldenFixtures();
+  validateEventTruthFields();
 
   expectGuardrailError('update should reject missing schedule', () => {
     const payload = { ...baseUpdatePayload };
@@ -95,6 +121,46 @@ const main = (): void => {
           formattedAddressI18n: { en: 'China · Shanghai · 88 Xuhui', zh: 'China · Shanghai · 88 Xuhui' },
           selectedAt: '2099-12-01T12:00:00.000Z',
         },
+      },
+      'update'
+    );
+  });
+
+  expectGuardrailError('create should reject legacy status field', () => {
+    validateEventAdminContractPayload(
+      {
+        ...loadFixture('create-cross-midnight.json'),
+        status: 'upcoming',
+      },
+      'create'
+    );
+  });
+
+  expectGuardrailError('update should reject legacy status field', () => {
+    validateEventAdminContractPayload(
+      {
+        ...baseUpdatePayload,
+        status: 'ended',
+      },
+      'update'
+    );
+  });
+
+  expectGuardrailError('update should reject invalid visibility value', () => {
+    validateEventAdminContractPayload(
+      {
+        ...baseUpdatePayload,
+        visibility: 'archived',
+      },
+      'update'
+    );
+  });
+
+  expectGuardrailError('update should reject non-boolean isCancelled value', () => {
+    validateEventAdminContractPayload(
+      {
+        ...baseUpdatePayload,
+        isCancelled: 'true',
       },
       'update'
     );

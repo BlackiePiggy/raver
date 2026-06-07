@@ -18,7 +18,8 @@ const snapshot = (data: Record<string, unknown>): EntitySnapshot => ({
 const baseData = {
   profile: {
     name: 'Regression Event',
-    status: 'upcoming',
+    isCancelled: false,
+    visibility: 'visible',
   },
   media: {},
   organizer: {},
@@ -65,6 +66,15 @@ const run = async (): Promise<void> => {
     before: snapshot(baseData),
     after: snapshot({
       ...baseData,
+      profile: {
+        ...baseData.profile,
+        isCancelled: true,
+        visibility: 'hidden',
+      },
+      schedule: {
+        ...baseData.schedule,
+        startDate: '2026-06-03T12:00:00.000Z',
+      },
       lineup: {
         ...baseData.lineup,
         performances: [
@@ -85,6 +95,22 @@ const run = async (): Promise<void> => {
   assert(
     changed.publicChanges.some((change) => change.before === 'Main' && change.after === 'Warehouse'),
     'Event performance stage change should expose old/new values'
+  );
+  assert(
+    changed.publicChanges.some((change) => change.path === 'profile.isCancelled' && change.before === '未取消' && change.after === '已取消'),
+    'Event cancellation diff should use isCancelled truth field'
+  );
+  assert(
+    changed.publicChanges.some((change) => change.path === 'profile.visibility' && change.before === '可见' && change.after === '隐藏'),
+    'Event visibility diff should use visibility truth field'
+  );
+  assert(
+    changed.publicChanges.some((change) => change.path === 'schedule.startDate'),
+    'Event schedule diff should continue exposing time field changes'
+  );
+  assert(
+    !changed.publicChanges.some((change) => change.path === 'profile.status'),
+    'Event public diff should no longer surface derived profile.status as a primary change field'
   );
   console.log('[entity-change-event-regression] ok');
 };

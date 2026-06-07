@@ -9,6 +9,7 @@ import { checkinAPI } from '@/lib/api/checkin';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
+import { formatEventDisplayStatusText, resolveEventDisplayStatus } from '@/lib/event-status';
 import {
   ceilInstantToZonedHourMs,
   floorInstantToZonedHourMs,
@@ -260,6 +261,7 @@ export default function EventDetailPage() {
 
   const startDate = formatDate(event.startDate);
   const endDate = formatDate(event.endDate);
+  const displayStatus = resolveEventDisplayStatus(event);
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -605,13 +607,15 @@ export default function EventDetailPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-text-tertiary">活动状态</div>
                       <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
-                        event.status === 'upcoming'
+                        displayStatus === 'cancelled'
+                          ? 'bg-red-500/12 text-red-300'
+                          : displayStatus === 'upcoming'
                           ? 'bg-accent-green/20 text-accent-green'
-                          : event.status === 'ongoing'
+                          : displayStatus === 'ongoing'
                           ? 'bg-primary-blue/20 text-primary-blue'
                           : 'bg-text-tertiary/20 text-text-tertiary'
                       }`}>
-                        {event.status === 'upcoming' ? '即将开始' : event.status === 'ongoing' ? '进行中' : '已结束'}
+                        {formatEventDisplayStatusText(event)}
                       </span>
                     </div>
                   </div>

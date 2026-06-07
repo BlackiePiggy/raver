@@ -99,7 +99,9 @@ export interface components {
         /** @enum {string} */
         EventLineupSyncMode: "incremental_fill" | "exact_align";
         /** @enum {string} */
-        EventMutationStatus: "draft" | "upcoming" | "ongoing" | "ended" | "cancelled" | "canceled";
+        EventDerivedStatus: "upcoming" | "ongoing" | "ended" | "cancelled";
+        /** @enum {string} */
+        EventVisibility: "visible" | "hidden";
         /** @enum {string} */
         EventApiErrorCode: "ACTIVE_EVENT_EDIT_SUBMISSION_EXISTS" | "EVENT_SUBMISSION_INVALID_PAYLOAD";
         GenericApiError: {
@@ -322,8 +324,9 @@ export interface components {
             /** @enum {string|null} */
             lineupSyncMode?: "incremental_fill" | "exact_align" | null;
             idempotencyKey?: string | null;
+            isCancelled?: boolean | null;
             /** @enum {string|null} */
-            status?: "draft" | "upcoming" | "ongoing" | "ended" | "cancelled" | "canceled" | null;
+            visibility?: "visible" | "hidden" | null;
         };
         CreateEventInput: components["schemas"]["EventMutationBase"];
         UpdateEventInput: components["schemas"]["EventMutationBase"] & {
@@ -359,7 +362,9 @@ export interface components {
             startDate: string;
             /** Format: date-time */
             endDate: string;
-            status?: string | null;
+            status?: components["schemas"]["EventDerivedStatus"] | null;
+            isCancelled?: boolean | null;
+            visibility?: components["schemas"]["EventVisibility"] | null;
         };
         /**
          * @description Lightweight event overview shape used by summary/overview surfaces.
@@ -417,7 +422,9 @@ export interface components {
             ticketCurrency?: string | null;
             ticketNotes?: string | null;
             officialWebsite?: string | null;
-            status?: string | null;
+            status?: components["schemas"]["EventDerivedStatus"] | null;
+            isCancelled?: boolean | null;
+            visibility?: components["schemas"]["EventVisibility"] | null;
             isVerified?: boolean | null;
             revision?: number | null;
             /** Format: date-time */
@@ -476,7 +483,9 @@ export interface components {
             ticketCurrency?: string | null;
             ticketNotes?: string | null;
             officialWebsite?: string | null;
-            status?: string | null;
+            status?: components["schemas"]["EventDerivedStatus"] | null;
+            isCancelled?: boolean | null;
+            visibility?: components["schemas"]["EventVisibility"] | null;
             revision?: number | null;
             ticketTiers?: components["schemas"]["EventTicketTierInput"][] | null;
         } & {

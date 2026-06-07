@@ -94,9 +94,6 @@ enum EventUploadMappers {
         let addressI18n = localizedText(from: draft.detailAddress, language: language)
         let timeZone = draft.timeZoneIdentifier.trimmed.eventUploadMapperNilIfBlank ?? "Asia/Shanghai"
         let ticketTiers = ticketTierInputs(from: draft.ticket)
-        let mutationStatus = EventAdminComponents.Schemas.EventMutationBase.StatusPayload(
-            rawValue: EventVisualStatus.resolve(startDate: draft.startDate, endDate: draft.endDate).apiValue
-        )
         let generatedImageAssets = adminImageAssets(from: imageAssets(from: draft))
         let resolvedTimeZone = TimeZone(identifier: timeZone) ?? TimeZone(identifier: "UTC") ?? .current
 
@@ -168,7 +165,8 @@ enum EventUploadMappers {
             lineupSlots: adminLineupSlots(from: lineupSlotInputs(from: draft), timeZone: resolvedTimeZone),
             lineupSyncMode: .init(rawValue: lineupSyncMode.rawValue),
             idempotencyKey: nil,
-            status: mutationStatus
+            isCancelled: false,
+            visibility: .init(rawValue: "visible")
         )
     }
 

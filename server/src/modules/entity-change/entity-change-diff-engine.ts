@@ -39,7 +39,7 @@ const labelJaByEn: Record<string, string> = {
   'Event name': 'イベント名',
   'Event description': 'イベント説明',
   'Event type': 'イベント種別',
-  'Event status': 'イベント状態',
+  'Cancellation status': 'キャンセル状態',
   'Official website': '公式サイト',
   'Cover image': 'カバー画像',
   'Lineup image': 'ラインナップ画像',

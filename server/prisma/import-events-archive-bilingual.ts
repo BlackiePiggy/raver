@@ -302,15 +302,8 @@ const normalizeBoolFlag = (value: unknown, fallback = false): boolean => {
   return fallback;
 };
 
-const resolveStatus = (canceled: boolean, startDate: Date, endDate: Date): string => {
-  if (canceled) return 'cancelled';
-  const now = Date.now();
-  const start = startDate.getTime();
-  const end = endDate.getTime();
-  if (now < start) return 'upcoming';
-  if (now > end) return 'ended';
-  return 'ongoing';
-};
+const resolveStatus = (canceled: boolean, _startDate: Date, _endDate: Date): string =>
+  canceled ? 'cancelled' : 'active';
 
 const normalizeReferenceLinks = (value: unknown): string[] => {
   const list = Array.isArray(value)

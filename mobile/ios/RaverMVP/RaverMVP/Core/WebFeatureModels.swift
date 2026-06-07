@@ -805,7 +805,8 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var ticketCurrency: String?
     var ticketNotes: String?
     var officialWebsite: String?
-    var status: String?
+    var isCancelled: Bool? = nil
+    var visibility: String? = nil
     var isVerified: Bool?
     var revision: Int? = nil
     var createdAt: Date
@@ -937,7 +938,8 @@ struct CreateEventInput: Encodable {
     var lineupSlots: [EventLineupSlotInput]? = nil
     var lineupSyncMode: EventLineupSyncMode? = .incrementalFill
     var idempotencyKey: String? = nil
-    var status: String?
+    var isCancelled: Bool? = nil
+    var visibility: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -989,7 +991,8 @@ struct CreateEventInput: Encodable {
         case lineupSlots
         case lineupSyncMode
         case idempotencyKey
-        case status
+        case isCancelled
+        case visibility
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1044,7 +1047,8 @@ struct CreateEventInput: Encodable {
         try container.encodeIfPresent(lineupSlots, forKey: .lineupSlots)
         try container.encodeIfPresent(lineupSyncMode, forKey: .lineupSyncMode)
         try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
-        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(isCancelled, forKey: .isCancelled)
+        try container.encodeIfPresent(visibility, forKey: .visibility)
     }
 }
 
@@ -1255,7 +1259,8 @@ struct UpdateEventInput: Encodable {
     var lineupSlots: [EventLineupSlotInput]? = nil
     var lineupSyncMode: EventLineupSyncMode? = .incrementalFill
     var idempotencyKey: String? = nil
-    var status: String?
+    var isCancelled: Bool? = nil
+    var visibility: String? = nil
     var clearCityI18n: Bool = false
     var clearCountryI18n: Bool = false
     var clearManualLocation: Bool = false
@@ -1317,7 +1322,8 @@ struct UpdateEventInput: Encodable {
         case lineupSlots
         case lineupSyncMode
         case idempotencyKey
-        case status
+        case isCancelled
+        case visibility
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1416,7 +1422,8 @@ struct UpdateEventInput: Encodable {
         }
         try container.encodeIfPresent(lineupSyncMode, forKey: .lineupSyncMode)
         try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
-        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(isCancelled, forKey: .isCancelled)
+        try container.encodeIfPresent(visibility, forKey: .visibility)
     }
 }
 

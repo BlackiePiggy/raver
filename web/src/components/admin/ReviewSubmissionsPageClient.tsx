@@ -165,6 +165,34 @@ const formatSlotClock = (value: unknown): string => {
   return text;
 };
 
+const formatBooleanState = (value: unknown, labels: { truthy: string; falsy: string }): string => {
+  if (value === true) return labels.truthy;
+  if (value === false) return labels.falsy;
+  return '未设置';
+};
+
+const formatEventVisibility = (value: unknown): string => {
+  const normalized = normalizeText(value).toLowerCase();
+  if (normalized === 'hidden') return '隐藏';
+  if (normalized === 'visible') return '可见';
+  return normalized || '未设置';
+};
+
+const formatEventDateTime = (value: unknown): string => {
+  const text = normalizeText(value);
+  if (!text) return '未设置';
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed);
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DiffRow = { key: string; before: unknown; after: unknown; kind: 'added' | 'removed' | 'changed' };
@@ -306,6 +334,47 @@ const buildVersionDiffRows = (previous?: ContentSubmissionVersion | null, curren
 
 const semanticEventDiffSections = (previous: Record<string, unknown>, current: Record<string, unknown>): SemanticDiffSection[] => {
   const sections: SemanticDiffSection[] = [];
+  const rowsTruth: string[] = [];
+  const previousCancelled = previous.isCancelled;
+  const currentCancelled = current.isCancelled;
+  if (previousCancelled !== currentCancelled) {
+    rowsTruth.push(
+      `取消状态：${formatBooleanState(previousCancelled, { truthy: '已取消', falsy: '正常' })} -> ${formatBooleanState(currentCancelled, { truthy: '已取消', falsy: '正常' })}`
+    );
+  }
+  const previousVisibility = normalizeText(previous.visibility).toLowerCase();
+  const currentVisibility = normalizeText(current.visibility).toLowerCase();
+  if (previousVisibility !== currentVisibility) {
+    rowsTruth.push(`可见性：${formatEventVisibility(previous.visibility)} -> ${formatEventVisibility(current.visibility)}`);
+  }
+  if (rowsTruth.length > 0) sections.push({ title: '状态与可见性', rows: rowsTruth });
+
+  const rowsTime: string[] = [];
+  if (normalizeText(previous.startDate) !== normalizeText(current.startDate)) {
+    rowsTime.push(`开始时间：${formatEventDateTime(previous.startDate)} -> ${formatEventDateTime(current.startDate)}`);
+  }
+  if (normalizeText(previous.endDate) !== normalizeText(current.endDate)) {
+    rowsTime.push(`结束时间：${formatEventDateTime(previous.endDate)} -> ${formatEventDateTime(current.endDate)}`);
+  }
+  if (normalizeText(previous.startTime) !== normalizeText(current.startTime)) {
+    rowsTime.push(`日内开始时间：${summarizePrimitive(previous.startTime)} -> ${summarizePrimitive(current.startTime)}`);
+  }
+  if (normalizeText(previous.endTime) !== normalizeText(current.endTime)) {
+    rowsTime.push(`日内结束时间：${summarizePrimitive(previous.endTime)} -> ${summarizePrimitive(current.endTime)}`);
+  }
+  if (normalizeText(previous.timeZone) !== normalizeText(current.timeZone)) {
+    rowsTime.push(`时区：${summarizePrimitive(previous.timeZone)} -> ${summarizePrimitive(current.timeZone)}`);
+  }
+  if (summarizePrimitive(previous.dayRolloverHour) !== summarizePrimitive(current.dayRolloverHour)) {
+    rowsTime.push(`跨日切分时间：${summarizePrimitive(previous.dayRolloverHour)} -> ${summarizePrimitive(current.dayRolloverHour)}`);
+  }
+  const previousScheduleMode = normalizeText(previous.scheduleMode || asObject(previous.schedule)?.mode);
+  const currentScheduleMode = normalizeText(current.scheduleMode || asObject(current.schedule)?.mode);
+  if (previousScheduleMode !== currentScheduleMode) {
+    rowsTime.push(`排期模式：${summarizePrimitive(previousScheduleMode)} -> ${summarizePrimitive(currentScheduleMode)}`);
+  }
+  if (rowsTime.length > 0) sections.push({ title: '时间真值', rows: rowsTime });
+
   const rowsSchedule: string[] = [];
   const prevSchedule = asObject(previous.schedule); const nextSchedule = asObject(current.schedule);
   if ((prevSchedule?.mode || '') !== (nextSchedule?.mode || '')) rowsSchedule.push(`排期模式：${summarizePrimitive(prevSchedule?.mode)} -> ${summarizePrimitive(nextSchedule?.mode)}`);

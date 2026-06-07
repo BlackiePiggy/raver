@@ -122,6 +122,32 @@ const textInputClassName = 'admin-studio-input';
 const selectInputClassName = 'admin-studio-select';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
 
+const EVENT_DERIVED_STATUS_META: Record<
+  EventStudioDraft['derivedStatus'],
+  { label: string; toneClassName: string; description: string }
+> = {
+  upcoming: {
+    label: '即将开始',
+    toneClassName: 'bg-[#fff4e8] text-[#9a5a12]',
+    description: '这是根据开始和结束日期动态推导出的时间状态。',
+  },
+  ongoing: {
+    label: '进行中',
+    toneClassName: 'bg-[#e9f8ef] text-[#1d7d4d]',
+    description: '这是根据开始和结束日期动态推导出的时间状态。',
+  },
+  ended: {
+    label: '已结束',
+    toneClassName: 'bg-[#eef1f3] text-[#44525f]',
+    description: '这是根据开始和结束日期动态推导出的时间状态。',
+  },
+  cancelled: {
+    label: '已取消',
+    toneClassName: 'bg-[#fdecec] text-[#b13a3a]',
+    description: '取消态优先于时间推导，活动会按已取消展示。',
+  },
+};
+
 const firstFilledText = (...values: Array<string | undefined | null>) => {
   for (const value of values) {
     const trimmed = String(value || '').trim();
@@ -240,6 +266,27 @@ const imageStatusLabel = (image: EventStudioImageState): string => {
   if (image.uploadState === 'failed') return '上传失败，提交前会重试';
   if (image.uploadState === 'pending') return '等待上传';
   return imageOriginLabel(image.origin);
+};
+
+const deriveDraftEventStatus = (
+  startDate: string,
+  endDate: string,
+  isCancelled: boolean,
+  timeZoneSelection?: EventStudioDraft['timeZoneSelection'] | null
+): EventStudioDraft['derivedStatus'] => {
+  if (isCancelled) return 'cancelled';
+  const timeZone = normalizeDisplayTimeZone(timeZoneSelection?.timezone || null);
+  const normalizedStartDate = String(startDate || '').trim();
+  const normalizedEndDate = String(endDate || '').trim();
+  if (!normalizedStartDate || !normalizedEndDate) return 'upcoming';
+  const start = new Date(`${normalizedStartDate}T00:00:00`);
+  const end = new Date(`${normalizedEndDate}T23:59:59`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'upcoming';
+  const now = new Date();
+  const zonedNow = new Date(now.toLocaleString('en-US', { timeZone }));
+  if (zonedNow.getTime() < start.getTime()) return 'upcoming';
+  if (zonedNow.getTime() > end.getTime()) return 'ended';
+  return 'ongoing';
 };
 
 const isAbortLikeError = (error: unknown): boolean =>
@@ -1023,10 +1070,39 @@ export default function EventStudioForm({
       draft.detailAddress.ja,
       draft.detailAddress.enFull
     ) || '还没有地点地址';
+  const derivedStatusMeta = EVENT_DERIVED_STATUS_META[draft.derivedStatus];
+  const isCancelledDraft = draft.isCancelled;
+  const visibilityDraft = draft.visibility;
 
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useEffect(() => {
+    const nextDerivedStatus = deriveDraftEventStatus(
+      draft.startDate,
+      draft.endDate,
+      draft.isCancelled,
+      draft.timeZoneSelection
+    );
+    if (draft.derivedStatus === nextDerivedStatus) {
+      return;
+    }
+    setDraft((current) => {
+      if (current.derivedStatus === nextDerivedStatus) return current;
+      return {
+        ...current,
+        derivedStatus: nextDerivedStatus,
+      };
+    });
+  }, [
+    draft.startDate,
+    draft.endDate,
+    draft.isCancelled,
+    draft.timeZoneSelection,
+    draft.derivedStatus,
+    setDraft,
+  ]);
 
   useEffect(() => {
     const uploadTasks = uploadTasksRef.current;
@@ -3206,6 +3282,74 @@ export default function EventStudioForm({
           <Section title="活动信息" description="这一步集中填写活动名称、主办方、描述以及地点基础信息。地点部分直接使用原生地图弹层。">
             <div className="mb-5">
               <EventStudioAIImportDock draft={draft} setDraft={setDraft} entryMode="single" entryKind="poster" onOpenStep={() => setCurrentStep(1)} />
+            </div>
+            <div className="mb-5 grid gap-4 lg:grid-cols-3">
+              <div className="admin-reference-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[#071110]">当前状态</div>
+                    <div className="mt-2 text-sm leading-6 text-black/52">
+                      时间状态由活动开始时间、结束时间和时区自动推导，这里只展示，不作为可编辑真值。
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${derivedStatusMeta.toneClassName}`}>
+                    {derivedStatusMeta.label}
+                  </span>
+                </div>
+                <div className="mt-3 text-xs leading-6 text-black/42">{derivedStatusMeta.description}</div>
+              </div>
+              <div className="admin-reference-card p-4">
+                <div className="text-sm font-semibold text-[#071110]">取消状态</div>
+                <div className="mt-2 text-sm leading-6 text-black/52">
+                  这里只控制活动是否取消，不再手动编辑“即将开始 / 进行中 / 已结束”。
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateDraft('isCancelled', false)}
+                    className={isCancelledDraft ? 'admin-studio-button-secondary px-4 py-3 text-sm' : 'admin-studio-button-primary px-4 py-3 text-sm'}
+                  >
+                    正常活动
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateDraft('isCancelled', true)}
+                    className={isCancelledDraft ? 'admin-studio-button-danger px-4 py-3 text-sm' : 'admin-studio-button-secondary px-4 py-3 text-sm'}
+                  >
+                    标记为已取消
+                  </button>
+                </div>
+                <div className={`mt-3 text-xs ${isCancelledDraft ? 'text-[#b13a3a]' : 'text-black/42'}`}>
+                  {isCancelledDraft ? '保存后活动将按“已取消”展示。' : '保存后活动保持正常状态，时间态会自动推导。'}
+                </div>
+              </div>
+              <div className="admin-reference-card p-4">
+                <div className="text-sm font-semibold text-[#071110]">可见性</div>
+                <div className="mt-2 text-sm leading-6 text-black/52">
+                  控制活动是否在前台展示。隐藏不会改变时间状态，只影响内容可见性。
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateDraft('visibility', 'visible')}
+                    className={visibilityDraft === 'visible' ? 'admin-studio-button-primary px-4 py-3 text-sm' : 'admin-studio-button-secondary px-4 py-3 text-sm'}
+                  >
+                    前台可见
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateDraft('visibility', 'hidden')}
+                    className={visibilityDraft === 'hidden' ? 'admin-studio-button-primary px-4 py-3 text-sm' : 'admin-studio-button-secondary px-4 py-3 text-sm'}
+                  >
+                    隐藏活动
+                  </button>
+                </div>
+                <div className={`mt-3 text-xs ${visibilityDraft === 'hidden' ? 'text-[#8a5a16]' : 'text-black/42'}`}>
+                  {visibilityDraft === 'hidden'
+                    ? '保存后活动会从前台列表中隐藏，但后台仍保留完整编辑信息。'
+                    : '保存后活动按正常可见内容参与前台展示与检索。'}
+                </div>
+              </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="lg:col-span-2">

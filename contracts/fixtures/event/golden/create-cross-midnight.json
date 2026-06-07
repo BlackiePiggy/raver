@@ -178,5 +178,6 @@
     }
   ],
   "lineupSyncMode": "exact_align",
-  "status": "upcoming"
+  "isCancelled": false,
+  "visibility": "visible"
 }

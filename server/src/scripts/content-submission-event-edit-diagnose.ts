@@ -41,7 +41,8 @@ const main = async (): Promise<void> => {
       revision: true,
       updatedAt: true,
       organizerId: true,
-      status: true,
+      isCancelled: true,
+      visibility: true,
     },
   });
 

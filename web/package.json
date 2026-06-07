@@ -10,7 +10,7 @@
     "test:e2e": "playwright test",
     "generate:contracts:event": "openapi-typescript ../contracts/openapi/event-admin.v1.yaml -o ../contracts/generated/web/event-admin.ts",
     "test:contracts:event": "tsc -p tests/contracts/tsconfig.json --pretty false",
-    "test:parity:event": "rm -rf tests/contracts/dist && tsc -p tests/contracts/tsconfig.parity.json --pretty false && node tests/contracts/dist/web/tests/contracts/event-mapper-parity.js"
+    "test:parity:event": "rm -rf tests/contracts/dist && tsc -p tests/contracts/tsconfig.parity.json --pretty false && node tests/contracts/run-parity.js"
   },
   "dependencies": {
     "clsx": "^2.1.1",
