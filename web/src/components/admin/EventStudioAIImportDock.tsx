@@ -2088,10 +2088,11 @@ export default function EventStudioAIImportDock({
   ) => (
     <div className="admin-reference-card p-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <label className="flex min-w-0 flex-1 items-center gap-3 rounded-[18px] border border-[#e7ece7] bg-white px-4 py-2.5">
+        <label className="admin-search-field-shell flex min-w-0 flex-1 items-center gap-3 rounded-[18px] border border-[#e7ece7] bg-white px-4 py-2.5">
           <span className="text-black/35">⌕</span>
           <input
-            className="min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-sm text-[#071110] shadow-none outline-none ring-0 placeholder:text-black/35 focus:outline-none focus:ring-0"
+            type="text"
+            className="admin-search-field-input min-w-0 flex-1 bg-transparent p-0 text-sm text-[#071110] placeholder:text-black/35"
             value={panel?.resultSearchQuery || ''}
             onChange={(event) => updatePanel({ resultSearchQuery: event.target.value })}
             placeholder={searchPlaceholder}
@@ -2868,24 +2869,27 @@ export default function EventStudioAIImportDock({
                         <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
                           <label className="space-y-1 text-xs text-black/45">
                             <span>Timezone Search</span>
-                            <input
-                              className="admin-studio-input"
-                              value={panel.posterResult.timeZoneSearchQuery}
-                              onChange={(event) =>
-                                setPanel((current) =>
-                                  current && current.posterResult
-                                    ? {
-                                        ...current,
-                                        posterResult: {
-                                          ...current.posterResult,
-                                          timeZoneSearchQuery: event.target.value,
-                                        },
-                                      }
-                                    : current
-                                )
-                              }
-                              placeholder="Search city or timezone"
-                            />
+                            <span className="admin-search-field-shell flex items-center rounded-[18px] border border-[#e7ece7] bg-white px-4 py-2.5">
+                              <input
+                                type="text"
+                                className="admin-search-field-input min-w-0 flex-1 bg-transparent p-0 text-sm text-[#071110] placeholder:text-black/35"
+                                value={panel.posterResult.timeZoneSearchQuery}
+                                onChange={(event) =>
+                                  setPanel((current) =>
+                                    current && current.posterResult
+                                      ? {
+                                          ...current,
+                                          posterResult: {
+                                            ...current.posterResult,
+                                            timeZoneSearchQuery: event.target.value,
+                                          },
+                                        }
+                                      : current
+                                  )
+                                }
+                                placeholder="Search city or timezone"
+                              />
+                            </span>
                           </label>
                           <button
                             type="button"

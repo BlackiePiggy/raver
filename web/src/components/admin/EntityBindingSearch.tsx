@@ -269,27 +269,30 @@ export default function EntityBindingSearch({
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <input
-            className="min-w-[180px] flex-1 rounded-[14px] border border-[#e8eceb] bg-white px-3 py-2 text-sm"
-            placeholder={
-              kind === 'festival' || kind === 'brand' || kind === 'label'
-                ? kind === 'festival'
-                  ? 'Search organizer / festival'
-                  : kind === 'label'
-                    ? 'Search label'
-                    : 'Search organizer / label'
-                : kind === 'event'
-                  ? 'Search event'
-                  : kind === 'news'
-                    ? 'Search news'
-                    : kind === 'user'
-                      ? 'Search user'
-                  : 'Search DJ'
-            }
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            disabled={disabled || submitting}
-          />
+          <div className="admin-search-field-shell flex min-w-[180px] flex-1 items-center rounded-[14px] border border-[#e8eceb] bg-white px-3 py-2">
+            <input
+              type="text"
+              className="admin-search-field-input min-w-0 flex-1 bg-transparent text-sm text-[#111827] placeholder:text-black/35"
+              placeholder={
+                kind === 'festival' || kind === 'brand' || kind === 'label'
+                  ? kind === 'festival'
+                    ? 'Search organizer / festival'
+                    : kind === 'label'
+                      ? 'Search label'
+                      : 'Search organizer / label'
+                  : kind === 'event'
+                    ? 'Search event'
+                    : kind === 'news'
+                      ? 'Search news'
+                      : kind === 'user'
+                        ? 'Search user'
+                    : 'Search DJ'
+              }
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              disabled={disabled || submitting}
+            />
+          </div>
           <button
             type="button"
             className="rounded-full border border-[#d7ded9] bg-white px-4 py-2 text-sm text-[#18211f]"

@@ -199,16 +199,18 @@ function UrlField({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="text-xs text-gray-500">{label}</div>
-      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-gray-400 focus-within:bg-white transition-colors">
+      <div className="admin-search-field-shell flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 transition-colors">
         <input
+          type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           maxLength={maxLength}
-          className="flex-1 min-w-0 appearance-none border-0 bg-transparent text-sm text-gray-800 shadow-none outline-none placeholder:text-gray-400 focus:outline-none focus:ring-0 font-mono"
+          className="admin-search-field-input flex-1 min-w-0 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 font-mono"
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
+          inputMode="url"
         />
         {value && (
           <a href={value} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors">
@@ -767,13 +769,14 @@ export default function AdminGenresPage() {
 
           {/* Search */}
           <div className="border-b border-gray-100 px-3 py-2.5">
-            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-gray-400 focus-within:bg-white transition-colors">
+            <div className="admin-search-field-shell flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 transition-colors">
               <Search className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
               <input
+                type="text"
                 value={treeSearch}
                 onChange={(e) => setTreeSearch(e.target.value)}
                 placeholder="搜索风格名称"
-                className="flex-1 appearance-none border-0 bg-transparent text-sm text-gray-700 shadow-none outline-none placeholder:text-gray-400 focus:outline-none focus:ring-0"
+                className="admin-search-field-input flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400"
               />
             </div>
           </div>
