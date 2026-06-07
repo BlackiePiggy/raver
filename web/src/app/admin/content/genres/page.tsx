@@ -205,7 +205,7 @@ function UrlField({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           maxLength={maxLength}
-          className="flex-1 min-w-0 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none font-mono"
+          className="flex-1 min-w-0 appearance-none border-0 bg-transparent text-sm text-gray-800 shadow-none outline-none placeholder:text-gray-400 focus:outline-none focus:ring-0 font-mono"
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
@@ -630,7 +630,7 @@ export default function AdminGenresPage() {
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/80">
                         {['DJ 名称', '绑定状态', '操作'].map((col) => (
-                          <th key={col} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          <th key={col} className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                             {col}
                           </th>
                         ))}
@@ -640,18 +640,18 @@ export default function AdminGenresPage() {
                       {keyArtistDrafts.map((item) => (
                         <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                           {/* Name */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2">
                             <input
                               value={item.name}
                               onChange={(e) => updateKeyArtistDraft(item.id, { name: e.target.value })}
                               placeholder="艺人名称"
                               maxLength={INPUT_LIMITS.genre.keyArtistName}
-                              className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                              className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
                             />
                           </td>
 
                           {/* Binding status */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2">
                             {item.djId ? (
                               <div className="flex items-center gap-1.5">
                                 <span className="h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />
@@ -669,7 +669,7 @@ export default function AdminGenresPage() {
                           </td>
 
                           {/* Actions */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               <EditableEntityBindingCard
                                 key={item.id}
@@ -773,7 +773,7 @@ export default function AdminGenresPage() {
                 value={treeSearch}
                 onChange={(e) => setTreeSearch(e.target.value)}
                 placeholder="搜索风格名称"
-                className="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none"
+                className="flex-1 appearance-none border-0 bg-transparent text-sm text-gray-700 shadow-none outline-none placeholder:text-gray-400 focus:outline-none focus:ring-0"
               />
             </div>
           </div>
