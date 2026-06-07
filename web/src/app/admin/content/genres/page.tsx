@@ -445,7 +445,9 @@ export default function AdminGenresPage() {
       const nextFlat = flattenTree(payload.items);
       const nextId = preferredId || nextFlat[0]?.id || '';
       setSelectedId(nextId);
-      const nextExpanded = preferredId ? new Set(getAncestorIds(preferredId, nextFlat)) : new Set<string>();
+      const nextExpanded = preferredId
+        ? new Set(getAncestorIds(preferredId, nextFlat))
+        : new Set(payload.items.map((item) => item.id));
       setExpandedIds(nextExpanded);
       if (preferredId) {
         setPendingScrollTargetId(preferredId);
