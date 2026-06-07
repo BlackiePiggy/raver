@@ -659,9 +659,6 @@ export default function AdminGenresPage() {
             <RefreshCw className="h-3.5 w-3.5" />
             刷新
           </button>
-          <Link href="/admin/content/genres/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors">
-            新建子风格
-          </Link>
         </div>
       }
     >
@@ -989,7 +986,7 @@ export default function AdminGenresPage() {
 
           {/* Search */}
           <div className="relative border-b border-gray-100 px-3 py-2.5">
-            <div className="admin-search-field-shell flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 transition-colors">
+            <div className="admin-search-field-shell flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 transition-colors">
               <Search className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
               <input
                 type="text"
