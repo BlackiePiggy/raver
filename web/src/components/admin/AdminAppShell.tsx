@@ -306,20 +306,20 @@ function Sidebar({
   setCollapsed,
   mobileOpen,
   setMobileOpen,
+  showProfileFooter,
 }: {
   collapsed: boolean;
   setCollapsed: (next: boolean) => void;
   mobileOpen: boolean;
   setMobileOpen: (next: boolean) => void;
+  showProfileFooter?: boolean;
 }) {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const policy = useMemo(() => getAdminCmsRolePolicy(user), [user]);
   const groups = useMemo(() => getVisibleAdminNavGroups(policy), [policy]);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const [groupOpenState, setGroupOpenState] = useState<Record<string, boolean>>({});
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SidebarSettingsTabKey>('profile');
 
   const groupActiveState = useMemo(
     () =>
@@ -410,11 +410,6 @@ function Sidebar({
       };
     });
   };
-
-  const resolvedUserName = user?.displayName?.trim() || user?.username || 'Admin User';
-  const resolvedUserEmail = user?.email?.trim() || '未登录邮箱';
-  const resolvedAvatarUrl = user?.avatarUrl?.trim() || user?.avatarURL?.trim() || null;
-
   return (
     <>
       <aside
@@ -519,57 +514,9 @@ function Sidebar({
           </div>
         </div>
 
-        <div className="admin-shell-profile mt-4 shrink-0 rounded-[24px] p-3">
-          <div className={clsx('mb-3 flex items-center', collapsed ? 'justify-center' : 'justify-end')}>
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsTab('profile');
-                setSettingsOpen(true);
-              }}
-              className="relative grid size-9 place-items-center rounded-full bg-[#f4f6f5] text-[#15221f] transition hover:bg-white"
-              aria-label="Open admin account settings"
-            >
-              <Settings className="size-[15px]" />
-            </button>
-          </div>
-
-          <div className={clsx('flex items-center', collapsed ? 'justify-center' : 'gap-3')}>
-            <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#071110] text-[12px] font-extrabold text-white">
-              {resolvedAvatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={resolvedAvatarUrl} alt={resolvedUserName} className="h-full w-full object-cover" />
-              ) : (
-                initialsFromName(user?.displayName || user?.username || user?.email)
-              )}
-            </span>
-            {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 break-words text-[13px] font-extrabold leading-5 text-[#071110]">{resolvedUserName}</p>
-                <p className="mt-1 break-all text-[10px] leading-4 text-black/45">{user?.email || '未登录'}</p>
-              </div>
-            )}
-          </div>
-        </div>
+        {showProfileFooter ? <div className="admin-shell-profile mt-4 shrink-0 rounded-[24px] p-3" /> : null}
       </aside>
       {mobileOpen && <div onClick={() => setMobileOpen(false)} className="fixed inset-0 z-20 bg-black/20 md:hidden" />}
-      <SidebarUserSettingsOverlay
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onLogout={logout}
-        activeTab={settingsTab}
-        setActiveTab={setSettingsTab}
-        userName={resolvedUserName}
-        userEmail={resolvedUserEmail}
-        userAvatarUrl={resolvedAvatarUrl}
-        userRoleLabel={policy.label}
-        userRoleDescription={policy.description}
-        userCapabilities={policy.capabilities}
-        userId={user?.id || ''}
-        username={user?.username || ''}
-        userBio={user?.bio || null}
-        userLocation={user?.location || null}
-      />
     </>
   );
 }
@@ -581,9 +528,15 @@ function Topbar({
   actions,
   hidePageHeader,
   setMobileOpen,
+  onOpenSettings,
+  userName,
+  userAvatarUrl,
 }: Pick<AdminAppShellProps, 'title' | 'eyebrow' | 'description' | 'actions'> & {
   hidePageHeader?: boolean;
   setMobileOpen: (next: boolean) => void;
+  onOpenSettings: () => void;
+  userName: string;
+  userAvatarUrl: string | null;
 }) {
   const [query, setQuery] = useState('');
 
@@ -607,21 +560,26 @@ function Topbar({
           onClear={query ? () => setQuery('') : undefined}
         />
         <div className="hidden items-center gap-3 md:flex">
-          <button className="admin-shell-pill h-[42px] px-7 text-[12px] font-bold">Integration</button>
-          <div className="flex items-center -space-x-2">
-            {['RB', 'OP', 'CM'].map((label, index) => (
-              <span
-                key={label}
-                className={clsx(
-                  'grid size-[42px] place-items-center rounded-full text-[11px] font-bold text-white ring-2 ring-white',
-                  index === 0 && 'bg-[#0f766e]',
-                  index === 1 && 'bg-[#071110]',
-                  index === 2 && 'bg-[#f97316]'
-                )}
-              >
-                {label}
-              </span>
-            ))}
+          <div className="flex items-center gap-3 rounded-full border border-[#d8e1dd] bg-white/75 px-2.5 py-1.5 shadow-[0_8px_28px_rgba(7,17,16,0.06)]">
+            <span className="relative grid size-[42px] shrink-0 place-items-center overflow-hidden rounded-full bg-[#071110] text-[11px] font-bold text-white">
+              {userAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userAvatarUrl} alt={userName} className="h-full w-full object-cover" />
+              ) : (
+                initialsFromName(userName)
+              )}
+            </span>
+            <div className="min-w-0 max-w-[220px]">
+              <div className="line-clamp-2 break-words text-[13px] font-extrabold leading-5 text-[#071110]">{userName}</div>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="grid size-10 shrink-0 place-items-center rounded-full border border-[#d7ded9] bg-[#f4f6f5] text-[#15221f] transition hover:bg-white"
+              aria-label="Open admin account settings"
+            >
+              <Settings className="size-[15px]" />
+            </button>
           </div>
         </div>
       </div>
@@ -648,8 +606,16 @@ export default function AdminAppShell({
   hidePageHeader = false,
   children,
 }: AdminAppShellProps) {
+  const { user, logout } = useAuth();
+  const policy = useMemo(() => getAdminCmsRolePolicy(user), [user]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SidebarSettingsTabKey>('profile');
+
+  const resolvedUserName = user?.displayName?.trim() || user?.username || 'Admin User';
+  const resolvedUserEmail = user?.email?.trim() || '未登录邮箱';
+  const resolvedAvatarUrl = user?.avatarUrl?.trim() || user?.avatarURL?.trim() || null;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -666,7 +632,13 @@ export default function AdminAppShell({
     <main className="admin-ravehub-shell h-screen">
       <div className="admin-ravehub-bg" />
       <div className="relative flex h-screen overflow-hidden">
-        <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+        <Sidebar
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          mobileOpen={mobileOpen}
+          setMobileOpen={setMobileOpen}
+          showProfileFooter={false}
+        />
         <div className="flex min-w-0 flex-1 overflow-hidden px-3 pb-4 md:px-4 md:pb-5">
           <section className="min-w-0 flex-1 overflow-y-auto admin-shell-scrollbar">
             <Topbar
@@ -676,6 +648,12 @@ export default function AdminAppShell({
               actions={actions}
               hidePageHeader={hidePageHeader}
               setMobileOpen={setMobileOpen}
+              onOpenSettings={() => {
+                setSettingsTab('profile');
+                setSettingsOpen(true);
+              }}
+              userName={resolvedUserName}
+              userAvatarUrl={resolvedAvatarUrl}
             />
             <div className="admin-shell-page pb-8">
               {children}
@@ -683,6 +661,23 @@ export default function AdminAppShell({
           </section>
         </div>
       </div>
+      <SidebarUserSettingsOverlay
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onLogout={logout}
+        activeTab={settingsTab}
+        setActiveTab={setSettingsTab}
+        userName={resolvedUserName}
+        userEmail={resolvedUserEmail}
+        userAvatarUrl={resolvedAvatarUrl}
+        userRoleLabel={policy.label}
+        userRoleDescription={policy.description}
+        userCapabilities={policy.capabilities}
+        userId={user?.id || ''}
+        username={user?.username || ''}
+        userBio={user?.bio || null}
+        userLocation={user?.location || null}
+      />
     </main>
   );
 }
