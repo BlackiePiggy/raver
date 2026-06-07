@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
@@ -72,7 +72,7 @@ const SIDEBAR_SETTINGS_TABS: Array<{
 function SidebarUserSettingsOverlay({
   open,
   onClose,
-  onLogout,
+  onAuthAction,
   activeTab,
   setActiveTab,
   userName,
@@ -85,10 +85,11 @@ function SidebarUserSettingsOverlay({
   username,
   userBio,
   userLocation,
+  isAuthenticated,
 }: {
   open: boolean;
   onClose: () => void;
-  onLogout: () => void;
+  onAuthAction: () => void;
   activeTab: SidebarSettingsTabKey;
   setActiveTab: (next: SidebarSettingsTabKey) => void;
   userName: string;
@@ -101,6 +102,7 @@ function SidebarUserSettingsOverlay({
   username: string;
   userBio: string | null;
   userLocation: string | null;
+  isAuthenticated: boolean;
 }) {
   useOverlayBodyLock(open);
 
@@ -154,24 +156,33 @@ function SidebarUserSettingsOverlay({
         <div className="space-y-4">
           <section className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">会话状态</div>
-            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">当前已登录</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">
+              {isAuthenticated ? '当前已登录' : '当前未登录'}
+            </div>
             <p className="mt-2 text-sm leading-7 text-black/55">
-              当前后台会话基于你的账号身份生效。退出后将返回登录页，需要重新认证才能继续进入管理后台。
+              {isAuthenticated
+                ? '当前后台会话基于你的账号身份生效。退出后将返回登录页，需要重新认证才能继续进入管理后台。'
+                : '当前没有有效的后台会话。你可以前往登录页重新认证后再进入管理后台。'}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                href="/admin/auth-sessions"
-                className="rounded-full border border-[#d7ded9] bg-white px-4 py-2.5 text-sm font-semibold text-[#18211f]"
-                onClick={onClose}
-              >
-                查看登录设备
-              </Link>
+              {isAuthenticated ? (
+                <Link
+                  href="/admin/auth-sessions"
+                  className="rounded-full border border-[#d7ded9] bg-white px-4 py-2.5 text-sm font-semibold text-[#18211f]"
+                  onClick={onClose}
+                >
+                  查看登录设备
+                </Link>
+              ) : null}
               <button
                 type="button"
-                onClick={onLogout}
-                className="rounded-full bg-[#7d2020] px-4 py-2.5 text-sm font-semibold text-white"
+                onClick={onAuthAction}
+                className={clsx(
+                  'rounded-full px-4 py-2.5 text-sm font-semibold text-white',
+                  isAuthenticated ? 'bg-[#7d2020]' : 'bg-[#1f9d61]'
+                )}
               >
-                退出登录
+                {isAuthenticated ? '退出登录' : '前往登录'}
               </button>
             </div>
           </section>
@@ -529,14 +540,18 @@ function Topbar({
   hidePageHeader,
   setMobileOpen,
   onOpenSettings,
-  onLogout,
+  onAuthAction,
+  authActionLabel,
+  authActionTone,
   userName,
   userAvatarUrl,
 }: Pick<AdminAppShellProps, 'title' | 'eyebrow' | 'description' | 'actions'> & {
   hidePageHeader?: boolean;
   setMobileOpen: (next: boolean) => void;
   onOpenSettings: () => void;
-  onLogout: () => void;
+  onAuthAction: () => void;
+  authActionLabel: string;
+  authActionTone: 'danger' | 'success';
   userName: string;
   userAvatarUrl: string | null;
 }) {
@@ -575,10 +590,13 @@ function Topbar({
               <div className="truncate text-[13px] font-extrabold leading-4 text-[#071110]">{userName}</div>
               <button
                 type="button"
-                onClick={onLogout}
-                className="inline-flex h-5 items-center self-start rounded-full bg-[#a92b2b] px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white"
+                onClick={onAuthAction}
+                className={clsx(
+                  'inline-flex h-5 items-center self-start rounded-full px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white',
+                  authActionTone === 'danger' ? 'bg-[#a92b2b]' : 'bg-[#1f9d61]'
+                )}
               >
-                Sign out
+                {authActionLabel}
               </button>
             </div>
             <button
@@ -616,6 +634,7 @@ export default function AdminAppShell({
   children,
 }: AdminAppShellProps) {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const policy = useMemo(() => getAdminCmsRolePolicy(user), [user]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -625,6 +644,8 @@ export default function AdminAppShell({
   const resolvedUserName = user?.displayName?.trim() || user?.username || 'Admin User';
   const resolvedUserEmail = user?.email?.trim() || '未登录邮箱';
   const resolvedAvatarUrl = user?.avatarUrl?.trim() || user?.avatarURL?.trim() || null;
+  const authActionLabel = user ? 'Sign out' : 'Sign in';
+  const authActionTone = user ? 'danger' : 'success';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -661,7 +682,15 @@ export default function AdminAppShell({
                 setSettingsTab('profile');
                 setSettingsOpen(true);
               }}
-              onLogout={logout}
+              onAuthAction={() => {
+                if (user) {
+                  logout();
+                  return;
+                }
+                router.push('/login');
+              }}
+              authActionLabel={authActionLabel}
+              authActionTone={authActionTone}
               userName={resolvedUserName}
               userAvatarUrl={resolvedAvatarUrl}
             />
@@ -674,7 +703,13 @@ export default function AdminAppShell({
       <SidebarUserSettingsOverlay
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onLogout={logout}
+        onAuthAction={() => {
+          if (user) {
+            logout();
+            return;
+          }
+          router.push('/login');
+        }}
         activeTab={settingsTab}
         setActiveTab={setSettingsTab}
         userName={resolvedUserName}
@@ -687,6 +722,7 @@ export default function AdminAppShell({
         username={user?.username || ''}
         userBio={user?.bio || null}
         userLocation={user?.location || null}
+        isAuthenticated={Boolean(user)}
       />
     </main>
   );
