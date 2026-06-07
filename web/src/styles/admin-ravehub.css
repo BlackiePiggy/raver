@@ -372,6 +372,10 @@
   padding: 0.9rem 1rem;
   font-size: 0.875rem;
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none;
+  background-clip: padding-box;
 }
 
 .admin-studio-select {

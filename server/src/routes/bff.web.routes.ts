@@ -17144,6 +17144,7 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
       select: {
         id: true,
         name: true,
+        slug: true,
         path: true,
         description: true,
         descriptionI18n: true,
@@ -17251,6 +17252,7 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
       select: {
         id: true,
         name: true,
+        slug: true,
         path: true,
         description: true,
         descriptionI18n: true,
@@ -17309,6 +17311,7 @@ router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: 
       select: {
         id: true,
         name: true,
+        slug: true,
         path: true,
         description: true,
         descriptionI18n: true,
@@ -17336,6 +17339,7 @@ router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: 
       items: rows.map((row) => ({
         id: row.id,
         name: row.name,
+        slug: row.slug,
         path: row.path,
         description: row.description ?? '',
         descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),

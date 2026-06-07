@@ -377,18 +377,20 @@ export default function AdminGenreCreatePage() {
               <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <label className="block">
                   <div className="mb-2 admin-studio-label">父风格</div>
-                  <select
-                    value={draft.parentId}
-                    onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))}
-                    className="admin-studio-input"
-                  >
-                    <option value="">{loadingTree ? '正在加载风格树...' : '选择一个父风格'}</option>
-                    {flatNodes.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {`${'— '.repeat(item.depth)}${item.name}`}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="admin-studio-select-shell">
+                    <select
+                      value={draft.parentId}
+                      onChange={(event) => setDraft((current) => ({ ...current, parentId: event.target.value }))}
+                      className="admin-studio-select"
+                    >
+                      <option value="">{loadingTree ? '正在加载风格树...' : '选择一个父风格'}</option>
+                      {flatNodes.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {`${'— '.repeat(item.depth)}${item.name}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </label>
                 <div className="admin-reference-soft-card p-4 text-sm text-black/55">
                   <div className="text-xs uppercase tracking-[0.14em] text-black/38">当前父节点</div>
@@ -489,23 +491,25 @@ export default function AdminGenreCreatePage() {
                   <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <label className="block">
                       <div className="mb-2 admin-studio-label">新父节点的上级节点</div>
-                      <select
-                        value={newParentDraft.ancestorParentId}
-                        onChange={(event) =>
-                          setNewParentDraft((current) => ({
-                            ...current,
-                            ancestorParentId: event.target.value,
-                          }))
-                        }
-                        className="admin-studio-input"
-                      >
-                        <option value="">{loadingTree ? '正在加载风格树...' : '选择一个现有节点'}</option>
-                        {flatNodes.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {`${'— '.repeat(item.depth)}${item.name}`}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="admin-studio-select-shell">
+                        <select
+                          value={newParentDraft.ancestorParentId}
+                          onChange={(event) =>
+                            setNewParentDraft((current) => ({
+                              ...current,
+                              ancestorParentId: event.target.value,
+                            }))
+                          }
+                          className="admin-studio-select"
+                        >
+                          <option value="">{loadingTree ? '正在加载风格树...' : '选择一个现有节点'}</option>
+                          {flatNodes.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {`${'— '.repeat(item.depth)}${item.name}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </label>
                     <div className="admin-reference-soft-card p-4 text-sm text-black/55">
                       <div className="text-xs uppercase tracking-[0.14em] text-black/38">新父节点将挂载到</div>
