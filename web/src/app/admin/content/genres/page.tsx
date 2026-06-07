@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import EditableEntityBindingCard from '@/components/admin/EditableEntityBindingCard';
@@ -36,6 +36,34 @@ type KeyArtistDraft = {
   dj: GenreKeyArtistBinding['dj'];
 };
 
+type TreeSearchCandidate = {
+  id: string;
+  name: string;
+  path: string;
+  depth: number;
+};
+
+type PendingCreateTarget = {
+  id: string;
+  name: string;
+  parentId: string | null | undefined;
+};
+
+type PendingCreateMode = 'sibling' | 'child';
+
+const getNodeDepth = (path: string): number => path.split(' / ').filter(Boolean).length;
+
+const getAncestorIds = (targetId: string, items: GenreAdminNode[]): string[] => {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ancestorIds: string[] = [];
+  let current = byId.get(targetId) ?? null;
+  while (current?.parentId) {
+    ancestorIds.unshift(current.parentId);
+    current = byId.get(current.parentId) ?? null;
+  }
+  return ancestorIds;
+};
+
 // ─── Right-side tree node ─────────────────────────────────────────────────────
 
 function TreeNode({
@@ -44,6 +72,10 @@ function TreeNode({
   expandedIds,
   onSelect,
   onToggle,
+  registerNodeRef,
+  hoveredInsertId,
+  onHoverInsert,
+  onRequestCreate,
   level = 0,
 }: {
   item: GenreAdminNode;
@@ -51,15 +83,24 @@ function TreeNode({
   expandedIds: Set<string>;
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
+  registerNodeRef: (id: string, node: HTMLDivElement | null) => void;
+  hoveredInsertId: string | null;
+  onHoverInsert: (id: string | null) => void;
+  onRequestCreate: (target: PendingCreateTarget) => void;
   level?: number;
 }) {
   const hasChildren = Boolean(item.children?.length);
   const isExpanded = expandedIds.has(item.id);
   const isSelected = selectedId === item.id;
+  const showInsertRow = hoveredInsertId === item.id;
 
   return (
-    <div>
+    <div
+      onMouseEnter={() => onHoverInsert(item.id)}
+      onMouseLeave={() => onHoverInsert(null)}
+    >
       <div
+        ref={(node) => registerNodeRef(item.id, node)}
         className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors cursor-pointer ${
           isSelected
             ? 'bg-emerald-50 text-emerald-800'
@@ -68,15 +109,6 @@ function TreeNode({
         style={{ paddingLeft: `${8 + level * 16}px` }}
         onClick={() => onSelect(item.id)}
       >
-        {/* Drag handle */}
-        <span className="flex-shrink-0 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab">
-          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx={9} cy={6} r={1.5} /><circle cx={15} cy={6} r={1.5} />
-            <circle cx={9} cy={12} r={1.5} /><circle cx={15} cy={12} r={1.5} />
-            <circle cx={9} cy={18} r={1.5} /><circle cx={15} cy={18} r={1.5} />
-          </svg>
-        </span>
-
         {/* Expand toggle */}
         <button
           type="button"
@@ -101,6 +133,29 @@ function TreeNode({
         </span>
       </div>
 
+      {showInsertRow ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRequestCreate({
+              id: item.id,
+              name: item.name,
+              parentId: item.parentId,
+            });
+          }}
+          className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-[#7d8592] transition-colors hover:bg-gray-50 hover:text-[#111827]"
+          style={{ paddingLeft: `${8 + level * 16}px` }}
+        >
+          <span className="h-px flex-1 bg-gray-200" />
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-[#cfd7d4] bg-white text-[#6b7280]">
+            <Plus className="h-3.5 w-3.5" />
+          </span>
+          <span className="text-[11px] font-medium">新增节点</span>
+          <span className="h-px flex-1 bg-gray-200" />
+        </button>
+      ) : null}
+
       {hasChildren && isExpanded && (
         <div>
           {item.children!.map((child) => (
@@ -111,6 +166,10 @@ function TreeNode({
               expandedIds={expandedIds}
               onSelect={onSelect}
               onToggle={onToggle}
+              registerNodeRef={registerNodeRef}
+              hoveredInsertId={hoveredInsertId}
+              onHoverInsert={onHoverInsert}
+              onRequestCreate={onRequestCreate}
               level={level + 1}
             />
           ))}
@@ -230,10 +289,18 @@ export default function AdminGenresPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState('');
   const [treeSearch, setTreeSearch] = useState('');
+  const [treeSearchFocused, setTreeSearchFocused] = useState(false);
+  const [pendingScrollTargetId, setPendingScrollTargetId] = useState<string | null>(null);
+  const [hoveredInsertId, setHoveredInsertId] = useState<string | null>(null);
+  const [pendingCreateTarget, setPendingCreateTarget] = useState<PendingCreateTarget | null>(null);
+  const [pendingCreateName, setPendingCreateName] = useState('');
+  const [creatingNode, setCreatingNode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const treeContainerRef = useRef<HTMLDivElement | null>(null);
+  const treeNodeRefs = useRef(new Map<string, HTMLDivElement>());
 
   // Localized text
   const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
@@ -251,11 +318,25 @@ export default function AdminGenresPage() {
   const flatNodes = useMemo(() => flattenTree(tree), [tree]);
   const selectedNode = flatNodes.find((item) => item.id === selectedId) ?? null;
 
-  // Filtered tree search (flat match, highlighted in tree by id set)
-  const searchMatchIds = useMemo(() => {
-    if (!treeSearch.trim()) return null;
-    const q = treeSearch.toLowerCase();
-    return new Set(flatNodes.filter((n) => n.name.toLowerCase().includes(q)).map((n) => n.id));
+  const treeSearchCandidates = useMemo<TreeSearchCandidate[]>(() => {
+    const query = treeSearch.trim().toLowerCase();
+    if (!query) return [];
+    return flatNodes
+      .filter((node) => node.name.toLowerCase().includes(query))
+      .map((node) => ({
+        id: node.id,
+        name: node.name,
+        path: node.path,
+        depth: getNodeDepth(node.path),
+      }))
+      .sort((left, right) => {
+        const leftStarts = left.name.toLowerCase().startsWith(query);
+        const rightStarts = right.name.toLowerCase().startsWith(query);
+        if (leftStarts !== rightStarts) return leftStarts ? -1 : 1;
+        if (left.depth !== right.depth) return left.depth - right.depth;
+        return left.path.localeCompare(right.path, 'zh-CN');
+      })
+      .slice(0, 10);
   }, [treeSearch, flatNodes]);
 
   // Breadcrumb from selected node path
@@ -273,13 +354,11 @@ export default function AdminGenresPage() {
       const nextFlat = flattenTree(payload.items);
       const nextId = preferredId || nextFlat[0]?.id || '';
       setSelectedId(nextId);
-      setExpandedIds((current) => {
-        const next = new Set(current);
-        nextFlat.forEach((item) => {
-          if (item.parentId) next.add(item.parentId);
-        });
-        return next;
-      });
+      const nextExpanded = preferredId ? new Set(getAncestorIds(preferredId, nextFlat)) : new Set<string>();
+      setExpandedIds(nextExpanded);
+      if (preferredId) {
+        setPendingScrollTargetId(preferredId);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载风格树失败。');
     } finally {
@@ -308,6 +387,71 @@ export default function AdminGenresPage() {
       }))
     );
   }, [selectedNode]);
+
+  useEffect(() => {
+    if (!pendingScrollTargetId) return;
+    const node = treeNodeRefs.current.get(pendingScrollTargetId);
+    if (!node) return;
+    node.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    setPendingScrollTargetId(null);
+  }, [pendingScrollTargetId, expandedIds, tree]);
+
+  const registerTreeNodeRef = useCallback((id: string, node: HTMLDivElement | null) => {
+    if (node) {
+      treeNodeRefs.current.set(id, node);
+      return;
+    }
+    treeNodeRefs.current.delete(id);
+  }, []);
+
+  const updateHoveredInsertId = useCallback((next: string | null | ((current: string | null) => string | null)) => {
+    setHoveredInsertId((current) => (typeof next === 'function' ? next(current) : next));
+  }, []);
+
+  const selectTreeNode = useCallback((id: string, options?: { expandAncestors?: boolean; alignTop?: boolean }) => {
+    setSelectedId(id);
+    if (options?.expandAncestors) {
+      setExpandedIds(new Set(getAncestorIds(id, flatNodes)));
+    }
+    if (options?.alignTop) {
+      setPendingScrollTargetId(id);
+    }
+  }, [flatNodes]);
+
+  const handleTreeSearchSelect = useCallback((candidate: TreeSearchCandidate) => {
+    setTreeSearch(candidate.name);
+    setTreeSearchFocused(false);
+    selectTreeNode(candidate.id, { expandAncestors: true, alignTop: true });
+  }, [selectTreeNode]);
+
+  const handleCreateNode = useCallback(async (mode: PendingCreateMode) => {
+    if (!pendingCreateTarget) return;
+    const trimmedName = pendingCreateName.trim();
+    if (!trimmedName) {
+      setError('请先填写新节点名称。');
+      return;
+    }
+    const parentId = mode === 'child' ? pendingCreateTarget.id : pendingCreateTarget.parentId ?? null;
+
+    setCreatingNode(true);
+    setError('');
+    setNotice('');
+    try {
+      const created = await genreAdminApi.createNode({
+        name: trimmedName,
+        parentId,
+      });
+      setPendingCreateTarget(null);
+      setPendingCreateName('');
+      setHoveredInsertId(null);
+      setNotice(`已创建节点「${created.name}」，你可以继续在左侧补充内容。`);
+      await loadTree(created.id);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : '创建风格节点失败。');
+    } finally {
+      setCreatingNode(false);
+    }
+  }, [loadTree, pendingCreateName, pendingCreateTarget]);
 
   const toggleExpanded = (id: string) =>
     setExpandedIds((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -469,33 +613,10 @@ export default function AdminGenresPage() {
                     value=""
                   />
                 </div>
-                {/* Row 2: path, type, status, sort */}
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <FieldCell
                     label="层级路径"
                     value={selectedNode.path}
-                  />
-                  <FieldCell
-                    label="节点类型"
-                    value={(selectedNode.children?.length ?? 0) === 0 ? '叶子节点' : '父节点'}
-                    badge={
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold mr-1 ${
-                        (selectedNode.children?.length ?? 0) === 0
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {(selectedNode.children?.length ?? 0) === 0 ? '叶子节点' : '父节点'}
-                      </span>
-                    }
-                  />
-                  <FieldCell
-                    label="状态"
-                    value="启用"
-                    badge={<span className="mr-1 h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />}
-                  />
-                  <FieldCell
-                    label="子节点数"
-                    value={String(selectedNode.children?.length ?? 0)}
                   />
                 </div>
               </div>
@@ -768,39 +889,69 @@ export default function AdminGenresPage() {
           </div>
 
           {/* Search */}
-          <div className="border-b border-gray-100 px-3 py-2.5">
+          <div className="relative border-b border-gray-100 px-3 py-2.5">
             <div className="admin-search-field-shell flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 transition-colors">
               <Search className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
               <input
                 type="text"
                 value={treeSearch}
                 onChange={(e) => setTreeSearch(e.target.value)}
+                onFocus={() => setTreeSearchFocused(true)}
+                onBlur={() => {
+                  window.setTimeout(() => setTreeSearchFocused(false), 120);
+                }}
                 placeholder="搜索风格名称"
                 className="admin-search-field-input flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400"
               />
             </div>
+            {treeSearchFocused && treeSearch.trim() ? (
+              <div className="absolute inset-x-3 top-full z-20 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+                {treeSearchCandidates.length ? (
+                  <div className="max-h-72 overflow-y-auto py-2">
+                    {treeSearchCandidates.map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleTreeSearchSelect(candidate)}
+                        className="flex w-full flex-col items-start gap-1 px-4 py-2.5 text-left transition-colors hover:bg-gray-50"
+                      >
+                        <span className="text-sm font-medium text-gray-900">{candidate.name}</span>
+                        <span className="text-xs text-gray-500">{candidate.path}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-4 py-3 text-sm text-gray-400">没有匹配到风格节点。</div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           {/* Tree */}
-          <div className="max-h-[calc(100vh-280px)] overflow-y-auto px-1 py-2">
+          <div ref={treeContainerRef} className="max-h-[calc(100vh-280px)] overflow-y-auto px-1 py-2">
             {loading ? (
               <div className="py-12 text-center text-xs text-gray-400">加载中…</div>
             ) : tree.length === 0 ? (
               <div className="py-12 text-center text-xs text-gray-400">暂无风格数据。</div>
             ) : (
               tree
-                .filter((item) =>
-                  !searchMatchIds || searchMatchIds.has(item.id) ||
-                  flattenTree([item]).some((n) => searchMatchIds.has(n.id))
-                )
                 .map((item) => (
                   <TreeNode
                     key={item.id}
                     item={item}
                     selectedId={selectedId}
-                    expandedIds={treeSearch ? new Set(flatNodes.map((n) => n.id)) : expandedIds}
-                    onSelect={setSelectedId}
+                    expandedIds={expandedIds}
+                    onSelect={selectTreeNode}
                     onToggle={toggleExpanded}
+                    registerNodeRef={registerTreeNodeRef}
+                    hoveredInsertId={hoveredInsertId}
+                    onHoverInsert={updateHoveredInsertId}
+                    onRequestCreate={(target) => {
+                      setPendingCreateTarget(target);
+                      setPendingCreateName('');
+                      setError('');
+                    }}
                   />
                 ))
             )}
@@ -841,6 +992,67 @@ export default function AdminGenresPage() {
         onChange={(locale, value) => updateLocalizedValue('example', locale, value)}
         onClose={() => setActiveLocalizedField(null)}
       />
+
+      {pendingCreateTarget ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 px-4">
+          <div className="w-full max-w-md rounded-[24px] border border-[#e5e7eb] bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-black/35">新增节点</div>
+            <h3 className="mt-2 text-xl font-semibold text-[#111827]">为“{pendingCreateTarget.name}”创建新节点</h3>
+            <p className="mt-2 text-sm leading-6 text-black/50">
+              请选择把新节点加在当前节点的同级，还是作为它的子节点。创建后会自动切换到新节点详情页。
+            </p>
+
+            <div className="mt-5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-black/38">节点名称</div>
+              <AdminCountedControl count={countText(pendingCreateName)} maxLength={INPUT_LIMITS.genre.name}>
+                <input
+                  className="admin-studio-input"
+                  value={pendingCreateName}
+                  maxLength={INPUT_LIMITS.genre.name}
+                  onChange={(event) => setPendingCreateName(event.target.value)}
+                  placeholder="先填写新节点名称"
+                  autoFocus
+                />
+              </AdminCountedControl>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              <button
+                type="button"
+                disabled={creatingNode}
+                onClick={() => void handleCreateNode('sibling')}
+                className="rounded-[18px] border border-[#d9e3df] bg-white px-4 py-3 text-left transition hover:border-[#bfcfc8] disabled:opacity-60"
+              >
+                <div className="text-sm font-semibold text-[#111827]">添加同级节点</div>
+                <div className="mt-1 text-sm text-black/48">新节点会和“{pendingCreateTarget.name}”处于同一层级。</div>
+              </button>
+              <button
+                type="button"
+                disabled={creatingNode}
+                onClick={() => void handleCreateNode('child')}
+                className="rounded-[18px] border border-[#d9e3df] bg-white px-4 py-3 text-left transition hover:border-[#bfcfc8] disabled:opacity-60"
+              >
+                <div className="text-sm font-semibold text-[#111827]">添加子节点</div>
+                <div className="mt-1 text-sm text-black/48">新节点会挂在“{pendingCreateTarget.name}”下面。</div>
+              </button>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                disabled={creatingNode}
+                onClick={() => {
+                  setPendingCreateTarget(null);
+                  setPendingCreateName('');
+                }}
+                className="rounded-full border border-[#e5e7eb] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition hover:bg-[#f8faf9] disabled:opacity-60"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AdminContentLayout>
   );
 }
