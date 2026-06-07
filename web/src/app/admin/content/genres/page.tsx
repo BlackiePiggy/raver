@@ -10,7 +10,6 @@ import {
   MultilingualEditorOverlay,
   type LocalizedLocaleKey,
   type LocalizedTextValue,
-  localizedTextFilledLocaleLabels,
 } from '@/components/admin/LocalizedTextEditor';
 import { genreAdminApi, type GenreAdminNode, type GenreKeyArtistBinding } from '@/features/admin-content/genre-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
@@ -51,6 +50,11 @@ type PendingCreateTarget = {
 
 type PendingCreateMode = 'sibling' | 'child';
 
+type SectionTitleProps = {
+  title: string;
+  dirty?: boolean;
+};
+
 const getNodeDepth = (path: string): number => path.split(' / ').filter(Boolean).length;
 
 const getAncestorIds = (targetId: string, items: GenreAdminNode[]): string[] => {
@@ -64,6 +68,33 @@ const getAncestorIds = (targetId: string, items: GenreAdminNode[]): string[] => 
   return ancestorIds;
 };
 
+const sameLocalizedValue = (left: LocalizedTextValue, right: LocalizedTextValue): boolean =>
+  left.zh === right.zh &&
+  left.en === right.en &&
+  left.ja === right.ja &&
+  left.enFull === right.enFull;
+
+const normalizeKeyArtistDraftsForCompare = (items: KeyArtistDraft[]) =>
+  items
+    .map((item) => ({
+      name: item.name.trim(),
+      djId: item.djId || null,
+    }))
+    .filter((item) => item.name);
+
+const normalizeGenreKeyArtistsForCompare = (node: GenreAdminNode | null) =>
+  node
+    ? (node.keyArtistBindings.length
+        ? node.keyArtistBindings
+        : node.keyArtists.map((name) => ({ name, djId: null, dj: null }))
+      )
+        .map((item) => ({
+          name: item.name.trim(),
+          djId: item.djId || null,
+        }))
+        .filter((item) => item.name)
+    : [];
+
 // ─── Right-side tree node ─────────────────────────────────────────────────────
 
 function TreeNode({
@@ -73,8 +104,6 @@ function TreeNode({
   onSelect,
   onToggle,
   registerNodeRef,
-  hoveredInsertId,
-  onHoverInsert,
   onRequestCreate,
   level = 0,
 }: {
@@ -84,21 +113,17 @@ function TreeNode({
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
   registerNodeRef: (id: string, node: HTMLDivElement | null) => void;
-  hoveredInsertId: string | null;
-  onHoverInsert: (id: string | null) => void;
   onRequestCreate: (target: PendingCreateTarget) => void;
   level?: number;
 }) {
   const hasChildren = Boolean(item.children?.length);
   const isExpanded = expandedIds.has(item.id);
   const isSelected = selectedId === item.id;
-  const showInsertRow = hoveredInsertId === item.id;
+  const insertButtonLeft = Math.max(0, 8 + level * 16 - 4);
+  const insertLineLeft = insertButtonLeft + 24;
 
   return (
-    <div
-      onMouseEnter={() => onHoverInsert(item.id)}
-      onMouseLeave={() => onHoverInsert(null)}
-    >
+    <div className="relative">
       <div
         ref={(node) => registerNodeRef(item.id, node)}
         className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors cursor-pointer ${
@@ -133,28 +158,30 @@ function TreeNode({
         </span>
       </div>
 
-      {showInsertRow ? (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRequestCreate({
-              id: item.id,
-              name: item.name,
-              parentId: item.parentId,
-            });
-          }}
-          className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-[#7d8592] transition-colors hover:bg-gray-50 hover:text-[#111827]"
-          style={{ paddingLeft: `${8 + level * 16}px` }}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRequestCreate({
+            id: item.id,
+            name: item.name,
+            parentId: item.parentId,
+          });
+        }}
+        className="absolute inset-x-0 -bottom-[9px] z-20 h-[18px] opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
+        aria-label={`在 ${item.name} 后新增节点`}
+      >
+        <span
+          className="pointer-events-none absolute top-1/2 h-px -translate-y-1/2 rounded-full bg-gradient-to-r from-[#5ee9a5] via-[#26d07c] to-[#9ef3c9] shadow-[0_0_14px_rgba(38,208,124,0.55)]"
+          style={{ left: `${insertLineLeft}px`, right: '6px' }}
+        />
+        <span
+          className="pointer-events-none absolute top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-[#78e4ab] bg-white text-[#18a957] shadow-[0_0_0_3px_rgba(255,255,255,0.92),0_0_18px_rgba(38,208,124,0.35)]"
+          style={{ left: `${insertButtonLeft}px` }}
         >
-          <span className="h-px flex-1 bg-gray-200" />
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-[#cfd7d4] bg-white text-[#6b7280]">
-            <Plus className="h-3.5 w-3.5" />
-          </span>
-          <span className="text-[11px] font-medium">新增节点</span>
-          <span className="h-px flex-1 bg-gray-200" />
-        </button>
-      ) : null}
+          <Plus className="h-3.5 w-3.5" />
+        </span>
+      </button>
 
       {hasChildren && isExpanded && (
         <div>
@@ -167,8 +194,6 @@ function TreeNode({
               onSelect={onSelect}
               onToggle={onToggle}
               registerNodeRef={registerNodeRef}
-              hoveredInsertId={hoveredInsertId}
-              onHoverInsert={onHoverInsert}
               onRequestCreate={onRequestCreate}
               level={level + 1}
             />
@@ -181,7 +206,7 @@ function TreeNode({
 
 // ─── Section card wrapper ─────────────────────────────────────────────────────
 
-function SectionCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+function SectionCard({ title, action, children }: { title: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
@@ -189,6 +214,67 @@ function SectionCard({ title, action, children }: { title: string; action?: Reac
         {action}
       </div>
       <div className="px-6 py-5">{children}</div>
+    </div>
+  );
+}
+
+function SectionTitle({ title, dirty = false }: SectionTitleProps) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span>{title}</span>
+      {dirty ? <span className="text-xs font-semibold text-red-500">未保存</span> : null}
+    </span>
+  );
+}
+
+function FieldLabel({
+  label,
+  dirty = false,
+}: {
+  label: string;
+  dirty?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-gray-500">
+      <span>{label}</span>
+      {dirty ? <span className="font-semibold text-red-500">未保存</span> : null}
+    </div>
+  );
+}
+
+function BasicInfoField({
+  label,
+  value,
+  placeholder,
+  maxLength,
+  onChange,
+  dirty = false,
+  monospace = false,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  maxLength: number;
+  onChange: (value: string) => void;
+  dirty?: boolean;
+  monospace?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <FieldLabel label={label} dirty={dirty} />
+      <AdminCountedControl count={countText(value)} maxLength={maxLength}>
+        <input
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          className={`admin-studio-input ${monospace ? 'font-mono' : ''}`}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+        />
+      </AdminCountedControl>
     </div>
   );
 }
@@ -248,16 +334,18 @@ function UrlField({
   placeholder,
   maxLength,
   onChange,
+  dirty = false,
 }: {
   label: string;
   value: string;
   placeholder: string;
   maxLength: number;
   onChange: (v: string) => void;
+  dirty?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-xs text-gray-500">{label}</div>
+      <FieldLabel label={label} dirty={dirty} />
       <div className="admin-search-field-shell flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 transition-colors">
         <input
           type="text"
@@ -291,7 +379,6 @@ export default function AdminGenresPage() {
   const [treeSearch, setTreeSearch] = useState('');
   const [treeSearchFocused, setTreeSearchFocused] = useState(false);
   const [pendingScrollTargetId, setPendingScrollTargetId] = useState<string | null>(null);
-  const [hoveredInsertId, setHoveredInsertId] = useState<string | null>(null);
   const [pendingCreateTarget, setPendingCreateTarget] = useState<PendingCreateTarget | null>(null);
   const [pendingCreateName, setPendingCreateName] = useState('');
   const [creatingNode, setCreatingNode] = useState(false);
@@ -301,6 +388,8 @@ export default function AdminGenresPage() {
   const [notice, setNotice] = useState('');
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeNodeRefs = useRef(new Map<string, HTMLDivElement>());
+  const [basicName, setBasicName] = useState('');
+  const [basicSlug, setBasicSlug] = useState('');
 
   // Localized text
   const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
@@ -370,6 +459,8 @@ export default function AdminGenresPage() {
 
   useEffect(() => {
     if (!selectedNode) return;
+    setBasicName(selectedNode.name || '');
+    setBasicSlug(selectedNode.slug || '');
     setDescriptionValue(normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || ''));
     setExampleValue(normalizeLocalizedValue(selectedNode.exampleI18n, selectedNode.example || ''));
     setSpotifyTrackURL(selectedNode.spotifyTrackURL || '');
@@ -402,10 +493,6 @@ export default function AdminGenresPage() {
       return;
     }
     treeNodeRefs.current.delete(id);
-  }, []);
-
-  const updateHoveredInsertId = useCallback((next: string | null | ((current: string | null) => string | null)) => {
-    setHoveredInsertId((current) => (typeof next === 'function' ? next(current) : next));
   }, []);
 
   const selectTreeNode = useCallback((id: string, options?: { expandAncestors?: boolean; alignTop?: boolean }) => {
@@ -443,7 +530,6 @@ export default function AdminGenresPage() {
       });
       setPendingCreateTarget(null);
       setPendingCreateName('');
-      setHoveredInsertId(null);
       setNotice(`已创建节点「${created.name}」，你可以继续在左侧补充内容。`);
       await loadTree(created.id);
     } catch (createError) {
@@ -456,12 +542,34 @@ export default function AdminGenresPage() {
   const toggleExpanded = (id: string) =>
     setExpandedIds((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
+  const initialDescriptionValue = selectedNode
+    ? normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || '')
+    : normalizeLocalizedValue(null);
+  const basicNameDirty = selectedNode ? basicName !== (selectedNode.name || '') : false;
+  const basicSlugDirty = selectedNode ? basicSlug !== (selectedNode.slug || '') : false;
+  const descriptionDirty = selectedNode ? !sameLocalizedValue(descriptionValue, initialDescriptionValue) : false;
+  const keyArtistsDirty = selectedNode
+    ? JSON.stringify(normalizeKeyArtistDraftsForCompare(keyArtistDrafts)) !== JSON.stringify(normalizeGenreKeyArtistsForCompare(selectedNode))
+    : false;
+  const spotifyDirty = selectedNode ? spotifyTrackURL !== (selectedNode.spotifyTrackURL || '') : false;
+  const wikipediaDirty = selectedNode ? wikipediaURL !== (selectedNode.wikipediaURL || '') : false;
+  const basicInfoDirty = basicNameDirty || basicSlugDirty;
+  const externalLinksDirty = spotifyDirty || wikipediaDirty;
+
   const handleSaveContent = async () => {
     if (!selectedNode) return;
+    if (!basicName.trim()) {
+      setError('请先填写流派名称。');
+      return;
+    }
     setSaving(true);
     setError('');
     setNotice('');
     try {
+      await genreAdminApi.updateNode(selectedNode.id, {
+        name: basicName.trim(),
+        slug: basicSlug.trim() || null,
+      });
       await genreAdminApi.updateContent(selectedNode.id, {
         description: descriptionValue.zh,
         descriptionI18n: descriptionValue,
@@ -586,31 +694,27 @@ export default function AdminGenresPage() {
 
           {/* Section 1: Basic info */}
           <SectionCard
-            title="基本信息"
-            action={
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            }
+            title={<SectionTitle title="基本信息" dirty={basicInfoDirty} />}
           >
             {selectedNode ? (
               <div className="space-y-4">
-                {/* Row 1: names */}
-                <div className="grid grid-cols-3 gap-4">
-                  <FieldCell
-                    label="名称（中文）"
-                    value={selectedNode.name}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <BasicInfoField
+                    label="名称"
+                    value={basicName}
+                    placeholder="输入流派名称"
+                    maxLength={INPUT_LIMITS.genre.name}
+                    onChange={setBasicName}
+                    dirty={basicNameDirty}
                   />
-                  <FieldCell
-                    label="名称（英文）"
-                    value=""
-                  />
-                  <FieldCell
-                    label="名称（日文）"
-                    value=""
+                  <BasicInfoField
+                    label="Slug"
+                    value={basicSlug}
+                    placeholder="可选，自定义 slug"
+                    maxLength={INPUT_LIMITS.genre.slug}
+                    onChange={setBasicSlug}
+                    dirty={basicSlugDirty}
+                    monospace
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-4">
@@ -627,42 +731,10 @@ export default function AdminGenresPage() {
             )}
           </SectionCard>
 
-          {/* Section 2: External links */}
+          {/* Section 2: Description */}
           {selectedNode && (
             <SectionCard
-              title="外部链接"
-              action={
-                <button
-                  type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              }
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <UrlField
-                  label="Spotify 曲目链接"
-                  value={spotifyTrackURL}
-                  placeholder="https://open.spotify.com/..."
-                  maxLength={INPUT_LIMITS.common.url}
-                  onChange={setSpotifyTrackURL}
-                />
-                <UrlField
-                  label="Wikipedia 链接"
-                  value={wikipediaURL}
-                  placeholder="https://en.wikipedia.org/..."
-                  maxLength={INPUT_LIMITS.common.url}
-                  onChange={setWikipediaURL}
-                />
-              </div>
-            </SectionCard>
-          )}
-
-          {/* Section 3: Description */}
-          {selectedNode && (
-            <SectionCard
-              title="风格描述"
+              title={<SectionTitle title="风格描述" dirty={descriptionDirty} />}
               action={
                 <button
                   type="button"
@@ -701,7 +773,8 @@ export default function AdminGenresPage() {
               </div>
 
               {/* Text area */}
-              <div className="relative">
+              <div>
+                <FieldLabel label="描述内容" dirty={descriptionDirty} />
                 <textarea
                   value={descriptionTabText}
                   onChange={(e) => {
@@ -732,10 +805,10 @@ export default function AdminGenresPage() {
             </SectionCard>
           )}
 
-          {/* Section 4: Key artists */}
+          {/* Section 3: Key artists */}
           {selectedNode && (
             <SectionCard
-              title="代表艺人"
+              title={<SectionTitle title="代表艺人" dirty={keyArtistsDirty} />}
               action={
                 <button
                   type="button"
@@ -848,6 +921,30 @@ export default function AdminGenresPage() {
             </SectionCard>
           )}
 
+          {/* Section 4: External links */}
+          {selectedNode && (
+            <SectionCard title={<SectionTitle title="外部链接" dirty={externalLinksDirty} />}>
+              <div className="grid grid-cols-2 gap-4">
+                <UrlField
+                  label="Spotify 曲目链接"
+                  value={spotifyTrackURL}
+                  placeholder="https://open.spotify.com/..."
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={setSpotifyTrackURL}
+                  dirty={spotifyDirty}
+                />
+                <UrlField
+                  label="Wikipedia 链接"
+                  value={wikipediaURL}
+                  placeholder="https://en.wikipedia.org/..."
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={setWikipediaURL}
+                  dirty={wikipediaDirty}
+                />
+              </div>
+            </SectionCard>
+          )}
+
           {/* Save / delete actions */}
           {selectedNode && (
             <div className="flex items-center justify-between gap-3">
@@ -945,8 +1042,6 @@ export default function AdminGenresPage() {
                     onSelect={selectTreeNode}
                     onToggle={toggleExpanded}
                     registerNodeRef={registerTreeNodeRef}
-                    hoveredInsertId={hoveredInsertId}
-                    onHoverInsert={updateHoveredInsertId}
                     onRequestCreate={(target) => {
                       setPendingCreateTarget(target);
                       setPendingCreateName('');
