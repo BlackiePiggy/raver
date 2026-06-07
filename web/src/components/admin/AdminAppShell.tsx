@@ -560,8 +560,8 @@ function Topbar({
           onClear={query ? () => setQuery('') : undefined}
         />
         <div className="hidden items-center gap-3 md:flex">
-          <div className="flex items-center gap-3 rounded-full border border-[#d8e1dd] bg-white/75 px-2.5 py-1.5 shadow-[0_8px_28px_rgba(7,17,16,0.06)]">
-            <span className="relative grid size-[42px] shrink-0 place-items-center overflow-hidden rounded-full bg-[#071110] text-[11px] font-bold text-white">
+          <div className="flex items-center gap-3">
+            <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#071110] text-[11px] font-bold text-white shadow-[0_8px_24px_rgba(7,17,16,0.12)]">
               {userAvatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={userAvatarUrl} alt={userName} className="h-full w-full object-cover" />
