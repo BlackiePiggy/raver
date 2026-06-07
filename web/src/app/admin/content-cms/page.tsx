@@ -96,12 +96,9 @@ export default function AdminContentCmsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-[#071110]">{redirecting ? '跳转中...' : '准备跳转'}</h2>
-              <p className="mt-1 text-sm text-black/50">如果没有自动跳转，可以手动打开统一内容控制台或 legacy tools。</p>
+              <p className="mt-1 text-sm text-black/50">如果没有自动跳转，可以手动打开 legacy tools。</p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link href="/admin/content" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white">
-                打开统一内容控制台
-              </Link>
               <Link href="/admin/content/legacy-tools" className="rounded-full border border-white/50 bg-white/50 px-4 py-2 text-sm text-[#071110]">
                 打开旧工具桥接
               </Link>

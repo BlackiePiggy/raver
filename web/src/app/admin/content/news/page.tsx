@@ -564,9 +564,6 @@ export default function AdminContentNewsPage() {
       description=""
       actions={
         <>
-          <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回内容控制台
-          </Link>
           <Link href="/admin/content/news/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建资讯
           </Link>

@@ -502,9 +502,6 @@ export default function AdminContentLabelsPage() {
       description="Manage label metadata, channel links, and profile assets with the same detail overlay structure used by events."
       actions={
         <>
-          <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            Back to Content
-          </Link>
           <Link href="/admin/content/labels/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             New Label
           </Link>

@@ -250,11 +250,6 @@ export default function AdminRatingsPage() {
     <AdminContentLayout
       title="Rating Management"
       description="Manage rating events, rating units, source event mapping, and reusable DJ bindings."
-      actions={
-        <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-          Back to Content Console
-        </Link>
-      }
     >
       <section className="space-y-5">
         {error ? <div className="admin-reference-pastel-card bg-[linear-gradient(180deg,#f7e3e0_0%,#ffffff_100%)] p-4 text-sm text-[#6a3530]">{error}</div> : null}

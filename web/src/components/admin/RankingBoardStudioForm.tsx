@@ -151,12 +151,6 @@ export default function RankingBoardStudioForm({ mode, boardId }: RankingBoardSt
           >
             返回榜单管理
           </Link>
-          <Link
-            href="/admin/content"
-            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
-          >
-            返回内容控制台
-          </Link>
         </>
       }
     >

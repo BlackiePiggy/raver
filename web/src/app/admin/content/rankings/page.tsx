@@ -466,9 +466,6 @@ export default function AdminRankingPage() {
       description="榜单本体与年度内容分离管理。榜单名称、封面和简介单独编辑；具体某一年的榜单对象在这里维护。"
       actions={
         <>
-          <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-            返回内容控制台
-          </Link>
           <Link href="/admin/content/rankings/new" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             新建榜单
           </Link>

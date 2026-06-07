@@ -155,11 +155,6 @@ export default function AdminOverviewPage() {
               <div className="mt-2 text-sm leading-6 text-text-secondary">检索邮箱、手机号、账号状态，处理会话、处罚与删除</div>
             </Link>
           )}
-          <Link href="/admin/content" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
-            <div className="text-sm text-text-secondary">Content CMS</div>
-            <div className="mt-2 text-lg font-semibold">内容管理中心</div>
-            <div className="mt-2 text-sm leading-6 text-text-secondary">活动、主办方、DJ、审核与旧工具迁移入口统一收口</div>
-          </Link>
           {rolePolicy.canAccessOperations && (
             <Link href="/admin/dj-binding-reviews" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
               <div className="text-sm text-text-secondary">DJ Binding Review</div>

@@ -31,9 +31,6 @@ export default function AdminContentReviewsPage() {
       description="审核中心现在以统一后台原生页面为主，不再把具体功能完全桥接到 festival-viewer。内容贡献审核、DJ 绑定审核、举报审核都沿着当前接口体系直接在 Next Admin 内持续演进。"
       actions={
         <>
-          <Link href="/admin/content" className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]">
-            返回内容总览
-          </Link>
           <Link href="/admin/content/reviews/submissions" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             进入内容贡献审核
           </Link>

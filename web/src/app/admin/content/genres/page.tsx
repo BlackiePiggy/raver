@@ -649,9 +649,6 @@ export default function AdminGenresPage() {
       description="维护风格层级树、多语言描述，以及可复用的代表艺人 DJ 绑定。"
       actions={
         <div className="flex items-center gap-2">
-          <Link href="/admin/content" className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            返回上级
-          </Link>
           <button
             type="button"
             onClick={() => void loadTree(selectedId)}

@@ -144,14 +144,6 @@ export default function AdminIdentifiersPage() {
     <AdminContentLayout
       title="ID 管理"
       description="统一管理未发布歌曲条目。这里的 ID 指 track / tracklist 中标记为 unreleased ID 的曲目，而不是实体 identifier。"
-      actions={
-        <Link
-          href="/admin/content"
-          className="rounded-full border border-[#ececec] bg-white px-5 py-3 text-sm text-[#18211f]"
-        >
-          返回内容控制台
-        </Link>
-      }
     >
       <section className="space-y-5">
         {error ? (

@@ -261,12 +261,6 @@ export default function AdminGenreCreatePage() {
       actions={
         <>
           <Link
-            href="/admin/content"
-            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
-          >
-            返回内容后台
-          </Link>
-          <Link
             href="/admin/content/genres"
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >

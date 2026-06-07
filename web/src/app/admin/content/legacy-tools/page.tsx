@@ -30,9 +30,6 @@ export default function AdminContentLegacyToolsPage() {
       description="统一内容后台已经建立，但部分审核、Brand/DJ 历史工具、长尾编辑能力仍需通过 Festival Viewer 过渡访问。这里集中保留这些入口，避免后台再次分散。"
       actions={
         <>
-          <Link href="/admin/content" className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]">
-            返回内容总览
-          </Link>
           <Link href="/admin/festival-viewer.html" className="rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             打开 Festival Viewer
           </Link>

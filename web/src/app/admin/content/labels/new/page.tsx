@@ -40,12 +40,6 @@ export default function AdminContentLabelCreatePage() {
           >
             返回厂牌目录
           </Link>
-          <Link
-            href="/admin/content"
-            className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
-          >
-            返回内容控制台
-          </Link>
         </>
       }
     >

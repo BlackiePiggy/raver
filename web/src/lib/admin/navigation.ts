@@ -7,7 +7,6 @@ import {
   Disc3,
   FileWarning,
   Fingerprint,
-  FolderKanban,
   Gavel,
   Headphones,
   LayoutGrid,
@@ -54,20 +53,6 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: '总览与状态',
         icon: LayoutGrid,
         visible: alwaysVisible,
-        matchMode: 'exact',
-      },
-    ],
-  },
-  {
-    id: 'overview',
-    label: 'Overview',
-    items: [
-      {
-        href: '/admin/content',
-        label: '内容控制台',
-        description: '内容总览入口',
-        icon: FolderKanban,
-        visible: contentVisible,
         matchMode: 'exact',
       },
     ],

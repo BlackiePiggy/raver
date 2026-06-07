@@ -2,17 +2,20 @@
 
 import Link from 'next/link';
 import {
+  BadgeCheck,
   ChevronDown,
-  Command,
+  LogOut,
   PanelLeftClose,
   Settings,
-  Sparkles,
   Triangle,
+  UserCircle2,
+  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { getVisibleAdminNavGroups, isAdminHrefActive } from '@/lib/admin/navigation';
 import AdminSearchField from '@/components/admin/AdminSearchField';
@@ -38,6 +41,265 @@ const initialsFromName = (value?: string | null): string =>
     .map((item) => item.slice(0, 1).toUpperCase())
     .join('') || 'RA';
 
+type SidebarSettingsTabKey = 'profile' | 'permissions' | 'session';
+
+const SIDEBAR_SETTINGS_TABS: Array<{
+  key: SidebarSettingsTabKey;
+  label: string;
+  description: string;
+  icon: typeof UserCircle2;
+}> = [
+  {
+    key: 'profile',
+    label: '基本信息',
+    description: '头像、名称与账号标识',
+    icon: UserCircle2,
+  },
+  {
+    key: 'permissions',
+    label: '身份权限',
+    description: '当前角色与后台能力',
+    icon: BadgeCheck,
+  },
+  {
+    key: 'session',
+    label: '会话操作',
+    description: '退出登录与会话入口',
+    icon: LogOut,
+  },
+];
+
+function SidebarUserSettingsOverlay({
+  open,
+  onClose,
+  onLogout,
+  activeTab,
+  setActiveTab,
+  userName,
+  userEmail,
+  userAvatarUrl,
+  userRoleLabel,
+  userRoleDescription,
+  userCapabilities,
+  userId,
+  username,
+  userBio,
+  userLocation,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onLogout: () => void;
+  activeTab: SidebarSettingsTabKey;
+  setActiveTab: (next: SidebarSettingsTabKey) => void;
+  userName: string;
+  userEmail: string;
+  userAvatarUrl: string | null;
+  userRoleLabel: string;
+  userRoleDescription: string;
+  userCapabilities: string[];
+  userId: string;
+  username: string;
+  userBio: string | null;
+  userLocation: string | null;
+}) {
+  useOverlayBodyLock(open);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  const renderRightPane = () => {
+    if (activeTab === 'permissions') {
+      return (
+        <div className="space-y-4">
+          <section className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">当前身份</div>
+            <div className="mt-3 text-[26px] font-semibold tracking-[-0.04em] text-[#071110]">{userRoleLabel}</div>
+            <p className="mt-2 text-sm leading-7 text-black/55">{userRoleDescription}</p>
+          </section>
+
+          <section className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">可用能力</div>
+            <div className="mt-4 grid gap-3">
+              {userCapabilities.length ? (
+                userCapabilities.map((capability) => (
+                  <div key={capability} className="rounded-[18px] border border-[#eef1ef] bg-[#f6f8f7] px-4 py-3 text-sm leading-6 text-[#18211f]">
+                    {capability}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[18px] border border-dashed border-[#d7ded9] px-4 py-5 text-sm text-black/45">
+                  当前账号没有额外的后台能力说明。
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    if (activeTab === 'session') {
+      return (
+        <div className="space-y-4">
+          <section className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">会话状态</div>
+            <div className="mt-3 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">当前已登录</div>
+            <p className="mt-2 text-sm leading-7 text-black/55">
+              当前后台会话基于你的账号身份生效。退出后将返回登录页，需要重新认证才能继续进入管理后台。
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                href="/admin/auth-sessions"
+                className="rounded-full border border-[#d7ded9] bg-white px-4 py-2.5 text-sm font-semibold text-[#18211f]"
+                onClick={onClose}
+              >
+                查看登录设备
+              </Link>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="rounded-full bg-[#7d2020] px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                退出登录
+              </button>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <section className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+          <div className="flex flex-wrap items-start gap-4">
+            <span className="relative grid size-[84px] shrink-0 place-items-center overflow-hidden rounded-[28px] bg-[#071110] text-[22px] font-extrabold text-white">
+              {userAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userAvatarUrl} alt={userName} className="h-full w-full object-cover" />
+              ) : (
+                initialsFromName(userName || userEmail || username)
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">账户资料</div>
+              <div className="mt-2 break-words text-[28px] font-semibold tracking-[-0.04em] text-[#071110]">
+                {userName}
+              </div>
+              <div className="mt-2 text-sm text-black/56">{userEmail}</div>
+              <div className="mt-1 text-sm text-black/46">@{username}</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">用户 ID</div>
+            <div className="mt-3 break-all text-sm leading-6 text-[#18211f]">{userId || '未提供'}</div>
+          </div>
+          <div className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">当前角色</div>
+            <div className="mt-3 text-sm font-semibold text-[#18211f]">{userRoleLabel}</div>
+          </div>
+        </section>
+
+        <section className="rounded-[22px] border border-[#d8e1dd] bg-white p-5">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/38">补充信息</div>
+          <div className="mt-4 grid gap-3">
+            <div className="rounded-[18px] border border-[#eef1ef] bg-[#f6f8f7] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-black/34">Bio</div>
+              <div className="mt-2 text-sm leading-6 text-[#18211f]">{userBio?.trim() || '未填写'}</div>
+            </div>
+            <div className="rounded-[18px] border border-[#eef1ef] bg-[#f6f8f7] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-black/34">Location</div>
+              <div className="mt-2 text-sm leading-6 text-[#18211f]">{userLocation?.trim() || '未填写'}</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(7,17,16,0.36)] p-4" onClick={onClose}>
+      <div
+        className="flex h-[min(720px,calc(100vh-32px))] w-full max-w-5xl overflow-hidden rounded-[32px] border border-[#d7ded9] bg-[#f4f6f5] shadow-[0_24px_80px_rgba(7,17,16,0.18)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <aside className="flex w-[280px] shrink-0 flex-col border-r border-[#dce3df] bg-[linear-gradient(180deg,#eef4f1_0%,#f7faf8_100%)] p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/36">设置</div>
+              <div className="mt-1 text-[24px] font-semibold tracking-[-0.04em] text-[#071110]">后台账户</div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid size-10 place-items-center rounded-full border border-[#d7ded9] bg-white text-[#18211f]"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="mt-5 flex items-center gap-3 rounded-[22px] border border-[#dde5e1] bg-white px-3 py-3">
+            <span className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-[#071110] text-sm font-extrabold text-white">
+              {userAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={userAvatarUrl} alt={userName} className="h-full w-full object-cover" />
+              ) : (
+                initialsFromName(userName || userEmail || username)
+              )}
+            </span>
+            <div className="min-w-0">
+              <div className="line-clamp-2 break-words text-sm font-semibold leading-5 text-[#071110]">{userName}</div>
+              <div className="mt-1 text-xs text-black/48">{userRoleLabel}</div>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-2">
+            {SIDEBAR_SETTINGS_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={clsx(
+                    'flex w-full items-start gap-3 rounded-[20px] px-4 py-3 text-left transition',
+                    active ? 'bg-[#071110] text-white' : 'border border-transparent bg-white text-[#18211f] hover:border-[#d7ded9]'
+                  )}
+                >
+                  <span className={clsx('mt-0.5 grid size-8 shrink-0 place-items-center rounded-full', active ? 'bg-white/14' : 'bg-[#f1f4f2]')}>
+                    <Icon className="size-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <div className="text-sm font-semibold">{tab.label}</div>
+                    <div className={clsx('mt-1 text-xs leading-5', active ? 'text-white/74' : 'text-black/48')}>
+                      {tab.description}
+                    </div>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section className="min-w-0 flex-1 overflow-y-auto p-6 admin-shell-scrollbar">{renderRightPane()}</section>
+      </div>
+    </div>
+  );
+}
 
 function Sidebar({
   collapsed,
@@ -56,6 +318,8 @@ function Sidebar({
   const groups = useMemo(() => getVisibleAdminNavGroups(policy), [policy]);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const [groupOpenState, setGroupOpenState] = useState<Record<string, boolean>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SidebarSettingsTabKey>('profile');
 
   const groupActiveState = useMemo(
     () =>
@@ -146,6 +410,10 @@ function Sidebar({
       };
     });
   };
+
+  const resolvedUserName = user?.displayName?.trim() || user?.username || 'Admin User';
+  const resolvedUserEmail = user?.email?.trim() || '未登录邮箱';
+  const resolvedAvatarUrl = user?.avatarUrl?.trim() || user?.avatarURL?.trim() || null;
 
   return (
     <>
@@ -252,47 +520,56 @@ function Sidebar({
         </div>
 
         <div className="admin-shell-profile mt-4 shrink-0 rounded-[24px] p-3">
-          <div className={clsx('mb-3 flex items-center', collapsed ? 'justify-center' : 'justify-between')}>
-            {[Sparkles, Command, Settings].map((Icon, index) => (
-              <span
-                key={index}
-                className="relative grid size-9 place-items-center rounded-full bg-[#f4f6f5] text-[#15221f] transition hover:bg-white"
-              >
-                <Icon className="size-[15px]" />
-                {index === 1 && (
-                  <em className="absolute -right-0.5 -top-0.5 size-4 rounded-full bg-[#25bb72] text-center text-[9px] not-italic leading-4 text-white">
-                    3
-                  </em>
-                )}
-              </span>
-            ))}
+          <div className={clsx('mb-3 flex items-center', collapsed ? 'justify-center' : 'justify-end')}>
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsTab('profile');
+                setSettingsOpen(true);
+              }}
+              className="relative grid size-9 place-items-center rounded-full bg-[#f4f6f5] text-[#15221f] transition hover:bg-white"
+              aria-label="Open admin account settings"
+            >
+              <Settings className="size-[15px]" />
+            </button>
           </div>
 
           <div className={clsx('flex items-center', collapsed ? 'justify-center' : 'gap-3')}>
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#071110] text-[12px] font-extrabold text-white">
-              {initialsFromName(user?.displayName || user?.username || user?.email)}
+            <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#071110] text-[12px] font-extrabold text-white">
+              {resolvedAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resolvedAvatarUrl} alt={resolvedUserName} className="h-full w-full object-cover" />
+              ) : (
+                initialsFromName(user?.displayName || user?.username || user?.email)
+              )}
             </span>
             {!collapsed && (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-extrabold text-[#071110]">{user?.displayName || user?.username || 'Admin User'}</p>
-                  <p className="truncate text-[10px] text-black/45">{user?.email || '未登录'}</p>
-                </div>
-                {user ? (
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className="rounded-full bg-[#071110] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white"
-                  >
-                    Sign out
-                  </button>
-                ) : null}
-              </>
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 break-words text-[13px] font-extrabold leading-5 text-[#071110]">{resolvedUserName}</p>
+                <p className="mt-1 break-all text-[10px] leading-4 text-black/45">{user?.email || '未登录'}</p>
+              </div>
             )}
           </div>
         </div>
       </aside>
       {mobileOpen && <div onClick={() => setMobileOpen(false)} className="fixed inset-0 z-20 bg-black/20 md:hidden" />}
+      <SidebarUserSettingsOverlay
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onLogout={logout}
+        activeTab={settingsTab}
+        setActiveTab={setSettingsTab}
+        userName={resolvedUserName}
+        userEmail={resolvedUserEmail}
+        userAvatarUrl={resolvedAvatarUrl}
+        userRoleLabel={policy.label}
+        userRoleDescription={policy.description}
+        userCapabilities={policy.capabilities}
+        userId={user?.id || ''}
+        username={user?.username || ''}
+        userBio={user?.bio || null}
+        userLocation={user?.location || null}
+      />
     </>
   );
 }
