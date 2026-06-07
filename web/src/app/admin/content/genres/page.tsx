@@ -460,11 +460,11 @@ export default function AdminGenresPage() {
                   />
                   <FieldCell
                     label="名称（英文）"
-                    value={selectedNode.nameEn || selectedNode.name}
+                    value=""
                   />
                   <FieldCell
                     label="名称（日文）"
-                    value={selectedNode.nameJa || ''}
+                    value=""
                   />
                 </div>
                 {/* Row 2: path, type, status, sort */}
@@ -710,14 +710,6 @@ export default function AdminGenresPage() {
                                   </button>
                                 )}
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeKeyArtistDraft(item.id)}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
-                                title="删除"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
                             </div>
                           </td>
                         </tr>

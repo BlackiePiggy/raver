@@ -31,6 +31,7 @@ type EditableEntityBindingCardProps = {
   onEditStart?: () => void;
   onEditCancel?: () => void;
   onDelete?: () => void;
+  renderTrigger?: (props: { onClick: () => void }) => ReactNode;
 };
 
 const BOUND_BADGE_CLASS = 'bg-[#edf7f2] text-[#31513d]';
@@ -60,6 +61,7 @@ export default function EditableEntityBindingCard({
   onEditStart,
   onEditCancel,
   onDelete,
+  renderTrigger,
 }: EditableEntityBindingCardProps) {
   const [localEditing, setLocalEditing] = useState(defaultEditing);
   const editing = isEditing ?? localEditing;
@@ -84,44 +86,60 @@ export default function EditableEntityBindingCard({
   return (
     <div className="rounded-[18px] border border-[#e8eceb] bg-white p-4">
       {!editing ? (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {badge}
-              <span className="text-base font-semibold text-[#111827]">{name || '未命名对象'}</span>
-              <span className={`rounded-full px-2.5 py-1 text-xs ${isBound ? BOUND_BADGE_CLASS : UNBOUND_BADGE_CLASS}`}>
-                {isBound ? boundLabel : unboundLabel}
-              </span>
-            </div>
-            <div className="mt-2 text-sm font-medium text-[#111827]">{header}</div>
-            {confirmedMeta ? <div className="mt-2 text-sm text-black/55">{confirmedMeta}</div> : null}
-            <div className="mt-2 text-sm text-black/55">
-              {binding
-                ? `绑定对象：${binding.name}${binding.subtitle ? ` · ${binding.subtitle}` : ''}`
-                : bindingEmptyLabel}
-            </div>
-          </div>
+        renderTrigger ? (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openEditor}
-              className="inline-flex items-center gap-2 rounded-full border border-[#d7ded9] bg-white px-4 py-2 text-sm text-[#18211f]"
-            >
-              <Pencil className="h-4 w-4" />
-              编辑
-            </button>
+            {renderTrigger({ onClick: openEditor })}
             {onDelete ? (
               <button
                 type="button"
                 onClick={onDelete}
-                className="inline-flex items-center gap-2 rounded-full border border-[#ead6d6] bg-white px-4 py-2 text-sm text-[#8b3a3a]"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ead6d6] bg-white text-[#8b3a3a] transition hover:bg-[#fff5f5]"
+                title="删除"
               >
-                <Trash2 className="h-4 w-4" />
-                删除
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             ) : null}
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {badge}
+                <span className="text-base font-semibold text-[#111827]">{name || '未命名对象'}</span>
+                <span className={`rounded-full px-2.5 py-1 text-xs ${isBound ? BOUND_BADGE_CLASS : UNBOUND_BADGE_CLASS}`}>
+                  {isBound ? boundLabel : unboundLabel}
+                </span>
+              </div>
+              <div className="mt-2 text-sm font-medium text-[#111827]">{header}</div>
+              {confirmedMeta ? <div className="mt-2 text-sm text-black/55">{confirmedMeta}</div> : null}
+              <div className="mt-2 text-sm text-black/55">
+                {binding
+                  ? `绑定对象：${binding.name}${binding.subtitle ? ` · ${binding.subtitle}` : ''}`
+                  : bindingEmptyLabel}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openEditor}
+                className="inline-flex items-center gap-2 rounded-full border border-[#d7ded9] bg-white px-4 py-2 text-sm text-[#18211f]"
+              >
+                <Pencil className="h-4 w-4" />
+                编辑
+              </button>
+              {onDelete ? (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#ead6d6] bg-white px-4 py-2 text-sm text-[#8b3a3a]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  删除
+                </button>
+              ) : null}
+            </div>
+          </div>
+        )
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
