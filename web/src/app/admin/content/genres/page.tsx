@@ -1,16 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
-import EntityBindingField from '@/components/admin/EntityBindingField';
+import EditableEntityBindingCard from '@/components/admin/EditableEntityBindingCard';
 import {
-  LocalizedTextField,
   MultilingualEditorOverlay,
   type LocalizedLocaleKey,
   type LocalizedTextValue,
+  localizedTextFilledLocaleLabels,
 } from '@/components/admin/LocalizedTextEditor';
 import { genreAdminApi, type GenreAdminNode, type GenreKeyArtistBinding } from '@/features/admin-content/genre-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
@@ -34,35 +34,6 @@ type KeyArtistDraft = {
   name: string;
   djId: string | null;
   dj: GenreKeyArtistBinding['dj'];
-};
-
-type StructureDraft = {
-  name: string;
-  slug: string;
-  sortOrder: string;
-  parentId: string;
-};
-
-const emptyLocalizedValue = (): LocalizedTextValue => ({
-  zh: '',
-  en: '',
-  ja: '',
-  enFull: '',
-});
-
-const collectDescendantIds = (node: GenreAdminNode | null): Set<string> => {
-  const ids = new Set<string>();
-  if (!node) return ids;
-  const walk = (items: GenreAdminNode[]) => {
-    for (const item of items) {
-      ids.add(item.id);
-      if (item.children?.length) {
-        walk(item.children);
-      }
-    }
-  };
-  walk(node.children ?? []);
-  return ids;
 };
 
 // ─── Right-side tree node ─────────────────────────────────────────────────────
@@ -210,48 +181,42 @@ function FieldCell({
   );
 }
 
-function ReadOnlyTextBlock({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div>
-      <div className="mb-2 text-xs text-gray-500">{label}</div>
-      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-800">
-        {value || '—'}
-      </div>
-    </div>
-  );
-}
+// ─── URL input field with char count ─────────────────────────────────────────
 
-function ReadOnlyUrlField({
+function UrlField({
   label,
   value,
+  placeholder,
+  maxLength,
+  onChange,
 }: {
   label: string;
   value: string;
+  placeholder: string;
+  maxLength: number;
+  onChange: (v: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="text-xs text-gray-500">{label}</div>
-      <div className="flex min-h-[44px] items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-        <span className={`min-w-0 flex-1 break-all font-mono text-sm ${value ? 'text-gray-800' : 'text-gray-400'}`}>
-          {value || '—'}
-        </span>
-        {value ? (
-          <a
-            href={value}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-shrink-0 text-gray-400 transition-colors hover:text-gray-600"
-          >
+      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-gray-400 focus-within:bg-white transition-colors">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          className="flex-1 min-w-0 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none font-mono"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+        />
+        {value && (
+          <a href={value} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors">
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
-        ) : null}
+        )}
       </div>
+      <div className="text-right text-[10px] text-gray-400">{countText(value)}/{maxLength}</div>
     </div>
   );
 }
@@ -263,46 +228,26 @@ export default function AdminGenresPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState('');
   const [treeSearch, setTreeSearch] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const [structureDraft, setStructureDraft] = useState<StructureDraft>({
-    name: '',
-    slug: '',
-    sortOrder: '',
-    parentId: '',
-  });
-  const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(emptyLocalizedValue);
-  const [exampleValue, setExampleValue] = useState<LocalizedTextValue>(emptyLocalizedValue);
+  // Localized text
+  const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
+  const [exampleValue, setExampleValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldKey | null>(null);
+  const [descriptionTab, setDescriptionTab] = useState<'zh' | 'en' | 'ja'>('zh');
 
+  // External links
   const [spotifyTrackURL, setSpotifyTrackURL] = useState('');
   const [wikipediaURL, setWikipediaURL] = useState('');
+
+  // Key artists
   const [keyArtistDrafts, setKeyArtistDrafts] = useState<KeyArtistDraft[]>([]);
 
   const flatNodes = useMemo(() => flattenTree(tree), [tree]);
   const selectedNode = flatNodes.find((item) => item.id === selectedId) ?? null;
-  const selectedParentNode = useMemo(
-    () => (selectedNode?.parentId ? flatNodes.find((item) => item.id === selectedNode.parentId) ?? null : null),
-    [flatNodes, selectedNode]
-  );
-  const selectedNodeDescendantIds = useMemo(() => collectDescendantIds(selectedNode), [selectedNode]);
-  const parentOptions = useMemo(
-    () => flatNodes.filter((item) => item.id !== selectedId && !selectedNodeDescendantIds.has(item.id)),
-    [flatNodes, selectedId, selectedNodeDescendantIds]
-  );
-  const readonlyKeyArtistBindings = useMemo(
-    () =>
-      selectedNode
-        ? (selectedNode.keyArtistBindings.length
-            ? selectedNode.keyArtistBindings
-            : selectedNode.keyArtists.map((name) => ({ name, djId: null, dj: null })))
-        : [],
-    [selectedNode]
-  );
 
   // Filtered tree search (flat match, highlighted in tree by id set)
   const searchMatchIds = useMemo(() => {
@@ -340,59 +285,37 @@ export default function AdminGenresPage() {
     }
   }, []);
 
-  const hydrateDraftFromNode = useCallback((node: GenreAdminNode | null) => {
-    if (!node) return;
-    setStructureDraft({
-      name: node.name || '',
-      slug: node.slug || '',
-      sortOrder: node.sortOrder != null ? String(node.sortOrder) : '',
-      parentId: node.parentId || '',
-    });
-    setDescriptionValue(normalizeLocalizedValue(node.descriptionI18n, node.description || ''));
-    setExampleValue(normalizeLocalizedValue(node.exampleI18n, node.example || ''));
-    setSpotifyTrackURL(node.spotifyTrackURL || '');
-    setWikipediaURL(node.wikipediaURL || '');
+  useEffect(() => { void loadTree(); }, [loadTree]);
+
+  useEffect(() => {
+    if (!selectedNode) return;
+    setDescriptionValue(normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || ''));
+    setExampleValue(normalizeLocalizedValue(selectedNode.exampleI18n, selectedNode.example || ''));
+    setSpotifyTrackURL(selectedNode.spotifyTrackURL || '');
+    setWikipediaURL(selectedNode.wikipediaURL || '');
+    setDescriptionTab('zh');
     setKeyArtistDrafts(
-      (node.keyArtistBindings.length
-        ? node.keyArtistBindings
-        : node.keyArtists.map((name) => ({ name, djId: null, dj: null }))
+      (selectedNode.keyArtistBindings.length
+        ? selectedNode.keyArtistBindings
+        : selectedNode.keyArtists.map((name) => ({ name, djId: null, dj: null }))
       ).map((item, index) => ({
-        id: `${node.id}-artist-${index}-${item.name}`,
+        id: `${selectedNode.id}-artist-${index}-${item.name}`,
         name: item.name,
         djId: item.djId,
         dj: item.dj,
       }))
     );
-  }, []);
-
-  useEffect(() => { void loadTree(); }, [loadTree]);
-
-  useEffect(() => {
-    if (!selectedNode) return;
-    hydrateDraftFromNode(selectedNode);
-    setIsEditing(false);
-    setActiveLocalizedField(null);
-  }, [hydrateDraftFromNode, selectedNode]);
+  }, [selectedNode]);
 
   const toggleExpanded = (id: string) =>
     setExpandedIds((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   const handleSaveContent = async () => {
     if (!selectedNode) return;
-    if (!structureDraft.name.trim()) {
-      setError('请先填写风格名称。');
-      return;
-    }
     setSaving(true);
     setError('');
     setNotice('');
     try {
-      await genreAdminApi.updateNode(selectedNode.id, {
-        name: structureDraft.name.trim(),
-        parentId: structureDraft.parentId || null,
-        slug: structureDraft.slug.trim() || null,
-        sortOrder: structureDraft.sortOrder.trim() ? Number(structureDraft.sortOrder) : null,
-      });
       await genreAdminApi.updateContent(selectedNode.id, {
         description: descriptionValue.zh,
         descriptionI18n: descriptionValue,
@@ -407,7 +330,6 @@ export default function AdminGenresPage() {
       });
       setNotice('风格内容已更新。');
       await loadTree(selectedNode.id);
-      setIsEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : '更新风格内容失败。');
     } finally {
@@ -460,6 +382,9 @@ export default function AdminGenresPage() {
   const removeKeyArtistDraft = (id: string) =>
     setKeyArtistDrafts((cur) => cur.filter((item) => item.id !== id));
 
+  // Description tab active text
+  const descriptionTabText = descriptionTab === 'zh' ? descriptionValue.zh : descriptionTab === 'en' ? descriptionValue.en : descriptionValue.ja;
+
   return (
     <AdminContentLayout
       title="风格管理"
@@ -478,46 +403,6 @@ export default function AdminGenresPage() {
             <RefreshCw className="h-3.5 w-3.5" />
             刷新
           </button>
-          {selectedNode ? (
-            isEditing ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError('');
-                    setNotice('');
-                    hydrateDraftFromNode(selectedNode);
-                    setIsEditing(false);
-                  }}
-                  disabled={saving}
-                  className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  取消编辑
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveContent}
-                  disabled={saving}
-                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
-                >
-                  {saving ? '保存中…' : '保存当前节点'}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setError('');
-                  setNotice('');
-                  setIsEditing(true);
-                }}
-                disabled={!selectedNode}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                编辑当前节点
-              </button>
-            )
-          ) : null}
           <Link href="/admin/content/genres/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors">
             新建子风格
           </Link>
@@ -552,240 +437,307 @@ export default function AdminGenresPage() {
 
         {/* ── Left: edit panels ── */}
         <div className="space-y-4">
-          {!selectedNode ? (
-            <SectionCard title="风格详情">
+
+          {/* Section 1: Basic info */}
+          <SectionCard
+            title="基本信息"
+            action={
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            }
+          >
+            {selectedNode ? (
+              <div className="space-y-4">
+                {/* Row 1: names */}
+                <div className="grid grid-cols-3 gap-4">
+                  <FieldCell
+                    label="名称（中文）"
+                    value={selectedNode.name}
+                  />
+                  <FieldCell
+                    label="名称（英文）"
+                    value=""
+                  />
+                  <FieldCell
+                    label="名称（日文）"
+                    value=""
+                  />
+                </div>
+                {/* Row 2: path, type, status, sort */}
+                <div className="grid grid-cols-4 gap-4">
+                  <FieldCell
+                    label="层级路径"
+                    value={selectedNode.path}
+                  />
+                  <FieldCell
+                    label="节点类型"
+                    value={(selectedNode.children?.length ?? 0) === 0 ? '叶子节点' : '父节点'}
+                    badge={
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold mr-1 ${
+                        (selectedNode.children?.length ?? 0) === 0
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {(selectedNode.children?.length ?? 0) === 0 ? '叶子节点' : '父节点'}
+                      </span>
+                    }
+                  />
+                  <FieldCell
+                    label="状态"
+                    value="启用"
+                    badge={<span className="mr-1 h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />}
+                  />
+                  <FieldCell
+                    label="子节点数"
+                    value={String(selectedNode.children?.length ?? 0)}
+                  />
+                </div>
+              </div>
+            ) : (
               <div className="py-8 text-center text-sm text-gray-400">
                 {loading ? '加载中…' : '请先从右侧风格树中选择一个节点。'}
               </div>
-            </SectionCard>
-          ) : isEditing ? (
-            <>
-              <section className="admin-reference-card p-6">
-                <div className="text-xs uppercase tracking-[0.14em] text-black/38">结构</div>
-                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">当前节点结构</h2>
-                <div className="mt-1 text-sm text-black/48">
-                  调整当前风格的名称、slug、排序以及挂载父节点。
-                </div>
+            )}
+          </SectionCard>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                  <AdminCountedControl count={countText(structureDraft.name)} maxLength={INPUT_LIMITS.genre.name}>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="风格名称"
-                      value={structureDraft.name}
-                      maxLength={INPUT_LIMITS.genre.name}
-                      onChange={(event) => setStructureDraft((current) => ({ ...current, name: event.target.value }))}
-                    />
-                  </AdminCountedControl>
-                  <AdminCountedControl count={countText(structureDraft.slug)} maxLength={INPUT_LIMITS.genre.slug}>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="Slug（可选）"
-                      value={structureDraft.slug}
-                      maxLength={INPUT_LIMITS.genre.slug}
-                      onChange={(event) => setStructureDraft((current) => ({ ...current, slug: event.target.value }))}
-                    />
-                  </AdminCountedControl>
-                  <AdminCountedControl count={countText(structureDraft.sortOrder)} maxLength={INPUT_LIMITS.genre.sortOrder}>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="排序值（可选）"
-                      value={structureDraft.sortOrder}
-                      maxLength={INPUT_LIMITS.genre.sortOrder}
-                      onChange={(event) => setStructureDraft((current) => ({ ...current, sortOrder: event.target.value }))}
-                    />
-                  </AdminCountedControl>
-                </div>
-
-                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <label className="block">
-                    <div className="mb-2 admin-studio-label">父风格</div>
-                    <div className="admin-studio-select-shell">
-                      <select
-                        value={structureDraft.parentId}
-                        onChange={(event) => setStructureDraft((current) => ({ ...current, parentId: event.target.value }))}
-                        className="admin-studio-select"
-                      >
-                        <option value="">设为顶层根节点</option>
-                        {parentOptions.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {`${'— '.repeat(item.path.split(' / ').filter(Boolean).length - 1)}${item.name}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
-                  <div className="admin-reference-soft-card p-4 text-sm text-black/55">
-                    <div className="text-xs uppercase tracking-[0.14em] text-black/38">当前挂载位置</div>
-                    <div className="mt-2 font-medium text-[#111827]">
-                      {parentOptions.find((item) => item.id === structureDraft.parentId)?.name || '顶层根节点'}
-                    </div>
-                    <div className="mt-1 break-words leading-6">
-                      {parentOptions.find((item) => item.id === structureDraft.parentId)?.path || '当前节点将直接位于顶层。'}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="admin-reference-card p-6">
-                <div className="text-xs uppercase tracking-[0.14em] text-black/38">详情</div>
-                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">风格资料</h2>
-                <div className="mt-1 text-sm text-black/48">
-                  补齐外部链接、多语言描述与示例内容。
-                </div>
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <AdminCountedControl count={countText(spotifyTrackURL)} maxLength={INPUT_LIMITS.common.url}>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="Spotify 曲目链接（可选）"
-                      value={spotifyTrackURL}
-                      maxLength={INPUT_LIMITS.common.url}
-                      onChange={(event) => setSpotifyTrackURL(event.target.value)}
-                    />
-                  </AdminCountedControl>
-                  <AdminCountedControl count={countText(wikipediaURL)} maxLength={INPUT_LIMITS.common.url}>
-                    <input
-                      className="admin-studio-input"
-                      placeholder="Wikipedia 链接（可选）"
-                      value={wikipediaURL}
-                      maxLength={INPUT_LIMITS.common.url}
-                      onChange={(event) => setWikipediaURL(event.target.value)}
-                    />
-                  </AdminCountedControl>
-                </div>
-
-                <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                  <LocalizedTextField
-                    label="风格描述"
-                    kind="textarea"
-                    value={descriptionValue}
-                    placeholder="先填写中文描述"
-                    hint="右侧按钮可继续补充英文、日文和英文全称版本。"
-                    maxLength={INPUT_LIMITS.genre.description}
-                    onPrimaryChange={(value) => setDescriptionValue((current) => ({ ...current, zh: value }))}
-                    onOpenOverlay={() => setActiveLocalizedField('description')}
-                  />
-                  <LocalizedTextField
-                    label="风格示例"
-                    kind="textarea"
-                    value={exampleValue}
-                    placeholder="填写中文示例或代表性语境"
-                    hint="用于补充典型表达、代表作品或场景。"
-                    maxLength={INPUT_LIMITS.genre.example}
-                    onPrimaryChange={(value) => setExampleValue((current) => ({ ...current, zh: value }))}
-                    onOpenOverlay={() => setActiveLocalizedField('example')}
-                  />
-                </div>
-              </section>
-
-              <section className="admin-reference-card p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.14em] text-black/38">绑定</div>
-                    <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">代表艺人</h2>
-                    <div className="mt-1 text-sm text-black/48">
-                      每行保留一个艺人名称，并可选绑定到库内 DJ。
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addKeyArtistDraft}
-                    className="rounded-full border border-[#d7ded9] bg-white px-4 py-2 text-sm text-[#18211f]"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Plus className="h-4 w-4" />
-                      添加艺人
-                    </span>
-                  </button>
-                </div>
-
-                <div className="mt-4 space-y-2.5">
-                  {keyArtistDrafts.map((item, index) => {
-                    const currentBinding = item.dj
-                      ? {
-                          id: item.dj.id,
-                          name: item.dj.name,
-                          subtitle: null,
-                          imageUrl: item.dj.avatarMediumUrl || item.dj.avatarUrl || null,
-                        }
-                      : null;
-
-                    return (
-                      <div key={item.id} className="rounded-[18px] border border-[#e8eceb] bg-white p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-[#111827]">代表艺人 #{index + 1}</div>
-                          <button
-                            type="button"
-                            className="rounded-full border border-[#ead6d6] bg-white p-2 text-[#8b3a3a]"
-                            onClick={() => removeKeyArtistDraft(item.id)}
-                            aria-label="删除代表艺人"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="mt-2.5">
-                          <AdminCountedControl count={countText(item.name)} maxLength={INPUT_LIMITS.genre.keyArtistName}>
-                            <input
-                              className="admin-reference-soft-card w-full px-4 py-3 text-sm"
-                              placeholder="艺人名称"
-                              value={item.name}
-                              maxLength={INPUT_LIMITS.genre.keyArtistName}
-                              onChange={(event) => updateKeyArtistDraft(item.id, { name: event.target.value })}
-                            />
-                          </AdminCountedControl>
-                        </div>
-
-                        <div className="mt-2.5">
-                          <EntityBindingField
-                            kind="dj"
-                            mode="single"
-                            seedQuery={item.name}
-                            items={currentBinding ? [currentBinding] : []}
-                            title="已绑定 DJ"
-                            emptyLabel="当前艺人还没有绑定到库内 DJ。"
-                            onAdd={(value) =>
-                              updateKeyArtistDraft(item.id, {
-                                djId: value.id,
-                                dj: {
-                                  id: value.id,
-                                  name: value.name,
-                                  avatarUrl: value.imageUrl || null,
-                                  avatarMediumUrl: value.imageUrl || null,
-                                },
-                              })
-                            }
-                            onRemove={() =>
-                              updateKeyArtistDraft(item.id, {
-                                djId: null,
-                                dj: null,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {!keyArtistDrafts.length ? (
-                    <div className="rounded-[16px] border border-dashed border-[#d7ded9] px-4 py-6 text-sm text-black/48">
-                      暂无代表艺人。如确有需要，再为当前风格补充代表艺人行。
-                    </div>
-                  ) : null}
-                </div>
-              </section>
-
-              <div className="flex items-center justify-between gap-3">
+          {/* Section 2: External links */}
+          {selectedNode && (
+            <SectionCard
+              title="外部链接"
+              action={
                 <button
                   type="button"
-                  disabled={saving}
-                  onClick={handleDeleteNode}
-                  className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  删除节点
+                  <Pencil className="h-3.5 w-3.5" />
                 </button>
+              }
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <UrlField
+                  label="Spotify 曲目链接"
+                  value={spotifyTrackURL}
+                  placeholder="https://open.spotify.com/..."
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={setSpotifyTrackURL}
+                />
+                <UrlField
+                  label="Wikipedia 链接"
+                  value={wikipediaURL}
+                  placeholder="https://en.wikipedia.org/..."
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={setWikipediaURL}
+                />
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Section 3: Description */}
+          {selectedNode && (
+            <SectionCard
+              title="风格描述"
+              action={
+                <button
+                  type="button"
+                  onClick={() => setActiveLocalizedField('description')}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  添加语言
+                </button>
+              }
+            >
+              {/* Language tabs */}
+              <div className="flex items-center gap-1 mb-4">
+                {(
+                  [
+                    { key: 'zh' as const, label: '中文', filled: Boolean(descriptionValue.zh) },
+                    { key: 'en' as const, label: '英文', filled: Boolean(descriptionValue.en) },
+                    { key: 'ja' as const, label: '日文', filled: Boolean(descriptionValue.ja) },
+                  ]
+                ).map(({ key, label, filled }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setDescriptionTab(key)}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                      descriptionTab === key
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : filled
+                        ? 'text-gray-700 hover:bg-gray-100'
+                        : 'text-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Text area */}
+              <div className="relative">
+                <textarea
+                  value={descriptionTabText}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (descriptionTab === 'zh') setDescriptionValue((cur) => ({ ...cur, zh: v }));
+                    else if (descriptionTab === 'en') setDescriptionValue((cur) => ({ ...cur, en: v }));
+                    else setDescriptionValue((cur) => ({ ...cur, ja: v }));
+                  }}
+                  rows={5}
+                  maxLength={INPUT_LIMITS.genre.description}
+                  placeholder={`请输入${descriptionTab === 'zh' ? '中文' : descriptionTab === 'en' ? '英文' : '日文'}描述…`}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 resize-none"
+                />
+                <div className="mt-1 text-right text-[10px] text-gray-400">
+                  {countText(descriptionTabText)}/{INPUT_LIMITS.genre.description}
+                </div>
+              </div>
+
+              {/* Full multilingual editor */}
+              <button
+                type="button"
+                onClick={() => setActiveLocalizedField('description')}
+                className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors"
+              >
+                <Languages className="h-3.5 w-3.5" />
+                打开多语言编辑器
+              </button>
+            </SectionCard>
+          )}
+
+          {/* Section 4: Key artists */}
+          {selectedNode && (
+            <SectionCard
+              title="代表艺人"
+              action={
+                <button
+                  type="button"
+                  onClick={addKeyArtistDraft}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  添加艺人
+                </button>
+              }
+            >
+              {keyArtistDrafts.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/80">
+                        {['DJ 名称', '绑定状态', '操作'].map((col) => (
+                          <th key={col} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {keyArtistDrafts.map((item) => (
+                        <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                          {/* Name */}
+                          <td className="px-4 py-3">
+                            <input
+                              value={item.name}
+                              onChange={(e) => updateKeyArtistDraft(item.id, { name: e.target.value })}
+                              placeholder="艺人名称"
+                              maxLength={INPUT_LIMITS.genre.keyArtistName}
+                              className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                            />
+                          </td>
+
+                          {/* Binding status */}
+                          <td className="px-4 py-3">
+                            {item.djId ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                                <span className="text-xs font-semibold text-emerald-700">已绑定</span>
+                                {item.dj && (
+                                  <span className="text-xs text-gray-500 truncate max-w-[120px]">{item.dj.name}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="h-2 w-2 rounded-full bg-gray-300 flex-shrink-0" />
+                                <span className="text-xs text-gray-500">未绑定</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <EditableEntityBindingCard
+                                key={item.id}
+                                header={`代表艺人`}
+                                name={item.name}
+                                nameValue={item.name}
+                                namePlaceholder="艺人名称"
+                                nameMaxLength={INPUT_LIMITS.genre.keyArtistName}
+                                bindingKind="dj"
+                                binding={
+                                  item.dj
+                                    ? { id: item.dj.id, name: item.dj.name, subtitle: null, imageUrl: item.dj.avatarMediumUrl || item.dj.avatarUrl || null }
+                                    : null
+                                }
+                                seedQuery={item.name}
+                                bindingTitle="已绑定 DJ"
+                                bindingEmptyLabel="当前代表艺人还没有关联到库内 DJ。"
+                                confirmedMeta={null}
+                                boundLabel="已绑定"
+                                unboundLabel="未绑定"
+                                onNameChange={(v) => updateKeyArtistDraft(item.id, { name: v })}
+                                onAddBinding={(v) =>
+                                  updateKeyArtistDraft(item.id, {
+                                    djId: v.id,
+                                    dj: { id: v.id, name: v.name, avatarUrl: v.imageUrl || null, avatarMediumUrl: v.imageUrl || null },
+                                  })
+                                }
+                                onRemoveBinding={() => updateKeyArtistDraft(item.id, { djId: null, dj: null })}
+                                onDelete={() => removeKeyArtistDraft(item.id)}
+                                renderTrigger={({ onClick }: { onClick: () => void }) => (
+                                  <button
+                                    type="button"
+                                    onClick={onClick}
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                                    title="编辑绑定"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400">
+                  暂无代表艺人，可通过上方按钮按需添加。
+                </div>
+              )}
+            </SectionCard>
+          )}
+
+          {/* Save / delete actions */}
+          {selectedNode && (
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={!selectedNode || saving}
+                onClick={handleDeleteNode}
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                删除节点
+              </button>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   disabled={saving}
@@ -794,88 +746,16 @@ export default function AdminGenresPage() {
                 >
                   自动匹配代表艺人
                 </button>
+                <button
+                  type="button"
+                  disabled={saving || !selectedNode}
+                  onClick={handleSaveContent}
+                  className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  {saving ? '保存中…' : '保存节点内容'}
+                </button>
               </div>
-            </>
-          ) : (
-            <>
-              <SectionCard title="基本信息">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <FieldCell label="名称（中文）" value={selectedNode.name} />
-                    <FieldCell label="名称（英文）" value="" />
-                    <FieldCell label="名称（日文）" value="" />
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <FieldCell label="Slug" value={selectedNode.slug || ''} monospace />
-                    <FieldCell label="排序值" value={selectedNode.sortOrder != null ? String(selectedNode.sortOrder) : ''} />
-                    <FieldCell label="父节点" value={selectedParentNode?.name || '顶层根节点'} />
-                    <FieldCell label="层级路径" value={selectedNode.path} monospace />
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <FieldCell
-                      label="节点类型"
-                      value={(selectedNode.children?.length ?? 0) === 0 ? '叶子节点' : '父节点'}
-                      badge={
-                        <span className={`mr-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          (selectedNode.children?.length ?? 0) === 0
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {(selectedNode.children?.length ?? 0) === 0 ? '叶子节点' : '父节点'}
-                        </span>
-                      }
-                    />
-                    <FieldCell
-                      label="状态"
-                      value="启用"
-                      badge={<span className="mr-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />}
-                    />
-                    <FieldCell label="子节点数" value={String(selectedNode.children?.length ?? 0)} />
-                    <FieldCell label="代表艺人数" value={String(readonlyKeyArtistBindings.length)} />
-                  </div>
-                </div>
-              </SectionCard>
-
-              <SectionCard title="外部链接">
-                <div className="grid grid-cols-2 gap-4">
-                  <ReadOnlyUrlField label="Spotify 曲目链接" value={selectedNode.spotifyTrackURL || ''} />
-                  <ReadOnlyUrlField label="Wikipedia 链接" value={selectedNode.wikipediaURL || ''} />
-                </div>
-              </SectionCard>
-
-              <SectionCard title="风格描述">
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <ReadOnlyTextBlock label="中文描述" value={selectedNode.descriptionI18n?.zh || selectedNode.description || ''} />
-                  <ReadOnlyTextBlock label="英文描述" value={selectedNode.descriptionI18n?.en || ''} />
-                  <ReadOnlyTextBlock label="日文描述" value={selectedNode.descriptionI18n?.ja || ''} />
-                  <ReadOnlyTextBlock label="风格示例" value={selectedNode.exampleI18n?.zh || selectedNode.example || ''} />
-                </div>
-              </SectionCard>
-
-              <SectionCard title="代表艺人">
-                {readonlyKeyArtistBindings.length ? (
-                  <div className="space-y-1.5">
-                    {readonlyKeyArtistBindings.map((item, index) => (
-                      <div key={`${item.name}-${index}`} className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-900">{item.name}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            item.djId ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'
-                          }`}>
-                            {item.djId ? '已绑定' : '未绑定'}
-                          </span>
-                          {item.dj ? <span className="text-xs text-gray-500">{item.dj.name}</span> : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-gray-200 py-6 text-center text-sm text-gray-400">
-                    暂无代表艺人。
-                  </div>
-                )}
-              </SectionCard>
-            </>
+            </div>
           )}
         </div>
 
@@ -893,7 +773,7 @@ export default function AdminGenresPage() {
                 value={treeSearch}
                 onChange={(e) => setTreeSearch(e.target.value)}
                 placeholder="搜索风格名称"
-                className="flex-1 appearance-none border-0 bg-transparent text-sm text-gray-700 shadow-none outline-none placeholder:text-gray-400 focus:outline-none focus:ring-0"
+                className="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none"
               />
             </div>
           </div>
