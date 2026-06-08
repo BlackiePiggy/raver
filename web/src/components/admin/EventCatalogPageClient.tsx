@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Ellipsis,
   List,
+  MapPinned,
   SlidersHorizontal,
   Upload,
   Users2,
@@ -1628,6 +1629,8 @@ export default function EventCatalogPageClient() {
             <div className="divide-y divide-[#edf0f2]">
               {items.map((item) => {
                 const state = resolveEventStatus(item);
+                const eventDayCount = item.eventDays?.length || countDateSpanDays(item.startDate, item.endDate) || 1;
+                const hasBoundMapLocation = Boolean(item.locationPoint?.location);
                 return (
                   <article
                     key={item.id}
@@ -1681,11 +1684,20 @@ export default function EventCatalogPageClient() {
                         <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] font-medium text-[#7d8592]">
                           <div className="flex items-center gap-2">
                             <CalendarDays className="h-4 w-4 text-[#b1b7c3]" />
-                            <span>{formatDateRange(item)}</span>
+                            <span>
+                              {formatDateRange(item)} · {eventDayCount}天
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Users2 className="h-4 w-4 text-[#b1b7c3]" />
-                            <span>{item.eventDays?.length ?? 0} 天</span>
+                          <div
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] ${
+                              hasBoundMapLocation
+                                ? 'bg-[#ecfdf3] text-[#15803d]'
+                                : 'bg-[#fef2f2] text-[#dc2626]'
+                            }`}
+                            title={hasBoundMapLocation ? '已绑定地图信息' : '未绑定地图信息'}
+                          >
+                            <MapPinned className="h-3.5 w-3.5" />
+                            <span>{hasBoundMapLocation ? '地图已绑' : '地图未绑'}</span>
                           </div>
                         </div>
                       </div>

@@ -46,6 +46,43 @@ export type EventCatalogItem = {
     id: string;
     name?: string | null;
   } | null;
+  locationPoint?: {
+    provider?: string | null;
+    sourceMode?: string | null;
+    providerPlaceId?: string | null;
+    poiId?: string | null;
+    adcode?: string | null;
+    nameI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    addressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    formattedAddressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    manualSetAddressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    location?: {
+      lat: number;
+      lng: number;
+    } | null;
+    city?: string | null;
+    countryCode?: string | null;
+  } | null;
   eventDays?: Array<{
     eventDayId?: string;
   }>;
