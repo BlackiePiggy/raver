@@ -670,7 +670,6 @@ export default function EventLocationPickerModal({
                       <div className="event-location-picker-title" id="event-location-picker-title">
                         活动地点绑定（{providerLabel(provider)}）
                       </div>
-                      <div className="event-location-picker-sub">支持搜索地点、中心 Pin 选点、拖拽精调与当前位置辅助定位</div>
                     </div>
                     <button
                       type="button"
@@ -681,7 +680,7 @@ export default function EventLocationPickerModal({
                     </button>
                   </div>
 
-                  <div className="event-location-picker-controlbar">
+                  <div className="event-location-picker-toolbar">
                     <div className="event-location-picker-segment" aria-label="版本切换">
                       {[
                         { value: 'native' as const, label: '原生版' },
@@ -716,9 +715,6 @@ export default function EventLocationPickerModal({
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="event-location-picker-toolbar">
                     <input
                       id="event-location-picker-search-input"
                       className="event-location-picker-search-input"
@@ -876,15 +872,15 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-picker-head {
-          min-height: 82px;
-          padding: 18px 24px;
+          min-height: 54px;
+          padding: 12px 22px;
           background: linear-gradient(120deg, rgba(255, 255, 255, 0.86), rgba(246, 242, 232, 0.92));
           border-bottom: 1px solid rgba(7, 17, 16, 0.08);
         }
 
         .event-location-picker-stage .event-location-picker-title {
           font-family: inherit;
-          font-size: 19px;
+          font-size: 16px;
           font-weight: 750;
           letter-spacing: 0;
           color: #071110;
@@ -899,14 +895,14 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-picker-close {
-          height: 42px;
-          min-width: 72px;
+          height: 36px;
+          min-width: 64px;
           border: 1px solid rgba(7, 17, 16, 0.1);
           border-radius: 999px;
           background: rgba(255, 255, 255, 0.72);
           color: #071110;
           font-family: inherit;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 650;
           letter-spacing: 0;
           text-transform: none;
@@ -914,7 +910,7 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-picker-controlbar {
-          display: grid;
+          display: none;
           grid-template-columns: auto minmax(0, 1fr);
           gap: 34px;
           align-items: center;
@@ -941,14 +937,14 @@ export default function EventLocationPickerModal({
 
         .event-location-picker-stage .event-location-picker-segment button,
         .event-location-picker-stage .event-location-picker-provider-tabs button {
-          min-height: 44px;
-          padding: 0 24px;
+          min-height: 34px;
+          padding: 0 12px;
           border: 0;
           border-right: 1px solid rgba(7, 17, 16, 0.08);
           background: #fff;
           color: #071110;
           cursor: pointer;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 650;
           white-space: nowrap;
         }
@@ -967,26 +963,26 @@ export default function EventLocationPickerModal({
 
         .event-location-picker-stage .event-location-picker-toolbar {
           display: grid;
-          grid-template-columns: minmax(260px, 1fr) auto auto auto auto;
-          gap: 14px;
+          grid-template-columns: auto auto minmax(260px, 1fr) auto auto auto auto;
+          gap: 8px;
           align-items: center;
-          padding: 10px 18px 18px;
+          padding: 10px 18px;
           border-bottom: 1px solid rgba(7, 17, 16, 0.08);
           background: #fff;
         }
 
         .event-location-picker-stage .event-location-picker-search-input {
-          height: 52px;
+          height: 40px;
           min-width: 0;
           border: 1px solid rgba(7, 17, 16, 0.12);
-          border-radius: 14px;
+          border-radius: 12px;
           background: #fff;
           color: #071110;
           font-family: inherit;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 650;
           letter-spacing: 0;
-          padding: 0 18px;
+          padding: 0 14px;
         }
 
         .event-location-picker-stage .event-location-picker-search-input:focus {
@@ -995,18 +991,18 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-picker-btn {
-          min-height: 48px;
+          min-height: 40px;
           border: 1px solid rgba(7, 17, 16, 0.1);
-          border-radius: 14px;
+          border-radius: 12px;
           background: #fff;
           color: rgba(7, 17, 16, 0.68);
           cursor: pointer;
           font-family: inherit;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 650;
           letter-spacing: 0;
           text-transform: none;
-          padding: 0 18px;
+          padding: 0 14px;
           white-space: nowrap;
         }
 
@@ -1160,27 +1156,29 @@ export default function EventLocationPickerModal({
 
         .event-location-picker-stage .event-location-picker-bottom {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) auto;
           gap: 12px;
-          align-items: center;
+          align-items: stretch;
           padding: 12px;
           background: #fff;
           border-top: 1px solid rgba(7, 17, 16, 0.08);
         }
 
         .event-location-picker-stage #event-location-poi-panel {
-          position: absolute;
-          right: 20px;
-          bottom: 118px;
-          z-index: 24;
-          width: min(420px, calc(100% - 40px));
-          max-height: 260px;
-          display: none;
+          position: relative;
+          right: auto;
+          bottom: auto;
+          z-index: 1;
+          width: 100%;
+          min-height: 84px;
+          max-height: 84px;
+          display: flex;
           border-radius: 16px;
           overflow: hidden;
           background: rgba(255, 255, 255, 0.96);
           border: 1px solid rgba(7, 17, 16, 0.1);
-          box-shadow: 0 16px 40px rgba(7, 17, 16, 0.16);
+          box-shadow: none;
+          flex-direction: column;
         }
 
         .event-location-picker-stage #event-location-poi-panel.visible {
@@ -1193,10 +1191,11 @@ export default function EventLocationPickerModal({
           min-height: 0;
           max-height: none;
           overflow: auto;
-          padding: 0.6rem 0.68rem;
+          padding: 7px 10px;
         }
 
         .event-location-picker-stage .event-location-poi-panel-head {
+          display: none;
           background: linear-gradient(90deg, rgba(242, 247, 242, 0.92), rgba(251, 248, 239, 0.92));
           border-bottom: 1px solid rgba(7, 17, 16, 0.08);
           color: rgba(7, 17, 16, 0.68);
@@ -1209,21 +1208,21 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-poi-info {
-          gap: 0.16rem;
-          font-size: 0.5rem;
-          line-height: 1.38;
+          gap: 2px;
+          font-size: 10px;
+          line-height: 1.25;
           color: #071110;
         }
 
         .event-location-picker-stage .event-location-poi-info-title {
-          font-size: 0.72rem;
-          margin-bottom: 0.1rem;
+          font-size: 12px;
+          margin-bottom: 1px;
           color: #071110;
         }
 
         .event-location-picker-stage .event-location-poi-info-meta,
         .event-location-picker-stage .event-location-poi-info-tip {
-          font-size: 0.56rem;
+          font-size: 10px;
           color: rgba(7, 17, 16, 0.52);
         }
 
@@ -1303,6 +1302,13 @@ export default function EventLocationPickerModal({
           background: transparent;
         }
 
+        .event-location-picker-stage .event-location-picker-footer .event-location-picker-btn {
+          min-height: 58px;
+          border-radius: 16px;
+          padding: 0 22px;
+          font-size: 13px;
+        }
+
         .event-location-picker-stage .event-location-picker-status {
           display: none;
         }
@@ -1334,6 +1340,10 @@ export default function EventLocationPickerModal({
 
           .event-location-picker-stage .event-location-picker-bottom {
             grid-template-columns: minmax(0, 1fr);
+          }
+
+          .event-location-picker-stage #event-location-poi-panel {
+            max-height: 120px;
           }
         }
       `}</style>
