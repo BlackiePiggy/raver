@@ -9527,7 +9527,7 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
         visibility: row.visibility,
       });
       return {
-        ...mapEventReference(row),
+        ...mapEventReference(row, { includeCoverImageUrl: true }),
         slug: row.slug,
         organizerName: row.organizerName,
         eventType: row.eventType,
