@@ -764,16 +764,6 @@ export default function EventLocationPickerModal({
                   </div>
 
                   <div className="event-location-picker-bottom">
-                    <aside id="event-location-poi-panel" className="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
-                      <div className="event-location-poi-panel-head">
-                        <span>POI 信息</span>
-                        <button id="event-location-poi-panel-close" className="event-location-poi-panel-close" type="button" aria-label="关闭">
-                          ×
-                        </button>
-                      </div>
-                      <div id="event-location-poi-panel-body" className="event-location-poi-panel-body" />
-                    </aside>
-
                     <div className="event-location-selected-summary">
                       <div className="event-location-selected-main">
                         <span className="event-location-selected-icon">⌖</span>
@@ -781,6 +771,7 @@ export default function EventLocationPickerModal({
                           <strong>{pointTitle(selectedPoint)}</strong>
                           <span>{pointAddress(selectedPoint)}</span>
                           <em>{pointCoord(selectedPoint)}</em>
+                          <small>{selectedPoint?.providerPlaceId || selectedPoint?.poiId || '-'}</small>
                         </div>
                       </div>
                       <div className="event-location-selected-meta">
@@ -1165,74 +1156,12 @@ export default function EventLocationPickerModal({
 
         .event-location-picker-stage .event-location-picker-bottom {
           display: grid;
-          grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) auto;
+          grid-template-columns: minmax(0, 1fr) auto;
           gap: 12px;
           align-items: stretch;
           padding: 12px;
           background: #fff;
           border-top: 1px solid rgba(7, 17, 16, 0.08);
-        }
-
-        .event-location-picker-stage #event-location-poi-panel {
-          position: relative;
-          right: auto;
-          bottom: auto;
-          z-index: 1;
-          width: 100%;
-          min-height: 84px;
-          max-height: 84px;
-          display: flex;
-          border-radius: 16px;
-          overflow: hidden;
-          background: rgba(255, 255, 255, 0.96);
-          border: 1px solid rgba(7, 17, 16, 0.1);
-          box-shadow: none;
-          flex-direction: column;
-        }
-
-        .event-location-picker-stage #event-location-poi-panel.visible {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .event-location-picker-stage .event-location-poi-panel-body {
-          flex: 1 1 auto;
-          min-height: 0;
-          max-height: none;
-          overflow: auto;
-          padding: 7px 10px;
-        }
-
-        .event-location-picker-stage .event-location-poi-panel-head {
-          display: none;
-          background: linear-gradient(90deg, rgba(242, 247, 242, 0.92), rgba(251, 248, 239, 0.92));
-          border-bottom: 1px solid rgba(7, 17, 16, 0.08);
-          color: rgba(7, 17, 16, 0.68);
-          font-family: inherit;
-          font-size: 12px;
-          font-weight: 750;
-          letter-spacing: 0;
-          text-transform: none;
-          padding: 10px 14px;
-        }
-
-        .event-location-picker-stage .event-location-poi-info {
-          gap: 2px;
-          font-size: 10px;
-          line-height: 1.25;
-          color: #071110;
-        }
-
-        .event-location-picker-stage .event-location-poi-info-title {
-          font-size: 12px;
-          margin-bottom: 1px;
-          color: #071110;
-        }
-
-        .event-location-picker-stage .event-location-poi-info-meta,
-        .event-location-picker-stage .event-location-poi-info-tip {
-          font-size: 10px;
-          color: rgba(7, 17, 16, 0.52);
         }
 
         .event-location-picker-stage .event-location-selected-summary {
@@ -1295,6 +1224,17 @@ export default function EventLocationPickerModal({
           color: rgba(7, 17, 16, 0.72);
           font-size: 11px;
           font-style: normal;
+        }
+
+        .event-location-picker-stage .event-location-selected-main small {
+          display: block;
+          overflow: hidden;
+          margin-top: 2px;
+          color: rgba(7, 17, 16, 0.38);
+          font-size: 10px;
+          line-height: 1.3;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .event-location-picker-stage .event-location-selected-meta {
