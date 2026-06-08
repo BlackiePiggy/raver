@@ -5,6 +5,7 @@
   },
   "include": [
     "./event-contract-fixtures.ts",
-    "./event-mapper-parity.ts"
+    "./event-mapper-parity.ts",
+    "./brand-address-parity.ts"
   ]
 }

@@ -13,6 +13,7 @@ Module._resolveFilename = function patchedResolveFilename(request, parent, isMai
 };
 
 require("./dist/web/tests/contracts/event-mapper-parity.js");
+require("./dist/web/tests/contracts/brand-address-parity.js");
 require("./dist/web/tests/contracts/event-status-display-parity.js");
 require("./dist/web/tests/contracts/event-status-cross-platform-parity.js");
 require("./dist/web/tests/contracts/event-ios-mutation-compat-parity.js");

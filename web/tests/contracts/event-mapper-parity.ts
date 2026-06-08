@@ -522,8 +522,7 @@ const tests: TestCase[] = [
       assert.equal(payload.locationPoint?.nameI18n?.en, createMapPoiFixture.locationPoint.nameI18n.en);
       assert.equal(payload.locationPoint?.formattedAddressI18n?.zh, createMapPoiFixture.locationPoint.formattedAddressI18n.zh);
       assert.equal(payload.locationPoint?.formattedAddressI18n?.en, createMapPoiFixture.locationPoint.formattedAddressI18n.en);
-      assert.equal(payload.locationPoint?.manualSetAddressI18n?.zh, createMapPoiFixture.locationPoint.manualSetAddressI18n.zh);
-      assert.equal(payload.locationPoint?.manualSetAddressI18n?.en, createMapPoiFixture.locationPoint.manualSetAddressI18n.en);
+      assert.equal(payload.locationPoint?.manualSetAddressI18n, undefined);
       assert.equal(payload.locationPoint?.poiId, createMapPoiFixture.locationPoint.poiId);
       assert.equal(payload.locationPoint?.adcode, createMapPoiFixture.locationPoint.adcode);
       assert.deepEqual(payload.locationPoint?.providerMeta, createMapPoiFixture.locationPoint.providerMeta);
@@ -1028,8 +1027,8 @@ const tests: TestCase[] = [
       assert.equal(payload.manualLocation?.formattedAddressI18n?.en, "China · Shanghai · 99 Xuhui Riverside");
       assert.equal(payload.locationPoint?.formattedAddressI18n?.zh, "中国 · 上海 · 滨江仓库");
       assert.equal(payload.locationPoint?.formattedAddressI18n?.en, "China · Shanghai · Riverside Warehouse");
-      assert.equal(payload.locationPoint?.manualSetAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 99 号");
-      assert.equal(payload.locationPoint?.manualSetAddressI18n?.en, "China · Shanghai · 99 Xuhui Riverside");
+      assert.equal(payload.locationPoint?.manualSetAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 88 号");
+      assert.equal(payload.locationPoint?.manualSetAddressI18n?.en, "China · Shanghai · 88 Xuhui Riverside");
       assert.equal(payload.timeZone, "Asia/Shanghai");
       assert.equal(payload.timeZoneCity, null);
       assert.equal(payload.timeZoneProvince, null);

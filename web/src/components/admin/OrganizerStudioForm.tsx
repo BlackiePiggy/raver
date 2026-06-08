@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Languages, Plus, Trash2 } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
+import EventLocationPickerModal, {
+  type EventLocationPoint,
+} from '@/components/admin/EventLocationPickerModal';
 import {
   LocalizedTextField,
   MultilingualEditorOverlay,
@@ -66,6 +69,8 @@ function Field({
 }
 
 const textInputClassName = 'admin-studio-input';
+const compactInputClassName =
+  'h-11 w-full rounded-[16px] border border-[#d7ded9] bg-white px-4 text-[14px] text-[#071110] outline-none transition focus:border-[#071110] focus:ring-0';
 type OrganizerStudioFormProps = {
   mode: 'create' | 'edit';
   organizerId?: string;
@@ -75,12 +80,122 @@ type OrganizerStudioFormProps = {
   submitButtonText?: string;
 };
 
-type OrganizerLocalizedFieldKey = 'name' | 'country' | 'city' | 'introduction';
+type OrganizerLocalizedFieldKey =
+  | 'name'
+  | 'country'
+  | 'city'
+  | 'introduction'
+  | 'detailAddress'
+  | 'manualSetAddress';
 
 type OrganizerLocalizedFieldOverlayState = {
   key: OrganizerLocalizedFieldKey;
   label: string;
   kind: LocalizedFieldKind;
+};
+
+const firstFilledText = (...values: Array<string | null | undefined>): string => {
+  for (const value of values) {
+    const trimmed = String(value || '').trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+};
+
+const buildReadonlyFormattedAddress = (
+  detail: OrganizerStudioDraft['detailAddress'],
+  city: OrganizerStudioDraft['city'],
+  country: OrganizerStudioDraft['country']
+) => {
+  const join = (parts: Array<string | null | undefined>) =>
+    parts
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .join(' · ');
+
+  return {
+    zh: join([
+      country.zh || country.en,
+      city.zh || city.en,
+      detail.zh || detail.en,
+    ]),
+    en: join([
+      country.enFull || country.en || country.zh,
+      city.en || city.zh,
+      detail.en || detail.zh,
+    ]),
+    ja: join([
+      country.ja || country.enFull || country.en || country.zh,
+      city.ja || city.en || city.zh,
+      detail.ja || detail.en || detail.zh,
+    ]),
+  };
+};
+
+const normalizeMapProvider = (value?: string | null): EventLocationPoint['provider'] => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'apple-mapkit' || normalized === 'apple_mapkit') {
+    return 'mapkit';
+  }
+  if (
+    normalized === 'amap' ||
+    normalized === 'mapkit' ||
+    normalized === 'mapbox' ||
+    normalized === 'geoapify' ||
+    normalized === 'google'
+  ) {
+    return normalized;
+  }
+  return 'geoapify';
+};
+
+const normalizeProviderMetaForModal = (
+  value: NonNullable<OrganizerStudioDraft['locationPoint']>['providerMeta'] | undefined
+) => {
+  if (!value) return null;
+  return {
+    ...(value.amap
+      ? {
+          amap: {
+            ...(value.amap.poiId ? { poiId: value.amap.poiId } : {}),
+            ...(value.amap.adcode ? { adcode: value.amap.adcode } : {}),
+          },
+        }
+      : {}),
+    ...(value.mapkit
+      ? {
+          mapkit: {
+            ...(value.mapkit.mapItemIdentifier
+              ? { mapItemIdentifier: value.mapkit.mapItemIdentifier }
+              : {}),
+          },
+        }
+      : {}),
+    ...(value.mapbox
+      ? {
+          mapbox: {
+            ...(value.mapbox.placeId ? { placeId: value.mapbox.placeId } : {}),
+            ...(value.mapbox.featureType ? { featureType: value.mapbox.featureType } : {}),
+          },
+        }
+      : {}),
+    ...(value.geoapify
+      ? {
+          geoapify: {
+            ...(value.geoapify.placeId ? { placeId: value.geoapify.placeId } : {}),
+            ...(value.geoapify.featureType ? { featureType: value.geoapify.featureType } : {}),
+          },
+        }
+      : {}),
+    ...(value.google
+      ? {
+          google: {
+            ...(value.google.placeId ? { placeId: value.google.placeId } : {}),
+            ...(value.google.types?.length ? { types: value.google.types } : {}),
+          },
+        }
+      : {}),
+  };
 };
 
 export default function OrganizerStudioForm({
@@ -101,10 +216,107 @@ export default function OrganizerStudioForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [activeLocalizedField, setActiveLocalizedField] = useState<OrganizerLocalizedFieldOverlayState | null>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   const canSubmit = useMemo(() => Object.keys(validateOrganizerStudioDraft(draft)).length === 0, [draft]);
+  const detailAddressDisplay = useMemo(
+    () =>
+      firstFilledText(
+        draft.detailAddress.zh,
+        draft.detailAddress.en,
+        draft.detailAddress.ja,
+        draft.detailAddress.enFull
+      ),
+    [draft.detailAddress]
+  );
+  const manualLocationFormattedAddress = useMemo(
+    () => buildReadonlyFormattedAddress(draft.detailAddress, draft.city, draft.country),
+    [draft.detailAddress, draft.city, draft.country]
+  );
+  const locationPointFormattedAddress = useMemo(() => {
+    return {
+      zh:
+        draft.locationPoint?.formattedAddressI18n?.zh ||
+        draft.locationPoint?.formattedAddressI18n?.en ||
+        manualLocationFormattedAddress.zh,
+      en:
+        draft.locationPoint?.formattedAddressI18n?.en ||
+        draft.locationPoint?.formattedAddressI18n?.zh ||
+        manualLocationFormattedAddress.en,
+      ja:
+        draft.locationPoint?.formattedAddressI18n?.ja ||
+        manualLocationFormattedAddress.ja,
+    };
+  }, [draft.locationPoint, manualLocationFormattedAddress]);
 
   const activeLocalizedValue = activeLocalizedField ? draft[activeLocalizedField.key] : null;
+  const locationPointInitial = useMemo<EventLocationPoint | null>(() => {
+    if (draft.locationPoint) {
+      return {
+        provider: normalizeMapProvider(draft.locationPoint.provider),
+        sourceMode: draft.locationPoint.sourceMode || 'pin_drag',
+        providerPlaceId: draft.locationPoint.providerPlaceId || undefined,
+        poiId: draft.locationPoint.poiId || undefined,
+        adcode: draft.locationPoint.adcode || undefined,
+        location: {
+          lng: Number(draft.locationPoint.location?.lng),
+          lat: Number(draft.locationPoint.location?.lat),
+        },
+        nameI18n: {
+          zh: draft.locationPoint.nameI18n?.zh || '',
+          en: draft.locationPoint.nameI18n?.en || '',
+        },
+        addressI18n: {
+          zh: draft.locationPoint.addressI18n?.zh || '',
+          en: draft.locationPoint.addressI18n?.en || '',
+        },
+        formattedAddressI18n: {
+          zh: draft.locationPoint.formattedAddressI18n?.zh || '',
+          en: draft.locationPoint.formattedAddressI18n?.en || '',
+        },
+        city: draft.locationPoint.city || '',
+        district: draft.locationPoint.district || '',
+        province: draft.locationPoint.province || '',
+        countryCode: draft.locationPoint.countryCode || '',
+        providerMeta: normalizeProviderMetaForModal(draft.locationPoint.providerMeta),
+      };
+    }
+    const latitude = Number(draft.latitude);
+    const longitude = Number(draft.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return {
+      provider: 'geoapify',
+      sourceMode: 'pin_drag',
+      location: { lng: longitude, lat: latitude },
+      nameI18n: {
+        zh: draft.pickedPlaceName,
+        en: draft.pickedPlaceName,
+      },
+      addressI18n: {
+        zh: draft.pickedMapAddress || draft.detailAddress.zh,
+        en: draft.pickedMapAddress || draft.detailAddress.en,
+      },
+      formattedAddressI18n: {
+        zh: draft.pickedMapAddress || draft.detailAddress.zh,
+        en: draft.pickedMapAddress || draft.detailAddress.en,
+      },
+      city: firstFilledText(draft.city.en, draft.city.zh),
+      district: '',
+      province: '',
+      countryCode: '',
+      providerMeta: null,
+    };
+  }, [
+    draft.locationPoint,
+    draft.latitude,
+    draft.longitude,
+    draft.pickedPlaceName,
+    draft.pickedMapAddress,
+    draft.detailAddress.zh,
+    draft.detailAddress.en,
+    draft.city.en,
+    draft.city.zh,
+  ]);
 
   const updateDraft = <K extends keyof OrganizerStudioDraft>(key: K, value: OrganizerStudioDraft[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -129,11 +341,106 @@ export default function OrganizerStudioForm({
       },
     }));
     setErrors((current) => {
-      if (!current[key as keyof OrganizerStudioValidationErrors]) return current;
+      const errorKey = key === 'detailAddress' || key === 'manualSetAddress'
+        ? 'detailAddress'
+        : key;
+      if (!current[errorKey as keyof OrganizerStudioValidationErrors]) return current;
       const next = { ...current };
-      delete next[key as keyof OrganizerStudioValidationErrors];
+      delete next[errorKey as keyof OrganizerStudioValidationErrors];
       return next;
     });
+  };
+
+  const handleLocationConfirm = (point: EventLocationPoint) => {
+    setDraft((current) => {
+      const currentDetail = firstFilledText(
+        current.detailAddress.zh,
+        current.detailAddress.en,
+        current.detailAddress.ja,
+        current.detailAddress.enFull
+      );
+      const hasCurrentCity = !!firstFilledText(current.city.zh, current.city.en, current.city.ja, current.city.enFull);
+      const nextAddressZh =
+        point.formattedAddressI18n?.zh?.trim() ||
+        point.addressI18n?.zh?.trim() ||
+        point.formattedAddressI18n?.en?.trim() ||
+        point.addressI18n?.en?.trim() ||
+        '';
+      const nextAddressEn =
+        point.formattedAddressI18n?.en?.trim() ||
+        point.addressI18n?.en?.trim() ||
+        point.formattedAddressI18n?.zh?.trim() ||
+        point.addressI18n?.zh?.trim() ||
+        '';
+      const nextCity = point.city?.trim() || '';
+
+      return {
+        ...current,
+        latitude: String(point.location.lat),
+        longitude: String(point.location.lng),
+        locationPoint: {
+          provider: point.provider,
+          sourceMode: point.sourceMode,
+          providerPlaceId: point.providerPlaceId || null,
+          poiId: point.poiId || null,
+          adcode: point.adcode || null,
+          providerMeta: point.providerMeta || null,
+          location: {
+            lng: point.location.lng,
+            lat: point.location.lat,
+          },
+          nameI18n: {
+            zh: point.nameI18n?.zh || '',
+            en: point.nameI18n?.en || '',
+            ja: '',
+            enFull: '',
+          },
+          addressI18n: {
+            zh: point.addressI18n?.zh || '',
+            en: point.addressI18n?.en || '',
+            ja: '',
+            enFull: '',
+          },
+          formattedAddressI18n: {
+            zh: point.formattedAddressI18n?.zh || '',
+            en: point.formattedAddressI18n?.en || '',
+            ja: '',
+            enFull: '',
+          },
+          manualSetAddressI18n: {
+            zh: current.manualSetAddress.zh || '',
+            en: current.manualSetAddress.en || '',
+            ja: current.manualSetAddress.ja || '',
+            enFull: current.manualSetAddress.enFull || '',
+          },
+          city: point.city || null,
+          district: point.district || null,
+          province: point.province || null,
+          countryCode: point.countryCode || null,
+          selectedAt: new Date().toISOString(),
+        },
+        pickedPlaceName: point.nameI18n?.zh?.trim() || point.nameI18n?.en?.trim() || current.pickedPlaceName,
+        pickedMapAddress: nextAddressZh || nextAddressEn || current.pickedMapAddress,
+        detailAddress: {
+          ...current.detailAddress,
+          zh: current.detailAddress.zh || (!currentDetail ? nextAddressZh : ''),
+          en: current.detailAddress.en || (!currentDetail ? nextAddressEn : ''),
+        },
+        city: nextCity && !hasCurrentCity
+          ? {
+              ...current.city,
+              zh: nextCity,
+              en: current.city.en || nextCity,
+            }
+          : current.city,
+      };
+    });
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.detailAddress;
+      return next;
+    });
+    setShowLocationPicker(false);
   };
 
   const updateExtraLink = (id: string, key: 'title' | 'icon' | 'url', value: string) => {
@@ -500,6 +807,189 @@ export default function OrganizerStudioForm({
       </Section>
 
       <Section
+        title="地点与地图"
+        description="这里复用 event 的地图选点能力，但对主办方地址保持完全可选。你可以只填手动地址、只选地图，或者两者都不填。"
+      >
+        <div className="space-y-5">
+          <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-gray-700">主办方地点</div>
+                    <div className="mt-2 text-sm leading-relaxed text-gray-600">
+                      {detailAddressDisplay || '当前还没有配置主办方地点地址'}
+                    </div>
+                    <div className="mt-2 text-xs text-gray-400">
+                      地图选点支持原生版与 legacy 版切换，确认后会自动回填当前表单。
+                    </div>
+                    {draft.locationPoint?.provider ? (
+                      <div className="mt-2 text-[10px] text-gray-400">
+                        Provider: {draft.locationPoint.provider} · sourceMode: {draft.locationPoint.sourceMode || 'pin_drag'}
+                      </div>
+                    ) : null}
+                    {draft.latitude || draft.longitude ? (
+                      <div className="mt-2 text-xs text-gray-400 font-mono">
+                        {draft.latitude || '—'}, {draft.longitude || '—'}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationPicker(true)}
+                      className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-colors"
+                    >
+                      {draft.latitude && draft.longitude ? '重新地图选点' : '地图选点'}
+                    </button>
+                    {(draft.latitude || draft.longitude || draft.pickedMapAddress || draft.pickedPlaceName) ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            latitude: '',
+                            longitude: '',
+                            locationPoint: null,
+                            pickedPlaceName: '',
+                            pickedMapAddress: '',
+                          }))
+                        }
+                        className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        清除地图绑定
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 text-xs text-gray-500">场地展示地址（可选）</div>
+                  <div className="admin-localized-field-shell">
+                    <AdminCountedControl count={countText(draft.manualSetAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                      <input
+                        value={draft.manualSetAddress.zh}
+                        onChange={(event) => updateLocalizedField('manualSetAddress', 'zh', event.target.value)}
+                        className={compactInputClassName}
+                        placeholder="未填写时回退到地图地址"
+                        maxLength={INPUT_LIMITS.event.detailAddress}
+                      />
+                    </AdminCountedControl>
+                    <button
+                      type="button"
+                      onClick={() => setActiveLocalizedField({ key: 'manualSetAddress', label: '场地展示地址', kind: 'textarea' })}
+                      className="admin-localized-field-trigger"
+                      title="多语言编辑"
+                    >
+                      <Languages className="h-4 w-4" strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <div className="mb-1.5 text-xs text-gray-500">国家</div>
+                  <div className="admin-localized-field-shell">
+                    <AdminCountedControl count={countText(draft.country.zh)} maxLength={INPUT_LIMITS.organizer.country}>
+                      <input
+                        value={draft.country.zh}
+                        onChange={(event) => updateLocalizedField('country', 'zh', event.target.value)}
+                        className={compactInputClassName}
+                        placeholder="例如：中国"
+                        maxLength={INPUT_LIMITS.organizer.country}
+                      />
+                    </AdminCountedControl>
+                    <button
+                      type="button"
+                      onClick={() => setActiveLocalizedField({ key: 'country', label: '国家', kind: 'input' })}
+                      className="admin-localized-field-trigger"
+                      title="多语言编辑"
+                    >
+                      <Languages className="h-4 w-4" strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 text-xs text-gray-500">城市</div>
+                  <div className="admin-localized-field-shell">
+                    <AdminCountedControl count={countText(draft.city.zh)} maxLength={INPUT_LIMITS.organizer.city}>
+                      <input
+                        value={draft.city.zh}
+                        onChange={(event) => updateLocalizedField('city', 'zh', event.target.value)}
+                        className={compactInputClassName}
+                        placeholder="例如：Shanghai"
+                        maxLength={INPUT_LIMITS.organizer.city}
+                      />
+                    </AdminCountedControl>
+                    <button
+                      type="button"
+                      onClick={() => setActiveLocalizedField({ key: 'city', label: '城市', kind: 'input' })}
+                      className="admin-localized-field-trigger"
+                      title="多语言编辑"
+                    >
+                      <Languages className="h-4 w-4" strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="mb-1.5 text-xs text-gray-500">详细地址</div>
+                  <div className="admin-localized-field-shell">
+                    <AdminCountedControl count={countText(draft.detailAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                      <input
+                        value={draft.detailAddress.zh}
+                        onChange={(event) => updateLocalizedField('detailAddress', 'zh', event.target.value)}
+                        className={compactInputClassName}
+                        placeholder="主办方详细地址"
+                        maxLength={INPUT_LIMITS.event.detailAddress}
+                      />
+                    </AdminCountedControl>
+                    <button
+                      type="button"
+                      onClick={() => setActiveLocalizedField({ key: 'detailAddress', label: '详细地址', kind: 'textarea' })}
+                      className="admin-localized-field-trigger"
+                      title="多语言编辑"
+                    >
+                      <Languages className="h-4 w-4" strokeWidth={2.2} />
+                    </button>
+                  </div>
+                  {errors.detailAddress ? <div className="mt-1 text-xs text-[#6a3530]">{errors.detailAddress}</div> : null}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[1.3fr_1.3fr_1fr]">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终 hand-made 地址</div>
+              {firstFilledText(manualLocationFormattedAddress.zh, manualLocationFormattedAddress.en) || '—'}
+              {manualLocationFormattedAddress.en && manualLocationFormattedAddress.en !== manualLocationFormattedAddress.zh ? (
+                <div className="mt-1 text-gray-400">EN: {manualLocationFormattedAddress.en}</div>
+              ) : null}
+              {manualLocationFormattedAddress.ja ? <div className="mt-0.5 text-gray-400">JA: {manualLocationFormattedAddress.ja}</div> : null}
+            </div>
+
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终地图格式化地址</div>
+              {firstFilledText(locationPointFormattedAddress.zh, locationPointFormattedAddress.en) || '—'}
+              {locationPointFormattedAddress.en && locationPointFormattedAddress.en !== locationPointFormattedAddress.zh ? (
+                <div className="mt-1 text-gray-400">EN: {locationPointFormattedAddress.en}</div>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终场地展示地址</div>
+              {firstFilledText(draft.manualSetAddress.zh, draft.manualSetAddress.en, draft.manualSetAddress.ja, draft.manualSetAddress.enFull) || '未填写时回退到地图地址'}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section
         title="品牌资料"
         description="主办方详情描述会作为品牌档案和详情页的核心资料来源。多语言介绍使用和 event / DJ 相同的共享编辑方式。"
       >
@@ -792,13 +1282,29 @@ export default function OrganizerStudioForm({
               ? INPUT_LIMITS.organizer.country
               : activeLocalizedField?.key === 'city'
                 ? INPUT_LIMITS.organizer.city
-                : INPUT_LIMITS.organizer.introduction
+                : activeLocalizedField?.key === 'detailAddress' || activeLocalizedField?.key === 'manualSetAddress'
+                  ? INPUT_LIMITS.event.detailAddress
+                  : INPUT_LIMITS.organizer.introduction
         }
         onChange={(locale, value) => {
           if (!activeLocalizedField) return;
           updateLocalizedField(activeLocalizedField.key, locale, value);
         }}
         onClose={() => setActiveLocalizedField(null)}
+      />
+
+      <EventLocationPickerModal
+        open={showLocationPicker}
+        initialPoint={locationPointInitial}
+        initialProvider={locationPointInitial?.provider === 'google' ? 'geoapify' : locationPointInitial?.provider}
+        composedQuery={[draft.country.zh || draft.country.en, draft.city.zh || draft.city.en, draft.detailAddress.zh || draft.detailAddress.en]
+          .filter(Boolean)
+          .join(' ')
+          .trim()}
+        composedQueryZh={[draft.country.zh, draft.city.zh, draft.detailAddress.zh].filter(Boolean).join(' ').trim()}
+        composedQueryEn={[draft.detailAddress.en, draft.city.en, draft.country.en].filter(Boolean).join(', ').trim()}
+        onClose={() => setShowLocationPicker(false)}
+        onConfirm={handleLocationConfirm}
       />
     </div>
   );

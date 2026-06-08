@@ -44,6 +44,18 @@ type EventStudioLooseLocalizedText = {
   enFull?: string | null;
 };
 
+type EventStudioOrganizerAddressSource = {
+  country?: string | null;
+  countryI18n?: EventStudioLooseLocalizedText | null;
+  city?: string | null;
+  cityI18n?: EventStudioLooseLocalizedText | null;
+  manualLocation?: {
+    detailAddressI18n?: EventStudioLooseLocalizedText | null;
+    formattedAddressI18n?: EventStudioLooseLocalizedText | null;
+  } | null;
+  locationPoint?: EventStudioDraft['locationPoint'] | null;
+};
+
 const createTicketTier = (): EventStudioTicketTierDraft => ({
   id: crypto.randomUUID(),
   name: '',
@@ -100,6 +112,14 @@ const createImageState = (input: {
   localFile: null,
   uploadState: input.remoteUrl.trim() ? 'uploaded' : 'pending',
 });
+
+const firstFilledText = (...values: Array<string | undefined | null>) => {
+  for (const value of values) {
+    const trimmed = String(value || '').trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+};
 
 const classifyEventImageUsage = (type?: string | null, label?: string | null): EventStudioImageUsage => {
   const normalizedType = String(type || '').trim().toLowerCase();
@@ -648,6 +668,68 @@ const fromNullableLocalizedText = (
   ja: value?.ja ?? '',
   enFull: value?.enFull ?? '',
 });
+
+const cloneLocationPoint = (
+  value: EventStudioDraft['locationPoint']
+): EventStudioDraft['locationPoint'] => {
+  if (!value) return null;
+  return {
+    ...value,
+    location: value.location
+      ? {
+          lng: Number(value.location.lng),
+          lat: Number(value.location.lat),
+        }
+      : value.location,
+    nameI18n: value.nameI18n ? { ...value.nameI18n } : value.nameI18n,
+    addressI18n: value.addressI18n ? { ...value.addressI18n } : value.addressI18n,
+    formattedAddressI18n: value.formattedAddressI18n ? { ...value.formattedAddressI18n } : value.formattedAddressI18n,
+    manualSetAddressI18n: value.manualSetAddressI18n ? { ...value.manualSetAddressI18n } : value.manualSetAddressI18n,
+    providerMeta: value.providerMeta
+      ? {
+          ...(value.providerMeta.amap ? { amap: { ...value.providerMeta.amap } } : {}),
+          ...(value.providerMeta.mapkit ? { mapkit: { ...value.providerMeta.mapkit } } : {}),
+          ...(value.providerMeta.mapbox ? { mapbox: { ...value.providerMeta.mapbox } } : {}),
+          ...(value.providerMeta.geoapify ? { geoapify: { ...value.providerMeta.geoapify } } : {}),
+          ...(value.providerMeta.google ? { google: { ...value.providerMeta.google } } : {}),
+        }
+      : null,
+  };
+};
+
+export const applyOrganizerAddressToEventDraft = (
+  draft: EventStudioDraft,
+  organizer: EventStudioOrganizerAddressSource
+): EventStudioDraft => {
+  const locationPoint = cloneLocationPoint(organizer.locationPoint ?? null);
+  return {
+    ...draft,
+    country: fromNullableLocalizedText(organizer.countryI18n, organizer.country ?? ''),
+    clearCountryI18nIntent: false,
+    city: fromNullableLocalizedText(organizer.cityI18n, organizer.city ?? ''),
+    clearCityI18nIntent: false,
+    detailAddress: fromNullableLocalizedText(organizer.manualLocation?.detailAddressI18n, ''),
+    manualSetAddress: fromNullableLocalizedText(locationPoint?.manualSetAddressI18n, ''),
+    locationPoint,
+    latitude:
+      locationPoint && locationPoint.location?.lat != null
+        ? String(locationPoint.location.lat)
+        : '',
+    longitude:
+      locationPoint && locationPoint.location?.lng != null
+        ? String(locationPoint.location.lng)
+        : '',
+    pickedPlaceName: locationPoint
+      ? firstFilledText(locationPoint.nameI18n?.zh, locationPoint.nameI18n?.en)
+      : '',
+    pickedMapAddress: locationPoint
+      ? firstFilledText(
+          locationPoint.formattedAddressI18n?.zh,
+          locationPoint.formattedAddressI18n?.en
+        )
+      : '',
+  };
+};
 
 export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent): EventStudioDraft => {
   const eventWithStatusTruth = event as EventStudioLoadedEvent & {

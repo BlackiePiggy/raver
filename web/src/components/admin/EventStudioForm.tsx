@@ -21,6 +21,7 @@ import { clearAdminCatalogCacheByScope } from '@/features/admin-content/catalog/
 import {
   createEmptyTicketTierDraft,
   createEmptyEventStudioTimetableSlotDraft,
+  applyOrganizerAddressToEventDraft,
   eventStudioApi,
   EventStudioApiError,
   buildLineupArtistsFromTimetableSlots,
@@ -46,6 +47,10 @@ import {
   type EventStudioValidationErrors,
   type EventStudioWeekDraft,
 } from '@/features/admin-content/event-studio';
+import {
+  organizerStudioApi,
+  type OrganizerStudioLoadedOrganizer,
+} from '@/features/admin-content/organizer-studio';
 
 const EVENT_TYPES = ['电音节', '酒吧活动', '露天活动', '俱乐部派对', '仓库派对', '巡演专场', '其他'];
 
@@ -211,6 +216,29 @@ const toReadonlyLocalizedText = (
   ja: String(value?.ja || '').trim(),
   enFull: String(value?.enFull || '').trim(),
 });
+
+const toEventLocalizedTextWithFallback = (
+  value?:
+    | {
+        zh?: string | null;
+        en?: string | null;
+        ja?: string | null;
+        enFull?: string | null;
+      }
+    | null,
+  fallback?: string | null
+): EventStudioLocalizedText => {
+  const normalized = toReadonlyLocalizedText(value);
+  if (firstFilledText(normalized.zh, normalized.en, normalized.ja, normalized.enFull)) {
+    return normalized;
+  }
+  return {
+    zh: String(fallback || '').trim(),
+    en: '',
+    ja: '',
+    enFull: '',
+  };
+};
 
 const collapseLocalizedTextForPlainValue = (
   value: EventStudioDraft['city'] | EventStudioDraft['country']
@@ -961,6 +989,9 @@ export default function EventStudioForm({
   const [conflictNotice, setConflictNotice] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [boundOrganizerDetail, setBoundOrganizerDetail] = useState<OrganizerStudioLoadedOrganizer | null>(null);
+  const [boundOrganizerLoading, setBoundOrganizerLoading] = useState(false);
+  const [boundOrganizerAddressError, setBoundOrganizerAddressError] = useState<string | null>(null);
   const [uploadingUsage, setUploadingUsage] = useState<EventStudioImageUsage | null>(null);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const [selectedTimetableWeekIndex, setSelectedTimetableWeekIndex] = useState(1);
@@ -1054,6 +1085,46 @@ export default function EventStudioForm({
       }),
     [draft.manualSetAddress]
   );
+  const boundOrganizerAddressSummary = useMemo(() => {
+    if (!boundOrganizerDetail) return '';
+    return firstFilledText(
+      boundOrganizerDetail.locationPoint?.manualSetAddressI18n?.zh,
+      boundOrganizerDetail.locationPoint?.manualSetAddressI18n?.en,
+      boundOrganizerDetail.locationPoint?.formattedAddressI18n?.zh,
+      boundOrganizerDetail.locationPoint?.formattedAddressI18n?.en,
+      boundOrganizerDetail.manualLocation?.formattedAddressI18n?.zh,
+      boundOrganizerDetail.manualLocation?.formattedAddressI18n?.en,
+      boundOrganizerDetail.manualLocation?.detailAddressI18n?.zh,
+      boundOrganizerDetail.manualLocation?.detailAddressI18n?.en,
+      boundOrganizerDetail.cityI18n?.zh,
+      boundOrganizerDetail.cityI18n?.en,
+      boundOrganizerDetail.city,
+      boundOrganizerDetail.countryI18n?.zh,
+      boundOrganizerDetail.countryI18n?.en,
+      boundOrganizerDetail.country
+    );
+  }, [boundOrganizerDetail]);
+  const boundOrganizerHasReusableAddress = useMemo(() => {
+    if (!boundOrganizerDetail) return false;
+    return Boolean(
+      firstFilledText(
+        boundOrganizerDetail.countryI18n?.zh,
+        boundOrganizerDetail.countryI18n?.en,
+        boundOrganizerDetail.country,
+        boundOrganizerDetail.cityI18n?.zh,
+        boundOrganizerDetail.cityI18n?.en,
+        boundOrganizerDetail.city,
+        boundOrganizerDetail.manualLocation?.detailAddressI18n?.zh,
+        boundOrganizerDetail.manualLocation?.detailAddressI18n?.en,
+        boundOrganizerDetail.manualLocation?.formattedAddressI18n?.zh,
+        boundOrganizerDetail.manualLocation?.formattedAddressI18n?.en,
+        boundOrganizerDetail.locationPoint?.formattedAddressI18n?.zh,
+        boundOrganizerDetail.locationPoint?.formattedAddressI18n?.en,
+        boundOrganizerDetail.locationPoint?.manualSetAddressI18n?.zh,
+        boundOrganizerDetail.locationPoint?.manualSetAddressI18n?.en
+      )
+    );
+  }, [boundOrganizerDetail]);
   const derivedStatusMeta = EVENT_DERIVED_STATUS_META[draft.derivedStatus];
   const isCancelledDraft = draft.isCancelled;
   const visibilityDraft = draft.visibility;
@@ -1100,6 +1171,37 @@ export default function EventStudioForm({
       objectUrls.clear();
     };
   }, []);
+
+  useEffect(() => {
+    const organizerId = draft.organizerFestivalId.trim();
+    if (!organizerId) {
+      setBoundOrganizerDetail(null);
+      setBoundOrganizerLoading(false);
+      setBoundOrganizerAddressError(null);
+      return;
+    }
+    let cancelled = false;
+    setBoundOrganizerLoading(true);
+    setBoundOrganizerAddressError(null);
+    organizerStudioApi
+      .fetchOrganizer(organizerId)
+      .then((result) => {
+        if (cancelled) return;
+        setBoundOrganizerDetail(result);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setBoundOrganizerDetail(null);
+        setBoundOrganizerAddressError(error instanceof Error ? error.message : '主办方地址读取失败');
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setBoundOrganizerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.organizerFestivalId]);
 
   useEffect(() => {
     if (!draft.eventDays.length) {
@@ -1393,6 +1495,21 @@ export default function EventStudioForm({
         displayNameOverride: normalizeDisplayNameOverrideText(value, performerNames, artist.actType) || undefined,
       };
     });
+  };
+
+  const handleApplyBoundOrganizerAddress = () => {
+    if (!boundOrganizerDetail || !boundOrganizerHasReusableAddress) {
+      setConflictNotice('当前绑定的主办方还没有可复用的地址信息。');
+      return;
+    }
+
+    updateDraftState(
+      (current) => applyOrganizerAddressToEventDraft(current, boundOrganizerDetail),
+      {
+        clearErrorKeys: ['city', 'country', 'detailAddress'],
+      }
+    );
+    setConflictNotice('已将主办方地址复制到当前活动草稿，你还可以继续手动修改。');
   };
 
   const lineupSearchKey = (artistId: string, performerIndex: number) => `${artistId}-${performerIndex}`;
@@ -3609,6 +3726,20 @@ export default function EventStudioForm({
                         ) : null}
                       </div>
                       <div className="flex shrink-0 flex-col gap-2">
+                        {draft.organizerFestivalId ? (
+                          <button
+                            type="button"
+                            onClick={handleApplyBoundOrganizerAddress}
+                            disabled={boundOrganizerLoading || !boundOrganizerHasReusableAddress}
+                            className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                              boundOrganizerLoading || !boundOrganizerHasReusableAddress
+                                ? 'cursor-not-allowed border border-gray-200 bg-gray-100 text-gray-400'
+                                : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            {boundOrganizerLoading ? '读取主办方地址…' : '使用主办方地址'}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => setShowLocationPicker(true)}
@@ -3632,6 +3763,18 @@ export default function EventStudioForm({
                         ) : null}
                       </div>
                     </div>
+
+                    {draft.organizerFestivalId ? (
+                      <div className="rounded-lg border border-dashed border-gray-200 bg-white/80 px-3 py-2 text-xs leading-5 text-gray-500">
+                        {boundOrganizerAddressError
+                          ? `主办方地址读取失败：${boundOrganizerAddressError}`
+                          : boundOrganizerLoading
+                            ? '正在读取已绑定主办方的地址信息…'
+                            : boundOrganizerHasReusableAddress
+                              ? `主办方地址摘要：${boundOrganizerAddressSummary}`
+                              : '当前绑定的主办方还没有配置可复用的地址信息。'}
+                      </div>
+                    ) : null}
 
                     <div>
                       <div className="mb-1.5 text-xs text-gray-500">场地展示地址（可选）</div>

@@ -66,6 +66,13 @@ type BrandLinkPayload = {
   url: string;
 };
 
+type BrandLocalizedAddressText = {
+  zh?: string;
+  en?: string;
+  ja?: string;
+  enFull?: string;
+};
+
 const parseLinks = (value: unknown): BrandLinkPayload[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -115,6 +122,123 @@ const mergeLinks = (
   push('YouTube', 'play.rectangle', fields.youtubeUrl);
   push('TikTok', 'music.note', fields.tiktokUrl);
   return merged;
+};
+
+const asPlainObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const normalizeLocalizedAddressText = (value: unknown): BrandLocalizedAddressText | null => {
+  const normalized = normalizeTriTextPayload(value, '');
+  const zh = cleanText(normalized?.zh);
+  const en = cleanText(normalized?.en);
+  const ja = cleanText(normalized?.ja);
+  const enFull = cleanText(normalized?.enFull);
+  if (!zh && !en && !ja && !enFull) return null;
+  return {
+    zh: zh || undefined,
+    en: en || undefined,
+    ja: ja || undefined,
+    enFull: enFull || undefined,
+  };
+};
+
+const joinAddressParts = (parts: Array<string | null | undefined>): string =>
+  parts
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item))
+    .join(' · ');
+
+const buildFormattedAddressI18n = (input: {
+  detailAddressI18n?: BrandLocalizedAddressText | null;
+  cityI18n?: BrandLocalizedAddressText | null;
+  countryI18n?: BrandLocalizedAddressText | null;
+}): BrandLocalizedAddressText | null => {
+  const detail = input.detailAddressI18n;
+  if (!detail) return null;
+  const city = input.cityI18n ?? null;
+  const country = input.countryI18n ?? null;
+  return {
+    zh:
+      joinAddressParts([
+        country?.zh || country?.en,
+        city?.zh || city?.en,
+        detail.zh || detail.en,
+      ]) || detail.zh || detail.en,
+    en:
+      joinAddressParts([
+        country?.enFull || country?.en || country?.zh,
+        city?.en || city?.zh,
+        detail.en || detail.zh,
+      ]) || detail.en || detail.zh,
+    ja:
+      joinAddressParts([
+        country?.ja || country?.enFull || country?.en || country?.zh,
+        city?.ja || city?.en || city?.zh,
+        detail.ja || detail.en || detail.zh,
+      ]) || detail.ja || detail.en || detail.zh,
+    enFull: detail.enFull,
+  };
+};
+
+const normalizeBrandAddressPayloads = (input: {
+  manualLocation: unknown;
+  locationPoint: unknown;
+  cityI18n?:
+    | Prisma.InputJsonValue
+    | Prisma.JsonValue
+    | typeof Prisma.DbNull
+    | null
+    | undefined;
+  countryI18n?:
+    | Prisma.InputJsonValue
+    | Prisma.JsonValue
+    | typeof Prisma.DbNull
+    | null
+    | undefined;
+}): {
+  manualLocation: Prisma.InputJsonValue | null | undefined;
+  locationPoint: Prisma.InputJsonValue | null | undefined;
+} => {
+  const hasManualLocationField = input.manualLocation !== undefined;
+  const hasLocationPointField = input.locationPoint !== undefined;
+  const manualLocation = asPlainObject(input.manualLocation);
+  const locationPoint = asPlainObject(input.locationPoint);
+  const normalizedCityI18n = normalizeLocalizedAddressText(input.cityI18n);
+  const normalizedCountryI18n = normalizeLocalizedAddressText(input.countryI18n);
+  const detailAddressI18n = normalizeLocalizedAddressText(manualLocation?.detailAddressI18n);
+  const formattedAddressI18n = buildFormattedAddressI18n({
+    detailAddressI18n,
+    cityI18n: normalizedCityI18n,
+    countryI18n: normalizedCountryI18n,
+  });
+  const pointManualSetAddressI18n =
+    normalizeLocalizedAddressText(locationPoint?.manualSetAddressI18n);
+
+  const nextManualLocation = manualLocation
+    ? {
+        ...manualLocation,
+        ...(detailAddressI18n ? { detailAddressI18n } : {}),
+        ...(formattedAddressI18n ? { formattedAddressI18n } : {}),
+      }
+    : null;
+
+  const nextLocationPoint = locationPoint
+    ? {
+        ...locationPoint,
+        ...(pointManualSetAddressI18n ? { manualSetAddressI18n: pointManualSetAddressI18n } : {}),
+      }
+    : null;
+
+  return {
+    manualLocation: hasManualLocationField
+      ? (nextManualLocation ? (nextManualLocation as Prisma.InputJsonValue) : null)
+      : undefined,
+    locationPoint: hasLocationPointField
+      ? (nextLocationPoint ? (nextLocationPoint as Prisma.InputJsonValue) : null)
+      : undefined,
+  };
 };
 
 const uniqueWikiFestivalId = async (
@@ -495,7 +619,17 @@ const normalizeBrandImageAssets = (payload: Prisma.JsonObject): BrandImageAssetP
 export const normalizeBrandSubmissionPayload = (
   payload: Prisma.InputJsonObject | Prisma.JsonObject
 ): Prisma.InputJsonObject => {
-  const normalized = { ...(payload as Prisma.JsonObject) } as Record<string, Prisma.InputJsonValue>;
+  const normalized = {
+    ...(payload as Prisma.JsonObject),
+  } as Record<string, Prisma.InputJsonValue | typeof Prisma.JsonNull>;
+  const normalizedCountryI18n = normalizeCountryBiTextPayload(
+    (payload as Prisma.JsonObject).countryI18n,
+    cleanText((payload as Prisma.JsonObject).country) || pickPrimaryText((payload as Prisma.JsonObject).countryI18n) || ''
+  );
+  const normalizedCityI18n = normalizeTriTextPayload(
+    (payload as Prisma.JsonObject).cityI18n,
+    cleanText((payload as Prisma.JsonObject).city) || pickPrimaryText((payload as Prisma.JsonObject).cityI18n) || ''
+  );
   const imageAssets = normalizeBrandImageAssets(payload as Prisma.JsonObject);
   const avatarAsset = imageAssets.find((item) => item.type === 'avatar');
   const backgroundAsset = imageAssets.find((item) => item.type === 'background');
@@ -511,6 +645,18 @@ export const normalizeBrandSubmissionPayload = (
   }
   if (imageAssets.length > 0) {
     normalized.imageAssets = imageAssets as unknown as Prisma.InputJsonValue;
+  }
+  const normalizedAddresses = normalizeBrandAddressPayloads({
+    manualLocation: (payload as Prisma.JsonObject).manualLocation,
+    locationPoint: (payload as Prisma.JsonObject).locationPoint,
+    cityI18n: normalizedCityI18n ? triTextToJson(normalizedCityI18n) : undefined,
+    countryI18n: normalizedCountryI18n ? (normalizedCountryI18n as unknown as Prisma.InputJsonValue) : undefined,
+  });
+  if (normalizedAddresses.manualLocation !== undefined) {
+    normalized.manualLocation = normalizedAddresses.manualLocation ?? Prisma.JsonNull;
+  }
+  if (normalizedAddresses.locationPoint !== undefined) {
+    normalized.locationPoint = normalizedAddresses.locationPoint ?? Prisma.JsonNull;
   }
   return normalized as Prisma.InputJsonObject;
 };
@@ -668,6 +814,8 @@ export const createOrUpdateBrandFromSubmission = async (
     const hasIntroductionField = hasOwn(payload, 'introduction');
     const hasDescriptionField = hasOwn(payload, 'description');
     const hasDescriptionI18nField = hasOwn(payload, 'descriptionI18n');
+    const hasManualLocationField = hasOwn(payload, 'manualLocation');
+    const hasLocationPointField = hasOwn(payload, 'locationPoint');
     const hasLinksField = hasOwn(payload, 'links');
     const hasOfficialWebsiteField = hasOwn(payload, 'officialWebsite');
     const hasFacebookUrlField = hasOwn(payload, 'facebookUrl');
@@ -757,6 +905,17 @@ export const createOrUpdateBrandFromSubmission = async (
           )
         : null;
 
+    const normalizedAddresses = normalizeBrandAddressPayloads({
+      manualLocation: hasManualLocationField ? payload.manualLocation : undefined,
+      locationPoint: hasLocationPointField ? payload.locationPoint : undefined,
+      cityI18n: nextCityI18n === undefined
+        ? existing.cityI18n
+        : nextCityI18n,
+      countryI18n: nextCountryI18n === undefined
+        ? existing.countryI18n
+        : nextCountryI18n,
+    });
+
     let updated;
     try {
       updated = await db.wikiFestival.update({
@@ -801,6 +960,12 @@ export const createOrUpdateBrandFromSubmission = async (
           descriptionI18n: nextDescriptionI18n === undefined
             ? existing.descriptionI18n
             : nextDescriptionI18n,
+          manualLocation: normalizedAddresses.manualLocation === undefined
+            ? existing.manualLocation
+            : (normalizedAddresses.manualLocation ?? Prisma.JsonNull),
+          locationPoint: normalizedAddresses.locationPoint === undefined
+            ? existing.locationPoint
+            : (normalizedAddresses.locationPoint ?? Prisma.JsonNull),
           officialWebsite: nextOfficialWebsite,
           facebookUrl: nextFacebookUrl,
           instagramUrl: nextInstagramUrl,
@@ -869,6 +1034,20 @@ export const createOrUpdateBrandFromSubmission = async (
   }
 
   const id = await uniqueWikiFestivalId(db, name);
+  const createCountryI18n = normalizeCountryBiTextPayload(
+    payload.countryI18n,
+    cleanText(payload.country) || pickPrimaryText(payload.countryI18n) || ''
+  );
+  const createCityI18n = normalizeTriTextPayload(
+    payload.cityI18n,
+    cleanText(payload.city) || pickPrimaryText(payload.cityI18n) || ''
+  );
+  const normalizedAddresses = normalizeBrandAddressPayloads({
+    manualLocation: payload.manualLocation,
+    locationPoint: payload.locationPoint,
+    cityI18n: createCityI18n ? triTextToJson(createCityI18n) : undefined,
+    countryI18n: createCountryI18n ? (createCountryI18n as unknown as Prisma.InputJsonValue) : undefined,
+  });
   const created = await db.wikiFestival.create({
     data: {
       id,
@@ -879,17 +1058,11 @@ export const createOrUpdateBrandFromSubmission = async (
       aliases: stringArray(payload.aliases),
       country: cleanText(payload.country) || pickPrimaryText(payload.countryI18n) || '',
       countryI18n: triTextToJson(
-        normalizeCountryBiTextPayload(
-          payload.countryI18n,
-          cleanText(payload.country) || pickPrimaryText(payload.countryI18n) || ''
-        )
+        createCountryI18n
       ),
       city: cleanText(payload.city) || pickPrimaryText(payload.cityI18n) || '',
       cityI18n: triTextToJson(
-        normalizeTriTextPayload(
-          payload.cityI18n,
-          cleanText(payload.city) || pickPrimaryText(payload.cityI18n) || ''
-        )
+        createCityI18n
       ),
       foundedYear: cleanText(payload.foundedYear) || '',
       frequency: cleanText(payload.frequency) || pickPrimaryText(payload.frequencyI18n) || '',
@@ -914,6 +1087,12 @@ export const createOrUpdateBrandFromSubmission = async (
             ''
         )
       ),
+      manualLocation: normalizedAddresses.manualLocation === undefined
+        ? undefined
+        : (normalizedAddresses.manualLocation ?? Prisma.JsonNull),
+      locationPoint: normalizedAddresses.locationPoint === undefined
+        ? undefined
+        : (normalizedAddresses.locationPoint ?? Prisma.JsonNull),
       officialWebsite: cleanText(payload.officialWebsite) || null,
       facebookUrl: cleanText(payload.facebookUrl) || null,
       instagramUrl: cleanText(payload.instagramUrl) || null,

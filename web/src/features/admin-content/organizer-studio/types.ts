@@ -1,4 +1,5 @@
 import type { EventDerivedStatus } from '@/lib/api/event';
+import type { EventStudioLocationPoint } from '@/features/admin-content/event-studio/types';
 
 export type OrganizerStudioLocalizedText = {
   zh: string;
@@ -30,6 +31,13 @@ export type OrganizerStudioDraft = {
   aliases: string[];
   country: OrganizerStudioLocalizedText;
   city: OrganizerStudioLocalizedText;
+  detailAddress: OrganizerStudioLocalizedText;
+  manualSetAddress: OrganizerStudioLocalizedText;
+  locationPoint: EventStudioLocationPoint | null;
+  pickedPlaceName: string;
+  pickedMapAddress: string;
+  latitude: string;
+  longitude: string;
   foundedYear: string;
   frequency: string;
   tagline: string;
@@ -50,7 +58,7 @@ export type OrganizerStudioDraft = {
 };
 
 export type OrganizerStudioValidationErrors = Partial<Record<
-  'name' | 'avatarImage' | 'links' | 'review',
+  'name' | 'avatarImage' | 'links' | 'review' | 'detailAddress',
   string
 >>;
 
@@ -97,6 +105,12 @@ export type OrganizerStudioLoadedOrganizer = {
   countryI18n?: OrganizerStudioLocalizedText | null;
   city?: string | null;
   cityI18n?: OrganizerStudioLocalizedText | null;
+  manualLocation?: {
+    detailAddressI18n?: OrganizerStudioLocalizedText | null;
+    formattedAddressI18n?: OrganizerStudioLocalizedText | null;
+    selectedAt?: string | null;
+  } | null;
+  locationPoint?: EventStudioLocationPoint | null;
   foundedYear?: string | null;
   frequency?: string | null;
   frequencyI18n?: OrganizerStudioLocalizedText | null;
@@ -184,6 +198,11 @@ export type OrganizerStudioCreateInput = {
   countryI18n?: OrganizerStudioLocalizedText | null;
   city?: string | null;
   cityI18n?: OrganizerStudioLocalizedText | null;
+  manualLocation?: {
+    detailAddressI18n?: OrganizerStudioLocalizedText | null;
+    formattedAddressI18n?: OrganizerStudioLocalizedText | null;
+  } | null;
+  locationPoint?: EventStudioLocationPoint | null;
   foundedYear?: string | null;
   frequency?: string | null;
   tagline?: string | null;

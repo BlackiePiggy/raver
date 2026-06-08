@@ -11,6 +11,7 @@
   },
   "include": [
     "./event-mapper-parity.ts",
+    "./brand-address-parity.ts",
     "./event-status-display-parity.ts",
     "./event-status-cross-platform-parity.ts",
     "./event-ios-mutation-compat-parity.ts"

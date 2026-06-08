@@ -1149,6 +1149,8 @@ model WikiFestival {
   tagline         String
   introduction    String   @db.Text
   descriptionI18n Json?    @map("description_i18n")
+  manualLocation  Json?    @map("manual_location")
+  locationPoint   Json?    @map("location_point")
   officialWebsite String?  @map("official_website")
   facebookUrl     String?  @map("facebook_url")
   instagramUrl    String?  @map("instagram_url")

@@ -54,6 +54,8 @@ export const validateOrganizerStudioDraft = (
   const name = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull);
   const country = firstFilledText(draft.country.zh, draft.country.en, draft.country.ja, draft.country.enFull);
   const city = firstFilledText(draft.city.zh, draft.city.en, draft.city.ja, draft.city.enFull);
+  const detailAddress = firstFilledText(draft.detailAddress.zh, draft.detailAddress.en, draft.detailAddress.ja, draft.detailAddress.enFull);
+  const manualSetAddress = firstFilledText(draft.manualSetAddress.zh, draft.manualSetAddress.en, draft.manualSetAddress.ja, draft.manualSetAddress.enFull);
   const introduction = firstFilledText(draft.introduction.zh, draft.introduction.en, draft.introduction.ja, draft.introduction.enFull);
 
   if (!name) {
@@ -84,6 +86,14 @@ export const validateOrganizerStudioDraft = (
 
   if (city && countText(city) > INPUT_LIMITS.organizer.city) {
     errors.name = errors.name || `城市不能超过 ${INPUT_LIMITS.organizer.city} 个字符`;
+  }
+
+  if (detailAddress && countText(detailAddress, true) > INPUT_LIMITS.event.detailAddress) {
+    errors.detailAddress = `详细地址不能超过 ${INPUT_LIMITS.event.detailAddress} 个字符`;
+  }
+
+  if (manualSetAddress && countText(manualSetAddress, true) > INPUT_LIMITS.event.detailAddress) {
+    errors.detailAddress = errors.detailAddress || `场地展示地址不能超过 ${INPUT_LIMITS.event.detailAddress} 个字符`;
   }
 
   if (draft.foundedYear.trim() && countText(draft.foundedYear) > INPUT_LIMITS.organizer.foundedYear) {

@@ -154,6 +154,8 @@ const learnFestivalListSelect = {
   tagline: true,
   introduction: true,
   descriptionI18n: true,
+  manualLocation: true,
+  locationPoint: true,
   officialWebsite: true,
   facebookUrl: true,
   instagramUrl: true,
@@ -7182,6 +7184,15 @@ const mergeWikiFestivalLinks = (
   return merged;
 };
 
+const normalizeWikiFestivalManualLocationPayload = (
+  value: unknown,
+  cityI18n: EventBiTextPayload | null,
+  countryI18n: EventBiTextPayload | null
+): Record<string, unknown> | null => {
+  const manualLocationRaw = normalizeEventManualLocationPayload(value ?? null);
+  return mergeManualLocationFormattedWithBaseI18n(manualLocationRaw, cityI18n, countryI18n);
+};
+
 const parseWikiFestivalAliases = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
@@ -7212,6 +7223,20 @@ const mapWikiFestival = (
   const cityI18n = resolveBiTextWithFallback(row?.cityI18n ?? null, row?.city ?? '');
   const countryI18n = resolveCountryBiTextWithFallback(row?.countryI18n ?? null, row?.country ?? '');
   const frequencyI18n = resolveBiTextWithFallback(row?.frequencyI18n ?? null, row?.frequency ?? '');
+  const manualLocation = normalizeWikiFestivalManualLocationPayload(
+    row?.manualLocation ?? null,
+    cityI18n,
+    countryI18n
+  );
+  const locationFallback = manualLocation
+    ? {
+        lng: null,
+        lat: null,
+        addressI18n: (manualLocation as any).formattedAddressI18n ?? (manualLocation as any).detailAddressI18n ?? null,
+        formattedAddressI18n: (manualLocation as any).formattedAddressI18n ?? (manualLocation as any).detailAddressI18n ?? null,
+      }
+    : null;
+  const locationPoint = normalizeEventLocationPointPayload(row?.locationPoint ?? null, locationFallback);
   const links = mergeWikiFestivalLinks(parseWikiFestivalLinks(row?.links), {
     officialWebsite: row?.officialWebsite ?? null,
     facebookUrl: row?.facebookUrl ?? null,
@@ -7241,6 +7266,8 @@ const mapWikiFestival = (
     tagline: row.tagline,
     introduction: row.introduction,
     descriptionI18n: descriptionI18n ?? null,
+    manualLocation: manualLocation ?? null,
+    locationPoint: locationPoint ?? null,
     officialWebsite: row.officialWebsite ?? null,
     facebookUrl: row.facebookUrl ?? null,
     instagramUrl: row.instagramUrl ?? null,

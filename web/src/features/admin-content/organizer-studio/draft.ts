@@ -26,6 +26,13 @@ export const createOrganizerStudioDraft = (initialName = ''): OrganizerStudioDra
   aliases: [''],
   country: emptyLocalizedText(),
   city: emptyLocalizedText(),
+  detailAddress: emptyLocalizedText(),
+  manualSetAddress: emptyLocalizedText(),
+  locationPoint: null,
+  pickedPlaceName: '',
+  pickedMapAddress: '',
+  latitude: '',
+  longitude: '',
   foundedYear: '',
   frequency: '',
   tagline: '',
@@ -46,7 +53,12 @@ export const createOrganizerStudioDraft = (initialName = ''): OrganizerStudioDra
 });
 
 const fromNullableLocalizedText = (
-  value?: OrganizerStudioLocalizedText | null,
+  value?: {
+    zh?: string | null;
+    en?: string | null;
+    ja?: string | null;
+    enFull?: string | null;
+  } | OrganizerStudioLocalizedText | null,
   fallback?: string | null
 ): OrganizerStudioLocalizedText => ({
   zh: value?.zh ?? String(fallback || ''),
@@ -111,6 +123,10 @@ export const hydrateOrganizerStudioDraftFromOrganizer = (
       .map(normalizeUrl)
       .filter(Boolean)
   );
+  const manualDetail = organizer.manualLocation?.detailAddressI18n;
+  const locationAddress = organizer.locationPoint?.addressI18n;
+  const formattedLocationAddress = organizer.locationPoint?.formattedAddressI18n;
+  const manualSetLocationAddress = organizer.locationPoint?.manualSetAddressI18n;
 
   return {
     id: crypto.randomUUID(),
@@ -119,6 +135,36 @@ export const hydrateOrganizerStudioDraftFromOrganizer = (
     aliases: aliases.length ? aliases : [''],
     country: fromNullableLocalizedText(organizer.countryI18n, organizer.country),
     city: fromNullableLocalizedText(organizer.cityI18n, organizer.city),
+    detailAddress: fromNullableLocalizedText(manualDetail || locationAddress, ''),
+    manualSetAddress: fromNullableLocalizedText(manualSetLocationAddress, ''),
+    locationPoint: organizer.locationPoint
+      ? {
+          ...organizer.locationPoint,
+          adcode:
+            typeof organizer.locationPoint === 'object' &&
+            organizer.locationPoint &&
+            'adcode' in organizer.locationPoint
+              ? String((organizer.locationPoint as { adcode?: string | null }).adcode || '')
+              : null,
+          providerMeta:
+            typeof organizer.locationPoint === 'object' &&
+            organizer.locationPoint &&
+            'providerMeta' in organizer.locationPoint
+              ? ((organizer.locationPoint as { providerMeta?: NonNullable<OrganizerStudioDraft['locationPoint']>['providerMeta'] }).providerMeta ?? null)
+              : null,
+        }
+      : null,
+    pickedPlaceName: organizer.locationPoint?.nameI18n?.zh ?? organizer.locationPoint?.nameI18n?.en ?? '',
+    pickedMapAddress:
+      manualSetLocationAddress?.zh ??
+      manualSetLocationAddress?.en ??
+      formattedLocationAddress?.zh ??
+      formattedLocationAddress?.en ??
+      organizer.locationPoint?.addressI18n?.zh ??
+      organizer.locationPoint?.addressI18n?.en ??
+      '',
+    latitude: organizer.locationPoint?.location?.lat != null ? String(organizer.locationPoint.location.lat) : '',
+    longitude: organizer.locationPoint?.location?.lng != null ? String(organizer.locationPoint.location.lng) : '',
     foundedYear: organizer.foundedYear ?? '',
     frequency: organizer.frequencyI18n?.zh ?? organizer.frequency ?? '',
     tagline: organizer.tagline ?? '',
