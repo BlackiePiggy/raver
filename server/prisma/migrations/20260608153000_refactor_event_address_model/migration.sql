@@ -1,6 +1,10 @@
 UPDATE "events"
 SET "manual_location" = jsonb_set(
-  COALESCE("manual_location"::jsonb, '{}'::jsonb),
+  CASE
+    WHEN "manual_location" IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof("manual_location"::jsonb) = 'object' THEN "manual_location"::jsonb
+    ELSE '{}'::jsonb
+  END,
   '{detailAddressI18n}',
   COALESCE(
     "manual_location"::jsonb -> 'detailAddressI18n',
@@ -23,7 +27,11 @@ WHERE NULLIF(BTRIM("venue_address"), '') IS NOT NULL
 
 UPDATE "events"
 SET "manual_location" = jsonb_set(
-  COALESCE("manual_location"::jsonb, '{}'::jsonb),
+  CASE
+    WHEN "manual_location" IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof("manual_location"::jsonb) = 'object' THEN "manual_location"::jsonb
+    ELSE '{}'::jsonb
+  END,
   '{formattedAddressI18n}',
   jsonb_strip_nulls(
     jsonb_build_object(
@@ -61,7 +69,11 @@ WHERE "manual_location" IS NOT NULL
 
 UPDATE "events"
 SET "location_point" = jsonb_set(
-  COALESCE("location_point"::jsonb, '{}'::jsonb),
+  CASE
+    WHEN "location_point" IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof("location_point"::jsonb) = 'object' THEN "location_point"::jsonb
+    ELSE '{}'::jsonb
+  END,
   '{nameI18n}',
   COALESCE(
     "location_point"::jsonb -> 'nameI18n',
@@ -85,7 +97,11 @@ WHERE "location_point" IS NOT NULL
 
 UPDATE "events"
 SET "location_point" = jsonb_set(
-  COALESCE("location_point"::jsonb, '{}'::jsonb),
+  CASE
+    WHEN "location_point" IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof("location_point"::jsonb) = 'object' THEN "location_point"::jsonb
+    ELSE '{}'::jsonb
+  END,
   '{manualSetAddressI18n}',
   COALESCE(
     "location_point"::jsonb -> 'manualSetAddressI18n',
