@@ -596,11 +596,12 @@ function eventLocationRenderCandidates() {
     const name = escapeHtml(String(item?.nameI18n?.zh || item?.nameI18n?.en || '').trim() || '-');
     const addr = escapeHtml(String(item?.formattedAddressI18n?.zh || item?.formattedAddressI18n?.en || '').trim() || '-');
     const coord = `${Number(item?.location?.lng || 0).toFixed(6)}, ${Number(item?.location?.lat || 0).toFixed(6)}`;
+    if (idx >= 10) return '';
     return `
       <div class="${classList.join(' ')}" data-location-candidate-idx="${idx}">
         <div class="event-location-candidate-head">
           <span class="event-location-candidate-badge">${isCurrent ? '当前选定地址' : '候选地址'}</span>
-          ${isCurrent ? '' : `<button type="button" class="event-location-candidate-set-btn" data-location-set-idx="${idx}">设为候选地址</button>`}
+          ${isCurrent ? '' : `<button type="button" class="event-location-candidate-set-btn" data-location-set-idx="${idx}">设为精确地址</button>`}
         </div>
         <span class="event-location-candidate-name">${name}</span>
         <span class="event-location-candidate-addr">${addr}</span>

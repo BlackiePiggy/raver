@@ -310,6 +310,43 @@ function currentPointSummary(point: EventLocationPoint | null) {
   return `${title} · ${point.location.lat.toFixed(6)}, ${point.location.lng.toFixed(6)}`;
 }
 
+function pointTitle(point: EventLocationPoint | null) {
+  return (
+    point?.nameI18n?.zh?.trim() ||
+    point?.nameI18n?.en?.trim() ||
+    point?.formattedAddressI18n?.zh?.trim() ||
+    point?.formattedAddressI18n?.en?.trim() ||
+    '未选择地点'
+  );
+}
+
+function pointAddress(point: EventLocationPoint | null) {
+  return point?.formattedAddressI18n?.zh?.trim() || point?.formattedAddressI18n?.en?.trim() || '-';
+}
+
+function pointCoord(point: EventLocationPoint | null) {
+  if (!point) return '-';
+  return `${point.location.lng.toFixed(6)}, ${point.location.lat.toFixed(6)}`;
+}
+
+function pointArea(point: EventLocationPoint | null) {
+  if (!point) return '-';
+  return [point.district, point.city, point.province].map((item) => item?.trim()).filter(Boolean).join(', ') || '-';
+}
+
+function providerLabel(provider: EventLocationProvider | EventLocationPoint['provider'] | null | undefined) {
+  const value = String(provider || '').trim();
+  return PROVIDER_ITEMS.find((item) => item.value === value)?.label || value || '-';
+}
+
+function pointUpdatedAt(point: EventLocationPoint | null) {
+  const raw = String(point?.selectedAt || '').trim();
+  if (!raw) return '-';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
+
 function buildStandaloneFrame(
   channel: string,
   provider: EventLocationProvider,
@@ -621,121 +658,66 @@ export default function EventLocationPickerModal({
   if (!open) return null;
 
   return (
-    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/55 p-4">
-      <div className="flex h-[88vh] min-h-[88vh] w-full max-w-[1480px] overflow-hidden rounded-[32px] border border-white/70 bg-[#f6f3ea] shadow-[0_30px_120px_rgba(7,17,16,0.24)]">
-        <aside className="hidden h-full min-h-0 w-[320px] overflow-y-auto border-r border-black/8 bg-[linear-gradient(180deg,#f7f0df_0%,#fbf8ef_100%)] p-6 lg:flex lg:flex-col">
-          <div className="admin-studio-label">Location Picker</div>
-          <h2 className="mt-3 text-[26px] font-semibold tracking-[-0.03em] text-[#071110]">地图选点</h2>
-          <p className="mt-3 text-sm leading-6 text-black/52">
-            现在同时保留两套选点能力。你可以在原生 web 版和 `festival-viewer` legacy 版之间随时切换。
-          </p>
-
-          <div className="mt-6 rounded-[24px] border border-black/8 bg-white/80 p-4 text-sm text-[#071110]">
-            <div className="font-semibold">版本切换</div>
-            <div className="mt-3 grid gap-2">
-              {[
-                { value: 'native' as const, label: '原生版', desc: '使用你之前已接入的原生嵌入能力' },
-                { value: 'legacy' as const, label: 'Legacy 版', desc: '继续使用 festival-viewer iframe' },
-              ].map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => {
-                    setPickerMode(item.value);
-                    setRuntimeError(null);
-                  }}
-                  className={
-                    pickerMode === item.value
-                      ? 'rounded-[16px] border border-[#071110] bg-[#071110] px-4 py-3 text-left text-sm font-semibold text-white'
-                      : 'rounded-[16px] border border-black/10 bg-white px-4 py-3 text-left text-sm font-semibold text-[#071110]'
-                  }
-                >
-                  <div>{item.label}</div>
-                  <div className={`mt-1 text-xs ${pickerMode === item.value ? 'text-white/72' : 'text-black/46'}`}>{item.desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-[24px] border border-black/8 bg-white/80 p-4 text-sm text-[#071110]">
-            <div className="font-semibold">地图供应商</div>
-            <div className="mt-3 grid gap-2">
-              {PROVIDER_ITEMS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => {
-                    setProvider(item.value);
-                    runtimeRef.current?.setPreferredEventLocationProvider?.(item.value);
-                  }}
-                  className={
-                    provider === item.value
-                      ? 'rounded-[16px] border border-[#071110] bg-[#071110] px-4 py-3 text-left text-sm font-semibold text-white'
-                      : 'rounded-[16px] border border-black/10 bg-white px-4 py-3 text-left text-sm font-semibold text-[#071110]'
-                  }
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-[24px] border border-black/8 bg-white/80 p-4 text-sm text-[#071110]">
-            <div className="font-semibold">当前选择</div>
-            <div className="mt-2 text-black/55">{summaryText}</div>
-          </div>
-
-          <div className="mt-4 rounded-[24px] border border-black/8 bg-white/80 p-4 text-sm text-[#071110]">
-            <div className="font-semibold">使用建议</div>
-            <div className="mt-2 space-y-2 text-black/55">
-              {pickerMode === 'native' ? (
-                <>
-                  <p>这版就是你之前做过的原生嵌入实现，直接在当前后台里跑完整地图能力。</p>
-                  <p>支持多地图 provider、关键词搜索、拖动 Pin、当前位置与 POI 面板。</p>
-                  <p>如果想对照旧桥接方式，可以随时切回 Legacy 版。</p>
-                </>
-              ) : (
-                <>
-                  <p>切换地图供应商会重新载入选点页，但不会影响当前表单。</p>
-                  <p>Mapbox / Geoapify 更适合国际地址，AMap 更适合国内 POI。</p>
-                  <p>确认后会自动回填活动坐标、地点名、地图地址与 provider 元信息。</p>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-auto rounded-[20px] border border-black/8 bg-[#fffaf0] px-4 py-3 text-xs text-black/48">
-            {runtimeError
-              ? runtimeError
-              : pickerMode === 'native'
-                ? runtimeReady
-                  ? '原生地图能力已就绪。'
-                  : '正在加载原生地图能力与 provider 配置...'
-                : `当前模式：Legacy 版 · 当前地图供应商：${provider}`}
-          </div>
-        </aside>
-
-        <div className="event-location-picker-stage relative min-h-0 min-w-0 flex-1 bg-white p-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-8 top-8 z-[3] rounded-full border border-black/10 bg-white/92 px-4 py-2 text-sm font-semibold text-[#071110] shadow-sm"
-          >
-            关闭
-          </button>
-
+    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/55 p-3">
+      <div className="event-location-picker-frame flex h-[88vh] min-h-[720px] w-full max-w-[1760px] overflow-hidden rounded-[30px] border border-black/10 bg-[#f7f3ea] shadow-[0_30px_120px_rgba(7,17,16,0.24)]">
+        <div className="event-location-picker-stage relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#f7f3ea] p-4">
           {pickerMode === 'native' ? (
-            <div ref={modalRootRef} className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] bg-[#f6f3ea]">
+            <div ref={modalRootRef} className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-black/10 bg-[#f7f3ea]">
               <div id="event-location-picker-overlay" className="h-full">
                 <div id="event-location-picker-modal" className="flex h-full min-h-0 flex-col">
                   <div className="event-location-picker-head">
                     <div>
                       <div className="event-location-picker-title" id="event-location-picker-title">
-                        活动地点绑定（原生页面）
+                        活动地点绑定（{providerLabel(provider)}）
                       </div>
                       <div className="event-location-picker-sub">支持搜索地点、中心 Pin 选点、拖拽精调与当前位置辅助定位</div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="event-location-picker-close"
+                    >
+                      关闭
+                    </button>
                   </div>
+
+                  <div className="event-location-picker-controlbar">
+                    <div className="event-location-picker-segment" aria-label="版本切换">
+                      {[
+                        { value: 'native' as const, label: '原生版' },
+                        { value: 'legacy' as const, label: 'Legacy 版' },
+                      ].map((item) => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => {
+                            setPickerMode(item.value);
+                            setRuntimeError(null);
+                          }}
+                          className={pickerMode === item.value ? 'active' : ''}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="event-location-picker-provider-tabs" aria-label="地图供应商">
+                      {PROVIDER_ITEMS.map((item) => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => {
+                            setProvider(item.value);
+                            runtimeRef.current?.setPreferredEventLocationProvider?.(item.value);
+                          }}
+                          className={provider === item.value ? 'active' : ''}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="event-location-picker-toolbar">
                     <input
                       id="event-location-picker-search-input"
@@ -757,9 +739,10 @@ export default function EventLocationPickerModal({
                       定位到我
                     </button>
                   </div>
+
                   <div className="event-location-picker-content min-h-0 min-w-0 flex-1">
                     <div className="event-location-picker-map-wrap">
-                      <div id="event-location-picker-map" ref={mapWrapRef} className="event-location-picker-map-canvas h-full w-full rounded-[20px]" />
+                      <div id="event-location-picker-map" ref={mapWrapRef} className="event-location-picker-map-canvas h-full w-full" />
                       <button id="event-location-return-anchor-btn" className="event-location-return-anchor-btn" type="button">
                         回到活动场地
                       </button>
@@ -768,38 +751,94 @@ export default function EventLocationPickerModal({
                       </div>
                     </div>
                     <div className="event-location-picker-side">
-                      <aside id="event-location-poi-panel" className="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
-                        <div className="event-location-poi-panel-head">
-                          <span>POI 信息</span>
-                          <button id="event-location-poi-panel-close" className="event-location-poi-panel-close" type="button" aria-label="关闭">
-                            ×
-                          </button>
-                        </div>
-                        <div id="event-location-poi-panel-body" className="event-location-poi-panel-body" />
-                      </aside>
+                      <div className="event-location-candidate-panel-head">
+                        <span>搜索候选</span>
+                        <small>最多展示 10 条</small>
+                      </div>
                       <div className="event-location-picker-candidates" id="event-location-picker-candidates" />
                     </div>
                   </div>
-                  <div className="event-location-picker-footer">
-                    <span id="event-location-picker-status" className="event-location-picker-status" />
-                    <button id="event-location-picker-cancel-btn" className="event-location-picker-btn" type="button">
-                      取消
-                    </button>
-                    <button id="event-location-picker-confirm-btn" className="event-location-picker-btn primary" type="button">
-                      确认绑定
-                    </button>
+
+                  <div className="event-location-picker-bottom">
+                    <aside id="event-location-poi-panel" className="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
+                      <div className="event-location-poi-panel-head">
+                        <span>POI 信息</span>
+                        <button id="event-location-poi-panel-close" className="event-location-poi-panel-close" type="button" aria-label="关闭">
+                          ×
+                        </button>
+                      </div>
+                      <div id="event-location-poi-panel-body" className="event-location-poi-panel-body" />
+                    </aside>
+
+                    <div className="event-location-selected-summary">
+                      <div className="event-location-selected-main">
+                        <span className="event-location-selected-icon">⌖</span>
+                        <div>
+                          <strong>{pointTitle(selectedPoint)}</strong>
+                          <span>{pointAddress(selectedPoint)}</span>
+                        </div>
+                      </div>
+                      {[
+                        ['坐标（经纬度）', pointCoord(selectedPoint)],
+                        ['标准地址', pointAddress(selectedPoint)],
+                        ['城市 / 区域', pointArea(selectedPoint)],
+                        ['国家 / 地区', selectedPoint?.countryCode || '-'],
+                        ['数据来源', providerLabel(selectedPoint?.provider || provider)],
+                        ['更新时间', pointUpdatedAt(selectedPoint)],
+                      ].map(([label, value]) => (
+                        <div className="event-location-selected-field" key={label}>
+                          <span>{label}</span>
+                          <strong>{value}</strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="event-location-picker-footer">
+                      <span id="event-location-picker-status" className="event-location-picker-status">
+                        {runtimeError || (runtimeReady ? summaryText : '正在加载原生地图能力与 provider 配置...')}
+                      </span>
+                      <button id="event-location-picker-cancel-btn" className="event-location-picker-btn" type="button">
+                        取消
+                      </button>
+                      <button id="event-location-picker-confirm-btn" className="event-location-picker-btn primary" type="button">
+                        确认绑定
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="h-full overflow-hidden rounded-[28px] border border-black/8 bg-[#f6f3ea]">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px] border border-black/10 bg-[#f7f3ea]">
+              <div className="event-location-legacy-head">
+                <div className="event-location-picker-segment" aria-label="版本切换">
+                  {[
+                    { value: 'native' as const, label: '原生版' },
+                    { value: 'legacy' as const, label: 'Legacy 版' },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => {
+                        setPickerMode(item.value);
+                        setRuntimeError(null);
+                      }}
+                      className={pickerMode === item.value ? 'active' : ''}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={onClose} className="event-location-picker-close">
+                  关闭
+                </button>
+              </div>
               {frame ? (
                 <iframe
                   key={frame.requestId}
                   src={frame.src}
                   title="Legacy Event Location Picker"
-                  className="h-full w-full border-0 bg-[#f6f3ea]"
+                  className="h-full min-h-0 w-full flex-1 border-0 bg-[#f7f3ea]"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-black/48">
@@ -811,14 +850,175 @@ export default function EventLocationPickerModal({
         </div>
       </div>
       <style jsx global>{`
+        .event-location-picker-frame {
+          min-width: 0;
+        }
+
         .event-location-picker-stage .event-location-picker-content {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 332px;
-          gap: 12px;
+          grid-template-columns: minmax(0, 1fr) minmax(320px, 35%);
+          gap: 10px;
           min-height: 0;
           flex: 1 1 auto;
-          padding: 12px;
-          background: #f6f3ea;
+          padding: 10px;
+          background: #f2efe7;
+        }
+
+        .event-location-picker-stage #event-location-picker-overlay,
+        .event-location-picker-stage #event-location-picker-modal {
+          background: transparent;
+        }
+
+        .event-location-picker-stage #event-location-picker-modal {
+          border: 0;
+          box-shadow: none;
+          max-height: none;
+        }
+
+        .event-location-picker-stage .event-location-picker-head {
+          min-height: 82px;
+          padding: 18px 24px;
+          background: linear-gradient(120deg, rgba(255, 255, 255, 0.86), rgba(246, 242, 232, 0.92));
+          border-bottom: 1px solid rgba(7, 17, 16, 0.08);
+        }
+
+        .event-location-picker-stage .event-location-picker-title {
+          font-family: inherit;
+          font-size: 19px;
+          font-weight: 750;
+          letter-spacing: 0;
+          color: #071110;
+        }
+
+        .event-location-picker-stage .event-location-picker-sub {
+          margin-top: 7px;
+          font-family: inherit;
+          font-size: 12px;
+          letter-spacing: 0;
+          color: rgba(7, 17, 16, 0.45);
+        }
+
+        .event-location-picker-stage .event-location-picker-close {
+          height: 42px;
+          min-width: 72px;
+          border: 1px solid rgba(7, 17, 16, 0.1);
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.72);
+          color: #071110;
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 650;
+          letter-spacing: 0;
+          text-transform: none;
+          box-shadow: 0 4px 14px rgba(7, 17, 16, 0.07);
+        }
+
+        .event-location-picker-stage .event-location-picker-controlbar {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 34px;
+          align-items: center;
+          padding: 16px 18px 8px;
+          border-bottom: 0;
+          background: #fff;
+        }
+
+        .event-location-picker-stage .event-location-picker-segment,
+        .event-location-picker-stage .event-location-picker-provider-tabs {
+          display: flex;
+          align-items: stretch;
+          overflow: hidden;
+          border: 1px solid rgba(7, 17, 16, 0.1);
+          border-radius: 10px;
+          background: #fff;
+        }
+
+        .event-location-picker-stage .event-location-picker-provider-tabs {
+          overflow-x: auto;
+          width: fit-content;
+          max-width: 100%;
+        }
+
+        .event-location-picker-stage .event-location-picker-segment button,
+        .event-location-picker-stage .event-location-picker-provider-tabs button {
+          min-height: 44px;
+          padding: 0 24px;
+          border: 0;
+          border-right: 1px solid rgba(7, 17, 16, 0.08);
+          background: #fff;
+          color: #071110;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 650;
+          white-space: nowrap;
+        }
+
+        .event-location-picker-stage .event-location-picker-segment button:last-child,
+        .event-location-picker-stage .event-location-picker-provider-tabs button:last-child {
+          border-right: 0;
+        }
+
+        .event-location-picker-stage .event-location-picker-segment button.active,
+        .event-location-picker-stage .event-location-picker-provider-tabs button.active {
+          background: #001310;
+          color: #fff;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .event-location-picker-stage .event-location-picker-toolbar {
+          display: grid;
+          grid-template-columns: minmax(260px, 1fr) auto auto auto auto;
+          gap: 14px;
+          align-items: center;
+          padding: 10px 18px 18px;
+          border-bottom: 1px solid rgba(7, 17, 16, 0.08);
+          background: #fff;
+        }
+
+        .event-location-picker-stage .event-location-picker-search-input {
+          height: 52px;
+          min-width: 0;
+          border: 1px solid rgba(7, 17, 16, 0.12);
+          border-radius: 14px;
+          background: #fff;
+          color: #071110;
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 650;
+          letter-spacing: 0;
+          padding: 0 18px;
+        }
+
+        .event-location-picker-stage .event-location-picker-search-input:focus {
+          border-color: rgba(7, 17, 16, 0.28);
+          box-shadow: 0 0 0 3px rgba(0, 19, 16, 0.06);
+        }
+
+        .event-location-picker-stage .event-location-picker-btn {
+          min-height: 48px;
+          border: 1px solid rgba(7, 17, 16, 0.1);
+          border-radius: 14px;
+          background: #fff;
+          color: rgba(7, 17, 16, 0.68);
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 13px;
+          font-weight: 650;
+          letter-spacing: 0;
+          text-transform: none;
+          padding: 0 18px;
+          white-space: nowrap;
+        }
+
+        .event-location-picker-stage .event-location-picker-btn:hover {
+          border-color: rgba(7, 17, 16, 0.22);
+          color: #071110;
+        }
+
+        .event-location-picker-stage .event-location-picker-btn.primary {
+          border-color: #001310;
+          background: #001310;
+          color: #fff;
         }
 
         .event-location-picker-stage .event-location-picker-map-wrap {
@@ -826,15 +1026,15 @@ export default function EventLocationPickerModal({
           min-height: 0;
           height: 100%;
           overflow: hidden;
-          border: 1px solid rgba(7, 17, 16, 0.08);
-          border-radius: 20px;
+          border: 0;
+          border-radius: 0;
           background: #fff;
         }
 
         .event-location-picker-stage #event-location-picker-map {
           height: 100%;
           min-height: 420px;
-          border-radius: 20px;
+          border-radius: 0;
         }
 
         .event-location-picker-stage .event-location-picker-side {
@@ -842,20 +1042,145 @@ export default function EventLocationPickerModal({
           min-height: 0;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.94);
+          box-shadow: 0 12px 30px rgba(7, 17, 16, 0.08);
+        }
+
+        .event-location-picker-stage .event-location-candidate-panel-head {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          padding: 16px 24px 8px;
+          color: #071110;
+          font-size: 13px;
+          font-weight: 750;
+        }
+
+        .event-location-picker-stage .event-location-candidate-panel-head small {
+          color: rgba(7, 17, 16, 0.42);
+          font-size: 11px;
+          font-weight: 650;
+        }
+
+        .event-location-picker-stage #event-location-picker-candidates {
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
+          padding: 0 18px 18px;
+          gap: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+        }
+
+        .event-location-picker-stage .event-location-candidate {
+          position: relative;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 2px 12px;
+          padding: 10px 0;
+          border: 0;
+          border-bottom: 1px solid rgba(7, 17, 16, 0.08);
+          border-radius: 0;
+          background: transparent;
+          color: #071110;
+          box-shadow: none;
+        }
+
+        .event-location-picker-stage .event-location-candidate:hover {
+          border-color: rgba(7, 17, 16, 0.14);
+        }
+
+        .event-location-picker-stage .event-location-candidate.current,
+        .event-location-picker-stage .event-location-candidate.active,
+        .event-location-picker-stage .event-location-candidate.current.active {
+          border-color: rgba(7, 17, 16, 0.12);
+          box-shadow: none;
+        }
+
+        .event-location-picker-stage .event-location-candidate-head {
+          display: contents;
+        }
+
+        .event-location-picker-stage .event-location-candidate-badge {
+          display: none;
+        }
+
+        .event-location-picker-stage .event-location-candidate-set-btn {
+          grid-column: 2;
+          grid-row: 1 / span 3;
+          align-self: center;
+          min-height: 28px;
+          border: 1px solid rgba(7, 17, 16, 0.1);
+          border-radius: 999px;
+          background: #fff;
+          color: #071110;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0;
+          text-transform: none;
+          padding: 0 12px;
+          white-space: nowrap;
+        }
+
+        .event-location-picker-stage .event-location-candidate-name {
+          grid-column: 1;
+          font-family: inherit;
+          font-size: 12px;
+          line-height: 1.3;
+          font-weight: 750;
+          letter-spacing: 0;
+          color: #071110;
+        }
+
+        .event-location-picker-stage .event-location-candidate-addr,
+        .event-location-picker-stage .event-location-candidate-coord {
+          grid-column: 1;
+          font-family: inherit;
+          font-size: 11px;
+          line-height: 1.28;
+          color: rgba(7, 17, 16, 0.5);
+        }
+
+        .event-location-picker-stage .event-location-candidate-empty {
+          margin: 12px 0;
+          border: 1px dashed rgba(7, 17, 16, 0.14);
+          border-radius: 14px;
+          color: rgba(7, 17, 16, 0.46);
+          font-family: inherit;
+          font-size: 12px;
+          letter-spacing: 0;
+          padding: 20px;
+          text-align: center;
+        }
+
+        .event-location-picker-stage .event-location-picker-bottom {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
           gap: 12px;
+          align-items: center;
+          padding: 12px;
+          background: #fff;
+          border-top: 1px solid rgba(7, 17, 16, 0.08);
         }
 
         .event-location-picker-stage #event-location-poi-panel {
-          position: relative;
-          top: auto;
-          right: auto;
-          width: 100%;
-          max-height: none;
-          min-height: 0;
-          flex: 0 0 260px;
+          position: absolute;
+          right: 20px;
+          bottom: 118px;
+          z-index: 24;
+          width: min(420px, calc(100% - 40px));
+          max-height: 260px;
           display: none;
-          border-radius: 18px;
+          border-radius: 16px;
           overflow: hidden;
+          background: rgba(255, 255, 255, 0.96);
+          border: 1px solid rgba(7, 17, 16, 0.1);
+          box-shadow: 0 16px 40px rgba(7, 17, 16, 0.16);
         }
 
         .event-location-picker-stage #event-location-poi-panel.visible {
@@ -871,57 +1196,124 @@ export default function EventLocationPickerModal({
           padding: 0.6rem 0.68rem;
         }
 
+        .event-location-picker-stage .event-location-poi-panel-head {
+          background: linear-gradient(90deg, rgba(242, 247, 242, 0.92), rgba(251, 248, 239, 0.92));
+          border-bottom: 1px solid rgba(7, 17, 16, 0.08);
+          color: rgba(7, 17, 16, 0.68);
+          font-family: inherit;
+          font-size: 12px;
+          font-weight: 750;
+          letter-spacing: 0;
+          text-transform: none;
+          padding: 10px 14px;
+        }
+
         .event-location-picker-stage .event-location-poi-info {
           gap: 0.16rem;
           font-size: 0.5rem;
           line-height: 1.38;
+          color: #071110;
         }
 
         .event-location-picker-stage .event-location-poi-info-title {
-          font-size: 0.6rem;
+          font-size: 0.72rem;
           margin-bottom: 0.1rem;
+          color: #071110;
         }
 
         .event-location-picker-stage .event-location-poi-info-meta,
         .event-location-picker-stage .event-location-poi-info-tip {
-          font-size: 0.48rem;
-        }
-
-        .event-location-picker-stage #event-location-picker-candidates {
-          flex: 1 1 auto;
-          min-height: 0;
-          max-height: none;
-          padding: 0.6rem 0.68rem;
-          gap: 0.26rem;
-          border: 1px solid rgba(7, 17, 16, 0.08);
-          border-radius: 18px;
-          background: rgba(255, 255, 255, 0.92);
-        }
-
-        .event-location-picker-stage .event-location-candidate {
-          gap: 0.12rem;
-          padding: 0.4rem 0.46rem;
-          border-radius: 12px;
-        }
-
-        .event-location-picker-stage .event-location-candidate-badge,
-        .event-location-picker-stage .event-location-candidate-set-btn {
-          font-size: 0.42rem;
-        }
-
-        .event-location-picker-stage .event-location-candidate-name {
           font-size: 0.56rem;
-          line-height: 1.25;
+          color: rgba(7, 17, 16, 0.52);
         }
 
-        .event-location-picker-stage .event-location-candidate-addr,
-        .event-location-picker-stage .event-location-candidate-coord,
-        .event-location-picker-stage .event-location-candidate-empty {
-          font-size: 0.46rem;
-          line-height: 1.34;
+        .event-location-picker-stage .event-location-selected-summary {
+          min-width: 0;
+          display: grid;
+          grid-template-columns: minmax(230px, 1.25fr) repeat(6, minmax(120px, 1fr));
+          align-items: stretch;
+          overflow: hidden;
+          border: 1px solid rgba(7, 17, 16, 0.08);
+          border-radius: 16px;
+          background: #fff;
+        }
+
+        .event-location-picker-stage .event-location-selected-main,
+        .event-location-picker-stage .event-location-selected-field {
+          min-width: 0;
+          padding: 12px 16px;
+          border-right: 1px solid rgba(7, 17, 16, 0.08);
+        }
+
+        .event-location-picker-stage .event-location-selected-main {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .event-location-picker-stage .event-location-selected-icon {
+          display: inline-flex;
+          width: 34px;
+          height: 34px;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: rgba(7, 17, 16, 0.06);
+          color: #071110;
+          font-size: 16px;
+        }
+
+        .event-location-picker-stage .event-location-selected-main strong,
+        .event-location-picker-stage .event-location-selected-field strong {
+          display: block;
+          overflow: hidden;
+          color: #071110;
+          font-size: 12px;
+          font-weight: 750;
+          line-height: 1.35;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .event-location-picker-stage .event-location-selected-main span:not(.event-location-selected-icon),
+        .event-location-picker-stage .event-location-selected-field span {
+          display: block;
+          overflow: hidden;
+          color: rgba(7, 17, 16, 0.45);
+          font-size: 11px;
+          line-height: 1.35;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .event-location-picker-stage .event-location-selected-field {
+          display: flex;
+          min-width: 0;
+          flex-direction: column;
+          justify-content: center;
+          gap: 4px;
+        }
+
+        .event-location-picker-stage .event-location-picker-footer {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 0;
+          background: transparent;
+        }
+
+        .event-location-picker-stage .event-location-picker-status {
+          display: none;
         }
 
         @media (max-width: 1279px) {
+          .event-location-picker-frame {
+            min-height: 88vh;
+          }
+
+          .event-location-picker-stage .event-location-picker-controlbar,
+          .event-location-picker-stage .event-location-picker-toolbar,
           .event-location-picker-stage .event-location-picker-content {
             grid-template-columns: minmax(0, 1fr);
           }
@@ -932,6 +1324,16 @@ export default function EventLocationPickerModal({
 
           .event-location-picker-stage #event-location-picker-map {
             min-height: 320px;
+          }
+
+          .event-location-picker-stage .event-location-selected-summary {
+            grid-template-columns: minmax(220px, 1fr);
+            max-height: 180px;
+            overflow: auto;
+          }
+
+          .event-location-picker-stage .event-location-picker-bottom {
+            grid-template-columns: minmax(0, 1fr);
           }
         }
       `}</style>
