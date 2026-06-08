@@ -156,6 +156,59 @@ const firstFilledText = (...values: Array<string | undefined | null>) => {
   return '';
 };
 
+const joinReadonlyAddressParts = (parts: Array<string | undefined | null>) =>
+  parts
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+
+const buildReadonlyFormattedAddress = (
+  detail: EventStudioLocalizedText,
+  city: EventStudioLocalizedText,
+  country: EventStudioLocalizedText
+): EventStudioLocalizedText => ({
+  zh:
+    joinReadonlyAddressParts([
+      firstFilledText(country.zh, country.en),
+      firstFilledText(city.zh, city.en),
+      firstFilledText(detail.zh, detail.en),
+    ]) || firstFilledText(detail.zh, detail.en),
+  en:
+    joinReadonlyAddressParts([
+      firstFilledText(country.enFull, country.en, country.zh),
+      firstFilledText(city.en, city.zh),
+      firstFilledText(detail.en, detail.zh),
+    ]) || firstFilledText(detail.en, detail.zh),
+  ja:
+    joinReadonlyAddressParts([
+      firstFilledText(country.ja, country.zh, country.en),
+      firstFilledText(city.ja, city.zh, city.en),
+      firstFilledText(detail.ja, detail.zh, detail.en),
+    ]) || firstFilledText(detail.ja, detail.zh, detail.en),
+  enFull:
+    joinReadonlyAddressParts([
+      firstFilledText(country.enFull, country.en, country.zh),
+      firstFilledText(city.enFull, city.en, city.zh),
+      firstFilledText(detail.enFull, detail.en, detail.zh),
+    ]) || firstFilledText(detail.enFull, detail.en, detail.zh),
+});
+
+const toReadonlyLocalizedText = (
+  value?:
+    | {
+        zh?: string | null;
+        en?: string | null;
+        ja?: string | null;
+        enFull?: string | null;
+      }
+    | null
+): EventStudioLocalizedText => ({
+  zh: String(value?.zh || '').trim(),
+  en: String(value?.en || '').trim(),
+  ja: String(value?.ja || '').trim(),
+  enFull: String(value?.enFull || '').trim(),
+});
+
 const collapseLocalizedTextForPlainValue = (
   value: EventStudioDraft['city'] | EventStudioDraft['country']
 ): EventStudioDraft['city'] => {
@@ -334,6 +387,41 @@ function Field({
       {hint ? <div className="mt-2 text-xs text-black/40">{hint}</div> : null}
       {error ? <div className="mt-2 text-xs text-[#6a3530]">{error}</div> : null}
     </label>
+  );
+}
+
+function ReadonlyLocalizedResultField({
+  label,
+  value,
+  emptyLabel,
+  hint,
+}: {
+  label: string;
+  value: EventStudioLocalizedText;
+  emptyLabel: string;
+  hint?: string;
+}) {
+  const zh = value.zh.trim();
+  const en = firstFilledText(value.enFull, value.en);
+  const ja = value.ja.trim();
+  const primary = firstFilledText(zh, en, ja);
+  const showEn = !!en && en !== primary;
+  const showJa = !!ja && ja !== primary && ja !== en;
+
+  return (
+    <Field label={label} hint={hint}>
+      <div className="admin-studio-input min-h-[72px] bg-black/[0.035] px-4 py-3 text-sm leading-6 text-black/70">
+        {primary ? (
+          <div className="space-y-1.5">
+            <div>{primary}</div>
+            {showEn ? <div className="text-xs leading-5 text-black/48">EN: {en}</div> : null}
+            {showJa ? <div className="text-xs leading-5 text-black/48">JA: {ja}</div> : null}
+          </div>
+        ) : (
+          <div className="text-black/36">{emptyLabel}</div>
+        )}
+      </div>
+    </Field>
   );
 }
 
@@ -1070,6 +1158,26 @@ export default function EventStudioForm({
       draft.detailAddress.ja,
       draft.detailAddress.enFull
     ) || '还没有地点地址';
+  const manualLocationFormattedAddress = useMemo(
+    () => buildReadonlyFormattedAddress(draft.detailAddress, draft.city, draft.country),
+    [draft.detailAddress, draft.city, draft.country]
+  );
+  const locationPointFormattedAddress = useMemo(() => {
+    if (!draft.locationPoint && !draft.latitude && !draft.longitude) {
+      return toReadonlyLocalizedText(null);
+    }
+    return toReadonlyLocalizedText(draft.locationPoint?.formattedAddressI18n) || manualLocationFormattedAddress;
+  }, [draft.locationPoint, draft.latitude, draft.longitude, manualLocationFormattedAddress]);
+  const locationPointManualSetAddress = useMemo(
+    () =>
+      toReadonlyLocalizedText({
+        zh: draft.manualSetAddress.zh,
+        en: draft.manualSetAddress.en,
+        ja: draft.manualSetAddress.ja,
+        enFull: draft.manualSetAddress.enFull,
+      }),
+    [draft.manualSetAddress]
+  );
   const derivedStatusMeta = EVENT_DERIVED_STATUS_META[draft.derivedStatus];
   const isCancelledDraft = draft.isCancelled;
   const visibilityDraft = draft.visibility;
@@ -3603,9 +3711,9 @@ export default function EventStudioForm({
                   ) : null}
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <LocalizedTextField
-                    label="城市"
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <LocalizedTextField
+                      label="城市"
                     value={draft.city}
                     kind="input"
                     error={errors.city}
@@ -3675,6 +3783,26 @@ export default function EventStudioForm({
                           kind: 'textarea',
                         })
                       }
+                    />
+                  </div>
+                  <div className="lg:col-span-2 grid gap-4 lg:grid-cols-3">
+                    <ReadonlyLocalizedResultField
+                      label="最终活动地址"
+                      value={manualLocationFormattedAddress}
+                      emptyLabel="填写详细地址、城市、国家后这里会展示 manualLocation.formattedAddressI18n。"
+                      hint="只读预览：最终写入 manualLocation.formattedAddressI18n。"
+                    />
+                    <ReadonlyLocalizedResultField
+                      label="最终地图格式化地址"
+                      value={locationPointFormattedAddress}
+                      emptyLabel="完成地图选点后，这里会展示 locationPoint.formattedAddressI18n。"
+                      hint="只读预览：优先保留地图 provider 返回的格式化地址。"
+                    />
+                    <ReadonlyLocalizedResultField
+                      label="最终场地展示地址"
+                      value={locationPointManualSetAddress}
+                      emptyLabel="未填写时不会写入 manualSetAddressI18n，展示层会回退到地图格式化地址。"
+                      hint="只读预览：最终写入 locationPoint.manualSetAddressI18n。"
                     />
                   </div>
                   <Field label="纬度（可选）">

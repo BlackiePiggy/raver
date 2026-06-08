@@ -538,6 +538,51 @@ struct EventUploadFlowView: View {
                 preferredLanguage: viewModel.draft.preferredLanguage
             )
 
+            VStack(alignment: .leading, spacing: 10) {
+                readonlyAddressPreviewCard(
+                    title: LT("最终活动地址", "Final Activity Address", "最終イベント住所"),
+                    value: viewModel.manualLocationFormattedAddressSummary,
+                    emptyText: LT(
+                        "填写详细地址、城市、国家后，这里会展示 manualLocation.formattedAddressI18n。",
+                        "manualLocation.formattedAddressI18n appears here after detailed address, city, and country are filled.",
+                        "詳細住所・都市・国を入力すると、ここに manualLocation.formattedAddressI18n が表示されます。"
+                    ),
+                    hint: LT(
+                        "只读预览：最终写入 manualLocation.formattedAddressI18n",
+                        "Read-only preview of manualLocation.formattedAddressI18n",
+                        "読み取り専用プレビュー: manualLocation.formattedAddressI18n"
+                    )
+                )
+                readonlyAddressPreviewCard(
+                    title: LT("最终地图格式化地址", "Final Map Formatted Address", "最終地図整形住所"),
+                    value: viewModel.locationPointFormattedAddressSummary,
+                    emptyText: LT(
+                        "完成地图选点后，这里会展示 locationPoint.formattedAddressI18n。",
+                        "locationPoint.formattedAddressI18n appears here after map selection.",
+                        "地図選択後、ここに locationPoint.formattedAddressI18n が表示されます。"
+                    ),
+                    hint: LT(
+                        "只读预览：优先保留地图 provider 返回的格式化地址",
+                        "Read-only preview that preserves the provider formatted address first",
+                        "読み取り専用プレビュー: 地図 provider の整形住所を優先保持"
+                    )
+                )
+                readonlyAddressPreviewCard(
+                    title: LT("最终场地展示地址", "Final Venue Display Address", "最終会場表示住所"),
+                    value: viewModel.locationPointManualSetAddressSummary,
+                    emptyText: LT(
+                        "未填写时不会写入 manualSetAddressI18n，展示层会回退到地图格式化地址。",
+                        "When empty, manualSetAddressI18n is not written and display falls back to the map formatted address.",
+                        "未入力時は manualSetAddressI18n は保存されず、表示は地図の整形住所にフォールバックします。"
+                    ),
+                    hint: LT(
+                        "只读预览：最终写入 locationPoint.manualSetAddressI18n",
+                        "Read-only preview of locationPoint.manualSetAddressI18n",
+                        "読み取り専用プレビュー: locationPoint.manualSetAddressI18n"
+                    )
+                )
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 fieldTitle(LT("地图选点", "Map Location", "地図選択"), isRequired: false)
                 HStack(spacing: 10) {
@@ -2523,6 +2568,43 @@ struct EventUploadFlowView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.red)
             }
+        }
+    }
+
+    private func readonlyAddressPreviewCard(
+        title: String,
+        value: String?,
+        emptyText: String,
+        hint: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            VStack(alignment: .leading, spacing: 6) {
+                if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(value)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(emptyText)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(hint)
+                    .font(.caption2)
+                    .foregroundStyle(RaverTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RaverTheme.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(RaverTheme.cardBorder, lineWidth: 1)
+            )
         }
     }
 

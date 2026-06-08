@@ -1568,6 +1568,30 @@ final class EventUploadFlowViewModel: ObservableObject {
         return localized.isEmpty ? LT("尚未填写地址", "No address yet", "住所未入力") : localized
     }
 
+    var manualLocationFormattedAddressSummary: String? {
+        let input = EventUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(
+            legacyWebBiText(from: input.value1.manualLocation?.formattedAddressI18n)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? nil : localized
+    }
+
+    var locationPointFormattedAddressSummary: String? {
+        let input = EventUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(
+            legacyWebBiText(from: input.value1.locationPoint?.formattedAddressI18n)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? nil : localized
+    }
+
+    var locationPointManualSetAddressSummary: String? {
+        let input = EventUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(
+            legacyWebBiText(from: input.value1.locationPoint?.manualSetAddressI18n)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? nil : localized
+    }
+
     var venueDisplaySummary: String? {
         let input = EventUploadMappers.createInput(from: draft)
         let point = legacyLocationPoint(from: input.value1.locationPoint)
