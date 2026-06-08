@@ -357,14 +357,14 @@ function Section({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children: ReactNode;
 }) {
   return (
     <section className="admin-studio-section p-6">
       <div>
         <div className="admin-studio-label">{title}</div>
-        <p className="mt-3 text-sm leading-6 text-black/52">{description}</p>
+        {description ? <p className="mt-3 text-sm leading-6 text-black/52">{description}</p> : null}
       </div>
       <div className="mt-5">{children}</div>
     </section>
