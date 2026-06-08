@@ -358,14 +358,18 @@ enum EventUploadMappers {
                 }
             )
         }
-        let manualSetDetailAddressI18n =
-            addressI18n.flatMap(normalizedLocalizedAddress)
-            ?? address?.trimmed.eventUploadMapperNilIfBlank.flatMap {
-                localizedSingleText($0, language: draft.preferredLanguage)
-            }
-        if let manualSetDetailAddressI18n {
+        let manualSetAddressI18n =
+            normalizedLocalizedAddress(
+                WebBiText(
+                    en: draft.manualSetAddress.en,
+                    zh: draft.manualSetAddress.zh,
+                    ja: draft.manualSetAddress.ja,
+                    enFull: draft.manualSetAddress.enFull
+                )
+            )
+        if let manualSetAddressI18n {
             next.manualSetAddressI18n = formattedAddress(
-                detailAddressI18n: manualSetDetailAddressI18n,
+                detailAddressI18n: manualSetAddressI18n,
                 cityI18n: cityI18n ?? city.map {
                     localizedSingleText($0, language: draft.preferredLanguage)
                 },
@@ -374,7 +378,7 @@ enum EventUploadMappers {
                 }
             )
         } else {
-            next.manualSetAddressI18n = next.formattedAddressI18n
+            next.manualSetAddressI18n = nil
         }
 
         if let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank {

@@ -518,6 +518,26 @@ struct EventUploadFlowView: View {
                 preferredLanguage: viewModel.draft.preferredLanguage
             )
 
+            LocalizedExpandableFieldSection(
+                title: LT("场地展示地址", "Venue Display Address", "会場表示住所"),
+                isRequired: false,
+                axis: .vertical,
+                includeEnglishFull: false,
+                expanded: localizedExpansionBinding(for: "manualSetAddress"),
+                primaryPlaceholder: LT(
+                    "可选填写；留空时自动回退到地图格式化地址",
+                    "Optional; falls back to the map formatted address when empty",
+                    "任意入力。未入力時は地図の整形住所にフォールバック"
+                ),
+                primaryBinding: localizedBinding(\.manualSetAddress),
+                zhBinding: localizedBinding(\.manualSetAddress, language: .zh),
+                enBinding: localizedBinding(\.manualSetAddress, language: .en),
+                jaBinding: localizedBinding(\.manualSetAddress, language: .ja),
+                englishFullBinding: nil,
+                extraCount: viewModel.draft.manualSetAddress.secondaryValueCount(excluding: viewModel.draft.preferredLanguage),
+                preferredLanguage: viewModel.draft.preferredLanguage
+            )
+
             VStack(alignment: .leading, spacing: 8) {
                 fieldTitle(LT("地图选点", "Map Location", "地図選択"), isRequired: false)
                 HStack(spacing: 10) {

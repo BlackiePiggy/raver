@@ -611,6 +611,7 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
   country: emptyLocalizedText(),
   clearCountryI18nIntent: false,
   detailAddress: emptyLocalizedText(),
+  manualSetAddress: emptyLocalizedText(),
   latitude: '',
   longitude: '',
   locationPoint: null,
@@ -836,6 +837,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     country: fromNullableLocalizedText(event.countryI18n, event.country ?? ''),
     clearCountryI18nIntent: false,
     detailAddress: fromNullableLocalizedText(manualDetail || locationAddress, ''),
+    manualSetAddress: fromNullableLocalizedText(manualSetLocationAddress, ''),
     latitude: event.latitude != null ? String(event.latitude) : '',
     longitude: event.longitude != null ? String(event.longitude) : '',
     locationPoint: event.locationPoint

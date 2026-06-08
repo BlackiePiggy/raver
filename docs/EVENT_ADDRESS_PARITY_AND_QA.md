@@ -33,6 +33,8 @@
   - provider 原始格式化地址
 - `locationPoint.manualSetAddressI18n`
   - 用户最终确认的场地展示地址
+  - web / iOS 编辑态都必须提供显式可选输入入口
+  - 留空时不应被自动写死，展示时回退到 `locationPoint.formattedAddressI18n`
 - `locationPoint.nameI18n`
   - POI 名称元数据
   - 不再作为前台主展示地址
@@ -98,9 +100,10 @@
 
 - [ ] Web 新建 event，手填 `detailAddress + city + country`，提交后详情页“活动地址”正确显示 `manualLocation.formattedAddressI18n`
 - [ ] Web 新建 event，地图选点后再提交，详情页“场地”显示 `locationPoint.manualSetAddressI18n`
+- [x] Web event 创建 / 编辑页已提供 `manualSetAddressI18n` 显式可选输入框
 - [ ] Web 编辑 event，只改 `detailAddress`，再次提交后：
   - [ ] `manualLocation.formattedAddressI18n` 变化
-  - [ ] `locationPoint.manualSetAddressI18n` 同步变化
+  - [ ] `locationPoint.manualSetAddressI18n` 仅在用户显式填写时变化
   - [ ] `locationPoint.formattedAddressI18n` 保持 provider 原值
 - [ ] Web 清空地图点，提交后：
   - [ ] `locationPoint = null`
@@ -113,6 +116,7 @@
   - [ ] `locationPoint.nameI18n`
 - [ ] iOS event 详情页“活动地址”显示 `manualLocation.formattedAddressI18n`
 - [ ] iOS event 详情页“场地”显示 `locationPoint.manualSetAddressI18n -> locationPoint.formattedAddressI18n`
+- [x] iOS event 创建 / 编辑页已提供 `manualSetAddressI18n` 显式可选输入框
 - [ ] iOS map pin 文案与 open map query 语义一致
 - [ ] share / widget / check-in / search 与 event detail 地址语义一致
 
@@ -123,3 +127,4 @@
 - web / iOS / server 已统一切换到最新地址模型
 - `venueName` / `venueAddress` 不再属于 event 活跃写入与展示主线
 - 地址搜索、详情、列表、catalog、share、widget、check-in 已按新语义验收
+- `manualSetAddressI18n` 已回归为“显式可选覆盖字段”，不再由编辑页自动写死

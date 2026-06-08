@@ -69,7 +69,7 @@ const EVENT_STUDIO_STEP_ITEMS = [
 ] as const;
 
 type EventStudioStepKey = (typeof EVENT_STUDIO_STEP_ITEMS)[number]['key'];
-type LocalizedFieldKey = 'name' | 'city' | 'country' | 'detailAddress';
+type LocalizedFieldKey = 'name' | 'city' | 'country' | 'detailAddress' | 'manualSetAddress';
 type LocalizedLocaleKey = 'zh' | 'en' | 'ja' | 'enFull';
 type LocalizedFieldKind = 'input' | 'textarea';
 
@@ -1319,7 +1319,7 @@ export default function EventStudioForm({
   };
 
   const updateLocalizedField = (
-    key: 'name' | 'city' | 'country' | 'detailAddress',
+    key: 'name' | 'city' | 'country' | 'detailAddress' | 'manualSetAddress',
     locale: 'zh' | 'en' | 'ja' | 'enFull',
     value: string
   ) => {
@@ -1342,8 +1342,10 @@ export default function EventStudioForm({
             ? ['name']
             : key === 'city'
               ? ['city']
-              : key === 'country'
-                ? ['country']
+            : key === 'country'
+              ? ['country']
+              : key === 'manualSetAddress'
+                ? []
                 : ['detailAddress'],
       }
     );
@@ -1926,18 +1928,10 @@ export default function EventStudioForm({
               enFull: '',
             },
             manualSetAddressI18n: {
-              zh:
-                current.detailAddress.zh ||
-                point.formattedAddressI18n?.zh ||
-                point.addressI18n?.zh ||
-                '',
-              en:
-                current.detailAddress.en ||
-                point.formattedAddressI18n?.en ||
-                point.addressI18n?.en ||
-                '',
-              ja: '',
-              enFull: '',
+              zh: current.manualSetAddress.zh || '',
+              en: current.manualSetAddress.en || '',
+              ja: current.manualSetAddress.ja || '',
+              enFull: current.manualSetAddress.enFull || '',
             },
             city: point.city || null,
             district: point.district || null,
@@ -3660,6 +3654,24 @@ export default function EventStudioForm({
                         setActiveLocalizedField({
                           key: 'detailAddress',
                           label: '详细地址',
+                          kind: 'textarea',
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <LocalizedTextField
+                      label="场地展示地址（可选）"
+                      value={draft.manualSetAddress}
+                      kind="textarea"
+                      placeholder="用于 locationPoint.manualSetAddressI18n；留空时自动回退到地图格式化地址"
+                      hint="这是地图 pin 旁边和场地展示优先使用的文案，可选填写。"
+                      maxLength={INPUT_LIMITS.event.detailAddress}
+                      onPrimaryChange={(value) => updateLocalizedField('manualSetAddress', 'zh', value)}
+                      onOpenOverlay={() =>
+                        setActiveLocalizedField({
+                          key: 'manualSetAddress',
+                          label: '场地展示地址',
                           kind: 'textarea',
                         })
                       }

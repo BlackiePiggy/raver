@@ -378,6 +378,7 @@ struct EventUploadDraft: Hashable, Codable {
     var country = EventUploadLocalizedFields()
     var clearCountryI18nIntent = false
     var detailAddress = EventUploadLocalizedFields()
+    var manualSetAddress = EventUploadLocalizedFields()
     var startDate = Date()
     var endDate = Date()
     var canonicalSchedule: WebEventSchedule? = nil
@@ -448,6 +449,12 @@ struct EventUploadDraft: Hashable, Codable {
             en: detailAddressText?.en ?? "",
             ja: detailAddressText?.ja ?? "",
             enFull: detailAddressText?.enFull ?? ""
+        )
+        draft.manualSetAddress = EventUploadLocalizedFields(
+            zh: event.locationPoint?.manualSetAddressI18n?.zh ?? "",
+            en: event.locationPoint?.manualSetAddressI18n?.en ?? "",
+            ja: event.locationPoint?.manualSetAddressI18n?.ja ?? "",
+            enFull: event.locationPoint?.manualSetAddressI18n?.enFull ?? ""
         )
         draft.timeZoneIdentifier = event.timeZone ?? draft.timeZoneIdentifier
         let eventTimeZone = TimeZone(identifier: draft.timeZoneIdentifier) ?? .current

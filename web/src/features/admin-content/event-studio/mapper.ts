@@ -464,6 +464,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
   const cityI18n = draft.clearCityI18nIntent ? null : normalizedLocalizedText(draft.city, INPUT_LIMITS.event.city);
   const countryI18n = draft.clearCountryI18nIntent ? null : normalizedLocalizedText(draft.country, INPUT_LIMITS.event.country);
   const detailAddressI18n = normalizedLocalizedText(draft.detailAddress, INPUT_LIMITS.event.detailAddress, true);
+  const manualSetAddressI18n = normalizedLocalizedText(draft.manualSetAddress, INPUT_LIMITS.event.detailAddress, true);
   const posterImage = firstImageInZone(draft, 'poster');
   const coverImage = firstImageInZone(draft, 'cover');
   const lineupImage = firstImageInZone(draft, 'lineup');
@@ -579,18 +580,9 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
             ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
             : undefined),
         manualSetAddressI18n:
-          detailAddressI18n
-            ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
-            : cloneLocalizedTextOrUndefined(draft.locationPoint?.manualSetAddressI18n) ||
-              cloneLocalizedTextOrUndefined(draft.locationPoint?.formattedAddressI18n) ||
-              (locationAddress
-                ? {
-                    zh: locationAddress,
-                    en: locationAddress,
-                    ja: '',
-                    enFull: '',
-                  }
-                : undefined),
+          manualSetAddressI18n ||
+          cloneLocalizedTextOrUndefined(draft.locationPoint?.manualSetAddressI18n) ||
+          undefined,
         city: trimSingleLineOrNull(draft.locationPoint?.city, INPUT_LIMITS.event.city) || trimSingleLineOrNull(primaryText(draft.city), INPUT_LIMITS.event.city),
         district: trimSingleLineOrNull(draft.locationPoint?.district, INPUT_LIMITS.event.city),
         province: trimSingleLineOrNull(draft.locationPoint?.province, INPUT_LIMITS.event.country),
