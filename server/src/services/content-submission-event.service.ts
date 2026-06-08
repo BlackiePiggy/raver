@@ -270,12 +270,8 @@ const normalizeEventAddressPayloads = (input: {
       }
     : undefined;
 
-  const pointFormattedAddressI18n = normalizeLocalizedAddressText(locationPoint?.formattedAddressI18n);
   const pointManualSetAddressI18n =
-    normalizeLocalizedAddressText(locationPoint?.manualSetAddressI18n)
-    || formattedAddressI18n
-    || pointFormattedAddressI18n
-    || null;
+    normalizeLocalizedAddressText(locationPoint?.manualSetAddressI18n);
 
   const nextLocationPoint = locationPoint
     ? {

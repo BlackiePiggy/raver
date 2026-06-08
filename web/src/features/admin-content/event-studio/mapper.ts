@@ -347,6 +347,32 @@ const hasLocationPointProvenance = (input: {
     || hasLocationProviderMeta(input.providerMeta)
   );
 
+const hasUsefulLocationPointPayload = (
+  value: EventStudioDraft['locationPoint'] | null | undefined
+): boolean => {
+  if (!value) return false;
+  const hasLocation =
+    Number.isFinite(Number(value.location?.lng))
+    && Number.isFinite(Number(value.location?.lat));
+  return Boolean(
+    hasLocation
+    || normalizeLocationProvider(value.provider)
+    || normalizeLocationSourceMode(value.sourceMode)
+    || trimExternalIdOrNull(value.providerPlaceId)
+    || trimExternalIdOrNull(value.poiId)
+    || trimExternalIdOrNull(value.adcode)
+    || cloneLocalizedTextOrUndefined(value.nameI18n)
+    || cloneLocalizedTextOrUndefined(value.addressI18n)
+    || cloneLocalizedTextOrUndefined(value.formattedAddressI18n)
+    || cloneLocalizedTextOrUndefined(value.manualSetAddressI18n)
+    || trimSingleLineOrNull(value.city, INPUT_LIMITS.event.city)
+    || trimSingleLineOrNull(value.district, INPUT_LIMITS.event.city)
+    || trimSingleLineOrNull(value.province, INPUT_LIMITS.event.country)
+    || trimSingleLineOrNull(value.countryCode, 16)
+    || hasLocationProviderMeta(value.providerMeta ?? null)
+  );
+};
+
 const fallbackStageName = (stageOrder: string[]): string => stageOrder[0] || 'Main Stage';
 const defaultTicketTierName = (index: number): string => `Tier ${index + 1}`;
 
@@ -494,6 +520,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     adcode: locationAdcode,
     providerMeta: locationProviderMeta,
   });
+  const shouldRetainLocationPoint = hasRealLocationPointProvenance || hasUsefulLocationPointPayload(draft.locationPoint);
 
   const imageAssets = Object.entries(draft.imageZones).flatMap(([usage, items]) =>
     [...items]
@@ -543,7 +570,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
 
   const locationPoint: EventStudioCreateInput['locationPoint'] | null = latitude !== null
     && longitude !== null
-    && hasRealLocationPointProvenance
+    && shouldRetainLocationPoint
     && locationProvider
     && locationSourceMode
     ? {
@@ -580,9 +607,7 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
             ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
             : undefined),
         manualSetAddressI18n:
-          manualSetAddressI18n ||
-          cloneLocalizedTextOrUndefined(draft.locationPoint?.manualSetAddressI18n) ||
-          undefined,
+          manualSetAddressI18n || undefined,
         city: trimSingleLineOrNull(draft.locationPoint?.city, INPUT_LIMITS.event.city) || trimSingleLineOrNull(primaryText(draft.city), INPUT_LIMITS.event.city),
         district: trimSingleLineOrNull(draft.locationPoint?.district, INPUT_LIMITS.event.city),
         province: trimSingleLineOrNull(draft.locationPoint?.province, INPUT_LIMITS.event.country),
