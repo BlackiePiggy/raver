@@ -942,7 +942,8 @@ function bindEventLocationModalActions() {
         els.searchInput.value = zhQuery;
         els.searchInput.focus();
       }
-      eventLocationSetStatus('已填入中文地址，请手动点击搜索', false);
+      eventLocationSetStatus('已填入中文地址，正在搜索...', false);
+      eventLocationCallSearchByKeyword('manual_search');
     };
   }
   if (els.fillEnBtn) {
@@ -956,7 +957,8 @@ function bindEventLocationModalActions() {
         els.searchInput.value = enQuery;
         els.searchInput.focus();
       }
-      eventLocationSetStatus('已填入英文地址，请手动点击搜索', false);
+      eventLocationSetStatus('已填入英文地址，正在搜索...', false);
+      eventLocationCallSearchByKeyword('manual_search');
     };
   }
   if (els.myPosBtn) {

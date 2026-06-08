@@ -364,7 +364,6 @@ export default function EventLocationPickerModal({
   const [runtimeReady, setRuntimeReady] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [provider, setProvider] = useState<EventLocationProvider>(initialProvider);
-  const [search, setSearch] = useState(composedQuery || '');
   const [selectedPoint, setSelectedPoint] = useState<EventLocationPoint | null>(initialPoint);
   const [frame, setFrame] = useState<StandaloneRequestFrame | null>(null);
 
@@ -393,7 +392,6 @@ export default function EventLocationPickerModal({
     setRuntimeError(null);
     setRuntimeReady(false);
     setProvider(initialProvider);
-    setSearch(composedQuery || '');
     setSelectedPoint(initialPoint);
   }, [open, initialProvider, initialPoint, composedQuery]);
 
@@ -459,7 +457,7 @@ export default function EventLocationPickerModal({
     modal.style.borderRadius = '28px';
     mapWrap.id = 'event-location-picker-map';
     mapWrap.classList.add('event-location-picker-map-canvas');
-    searchInput.value = search;
+    searchInput.value = String(composedQuery || '').trim();
 
     const syncSelected = () => {
       const nextPoint =
@@ -496,11 +494,8 @@ export default function EventLocationPickerModal({
     }, 250);
 
     searchBtn.onclick = () => {
-      setSearch(searchInput.value);
       void runtime.eventLocationSearchByKeyword?.('manual_search');
     };
-    fillZhBtn.onclick = () => runtime.eventLocationFillAddressToCurrentPanel?.('zh');
-    fillEnBtn.onclick = () => runtime.eventLocationFillAddressToCurrentPanel?.('en');
     myPosBtn.onclick = () => void runtime.eventLocationLocateMe?.();
     confirmBtn.onclick = () => {
       const normalized =
@@ -526,7 +521,6 @@ export default function EventLocationPickerModal({
     pickerMode,
     runtimeReady,
     provider,
-    search,
     initialPoint,
     composedQuery,
     composedQueryZh,
@@ -627,9 +621,9 @@ export default function EventLocationPickerModal({
   if (!open) return null;
 
   return (
-    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center overflow-hidden overscroll-contain bg-black/55 p-4">
+    <div className="event-location-picker-shell fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/55 p-4">
       <div className="flex h-[88vh] min-h-[88vh] w-full max-w-[1480px] overflow-hidden rounded-[32px] border border-white/70 bg-[#f6f3ea] shadow-[0_30px_120px_rgba(7,17,16,0.24)]">
-        <aside className="hidden w-[320px] border-r border-black/8 bg-[linear-gradient(180deg,#f7f0df_0%,#fbf8ef_100%)] p-6 lg:flex lg:flex-col">
+        <aside className="hidden h-full min-h-0 w-[320px] overflow-y-auto border-r border-black/8 bg-[linear-gradient(180deg,#f7f0df_0%,#fbf8ef_100%)] p-6 lg:flex lg:flex-col">
           <div className="admin-studio-label">Location Picker</div>
           <h2 className="mt-3 text-[26px] font-semibold tracking-[-0.03em] text-[#071110]">地图选点</h2>
           <p className="mt-3 text-sm leading-6 text-black/52">
@@ -721,7 +715,7 @@ export default function EventLocationPickerModal({
           </div>
         </aside>
 
-        <div className="event-location-picker-stage relative flex-1 bg-white p-4">
+        <div className="event-location-picker-stage relative min-h-0 min-w-0 flex-1 bg-white p-4">
           <button
             type="button"
             onClick={onClose}
@@ -731,9 +725,9 @@ export default function EventLocationPickerModal({
           </button>
 
           {pickerMode === 'native' ? (
-            <div ref={modalRootRef} className="h-full overflow-hidden rounded-[28px] bg-[#f6f3ea]">
+            <div ref={modalRootRef} className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] bg-[#f6f3ea]">
               <div id="event-location-picker-overlay" className="h-full">
-                <div id="event-location-picker-modal" className="h-full">
+                <div id="event-location-picker-modal" className="flex h-full min-h-0 flex-col">
                   <div className="event-location-picker-head">
                     <div>
                       <div className="event-location-picker-title" id="event-location-picker-title">
@@ -747,7 +741,7 @@ export default function EventLocationPickerModal({
                       id="event-location-picker-search-input"
                       className="event-location-picker-search-input"
                       type="text"
-                      defaultValue={search}
+                      defaultValue={composedQuery || ''}
                       placeholder="搜索地点，例如：上海 梅赛德斯奔驰文化中心"
                     />
                     <button id="event-location-picker-search-btn" className="event-location-picker-btn primary" type="button">
@@ -763,25 +757,29 @@ export default function EventLocationPickerModal({
                       定位到我
                     </button>
                   </div>
-                  <div className="event-location-picker-map-wrap">
-                    <div id="event-location-picker-map" ref={mapWrapRef} className="event-location-picker-map-canvas h-full w-full rounded-[20px]" />
-                    <aside id="event-location-poi-panel" className="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
-                      <div className="event-location-poi-panel-head">
-                        <span>POI 信息</span>
-                        <button id="event-location-poi-panel-close" className="event-location-poi-panel-close" type="button" aria-label="关闭">
-                          ×
-                        </button>
+                  <div className="event-location-picker-content min-h-0 min-w-0 flex-1">
+                    <div className="event-location-picker-map-wrap">
+                      <div id="event-location-picker-map" ref={mapWrapRef} className="event-location-picker-map-canvas h-full w-full rounded-[20px]" />
+                      <button id="event-location-return-anchor-btn" className="event-location-return-anchor-btn" type="button">
+                        回到活动场地
+                      </button>
+                      <div id="event-location-center-pin" className="event-location-center-pin">
+                        📍
                       </div>
-                      <div id="event-location-poi-panel-body" className="event-location-poi-panel-body" />
-                    </aside>
-                    <button id="event-location-return-anchor-btn" className="event-location-return-anchor-btn" type="button">
-                      回到活动场地
-                    </button>
-                    <div id="event-location-center-pin" className="event-location-center-pin">
-                      📍
+                    </div>
+                    <div className="event-location-picker-side">
+                      <aside id="event-location-poi-panel" className="event-location-poi-panel" aria-live="polite" aria-label="POI 信息面板">
+                        <div className="event-location-poi-panel-head">
+                          <span>POI 信息</span>
+                          <button id="event-location-poi-panel-close" className="event-location-poi-panel-close" type="button" aria-label="关闭">
+                            ×
+                          </button>
+                        </div>
+                        <div id="event-location-poi-panel-body" className="event-location-poi-panel-body" />
+                      </aside>
+                      <div className="event-location-picker-candidates" id="event-location-picker-candidates" />
                     </div>
                   </div>
-                  <div className="event-location-picker-candidates" id="event-location-picker-candidates" />
                   <div className="event-location-picker-footer">
                     <span id="event-location-picker-status" className="event-location-picker-status" />
                     <button id="event-location-picker-cancel-btn" className="event-location-picker-btn" type="button">
@@ -812,6 +810,131 @@ export default function EventLocationPickerModal({
           )}
         </div>
       </div>
+      <style jsx global>{`
+        .event-location-picker-stage .event-location-picker-content {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 332px;
+          gap: 12px;
+          min-height: 0;
+          flex: 1 1 auto;
+          padding: 12px;
+          background: #f6f3ea;
+        }
+
+        .event-location-picker-stage .event-location-picker-map-wrap {
+          min-width: 0;
+          min-height: 0;
+          height: 100%;
+          overflow: hidden;
+          border: 1px solid rgba(7, 17, 16, 0.08);
+          border-radius: 20px;
+          background: #fff;
+        }
+
+        .event-location-picker-stage #event-location-picker-map {
+          height: 100%;
+          min-height: 420px;
+          border-radius: 20px;
+        }
+
+        .event-location-picker-stage .event-location-picker-side {
+          min-width: 0;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .event-location-picker-stage #event-location-poi-panel {
+          position: relative;
+          top: auto;
+          right: auto;
+          width: 100%;
+          max-height: none;
+          min-height: 0;
+          flex: 0 0 260px;
+          display: none;
+          border-radius: 18px;
+          overflow: hidden;
+        }
+
+        .event-location-picker-stage #event-location-poi-panel.visible {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .event-location-picker-stage .event-location-poi-panel-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
+          overflow: auto;
+          padding: 0.6rem 0.68rem;
+        }
+
+        .event-location-picker-stage .event-location-poi-info {
+          gap: 0.16rem;
+          font-size: 0.5rem;
+          line-height: 1.38;
+        }
+
+        .event-location-picker-stage .event-location-poi-info-title {
+          font-size: 0.6rem;
+          margin-bottom: 0.1rem;
+        }
+
+        .event-location-picker-stage .event-location-poi-info-meta,
+        .event-location-picker-stage .event-location-poi-info-tip {
+          font-size: 0.48rem;
+        }
+
+        .event-location-picker-stage #event-location-picker-candidates {
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
+          padding: 0.6rem 0.68rem;
+          gap: 0.26rem;
+          border: 1px solid rgba(7, 17, 16, 0.08);
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.92);
+        }
+
+        .event-location-picker-stage .event-location-candidate {
+          gap: 0.12rem;
+          padding: 0.4rem 0.46rem;
+          border-radius: 12px;
+        }
+
+        .event-location-picker-stage .event-location-candidate-badge,
+        .event-location-picker-stage .event-location-candidate-set-btn {
+          font-size: 0.42rem;
+        }
+
+        .event-location-picker-stage .event-location-candidate-name {
+          font-size: 0.56rem;
+          line-height: 1.25;
+        }
+
+        .event-location-picker-stage .event-location-candidate-addr,
+        .event-location-picker-stage .event-location-candidate-coord,
+        .event-location-picker-stage .event-location-candidate-empty {
+          font-size: 0.46rem;
+          line-height: 1.34;
+        }
+
+        @media (max-width: 1279px) {
+          .event-location-picker-stage .event-location-picker-content {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .event-location-picker-stage .event-location-picker-side {
+            max-height: 34vh;
+          }
+
+          .event-location-picker-stage #event-location-picker-map {
+            min-height: 320px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
