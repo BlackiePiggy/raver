@@ -85,3 +85,17 @@ export const clearAdminCatalogCache = (key: string): void => {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(resolveStorageKey(key));
 };
+
+export const clearAdminCatalogCacheByScope = (scope: string): void => {
+  if (typeof window === 'undefined') return;
+  const prefix = resolveStorageKey(scope);
+  const keysToDelete: string[] = [];
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key) continue;
+    if (key === prefix || key.startsWith(`${prefix}?`)) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach((key) => window.localStorage.removeItem(key));
+};

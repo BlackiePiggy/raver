@@ -789,6 +789,10 @@ export default function OrganizerCatalogPageClient() {
     setSearch(searchInput.trim());
   };
 
+  const handleRefresh = () => {
+    void loadCatalog();
+  };
+
   const handleReset = () => {
     setSearchInput('');
     setSearch('');
@@ -882,7 +886,7 @@ export default function OrganizerCatalogPageClient() {
           </Link>
           <button
             type="button"
-            onClick={() => void loadCatalog()}
+            onClick={handleRefresh}
             className="rounded-full border border-[#e8eceb] bg-white px-5 py-3 text-sm font-semibold text-[#071110]"
           >
             刷新目录

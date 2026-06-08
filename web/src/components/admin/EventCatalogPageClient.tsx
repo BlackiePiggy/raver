@@ -12,6 +12,7 @@ import {
   Ellipsis,
   List,
   MapPinned,
+  RefreshCw,
   SlidersHorizontal,
   Upload,
   Users2,
@@ -28,6 +29,7 @@ import {
 } from '@/features/admin-content/catalog/api';
 import {
   buildAdminCatalogCacheKey,
+  clearAdminCatalogCache,
   readAdminCatalogCache,
   writeAdminCatalogCache,
 } from '@/features/admin-content/catalog/cache';
@@ -1189,6 +1191,7 @@ export default function EventCatalogPageClient() {
   const [selectedEventError, setSelectedEventError] = useState('');
   const [selectedEventOverviewLoading, setSelectedEventOverviewLoading] = useState(false);
   const [selectedEventLoading, setSelectedEventLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [overviewCache, setOverviewCache] = useState<Record<string, EventStudioOverview>>({});
   const [detailCache, setDetailCache] = useState<Record<string, EventStudioLoadedEvent>>({});
   const [menuOpenEventId, setMenuOpenEventId] = useState<string | null>(null);
@@ -1289,6 +1292,16 @@ export default function EventCatalogPageClient() {
     event.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      clearAdminCatalogCache(cacheKey);
+      await loadCatalog({ force: true });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const statusCounts = useMemo(() => {
@@ -1524,6 +1537,15 @@ export default function EventCatalogPageClient() {
               </select>
               <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
             </label>
+
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              className="inline-flex h-[54px] w-[54px] items-center justify-center rounded-[18px] border border-[#eceff1] bg-white text-[#6b7280]"
+              aria-label="刷新目录"
+            >
+              <RefreshCw className={`h-4.5 w-4.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
 
             {/* 全部类型 */}
             <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">

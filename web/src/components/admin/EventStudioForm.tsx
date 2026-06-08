@@ -17,6 +17,7 @@ import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import { formatClockTimeInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
+import { clearAdminCatalogCacheByScope } from '@/features/admin-content/catalog/cache';
 import {
   createEmptyTicketTierDraft,
   createEmptyEventStudioTimetableSlotDraft,
@@ -1244,6 +1245,7 @@ export default function EventStudioForm({
   };
 
   const handleCancelFlow = () => {
+    clearAdminCatalogCacheByScope('events-catalog');
     window.location.href = '/admin/content/events/catalog';
   };
 
@@ -2084,6 +2086,7 @@ export default function EventStudioForm({
           ? await eventStudioApi.updateEvent(eventId, mapEventStudioDraftToUpdateInput(draftRef.current))
           : await eventStudioApi.createEvent(mapEventStudioDraftToCreateInput(draftRef.current));
       setAlignmentPreview(null);
+      clearAdminCatalogCacheByScope('events-catalog');
       onSubmit(result);
     } catch (error) {
       const failureTitle =
