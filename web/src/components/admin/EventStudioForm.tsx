@@ -7,7 +7,7 @@ import { Check, Languages, Pencil, Plus, Trash2, X } from 'lucide-react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import EntityBindingField from '@/components/admin/EntityBindingField';
-import type { EntityBindingValue } from '@/components/admin/EntityBindingSearch';
+import EntityBindingSearch, { type EntityBindingValue } from '@/components/admin/EntityBindingSearch';
 import EventLocationPickerModal, {
   type EventLocationPoint,
   type EventLocationProvider,
@@ -566,11 +566,13 @@ const localizedFieldMaxLength = (key: LocalizedFieldKey): number => {
   return INPUT_LIMITS.event.detailAddress;
 };
 
-function StudioTopbar({
-  mode,
-  draftTitle,
-  currentStepItem,
+function WorkflowRail({
+  currentStep,
+  onSelect,
+  draft,
+  mediaCount,
   canSubmit,
+  mode,
   submitting,
   uploading,
   onCancel,
@@ -578,10 +580,12 @@ function StudioTopbar({
   onSubmit,
   submitButtonText,
 }: {
-  mode: 'create' | 'edit';
-  draftTitle: string;
-  currentStepItem: (typeof EVENT_STUDIO_STEP_ITEMS)[number];
+  currentStep: number;
+  onSelect: (index: number) => void;
+  draft: EventStudioDraft;
+  mediaCount: number;
   canSubmit: boolean;
+  mode: 'create' | 'edit';
   submitting: boolean;
   uploading: boolean;
   onCancel: () => void;
@@ -589,170 +593,39 @@ function StudioTopbar({
   onSubmit: () => void;
   submitButtonText?: string;
 }) {
-  /* const renderMediaZone = (usage: EventStudioImageUsage) => {
-    const config = IMAGE_ZONE_CONFIG.find((item) => item.usage === usage);
-    if (!config) return null;
-    const items = draft.imageZones[usage];
-    const isPrimary = config.emphasis === 'primary';
-    const zoneUploadingCount = items.filter((item) => item.uploadState === 'uploading').length;
-
-    return (
-      <div
-        key={usage}
-        className={isPrimary ? 'admin-reference-card p-4' : 'admin-reference-soft-card border border-[#e8eceb] bg-[#fafbf9] p-4'}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-[#071110]">{config.title}</div>
-            <div className="mt-1 text-sm leading-6 text-black/48">{config.description}</div>
-          </div>
-          <label className="admin-studio-button-secondary cursor-pointer px-3 py-2 text-xs">
-            {items.length ? 'Add More' : 'Choose Images'}
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              className="hidden"
-              onChange={(event) => void handleImageUpload(event, usage)}
-            />
-          </label>
-        </div>
-
-        <div className="mt-4">
-          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-black/45">
-            <span>{items.length} images</span>
-            <span>{zoneUploadingCount ? `${zoneUploadingCount} uploading` : 'Up to 12 per pick'}</span>
-          </div>
-          {items.length ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {items.map((image, index) => (
-                <div key={image.id} className="overflow-hidden rounded-[22px] border border-[#e8eceb] bg-white">
-                  <div className="relative aspect-[4/3] overflow-hidden bg-[#f2f3ef]">
-                    {imagePreviewUrl(image) ? (
-                      image.remoteUrl.trim() ? (
-                        <Image src={image.remoteUrl} alt={`${config.title}-${index + 1}`} fill className="object-cover" sizes="800px" />
-                      ) : (
-                        <img src={imagePreviewUrl(image)} alt={`${config.title}-${index + 1}`} className="h-full w-full object-cover" />
-                      )
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-black/35">No preview</div>
-                    )}
-                    {image.uploadState === 'uploading' ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-xs font-medium text-white">Uploading...</div>
-                    ) : null}
-                    {image.uploadState === 'failed' ? (
-                      <div className="absolute right-3 top-3 rounded-full bg-[#fff4e6] px-2 py-1 text-[11px] font-semibold text-[#b25b00]">
-                        Failed
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[#071110]">{image.fileName || `${config.title} ${index + 1}`}</div>
-                      <div className="mt-1 text-xs text-black/40">
-                        #{image.sortOrder} · {imageStatusLabel(image)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleImageMove(usage, image.id, -1)}
-                        disabled={index === 0}
-                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Up
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleImageMove(usage, image.id, 1)}
-                        disabled={index === items.length - 1}
-                        className="rounded-full border border-[#d6ddd7] px-3 py-2 text-xs text-[#071110] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Down
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleImageRemove(usage, image)}
-                        className="admin-studio-button-danger px-3 py-2 text-xs"
-                      >
-                        {deletingImageId === image.id ? 'Removing...' : 'Remove'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex min-h-[180px] items-center justify-center rounded-[22px] border border-dashed border-[#d6ddd7] bg-white text-sm text-black/42">
-              {config.hint}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }; */
-
-  return (
-    <section className="admin-event-workbench-topbar">
-      <div className="min-w-0">
-        <div className="admin-event-workbench-crumb">
-          <span>活动目录</span>
-          <span>/</span>
-          <span className="truncate">{draftTitle}</span>
-          <span>/</span>
-          <span>{currentStepItem.title}</span>
-        </div>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div>
-            <div className="admin-studio-label">{mode === 'create' ? 'Create Event Flow' : 'Edit Event Flow'}</div>
-            <h2 className="mt-1 text-[30px] font-extrabold tracking-[-0.045em] text-[#071110]">{currentStepItem.title}</h2>
-          </div>
-          <p className="max-w-2xl text-sm leading-6 text-black/48">{currentStepItem.description}</p>
-        </div>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <button type="button" onClick={onCancel} className="admin-studio-button-secondary px-5 py-3 text-sm">
-          取消
-        </button>
-        <button type="button" onClick={onSaveDraft} className="admin-studio-button-secondary px-5 py-3 text-sm">
-          保存草稿
-        </button>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={submitting || uploading}
-          className="admin-studio-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-          title={canSubmit ? '当前表单已满足提交条件' : '还有必填项未完成，提交时会自动跳转到对应分页'}
-        >
-          {submitting ? '提交中...' : submitButtonText || (mode === 'create' ? '提交审核' : '提交审核')}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function WorkflowRail({
-  currentStep,
-  onSelect,
-  draft,
-  mediaCount,
-  canSubmit,
-}: {
-  currentStep: number;
-  onSelect: (index: number) => void;
-  draft: EventStudioDraft;
-  mediaCount: number;
-  canSubmit: boolean;
-}) {
   return (
     <aside className="admin-event-workbench-rail">
-      <div className="rounded-[28px] bg-[#071110] p-5 text-white shadow-[0_24px_55px_rgba(7,17,16,.18)]">
-        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Event Session</div>
-        <div className="mt-3 text-2xl font-black tracking-[-0.05em]">{currentStep + 1}/7</div>
-        <div className="mt-2 text-sm leading-6 text-white/62">{canSubmit ? '资料已满足提交条件' : '按 iOS 上传分页继续补齐资料'}</div>
+      <div className="admin-event-workbench-rail-hero">
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#3b6556]">Event Session</div>
+          <div className="mt-2 flex items-end gap-2">
+            <div className="text-[28px] font-black leading-none tracking-[-0.06em] text-[#071110]">{currentStep + 1}/7</div>
+            <div className="pb-0.5 text-[11px] font-semibold text-[#4f6b60]">{mode === 'create' ? '创建流' : '编辑流'}</div>
+          </div>
+          <div className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${canSubmit ? 'bg-[#e5f6ed] text-[#1f7a4e]' : 'bg-[#f3f5f4] text-[#5d6f68]'}`}>
+            {canSubmit ? '资料已满足提交条件' : '按 iOS 上传分页继续补齐资料'}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <button type="button" onClick={onCancel} className="admin-event-workbench-rail-action">
+            取消
+          </button>
+          <button type="button" onClick={onSaveDraft} className="admin-event-workbench-rail-action">
+            草稿
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitting || uploading}
+            className="admin-event-workbench-rail-action admin-event-workbench-rail-action-primary"
+            title={canSubmit ? '当前表单已满足提交条件' : '还有必填项未完成，提交时会自动跳转到对应分页'}
+          >
+            {submitting ? '提交中' : submitButtonText || '提交'}
+          </button>
+        </div>
       </div>
 
-      <nav className="mt-4 space-y-2">
+      <nav className="mt-3 space-y-2">
         {EVENT_STUDIO_STEP_ITEMS.map((item, index) => {
           const active = currentStep === index;
           const done = index < currentStep;
@@ -773,7 +646,7 @@ function WorkflowRail({
         })}
       </nav>
 
-      <div className="admin-event-workbench-rail-card mt-4">
+      <div className="admin-event-workbench-rail-card mt-3">
         <div className="admin-studio-label">当前数据</div>
         <div className="mt-3 grid gap-2 text-sm">
           <div className="flex justify-between gap-3"><span>媒体</span><b>{mediaCount} 张</b></div>
@@ -3336,19 +3209,6 @@ export default function EventStudioForm({
 
   return (
     <div className="admin-event-workbench space-y-5">
-      <StudioTopbar
-        mode={mode}
-        draftTitle={draftTitle}
-        currentStepItem={currentStepItem}
-        canSubmit={canSubmit}
-        submitting={submitting}
-        uploading={uploadingImageCount > 0 || deletingImageId !== null}
-        onCancel={handleCancelFlow}
-        onSaveDraft={handleSaveDraft}
-        onSubmit={() => void handleSubmit()}
-        submitButtonText={submitButtonText}
-      />
-
       {conflictNotice ? (
         <section className="admin-studio-pastel-sand p-4 text-sm text-[#604a1b]">{conflictNotice}</section>
       ) : null}
@@ -3364,7 +3224,20 @@ export default function EventStudioForm({
       ) : null}
 
       <div className="admin-event-workbench-shell">
-        <WorkflowRail currentStep={currentStep} onSelect={goToStep} draft={draft} mediaCount={mediaCount} canSubmit={canSubmit} />
+        <WorkflowRail
+          currentStep={currentStep}
+          onSelect={goToStep}
+          draft={draft}
+          mediaCount={mediaCount}
+          canSubmit={canSubmit}
+          mode={mode}
+          submitting={submitting}
+          uploading={uploadingImageCount > 0 || deletingImageId !== null}
+          onCancel={handleCancelFlow}
+          onSaveDraft={handleSaveDraft}
+          onSubmit={() => void handleSubmit()}
+          submitButtonText={submitButtonText}
+        />
         <main className="min-w-0 space-y-5">
 
       {currentStep === 0 ? (
@@ -3671,19 +3544,16 @@ export default function EventStudioForm({
                   </div>
                 )}
 
-                {/* EntityBindingField */}
-                <EntityBindingField
+                <EntityBindingSearch
                   kind="festival"
-                  mode="single"
                   seedQuery={draft.organizerName}
-                  items={organizerBindingItems}
-                  title="Bound organizer"
-                  emptyLabel="Search and bind one organizer from the library."
-                  onAdd={(value) => {
+                  current={organizerBindingItems[0] ?? null}
+                  showCurrentCard={false}
+                  onBind={(value) => {
                     updateDraft('organizerFestivalId', value.id);
                     updateDraft('organizerName', value.name);
                   }}
-                  onRemove={() => updateDraft('organizerFestivalId', '')}
+                  onClear={() => updateDraft('organizerFestivalId', '')}
                 />
 
                 {/* Bound success notice */}
