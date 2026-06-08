@@ -36,6 +36,7 @@ import type { EventStudioLoadedEvent, EventStudioOverview } from '@/features/adm
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import type { ContributionListResponse, ContributionUserLite } from '@/features/contribution-module/types';
 import type { EventStatusFilter } from '@/lib/api/event';
+import { resolveEventActivityAddressText, resolveEventVenueDisplayText } from '@/lib/event-address';
 import { formatEventDisplayStatusText, formatEventVisibilityText, resolveEventDisplayStatus } from '@/lib/event-status';
 import { formatClockTimeInTimeZone, formatDateInputInTimeZone, normalizeDisplayTimeZone } from '@/lib/timezone';
 
@@ -111,8 +112,11 @@ const resolveEventStatus = (
   };
 };
 
-const formatLocation = (item: EventCatalogItem): string =>
-  [item.city, item.country].filter(Boolean).join(', ') || '地点待补充';
+const formatLocation = (item: EventCatalogItem): string => {
+  const venueText = resolveEventVenueDisplayText(item);
+  const activityText = resolveEventActivityAddressText(item);
+  return venueText || activityText || [item.city, item.country].filter(Boolean).join(', ') || '地点待补充';
+};
 
 const resolveCountryLabel = (country?: string | null): string => {
   if (!country) return '国家待补充';
@@ -429,6 +433,16 @@ function EventDetailOverlay({
   const ticketTiers = sortedByOrder(resolved?.ticketTiers);
   const stageOrder = compactStringList(resolved?.stageOrder);
   const cityCountry = [resolved?.city ?? safeItem.city, resolved?.country ?? safeItem.country].filter(Boolean).join(', ');
+  const venueDisplayAddress = resolveEventVenueDisplayText({
+    venueDisplayAddress: resolved?.venueDisplayAddress ?? safeItem.venueDisplayAddress,
+    manualLocation: resolved?.manualLocation,
+    locationPoint: resolved?.locationPoint,
+  });
+  const activityAddress = resolveEventActivityAddressText({
+    activityAddress: resolved?.activityAddress ?? safeItem.activityAddress,
+    manualLocation: resolved?.manualLocation,
+  });
+  const locationSummary = venueDisplayAddress || activityAddress || cityCountry || '地点待补充';
   const timeZone = resolved?.schedule?.timeZone || resolved?.timeZone || safeItem.timeZone || '未设置';
   const eventTypeLabel = resolved?.eventType || safeItem.eventType || '未设置';
   const organizerLabel = resolved?.organizerName || safeItem.wikiFestival?.name || safeItem.organizerName || '未绑定主办方';
@@ -586,7 +600,7 @@ function EventDetailOverlay({
               </div>
               <div className="rounded-[18px] border border-[#edf0f2] bg-[#fafbfb] px-4 py-3 sm:col-span-2">
                 <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">Location</div>
-                <div className="mt-2 text-sm font-semibold text-[#111827]">{formatLocation(item)}</div>
+                <div className="mt-2 text-sm font-semibold text-[#111827]">{locationSummary}</div>
               </div>
             </div>
           </div>
@@ -982,7 +996,7 @@ function EventDetailOverlay({
                 </div>
                 <div className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#111827]">{primaryName}</div>
                 <div className="mt-2 text-sm font-medium text-[#6b7280]">
-                  {organizerLabel} · {cityCountry || '地点待补充'}
+                  {organizerLabel} · {locationSummary}
                 </div>
               </div>
             </div>
@@ -1008,7 +1022,7 @@ function EventDetailOverlay({
                 {detailText('开始日期', formatLogicalDateInEventTimeZone(item.startDate, timeZone))}
                 {detailText('结束日期', formatLogicalDateInEventTimeZone(item.endDate, timeZone))}
                 {detailText('Organizer', organizerLabel)}
-                {detailText('Location', cityCountry || formatLocation(item))}
+                {detailText('Location', locationSummary)}
                 {detailText('Updated At', formatDateTimeInEventTimeZone(item.updatedAt, timeZone))}
               </div>
             </div>

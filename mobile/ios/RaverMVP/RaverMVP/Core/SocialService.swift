@@ -57,7 +57,7 @@ protocol IMChatCompatibilityService: AnyObject {
 struct EventShareCardPayload: Codable, Hashable {
     let eventID: String
     let eventName: String
-    let venueName: String?
+    let venueDisplayAddress: String?
     let city: String?
     let startAtISO8601: String?
     let coverImageURL: String?

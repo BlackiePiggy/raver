@@ -1905,7 +1905,7 @@ struct WidgetEventManagerView: View {
                     name: current.name,
                     customDisplayName: value,
                     city: current.city,
-                    venueName: current.venueName,
+                    venueDisplayAddress: current.venueDisplayAddress,
                     startDate: current.startDate,
                     endDate: current.endDate,
                     dateRanges: current.dateRanges,
@@ -1928,7 +1928,9 @@ struct WidgetEventManagerView: View {
         if let nextDate = widgetNextRelevantDateText(event) {
             parts.append(nextDate)
         }
-        parts.append(contentsOf: [event.city, event.venueName].compactMap(widgetTrimmed))
+        if let venue = widgetTrimmed(event.venueDisplayAddress) {
+            parts.append(venue)
+        }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 

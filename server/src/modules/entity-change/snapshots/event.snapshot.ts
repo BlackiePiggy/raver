@@ -78,8 +78,6 @@ export const buildEventChangeSnapshot = async (input: {
         wikiFestivalId: event.wikiFestivalId,
       },
       location: {
-        venueName: event.venueName,
-        venueAddress: event.venueAddress,
         city: event.city,
         cityI18n: normalizeJson(event.cityI18n),
         country: event.country,

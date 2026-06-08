@@ -53,13 +53,17 @@ Scope:
     - no client sends fake provider defaults
     - edit hydrate and resubmit preserves true location provenance
 
-- [x] Add iOS write support for `venueName`, `venueAddress`, `sourceProvider`, and `referenceLinks`
-  - Best solution: expand the iOS event upload draft and mapper so these fields become first-class editable event metadata, not web-only extras.
-  - Why this is the best solution: these fields are real event facts already persisted and read by the server, so leaving them web-only creates permanent product asymmetry.
+- [x] Remove `venueName` / `venueAddress` from cross-platform event write semantics and keep only `sourceProvider` / `referenceLinks` as first-class metadata
+  - Best solution: both web and iOS align to the canonical address model:
+    - no top-level `venueName`
+    - no top-level `venueAddress`
+    - `manualLocation` carries activity address truth
+    - `locationPoint` carries map provenance and venue display truth
+  - Why this is the best solution: keeping legacy top-level venue fields would permanently split write semantics between clients and server.
   - Acceptance:
-    - iOS draft model contains these fields
-    - iOS create/update payloads send them
-    - iOS edit hydrate round-trips them
+    - iOS draft model does not depend on legacy `venueName` / `venueAddress`
+    - iOS create/update payloads do not emit legacy top-level venue fields
+    - `sourceProvider` / `referenceLinks` continue to round-trip as event metadata
 
 - [x] Add iOS write support for canonical `socialLinks`
   - Best solution: map `socialLinks` as true arbitrary JSON through the generated EventAdmin Swift contract using the generator's canonical JSON container type, not a lossy string shim and not a second shadow schema.

@@ -158,7 +158,6 @@ final class EventMultiWeekDisplayTests: XCTestCase {
             ticketCurrency: nil,
             ticketNotes: nil,
             officialWebsite: nil,
-            status: nil,
             isVerified: true,
             createdAt: Self.date("2026-01-01", timeZoneID: "Europe/Brussels"),
             updatedAt: Self.date("2026-01-01", timeZoneID: "Europe/Brussels"),

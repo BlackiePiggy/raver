@@ -49,6 +49,10 @@
       "en": "Shanghai, China · Riverside Warehouse 99",
       "zh": "中国上海 · 滨江仓库 99"
     },
+    "manualSetAddressI18n": {
+      "en": "Shanghai, China · 99 Xuhui Riverside",
+      "zh": "中国上海 · 徐汇滨江 99 号"
+    },
     "city": "Shanghai",
     "province": "Shanghai",
     "countryCode": "CN",

@@ -489,8 +489,6 @@ model Event {
   sourceEventUrl    String?  @map("source_event_url")
   eventType         String?  @map("event_type")
   organizerName     String?  @map("organizer_name")
-  venueName         String?  @map("venue_name")
-  venueAddress      String?  @map("venue_address")
   city              String?
   country           String?
   manualLocation    Json?    @map("manual_location")

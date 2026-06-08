@@ -4,6 +4,11 @@ import path from 'path';
 import { resolveUserGenrePreferenceMap } from './user-genre-preference.service';
 import { DEFAULT_EVENT_TIME_ZONE, normalizeEventTimeZone, storageDateToEventDate } from '../utils/event-timezone';
 import { deriveEventStatus, resolveEventTruth } from '../utils/event-status';
+import {
+  readLocalizedJsonString,
+  resolveEventActivityAddressText,
+  resolveEventVenueDisplayAddressText,
+} from '../utils/event-address';
 
 const prisma = new PrismaClient();
 
@@ -248,6 +253,24 @@ const fetchEventIDsByLocalizedTextContains = async (
   return rows.map((row) => row.id);
 };
 
+const fetchEventIDsByAddressTextContains = async (
+  query: string,
+  options: { excludeIDs?: string[]; limit?: number } = {}
+): Promise<string[]> => {
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "events"
+    WHERE (
+      COALESCE("manual_location"::text, '') ILIKE ${`%${query}%`}
+      OR COALESCE("location_point"::text, '') ILIKE ${`%${query}%`}
+    )
+      ${options.excludeIDs?.length ? Prisma.sql`AND "id" NOT IN (${Prisma.join(options.excludeIDs)})` : Prisma.empty}
+    ORDER BY "updated_at" DESC
+    LIMIT ${options.limit ?? 50}
+  `);
+  return rows.map((row) => row.id);
+};
+
 const fetchFestivalIDsByLocalizedTextContains = async (
   query: string,
   options: { excludeIDs?: string[]; limit?: number } = {}
@@ -366,15 +389,14 @@ const buildSearchEventDateRanges = (input: {
 
 const buildEventSearchSubtitle = (input: {
   locale: GlobalSearchLocale;
-  city?: string | null;
-  country?: string | null;
-  venueName?: string | null;
+  activityAddress?: string | null;
+  venueDisplayAddress?: string | null;
   startDate: Date;
   endDate: Date;
   weeks?: Array<{ weekIndex: number; label?: string | null; startDate: Date; endDate: Date }>;
   eventDays?: Array<{ weekIndex: number; label?: string | null; date: Date }>;
 }): string | null => {
-  const locationText = compact([compact([input.city, input.country], ', '), input.venueName]);
+  const locationText = compact([input.venueDisplayAddress, input.activityAddress]);
   const ranges = buildSearchEventDateRanges(input);
   const dateText = ranges
     .map((range) => {
@@ -659,9 +681,10 @@ const loadRankingYearEntries = (boardId: string, year: number): RankingEntryReco
 };
 
 const searchEvents = async (query: string, limit: number, locale: GlobalSearchLocale): Promise<GlobalSearchItem[]> => {
-  const [brandAliasIDs, localizedEventIDs, localizedFestivalIDs] = await Promise.all([
+  const [brandAliasIDs, localizedEventIDs, addressMatchedEventIDs, localizedFestivalIDs] = await Promise.all([
     fetchFestivalIDsByAliasContains(query),
     fetchEventIDsByLocalizedTextContains(query),
+    fetchEventIDsByAddressTextContains(query),
     fetchFestivalIDsByLocalizedTextContains(query),
   ]);
 
@@ -673,7 +696,6 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         { description: containsInsensitive(query) },
         { city: containsInsensitive(query) },
         { country: containsInsensitive(query) },
-        { venueName: containsInsensitive(query) },
         { organizerName: containsInsensitive(query) },
         { canonicalArtists: { some: { displayName: containsInsensitive(query) } } },
         { canonicalArtists: { some: { members: { some: { memberNameSnapshot: containsInsensitive(query) } } } } },
@@ -689,6 +711,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
           },
         },
         ...(localizedEventIDs.length > 0 ? [{ id: { in: localizedEventIDs } }] : []),
+        ...(addressMatchedEventIDs.length > 0 ? [{ id: { in: addressMatchedEventIDs } }] : []),
         ...(localizedFestivalIDs.length > 0 ? [{ wikiFestivalId: { in: localizedFestivalIDs } }] : []),
         ...(brandAliasIDs.length > 0 ? [{ wikiFestivalId: { in: brandAliasIDs } }] : []),
       ],
@@ -705,7 +728,8 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       cityI18n: true,
       country: true,
       countryI18n: true,
-      venueName: true,
+      manualLocation: true,
+      locationPoint: true,
       organizerName: true,
       startDate: true,
       endDate: true,
@@ -761,6 +785,21 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       const description = pickLocalizedText(row.descriptionI18n, locale, row.description);
       const city = pickLocalizedText(row.cityI18n, locale, row.city);
       const country = pickLocalizedText(row.countryI18n, locale, row.country);
+      const activityAddress = resolveEventActivityAddressText({
+        manualLocation: row.manualLocation,
+      });
+      const venueDisplayAddress = resolveEventVenueDisplayAddressText({
+        manualLocation: row.manualLocation,
+        locationPoint: row.locationPoint,
+      });
+      const searchableLocationTexts = [
+        venueDisplayAddress,
+        readLocalizedJsonString(row.manualLocation, ['detailAddressI18n']),
+        readLocalizedJsonString(row.manualLocation, ['formattedAddressI18n']),
+        readLocalizedJsonString(row.locationPoint, ['manualSetAddressI18n']),
+        readLocalizedJsonString(row.locationPoint, ['formattedAddressI18n']),
+        readLocalizedJsonString(row.locationPoint, ['nameI18n']),
+      ];
       const brandName = row.wikiFestival
         ? pickLocalizedText(row.wikiFestival.nameI18n, locale, row.wikiFestival.name)
         : null;
@@ -774,7 +813,7 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
       const score = Math.max(
         scoreTexts(query, [row.name, title]),
         scoreText(query, row.abbreviation, { exact: 90, prefix: 78, contains: 62 }),
-        scoreTexts(query, [row.venueName, row.city, city, row.country, country, row.organizerName], { exact: 78, prefix: 66, contains: 48 }),
+        scoreTexts(query, [...searchableLocationTexts, row.city, city, row.country, country, row.organizerName], { exact: 78, prefix: 66, contains: 48 }),
         scoreTexts(query, brandNames, { exact: 86, prefix: 74, contains: 56 }),
         scoreTexts(query, lineupNames, { exact: 82, prefix: 70, contains: 52 }),
         scoreTexts(query, [row.description, description], { exact: 54, prefix: 44, contains: 34 })
@@ -794,9 +833,8 @@ const searchEvents = async (query: string, limit: number, locale: GlobalSearchLo
         title,
         subtitle: buildEventSearchSubtitle({
           locale,
-          city,
-          country,
-          venueName: row.venueName,
+          activityAddress,
+          venueDisplayAddress,
           startDate: row.startDate,
           endDate: row.endDate,
           weeks: row.weeks.map((week) => ({

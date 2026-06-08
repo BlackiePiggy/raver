@@ -1537,7 +1537,7 @@ struct TencentUIKitChatView: View {
         return ChatEventCardPayload(
             eventID: eventID,
             eventName: eventName,
-            venueName: (message.customData["venueName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            venueDisplayAddress: (message.customData["venueDisplayAddress"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
             city: (message.customData["eventCity"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
             startAtText: (message.customData["eventStartAtText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
             coverImageURL: (message.customData["eventCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1865,7 +1865,7 @@ struct TencentUIKitChatView: View {
             eventID: (message.customData["offlineActivityEventID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
             title: title,
             eventName: (message.customData["offlineActivityEventName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
-            venueName: (message.customData["offlineActivityVenueName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
+            venueDisplayAddress: (message.customData["offlineActivityVenueDisplayAddress"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
             city: (message.customData["offlineActivityCity"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
             coverImageURL: (message.customData["offlineActivityCoverImageURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank,
             startedAt: startedAt,
@@ -2025,7 +2025,7 @@ private struct ChatVoicePayload {
 private struct ChatEventCardPayload {
     let eventID: String
     let eventName: String
-    let venueName: String?
+    let venueDisplayAddress: String?
     let city: String?
     let startAtText: String?
     let coverImageURL: String?
@@ -3000,9 +3000,7 @@ private struct ChatSquadOfflineActivityCardBubbleView: View {
     }
 
     private var subtitle: String {
-        let venue = [payload.venueName, payload.city]
-            .compactMap { $0?.nilIfBlank }
-            .joined(separator: " · ")
+        let venue = payload.venueDisplayAddress?.nilIfBlank ?? ""
         if !venue.isEmpty {
             return venue
         }
@@ -4139,7 +4137,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
                 let payload = EventShareCardPayload(
                     eventID: "demo-event-001",
                     eventName: "Raver Demo Night",
-                    venueName: "Oil Club",
+                    venueDisplayAddress: "Oil Club",
                     city: "Shanghai",
                     startAtISO8601: ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600 * 24 * 3)),
                     coverImageURL: "https://images.unsplash.com/photo-1571266028243-d220c9f1db71?auto=format&fit=crop&w=1200&q=80",
@@ -4382,7 +4380,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             data["cardType"] = "event"
             data["eventID"] = payload.eventID
             data["eventName"] = payload.eventName
-            data["venueName"] = payload.venueName ?? ""
+            data["venueDisplayAddress"] = payload.venueDisplayAddress ?? ""
             data["eventCity"] = payload.city ?? ""
             data["eventStartAtText"] = eventCardDateText(payload.startAtISO8601)
             data["eventCoverImageURL"] = payload.coverImageURL ?? ""
@@ -4525,7 +4523,7 @@ private final class ExyteChatConversationViewModel: ObservableObject {
             data["offlineActivityEventID"] = payload.eventID ?? ""
             data["offlineActivityTitle"] = payload.title
             data["offlineActivityEventName"] = payload.eventName ?? ""
-            data["offlineActivityVenueName"] = payload.venueName ?? ""
+            data["offlineActivityVenueDisplayAddress"] = payload.venueDisplayAddress ?? ""
             data["offlineActivityCity"] = payload.city ?? ""
             data["offlineActivityCoverImageURL"] = payload.coverImageURL ?? ""
             data["offlineActivityStartedAt"] = payload.startedAt

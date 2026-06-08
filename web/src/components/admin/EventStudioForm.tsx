@@ -1925,6 +1925,20 @@ export default function EventStudioForm({
               ja: '',
               enFull: '',
             },
+            manualSetAddressI18n: {
+              zh:
+                current.detailAddress.zh ||
+                point.formattedAddressI18n?.zh ||
+                point.addressI18n?.zh ||
+                '',
+              en:
+                current.detailAddress.en ||
+                point.formattedAddressI18n?.en ||
+                point.addressI18n?.en ||
+                '',
+              ja: '',
+              enFull: '',
+            },
             city: point.city || null,
             district: point.district || null,
             province: point.province || null,
@@ -3397,28 +3411,6 @@ export default function EventStudioForm({
                   />
                 </AdminCountedControl>
               </Field>
-              <Field label="场馆名（可选）">
-                <AdminCountedControl count={countText(draft.venueName)} maxLength={INPUT_LIMITS.event.venueName}>
-                  <input
-                    value={draft.venueName}
-                    onChange={(event) => updateDraft('venueName', event.target.value)}
-                    className={textInputClassName}
-                    placeholder="例如：National Stadium"
-                    maxLength={INPUT_LIMITS.event.venueName}
-                  />
-                </AdminCountedControl>
-              </Field>
-              <Field label="场馆地址（可选）">
-                <AdminCountedControl count={countText(draft.venueAddress)} maxLength={INPUT_LIMITS.event.venueAddress}>
-                  <input
-                    value={draft.venueAddress}
-                    onChange={(event) => updateDraft('venueAddress', event.target.value)}
-                    className={textInputClassName}
-                    placeholder="例如：88 Xuhui Riverside"
-                    maxLength={INPUT_LIMITS.event.venueAddress}
-                  />
-                </AdminCountedControl>
-              </Field>
               <Field label="来源链接">
                 <AdminCountedControl count={countText(draft.sourceEventUrl)} maxLength={INPUT_LIMITS.common.url}>
                   <input
@@ -3601,30 +3593,20 @@ export default function EventStudioForm({
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <Field label="地图地点名（可选）">
-                      <AdminCountedControl count={countText(draft.pickedPlaceName)} maxLength={INPUT_LIMITS.event.venueName}>
-                        <input
-                          value={draft.pickedPlaceName}
-                          onChange={(event) => updateDraft('pickedPlaceName', event.target.value)}
-                          className={textInputClassName}
-                          placeholder="例如：National Stadium"
-                          maxLength={INPUT_LIMITS.event.venueName}
-                        />
-                      </AdminCountedControl>
-                    </Field>
-                    <Field label="地图地址（可选）">
-                      <AdminCountedControl count={countText(draft.pickedMapAddress)} maxLength={INPUT_LIMITS.event.detailAddress}>
-                        <input
-                          value={draft.pickedMapAddress}
-                          onChange={(event) => updateDraft('pickedMapAddress', event.target.value)}
-                          className={textInputClassName}
-                          placeholder="用于 locationPoint 回填"
-                          maxLength={INPUT_LIMITS.event.detailAddress}
-                        />
-                      </AdminCountedControl>
-                    </Field>
-                  </div>
+                  {draft.pickedPlaceName || draft.pickedMapAddress ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <Field label="地图地点名">
+                        <div className="admin-studio-input min-h-[52px] bg-black/[0.02] px-4 py-3 text-sm leading-6 text-black/72">
+                          {draft.pickedPlaceName || '未返回地点名'}
+                        </div>
+                      </Field>
+                      <Field label="地图地址">
+                        <div className="admin-studio-input min-h-[52px] bg-black/[0.02] px-4 py-3 text-sm leading-6 text-black/72">
+                          {draft.pickedMapAddress || '未返回地图地址'}
+                        </div>
+                      </Field>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">

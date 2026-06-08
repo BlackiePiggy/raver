@@ -37,7 +37,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
     let name: String
     let customDisplayName: String?
     let city: String?
-    let venueName: String?
+    let venueDisplayAddress: String?
     let startDate: Date
     let endDate: Date
     let dateRanges: [WidgetCountdownDateRange]
@@ -50,7 +50,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
         name: String,
         customDisplayName: String?,
         city: String?,
-        venueName: String?,
+        venueDisplayAddress: String?,
         startDate: Date,
         endDate: Date,
         dateRanges: [WidgetCountdownDateRange] = [],
@@ -62,7 +62,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
         self.name = name
         self.customDisplayName = widgetTrimmed(customDisplayName)
         self.city = city
-        self.venueName = venueName
+        self.venueDisplayAddress = venueDisplayAddress
         self.startDate = startDate
         self.endDate = endDate < startDate ? startDate : endDate
         self.dateRanges = dateRanges.isEmpty ? [
@@ -84,7 +84,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
         case name
         case customDisplayName
         case city
-        case venueName
+        case venueDisplayAddress
         case startDate
         case endDate
         case dateRanges
@@ -105,7 +105,7 @@ struct WidgetCountdownEvent: Codable, Identifiable, Hashable {
             name: name,
             customDisplayName: try container.decodeIfPresent(String.self, forKey: .customDisplayName),
             city: try container.decodeIfPresent(String.self, forKey: .city),
-            venueName: try container.decodeIfPresent(String.self, forKey: .venueName),
+            venueDisplayAddress: try container.decodeIfPresent(String.self, forKey: .venueDisplayAddress),
             startDate: startDate,
             endDate: decodedEndDate,
             dateRanges: try container.decodeIfPresent([WidgetCountdownDateRange].self, forKey: .dateRanges) ?? [],

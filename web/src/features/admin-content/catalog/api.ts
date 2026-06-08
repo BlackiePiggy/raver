@@ -31,6 +31,8 @@ export type EventCatalogItem = {
   organizerName?: string | null;
   city?: string | null;
   country?: string | null;
+  activityAddress?: string | null;
+  venueDisplayAddress?: string | null;
   eventType?: string | null;
   status?: EventDerivedStatus | null;
   isCancelled?: boolean | null;

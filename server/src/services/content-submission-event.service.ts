@@ -176,6 +176,120 @@ const resolveOptionalTriTextField = (
   return normalized ? triTextToJson(normalized) : Prisma.DbNull;
 };
 
+type EventLocalizedAddressText = {
+  zh?: string;
+  en?: string;
+  ja?: string;
+  enFull?: string;
+};
+
+const asPlainObject = (value: unknown): Record<string, unknown> | null =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const normalizeLocalizedAddressText = (value: unknown): EventLocalizedAddressText | null => {
+  const row = asPlainObject(value);
+  if (!row) return null;
+  const zh = cleanText(row.zh ?? row['zh-CN'] ?? row['zh-Hans']);
+  const en = cleanText(row.en ?? row['en-US']);
+  const ja = cleanText(row.ja ?? row['ja-JP']);
+  const enFull = cleanText(row.enFull ?? row.en_full);
+  if (!zh && !en && !ja && !enFull) return null;
+  return {
+    zh: zh || undefined,
+    en: en || undefined,
+    ja: ja || undefined,
+    enFull: enFull || undefined,
+  };
+};
+
+const joinAddressParts = (parts: Array<string | null | undefined>): string =>
+  parts
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item))
+    .join(' · ');
+
+const buildFormattedAddressI18n = (input: {
+  detailAddressI18n?: EventLocalizedAddressText | null;
+  cityI18n?: EventLocalizedAddressText | null;
+  countryI18n?: EventLocalizedAddressText | null;
+}): EventLocalizedAddressText | null => {
+  const detail = input.detailAddressI18n;
+  if (!detail) return null;
+  const city = input.cityI18n ?? null;
+  const country = input.countryI18n ?? null;
+  return {
+    zh:
+      joinAddressParts([
+        country?.zh || country?.en,
+        city?.zh || city?.en,
+        detail.zh || detail.en,
+      ]) || detail.zh || detail.en,
+    en:
+      joinAddressParts([
+        country?.enFull || country?.en || country?.zh,
+        city?.en || city?.zh,
+        detail.en || detail.zh,
+      ]) || detail.en || detail.zh,
+    ja:
+      joinAddressParts([
+        country?.ja || country?.enFull || country?.en || country?.zh,
+        city?.ja || city?.en || city?.zh,
+        detail.ja || detail.en || detail.zh,
+      ]) || detail.ja || detail.en || detail.zh,
+    enFull: detail.enFull,
+  };
+};
+
+const normalizeEventAddressPayloads = (input: {
+  manualLocation: unknown;
+  locationPoint: unknown;
+  cityI18n?: Prisma.InputJsonValue | typeof Prisma.DbNull | undefined;
+  countryI18n?: Prisma.InputJsonValue | typeof Prisma.DbNull | undefined;
+}): {
+  manualLocation: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+  locationPoint: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+} => {
+  const manualLocation = asPlainObject(input.manualLocation);
+  const locationPoint = asPlainObject(input.locationPoint);
+  const normalizedCityI18n = normalizeLocalizedAddressText(input.cityI18n);
+  const normalizedCountryI18n = normalizeLocalizedAddressText(input.countryI18n);
+  const detailAddressI18n = normalizeLocalizedAddressText(manualLocation?.detailAddressI18n);
+  const formattedAddressI18n = buildFormattedAddressI18n({
+    detailAddressI18n,
+    cityI18n: normalizedCityI18n,
+    countryI18n: normalizedCountryI18n,
+  });
+
+  const nextManualLocation = manualLocation
+    ? {
+        ...manualLocation,
+        ...(detailAddressI18n ? { detailAddressI18n } : {}),
+        ...(formattedAddressI18n ? { formattedAddressI18n } : {}),
+      }
+    : undefined;
+
+  const pointFormattedAddressI18n = normalizeLocalizedAddressText(locationPoint?.formattedAddressI18n);
+  const pointManualSetAddressI18n =
+    normalizeLocalizedAddressText(locationPoint?.manualSetAddressI18n)
+    || formattedAddressI18n
+    || pointFormattedAddressI18n
+    || null;
+
+  const nextLocationPoint = locationPoint
+    ? {
+        ...locationPoint,
+        ...(pointManualSetAddressI18n ? { manualSetAddressI18n: pointManualSetAddressI18n } : {}),
+      }
+    : undefined;
+
+  return {
+    manualLocation: nextManualLocation ? (nextManualLocation as Prisma.InputJsonValue) : undefined,
+    locationPoint: nextLocationPoint ? (nextLocationPoint as Prisma.InputJsonValue) : undefined,
+  };
+};
+
 const resolveEventLineupSyncMode = (
   payload: Prisma.JsonObject | Prisma.InputJsonObject | Record<string, unknown>
 ): EventLineupSyncMode => {
@@ -1390,8 +1504,6 @@ type EventCoreComparableState = {
   imageAssets: unknown;
   eventType: string | null;
   organizerName: string | null;
-  venueName: string | null;
-  venueAddress: string | null;
   referenceLinks: string[];
   socialLinks: unknown;
   sourceProvider: string | null;
@@ -1612,8 +1724,6 @@ const buildComparableEventCoreFromInput = (input: NormalizedEventSubmissionWrite
   imageAssets: normalizeJsonLikeForCompare(input.eventData.imageAssets),
   eventType: cleanText(input.eventData.eventType) ?? null,
   organizerName: cleanText(input.eventData.organizerName) ?? null,
-  venueName: cleanText(input.eventData.venueName) ?? null,
-  venueAddress: cleanText(input.eventData.venueAddress) ?? null,
   referenceLinks: normalizeStringArrayForCompare((input.eventData.referenceLinks as string[] | undefined) ?? []),
   socialLinks: normalizeJsonLikeForCompare(input.eventData.socialLinks),
   sourceProvider: cleanText(input.eventData.sourceProvider) ?? null,
@@ -1655,8 +1765,6 @@ const buildComparableEventCoreFromExisting = (event: {
   imageAssets: Prisma.JsonValue | null;
   eventType: string | null;
   organizerName: string | null;
-  venueName: string | null;
-  venueAddress: string | null;
   referenceLinks: string[];
   socialLinks: Prisma.JsonValue | null;
   sourceProvider: string | null;
@@ -1696,8 +1804,6 @@ const buildComparableEventCoreFromExisting = (event: {
   imageAssets: normalizeJsonLikeForCompare(event.imageAssets),
   eventType: event.eventType ?? null,
   organizerName: event.organizerName ?? null,
-  venueName: event.venueName ?? null,
-  venueAddress: event.venueAddress ?? null,
   referenceLinks: normalizeStringArrayForCompare(event.referenceLinks),
   socialLinks: normalizeJsonLikeForCompare(event.socialLinks),
   sourceProvider: event.sourceProvider ?? null,
@@ -1773,8 +1879,6 @@ const buildComparableExistingEventState = async (
       imageAssets: true,
       eventType: true,
       organizerName: true,
-      venueName: true,
-      venueAddress: true,
       referenceLinks: true,
       socialLinks: true,
       sourceProvider: true,
@@ -2120,8 +2224,6 @@ const normalizeEventSubmissionWriteInput = async (
   const lineupImageUrl = resolveOptionalNullableTextField(payload, 'lineupImageUrl');
   const eventType = resolveOptionalNullableTextField(payload, 'eventType');
   const organizerName = resolveOptionalNullableTextField(payload, 'organizerName');
-  const venueName = resolveOptionalNullableTextField(payload, 'venueName');
-  const venueAddress = resolveOptionalNullableTextField(payload, 'venueAddress');
   const referenceLinks = resolveOptionalStringArrayField(payload, 'referenceLinks');
   const socialLinks = resolveOptionalJsonField(payload, 'socialLinks');
   const sourceProvider = resolveOptionalNullableTextField(payload, 'sourceProvider');
@@ -2150,6 +2252,12 @@ const normalizeEventSubmissionWriteInput = async (
   const countryI18n = resolveOptionalTriTextField(payload, 'countryI18n', country || '', {
     includeWhen: hasOwn(payload, 'country') || hasOwn(payload, 'countryI18n'),
   });
+  const normalizedAddressPayloads = normalizeEventAddressPayloads({
+    manualLocation,
+    locationPoint,
+    cityI18n,
+    countryI18n,
+  });
 
   return {
     targetEventId,
@@ -2167,8 +2275,6 @@ const normalizeEventSubmissionWriteInput = async (
       imageAssets: imageAssets.length ? imageAssets : Prisma.JsonNull,
       eventType,
       organizerName,
-      venueName,
-      venueAddress,
       referenceLinks,
       socialLinks,
       sourceProvider,
@@ -2177,8 +2283,8 @@ const normalizeEventSubmissionWriteInput = async (
       country,
       cityI18n,
       countryI18n,
-      manualLocation,
-      locationPoint,
+      manualLocation: normalizedAddressPayloads.manualLocation,
+      locationPoint: normalizedAddressPayloads.locationPoint,
       latitude,
       longitude,
       startDate: scheduleContext.startDate,

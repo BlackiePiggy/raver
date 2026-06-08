@@ -1,6 +1,8 @@
 ﻿import assert from "node:assert/strict";
 import createCrossMidnightFixture from "../../../contracts/fixtures/event/golden/create-cross-midnight.json";
+import createMapPoiFixture from "../../../contracts/fixtures/event/golden/create-map-poi.json";
 import updateClearI18nFixture from "../../../contracts/fixtures/event/golden/update-clear-i18n.json";
+import updateClearLocationFixture from "../../../contracts/fixtures/event/golden/update-clear-location.json";
 
 import {
   buildEventStudioScheduleStructure,
@@ -102,8 +104,6 @@ const tests: TestCase[] = [
       draft.eventType = "festival";
       draft.organizerFestivalId = "fest_future_rave";
       draft.organizerName = "Raver Crew";
-      draft.venueName = "The Warehouse";
-      draft.venueAddress = "88 Xuhui Riverside";
       draft.sourceEventUrl = "https://example.com/events/future-rave";
       draft.sourceProvider = "manual";
       draft.referenceLinksText = "https://example.com/a\nhttps://example.com/b";
@@ -203,8 +203,6 @@ const tests: TestCase[] = [
       assert.deepEqual(payload.eventDays?.map((day) => day.eventDayId), ["d1", "d2"]);
       assert.equal(payload.city, createCrossMidnightFixture.city);
       assert.equal(payload.country, createCrossMidnightFixture.country);
-      assert.equal(payload.venueName, "The Warehouse");
-      assert.equal(payload.venueAddress, "88 Xuhui Riverside");
       assert.equal(payload.sourceProvider, "manual");
       assert.deepEqual(payload.referenceLinks, ["https://example.com/a", "https://example.com/b"]);
       assert.deepEqual(payload.socialLinks, [{ type: "instagram", url: "https://instagram.com/future-rave" }]);
@@ -440,6 +438,131 @@ const tests: TestCase[] = [
       assert.equal(payload.clearSocialLinks, updateClearI18nFixture.clearSocialLinks);
       assert.equal(payload.clearStageOrder, updateClearI18nFixture.clearStageOrder);
       assert.equal(payload.clearLineupSlots, updateClearI18nFixture.clearLineupSlots);
+    },
+  },
+  {
+    name: "mapEventStudioDraftToCreateInput emits canonical manualLocation and locationPoint address fields for POI-backed picks",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name.en = "Neon Port";
+      draft.name.zh = "霓虹码头";
+      draft.description = "Single-day event authored from a POI-backed map pick.";
+      draft.eventType = "club";
+      draft.organizerName = "Raver Crew";
+      draft.sourceEventUrl = "https://example.com/events/neon-port";
+      draft.sourceProvider = "map-picker";
+      draft.referenceLinksText = "https://example.com/events/neon-port";
+      draft.city.en = "Shanghai";
+      draft.city.zh = "上海";
+      draft.country.en = "China";
+      draft.country.zh = "中国";
+      draft.country.enFull = "China";
+      draft.detailAddress.en = "88 Xuhui Riverside";
+      draft.detailAddress.zh = "徐汇滨江 88 号";
+      draft.latitude = "31.1891";
+      draft.longitude = "121.4542";
+      draft.pickedPlaceName = "Riverside Warehouse";
+      draft.pickedMapAddress = "China · Shanghai · 88 Xuhui Riverside";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.startDate = "2099-09-19";
+      draft.endDate = "2099-09-19";
+      draft.locationPoint = {
+        provider: "amap",
+        sourceMode: "map_poi_click",
+        providerPlaceId: null,
+        poiId: "B0FFG1AMPLE",
+        adcode: "310104",
+        providerMeta: {
+          amap: {
+            poiId: "B0FFG1AMPLE",
+            adcode: "310104",
+          },
+        },
+        location: {
+          lng: 121.4542,
+          lat: 31.1891,
+        },
+        nameI18n: {
+          zh: "滨江仓库",
+          en: "Riverside Warehouse",
+          ja: "",
+          enFull: "",
+        },
+        addressI18n: {
+          zh: "徐汇滨江 88 号",
+          en: "88 Xuhui Riverside",
+          ja: "",
+          enFull: "",
+        },
+        formattedAddressI18n: {
+          zh: "中国 · 上海 · 滨江仓库",
+          en: "China · Shanghai · Riverside Warehouse",
+          ja: "",
+          enFull: "",
+        },
+        manualSetAddressI18n: undefined,
+        city: "Shanghai",
+        district: null,
+        province: "Shanghai",
+        countryCode: "CN",
+      };
+
+      draft = syncEventStudioScheduleStructure(draft);
+      const payload = mapEventStudioDraftToCreateInput(draft);
+
+      assert.equal(payload.manualLocation?.detailAddressI18n?.zh, createMapPoiFixture.manualLocation.detailAddressI18n.zh);
+      assert.equal(payload.manualLocation?.detailAddressI18n?.en, createMapPoiFixture.manualLocation.detailAddressI18n.en);
+      assert.equal(payload.manualLocation?.formattedAddressI18n?.zh, createMapPoiFixture.manualLocation.formattedAddressI18n.zh);
+      assert.equal(payload.manualLocation?.formattedAddressI18n?.en, createMapPoiFixture.manualLocation.formattedAddressI18n.en);
+      assert.ok(typeof payload.manualLocation?.selectedAt === "string" && payload.manualLocation.selectedAt.length > 0);
+      assert.equal(payload.locationPoint?.provider, createMapPoiFixture.locationPoint.provider);
+      assert.equal(payload.locationPoint?.sourceMode, createMapPoiFixture.locationPoint.sourceMode);
+      assert.deepEqual(payload.locationPoint?.location, createMapPoiFixture.locationPoint.location);
+      assert.equal(payload.locationPoint?.nameI18n?.zh, createMapPoiFixture.locationPoint.nameI18n.zh);
+      assert.equal(payload.locationPoint?.nameI18n?.en, createMapPoiFixture.locationPoint.nameI18n.en);
+      assert.equal(payload.locationPoint?.formattedAddressI18n?.zh, createMapPoiFixture.locationPoint.formattedAddressI18n.zh);
+      assert.equal(payload.locationPoint?.formattedAddressI18n?.en, createMapPoiFixture.locationPoint.formattedAddressI18n.en);
+      assert.equal(payload.locationPoint?.manualSetAddressI18n?.zh, createMapPoiFixture.locationPoint.manualSetAddressI18n.zh);
+      assert.equal(payload.locationPoint?.manualSetAddressI18n?.en, createMapPoiFixture.locationPoint.manualSetAddressI18n.en);
+      assert.equal(payload.locationPoint?.poiId, createMapPoiFixture.locationPoint.poiId);
+      assert.equal(payload.locationPoint?.adcode, createMapPoiFixture.locationPoint.adcode);
+      assert.deepEqual(payload.locationPoint?.providerMeta, createMapPoiFixture.locationPoint.providerMeta);
+      assert.equal(payload.latitude, createMapPoiFixture.latitude);
+      assert.equal(payload.longitude, createMapPoiFixture.longitude);
+    },
+  },
+  {
+    name: "mapEventStudioDraftToUpdateInput matches clear-location golden fixture for full address removal",
+    run: () => {
+      let draft = createEventStudioDraft();
+      draft.name.en = "Clear Location Event";
+      draft.name.zh = "清空地点活动";
+      draft.description = "Update payload that explicitly clears all location-bearing fields.";
+      draft.eventType = "festival";
+      draft.organizerName = "Raver Crew";
+      draft.sourceEventUrl = "https://example.com/events/clear-location";
+      draft.sourceProvider = "manual";
+      draft.city.en = "Shanghai";
+      draft.city.zh = "上海";
+      draft.country.en = "China";
+      draft.country.zh = "中国";
+      draft.country.enFull = "China";
+      draft.ticketCurrency = "CNY";
+      draft.timeZoneSelection = { ...timezoneSelection };
+      draft.startDate = "2099-10-03";
+      draft.endDate = "2099-10-03";
+
+      draft = syncEventStudioScheduleStructure(draft);
+      const payload = mapEventStudioDraftToUpdateInput(draft);
+
+      assert.equal(payload.clearManualLocation, updateClearLocationFixture.clearManualLocation);
+      assert.equal(payload.clearLocationPoint, updateClearLocationFixture.clearLocationPoint);
+      assert.equal(payload.clearLatitude, updateClearLocationFixture.clearLatitude);
+      assert.equal(payload.clearLongitude, updateClearLocationFixture.clearLongitude);
+      assert.equal(payload.manualLocation, undefined);
+      assert.equal(payload.locationPoint, undefined);
+      assert.equal(payload.latitude, null);
+      assert.equal(payload.longitude, null);
     },
   },
   {
@@ -700,11 +823,25 @@ const tests: TestCase[] = [
         slug: "hydration-test",
         startDate: "2099-09-12T00:00:00Z",
         endDate: "2099-09-13T00:00:00Z",
-        venueName: "The Warehouse",
-        venueAddress: "88 Xuhui Riverside",
         sourceProvider: "manual",
         referenceLinks: ["https://example.com/a"],
         socialLinks: [{ type: "instagram", url: "https://instagram.com/future-rave" }],
+        manualLocation: {
+          detailAddressI18n: { zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside" },
+          formattedAddressI18n: { zh: "中国 · 上海 · 徐汇滨江 88 号", en: "China · Shanghai · 88 Xuhui Riverside" },
+        },
+        locationPoint: {
+          provider: "amap",
+          sourceMode: "map_poi_click",
+          location: { lng: 121.4542, lat: 31.1891 },
+          nameI18n: { zh: "滨江仓库", en: "Riverside Warehouse" },
+          addressI18n: { zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside" },
+          formattedAddressI18n: { zh: "中国 · 上海 · 滨江仓库", en: "China · Shanghai · Riverside Warehouse" },
+          manualSetAddressI18n: { zh: "中国 · 上海 · 徐汇滨江 88 号", en: "China · Shanghai · 88 Xuhui Riverside" },
+          city: "Shanghai",
+          province: "Shanghai",
+          countryCode: "CN",
+        },
         eventDays: [
           {
             id: "day_1",
@@ -745,8 +882,9 @@ const tests: TestCase[] = [
       assert.equal(draft.timetableSlots.length, 1);
       assert.equal(draft.timetableSlots[0]?.eventDayId, "d1");
       assert.equal(draft.timetableSlots[0]?.stageName, "Main Stage");
-      assert.equal(draft.venueName, "The Warehouse");
-      assert.equal(draft.venueAddress, "88 Xuhui Riverside");
+      assert.equal(draft.detailAddress.zh, "徐汇滨江 88 号");
+      assert.equal(draft.pickedPlaceName, "滨江仓库");
+      assert.equal(draft.pickedMapAddress, "中国 · 上海 · 徐汇滨江 88 号");
       assert.equal(draft.sourceProvider, "manual");
       assert.equal(draft.referenceLinksText, "https://example.com/a");
       assert.equal(draft.socialLinksText, JSON.stringify([{ type: "instagram", url: "https://instagram.com/future-rave" }], null, 2));
@@ -754,6 +892,150 @@ const tests: TestCase[] = [
       assert.equal(draft.lineupArtists[0]?.djId, "dj_anyma");
       assert.deepEqual(draft.lineupArtists[0]?.memberDjIds, ["dj_anyma", "dj_mrak"]);
       assert.equal(draft.lineupArtists[0]?.memberNamesText, "Anyma / MRAK");
+    },
+  },
+  {
+    name: "hydrateEventStudioDraftFromEvent falls back pickedMapAddress to provider formatted address when manualSetAddressI18n is absent",
+    run: () => {
+      const event = {
+        id: "event_2",
+        name: "Hydration Address Fallback",
+        slug: "hydration-address-fallback",
+        startDate: "2099-09-12T00:00:00Z",
+        endDate: "2099-09-12T00:00:00Z",
+        sourceProvider: "manual",
+        city: "Shanghai",
+        country: "China",
+        manualLocation: {
+          detailAddressI18n: { zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside" },
+          formattedAddressI18n: { zh: "中国 · 上海 · 徐汇滨江 88 号", en: "China · Shanghai · 88 Xuhui Riverside" },
+        },
+        locationPoint: {
+          provider: "amap",
+          sourceMode: "map_poi_click",
+          location: { lng: 121.4542, lat: 31.1891 },
+          nameI18n: { zh: "滨江仓库", en: "Riverside Warehouse" },
+          addressI18n: { zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside" },
+          formattedAddressI18n: { zh: "中国 · 上海 · 滨江仓库", en: "China · Shanghai · Riverside Warehouse" },
+          manualSetAddressI18n: undefined,
+          city: "Shanghai",
+          province: "Shanghai",
+          countryCode: "CN",
+        },
+        eventDays: [],
+        lineupArtists: [],
+        lineupSlots: [],
+      } as any;
+
+      const draft = hydrateEventStudioDraftFromEvent(event);
+
+      assert.equal(draft.pickedPlaceName, "滨江仓库");
+      assert.equal(draft.pickedMapAddress, "中国 · 上海 · 滨江仓库");
+      assert.equal(draft.detailAddress.zh, "徐汇滨江 88 号");
+    },
+  },
+  {
+    name: "hydrateEventStudioDraftFromEvent then mapEventStudioDraftToUpdateInput rebuilds activity and venue address truth from edited detailAddress",
+    run: () => {
+      const event = {
+        id: "event_edit_1",
+        name: "Edit Address Truth Test",
+        slug: "edit-address-truth-test",
+        startDate: "2099-09-12T00:00:00Z",
+        endDate: "2099-09-12T23:59:59Z",
+        schedule: {
+          mode: "single_day",
+          timeZone: "Asia/Shanghai",
+          dayRolloverHour: 6,
+        },
+        timeZone: "Asia/Shanghai",
+        sourceProvider: "manual",
+        city: "Shanghai",
+        country: "China",
+        cityI18n: { zh: "上海", en: "Shanghai", ja: "", enFull: "" },
+        countryI18n: { zh: "中国", en: "China", ja: "", enFull: "China" },
+        manualLocation: {
+          detailAddressI18n: { zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside" },
+          formattedAddressI18n: { zh: "中国 · 上海 · 徐汇滨江 88 号", en: "China · Shanghai · 88 Xuhui Riverside" },
+        },
+        locationPoint: {
+          provider: "amap",
+          sourceMode: "map_poi_click",
+          providerPlaceId: "place_1",
+          poiId: "B0FFG1AMPLE",
+          adcode: "310104",
+          providerMeta: {
+            amap: {
+              poiId: "B0FFG1AMPLE",
+              adcode: "310104",
+            },
+          },
+          location: { lng: 121.4542, lat: 31.1891 },
+          nameI18n: { zh: "滨江仓库", en: "Riverside Warehouse", ja: "", enFull: "" },
+          addressI18n: { zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside", ja: "", enFull: "" },
+          formattedAddressI18n: { zh: "中国 · 上海 · 滨江仓库", en: "China · Shanghai · Riverside Warehouse", ja: "", enFull: "" },
+          manualSetAddressI18n: { zh: "中国 · 上海 · 徐汇滨江 88 号", en: "China · Shanghai · 88 Xuhui Riverside", ja: "", enFull: "" },
+          city: "Shanghai",
+          province: "Shanghai",
+          countryCode: "CN",
+        },
+        latitude: 31.1891,
+        longitude: 121.4542,
+        weeks: [
+          {
+            id: "week_1",
+            weekIndex: 1,
+            label: "Week 1",
+            startDate: "2099-09-12",
+            endDate: "2099-09-12",
+            sortOrder: 1,
+          },
+        ],
+        eventDays: [
+          {
+            id: "day_1",
+            eventDayId: "d1",
+            weekIndex: 1,
+            dayIndexInWeek: 1,
+            overallDayIndex: 1,
+            label: "Day 1",
+            weekday: "sat",
+            date: "2099-09-12",
+            sortOrder: 1,
+          },
+        ],
+        lineupArtists: [],
+        lineupSlots: [],
+      } as any;
+
+      const draft = hydrateEventStudioDraftFromEvent(event);
+      draft.detailAddress = {
+        zh: "徐汇滨江 99 号",
+        en: "99 Xuhui Riverside",
+        ja: "",
+        enFull: "",
+      };
+
+      const payload = mapEventStudioDraftToUpdateInput(draft);
+
+      assert.equal(payload.clearManualLocation, false);
+      assert.equal(payload.clearLocationPoint, false);
+      assert.equal(payload.clearLatitude, false);
+      assert.equal(payload.clearLongitude, false);
+      assert.equal(payload.manualLocation?.detailAddressI18n?.zh, "徐汇滨江 99 号");
+      assert.equal(payload.manualLocation?.detailAddressI18n?.en, "99 Xuhui Riverside");
+      assert.equal(payload.manualLocation?.formattedAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 99 号");
+      assert.equal(payload.manualLocation?.formattedAddressI18n?.en, "China · Shanghai · 99 Xuhui Riverside");
+      assert.equal(payload.locationPoint?.formattedAddressI18n?.zh, "中国 · 上海 · 滨江仓库");
+      assert.equal(payload.locationPoint?.formattedAddressI18n?.en, "China · Shanghai · Riverside Warehouse");
+      assert.equal(payload.locationPoint?.manualSetAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 99 号");
+      assert.equal(payload.locationPoint?.manualSetAddressI18n?.en, "China · Shanghai · 99 Xuhui Riverside");
+      assert.equal(payload.timeZone, "Asia/Shanghai");
+      assert.equal(payload.timeZoneCity, null);
+      assert.equal(payload.timeZoneProvince, null);
+      assert.equal(payload.timeZoneCountry, null);
+      assert.equal(payload.timeZoneLat, null);
+      assert.equal(payload.timeZoneLng, null);
     },
   },
   {

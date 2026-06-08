@@ -298,14 +298,7 @@ struct ProfileRecentCheckinPreview: Codable, Hashable, Identifiable {
 
     var unifiedAddress: String {
         let addressText = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !addressText.isEmpty {
-            return addressText
-        }
-
-        let cityText = city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let countryText = country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let components = [cityText, countryText].filter { !$0.isEmpty }
-        return components.joined(separator: ", ")
+        return addressText
     }
 
     init(item: MyCheckinsOverviewTimelineItem) {

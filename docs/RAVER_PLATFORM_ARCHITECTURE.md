@@ -294,7 +294,18 @@ Raver 的复杂度来自多个领域之间的组合。本文按领域拆分，�
 
 Event 是 Raver 的中心业务实体之一。它不仅是活动详情页的数据源，也是线下协同、通知提醒、阵容知识图谱、打卡、社区内容和小队活动的上下文。
 
-当前没有独立 `Venue` 表，场地信息主要内嵌在 `Event` 的 `venueName`、`venueAddress`、`latitude`、`longitude`、`locationPoint` 等字段中。后续如果活动规模扩大，可以再拆出 Venue Domain。
+当前没有独立 `Venue` 表，场地信息主要内嵌在 `Event` 的 `manualLocation`、`locationPoint`、`latitude`、`longitude` 等字段中。
+
+最新地址职责模型是：
+
+- `manualLocation`
+  - 承担活动地址真值
+- `locationPoint`
+  - 承担地图定位真值与场地展示真值
+- `locationPoint.manualSetAddressI18n`
+  - 承担有 POI 时的场地展示第一真值
+
+后续如果活动规模扩大，可以再拆出 Venue Domain。
 
 ### 3.3 Music Content Domain
 

@@ -80,8 +80,16 @@ const createSeedEvent = async (suffix: string) => {
       coverImageUrl: 'https://example.com/brand-regression-event.jpg',
       city: 'Macau',
       country: 'China',
-      venueName: 'Regression Venue',
-      venueAddress: 'Regression Address',
+      manualLocation: {
+        detailAddressI18n: {
+          en: 'Regression Address',
+          zh: 'Regression Address',
+        },
+        formattedAddressI18n: {
+          en: 'China · Macau · Regression Address',
+          zh: 'China · Macau · Regression Address',
+        },
+      } as Prisma.InputJsonValue,
       startDate: new Date('2026-08-01T12:00:00.000Z'),
       endDate: new Date('2026-08-02T12:00:00.000Z'),
       isCancelled: false,

@@ -497,7 +497,6 @@ final class MyCheckinsViewModel: ObservableObject {
             ticketCurrency: nil,
             ticketNotes: nil,
             officialWebsite: nil,
-            status: "ended",
             isVerified: true,
             createdAt: timelineItem.createdAt,
             updatedAt: timelineItem.createdAt,
@@ -776,13 +775,7 @@ struct MyCheckinsView: View {
 
         var unifiedAddress: String {
             let explicitAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !explicitAddress.isEmpty { return explicitAddress }
-            return [city, country]
-                .compactMap { value in
-                    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    return trimmed.isEmpty ? nil : trimmed
-                }
-                .joined(separator: " · ")
+            return explicitAddress
         }
     }
 

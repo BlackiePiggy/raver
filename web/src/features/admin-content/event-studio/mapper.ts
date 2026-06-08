@@ -471,8 +471,8 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
   const lineupUrl = trimUrlOrNull(lineupImage?.remoteUrl);
   const latitude = numericOrNull(draft.latitude);
   const longitude = numericOrNull(draft.longitude);
-  const locationName = trimSingleLineOrNull(draft.pickedPlaceName, INPUT_LIMITS.event.venueName);
-  const locationAddress = trimSingleLineOrNull(draft.pickedMapAddress, INPUT_LIMITS.event.venueAddress);
+  const locationName = trimSingleLineOrNull(draft.pickedPlaceName, INPUT_LIMITS.event.name);
+  const locationAddress = trimSingleLineOrNull(draft.pickedMapAddress, INPUT_LIMITS.event.detailAddress);
   const locationProviderMeta = normalizeLocationProviderMeta(draft.locationPoint?.providerMeta ?? null);
   const locationProvider =
     normalizeLocationProvider(draft.locationPoint?.provider)
@@ -578,6 +578,19 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
           (detailAddressI18n
             ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
             : undefined),
+        manualSetAddressI18n:
+          detailAddressI18n
+            ? joinLocalizedAddress(detailAddressI18n, cityI18n || draft.city, countryI18n || draft.country)
+            : cloneLocalizedTextOrUndefined(draft.locationPoint?.manualSetAddressI18n) ||
+              cloneLocalizedTextOrUndefined(draft.locationPoint?.formattedAddressI18n) ||
+              (locationAddress
+                ? {
+                    zh: locationAddress,
+                    en: locationAddress,
+                    ja: '',
+                    enFull: '',
+                  }
+                : undefined),
         city: trimSingleLineOrNull(draft.locationPoint?.city, INPUT_LIMITS.event.city) || trimSingleLineOrNull(primaryText(draft.city), INPUT_LIMITS.event.city),
         district: trimSingleLineOrNull(draft.locationPoint?.district, INPUT_LIMITS.event.city),
         province: trimSingleLineOrNull(draft.locationPoint?.province, INPUT_LIMITS.event.country),
@@ -653,8 +666,6 @@ export const mapEventStudioDraftToCreateInput = (draft: EventStudioDraft): Event
     description: trimMultilineOrNull(draft.description, INPUT_LIMITS.event.description),
     eventType: trimExternalIdOrNull(draft.eventType),
     organizerName: trimSingleLineOrNull(draft.organizerName, INPUT_LIMITS.event.organizerName),
-    venueName: trimSingleLineOrNull(draft.venueName, INPUT_LIMITS.event.venueName),
-    venueAddress: trimSingleLineOrNull(draft.venueAddress, INPUT_LIMITS.event.venueAddress),
     sourceEventUrl: trimUrlOrNull(draft.sourceEventUrl),
     sourceProvider: trimSingleLineOrNull(draft.sourceProvider, INPUT_LIMITS.event.sourceProvider),
     referenceLinks: splitLines(draft.referenceLinksText),

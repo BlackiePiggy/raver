@@ -368,8 +368,6 @@ struct EventUploadDraft: Hashable, Codable {
     var eventType = ""
     var organizerFestivalID: String?
     var organizerName = ""
-    var venueName = ""
-    var venueAddress = ""
     var sourceURL = ""
     var sourceProvider = ""
     var referenceLinksText = ""
@@ -428,8 +426,6 @@ struct EventUploadDraft: Hashable, Codable {
             ?? event.wikiFestival?.name
             ?? event.organizerName
             ?? ""
-        draft.venueName = event.venueName ?? ""
-        draft.venueAddress = event.venueAddress ?? ""
         draft.sourceURL = event.sourceEventUrl ?? ""
         draft.sourceProvider = event.sourceProvider ?? ""
         draft.referenceLinksText = (event.referenceLinks ?? []).joined(separator: "\n")

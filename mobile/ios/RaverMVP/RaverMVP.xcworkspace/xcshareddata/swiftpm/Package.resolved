@@ -2,42 +2,6 @@
   "object": {
     "pins": [
       {
-        "package": "OpenAPIKit",
-        "repositoryURL": "https://github.com/mattpolzin/OpenAPIKit",
-        "state": {
-          "branch": null,
-          "revision": "57b6318128e3f901c93f4fbf98d1c1464ec168d3",
-          "version": "6.2.0"
-        }
-      },
-      {
-        "package": "swift-algorithms",
-        "repositoryURL": "https://github.com/apple/swift-algorithms",
-        "state": {
-          "branch": null,
-          "revision": "87e50f483c54e6efd60e885f7f5aa946cee68023",
-          "version": "1.2.1"
-        }
-      },
-      {
-        "package": "swift-argument-parser",
-        "repositoryURL": "https://github.com/apple/swift-argument-parser",
-        "state": {
-          "branch": null,
-          "revision": "ca37474853a4b5f59a22c74bfdd449b1f6bc4cc2",
-          "version": "1.8.1"
-        }
-      },
-      {
-        "package": "swift-collections",
-        "repositoryURL": "https://github.com/apple/swift-collections",
-        "state": {
-          "branch": null,
-          "revision": "fea17c02d767f46b23070fdfdacc28a03a39232a",
-          "version": "1.5.1"
-        }
-      },
-      {
         "package": "swift-http-types",
         "repositoryURL": "https://github.com/apple/swift-http-types",
         "state": {
@@ -47,39 +11,12 @@
         }
       },
       {
-        "package": "swift-numerics",
-        "repositoryURL": "https://github.com/apple/swift-numerics.git",
-        "state": {
-          "branch": null,
-          "revision": "0c0290ff6b24942dadb83a929ffaaa1481df04a2",
-          "version": "1.1.1"
-        }
-      },
-      {
-        "package": "swift-openapi-generator",
-        "repositoryURL": "https://github.com/apple/swift-openapi-generator",
-        "state": {
-          "branch": null,
-          "revision": "d002e5d9a1ac4ff6466bb89ab8fa1c9a0afd820f",
-          "version": "1.12.2"
-        }
-      },
-      {
         "package": "swift-openapi-runtime",
         "repositoryURL": "https://github.com/apple/swift-openapi-runtime",
         "state": {
           "branch": null,
           "revision": "3d3a8457661daf7fb260ceeb9f0e24e5204ba5fb",
           "version": "1.12.0"
-        }
-      },
-      {
-        "package": "Yams",
-        "repositoryURL": "https://github.com/jpsim/Yams",
-        "state": {
-          "branch": null,
-          "revision": "a27b21e0c81c5bf42049b897a62aaf387e80f279",
-          "version": "6.2.2"
         }
       }
     ]

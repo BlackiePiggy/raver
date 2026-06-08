@@ -9,8 +9,6 @@
   "description": "Update payload that rewrites stage order, lineup artists, lineup slots, and ticket tiers as full-state collections.",
   "eventType": "festival",
   "organizerName": "Raver Crew",
-  "venueName": "Dock Hall",
-  "venueAddress": "9 Port Avenue",
   "sourceEventUrl": "https://example.com/events/lineup-replace",
   "sourceProvider": "manual",
   "referenceLinks": [

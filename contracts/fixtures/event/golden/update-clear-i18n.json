@@ -9,8 +9,6 @@
   "description": "Update payload that explicitly removes city/country localized write objects while preserving plain strings.",
   "eventType": "festival",
   "organizerName": "Raver Crew",
-  "venueName": null,
-  "venueAddress": null,
   "sourceEventUrl": "https://example.com/events/clear-i18n",
   "sourceProvider": "manual",
   "referenceLinks": null,

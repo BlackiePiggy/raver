@@ -96,7 +96,6 @@ enum EventVisualStatus: String {
         resolve(
             startDate: event.startDate,
             endDate: event.endDate,
-            derivedStatus: event.status,
             isCancelled: event.isCancelled,
             now: now
         )

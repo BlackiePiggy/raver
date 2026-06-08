@@ -1,7 +1,279 @@
 import XCTest
 @testable import RaverMVP
 
+@MainActor
 final class EventContractParityTests: XCTestCase {
+    func testWebEventAddressSemanticsPreferLocationPointManualSetForVenueAndManualFormattedForActivity() {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "amap",
+                sourceMode: "manual_search",
+                providerPlaceId: "poi_001",
+                poiId: "poi_001",
+                adcode: "310104",
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号"),
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        XCTAssertEqual(event.unifiedAddress, "中国 · 上海 · 徐汇滨江 88 号")
+        XCTAssertEqual(event.summaryLocation, "中国 · 上海 · 徐汇滨江 88 号")
+        XCTAssertEqual(event.eventActivityAddress, "中国 · 上海 · 徐汇滨江 88 号")
+    }
+
+    func testWebEventAddressSemanticsFallBackToLocationPointFormattedBeforeManualLocation() {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "amap",
+                sourceMode: "manual_search",
+                providerPlaceId: "poi_002",
+                poiId: "poi_002",
+                adcode: "310104",
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: nil,
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        XCTAssertEqual(event.unifiedAddress, "中国 · 上海 · 滨江仓库")
+        XCTAssertEqual(event.eventActivityAddress, "中国 · 上海 · 徐汇滨江 88 号")
+    }
+
+    func testWebEventAddressSemanticsFallBackToManualLocationOnlyWhenLocationPointMissing() {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: nil
+            ),
+            locationPoint: nil
+        )
+
+        XCTAssertEqual(event.unifiedAddress, "徐汇滨江 88 号")
+        XCTAssertEqual(event.summaryLocation, "徐汇滨江 88 号")
+        XCTAssertEqual(event.eventActivityAddress, "")
+    }
+
+    func testWebEventAddressSemanticsPreferExplicitPayloadOverridesWhenPresent() {
+        let event = Self.makeWebEvent(
+            activityAddress: "显式活动地址",
+            venueDisplayAddress: "显式场地地址",
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "amap",
+                sourceMode: "manual_search",
+                providerPlaceId: "poi_003",
+                poiId: "poi_003",
+                adcode: "310104",
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号"),
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        XCTAssertEqual(event.unifiedAddress, "显式场地地址")
+        XCTAssertEqual(event.eventActivityAddress, "显式活动地址")
+    }
+
+    func testResolvedVenueMapQueryFollowsVenueDisplayTruthBeforePOIName() {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "amap",
+                sourceMode: "manual_search",
+                providerPlaceId: "poi_004",
+                poiId: "poi_004",
+                adcode: "310104",
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号"),
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        let query = resolveEventVenueMapQueryText(
+            language: .zh,
+            manualLocation: event.manualLocation,
+            locationPoint: event.locationPoint
+        )
+
+        XCTAssertEqual(query, "中国 · 上海 · 徐汇滨江 88 号")
+    }
+
+    func testResolvedVenueMapQueryFallsBackToPOINameOnlyWhenVenueTextMissing() {
+        let point = WebEventLocationPoint(
+            provider: "amap",
+            sourceMode: "manual_search",
+            providerPlaceId: "poi_005",
+            poiId: "poi_005",
+            adcode: "310104",
+            location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+            nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+            addressI18n: nil,
+            formattedAddressI18n: nil,
+            manualSetAddressI18n: nil,
+            city: "Shanghai",
+            district: "Xuhui",
+            province: "Shanghai",
+            countryCode: "CN"
+        )
+
+        let query = resolveEventVenueMapQueryText(
+            language: .zh,
+            manualLocation: nil,
+            locationPoint: point
+        )
+
+        XCTAssertEqual(query, "滨江仓库")
+    }
+
+    func testWidgetSelectableEventUsesVenueDisplayAddressSemantics() async throws {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "amap",
+                sourceMode: "manual_search",
+                providerPlaceId: "poi_widget_001",
+                poiId: "poi_widget_001",
+                adcode: "310104",
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号"),
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        let fileManager = FileManager.default
+        let tempRoot = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        let currentDirectory = fileManager.currentDirectoryPath
+        defer {
+            fileManager.changeCurrentDirectoryPath(currentDirectory)
+            try? fileManager.removeItem(at: tempRoot)
+        }
+        fileManager.changeCurrentDirectoryPath(tempRoot.path)
+
+        let store = WidgetCountdownStore(fileManager: fileManager)
+        let service = WidgetSelectableEventsSyncService(store: store, session: .shared)
+        _ = try await service.add(event: event)
+
+        let snapshot = try store.loadSnapshot()
+        let storedEvent = try XCTUnwrap(snapshot.events.first(where: { $0.id == event.id }))
+        XCTAssertEqual(storedEvent.venueDisplayAddress, "中国 · 上海 · 徐汇滨江 88 号")
+    }
+
+    func testProfileRecentCheckinPreviewUsesServerProvidedVenueDisplayAddress() {
+        let item = MyCheckinsOverviewTimelineItem(
+            id: "checkin_001",
+            type: "event",
+            attendedAt: Self.dateTime("2099-09-12 23:30", timeZoneID: "Asia/Shanghai"),
+            createdAt: Self.dateTime("2099-09-12 23:59", timeZoneID: "Asia/Shanghai"),
+            event: MyCheckinsOverviewTimelineEvent(
+                id: "evt_checkin_001",
+                name: "Future Rave",
+                nameI18n: WebBiText(en: "Future Rave", zh: "未来电音派对"),
+                coverImageUrl: nil,
+                address: "中国 · 上海 · 徐汇滨江 88 号",
+                city: "Shanghai",
+                country: "China",
+                startDate: Self.date("2099-09-12", timeZoneID: "Asia/Shanghai"),
+                endDate: Self.date("2099-09-12", timeZoneID: "Asia/Shanghai"),
+                timeZone: "Asia/Shanghai"
+            ),
+            summary: MyCheckinsOverviewTimelineSummary(dayCount: 1, artistCount: 2, performanceCount: 3),
+            selections: []
+        )
+
+        let preview = ProfileRecentCheckinPreview(item: item)
+        XCTAssertEqual(preview.unifiedAddress, "中国 · 上海 · 徐汇滨江 88 号")
+    }
+
+    func testEventShareCardPayloadRoundTripsVenueDisplayAddressInChatMessage() async throws {
+        let service = MockSocialService()
+        let conversation = try await service.startDirectConversation(identifier: "warehouse_anya")
+        let payload = EventShareCardPayload(
+            eventID: "evt_share_001",
+            eventName: "Future Rave",
+            venueDisplayAddress: "中国 · 上海 · 徐汇滨江 88 号",
+            city: "Shanghai",
+            startAtISO8601: "2099-09-12T15:30:00Z",
+            coverImageURL: "https://cdn.example.com/events/future-rave/cover.jpg",
+            badgeText: "活动"
+        )
+
+        let sent = try await service.sendEventCardMessage(
+            conversationID: conversation.id,
+            payload: payload
+        )
+
+        XCTAssertEqual(sent.kind, ChatMessageKind.card)
+
+        let decoded = ChatCustomCardCodec.decodePayload(
+            EventShareCardPayload.self,
+            cardType: ChatCustomCardWireType.event,
+            from: sent.content
+        )
+
+        XCTAssertEqual(decoded?.venueDisplayAddress, "中国 · 上海 · 徐汇滨江 88 号")
+        XCTAssertEqual(decoded?.eventID, "evt_share_001")
+        XCTAssertEqual(decoded?.eventName, "Future Rave")
+    }
+
     func testCreateInputMatchesStructuredScheduleAddressAndLineupSemantics() {
         var draft = EventUploadDraft.create()
         draft.preferredLanguage = .en
@@ -91,7 +363,16 @@ final class EventContractParityTests: XCTestCase {
         XCTAssertEqual(input.value1.eventDays?.map(\.eventDayId), ["d1"])
         XCTAssertEqual(input.value1.manualLocation?.formattedAddressI18n.en, "China · Shanghai · 88 Xuhui Riverside")
         XCTAssertEqual(input.value1.manualLocation?.formattedAddressI18n.zh, "中国 · 上海 · 徐汇滨江 88 号")
-        XCTAssertEqual(input.value1.locationPoint?.formattedAddressI18n?.en, "China · Shanghai · 88 Xuhui Riverside")
+        XCTAssertEqual(input.value1.locationPoint?.provider.rawValue, "mapkit")
+        XCTAssertEqual(input.value1.locationPoint?.sourceMode.rawValue, "pin_drag")
+        XCTAssertEqual(input.value1.locationPoint?.nameI18n?.en, "Riverside Warehouse")
+        XCTAssertEqual(input.value1.locationPoint?.nameI18n?.zh, "")
+        XCTAssertEqual(input.value1.locationPoint?.addressI18n?.en, "88 Xuhui Riverside")
+        XCTAssertEqual(input.value1.locationPoint?.addressI18n?.zh, "")
+        XCTAssertEqual(input.value1.locationPoint?.formattedAddressI18n?.en, "88 Xuhui Riverside")
+        XCTAssertEqual(input.value1.locationPoint?.formattedAddressI18n?.zh, "")
+        XCTAssertEqual(input.value1.locationPoint?.manualSetAddressI18n?.en, "China · Shanghai · 88 Xuhui Riverside")
+        XCTAssertEqual(input.value1.locationPoint?.manualSetAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 88 号")
         XCTAssertEqual(input.value1.ticketTiers?.map(\.sortOrder), [1, 2])
         XCTAssertEqual(input.value1.ticketTiers?.map(\.currency), ["CNY", "CNY"])
         XCTAssertEqual(input.value1.lineupArtists?.first?.memberDjIds ?? [], ["dj_anyma", "dj_mrak"])
@@ -101,14 +382,15 @@ final class EventContractParityTests: XCTestCase {
         XCTAssertEqual(input.value1.lineupSlots?.first?.eventDayId, "d1")
         XCTAssertEqual(
             input.value1.lineupSlots?.first?.startTime,
-            "2099-09-12T15:30:00.000Z"
+            "2099-09-12T23:30:00"
         )
         XCTAssertEqual(
             input.value1.lineupSlots?.first?.endTime,
-            "2099-09-12T17:00:00.000Z"
+            "2099-09-13T01:00:00"
         )
         XCTAssertEqual(input.value1.lineupSyncMode, .exactAlign)
-        XCTAssertEqual(input.value1.status, .upcoming)
+        XCTAssertEqual(input.value1.isCancelled, false)
+        XCTAssertEqual(input.value1.visibility, .visible)
     }
 
     func testCreateInputNormalizesLineupSlotLocalDateFromLogicalEventDay() {
@@ -210,8 +492,6 @@ final class EventContractParityTests: XCTestCase {
         draft.eventType = "festival"
         draft.organizerFestivalID = "fest_future_rave"
         draft.organizerName = "Raver Crew"
-        draft.venueName = "The Warehouse"
-        draft.venueAddress = "88 Xuhui Riverside"
         draft.sourceURL = "https://example.com/events/future-rave"
         draft.sourceProvider = "manual"
         draft.referenceLinksText = "https://example.com/a\nhttps://example.com/b"
@@ -260,26 +540,108 @@ final class EventContractParityTests: XCTestCase {
 
         let input = EventUploadMappers.createInput(from: draft, lineupSyncMode: .exactAlign)
         let fixture = try Self.loadGoldenFixture(named: "create-cross-midnight.json")
+        let weeks = input.value1.weeks ?? []
+        let eventDays = input.value1.eventDays ?? []
+        let lineupSlots = input.value1.lineupSlots ?? []
 
         XCTAssertEqual(input.value1.city, fixture["city"] as? String)
         XCTAssertEqual(input.value1.country, fixture["country"] as? String)
         XCTAssertEqual(input.value1.lineupSyncMode?.rawValue, fixture["lineupSyncMode"] as? String)
-        XCTAssertEqual(input.value1.status?.rawValue, fixture["status"] as? String)
+        XCTAssertEqual(input.value1.isCancelled, fixture["isCancelled"] as? Bool)
+        XCTAssertEqual(input.value1.visibility?.rawValue, fixture["visibility"] as? String)
         XCTAssertEqual(
-            try Self.canonicalJSONString(encodable: input.value1.weeks ?? []),
-            try Self.canonicalJSONString(jsonObject: fixture["weeks"] ?? [])
+            try Self.canonicalJSONString(
+                jsonObject: weeks.map {
+                    [
+                        "weekIndex": $0.weekIndex,
+                        "startDate": $0.startDate,
+                        "endDate": $0.endDate,
+                        "sortOrder": $0.sortOrder as Any,
+                    ]
+                }
+            ),
+            try Self.canonicalJSONString(
+                jsonObject: ((fixture["weeks"] as? [[String: Any]]) ?? []).map {
+                    [
+                        "weekIndex": $0["weekIndex"] as Any,
+                        "startDate": $0["startDate"] as Any,
+                        "endDate": $0["endDate"] as Any,
+                        "sortOrder": $0["sortOrder"] as Any,
+                    ]
+                }
+            )
         )
         XCTAssertEqual(
-            try Self.canonicalJSONString(encodable: input.value1.eventDays ?? []),
-            try Self.canonicalJSONString(jsonObject: fixture["eventDays"] ?? [])
+            try Self.canonicalJSONString(
+                jsonObject: eventDays.map {
+                    [
+                        "eventDayId": $0.eventDayId,
+                        "weekIndex": $0.weekIndex,
+                        "dayIndexInWeek": $0.dayIndexInWeek,
+                        "overallDayIndex": $0.overallDayIndex,
+                        "weekday": $0.weekday as Any,
+                        "date": $0.date,
+                        "sortOrder": $0.sortOrder,
+                    ]
+                }
+            ),
+            try Self.canonicalJSONString(
+                jsonObject: ((fixture["eventDays"] as? [[String: Any]]) ?? []).map {
+                    [
+                        "eventDayId": $0["eventDayId"] as Any,
+                        "weekIndex": $0["weekIndex"] as Any,
+                        "dayIndexInWeek": $0["dayIndexInWeek"] as Any,
+                        "overallDayIndex": $0["overallDayIndex"] as Any,
+                        "weekday": $0["weekday"] as Any,
+                        "date": $0["date"] as Any,
+                        "sortOrder": $0["sortOrder"] as Any,
+                    ]
+                }
+            )
         )
         XCTAssertEqual(
             try Self.canonicalJSONString(encodable: input.value1.ticketTiers ?? []),
             try Self.canonicalJSONString(jsonObject: fixture["ticketTiers"] ?? [])
         )
         XCTAssertEqual(
-            try Self.canonicalJSONString(encodable: input.value1.lineupSlots ?? []),
-            try Self.canonicalJSONString(jsonObject: fixture["lineupSlots"] ?? [])
+            try Self.canonicalJSONString(
+                jsonObject: lineupSlots.map {
+                    [
+                        "eventDayId": $0.eventDayId as Any,
+                        "weekIndex": $0.weekIndex as Any,
+                        "dayIndexInWeek": $0.dayIndexInWeek as Any,
+                        "overallDayIndex": $0.overallDayIndex as Any,
+                        "localDate": $0.localDate as Any,
+                        "djId": $0.djId as Any,
+                        "memberDjIds": $0.memberDjIds as Any,
+                        "memberNames": $0.memberNames as Any,
+                        "djName": $0.djName as Any,
+                        "stageName": $0.stageName as Any,
+                        "sortOrder": $0.sortOrder as Any,
+                        "startTime": $0.startTime as Any,
+                        "endTime": $0.endTime as Any,
+                    ]
+                }
+            ),
+            try Self.canonicalJSONString(
+                jsonObject: ((fixture["lineupSlots"] as? [[String: Any]]) ?? []).map {
+                    [
+                        "eventDayId": $0["eventDayId"] as Any,
+                        "weekIndex": $0["weekIndex"] as Any,
+                        "dayIndexInWeek": $0["dayIndexInWeek"] as Any,
+                        "overallDayIndex": $0["overallDayIndex"] as Any,
+                        "localDate": $0["localDate"] as Any,
+                        "djId": $0["djId"] as Any,
+                        "memberDjIds": $0["memberDjIds"] as Any,
+                        "memberNames": $0["memberNames"] as Any,
+                        "djName": $0["djName"] as Any,
+                        "stageName": $0["stageName"] as Any,
+                        "sortOrder": $0["sortOrder"] as Any,
+                        "startTime": $0["startTime"] as Any,
+                        "endTime": $0["endTime"] as Any,
+                    ]
+                }
+            )
         )
     }
 
@@ -488,6 +850,86 @@ final class EventContractParityTests: XCTestCase {
         )
     }
 
+    func testEventUploadDraftEditHydratesProviderAddressAndPlaceNameSeparately() {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "amap",
+                sourceMode: "map_poi_click",
+                providerPlaceId: "poi_006",
+                poiId: "poi_006",
+                adcode: "310104",
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号"),
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        let draft = EventUploadDraft.edit(event: event)
+
+        XCTAssertEqual(draft.detailAddress.zh, "徐汇滨江 88 号")
+        XCTAssertEqual(draft.detailAddress.en, "88 Xuhui Riverside")
+        XCTAssertEqual(draft.pickedMapAddress, "中国 · 上海 · 滨江仓库")
+        XCTAssertEqual(draft.pickedPlaceName, "滨江仓库")
+        XCTAssertEqual(draft.latitude, 31.1891)
+        XCTAssertEqual(draft.longitude, 121.4542)
+    }
+
+    func testUpdateInputRebuildsManualSetAddressAfterEditingHydratedDraft() {
+        let event = Self.makeWebEvent(
+            activityAddress: nil,
+            venueDisplayAddress: nil,
+            manualLocation: WebEventManualLocation(
+                detailAddressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号")
+            ),
+            locationPoint: WebEventLocationPoint(
+                provider: "mapkit",
+                sourceMode: "pin_drag",
+                providerPlaceId: nil,
+                poiId: nil,
+                adcode: nil,
+                location: WebEventLocationCoordinate(lng: 121.4542, lat: 31.1891),
+                nameI18n: WebBiText(en: "Riverside Warehouse", zh: "滨江仓库"),
+                addressI18n: WebBiText(en: "88 Xuhui Riverside", zh: "徐汇滨江 88 号"),
+                formattedAddressI18n: WebBiText(en: "China · Shanghai · Riverside Warehouse", zh: "中国 · 上海 · 滨江仓库"),
+                manualSetAddressI18n: WebBiText(en: "China · Shanghai · 88 Xuhui Riverside", zh: "中国 · 上海 · 徐汇滨江 88 号"),
+                city: "Shanghai",
+                district: "Xuhui",
+                province: "Shanghai",
+                countryCode: "CN"
+            )
+        )
+
+        var draft = EventUploadDraft.edit(event: event)
+        draft.preferredLanguage = .en
+        draft.detailAddress = EventUploadLocalizedFields(zh: "徐汇滨江 99 号", en: "99 Xuhui Riverside")
+        draft.selectedTimeZoneLookup = Self.shanghaiTimeZoneLookup(matchSource: "contract-parity-edit")
+        draft.timeZoneIdentifier = "Asia/Shanghai"
+
+        let input = EventUploadMappers.updateInput(from: draft)
+
+        XCTAssertEqual(input.value1.manualLocation?.detailAddressI18n.zh, "徐汇滨江 99 号")
+        XCTAssertEqual(input.value1.manualLocation?.detailAddressI18n.en, "99 Xuhui Riverside")
+        XCTAssertEqual(input.value1.manualLocation?.formattedAddressI18n.zh, "中国 · 上海 · 徐汇滨江 99 号")
+        XCTAssertEqual(input.value1.manualLocation?.formattedAddressI18n.en, "China · Shanghai · 99 Xuhui Riverside")
+        XCTAssertEqual(input.value1.locationPoint?.formattedAddressI18n?.zh, "中国 · 上海 · 滨江仓库")
+        XCTAssertEqual(input.value1.locationPoint?.formattedAddressI18n?.en, "China · Shanghai · Riverside Warehouse")
+        XCTAssertEqual(input.value1.locationPoint?.manualSetAddressI18n?.zh, "中国 · 上海 · 徐汇滨江 99 号")
+        XCTAssertEqual(input.value1.locationPoint?.manualSetAddressI18n?.en, "China · Shanghai · 99 Xuhui Riverside")
+    }
+
     private static func shanghaiTimeZoneLookup(matchSource: String) -> EventTimezoneLookupItem {
         EventTimezoneLookupItem(
             city: "Shanghai",
@@ -507,9 +949,83 @@ final class EventContractParityTests: XCTestCase {
         )
     }
 
+    private static func makeWebEvent(
+        activityAddress: String?,
+        venueDisplayAddress: String?,
+        manualLocation: WebEventManualLocation?,
+        locationPoint: WebEventLocationPoint?
+    ) -> WebEvent {
+        WebEvent(
+            id: "evt_address_semantics",
+            name: "Address Semantics Event",
+            nameI18n: nil,
+            wikiFestivalId: nil,
+            slug: "address-semantics-event",
+            abbreviation: nil,
+            description: nil,
+            descriptionI18n: nil,
+            countryI18n: WebBiText(en: "China", zh: "中国", enFull: "China"),
+            cityI18n: WebBiText(en: "Shanghai", zh: "上海"),
+            cardImageUrl: nil,
+            coverImageUrl: nil,
+            lineupImageUrl: nil,
+            imageAssets: nil,
+            eventType: nil,
+            organizerName: nil,
+            sourceEventUrl: nil,
+            sourceProvider: nil,
+            referenceLinks: nil,
+            socialLinks: nil,
+            city: "Shanghai",
+            country: "China",
+            activityAddress: activityAddress,
+            venueDisplayAddress: venueDisplayAddress,
+            manualLocation: manualLocation,
+            locationPoint: locationPoint,
+            latitude: 31.1891,
+            longitude: 121.4542,
+            startDate: Self.date("2099-09-12", timeZoneID: "Asia/Shanghai"),
+            endDate: Self.date("2099-09-12", timeZoneID: "Asia/Shanghai"),
+            schedule: WebEventSchedule(mode: "single_day", timeZone: "Asia/Shanghai", dayRolloverHour: 7),
+            weeks: [],
+            eventDays: [],
+            timeZone: "Asia/Shanghai",
+            startTime: nil,
+            endTime: nil,
+            dayRolloverHour: 7,
+            stageOrder: nil,
+            ticketUrl: nil,
+            ticketPriceMin: nil,
+            ticketPriceMax: nil,
+            ticketCurrency: nil,
+            ticketNotes: nil,
+            officialWebsite: nil,
+            isCancelled: false,
+            visibility: "visible",
+            isVerified: false,
+            revision: 1,
+            createdAt: Self.dateTime("2099-09-01 10:00", timeZoneID: "Asia/Shanghai"),
+            updatedAt: Self.dateTime("2099-09-01 10:00", timeZoneID: "Asia/Shanghai"),
+            organizer: nil,
+            wikiFestival: nil,
+            ticketTiers: [],
+            lineupArtists: nil,
+            lineupSlots: [],
+            contributors: nil,
+            contributorSummary: nil,
+            contributorUsernames: nil,
+            uploadedByUsername: nil,
+            isContributor: nil,
+            canEdit: nil,
+            favoriteId: nil,
+            isFavorited: nil,
+            change: nil
+        )
+    }
+
     private static func loadGoldenFixture(named name: String) throws -> [String: Any] {
         var baseURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        for _ in 0..<5 {
+        while baseURL.lastPathComponent != "raver" && baseURL.path != "/" {
             baseURL.deleteLastPathComponent()
         }
         let fixtureURL = baseURL

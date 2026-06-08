@@ -117,11 +117,20 @@ Canonical event location write fields:
 - `locationPoint`
 - `latitude`
 - `longitude`
-- `venueName`
-- `venueAddress`
 
 Plain `city` / `country` strings should prefer canonical English values when available, while localized variants stay in
 `cityI18n` / `countryI18n`.
+
+### `manualLocation`
+
+- `manualLocation` is the canonical “activity address” source.
+- `manualLocation.detailAddressI18n` is the authored detailed address text.
+- `manualLocation.formattedAddressI18n` is the canonical externally displayed activity address.
+- `manualLocation.formattedAddressI18n` must be generated from:
+  - `detailAddress`
+  - `city`
+  - `country`
+- Clients must not invent their own long-term address composition rules outside this contract.
 
 ### `locationPoint`
 
@@ -129,7 +138,23 @@ Plain `city` / `country` strings should prefer canonical English values when ava
 - `sourceMode` is canonical and must come from the shared enum.
 - `adcode` is part of the write contract.
 - `providerMeta` is part of the write contract.
-- `manualLocation` and `locationPoint` may coexist when the authored event keeps both a display address and a provider-backed point.
+- `manualLocation` and `locationPoint` may coexist when the authored event keeps both an activity address and a provider-backed point.
+- `nameI18n` stores POI name metadata and may be preserved.
+- `nameI18n` must not be treated as the primary user-facing venue display address.
+- `formattedAddressI18n` stores the provider-returned formatted address.
+- `manualSetAddressI18n` stores the user-authored stable venue / map-pin display text.
+- When a `locationPoint` exists, venue display text must resolve as:
+  1. `manualSetAddressI18n`
+  2. `formattedAddressI18n`
+- When no `locationPoint` exists, venue display text may fallback to:
+  1. `manualLocation.formattedAddressI18n`
+  2. `manualLocation.detailAddressI18n`
+
+### Removed location fields
+
+- `venueName` is removed from the canonical mutation contract.
+- `venueAddress` is removed from the canonical mutation contract.
+- Clients must not emit legacy top-level venue display fields in canonical create/update payloads.
 
 ### Explicit i18n removal
 
@@ -167,6 +192,29 @@ These fixtures are the shared reference payloads for:
 - web mapper conformance
 - server contract guardrails
 - iOS parity tests
+
+Address-specific expectations from these fixtures:
+
+- `create-map-poi.json`
+  - `manualLocation.formattedAddressI18n` is the canonical activity address truth
+  - `locationPoint.formattedAddressI18n` preserves provider-formatted POI text
+  - `locationPoint.manualSetAddressI18n` is the canonical venue / map-pin display truth
+- `update-clear-location.json`
+  - clearing location must remove both `manualLocation` and `locationPoint`
+  - clearing location must also emit `clearManualLocation`, `clearLocationPoint`, `clearLatitude`, and `clearLongitude`
+
+## Parity Verification Entrypoints
+
+- Server guardrails:
+  - `pnpm --dir /Users/blackie/Projects/raver/server exec ts-node src/scripts/event-admin-contract-guardrails.ts`
+  - `pnpm --dir /Users/blackie/Projects/raver/server exec ts-node src/scripts/event-address-guardrails.ts`
+- Server smoke:
+  - `pnpm --dir /Users/blackie/Projects/raver/server exec ts-node src/scripts/event-address-search-smoke.ts`
+  - `pnpm --dir /Users/blackie/Projects/raver/server exec ts-node src/scripts/phase6-event-address-smoke.ts`
+- Web parity:
+  - `pnpm --dir /Users/blackie/Projects/raver/web test:parity:event`
+- iOS parity:
+  - `/Users/blackie/Projects/raver/scripts/run-ios-event-contract-parity.sh`
 
 ## Acceptance Criteria
 

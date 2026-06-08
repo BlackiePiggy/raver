@@ -138,6 +138,11 @@ raver/
 - [ADR-0005 Modular Monolith Before Microservices](./docs/adr/0005-modular-monolith-before-microservices.md)
 - [ADR-0006 Admin Console Over Public Web First](./docs/adr/0006-admin-console-over-public-web-first.md)
 
+当前 event 地址主线文档：
+
+- [Event Address Model Refactor Plan](./docs/event-address-model-refactor-plan.md)
+- [Event Address Parity And QA](./docs/EVENT_ADDRESS_PARITY_AND_QA.md)
+
 ## 架构改造纪律
 
 当前项目正在进行商用级架构收束。改造期间遵循：

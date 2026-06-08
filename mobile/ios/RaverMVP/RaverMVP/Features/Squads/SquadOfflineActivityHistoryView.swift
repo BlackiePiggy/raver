@@ -240,16 +240,10 @@ private struct SquadOfflineActivityHistoryDetailView: View {
     }
 
     private var venueText: String? {
-        let addressText = activity.eventAddressText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !addressText.isEmpty { return addressText }
-        let venue = activity.eventVenueName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let address = activity.eventVenueAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let city = activity.eventCity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !venue.isEmpty && !address.isEmpty { return "\(venue) · \(address)" }
-        if !address.isEmpty { return address }
-        if !venue.isEmpty && !city.isEmpty { return "\(venue) · \(city)" }
+        let venue = activity.eventVenueDisplayAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !venue.isEmpty { return venue }
-        if !city.isEmpty { return city }
+        let address = activity.eventActivityAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !address.isEmpty { return address }
         return nil
     }
 

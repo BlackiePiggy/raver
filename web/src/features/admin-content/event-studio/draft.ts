@@ -611,8 +611,6 @@ export const createEventStudioDraft = (): EventStudioDraft => ({
   country: emptyLocalizedText(),
   clearCountryI18nIntent: false,
   detailAddress: emptyLocalizedText(),
-  venueName: '',
-  venueAddress: '',
   latitude: '',
   longitude: '',
   locationPoint: null,
@@ -658,6 +656,7 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
   const manualDetail = event.manualLocation?.detailAddressI18n;
   const locationAddress = event.locationPoint?.addressI18n;
   const formattedLocationAddress = event.locationPoint?.formattedAddressI18n;
+  const manualSetLocationAddress = event.locationPoint?.manualSetAddressI18n;
   const legacyTicketPriceSource = event as EventStudioLoadedEvent & {
     ticketPriceMin?: number | null;
     ticketPriceMax?: number | null;
@@ -837,8 +836,6 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
     country: fromNullableLocalizedText(event.countryI18n, event.country ?? ''),
     clearCountryI18nIntent: false,
     detailAddress: fromNullableLocalizedText(manualDetail || locationAddress, ''),
-    venueName: event.venueName ?? '',
-    venueAddress: event.venueAddress ?? '',
     latitude: event.latitude != null ? String(event.latitude) : '',
     longitude: event.longitude != null ? String(event.longitude) : '',
     locationPoint: event.locationPoint
@@ -860,6 +857,8 @@ export const hydrateEventStudioDraftFromEvent = (event: EventStudioLoadedEvent):
       : null,
     pickedPlaceName: event.locationPoint?.nameI18n?.zh ?? event.locationPoint?.nameI18n?.en ?? '',
     pickedMapAddress:
+      manualSetLocationAddress?.zh ??
+      manualSetLocationAddress?.en ??
       formattedLocationAddress?.zh ??
       formattedLocationAddress?.en ??
       event.locationPoint?.addressI18n?.zh ??

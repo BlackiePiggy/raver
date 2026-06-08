@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Prisma, PrismaClient, ShareLink } from '@prisma/client';
 import { tencentIMGroupService } from '../modules/im';
+import { resolveEventVenueDisplayAddressText } from '../utils/event-address';
 
 const SHARE_BASE_URL = (process.env.PUBLIC_SHARE_BASE_URL || 'https://ravehub.top').replace(/\/+$/, '');
 const SHARE_CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -557,15 +558,21 @@ const buildTargetSeed = async (
         id: true,
         slug: true,
         name: true,
-        venueName: true,
         city: true,
+        manualLocation: true,
+        locationPoint: true,
         coverImageUrl: true,
       },
     });
     if (!event) {
       throw new ShareLinkError('target_not_found', 404, 'Event not found');
     }
-    const subtitle = singleLine([event.venueName, event.city].filter(Boolean).join(' · '));
+    const subtitle = singleLine(
+      resolveEventVenueDisplayAddressText({
+        manualLocation: event.manualLocation,
+        locationPoint: event.locationPoint,
+      }) || ''
+    );
     return {
       targetType,
       targetId: event.id,

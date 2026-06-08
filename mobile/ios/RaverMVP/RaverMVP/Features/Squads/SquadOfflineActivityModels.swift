@@ -40,9 +40,8 @@ struct SquadOfflineActivity: Codable, Identifiable, Hashable {
     var eventID: String?
     var eventName: String?
     var eventCoverImageURL: String?
-    var eventVenueName: String?
-    var eventVenueAddress: String?
-    var eventAddressText: String?
+    var eventVenueDisplayAddress: String?
+    var eventActivityAddress: String?
     var eventCity: String?
     var eventCoordinate: SquadOfflineCoordinate?
     var title: String?
@@ -106,7 +105,7 @@ struct SquadOfflineActivityCardPayload: Codable, Hashable {
     var eventID: String?
     var title: String
     var eventName: String?
-    var venueName: String?
+    var venueDisplayAddress: String?
     var city: String?
     var coverImageURL: String?
     var startedAt: Date

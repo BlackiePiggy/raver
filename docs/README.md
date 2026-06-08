@@ -47,6 +47,12 @@
 13. [Raver App 端后端概述](./RAVER_APP_BACKEND_OVERVIEW_FOR_ENGINEER.md)
    给后端工程师看的 App 端后端能力概述。
 
+14. [Event Address Model Refactor Plan](./event-address-model-refactor-plan.md)
+   Event 地址模型终局改造的执行主线、checklist 与验证进度。
+
+15. [Event Address Parity And QA](./EVENT_ADDRESS_PARITY_AND_QA.md)
+   Event 地址字段职责、golden fixture、自动化验证入口与手工验收清单。
+
 ## 2. 核心架构专题
 
 ### iOS

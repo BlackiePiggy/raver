@@ -647,6 +647,7 @@ struct WebEventLocationPoint: Codable, Hashable {
     var nameI18n: WebBiText? = nil
     var addressI18n: WebBiText? = nil
     var formattedAddressI18n: WebBiText? = nil
+    var manualSetAddressI18n: WebBiText? = nil
     var city: String? = nil
     var district: String? = nil
     var province: String? = nil
@@ -690,32 +691,69 @@ private func joinAddressComponents(_ values: [String?]) -> String {
 private func resolveEventUnifiedAddress(
     language: AppLanguage,
     manualLocation: WebEventManualLocation?,
-    locationPoint: WebEventLocationPoint?,
-    cityI18n: WebBiText?,
-    city: String?,
-    countryI18n: WebBiText?,
-    country: String?
+    locationPoint: WebEventLocationPoint?
 ) -> String {
+    if locationPoint != nil {
+        if let venueManual = localizedAddressText(locationPoint?.manualSetAddressI18n, language: language) {
+            return venueManual
+        }
+        if let pointFormatted = localizedAddressText(locationPoint?.formattedAddressI18n, language: language) {
+            return pointFormatted
+        }
+    }
+
     if let manualFormatted = localizedAddressText(manualLocation?.formattedAddressI18n, language: language) {
         return manualFormatted
     }
 
-    if let pointFormatted = localizedAddressText(locationPoint?.formattedAddressI18n, language: language) {
-        return pointFormatted
-    }
-
-    // Fallback for old records missing formattedAddressI18n.
     if let manualDetailText = localizedAddressText(manualLocation?.detailAddressI18n, language: language) {
         return manualDetailText
     }
+    return ""
+}
 
-    // Last fallback (legacy): still avoid multi-part composition.
-    if let cityText = localizedAddressText(cityI18n, language: language) ?? normalizedAddressText(city) {
-        return cityText
+func resolveEventVenueDisplayAddressText(
+    language: AppLanguage,
+    manualLocation: WebEventManualLocation?,
+    locationPoint: WebEventLocationPoint?
+) -> String {
+    resolveEventUnifiedAddress(
+        language: language,
+        manualLocation: manualLocation,
+        locationPoint: locationPoint
+    )
+}
+
+func resolveEventActivityAddressText(
+    language: AppLanguage,
+    explicitActivityAddress: String?,
+    manualLocation: WebEventManualLocation?
+) -> String {
+    if let explicit = normalizedAddressText(explicitActivityAddress) {
+        return explicit
     }
-    if let countryText = localizedAddressText(countryI18n, language: language) ?? normalizedAddressText(country) {
-        return countryText
+    return localizedAddressText(manualLocation?.formattedAddressI18n, language: language) ?? ""
+}
+
+func resolveEventVenueMapQueryText(
+    language: AppLanguage,
+    manualLocation: WebEventManualLocation?,
+    locationPoint: WebEventLocationPoint?
+) -> String {
+    let venueText = resolveEventVenueDisplayAddressText(
+        language: language,
+        manualLocation: manualLocation,
+        locationPoint: locationPoint
+    ).trimmingCharacters(in: .whitespacesAndNewlines)
+    if !venueText.isEmpty {
+        return venueText
     }
+
+    let pointName = localizedAddressText(locationPoint?.nameI18n, language: language) ?? ""
+    if !pointName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return pointName
+    }
+
     return ""
 }
 
@@ -777,14 +815,14 @@ struct WebEvent: Codable, Identifiable, Hashable {
     var imageAssets: [WebEventImageAsset]? = nil
     var eventType: String?
     var organizerName: String?
-    var venueName: String? = nil
-    var venueAddress: String? = nil
     var sourceEventUrl: String? = nil
     var sourceProvider: String? = nil
     var referenceLinks: [String]? = nil
     var socialLinks: ContentSubmissionJSONValue? = nil
     var city: String?
     var country: String?
+    var activityAddress: String? = nil
+    var venueDisplayAddress: String? = nil
     var manualLocation: WebEventManualLocation? = nil
     var locationPoint: WebEventLocationPoint? = nil
     var latitude: Double?
@@ -846,15 +884,21 @@ struct WebEvent: Codable, Identifiable, Hashable {
     }
 
     var unifiedAddress: String {
-        resolveEventUnifiedAddress(
+        if let explicitVenueDisplayAddress = normalizedAddressText(venueDisplayAddress) {
+            return explicitVenueDisplayAddress
+        }
+        return resolveEventUnifiedAddress(
             language: AppLanguagePreference.current.effectiveLanguage,
             manualLocation: manualLocation,
-            locationPoint: locationPoint,
-            cityI18n: cityI18n,
-            city: city,
-            countryI18n: countryI18n,
-            country: country
+            locationPoint: locationPoint
         )
+    }
+
+    var eventActivityAddress: String {
+        if let explicitActivityAddress = normalizedAddressText(activityAddress) {
+            return explicitActivityAddress
+        }
+        return localizedAddressText(manualLocation?.formattedAddressI18n, language: AppLanguagePreference.current.effectiveLanguage) ?? ""
     }
 
     var summaryLocation: String {
@@ -896,8 +940,6 @@ struct CreateEventInput: Encodable {
     var description: String?
     var eventType: String? = nil
     var organizerName: String? = nil
-    var venueName: String? = nil
-    var venueAddress: String? = nil
     var sourceEventUrl: String? = nil
     var sourceProvider: String? = nil
     var referenceLinks: [String]? = nil
@@ -949,8 +991,6 @@ struct CreateEventInput: Encodable {
         case description
         case eventType
         case organizerName
-        case venueName
-        case venueAddress
         case sourceEventUrl
         case sourceProvider
         case referenceLinks
@@ -1005,8 +1045,6 @@ struct CreateEventInput: Encodable {
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(eventType, forKey: .eventType)
         try container.encodeIfPresent(organizerName, forKey: .organizerName)
-        try container.encodeIfPresent(venueName, forKey: .venueName)
-        try container.encodeIfPresent(venueAddress, forKey: .venueAddress)
         try container.encodeIfPresent(sourceEventUrl, forKey: .sourceEventUrl)
         try container.encodeIfPresent(sourceProvider, forKey: .sourceProvider)
         try container.encodeIfPresent(referenceLinks, forKey: .referenceLinks)
@@ -1217,8 +1255,6 @@ struct UpdateEventInput: Encodable {
     var description: String?
     var eventType: String? = nil
     var organizerName: String? = nil
-    var venueName: String? = nil
-    var venueAddress: String? = nil
     var sourceEventUrl: String? = nil
     var sourceProvider: String? = nil
     var referenceLinks: [String]? = nil
@@ -1280,8 +1316,6 @@ struct UpdateEventInput: Encodable {
         case description
         case eventType
         case organizerName
-        case venueName
-        case venueAddress
         case sourceEventUrl
         case sourceProvider
         case referenceLinks
@@ -1340,8 +1374,6 @@ struct UpdateEventInput: Encodable {
         try container.encodeIfPresent(description, forKey: .description)
         try container.encodeIfPresent(eventType, forKey: .eventType)
         try container.encodeIfPresent(organizerName, forKey: .organizerName)
-        try container.encodeIfPresent(venueName, forKey: .venueName)
-        try container.encodeIfPresent(venueAddress, forKey: .venueAddress)
         try container.encodeIfPresent(sourceEventUrl, forKey: .sourceEventUrl)
         try container.encodeIfPresent(sourceProvider, forKey: .sourceProvider)
         try container.encodeIfPresent(referenceLinks, forKey: .referenceLinks)
@@ -1789,11 +1821,7 @@ struct CheckinEventLite: Codable, Identifiable, Hashable {
         resolveEventUnifiedAddress(
             language: AppLanguagePreference.current.effectiveLanguage,
             manualLocation: manualLocation,
-            locationPoint: locationPoint,
-            cityI18n: cityI18n,
-            city: city,
-            countryI18n: countryI18n,
-            country: country
+            locationPoint: locationPoint
         )
     }
 }
@@ -2106,11 +2134,7 @@ struct MyPublishEvent: Codable, Identifiable, Hashable {
         resolveEventUnifiedAddress(
             language: AppLanguagePreference.current.effectiveLanguage,
             manualLocation: manualLocation,
-            locationPoint: locationPoint,
-            cityI18n: cityI18n,
-            city: city,
-            countryI18n: countryI18n,
-            country: country
+            locationPoint: locationPoint
         )
     }
 }

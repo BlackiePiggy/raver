@@ -16,10 +16,64 @@ export interface Event {
   coverImageUrl: string | null;
   lineupImageUrl: string | null;
   eventType: string | null;
-  venueName: string | null;
-  venueAddress: string | null;
   city: string | null;
   country: string | null;
+  activityAddress?: string | null;
+  venueDisplayAddress?: string | null;
+  manualLocation?: {
+    detailAddressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    formattedAddressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    selectedAt?: string | null;
+  } | null;
+  locationPoint?: {
+    provider?: string | null;
+    sourceMode?: string | null;
+    providerPlaceId?: string | null;
+    poiId?: string | null;
+    adcode?: string | null;
+    location?: {
+      lng: number;
+      lat: number;
+    } | null;
+    nameI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    addressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    formattedAddressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    manualSetAddressI18n?: {
+      zh?: string | null;
+      en?: string | null;
+      ja?: string | null;
+      enFull?: string | null;
+    } | null;
+    city?: string | null;
+    district?: string | null;
+    province?: string | null;
+    countryCode?: string | null;
+  } | null;
   latitude: number | null;
   longitude: number | null;
   startDate: string;

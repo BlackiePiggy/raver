@@ -72,8 +72,6 @@ type EventStudioAIPosterEditableResult = {
   city: EventStudioDraft['city'];
   country: EventStudioDraft['country'];
   detailAddress: EventStudioDraft['detailAddress'];
-  venueName: string;
-  venueAddress: string;
   sourceProvider: string;
   referenceLinksText: string;
   socialLinksText: string;
@@ -465,8 +463,6 @@ const parsePosterEditableResult = (
       ja: safeString(raw.detailAddressI18n?.ja || raw.detail_address_i18n?.ja || draft.detailAddress.ja),
       enFull: safeString(raw.detailAddressI18n?.enFull || raw.detail_address_i18n?.enFull || draft.detailAddress.enFull),
     },
-    venueName: safeString(raw.venueName || raw.venue_name || draft.venueName),
-    venueAddress: safeString(raw.venueAddress || raw.venue_address || draft.venueAddress),
     sourceProvider: safeString(raw.sourceProvider || raw.source_provider || draft.sourceProvider),
     referenceLinksText: Array.isArray(raw.referenceLinks || raw.reference_links)
       ? (raw.referenceLinks || raw.reference_links).map((item: unknown) => safeString(item)).filter(Boolean).join('\n')
@@ -2379,8 +2375,6 @@ export default function EventStudioAIImportDock({
           city: result.city,
           country: result.country,
           detailAddress: result.detailAddress,
-          venueName: result.venueName,
-          venueAddress: result.venueAddress,
           sourceProvider: result.sourceProvider || current.sourceProvider,
           referenceLinksText: result.referenceLinksText,
           socialLinksText: result.socialLinksText,

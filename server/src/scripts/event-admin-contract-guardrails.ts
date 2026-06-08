@@ -66,9 +66,28 @@ const validateEventTruthFields = (): void => {
   assert(validatedUpdate.visibility === 'visible', 'update payload should accept visible visibility truth field');
 };
 
+const validateAddressContractFields = (): void => {
+  const createPayload = loadFixture('create-map-poi.json');
+  const validatedCreate = validateEventAdminContractPayload(createPayload, 'create');
+  const manualLocation = validatedCreate.manualLocation as Record<string, unknown> | undefined;
+  const locationPoint = validatedCreate.locationPoint as Record<string, unknown> | undefined;
+
+  assert(manualLocation != null, 'create payload should retain manualLocation');
+  assert(
+    typeof manualLocation?.formattedAddressI18n === 'object' && manualLocation.formattedAddressI18n !== null,
+    'create payload should retain manualLocation.formattedAddressI18n'
+  );
+  assert(locationPoint != null, 'create payload should retain locationPoint');
+  assert(
+    typeof locationPoint?.manualSetAddressI18n === 'object' && locationPoint.manualSetAddressI18n !== null,
+    'create payload should retain locationPoint.manualSetAddressI18n'
+  );
+};
+
 const main = (): void => {
   validateGoldenFixtures();
   validateEventTruthFields();
+  validateAddressContractFields();
 
   expectGuardrailError('update should reject missing schedule', () => {
     const payload = { ...baseUpdatePayload };
@@ -161,6 +180,26 @@ const main = (): void => {
       {
         ...baseUpdatePayload,
         isCancelled: 'true',
+      },
+      'update'
+    );
+  });
+
+  expectGuardrailError('create should reject legacy venueName field', () => {
+    validateEventAdminContractPayload(
+      {
+        ...loadFixture('create-cross-midnight.json'),
+        venueName: 'Legacy Warehouse',
+      },
+      'create'
+    );
+  });
+
+  expectGuardrailError('update should reject legacy venueAddress field', () => {
+    validateEventAdminContractPayload(
+      {
+        ...baseUpdatePayload,
+        venueAddress: '88 Xuhui Riverside',
       },
       'update'
     );

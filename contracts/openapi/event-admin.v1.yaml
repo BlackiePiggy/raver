@@ -501,6 +501,9 @@ components:
         formattedAddressI18n:
           $ref: '#/components/schemas/LocalizedText'
           nullable: true
+        manualSetAddressI18n:
+          $ref: '#/components/schemas/LocalizedText'
+          nullable: true
         city:
           type:
             - string
@@ -805,14 +808,6 @@ components:
             - string
             - 'null'
         organizerName:
-          type:
-            - string
-            - 'null'
-        venueName:
-          type:
-            - string
-            - 'null'
-        venueAddress:
           type:
             - string
             - 'null'
@@ -1201,19 +1196,19 @@ components:
           type:
             - string
             - 'null'
-        venueName:
-          type:
-            - string
-            - 'null'
-        venueAddress:
-          type:
-            - string
-            - 'null'
         city:
           type:
             - string
             - 'null'
         country:
+          type:
+            - string
+            - 'null'
+        activityAddress:
+          type:
+            - string
+            - 'null'
+        venueDisplayAddress:
           type:
             - string
             - 'null'
@@ -1396,14 +1391,6 @@ components:
           type:
             - string
             - 'null'
-        venueName:
-          type:
-            - string
-            - 'null'
-        venueAddress:
-          type:
-            - string
-            - 'null'
         sourceEventUrl:
           type:
             - string
@@ -1425,6 +1412,14 @@ components:
             - string
             - 'null'
         country:
+          type:
+            - string
+            - 'null'
+        activityAddress:
+          type:
+            - string
+            - 'null'
+        venueDisplayAddress:
           type:
             - string
             - 'null'

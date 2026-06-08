@@ -202,7 +202,6 @@ const mapCheckinResponse = (row: {
     country: string | null;
     startDate: Date;
     endDate: Date;
-    venueAddress?: string | null;
   } | null;
   dj?: {
     id: string;
@@ -687,8 +686,8 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
               coverImageUrl: true,
               city: true,
               country: true,
-              venueAddress: true,
               manualLocation: true,
+              locationPoint: true,
               startDate: true,
               endDate: true,
               isCancelled: true,
@@ -851,7 +850,6 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
               country: true,
               startDate: true,
               endDate: true,
-              venueAddress: true,
             },
           },
           dj: {
@@ -903,8 +901,8 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
             coverImageUrl: true,
             city: true,
             country: true,
-            venueAddress: true,
             manualLocation: true,
+            locationPoint: true,
             startDate: true,
             endDate: true,
             isCancelled: true,
@@ -1105,7 +1103,6 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
               country: true,
               startDate: true,
               endDate: true,
-              venueAddress: true,
             },
           },
           dj: {

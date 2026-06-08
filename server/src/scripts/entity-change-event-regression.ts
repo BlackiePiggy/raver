@@ -24,7 +24,16 @@ const baseData = {
   media: {},
   organizer: {},
   location: {
-    venueName: 'Club A',
+    manualLocation: {
+      detailAddressI18n: {
+        en: 'Club A',
+        zh: '俱乐部 A',
+      },
+      formattedAddressI18n: {
+        en: 'China · Shanghai · Club A',
+        zh: '中国 · 上海 · 俱乐部 A',
+      },
+    },
   },
   schedule: {
     startDate: '2026-06-01T12:00:00.000Z',

@@ -43,7 +43,7 @@ struct CountdownEventQuery: EntityQuery, EntityStringQuery {
             CountdownEventEntity(
                 id: event.id,
                 name: event.displayName,
-                subtitle: [event.nextRelevantDateText(), event.city, event.venueName]
+                subtitle: [event.nextRelevantDateText(), event.venueDisplayAddress]
                     .compactMap(widgetTrimmed)
                     .joined(separator: " · ")
             )

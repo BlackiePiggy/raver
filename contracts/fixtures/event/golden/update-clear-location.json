@@ -9,8 +9,6 @@
   "description": "Update payload that explicitly clears all location-bearing fields.",
   "eventType": "festival",
   "organizerName": "Raver Crew",
-  "venueName": null,
-  "venueAddress": null,
   "sourceEventUrl": "https://example.com/events/clear-location",
   "sourceProvider": "manual",
   "referenceLinks": null,

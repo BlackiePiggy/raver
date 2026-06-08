@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { normalizeTriTextPayload, type TriTextPayload } from '../utils/i18n';
+import { resolveEventAddressText } from '../utils/event-address';
 
 export type EventBiTextPayload = TriTextPayload;
 
@@ -36,8 +37,8 @@ export type SnapshotEventLite = {
   coverImageUrl: string | null;
   city: string | null;
   country: string | null;
-  venueAddress: string | null;
   manualLocation: Prisma.JsonValue | null;
+  locationPoint: Prisma.JsonValue | null;
   startDate: Date;
   endDate: Date;
 } | null;
@@ -91,27 +92,11 @@ export const normalizeBiText = (value: unknown, fallback = ''): EventBiTextPaylo
 };
 
 export const resolveEventAddress = (event: {
-  venueAddress?: string | null;
   manualLocation?: Prisma.JsonValue | null;
+  locationPoint?: Prisma.JsonValue | null;
   city?: string | null;
   country?: string | null;
-} | null): string | null => {
-  if (!event) return null;
-  const venueAddress = normalizeText(event.venueAddress);
-  if (venueAddress) return venueAddress;
-  const manualLocation =
-    event.manualLocation && typeof event.manualLocation === 'object' && !Array.isArray(event.manualLocation)
-      ? (event.manualLocation as Record<string, unknown>)
-      : null;
-  const manualAddress = normalizeText(
-    manualLocation?.address ?? manualLocation?.formattedAddress ?? manualLocation?.displayName
-  );
-  if (manualAddress) return manualAddress;
-  const city = normalizeText(event.city);
-  const country = normalizeText(event.country);
-  const fallback = [city, country].filter(Boolean).join(', ');
-  return fallback || null;
-};
+} | null): string | null => resolveEventAddressText(event);
 
 export const normalizeSelections = (
   raw: unknown

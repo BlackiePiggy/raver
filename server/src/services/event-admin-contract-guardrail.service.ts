@@ -22,6 +22,7 @@ const REQUIRED_CLEAR_FLAGS = [
   'clearStageOrder',
   'clearLineupSlots',
 ] as const;
+const REMOVED_LEGACY_FIELDS = ['venueName', 'venueAddress'] as const;
 
 const hasOwn = (body: EventAdminBody, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(body, key);
@@ -135,6 +136,14 @@ const ensureEventStatusTruthShape = (body: EventAdminBody): void => {
   }
 };
 
+const ensureNoLegacyAddressFields = (body: EventAdminBody): void => {
+  for (const key of REMOVED_LEGACY_FIELDS) {
+    if (hasOwn(body, key)) {
+      throw new EventAdminContractGuardrailError(`${key} is no longer accepted on event mutation payloads`);
+    }
+  }
+};
+
 export const validateEventAdminContractPayload = (
   payload: unknown,
   mode: EventAdminContractMode
@@ -153,6 +162,7 @@ export const validateEventAdminContractPayload = (
   ensureNonEmptyString(body.timeZone, 'timeZone');
   ensureStructuredScheduleFoundation(body);
   ensureEventStatusTruthShape(body);
+  ensureNoLegacyAddressFields(body);
 
   if (mode === 'update') {
     for (const key of REQUIRED_CLEAR_FLAGS) {

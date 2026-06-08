@@ -146,7 +146,6 @@ actor MockWebFeatureService: WebFeatureService {
             ticketCurrency: "CNY",
             ticketNotes: nil,
             officialWebsite: nil,
-            status: "upcoming",
             isCancelled: false,
             visibility: "visible",
             isVerified: true,
@@ -494,6 +493,10 @@ actor MockWebFeatureService: WebFeatureService {
         }
         let sorted = filtered.sorted(by: { $0.startDate < $1.startDate })
         return paginateEvents(sorted, page: page, limit: limit)
+    }
+
+    private func resolveEventStatus(for event: WebEvent) -> String {
+        EventVisualStatus.derivedRawValue(for: event)
     }
 
     func fetchFestivalEventFeed(
@@ -4007,8 +4010,7 @@ actor MockWebFeatureService: WebFeatureService {
             ticketCurrency: normalizedTicketCurrency,
             ticketNotes: normalizedOptional(base.ticketNotes),
             officialWebsite: normalizedOptional(base.officialWebsite),
-            status: base.isCancelled == true ? "cancelled" : "upcoming",
-            isCancelled: base.isCancelled ?? false,
+            isCancelled: eventMutationIsCancelled(base),
             visibility: normalizedMutationVisibility(base.visibility),
             isVerified: false,
             createdAt: now,
@@ -4096,10 +4098,8 @@ actor MockWebFeatureService: WebFeatureService {
         events[idx].ticketTiers = normalizedTicketTiers
         events[idx].ticketPriceMin = ticketPrices.min()
         events[idx].ticketPriceMax = ticketPrices.max()
-        events[idx].isCancelled = base.isCancelled ?? false
+        events[idx].isCancelled = eventMutationIsCancelled(base)
         events[idx].visibility = normalizedMutationVisibility(base.visibility)
-        events[idx].status = EventVisualStatus.resolve(event: events[idx]).rawValue
-
         if clear.clearLineupSlots == true {
             events[idx].lineupArtists = nil
             events[idx].lineupSlots = []
@@ -4182,12 +4182,24 @@ actor MockWebFeatureService: WebFeatureService {
         _ explicitValue: EventAdminComponents.Schemas.EventMutationBase.VisibilityPayload?
     ) -> String {
         if let explicitValue {
-            let normalized = explicitValue.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalized = explicitValue.rawValue
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                .lowercased()
             if normalized == "hidden" || normalized == "visible" {
                 return normalized
             }
         }
         return "visible"
+    }
+
+    private func eventMutationIsCancelled(
+        _ base: EventAdminComponents.Schemas.EventMutationBase
+    ) -> Bool {
+        guard let data = try? JSONEncoder().encode(base),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return object["isCancelled"] as? Bool ?? false
     }
 
     private func legacyLocalizedText(from text: EventAdminLocalizedText?) -> WebBiText? {
@@ -4228,6 +4240,7 @@ actor MockWebFeatureService: WebFeatureService {
             nameI18n: legacyLocalizedText(from: point.nameI18n),
             addressI18n: legacyLocalizedText(from: point.addressI18n),
             formattedAddressI18n: legacyLocalizedText(from: point.formattedAddressI18n),
+            manualSetAddressI18n: legacyLocalizedText(from: point.manualSetAddressI18n),
             city: point.city,
             district: point.district,
             province: point.province,

@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { SharePosterLocale } from './types';
+import { resolveEventVenueDisplayAddressText } from '../../utils/event-address';
 
 export const normalizeText = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
@@ -85,22 +87,16 @@ const readLocalizedAddressText = (
 
 export const resolvePosterVenueText = (
   event: {
-    city?: string | null;
-    country?: string | null;
-    cityI18n?: unknown;
-    countryI18n?: unknown;
     manualLocation?: unknown;
     locationPoint?: unknown;
   },
   locale: SharePosterLocale
 ): string | null => {
-  const cityText = pickLocalizedText(event.cityI18n, locale, event.city);
-  const countryText = pickLocalizedText(event.countryI18n, locale, event.country);
-  const unified = readLocalizedAddressText(event.manualLocation, 'formattedAddressI18n', locale)
-    ?? readLocalizedAddressText(event.locationPoint, 'formattedAddressI18n', locale)
-    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n', locale)
-    ?? cityText
-    ?? countryText;
+  const unified = resolveEventVenueDisplayAddressText({
+    manualLocation: (event.manualLocation as Prisma.JsonValue | null | undefined) ?? null,
+    locationPoint: (event.locationPoint as Prisma.JsonValue | null | undefined) ?? null,
+  })
+    ?? readLocalizedAddressText(event.manualLocation, 'detailAddressI18n', locale);
   return unified ? formatPosterVenueText(unified) : null;
 };
 

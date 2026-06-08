@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Event } from '@/lib/api/event';
+import { resolveEventVenueDisplayText } from '@/lib/event-address';
 import { formatEventDisplayStatusText, resolveEventDisplayStatus } from '@/lib/event-status';
 import { formatDateWithTimeZoneLabel } from '@/lib/timezone';
 
@@ -11,6 +12,7 @@ interface EventCardProps {
 
 export const EventCard: React.FC<EventCardProps> = ({ event }) => {
   const visualStatus = resolveEventDisplayStatus(event);
+  const venueDisplayText = resolveEventVenueDisplayText(event);
 
   const formatDate = (dateString: string) => {
     return formatDateWithTimeZoneLabel(dateString, event.timeZone);
@@ -57,17 +59,17 @@ export const EventCard: React.FC<EventCardProps> = ({ event }) => {
               <span>{formatDate(event.startDate)}</span>
             </div>
 
+            {venueDisplayText && (
+              <div className="flex items-center text-text-secondary">
+                <span className="mr-2">🏛️</span>
+                <span className="line-clamp-1">{venueDisplayText}</span>
+              </div>
+            )}
+
             {event.city && (
               <div className="flex items-center text-text-secondary">
                 <span className="mr-2">📍</span>
                 <span>{event.city}{event.country && `, ${event.country}`}</span>
-              </div>
-            )}
-
-            {event.venueName && (
-              <div className="flex items-center text-text-secondary">
-                <span className="mr-2">🏛️</span>
-                <span className="line-clamp-1">{event.venueName}</span>
               </div>
             )}
           </div>

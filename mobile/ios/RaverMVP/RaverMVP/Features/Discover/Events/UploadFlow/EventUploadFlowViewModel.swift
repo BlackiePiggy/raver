@@ -1,4 +1,5 @@
 import Foundation
+import RaverEventAdminContract
 
 @MainActor
 final class EventUploadFlowViewModel: ObservableObject {
@@ -828,18 +829,6 @@ final class EventUploadFlowViewModel: ObservableObject {
         saveDraft()
     }
 
-    func updateVenueName(_ value: String) {
-        draft.venueName = value
-        draft.dirty = true
-        saveDraft()
-    }
-
-    func updateVenueAddress(_ value: String) {
-        draft.venueAddress = value
-        draft.dirty = true
-        saveDraft()
-    }
-
     func updateReferenceLinksText(_ value: String) {
         draft.referenceLinksText = value
         draft.dirty = true
@@ -1571,15 +1560,27 @@ final class EventUploadFlowViewModel: ObservableObject {
         }
     }
 
+    var activityAddressSummary: String {
+        let input = EventUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(
+            legacyWebBiText(from: input.value1.manualLocation?.formattedAddressI18n)
+        )
+        return localized.isEmpty ? LT("尚未填写地址", "No address yet", "住所未入力") : localized
+    }
+
+    var venueDisplaySummary: String? {
+        let input = EventUploadMappers.createInput(from: draft)
+        let point = legacyLocationPoint(from: input.value1.locationPoint)
+        let venue = resolveEventVenueDisplayAddressText(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: nil,
+            locationPoint: point
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return venue.isEmpty ? nil : venue
+    }
+
     var locationSummary: String {
-        let language = draft.preferredLanguage
-        let address = draft.detailAddress.primaryValue(preferredLanguage: language)
-        let city = draft.city.primaryValue(preferredLanguage: language)
-        let country = draft.country.primaryValue(preferredLanguage: language)
-        let parts = [address, city, country]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return parts.isEmpty ? LT("尚未填写地址", "No address yet", "住所未入力") : parts.joined(separator: " · ")
+        activityAddressSummary
     }
 
     var coordinateSummary: String? {
@@ -1589,6 +1590,56 @@ final class EventUploadFlowViewModel: ObservableObject {
 
     var reviewDateRange: String {
         draft.discreteDateSummaryText(in: eventTimeZone)
+    }
+
+    private func legacyWebBiText(
+        from text: EventAdminComponents.Schemas.LocalizedText?
+    ) -> WebBiText? {
+        guard let text else { return nil }
+        let mapped = WebBiText(
+            en: text.en,
+            zh: text.zh,
+            ja: text.ja,
+            enFull: text.enFull
+        )
+        let hasValue = !mapped.en.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !mapped.zh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || (mapped.ja?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            || (mapped.enFull?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        return hasValue ? mapped : nil
+    }
+
+    private func localizedUploadAddressText(_ text: WebBiText?) -> String {
+        let language = AppLanguagePreference.current.effectiveLanguage
+        let localized = text?.text(for: language).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        if !localized.isEmpty { return localized }
+        let zh = text?.zh.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        if !zh.isEmpty { return zh }
+        let en = text?.en.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        return en
+    }
+
+    private func legacyLocationPoint(
+        from point: EventAdminComponents.Schemas.EventLocationPoint?
+    ) -> WebEventLocationPoint? {
+        guard let point else { return nil }
+        return WebEventLocationPoint(
+            provider: point.provider.rawValue,
+            sourceMode: point.sourceMode.rawValue,
+            providerPlaceId: point.providerPlaceId,
+            poiId: point.poiId,
+            adcode: point.adcode,
+            location: WebEventLocationCoordinate(lng: point.location.lng, lat: point.location.lat),
+            nameI18n: legacyWebBiText(from: point.nameI18n),
+            addressI18n: legacyWebBiText(from: point.addressI18n),
+            formattedAddressI18n: legacyWebBiText(from: point.formattedAddressI18n),
+            manualSetAddressI18n: legacyWebBiText(from: point.manualSetAddressI18n),
+            city: point.city,
+            district: point.district,
+            province: point.province,
+            countryCode: point.countryCode,
+            providerMeta: nil
+        )
     }
 
     func tapLocationPickerPlaceholder() {

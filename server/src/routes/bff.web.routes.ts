@@ -56,6 +56,10 @@ import {
   deriveEventStatus,
   resolveEventTruth,
 } from '../utils/event-status';
+import {
+  resolveEventActivityAddressText,
+  resolveEventVenueDisplayAddressText,
+} from '../utils/event-address';
 import { regionalCompliance, type RegionalComplianceUser } from '../config/regional-compliance';
 import { getServerCozeRuntimeConfig } from '../config/runtime-coze-config';
 import { contentCompliance } from '../utils/content-compliance';
@@ -2458,8 +2462,6 @@ const selectEventDetailForWeb = {
   sourceEventUrl: true,
   eventType: true,
   organizerName: true,
-  venueName: true,
-  venueAddress: true,
   city: true,
   cityI18n: true,
   country: true,
@@ -2607,8 +2609,6 @@ const selectEventSummaryForIOS = {
   sourceEventUrl: true,
   eventType: true,
   organizerName: true,
-  venueName: true,
-  venueAddress: true,
   city: true,
   cityI18n: true,
   country: true,
@@ -2758,8 +2758,6 @@ const selectEventRecommendationCardForWeb = {
   imageAssets: true,
   eventType: true,
   organizerName: true,
-  venueName: true,
-  venueAddress: true,
   city: true,
   country: true,
   manualLocation: true,
@@ -2852,8 +2850,6 @@ const selectEventListCardForWeb = {
   imageAssets: true,
   eventType: true,
   organizerName: true,
-  venueName: true,
-  venueAddress: true,
   city: true,
   country: true,
   manualLocation: true,
@@ -7360,13 +7356,7 @@ const mapEventTimetableSlots = (performancesRaw: any): any[] => {
   });
 };
 
-const mapEvent = (
-  row: any,
-  complianceUser?: RegionalComplianceUser | null,
-  viewerId: string | null | undefined = null,
-  viewerRole: string | null | undefined = null
-) => {
-  const eventTimeZone = normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE);
+const buildEventAddressPayload = (row: any) => {
   const latitude = toNumber(row.latitude);
   const longitude = toNumber(row.longitude);
   const locationFallback =
@@ -7387,6 +7377,69 @@ const mapEvent = (
   const manualLocationRaw = normalizeEventManualLocationPayload(row.manualLocation ?? null);
   const manualLocation = mergeManualLocationFormattedWithBaseI18n(manualLocationRaw, cityI18n, countryI18n);
   const locationPoint = normalizeEventLocationPointPayload(row.locationPoint ?? null, locationFallback);
+
+  return {
+    latitude,
+    longitude,
+    cityI18n,
+    countryI18n,
+    manualLocation: manualLocation ?? null,
+    locationPoint: locationPoint ?? null,
+    activityAddress: resolveEventActivityAddressText({
+      manualLocation: row.manualLocation ?? null,
+    }),
+    venueDisplayAddress: resolveEventVenueDisplayAddressText({
+      manualLocation: row.manualLocation ?? null,
+      locationPoint: row.locationPoint ?? null,
+    }),
+  };
+};
+
+const mapEventReference = (
+  row: any,
+  options?: {
+    includeCoverImageUrl?: boolean;
+    includeCreatedAt?: boolean;
+  }
+) => {
+  const addressPayload = buildEventAddressPayload(row);
+
+  return {
+    id: row.id,
+    name: row.name,
+    nameI18n: row.nameI18n ?? null,
+    cityI18n: addressPayload.cityI18n ?? null,
+    countryI18n: addressPayload.countryI18n ?? null,
+    manualLocation: addressPayload.manualLocation,
+    locationPoint: addressPayload.locationPoint,
+    activityAddress: addressPayload.activityAddress,
+    venueDisplayAddress: addressPayload.venueDisplayAddress,
+    city: row.city ?? null,
+    country: row.country ?? null,
+    ...(options?.includeCoverImageUrl ? { coverImageUrl: row.coverImageUrl ?? null } : {}),
+    ...(row.startDate ? { startDate: row.startDate } : {}),
+    ...(row.endDate ? { endDate: row.endDate } : {}),
+    ...(options?.includeCreatedAt ? { createdAt: row.createdAt } : {}),
+  };
+};
+
+const mapEvent = (
+  row: any,
+  complianceUser?: RegionalComplianceUser | null,
+  viewerId: string | null | undefined = null,
+  viewerRole: string | null | undefined = null
+) => {
+  const eventTimeZone = normalizeEventTimeZone(row.timeZone ?? row.timezone ?? DEFAULT_EVENT_TIME_ZONE);
+  const {
+    latitude,
+    longitude,
+    cityI18n,
+    countryI18n,
+    manualLocation,
+    locationPoint,
+    activityAddress,
+    venueDisplayAddress,
+  } = buildEventAddressPayload(row);
   const mappedCanonicalArtists = mapEventLineupArtists(row.canonicalArtists);
   const mappedCanonicalSlots = mapEventTimetableSlots(row.performances);
   const contributorInfo = eventContributorInfoFromRow(row);
@@ -7423,12 +7476,12 @@ const mapEvent = (
     sourceEventUrl: row.sourceEventUrl ?? null,
     eventType: row.eventType,
     organizerName: row.organizerName,
-    venueName: row.venueName ?? null,
-    venueAddress: row.venueAddress ?? null,
     city: row.city,
     country: row.country,
     manualLocation: manualLocation ?? null,
     locationPoint: locationPoint ?? null,
+    activityAddress,
+    venueDisplayAddress,
     latitude,
     longitude,
     startDate: row.startDate,
@@ -7805,6 +7858,9 @@ const mapRatingUnit = (row: any, includeComments = false) => {
           name: row.event.name,
           description: row.event.description ?? null,
           imageUrl: row.event.imageUrl ?? null,
+          ...(row.event.manualLocation || row.event.locationPoint || row.event.city || row.event.country
+            ? mapEventReference(row.event, { includeCoverImageUrl: false })
+            : {}),
         }
       : undefined,
     createdBy: mapUserLite(row.createdBy),
@@ -9428,6 +9484,12 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
           organizerName: true,
           city: true,
           country: true,
+          cityI18n: true,
+          countryI18n: true,
+          manualLocation: true,
+          locationPoint: true,
+          latitude: true,
+          longitude: true,
           eventType: true,
           isCancelled: true,
           visibility: true,
@@ -9465,7 +9527,14 @@ router.get('/events/catalog-summary', optionalAuth, async (req: Request, res: Re
         visibility: row.visibility,
       });
       return {
-        ...row,
+        ...mapEventReference(row),
+        slug: row.slug,
+        organizerName: row.organizerName,
+        eventType: row.eventType,
+        isVerified: row.isVerified,
+        updatedAt: row.updatedAt,
+        wikiFestival: row.wikiFestival,
+        eventDays: row.eventDays,
         status: deriveEventStatus(new Date(row.startDate), new Date(row.endDate), {
           isCancelled: resolvedEventTruth.isCancelled,
           visibility: resolvedEventTruth.visibility,
@@ -15374,7 +15443,7 @@ router.get('/checkins', optionalAuth, async (req: Request, res: Response): Promi
           rating: row.rating,
           attendedAt: row.attendedAt,
           createdAt: row.createdAt,
-          event: row.event,
+          event: row.event ? mapEventReference(row.event, { includeCoverImageUrl: true }) : null,
           dj: row.dj,
           selections: row.selections.map((selection) => ({
             dayId: selection.dayId,
@@ -15524,7 +15593,10 @@ router.post('/checkins', optionalAuth, async (req: Request, res: Response): Prom
       },
     });
 
-    ok(res, created);
+    ok(res, {
+      ...created,
+      event: created.event ? mapEventReference(created.event, { includeCoverImageUrl: true }) : null,
+    });
   } catch (error) {
     console.error('BFF web create checkin error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -15664,7 +15736,10 @@ router.patch('/checkins/:id', optionalAuth, async (req: Request, res: Response):
       },
     });
 
-    ok(res, updated);
+    ok(res, {
+      ...updated,
+      event: updated.event ? mapEventReference(updated.event, { includeCoverImageUrl: true }) : null,
+    });
   } catch (error) {
     console.error('BFF web update checkin error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -20954,18 +21029,7 @@ router.get('/publishes/me', optionalAuth, async (req: Request, res: Response): P
         dj: set.dj,
       })),
       events: events.map((event) => ({
-        id: event.id,
-        name: event.name,
-        nameI18n: event.nameI18n,
-        cityI18n: event.cityI18n,
-        countryI18n: event.countryI18n,
-        manualLocation: event.manualLocation,
-        locationPoint: event.locationPoint,
-        coverImageUrl: event.coverImageUrl,
-        city: event.city,
-        country: event.country,
-        startDate: event.startDate,
-        createdAt: event.createdAt,
+        ...mapEventReference(event, { includeCoverImageUrl: true, includeCreatedAt: true }),
         lineupSlotCount: eventLineupCounts.get(event.id) ?? 0,
       })),
       ratingEvents: ratingEvents.map((event) => ({

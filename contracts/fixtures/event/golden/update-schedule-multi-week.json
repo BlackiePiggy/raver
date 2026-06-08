@@ -9,8 +9,6 @@
   "description": "Update payload for multi-week schedule semantics with canonical week and event-day identities.",
   "eventType": "festival",
   "organizerName": "Raver Crew",
-  "venueName": "Harbor Grounds",
-  "venueAddress": "1 Harbor Avenue",
   "sourceEventUrl": "https://example.com/events/segmented",
   "sourceProvider": "manual",
   "referenceLinks": [

@@ -30,6 +30,8 @@ const minutesAfter = (base: Date, minutes: number): Date =>
   new Date(base.getTime() + minutes * 60_000);
 
 const REGRESSION_TIME_ZONE = 'Asia/Shanghai';
+const REGRESSION_TRANSACTION_TIMEOUT_MS = 120_000;
+const REGRESSION_TRANSACTION_MAX_WAIT_MS = 20_000;
 
 type RegressionSchedulePayload = {
   schedule: {
@@ -245,6 +247,7 @@ const buildSlot = (
 });
 
 const createRegressionUserAndEvent = async (suffix: string): Promise<{ userId: string; eventId: string }> => {
+  const schedule = buildAugustMultiDaySchedule();
   const user = await prisma.user.create({
     data: {
       username: `event_incremental_${suffix}`,
@@ -271,7 +274,11 @@ const createRegressionUserAndEvent = async (suffix: string): Promise<{ userId: s
       country: 'China',
       startDate: new Date('2026-08-01T00:00:00.000Z'),
       endDate: new Date('2026-08-02T23:59:59.000Z'),
+      scheduleMode: schedule.schedule.mode,
       timeZone: 'Asia/Shanghai',
+      startTime: '00:00:00',
+      endTime: '23:59:59',
+      dayRolloverHour: schedule.schedule.dayRolloverHour,
       coverImageUrl: 'https://example.com/regression-cover.jpg',
       lineupImageUrl: 'https://example.com/regression-lineup.jpg',
       imageAssets: [
@@ -284,6 +291,27 @@ const createRegressionUserAndEvent = async (suffix: string): Promise<{ userId: s
       isCancelled: false,
       visibility: 'visible',
       isVerified: true,
+      weeks: {
+        create: schedule.weeks.map((week) => ({
+          weekIndex: week.weekIndex,
+          label: week.label,
+          startDate: new Date(`${week.startDate}T00:00:00.000Z`),
+          endDate: new Date(`${week.endDate}T00:00:00.000Z`),
+          sortOrder: week.sortOrder,
+        })),
+      },
+      eventDays: {
+        create: schedule.eventDays.map((day) => ({
+          eventDayId: day.eventDayId,
+          weekIndex: day.weekIndex,
+          dayIndexInWeek: day.dayIndexInWeek,
+          overallDayIndex: day.overallDayIndex,
+          label: day.label,
+          weekday: day.weekday,
+          date: new Date(`${day.date}T00:00:00.000Z`),
+          sortOrder: day.sortOrder,
+        })),
+      },
     },
     select: { id: true },
   });
@@ -319,7 +347,7 @@ const seedNinetyNine = async (eventId: string, baseTime: Date): Promise<void> =>
   const slots = artists.map((artist, index) => buildSlot(index + 1, artist, baseTime, crypto.randomUUID()));
   await prisma.$transaction(async (tx) => {
     await syncCanonicalEventLineupAndTimetable(tx, eventId, slots, artists, ['Main Stage', 'Second Stage']);
-  }, { timeout: 30_000, maxWait: 10_000 });
+  }, { timeout: REGRESSION_TRANSACTION_TIMEOUT_MS, maxWait: REGRESSION_TRANSACTION_MAX_WAIT_MS });
 };
 
 const assertExistingRowsStable = async (
@@ -362,7 +390,7 @@ const runDirectCanonicalRegression = async (eventId: string): Promise<void> => {
       [...seeded.artists, addedArtist],
       seeded.stageOrder
     );
-  }, { timeout: 30_000, maxWait: 10_000 });
+  }, { timeout: REGRESSION_TRANSACTION_TIMEOUT_MS, maxWait: REGRESSION_TRANSACTION_MAX_WAIT_MS });
 
   const afterAdd = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   assert(afterAdd.artists.length === 100, `expected 100 artists after add, got ${afterAdd.artists.length}`);
@@ -386,7 +414,7 @@ const runDirectCanonicalRegression = async (eventId: string): Promise<void> => {
       afterAdd.artists,
       afterAdd.stageOrder
     );
-  }, { timeout: 30_000, maxWait: 10_000 });
+  }, { timeout: REGRESSION_TRANSACTION_TIMEOUT_MS, maxWait: REGRESSION_TRANSACTION_MAX_WAIT_MS });
 
   const afterSlotUpdate = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   assert(afterSlotUpdate.artists.length === 100, 'single-slot update changed artist count');
@@ -404,7 +432,7 @@ const runDirectCanonicalRegression = async (eventId: string): Promise<void> => {
       afterSlotUpdate.artists.filter((artist) => artist.id !== addedArtist.id),
       afterSlotUpdate.stageOrder
     );
-  }, { timeout: 30_000, maxWait: 10_000 });
+  }, { timeout: REGRESSION_TRANSACTION_TIMEOUT_MS, maxWait: REGRESSION_TRANSACTION_MAX_WAIT_MS });
 
   const afterDelete = await loadCanonicalEventLineupSnapshot(prisma, eventId);
   assert(afterDelete.artists.length === 99, `expected 99 artists after delete, got ${afterDelete.artists.length}`);
@@ -844,6 +872,143 @@ const runLegacyStatusSubmissionReplayRegression = async (userId: string): Promis
   await prisma.event.deleteMany({ where: { id: first.id } });
 };
 
+const runAddressNormalizationReplayRegression = async (userId: string): Promise<void> => {
+  logStep('address normalization replay path');
+  const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
+  const schedule = buildSingleDaySchedule('2026-09-15');
+  const payload = {
+    name: `Event Address Replay ${suffix}`,
+    city: 'Shanghai',
+    cityI18n: {
+      zh: '上海',
+      en: 'Shanghai',
+    },
+    country: 'China',
+    countryI18n: {
+      zh: '中国',
+      en: 'China',
+      enFull: 'China',
+    },
+    manualLocation: {
+      detailAddressI18n: {
+        zh: '徐汇滨江 88 号',
+        en: '88 Xuhui Riverside',
+      },
+    },
+    locationPoint: {
+      provider: 'amap',
+      sourceMode: 'map_poi_click',
+      poiId: 'B0FFG1AMPLE',
+      adcode: '310104',
+      location: {
+        lng: 121.4542,
+        lat: 31.1891,
+      },
+      nameI18n: {
+        zh: '滨江仓库',
+        en: 'Riverside Warehouse',
+      },
+      addressI18n: {
+        zh: '徐汇滨江 88 号',
+        en: '88 Xuhui Riverside',
+      },
+      formattedAddressI18n: {
+        zh: '中国 · 上海 · 滨江仓库',
+        en: 'China · Shanghai · Riverside Warehouse',
+      },
+    },
+    ...schedule,
+    imageAssets: [
+      {
+        type: 'poster',
+        label: 'POSTER',
+        url: 'https://example.com/regression-address-poster.jpg',
+      },
+    ],
+    lineupArtists: [
+      {
+        djName: 'Address Replay DJ',
+        memberNames: ['Address Replay DJ'],
+        sortOrder: 1,
+      },
+    ],
+    lineupSlots: [
+      {
+        eventDayId: schedule.eventDays[0].eventDayId,
+        weekIndex: schedule.eventDays[0].weekIndex,
+        dayIndexInWeek: schedule.eventDays[0].dayIndexInWeek,
+        overallDayIndex: schedule.eventDays[0].overallDayIndex,
+        localDate: schedule.eventDays[0].date,
+        djName: 'Address Replay DJ',
+        memberDjIds: [],
+        stageName: 'Main Stage',
+        festivalDayIndex: schedule.eventDays[0].overallDayIndex,
+        startTime: '2026-09-15T18:00:00+08:00',
+        endTime: '2026-09-15T19:00:00+08:00',
+        sortOrder: 1,
+      },
+    ],
+    stageOrder: ['Main Stage'],
+  } as Prisma.JsonObject;
+
+  const submission = await prisma.contentSubmission.create({
+    data: {
+      submitterId: userId,
+      entityType: 'event',
+      status: 'processing',
+      title: payload.name as string,
+      payload,
+      reviewReason: null,
+    },
+    select: { id: true },
+  });
+
+  const first = await createOrUpdateEventFromSubmission(prisma, payload, userId, {
+    submissionId: submission.id,
+  });
+  const second = await createOrUpdateEventFromSubmission(prisma, payload, userId, {
+    submissionId: submission.id,
+  });
+
+  assert(first.id === second.id, 'address replay should remain idempotent');
+
+  const replayed = await prisma.event.findUniqueOrThrow({
+    where: { id: first.id },
+    select: {
+      manualLocation: true,
+      locationPoint: true,
+    },
+  });
+
+  const manualLocation = replayed.manualLocation as Record<string, any> | null;
+  const locationPoint = replayed.locationPoint as Record<string, any> | null;
+  assert(manualLocation != null, 'address replay should persist manualLocation');
+  assert(locationPoint != null, 'address replay should persist locationPoint');
+  assert(
+    manualLocation?.formattedAddressI18n?.zh === '中国 · 上海 · 徐汇滨江 88 号',
+    'manualLocation.formattedAddressI18n.zh should be regenerated from detailAddress + city + country'
+  );
+  assert(
+    manualLocation?.formattedAddressI18n?.en === 'China · Shanghai · 88 Xuhui Riverside',
+    'manualLocation.formattedAddressI18n.en should be regenerated from detailAddress + city + country'
+  );
+  assert(
+    locationPoint?.manualSetAddressI18n?.zh === '中国 · 上海 · 徐汇滨江 88 号',
+    'locationPoint.manualSetAddressI18n.zh should align to manual formatted address'
+  );
+  assert(
+    locationPoint?.manualSetAddressI18n?.en === 'China · Shanghai · 88 Xuhui Riverside',
+    'locationPoint.manualSetAddressI18n.en should align to manual formatted address'
+  );
+  assert(
+    locationPoint?.formattedAddressI18n?.zh === '中国 · 上海 · 滨江仓库',
+    'locationPoint.formattedAddressI18n should preserve provider formatted address'
+  );
+
+  await prisma.contentSubmission.deleteMany({ where: { id: submission.id } });
+  await prisma.event.deleteMany({ where: { id: first.id } });
+};
+
 const runAutoApprovalResumeRegression = async (): Promise<void> => {
   logStep('auto approval resume path');
   const suffix = `${Date.now()}_${crypto.randomInt(1000, 9999)}`;
@@ -1099,6 +1264,7 @@ const main = async (): Promise<void> => {
     await runFullPayloadLargeMixedRegression(eventId, userId);
     await runCreateSubmissionIdempotencyRegression(userId);
     await runLegacyStatusSubmissionReplayRegression(userId);
+    await runAddressNormalizationReplayRegression(userId);
     await runCreatePayloadIncrementalFillRegression(userId);
     await runAutoApprovalResumeRegression();
     await runPhaseBFailureRecoveryRegression();

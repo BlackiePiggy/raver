@@ -181,8 +181,6 @@ export type EventStudioDraft = {
   country: EventStudioLocalizedText;
   clearCountryI18nIntent: boolean;
   detailAddress: EventStudioLocalizedText;
-  venueName: string;
-  venueAddress: string;
   latitude: string;
   longitude: string;
   locationPoint: EventStudioLocationPoint | null;

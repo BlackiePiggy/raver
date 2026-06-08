@@ -9,8 +9,6 @@
   "description": "Single-day event authored from a POI-backed map pick.",
   "eventType": "club",
   "organizerName": "Raver Crew",
-  "venueName": "Riverside Warehouse",
-  "venueAddress": "88 Xuhui Riverside",
   "sourceEventUrl": "https://example.com/events/neon-port",
   "sourceProvider": "map-picker",
   "referenceLinks": [
@@ -56,6 +54,10 @@
     "formattedAddressI18n": {
       "en": "China \u00b7 Shanghai \u00b7 Riverside Warehouse",
       "zh": "\u4e2d\u56fd \u00b7 \u4e0a\u6d77 \u00b7 \u6ee8\u6c5f\u4ed3\u5e93"
+    },
+    "manualSetAddressI18n": {
+      "en": "China \u00b7 Shanghai \u00b7 88 Xuhui Riverside",
+      "zh": "\u4e2d\u56fd \u00b7 \u4e0a\u6d77 \u00b7 \u5f90\u6c47\u6ee8\u6c5f 88 \u53f7"
     },
     "city": "Shanghai",
     "province": "Shanghai",

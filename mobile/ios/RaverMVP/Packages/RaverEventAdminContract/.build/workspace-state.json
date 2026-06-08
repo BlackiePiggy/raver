@@ -1,0 +1,47 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-http-types",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/apple/swift-http-types",
+          "name" : "swift-http-types"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "db774a277f60063a32d854f2980299caf06da041",
+            "version" : "1.6.0"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-http-types"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-openapi-runtime",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/apple/swift-openapi-runtime",
+          "name" : "swift-openapi-runtime"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "3d3a8457661daf7fb260ceeb9f0e24e5204ba5fb",
+            "version" : "1.12.0"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-openapi-runtime"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

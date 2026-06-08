@@ -160,6 +160,35 @@ final class EventTimetableAIParsingTests: XCTestCase {
         XCTAssertEqual(slot.notes, ["needs manual date confirmation"])
     }
 
+    func testLocationSummaryUsesManualLocationFormattedAddressSemantics() {
+        let viewModel = makeViewModel()
+        viewModel.draft.preferredLanguage = .zh
+        viewModel.draft.city = EventUploadLocalizedFields(zh: "上海", en: "Shanghai")
+        viewModel.draft.country = EventUploadLocalizedFields(zh: "中国", en: "China", enFull: "China")
+        viewModel.draft.detailAddress = EventUploadLocalizedFields(zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside")
+        viewModel.draft.latitude = 31.1891
+        viewModel.draft.longitude = 121.4542
+        viewModel.draft.pickedPlaceName = "滨江仓库"
+        viewModel.draft.pickedMapAddress = "Riverside Warehouse"
+
+        XCTAssertEqual(viewModel.locationSummary, "中国 · 上海 · 徐汇滨江 88 号")
+    }
+
+    func testVenueDisplaySummaryUsesVenueDisplayAddressSemantics() {
+        let viewModel = makeViewModel()
+        viewModel.draft.preferredLanguage = .zh
+        viewModel.draft.city = EventUploadLocalizedFields(zh: "上海", en: "Shanghai")
+        viewModel.draft.country = EventUploadLocalizedFields(zh: "中国", en: "China", enFull: "China")
+        viewModel.draft.detailAddress = EventUploadLocalizedFields(zh: "徐汇滨江 88 号", en: "88 Xuhui Riverside")
+        viewModel.draft.latitude = 31.1891
+        viewModel.draft.longitude = 121.4542
+        viewModel.draft.pickedPlaceName = "滨江仓库"
+        viewModel.draft.pickedMapAddress = "Riverside Warehouse"
+
+        XCTAssertEqual(viewModel.venueDisplaySummary, "中国 · 上海 · 徐汇滨江 88 号")
+        XCTAssertEqual(viewModel.coordinateSummary, "31.189100, 121.454200")
+    }
+
     private func makeViewModel() -> EventUploadFlowViewModel {
         var draft = EventUploadDraft.create()
         draft.timeZoneIdentifier = "Europe/Brussels"

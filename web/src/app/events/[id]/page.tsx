@@ -9,6 +9,7 @@ import { checkinAPI } from '@/lib/api/checkin';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
+import { resolveEventActivityAddressText, resolveEventVenueDisplayText } from '@/lib/event-address';
 import { formatEventDisplayStatusText, resolveEventDisplayStatus } from '@/lib/event-status';
 import {
   ceilInstantToZonedHourMs,
@@ -262,6 +263,8 @@ export default function EventDetailPage() {
   const startDate = formatDate(event.startDate);
   const endDate = formatDate(event.endDate);
   const displayStatus = resolveEventDisplayStatus(event);
+  const venueDisplayText = resolveEventVenueDisplayText(event);
+  const activityAddressText = resolveEventActivityAddressText(event);
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -620,20 +623,15 @@ export default function EventDetailPage() {
                     </div>
                   </div>
 
-                  {(event.venueName || event.venueAddress || event.city) && (
+                  {(venueDisplayText || activityAddressText) && (
                     <>
                       <div className="rounded-xl border border-bg-primary bg-bg-secondary/70 p-3">
                         <div className="text-xs text-text-tertiary mb-1.5">场地信息</div>
-                        {event.venueName && (
-                          <p className="text-sm text-text-primary leading-snug">{event.venueName}</p>
+                        {venueDisplayText && (
+                          <p className="text-sm text-text-primary leading-snug">{venueDisplayText}</p>
                         )}
-                        {event.venueAddress && (
-                          <p className="mt-1 text-sm text-text-secondary leading-snug">{event.venueAddress}</p>
-                        )}
-                        {event.city && (
-                          <p className="mt-1 text-sm text-text-tertiary">
-                            {event.city}{event.country ? `, ${event.country}` : ''}
-                          </p>
+                        {activityAddressText && (
+                          <p className="mt-1 text-sm text-text-secondary leading-snug">{activityAddressText}</p>
                         )}
                       </div>
                     </>

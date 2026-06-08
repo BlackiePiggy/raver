@@ -128,8 +128,8 @@ type EventTimelineRow = {
     coverImageUrl: string | null;
     city: string | null;
     country: string | null;
-    venueAddress: string | null;
     manualLocation: Prisma.JsonValue | null;
+    locationPoint: Prisma.JsonValue | null;
     startDate: Date;
     endDate: Date;
   } | null;
@@ -598,8 +598,8 @@ export async function fetchCheckinOverview(
             coverImageUrl: true,
             city: true,
             country: true,
-            venueAddress: true,
             manualLocation: true,
+            locationPoint: true,
             startDate: true,
             endDate: true,
           },
@@ -755,8 +755,8 @@ export async function fetchCheckinTimelinePage(
             coverImageUrl: true,
             city: true,
             country: true,
-            venueAddress: true,
             manualLocation: true,
+            locationPoint: true,
             startDate: true,
             endDate: true,
           },
@@ -849,8 +849,8 @@ export async function fetchCheckinGalleryEventsPage(
             coverImageUrl: true,
             city: true,
             country: true,
-            venueAddress: true,
             manualLocation: true,
+            locationPoint: true,
             startDate: true,
             endDate: true,
           },

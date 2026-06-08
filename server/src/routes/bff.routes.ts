@@ -102,6 +102,10 @@ import {
 import { mediaAssetService } from '../services/media-asset.service';
 import { virtualAssetService } from '../services/virtual-asset.service';
 import { authAuditService, getClientIpForAuthAudit, type AuthAuditOutcome } from '../services/auth-audit.service';
+import {
+  resolveEventActivityAddressText,
+  resolveEventVenueDisplayAddressText,
+} from '../utils/event-address';
 
 const router: Router = Router();
 const prisma = new PrismaClient();
@@ -1831,26 +1835,6 @@ const readJsonNumber = (value: unknown, keys: string[]): number | null => {
   return normalizeFiniteNumber(current);
 };
 
-const readJsonString = (value: unknown, keys: string[]): string | null => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  let current: unknown = value;
-  for (const key of keys) {
-    if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
-    current = (current as Record<string, unknown>)[key];
-  }
-  if (typeof current !== 'string') return null;
-  const normalized = current.trim();
-  return normalized.length > 0 ? normalized : null;
-};
-
-const readLocalizedJsonString = (value: unknown, keys: string[]): string | null => {
-  return readJsonString(value, [...keys, 'zhHans'])
-    ?? readJsonString(value, [...keys, 'zh-Hans'])
-    ?? readJsonString(value, [...keys, 'zh'])
-    ?? readJsonString(value, [...keys, 'en'])
-    ?? readJsonString(value, keys);
-};
-
 const resolveEventCoordinate = (event: {
   latitude?: Prisma.Decimal | null;
   longitude?: Prisma.Decimal | null;
@@ -1881,42 +1865,6 @@ const resolveEventCoordinate = (event: {
   return null;
 };
 
-const compactUniqueTextParts = (parts: Array<string | null | undefined>): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const part of parts) {
-    const normalized = String(part || '').trim();
-    if (!normalized) continue;
-    const key = normalized.toLocaleLowerCase('zh-Hans-CN');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(normalized);
-  }
-  return result;
-};
-
-const resolveEventAddressText = (event: {
-  venueName?: string | null;
-  venueAddress?: string | null;
-  city?: string | null;
-  country?: string | null;
-  manualLocation?: Prisma.JsonValue | null;
-  locationPoint?: Prisma.JsonValue | null;
-} | null | undefined): string | null => {
-  if (!event) return null;
-  const formatted = readLocalizedJsonString(event.manualLocation, ['formattedAddressI18n'])
-    ?? readLocalizedJsonString(event.locationPoint, ['formattedAddressI18n'])
-    ?? readLocalizedJsonString(event.manualLocation, ['detailAddressI18n']);
-  const parts = compactUniqueTextParts([
-    event.venueName,
-    event.venueAddress,
-    formatted,
-    event.city,
-    event.country,
-  ]);
-  return parts.length > 0 ? parts.join(' · ') : null;
-};
-
 type SquadOfflineActivityWithDetails = Prisma.SquadOfflineActivityGetPayload<{
   include: {
     createdBy: {
@@ -1932,8 +1880,6 @@ type SquadOfflineActivityWithDetails = Prisma.SquadOfflineActivityGetPayload<{
         id: true;
         name: true;
         coverImageUrl: true;
-        venueName: true;
-        venueAddress: true;
         city: true;
         country: true;
         latitude: true;
@@ -1979,8 +1925,6 @@ const fetchActiveSquadOfflineActivity = async (squadId: string): Promise<SquadOf
           id: true,
           name: true,
           coverImageUrl: true,
-          venueName: true,
-          venueAddress: true,
           city: true,
           country: true,
           latitude: true,
@@ -2024,8 +1968,6 @@ const fetchSquadOfflineActivityById = async (activityId: string): Promise<SquadO
           id: true,
           name: true,
           coverImageUrl: true,
-          venueName: true,
-          venueAddress: true,
           city: true,
           country: true,
           latitude: true,
@@ -2112,9 +2054,8 @@ const toSquadOfflineActivityResponse = async (
     eventId: activity.eventId,
     eventName: activity.event?.name ?? activity.title,
     eventCoverImageURL: activity.event?.coverImageUrl ?? null,
-    eventVenueName: activity.event?.venueName ?? null,
-    eventVenueAddress: activity.event?.venueAddress ?? null,
-    eventAddressText: resolveEventAddressText(activity.event),
+    eventVenueDisplayAddress: resolveEventVenueDisplayAddressText(activity.event),
+    eventActivityAddress: resolveEventActivityAddressText(activity.event),
     eventCity: activity.event?.city ?? null,
     eventCoordinate,
     title: activity.title,
@@ -2180,9 +2121,10 @@ const buildSquadOfflineActivityCardPayload = (activity: {
   eventId: string | null;
   event?: {
     name: string;
-    venueName: string | null;
     city: string | null;
     coverImageUrl: string | null;
+    manualLocation?: Prisma.JsonValue | null;
+    locationPoint?: Prisma.JsonValue | null;
   } | null;
   startedAt: Date;
   endedAt: Date | null;
@@ -2198,7 +2140,7 @@ const buildSquadOfflineActivityCardPayload = (activity: {
     eventId: activity.eventId,
     title,
     eventName: activity.event?.name ?? null,
-    venueName: activity.event?.venueName ?? null,
+    venueDisplayAddress: resolveEventVenueDisplayAddressText(activity.event),
     city: activity.event?.city ?? null,
     coverImageURL: activity.event?.coverImageUrl ?? null,
     startedAt: activity.startedAt,
@@ -8933,8 +8875,6 @@ router.get('/squads/:id/offline-activities/history', optionalAuth, async (req: R
             id: true,
             name: true,
             coverImageUrl: true,
-            venueName: true,
-            venueAddress: true,
             city: true,
             country: true,
             latitude: true,
@@ -9075,10 +9015,10 @@ router.post('/squads/:id/offline-activities/:activityId/end', optionalAuth, asyn
             select: {
               name: true,
               coverImageUrl: true,
-              venueName: true,
-              venueAddress: true,
               city: true,
               country: true,
+              manualLocation: true,
+              locationPoint: true,
             },
           },
           participants: {

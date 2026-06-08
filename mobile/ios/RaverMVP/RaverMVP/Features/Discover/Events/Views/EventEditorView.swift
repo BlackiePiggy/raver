@@ -1224,8 +1224,6 @@ struct EventEditorView: View {
     @State private var ticketUrl = ""
     @State private var sourceURL = ""
     @State private var sourceProvider = ""
-    @State private var venueName = ""
-    @State private var venueAddress = ""
     @State private var referenceLinksText = ""
     @State private var socialLinksText = ""
     @State private var officialWebsite = ""
@@ -1346,10 +1344,6 @@ struct EventEditorView: View {
                     TextField(LT("鏉ユ簮骞冲彴锛堝彲閫夛級", "Source Provider (optional)", "鏉ユ簮骞冲彴锛堜换鎰忥級"), text: $sourceProvider)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-
-                    TextField(LT("鍦哄湴鍚嶇О锛堝彲閫夛級", "Venue Name (optional)", "浼氬牬鍚嶇О锛堜换鎰忥級"), text: $venueName)
-
-                    TextField(LT("鍦哄湴鍦板潃锛堝彲閫夛級", "Venue Address (optional)", "浼氬牬鍦板潃锛堜换鎰忥級"), text: $venueAddress, axis: .vertical)
 
                     TextField(LT("鍙傝€冮摼鎺ワ紙姣忚涓€鏉★級", "Reference Links (one per line)", "鍙傜収銉兂銈紙1琛屼竴浠讹級"), text: $referenceLinksText, axis: .vertical)
 
@@ -3307,8 +3301,6 @@ struct EventEditorView: View {
         ticketUrl = event.ticketUrl ?? ""
         sourceURL = event.sourceEventUrl ?? ""
         sourceProvider = event.sourceProvider ?? ""
-        venueName = event.venueName ?? ""
-        venueAddress = event.venueAddress ?? ""
         referenceLinksText = (event.referenceLinks ?? []).joined(separator: "\n")
         socialLinksText = event.socialLinks?.prettyJSONString ?? ""
         officialWebsite = event.officialWebsite ?? ""
@@ -4896,8 +4888,6 @@ struct EventEditorView: View {
         draft.detailAddress = EventUploadLocalizedFields(zh: detailAddressZh, en: detailAddressEn)
         draft.sourceURL = sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.sourceProvider = sourceProvider.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.venueName = venueName.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.venueAddress = venueAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.referenceLinksText = referenceLinksText.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.socialLinksText = socialLinksText.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.officialWebsite = officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines)

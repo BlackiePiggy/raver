@@ -73,14 +73,6 @@ export const validateEventStudioDraft = (draft: EventStudioDraft): EventStudioVa
     errors.name = errors.name || `主办方名称不能超过 ${INPUT_LIMITS.event.organizerName} 个字符。`;
   }
 
-  if (draft.venueName.trim() && countText(draft.venueName) > INPUT_LIMITS.event.venueName) {
-    errors.name = errors.name || `场馆名不能超过 ${INPUT_LIMITS.event.venueName} 个字符。`;
-  }
-
-  if (draft.venueAddress.trim() && countText(draft.venueAddress) > INPUT_LIMITS.event.venueAddress) {
-    errors.detailAddress = errors.detailAddress || `场馆地址不能超过 ${INPUT_LIMITS.event.venueAddress} 个字符。`;
-  }
-
   if (draft.sourceProvider.trim() && countText(draft.sourceProvider) > INPUT_LIMITS.event.sourceProvider) {
     errors.socialLinks = errors.socialLinks || `来源平台不能超过 ${INPUT_LIMITS.event.sourceProvider} 个字符。`;
   }

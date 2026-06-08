@@ -108,7 +108,6 @@ type ExistingEventLite = {
   slug: string;
   organizerId: string | null;
   description: string | null;
-  venueName: string | null;
   city: string | null;
   country: string | null;
   coverImageUrl: string | null;
@@ -118,6 +117,7 @@ type ExistingEventLite = {
   locationI18n: Prisma.JsonValue | null;
   countryI18n: Prisma.JsonValue | null;
   descriptionI18n: Prisma.JsonValue | null;
+  manualLocation: Prisma.JsonValue | null;
   referenceLinks: string[];
   socialLinks: Prisma.JsonValue | null;
   sourceProvider: string | null;
@@ -125,7 +125,6 @@ type ExistingEventLite = {
   archiveFestivalId: string | null;
   eventType: string | null;
   organizerName: string | null;
-  venueAddress: string | null;
   latitude: Prisma.Decimal | null;
   longitude: Prisma.Decimal | null;
   ticketUrl: string | null;
@@ -473,6 +472,33 @@ const mergeBiTexts = (nextValue: EventBiText, existingValue: Prisma.JsonValue | 
     en: nextValue.en || currentEn,
     zh: nextValue.zh || currentZh || nextValue.en || currentEn,
   };
+};
+
+const buildManualLocation = (
+  detailAddress: EventBiText,
+  city: EventBiText | null,
+  country: EventBiText | null
+): Prisma.InputJsonValue => {
+  const joinParts = (...parts: Array<string | null | undefined>): string =>
+    parts.map((part) => safeText(part)).filter(Boolean).join(' · ');
+
+  const detailEn = safeText(detailAddress.en);
+  const detailZh = safeText(detailAddress.zh) || detailEn;
+  const cityEn = safeText(city?.en);
+  const cityZh = safeText(city?.zh) || cityEn;
+  const countryEn = safeText(country?.en);
+  const countryZh = safeText(country?.zh) || countryEn;
+
+  return {
+    detailAddressI18n: {
+      en: detailEn,
+      zh: detailZh,
+    },
+    formattedAddressI18n: {
+      en: joinParts(countryEn, cityEn, detailEn),
+      zh: joinParts(countryZh, cityZh, detailZh),
+    },
+  } as Prisma.InputJsonValue;
 };
 
 const mergeStringArray = (nextValues: string[], existingValues: string[]): string[] => {
@@ -908,7 +934,6 @@ const selectExistingEvent = {
   slug: true,
   organizerId: true,
   description: true,
-  venueName: true,
   city: true,
   country: true,
   coverImageUrl: true,
@@ -918,6 +943,7 @@ const selectExistingEvent = {
   locationI18n: true,
   countryI18n: true,
   descriptionI18n: true,
+  manualLocation: true,
   referenceLinks: true,
   socialLinks: true,
   sourceProvider: true,
@@ -925,7 +951,6 @@ const selectExistingEvent = {
   archiveFestivalId: true,
   eventType: true,
   organizerName: true,
-  venueAddress: true,
   latitude: true,
   longitude: true,
   ticketUrl: true,
@@ -1109,6 +1134,13 @@ const main = async (): Promise<void> => {
       const nextDescriptionI18n = existing
         ? mergeBiTexts(descriptionBi, existing.descriptionI18n)
         : descriptionBi;
+      const nextManualLocation = normalizedLocation
+        ? buildManualLocation(
+            nextLocationI18n,
+            normalizedLocation ? nextLocationI18n : null,
+            normalizedCountry ? nextCountryI18n : null
+          )
+        : (existing?.manualLocation as Prisma.InputJsonValue | null);
 
       const mergedReferenceLinks = existing
         ? mergeStringArray(referenceLinks, existing.referenceLinks || [])
@@ -1130,6 +1162,7 @@ const main = async (): Promise<void> => {
         descriptionI18n: nextDescriptionI18n as unknown as Prisma.InputJsonValue,
         locationI18n: nextLocationI18n as unknown as Prisma.InputJsonValue,
         countryI18n: nextCountryI18n as unknown as Prisma.InputJsonValue,
+        manualLocation: nextManualLocation ?? undefined,
         coverImageUrl: nextCoverImageUrl,
         lineupImageUrl: nextLineupImageUrl,
         imageAssets: nextAssets.length > 0 ? (nextAssets as unknown as Prisma.InputJsonValue) : undefined,
@@ -1139,8 +1172,6 @@ const main = async (): Promise<void> => {
         sourceEventUrl: sourceEventUrl || existing?.sourceEventUrl || null,
         eventType: existing?.eventType || 'festival',
         organizerName: existing?.organizerName || null,
-        venueName: normalizedLocation || existing?.venueName || null,
-        venueAddress: existing?.venueAddress || null,
         city: normalizedLocation || existing?.city || null,
         country: normalizedCountry || existing?.country || null,
         latitude: existing?.latitude ?? null,

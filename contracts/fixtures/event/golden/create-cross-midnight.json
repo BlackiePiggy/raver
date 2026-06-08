@@ -9,8 +9,6 @@
   "description": "Warehouse night with cross-midnight closing set.",
   "eventType": "festival",
   "organizerName": "Raver Crew",
-  "venueName": "The Warehouse",
-  "venueAddress": "88 Xuhui Riverside",
   "sourceEventUrl": "https://example.com/events/future-rave",
   "sourceProvider": "manual",
   "referenceLinks": [

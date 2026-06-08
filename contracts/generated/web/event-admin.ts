@@ -181,6 +181,7 @@ export interface components {
             nameI18n?: components["schemas"]["LocalizedText"];
             addressI18n?: components["schemas"]["LocalizedText"];
             formattedAddressI18n?: components["schemas"]["LocalizedText"];
+            manualSetAddressI18n?: components["schemas"]["LocalizedText"];
             city?: string | null;
             district?: string | null;
             province?: string | null;
@@ -276,8 +277,6 @@ export interface components {
             description?: string | null;
             eventType?: string | null;
             organizerName?: string | null;
-            venueName?: string | null;
-            venueAddress?: string | null;
             sourceEventUrl?: string | null;
             sourceProvider?: string | null;
             referenceLinks?: string[] | null;
@@ -396,10 +395,10 @@ export interface components {
             sourceEventUrl?: string | null;
             eventType?: string | null;
             organizerName?: string | null;
-            venueName?: string | null;
-            venueAddress?: string | null;
             city?: string | null;
             country?: string | null;
+            activityAddress?: string | null;
+            venueDisplayAddress?: string | null;
             manualLocation?: components["schemas"]["EventManualLocation"];
             locationPoint?: components["schemas"]["EventLocationPoint"];
             latitude?: number | null;
@@ -454,14 +453,14 @@ export interface components {
             imageAssets?: components["schemas"]["EventImageAsset"][] | null;
             eventType?: string | null;
             organizerName?: string | null;
-            venueName?: string | null;
-            venueAddress?: string | null;
             sourceEventUrl?: string | null;
             sourceProvider?: string | null;
             referenceLinks?: string[] | null;
             socialLinks?: unknown;
             city?: string | null;
             country?: string | null;
+            activityAddress?: string | null;
+            venueDisplayAddress?: string | null;
             manualLocation?: components["schemas"]["EventManualLocation"];
             locationPoint?: components["schemas"]["EventLocationPoint"];
             latitude?: number | null;

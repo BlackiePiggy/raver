@@ -1380,7 +1380,7 @@ private struct EventSharePreviewCard: View {
                     .foregroundStyle(RaverTheme.primaryText)
                     .lineLimit(2)
 
-                if let venue = payload.venueName?.nilIfBlank {
+                if let venue = payload.venueDisplayAddress?.nilIfBlank {
                     Text(venue)
                         .font(.caption)
                         .foregroundStyle(RaverTheme.secondaryText)
@@ -3415,7 +3415,7 @@ struct EventDetailView: View {
     private func eventInfoTabContent(_ event: WebEvent, cardWidth: CGFloat) -> some View {
         let status = EventVisualStatus.resolve(event: event)
         let eventType = EventTypeOption.displayText(for: event.eventType, fallbackWhenEmpty: false)
-        let unifiedAddress = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activityAddress = event.eventActivityAddress.trimmingCharacters(in: .whitespacesAndNewlines)
 
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -3431,8 +3431,8 @@ struct EventDetailView: View {
                     title: LT("活动时间", "Schedule", "開催日程"),
                     event: event
                 )
-                if !unifiedAddress.isEmpty {
-                    eventInfoRow(icon: "mappin.and.ellipse", title: LT("活动地址", "Address", "住所"), value: unifiedAddress)
+                if !activityAddress.isEmpty {
+                    eventInfoRow(icon: "mappin.and.ellipse", title: LT("活动地址", "Address", "住所"), value: activityAddress)
                 }
                 if hasEventVenueContent(event) {
                     eventVenueActionRow(event)
@@ -4819,23 +4819,26 @@ struct EventDetailView: View {
     }
 
     private func hasEventVenueContent(_ event: WebEvent) -> Bool {
-        return eventBoundLocationPoint(event) != nil
+        let venue = eventVenueDisplayText(event).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !venue.isEmpty && venue != LT("未填写场地信息", "Venue not provided", "会場情報未入力")
     }
 
     private func eventVenueDisplayText(_ event: WebEvent) -> String {
-        guard let point = eventBoundLocationPoint(event) else {
-            return LT("未填写场地信息", "Venue not provided", "会場情報未入力")
-        }
-        let formatted = localizedPointText(point.formattedAddressI18n).trimmingCharacters(in: .whitespacesAndNewlines)
-        if !formatted.isEmpty { return formatted }
-        let unified = event.unifiedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !unified.isEmpty { return unified }
-        return LT("未填写场地信息", "Venue not provided", "会場情報未入力")
+        let resolved = resolveEventVenueDisplayAddressText(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: event.manualLocation,
+            locationPoint: eventBoundLocationPoint(event)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return resolved.isEmpty ? LT("未填写场地信息", "Venue not provided", "会場情報未入力") : resolved
     }
 
     private func eventMapURL(for event: WebEvent) -> URL? {
         guard let coordinate = eventVenueCoordinate(event) else { return nil }
-        let queryText = eventVenueDisplayText(event)
+        let queryText = resolveEventVenueMapQueryText(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: event.manualLocation,
+            locationPoint: eventBoundLocationPoint(event)
+        )
         var components = URLComponents(string: "http://maps.apple.com/")
         components?.queryItems = [
             URLQueryItem(name: "ll", value: "\(coordinate.latitude),\(coordinate.longitude)"),
@@ -4852,7 +4855,7 @@ struct EventDetailView: View {
         return EventShareCardPayload(
             eventID: event.id,
             eventName: event.name,
-            venueName: venueText,
+            venueDisplayAddress: venueText,
             city: cityText,
             startAtISO8601: Self.eventCardISO8601Formatter.string(from: event.startDate),
             coverImageURL: coverURL,

@@ -398,6 +398,120 @@ const normalizeOptionalTriTextJson = (value: unknown): Prisma.InputJsonValue | u
   return Object.keys(out).length ? (out as Prisma.InputJsonValue) : undefined;
 };
 
+type EventLocalizedAddressText = {
+  zh?: string;
+  en?: string;
+  ja?: string;
+  enFull?: string;
+};
+
+const asPlainObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const normalizeLocalizedAddressText = (value: unknown): EventLocalizedAddressText | null => {
+  const row = asPlainObject(value);
+  if (!row) return null;
+  const zh = normalizeTrimmedText(row.zh ?? row['zh-CN'] ?? row['zh-Hans']);
+  const en = normalizeTrimmedText(row.en ?? row['en-US']);
+  const ja = normalizeTrimmedText(row.ja ?? row['ja-JP']);
+  const enFull = normalizeTrimmedText(row.enFull ?? row.en_full);
+  if (!zh && !en && !ja && !enFull) return null;
+  return {
+    zh: zh || undefined,
+    en: en || undefined,
+    ja: ja || undefined,
+    enFull: enFull || undefined,
+  };
+};
+
+const joinAddressParts = (parts: Array<string | null | undefined>): string =>
+  parts
+    .map((item) => normalizeTrimmedText(item))
+    .filter(Boolean)
+    .join(' · ');
+
+const buildFormattedAddressI18n = (input: {
+  detailAddressI18n?: EventLocalizedAddressText | null;
+  cityI18n?: EventLocalizedAddressText | null;
+  countryI18n?: EventLocalizedAddressText | null;
+}): EventLocalizedAddressText | null => {
+  const detail = input.detailAddressI18n;
+  if (!detail) return null;
+  const city = input.cityI18n ?? null;
+  const country = input.countryI18n ?? null;
+  return {
+    zh:
+      joinAddressParts([
+        country?.zh || country?.en,
+        city?.zh || city?.en,
+        detail.zh || detail.en,
+      ]) || detail.zh || detail.en,
+    en:
+      joinAddressParts([
+        country?.enFull || country?.en || country?.zh,
+        city?.en || city?.zh,
+        detail.en || detail.zh,
+      ]) || detail.en || detail.zh,
+    ja:
+      joinAddressParts([
+        country?.ja || country?.enFull || country?.en || country?.zh,
+        city?.ja || city?.en || city?.zh,
+        detail.ja || detail.en || detail.zh,
+      ]) || detail.ja || detail.en || detail.zh,
+    enFull: detail.enFull,
+  };
+};
+
+const normalizeEventAddressPayloads = (input: {
+  manualLocation: unknown;
+  locationPoint: unknown;
+  cityI18n?: Prisma.InputJsonValue;
+  countryI18n?: Prisma.InputJsonValue;
+}): {
+  manualLocation: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+  locationPoint: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+} => {
+  const manualLocation = asPlainObject(input.manualLocation);
+  const locationPoint = asPlainObject(input.locationPoint);
+  const normalizedCityI18n = normalizeLocalizedAddressText(input.cityI18n);
+  const normalizedCountryI18n = normalizeLocalizedAddressText(input.countryI18n);
+  const detailAddressI18n = normalizeLocalizedAddressText(manualLocation?.detailAddressI18n);
+  const formattedAddressI18n = buildFormattedAddressI18n({
+    detailAddressI18n,
+    cityI18n: normalizedCityI18n,
+    countryI18n: normalizedCountryI18n,
+  });
+
+  const nextManualLocation = manualLocation
+    ? {
+        ...manualLocation,
+        ...(detailAddressI18n ? { detailAddressI18n } : {}),
+        ...(formattedAddressI18n ? { formattedAddressI18n } : {}),
+      }
+    : undefined;
+
+  const pointFormattedAddressI18n = normalizeLocalizedAddressText(locationPoint?.formattedAddressI18n);
+  const pointManualSetAddressI18n =
+    normalizeLocalizedAddressText(locationPoint?.manualSetAddressI18n)
+    || formattedAddressI18n
+    || pointFormattedAddressI18n
+    || null;
+
+  const nextLocationPoint = locationPoint
+    ? {
+        ...locationPoint,
+        ...(pointManualSetAddressI18n ? { manualSetAddressI18n: pointManualSetAddressI18n } : {}),
+      }
+    : undefined;
+
+  return {
+    manualLocation: nextManualLocation ? (nextManualLocation as Prisma.InputJsonValue) : undefined,
+    locationPoint: nextLocationPoint ? (nextLocationPoint as Prisma.InputJsonValue) : undefined,
+  };
+};
+
 const hasOwn = (body: Record<string, unknown>, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(body, key);
 
@@ -965,8 +1079,6 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     const description = normalizeOptionalNullableTextField(requestBody, 'description');
     const eventType = normalizeOptionalNullableTextField(requestBody, 'eventType');
     const organizerName = normalizeOptionalNullableTextField(requestBody, 'organizerName');
-    const venueName = normalizeOptionalNullableTextField(requestBody, 'venueName');
-    const venueAddress = normalizeOptionalNullableTextField(requestBody, 'venueAddress');
     const sourceEventUrl = normalizeOptionalNullableTextField(requestBody, 'sourceEventUrl');
     const sourceProvider = normalizeOptionalNullableTextField(requestBody, 'sourceProvider');
     const city = normalizeOptionalNullableTextField(requestBody, 'city');
@@ -1054,6 +1166,12 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
+    const normalizedAddressPayloads = normalizeEventAddressPayloads({
+      manualLocation,
+      locationPoint,
+      cityI18n: normalizedCityI18n,
+      countryI18n: normalizedCountryI18n,
+    });
     const resolvedEventTruth = resolveEventTruth({
       isCancelled: requestBody.isCancelled,
       visibility: requestBody.visibility,
@@ -1073,8 +1191,6 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           lineupImageUrl,
           eventType: eventType ?? undefined,
           organizerName: organizerName ?? undefined,
-          venueName: venueName ?? undefined,
-          venueAddress: venueAddress ?? undefined,
           referenceLinks: referenceLinks ?? undefined,
           socialLinks: socialLinks ?? undefined,
           sourceProvider: sourceProvider ?? undefined,
@@ -1083,8 +1199,8 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           cityI18n: normalizedCityI18n,
           country: country ?? undefined,
           countryI18n: normalizedCountryI18n,
-          manualLocation,
-          locationPoint,
+          manualLocation: normalizedAddressPayloads.manualLocation,
+          locationPoint: normalizedAddressPayloads.locationPoint,
           latitude: toNumberOrNull(latitude),
           longitude: toNumberOrNull(longitude),
           startDate: parsedStartDate,
@@ -1229,8 +1345,6 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const description = normalizeOptionalNullableTextField(requestBody, 'description');
     const eventType = normalizeOptionalNullableTextField(requestBody, 'eventType');
     const organizerName = normalizeOptionalNullableTextField(requestBody, 'organizerName');
-    const venueName = normalizeOptionalNullableTextField(requestBody, 'venueName');
-    const venueAddress = normalizeOptionalNullableTextField(requestBody, 'venueAddress');
     const sourceEventUrl = normalizeOptionalNullableTextField(requestBody, 'sourceEventUrl');
     const sourceProvider = normalizeOptionalNullableTextField(requestBody, 'sourceProvider');
     const city = normalizeOptionalNullableTextField(requestBody, 'city');
@@ -1388,6 +1502,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
     const normalizedDescriptionI18n = normalizeOptionalTriTextJson(req.body.descriptionI18n);
     const normalizedCityI18n = normalizeOptionalTriTextJson(cityI18n);
     const normalizedCountryI18n = normalizeOptionalTriTextJson(countryI18n);
+    const normalizedAddressPayloads = normalizeEventAddressPayloads({
+      manualLocation,
+      locationPoint,
+      cityI18n: normalizedCityI18n,
+      countryI18n: normalizedCountryI18n,
+    });
     const resolvedEventTruth = resolveEventTruth({
       isCancelled: hasOwn(requestBody, 'isCancelled') ? requestBody.isCancelled : existing.isCancelled,
       visibility: hasOwn(requestBody, 'visibility') ? requestBody.visibility : existing.visibility,
@@ -1408,8 +1528,6 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             lineupImageUrl: hasLineupImageUrl ? (typeof lineupImageUrl === 'string' && lineupImageUrl.trim() ? lineupImageUrl.trim() : null) : undefined,
             eventType: eventType ?? undefined,
             organizerName: organizerName ?? undefined,
-            venueName: venueName,
-            venueAddress: venueAddress,
             referenceLinks: referenceLinks !== undefined ? referenceLinks : undefined,
             socialLinks: clearSocialLinks ? Prisma.JsonNull : socialLinks,
             sourceProvider: sourceProvider,
@@ -1421,12 +1539,12 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
             manualLocation: clearManualLocation
               ? Prisma.JsonNull
               : hasOwn(requestBody, 'manualLocation')
-                ? ((manualLocation as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+                ? (normalizedAddressPayloads.manualLocation ?? Prisma.JsonNull)
                 : undefined,
             locationPoint: clearLocationPoint
               ? Prisma.JsonNull
               : hasOwn(requestBody, 'locationPoint')
-                ? ((locationPoint as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull)
+                ? (normalizedAddressPayloads.locationPoint ?? Prisma.JsonNull)
                 : undefined,
             latitude: clearLatitude ? null : hasOwn(requestBody, 'latitude') ? toNumberOrNull(latitude) : undefined,
             longitude: clearLongitude ? null : hasOwn(requestBody, 'longitude') ? toNumberOrNull(longitude) : undefined,

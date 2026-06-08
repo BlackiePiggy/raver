@@ -28,8 +28,6 @@ export const INPUT_LIMITS = {
     name: 120,
     abbreviation: 32,
     organizerName: 120,
-    venueName: 120,
-    venueAddress: 200,
     description: 4000,
     city: 80,
     country: 80,

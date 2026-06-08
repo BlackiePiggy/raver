@@ -105,8 +105,6 @@ enum EventUploadMappers {
             description: description,
             eventType: EventTypeOption.submissionValue(for: draft.eventType),
             organizerName: draft.organizerName.trimmed.eventUploadMapperNilIfBlank,
-            venueName: draft.venueName.trimmed.eventUploadMapperNilIfBlank,
-            venueAddress: draft.venueAddress.trimmed.eventUploadMapperNilIfBlank,
             sourceEventUrl: draft.sourceURL.trimmed.eventUploadMapperNilIfBlank,
             sourceProvider: draft.sourceProvider.trimmed.eventUploadMapperNilIfBlank,
             referenceLinks: referenceLinks(from: draft.referenceLinksText),
@@ -299,26 +297,41 @@ enum EventUploadMappers {
         country: String?,
         countryI18n: WebBiText?
     ) -> WebEventLocationPoint? {
-        guard let point = normalizedLocationPointWithRealProvenance(from: draft.locationPoint),
-              let latitude = draft.latitude,
+        guard let latitude = draft.latitude,
               let longitude = draft.longitude else {
             return nil
         }
-        var next = point
+        var next = normalizedLocationPointForMutation(from: draft.locationPoint)
+            ?? fallbackLocationPoint(
+                from: draft,
+                latitude: latitude,
+                longitude: longitude
+            )
+            ?? WebEventLocationPoint(
+                provider: "mapkit",
+                sourceMode: "pin_drag",
+                providerPlaceId: nil,
+                poiId: nil,
+                adcode: nil,
+                location: WebEventLocationCoordinate(lng: longitude, lat: latitude),
+                nameI18n: nil,
+                addressI18n: nil,
+                formattedAddressI18n: nil,
+                manualSetAddressI18n: nil,
+                city: nil,
+                district: nil,
+                province: nil,
+                countryCode: nil,
+                providerMeta: nil
+            )
         next.location = WebEventLocationCoordinate(lng: longitude, lat: latitude)
 
         if let mapAddress = draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank {
+            let preservedAddress = next.addressI18n.flatMap(normalizedLocalizedAddress)
+            let preservedFormatted = next.formattedAddressI18n.flatMap(normalizedLocalizedAddress)
             let localizedMapAddress = localizedSingleText(mapAddress, language: draft.preferredLanguage)
-            next.addressI18n = localizedMapAddress
-            next.formattedAddressI18n = formattedAddress(
-                detailAddressI18n: localizedMapAddress,
-                cityI18n: cityI18n ?? city.map {
-                    localizedSingleText($0, language: draft.preferredLanguage)
-                },
-                countryI18n: countryI18n ?? country.map {
-                    localizedSingleText($0, language: draft.preferredLanguage)
-                }
-            )
+            next.addressI18n = preservedAddress ?? localizedMapAddress
+            next.formattedAddressI18n = preservedFormatted ?? localizedMapAddress
         } else if let localizedAddress = addressI18n.flatMap(normalizedLocalizedAddress) {
             next.addressI18n = localizedAddress
             next.formattedAddressI18n = formattedAddress(
@@ -345,6 +358,24 @@ enum EventUploadMappers {
                 }
             )
         }
+        let manualSetDetailAddressI18n =
+            addressI18n.flatMap(normalizedLocalizedAddress)
+            ?? address?.trimmed.eventUploadMapperNilIfBlank.flatMap {
+                localizedSingleText($0, language: draft.preferredLanguage)
+            }
+        if let manualSetDetailAddressI18n {
+            next.manualSetAddressI18n = formattedAddress(
+                detailAddressI18n: manualSetDetailAddressI18n,
+                cityI18n: cityI18n ?? city.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                },
+                countryI18n: countryI18n ?? country.map {
+                    localizedSingleText($0, language: draft.preferredLanguage)
+                }
+            )
+        } else {
+            next.manualSetAddressI18n = next.formattedAddressI18n
+        }
 
         if let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank {
             next.nameI18n = localizedSingleText(placeName, language: draft.preferredLanguage)
@@ -355,6 +386,36 @@ enum EventUploadMappers {
         }
 
         return next
+    }
+
+    private static func fallbackLocationPoint(
+        from draft: EventUploadDraft,
+        latitude: Double,
+        longitude: Double
+    ) -> WebEventLocationPoint? {
+        let mapAddress = draft.pickedMapAddress.trimmed.eventUploadMapperNilIfBlank
+        let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank
+        guard mapAddress != nil || placeName != nil else {
+            return nil
+        }
+
+        return WebEventLocationPoint(
+            provider: "mapkit",
+            sourceMode: "pin_drag",
+            providerPlaceId: nil,
+            poiId: nil,
+            adcode: nil,
+            location: WebEventLocationCoordinate(lng: longitude, lat: latitude),
+            nameI18n: placeName.map { localizedSingleText($0, language: draft.preferredLanguage) },
+            addressI18n: mapAddress.map { localizedSingleText($0, language: draft.preferredLanguage) },
+            formattedAddressI18n: mapAddress.map { localizedSingleText($0, language: draft.preferredLanguage) },
+            manualSetAddressI18n: nil,
+            city: nil,
+            district: nil,
+            province: nil,
+            countryCode: nil,
+            providerMeta: nil
+        )
     }
 
     private static func formattedAddress(
@@ -595,6 +656,7 @@ enum EventUploadMappers {
             nameI18n: adminLocalizedText(from: point.nameI18n),
             addressI18n: adminLocalizedText(from: point.addressI18n),
             formattedAddressI18n: adminLocalizedText(from: point.formattedAddressI18n),
+            manualSetAddressI18n: adminLocalizedText(from: point.manualSetAddressI18n),
             city: point.city,
             district: point.district,
             province: point.province,
@@ -779,23 +841,54 @@ enum EventUploadMappers {
         )
     }
 
-    private static func normalizedLocationPointWithRealProvenance(
+    private static func normalizedLocationPointForMutation(
         from point: WebEventLocationPoint?
     ) -> WebEventLocationPoint? {
         guard var point else { return nil }
+        let provider = point.provider?.trimmed.eventUploadMapperNilIfBlank
+        let sourceMode = point.sourceMode?.trimmed.eventUploadMapperNilIfBlank
         let providerPlaceId = point.providerPlaceId?.trimmed.eventUploadMapperNilIfBlank
         let poiId = point.poiId?.trimmed.eventUploadMapperNilIfBlank
         let adcode = point.adcode?.trimmed.eventUploadMapperNilIfBlank
+        let nameI18n = point.nameI18n.flatMap(normalizedLocalizedAddress)
+        let addressI18n = point.addressI18n.flatMap(normalizedLocalizedAddress)
+        let formattedAddressI18n = point.formattedAddressI18n.flatMap(normalizedLocalizedAddress)
+        let manualSetAddressI18n = point.manualSetAddressI18n.flatMap(normalizedLocalizedAddress)
+        let city = point.city?.trimmed.eventUploadMapperNilIfBlank
+        let district = point.district?.trimmed.eventUploadMapperNilIfBlank
+        let province = point.province?.trimmed.eventUploadMapperNilIfBlank
+        let countryCode = point.countryCode?.trimmed.eventUploadMapperNilIfBlank
         let providerMeta = normalizedProviderMeta(point.providerMeta)
-        let hasProvenance = providerPlaceId != nil
+        let hasUsefulPayload = point.location != nil
+            || provider != nil
+            || sourceMode != nil
+            || providerPlaceId != nil
             || poiId != nil
             || adcode != nil
+            || nameI18n != nil
+            || addressI18n != nil
+            || formattedAddressI18n != nil
+            || manualSetAddressI18n != nil
+            || city != nil
+            || district != nil
+            || province != nil
+            || countryCode != nil
             || providerMeta != nil
-        guard hasProvenance else { return nil }
+        guard hasUsefulPayload else { return nil }
 
+        point.provider = provider
+        point.sourceMode = sourceMode
         point.providerPlaceId = providerPlaceId
         point.poiId = poiId
         point.adcode = adcode
+        point.nameI18n = nameI18n
+        point.addressI18n = addressI18n
+        point.formattedAddressI18n = formattedAddressI18n
+        point.manualSetAddressI18n = manualSetAddressI18n
+        point.city = city
+        point.district = district
+        point.province = province
+        point.countryCode = countryCode
         point.providerMeta = providerMeta
         return point
     }

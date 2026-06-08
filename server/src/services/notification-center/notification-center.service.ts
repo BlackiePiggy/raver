@@ -4,6 +4,10 @@ import {
   USER_ENTITY_RELATION_FAVORITE,
   USER_ENTITY_TARGET_EVENT,
 } from '../user-entity-follow.service';
+import {
+  resolveEventActivityAddressText,
+  resolveEventVenueDisplayAddressText,
+} from '../../utils/event-address';
 import type {
   NotificationChannel,
   NotificationChannelHandler,
@@ -304,6 +308,8 @@ export type NotificationAdminDeliveryListItem = {
     newsTitle: string | null;
     eventId: string | null;
     eventName: string | null;
+    eventVenueDisplayAddress: string | null;
+    eventActivityAddress: string | null;
     djId: string | null;
     djName: string | null;
     brandId: string | null;
@@ -1226,6 +1232,35 @@ const readNumberFromRecord = (record: Record<string, unknown>, key: string, fall
   const value = record[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return value;
+};
+
+const enrichNotificationEventAddressMetadata = async (
+  metadata: Record<string, unknown> | undefined
+): Promise<Record<string, unknown> | undefined> => {
+  if (!metadata) return metadata;
+  const eventId = readStringFromRecord(metadata, 'eventId');
+  if (!eventId) return metadata;
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      manualLocation: true,
+      locationPoint: true,
+    },
+  });
+  if (!event) return metadata;
+
+  return {
+    ...metadata,
+    eventActivityAddress: resolveEventActivityAddressText({
+      manualLocation: event.manualLocation,
+    }),
+    eventVenueDisplayAddress: resolveEventVenueDisplayAddressText({
+      manualLocation: event.manualLocation,
+      locationPoint: event.locationPoint,
+    }),
+  };
 };
 
 const normalizeNotificationLocale = (value: unknown): string => {
@@ -2169,13 +2204,21 @@ export const notificationCenterService = {
       }
     }
 
+    const enrichedMetadata = await enrichNotificationEventAddressMetadata(
+      isRecord(input.payload.metadata) ? input.payload.metadata : undefined
+    );
+    const normalizedInputPayload: NotificationPayload = {
+      ...input.payload,
+      metadata: enrichedMetadata ?? input.payload.metadata,
+    };
+
     const renderedPayloadByChannel = new Map<NotificationChannel, NotificationPayload>();
     for (const channel of configuredChannels) {
-      renderedPayloadByChannel.set(channel, await renderNotificationPayloadForChannel(input.category, channel, input.payload));
+      renderedPayloadByChannel.set(channel, await renderNotificationPayloadForChannel(input.category, channel, normalizedInputPayload));
     }
     const primaryPayload =
       renderedPayloadByChannel.get(configuredChannels[0])
-      ?? { ...input.payload, locale: normalizeNotificationLocale(input.payload.locale ?? input.payload.metadata?.locale) };
+      ?? { ...normalizedInputPayload, locale: normalizeNotificationLocale(normalizedInputPayload.locale ?? normalizedInputPayload.metadata?.locale) };
 
     const eventRow = await prisma.notificationEvent.create({
       data: {
@@ -2791,6 +2834,8 @@ export const notificationCenterService = {
         metadataNewsTitle: string | null;
         metadataEventId: string | null;
         metadataEventName: string | null;
+        metadataEventVenueDisplayAddress: string | null;
+        metadataEventActivityAddress: string | null;
         metadataDjId: string | null;
         metadataDjName: string | null;
         metadataBrandId: string | null;
@@ -2827,6 +2872,8 @@ export const notificationCenterService = {
         e.payload #>> '{metadata,newsTitle}' AS "metadataNewsTitle",
         e.payload #>> '{metadata,eventId}' AS "metadataEventId",
         e.payload #>> '{metadata,eventName}' AS "metadataEventName",
+        e.payload #>> '{metadata,eventVenueDisplayAddress}' AS "metadataEventVenueDisplayAddress",
+        e.payload #>> '{metadata,eventActivityAddress}' AS "metadataEventActivityAddress",
         e.payload #>> '{metadata,djId}' AS "metadataDjId",
         e.payload #>> '{metadata,djName}' AS "metadataDjName",
         e.payload #>> '{metadata,brandId}' AS "metadataBrandId",
@@ -2875,6 +2922,8 @@ export const notificationCenterService = {
           newsTitle: row.metadataNewsTitle,
           eventId: row.metadataEventId,
           eventName: row.metadataEventName,
+          eventVenueDisplayAddress: row.metadataEventVenueDisplayAddress,
+          eventActivityAddress: row.metadataEventActivityAddress,
           djId: row.metadataDjId,
           djName: row.metadataDjName,
           brandId: row.metadataBrandId,
