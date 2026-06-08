@@ -393,7 +393,7 @@ async function eventLocationLoadPoiDetailsIntoPanel(point) {
         ? normalizeEventLocationPoint(normalizeAmapPoi(detail, p.sourceMode || 'map_poi_click'))
         : null;
       const enriched = eventLocationMergePoints(p, detailPoint || p);
-      eventLocationApplyPointUpdate(p, enriched);
+      eventLocationApplyPointUpdate(p, enriched, { insertIfMissing: false });
       eventLocationRenderCandidates();
       eventLocationShowPoiPanel(enriched, { detail });
       return;
@@ -460,10 +460,15 @@ function eventLocationMergePoints(base, incoming) {
   });
 }
 
-function eventLocationApplyPointUpdate(referencePoint, nextPoint) {
+function eventLocationShouldMutateCandidates(sourceMode = '') {
+  return String(sourceMode || '').trim() === 'manual_search';
+}
+
+function eventLocationApplyPointUpdate(referencePoint, nextPoint, options = {}) {
   const ref = normalizeEventLocationPoint(referencePoint);
   const next = normalizeEventLocationPoint(nextPoint);
   if (!ref || !next) return;
+  const insertIfMissing = options.insertIfMissing !== false;
   const oldRows = Array.isArray(eventLocationPickerState.candidates) ? eventLocationPickerState.candidates : [];
   let hit = false;
   eventLocationPickerState.candidates = oldRows.map((row) => {
@@ -471,7 +476,7 @@ function eventLocationApplyPointUpdate(referencePoint, nextPoint) {
     hit = true;
     return eventLocationMergePoints(row, next);
   });
-  if (!hit) {
+  if (!hit && insertIfMissing) {
     eventLocationPickerState.candidates = [next, ...eventLocationPickerState.candidates].slice(0, 20);
   }
   if (eventLocationIsSamePoint(eventLocationPickerState.selectedPoint, ref)) {
@@ -486,6 +491,7 @@ function eventLocationUpsertCandidate(point, options = {}) {
   const p = normalizeEventLocationPoint(point);
   if (!p) return null;
   const prepend = !!options.prepend;
+  const mutateCandidates = options.mutateCandidates !== false;
   const oldRows = Array.isArray(eventLocationPickerState.candidates) ? eventLocationPickerState.candidates : [];
   let mergedPoint = p;
   const kept = [];
@@ -496,14 +502,15 @@ function eventLocationUpsertCandidate(point, options = {}) {
     }
     mergedPoint = eventLocationMergePoints(row, p);
   }
+  if (!mutateCandidates) {
+    return mergedPoint;
+  }
   const nextRows = prepend ? [mergedPoint, ...kept] : [...kept, mergedPoint];
   eventLocationPickerState.candidates = nextRows.slice(0, 20);
   return mergedPoint;
 }
 
 function eventLocationBuildRenderRows() {
-  const selected = normalizeEventLocationPoint(eventLocationPickerState.selectedPoint);
-  const preview = normalizeEventLocationPoint(eventLocationPickerState.previewPoint);
   const sourceRows = Array.isArray(eventLocationPickerState.candidates) ? eventLocationPickerState.candidates : [];
   const rows = [];
   const pushUnique = (item) => {
@@ -516,8 +523,6 @@ function eventLocationBuildRenderRows() {
     }
     rows.push(normalized);
   };
-  if (selected) pushUnique(selected);
-  if (preview && !eventLocationIsSamePoint(preview, selected)) pushUnique(preview);
   for (const item of sourceRows) {
     pushUnique(item);
     if (rows.length >= 20) break;
@@ -531,7 +536,8 @@ async function eventLocationPreviewPoint(point, options = {}) {
   const withPan = !!options.withPan;
   const loadDetail = options.loadDetail !== false;
   const prepend = options.prepend !== false;
-  const merged = eventLocationUpsertCandidate(p, { prepend }) || p;
+  const mutateCandidates = options.mutateCandidates !== false;
+  const merged = eventLocationUpsertCandidate(p, { prepend, mutateCandidates }) || p;
   eventLocationPickerState.previewPoint = merged;
   eventLocationRenderCandidates();
   eventLocationCallSetPin(merged, withPan);
@@ -546,7 +552,8 @@ async function eventLocationPreviewPoint(point, options = {}) {
 async function eventLocationSetSelectedPoint(point, options = {}) {
   const p = normalizeEventLocationPoint(point);
   if (!p) return;
-  const merged = eventLocationUpsertCandidate(p, { prepend: true }) || p;
+  const mutateCandidates = options.mutateCandidates !== false;
+  const merged = eventLocationUpsertCandidate(p, { prepend: true, mutateCandidates }) || p;
   eventLocationPickerState.selectedPoint = merged;
   if (options.syncPreview === false) {
     eventLocationRenderCandidates();
@@ -556,6 +563,7 @@ async function eventLocationSetSelectedPoint(point, options = {}) {
     withPan: !!options.withPan,
     loadDetail: options.loadDetail !== false,
     prepend: true,
+    mutateCandidates,
   });
 }
 
@@ -675,7 +683,6 @@ async function eventLocationResolveByPoint(point, sourceMode = 'pin_drag', optio
   if (eventLocationIsViewMode()) return;
   const p = normalizeEventLocationPoint(point);
   if (!p) return;
-  const keepFirstPoint = !!options.keepFirstPoint;
   const key = `${p.location.lng.toFixed(6)},${p.location.lat.toFixed(6)}`;
   if (eventLocationLastResolvedPointKey === key && sourceMode === 'pin_drag') return;
   eventLocationLastResolvedPointKey = key;
@@ -695,16 +702,26 @@ async function eventLocationResolveByPoint(point, sourceMode = 'pin_drag', optio
     }
     rows.push(normalized);
   };
-  if (keepFirstPoint) pushUnique({ ...p, sourceMode });
   if (regeo) pushUnique({ ...regeo, sourceMode });
   for (const item of (nearby || [])) {
     if (!item?.location) continue;
     pushUnique(item);
     if (rows.length >= 20) break;
   }
-  eventLocationPickerState.candidates = rows;
-  await eventLocationPreviewPoint(p, { withPan: false, loadDetail: true, prepend: true });
-  eventLocationSetStatus(rows.length ? `已找到 ${rows.length} 个候选地点` : '未找到周边候选地点', false);
+  const previewPoint = rows[0] || { ...p, sourceMode };
+  await eventLocationPreviewPoint(previewPoint, {
+    withPan: false,
+    loadDetail: true,
+    prepend: true,
+    mutateCandidates: eventLocationShouldMutateCandidates(sourceMode),
+  });
+  const statusMap = {
+    manual_search: '已根据搜索结果更新地点预览',
+    map_poi_click: '已根据地图点击更新地点预览',
+    my_location: '已根据当前位置更新地点预览',
+    pin_drag: '已根据 Pin 位置更新地点预览',
+  };
+  eventLocationSetStatus(statusMap[sourceMode] || '已更新地点预览', false);
 }
 
 async function eventLocationSearchByKeyword(sourceMode = 'manual_search') {
@@ -725,6 +742,7 @@ async function eventLocationSearchByKeyword(sourceMode = 'manual_search') {
   if (rows.length) {
     await eventLocationPreviewPoint(rows[0], { withPan: true, loadDetail: true, prepend: true });
     await eventLocationCallResolveByPoint(rows[0], sourceMode, { keepFirstPoint: true });
+    eventLocationSetStatus(`已找到 ${rows.length} 个候选地点`, false);
   } else {
     eventLocationSetStatus('未找到可用地点，请换关键词或拖动地图 Pin', true);
   }
@@ -752,9 +770,13 @@ async function eventLocationLocateMe() {
       eventLocationSetStatus('已定位到你当前所在位置', false);
       return;
     }
-    eventLocationUpsertCandidate(current, { prepend: true });
     eventLocationPickerState.previewPoint = current;
-    await eventLocationPreviewPoint(current, { withPan: true, loadDetail: true, prepend: true });
+    await eventLocationPreviewPoint(current, {
+      withPan: true,
+      loadDetail: true,
+      prepend: true,
+      mutateCandidates: false,
+    });
     await eventLocationCallResolveByPoint(current, 'my_location', { keepFirstPoint: true });
   } catch (error) {
     eventLocationSetStatus(String(error?.message || '定位失败'), true);
@@ -837,7 +859,12 @@ async function ensureEventLocationMapReady(initialPoint = null) {
       eventLocationLastMapPickKey = pointKey;
       eventLocationLastMapPickAt = now;
       eventLocationSetStatus('已选择地图地点，正在解析候选...', false);
-      await eventLocationPreviewPoint(point, { withPan: false, loadDetail: true, prepend: true });
+      await eventLocationPreviewPoint(point, {
+        withPan: false,
+        loadDetail: true,
+        prepend: true,
+        mutateCandidates: false,
+      });
       await eventLocationResolveByPoint(point, mode, { keepFirstPoint: true });
     };
     eventLocationMap.on('hotspotclick', async (evt) => {

@@ -219,7 +219,12 @@
         eventLocationLastMapPickKey = pointKey;
         eventLocationLastMapPickAt = now;
         eventLocationSetStatus('已选择地图地点，正在解析候选...', false);
-        await eventLocationPreviewPoint(point, { withPan: false, loadDetail: true, prepend: true });
+        await eventLocationPreviewPoint(point, {
+          withPan: false,
+          loadDetail: true,
+          prepend: true,
+          mutateCandidates: false,
+        });
         await eventLocationResolveByPoint(point, 'map_poi_click', { keepFirstPoint: true });
       });
 
@@ -306,7 +311,6 @@
     if (eventLocationIsViewMode()) return;
     const p = normalizeEventLocationPoint(point);
     if (!p) return;
-    const keepFirstPoint = !!options.keepFirstPoint;
     const key = `${p.location.lng.toFixed(6)},${p.location.lat.toFixed(6)}`;
     if (eventLocationLastResolvedPointKey === key && sourceMode === 'pin_drag') return;
     eventLocationLastResolvedPointKey = key;
@@ -322,20 +326,26 @@
       : [];
 
     const rows = [];
-    if (keepFirstPoint) rows.push({ ...p, sourceMode });
     if (regeo) rows.push({ ...regeo, sourceMode });
     for (const item of nearby) {
       rows.push(item);
       if (rows.length >= 20) break;
     }
-    eventLocationPickerState.candidates = mapkitMergeUniqueRows(rows);
-    await eventLocationPreviewPoint(p, { withPan: false, loadDetail: true, prepend: true });
-    eventLocationSetStatus(
-      eventLocationPickerState.candidates.length
-        ? `已找到 ${eventLocationPickerState.candidates.length} 个候选地点`
-        : '未找到周边候选地点',
-      false
-    );
+    const mergedRows = mapkitMergeUniqueRows(rows);
+    const previewPoint = mergedRows[0] || { ...p, sourceMode };
+    await eventLocationPreviewPoint(previewPoint, {
+      withPan: false,
+      loadDetail: true,
+      prepend: true,
+      mutateCandidates: eventLocationShouldMutateCandidates(sourceMode),
+    });
+    const statusMap = {
+      manual_search: '已根据搜索结果更新地点预览',
+      map_poi_click: '已根据地图点击更新地点预览',
+      my_location: '已根据当前位置更新地点预览',
+      pin_drag: '已根据 Pin 位置更新地点预览',
+    };
+    eventLocationSetStatus(statusMap[sourceMode] || '已更新地点预览', false);
   }
 
   async function mapkitSearchByKeyword(sourceMode = 'manual_search') {
@@ -362,6 +372,7 @@
     }
     await eventLocationPreviewPoint(rows[0], { withPan: true, loadDetail: true, prepend: true });
     await eventLocationResolveByPoint(rows[0], sourceMode, { keepFirstPoint: true });
+    eventLocationSetStatus(`已找到 ${rows.length} 个候选地点`, false);
   }
 
   async function mapkitLocateMeAction() {
@@ -374,9 +385,13 @@
         eventLocationSetStatus('已定位到你当前所在位置', false);
         return;
       }
-      eventLocationUpsertCandidate(current, { prepend: true });
       eventLocationPickerState.previewPoint = current;
-      await eventLocationPreviewPoint(current, { withPan: true, loadDetail: true, prepend: true });
+      await eventLocationPreviewPoint(current, {
+        withPan: true,
+        loadDetail: true,
+        prepend: true,
+        mutateCandidates: false,
+      });
       await eventLocationResolveByPoint(current, 'my_location', { keepFirstPoint: true });
     } catch (error) {
       eventLocationSetStatus(String(error?.message || '定位失败'), true);
@@ -585,7 +600,12 @@
         eventLocationLastMapPickKey = pointKey;
         eventLocationLastMapPickAt = now;
         eventLocationSetStatus('已选择地图地点，正在解析候选...', false);
-        await eventLocationPreviewPoint(point, { withPan: false, loadDetail: true, prepend: true });
+        await eventLocationPreviewPoint(point, {
+          withPan: false,
+          loadDetail: true,
+          prepend: true,
+          mutateCandidates: false,
+        });
         await eventLocationResolveByPoint(point, 'map_poi_click', { keepFirstPoint: true });
       });
 
@@ -675,7 +695,6 @@
     if (eventLocationIsViewMode()) return;
     const p = normalizeEventLocationPoint(point);
     if (!p) return;
-    const keepFirstPoint = !!options.keepFirstPoint;
     const key = `${p.location.lng.toFixed(6)},${p.location.lat.toFixed(6)}`;
     if (eventLocationLastResolvedPointKey === key && sourceMode === 'pin_drag') return;
     eventLocationLastResolvedPointKey = key;
@@ -691,20 +710,26 @@
       : await mapboxSearchNearbyByPoint(p.location, { sourceMode }).catch(() => []);
 
     const rows = [];
-    if (keepFirstPoint) rows.push({ ...p, sourceMode });
     if (regeo) rows.push({ ...regeo, sourceMode });
     for (const item of nearby) {
       rows.push(item);
       if (rows.length >= 20) break;
     }
-    eventLocationPickerState.candidates = mapboxMergeUniqueRows(rows);
-    await eventLocationPreviewPoint(p, { withPan: false, loadDetail: true, prepend: true });
-    eventLocationSetStatus(
-      eventLocationPickerState.candidates.length
-        ? `已找到 ${eventLocationPickerState.candidates.length} 个候选地点`
-        : '未找到周边候选地点',
-      false
-    );
+    const mergedRows = mapboxMergeUniqueRows(rows);
+    const previewPoint = mergedRows[0] || { ...p, sourceMode };
+    await eventLocationPreviewPoint(previewPoint, {
+      withPan: false,
+      loadDetail: true,
+      prepend: true,
+      mutateCandidates: eventLocationShouldMutateCandidates(sourceMode),
+    });
+    const statusMap = {
+      manual_search: '已根据搜索结果更新地点预览',
+      map_poi_click: '已根据地图点击更新地点预览',
+      my_location: '已根据当前位置更新地点预览',
+      pin_drag: '已根据 Pin 位置更新地点预览',
+    };
+    eventLocationSetStatus(statusMap[sourceMode] || '已更新地点预览', false);
   }
 
   async function mapboxSearchByKeyword(sourceMode = 'manual_search') {
@@ -731,6 +756,7 @@
     }
     await eventLocationPreviewPoint(rows[0], { withPan: true, loadDetail: true, prepend: true });
     await eventLocationResolveByPoint(rows[0], sourceMode, { keepFirstPoint: true });
+    eventLocationSetStatus(`已找到 ${rows.length} 个候选地点`, false);
   }
 
   async function mapboxLocateMeAction() {
@@ -743,9 +769,13 @@
         eventLocationSetStatus('已定位到你当前所在位置', false);
         return;
       }
-      eventLocationUpsertCandidate(current, { prepend: true });
       eventLocationPickerState.previewPoint = current;
-      await eventLocationPreviewPoint(current, { withPan: true, loadDetail: true, prepend: true });
+      await eventLocationPreviewPoint(current, {
+        withPan: true,
+        loadDetail: true,
+        prepend: true,
+        mutateCandidates: false,
+      });
       await eventLocationResolveByPoint(current, 'my_location', { keepFirstPoint: true });
     } catch (error) {
       eventLocationSetStatus(String(error?.message || '定位失败'), true);
@@ -775,7 +805,7 @@
     if (!p) return;
     const resolved = await mapboxReverseGeocodeByPoint(p.location, { sourceMode: p.sourceMode || 'map_poi_click' }).catch(() => null);
     const enriched = eventLocationMergePoints(p, resolved || p);
-    eventLocationApplyPointUpdate(p, enriched);
+    eventLocationApplyPointUpdate(p, enriched, { insertIfMissing: false });
     eventLocationRenderCandidates();
     eventLocationShowPoiPanel(enriched, { detail: mapboxPointToPanelDetail(enriched) });
   }
@@ -977,9 +1007,13 @@
         eventLocationLastMapPickKey = pointKey;
         eventLocationLastMapPickAt = now;
         eventLocationSetStatus('已选择地图地点（Geoapify：未触发逆向解析）', false);
-        await eventLocationPreviewPoint(point, { withPan: false, loadDetail: true, prepend: true });
-        eventLocationUpsertCandidate(point, { prepend: true });
-        eventLocationRenderCandidates();
+        await eventLocationPreviewPoint(point, {
+          withPan: false,
+          loadDetail: true,
+          prepend: true,
+          mutateCandidates: false,
+        });
+        await eventLocationResolveByPoint(point, 'map_poi_click', { keepFirstPoint: true });
       });
 
       geoapifyState.map.on('moveend', async (evt) => {
@@ -1072,15 +1106,20 @@
     const p = normalizeEventLocationPoint(point);
     if (!p) return;
     if (sourceMode !== 'pin_drag') {
-      const rows = [];
-      if (options.keepFirstPoint) rows.push({ ...p, sourceMode });
-      rows.push({ ...p, sourceMode });
-      eventLocationPickerState.candidates = geoapifyMergeUniqueRows(rows);
-      await eventLocationPreviewPoint(p, { withPan: false, loadDetail: true, prepend: true });
-      eventLocationSetStatus('已更新候选地点（Geoapify：仅手动拖动 Pin 时触发逆向解析）', false);
+      await eventLocationPreviewPoint(p, {
+        withPan: false,
+        loadDetail: true,
+        prepend: true,
+        mutateCandidates: eventLocationShouldMutateCandidates(sourceMode),
+      });
+      const statusMap = {
+        manual_search: '已根据搜索结果更新地点预览',
+        map_poi_click: '已根据地图点击更新地点预览',
+        my_location: '已根据当前位置更新地点预览',
+      };
+      eventLocationSetStatus(statusMap[sourceMode] || '已更新地点预览', false);
       return;
     }
-    const keepFirstPoint = !!options.keepFirstPoint;
     const key = `${p.location.lng.toFixed(6)},${p.location.lat.toFixed(6)}`;
     if (eventLocationLastResolvedPointKey === key && sourceMode === 'pin_drag') return;
     eventLocationLastResolvedPointKey = key;
@@ -1096,20 +1135,20 @@
       : await geoapifySearchNearbyByPoint(p.location, { sourceMode }).catch(() => []);
 
     const rows = [];
-    if (keepFirstPoint) rows.push({ ...p, sourceMode });
     if (regeo) rows.push({ ...regeo, sourceMode });
     for (const item of nearby) {
       rows.push(item);
       if (rows.length >= 20) break;
     }
-    eventLocationPickerState.candidates = geoapifyMergeUniqueRows(rows);
-    await eventLocationPreviewPoint(p, { withPan: false, loadDetail: true, prepend: true });
-    eventLocationSetStatus(
-      eventLocationPickerState.candidates.length
-        ? `已找到 ${eventLocationPickerState.candidates.length} 个候选地点`
-        : '未找到周边候选地点',
-      false
-    );
+    const mergedRows = geoapifyMergeUniqueRows(rows);
+    const previewPoint = mergedRows[0] || { ...p, sourceMode };
+    await eventLocationPreviewPoint(previewPoint, {
+      withPan: false,
+      loadDetail: true,
+      prepend: true,
+      mutateCandidates: false,
+    });
+    eventLocationSetStatus('已根据 Pin 位置更新地点预览', false);
   }
 
   async function geoapifySearchByKeyword(sourceMode = 'manual_search') {
@@ -1135,7 +1174,8 @@
       return;
     }
     await eventLocationPreviewPoint(rows[0], { withPan: true, loadDetail: true, prepend: true });
-    eventLocationSetStatus(`已找到 ${rows.length} 个候选地点（Geoapify：未触发逆向解析）`, false);
+    await eventLocationResolveByPoint(rows[0], sourceMode, { keepFirstPoint: true });
+    eventLocationSetStatus(`已找到 ${rows.length} 个候选地点`, false);
   }
 
   async function geoapifyLocateMeAction() {
@@ -1148,10 +1188,14 @@
         eventLocationSetStatus('已定位到你当前所在位置', false);
         return;
       }
-      eventLocationUpsertCandidate(current, { prepend: true });
       eventLocationPickerState.previewPoint = current;
-      await eventLocationPreviewPoint(current, { withPan: true, loadDetail: true, prepend: true });
-      eventLocationSetStatus('已定位当前位置（Geoapify：未触发逆向解析）', false);
+      await eventLocationPreviewPoint(current, {
+        withPan: true,
+        loadDetail: true,
+        prepend: true,
+        mutateCandidates: false,
+      });
+      await eventLocationResolveByPoint(current, 'my_location', { keepFirstPoint: true });
     } catch (error) {
       eventLocationSetStatus(String(error?.message || '定位失败'), true);
     }
