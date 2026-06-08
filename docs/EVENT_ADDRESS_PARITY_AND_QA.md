@@ -117,6 +117,7 @@
 - [ ] iOS event 详情页“活动地址”显示 `manualLocation.formattedAddressI18n`
 - [ ] iOS event 详情页“场地”显示 `locationPoint.manualSetAddressI18n -> locationPoint.formattedAddressI18n`
 - [x] iOS event 创建 / 编辑页已提供 `manualSetAddressI18n` 显式可选输入框
+- [x] iOS `manualSetAddressI18n` 保存逻辑已对齐 web，不再自动拼接 `city / country`
 - [ ] iOS map pin 文案与 open map query 语义一致
 - [ ] share / widget / check-in / search 与 event detail 地址语义一致
 
@@ -128,3 +129,4 @@
 - `venueName` / `venueAddress` 不再属于 event 活跃写入与展示主线
 - 地址搜索、详情、列表、catalog、share、widget、check-in 已按新语义验收
 - `manualSetAddressI18n` 已回归为“显式可选覆盖字段”，不再由编辑页自动写死
+- iOS event upload / edit 保存链路已对齐 web：`manualSetAddressI18n` 按用户输入原样入库，不再二次格式化

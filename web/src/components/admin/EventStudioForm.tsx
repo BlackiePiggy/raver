@@ -3595,7 +3595,7 @@ export default function EventStudioForm({
                           {detailAddressDisplay || '还没有地点地址'}
                         </div>
                         <div className="mt-2 text-xs text-gray-400">
-                          地图选点将通过当前页内的 legacy 浮窗完成，确认后自动回填当前表单。
+                          地图选点现在支持原生版与 legacy 版切换，确认后都会自动回填当前表单。
                         </div>
                         {draft.locationPoint?.provider ? (
                           <div className="mt-2 text-[10px] text-gray-400">

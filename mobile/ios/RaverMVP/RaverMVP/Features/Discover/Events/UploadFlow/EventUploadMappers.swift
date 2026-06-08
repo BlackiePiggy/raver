@@ -367,19 +367,7 @@ enum EventUploadMappers {
                     enFull: draft.manualSetAddress.enFull
                 )
             )
-        if let manualSetAddressI18n {
-            next.manualSetAddressI18n = formattedAddress(
-                detailAddressI18n: manualSetAddressI18n,
-                cityI18n: cityI18n ?? city.map {
-                    localizedSingleText($0, language: draft.preferredLanguage)
-                },
-                countryI18n: countryI18n ?? country.map {
-                    localizedSingleText($0, language: draft.preferredLanguage)
-                }
-            )
-        } else {
-            next.manualSetAddressI18n = nil
-        }
+        next.manualSetAddressI18n = manualSetAddressI18n
 
         if let placeName = draft.pickedPlaceName.trimmed.eventUploadMapperNilIfBlank {
             next.nameI18n = localizedSingleText(placeName, language: draft.preferredLanguage)
