@@ -13,6 +13,7 @@ import {
   List,
   MapPinned,
   RefreshCw,
+  Filter,
   SlidersHorizontal,
   Upload,
   Users2,
@@ -1246,7 +1247,10 @@ export default function EventCatalogPageClient() {
       }
 
       try {
-        const response = await adminCatalogApi.fetchEvents(filters);
+        const response = await adminCatalogApi.fetchEvents({
+          ...filters,
+          refresh: options?.force ? true : undefined,
+        });
         const written = writeAdminCatalogCache(cacheKey, response, CACHE_TTL_MS);
         setItems(response.items);
         setPagination(response.pagination);
@@ -1479,23 +1483,23 @@ export default function EventCatalogPageClient() {
         <>
           <Link
             href="/admin/content/organizers/bindings"
-            className="inline-flex items-center gap-2.5 rounded-full border border-[#e9dcff] bg-[#f6f0ff] px-7 py-3.5 text-[15px] font-semibold text-[#6d28d9] shadow-[0_2px_10px_rgba(109,40,217,0.08)]"
+            className="inline-flex h-[44px] items-center gap-2 rounded-full border border-[#e9dcff] bg-[#f6f0ff] px-5 text-[14px] font-semibold text-[#6d28d9]"
           >
-            <Users2 className="h-5 w-5" />
+            <Users2 className="h-4 w-4" />
             <span>主办方绑定</span>
           </Link>
           <Link
             href="/admin/content/events/new"
-            className="inline-flex items-center gap-2.5 rounded-full border border-[#e8eceb] bg-white px-7 py-3.5 text-[15px] font-semibold text-[#111827] shadow-[0_2px_10px_rgba(15,23,42,0.04)]"
+            className="inline-flex h-[44px] items-center gap-2 rounded-full border border-[#e8eceb] bg-white px-5 text-[14px] font-semibold text-[#111827]"
           >
-            <Upload className="h-5 w-5" />
+            <Upload className="h-4 w-4" />
             <span>导入活动</span>
           </Link>
           <Link
             href="/admin/content/events/new"
-            className="inline-flex items-center gap-2.5 rounded-full bg-[#071110] px-7 py-3.5 text-[15px] font-semibold text-white shadow-[0_10px_24px_rgba(7,17,16,0.18)]"
+            className="inline-flex h-[44px] items-center gap-2 rounded-full bg-[#071110] px-5 text-[14px] font-semibold text-white"
           >
-            <span className="text-[22px] leading-none">+</span>
+            <span className="text-[18px] leading-none">+</span>
             <span>新建活动</span>
           </Link>
         </>
@@ -1505,13 +1509,12 @@ export default function EventCatalogPageClient() {
         {/* ② 筛选区 + 统计块 — 同一白卡 */}
         <section className="rounded-[28px] border border-[#edf0f2] bg-white px-6 py-5 shadow-[0_4px_20px_rgba(17,24,39,0.04)]">
           <form onSubmit={handleSearchSubmit} className="flex flex-wrap gap-3">
-            {/* 搜索框 — ① h-[54px] */}
             <AdminSearchField
               value={searchInput}
               onChange={setSearchInput}
               placeholder="搜索活动名称、主办方、城市..."
-              size="lg"
-              className="min-w-[240px] flex-[1.45_1_280px]"
+              size="sm"
+              className="min-w-[220px] flex-[1.45_1_280px]"
               submitLabel="搜索"
               submitButtonType="submit"
               onClear={() => {
@@ -1522,7 +1525,7 @@ export default function EventCatalogPageClient() {
             />
 
             {/* 全部状态 */}
-            <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
+            <label className="relative flex h-[44px] min-w-[160px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
               <span>{resolveStatusFilterLabel(status)}</span>
               <select
                 value={status}
@@ -1535,20 +1538,19 @@ export default function EventCatalogPageClient() {
                 <option value="ended">已结束</option>
                 <option value="cancelled">已取消</option>
               </select>
-              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
+              <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
             </label>
 
             <button
               type="button"
               onClick={() => void handleRefresh()}
-              className="inline-flex h-[54px] w-[54px] items-center justify-center rounded-[18px] border border-[#eceff1] bg-white text-[#6b7280]"
+              className="inline-flex h-[44px] w-[44px] items-center justify-center rounded-[14px] border border-[#e8eceb] bg-white text-[#6b7280]"
               aria-label="刷新目录"
             >
-              <RefreshCw className={`h-4.5 w-4.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
 
-            {/* 全部类型 */}
-            <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
+            <label className="relative flex h-[44px] min-w-[150px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
               <span>{eventType === 'all' ? '全部类型' : eventType}</span>
               <select
                 value={eventType}
@@ -1564,11 +1566,10 @@ export default function EventCatalogPageClient() {
                 <option value="巡演专场">巡演专场</option>
                 <option value="其他">其他</option>
               </select>
-              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
+              <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
             </label>
 
-            {/* 全部国家 */}
-            <label className="relative flex h-[54px] min-w-[148px] flex-1 items-center justify-between rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
+            <label className="relative flex h-[44px] min-w-[150px] flex-1 items-center justify-between rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
               <span>{country === 'all' ? '全部国家' : resolveCountryLabel(country)}</span>
               <select
                 value={country}
@@ -1582,34 +1583,32 @@ export default function EventCatalogPageClient() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
+              <ChevronDown className="h-4 w-4 text-[#9aa1ad]" />
             </label>
 
-            {/* 更多筛选 */}
-            <button
-              type="button"
-              className="flex h-[54px] min-w-[130px] items-center justify-center gap-2.5 rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]"
-            >
-              <SlidersHorizontal className="h-4.5 w-4.5" />
-              <span>更多筛选</span>
-            </button>
-
-            {/* 排序方式 */}
-            <label className="ml-auto relative flex h-[54px] min-w-[180px] cursor-pointer items-center justify-between gap-2 rounded-[18px] border border-[#eceff1] bg-white px-5 text-[15px] font-semibold text-[#111827]">
-              <span>{selectedSortLabel}</span>
-              <select
-                value={sortBy}
-                onChange={(event) => { setSortBy(event.target.value as (typeof EVENT_SORT_OPTIONS)[number]['value']); setPage(1); }}
-                className="absolute inset-0 opacity-0"
-              >
-                {EVENT_SORT_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="h-4.5 w-4.5 text-[#9ca3af]" />
-            </label>
+            <details className="relative">
+              <summary className="flex h-[44px] cursor-pointer list-none items-center gap-2 rounded-[14px] border border-[#e8eceb] bg-white px-4 text-[14px] font-semibold text-[#111827]">
+                <Filter className="h-4 w-4" />
+                <span>更多筛选</span>
+              </summary>
+              <div className="absolute left-0 top-[calc(100%+8px)] z-20 min-w-[220px] rounded-[18px] border border-[#e8eceb] bg-white p-4 shadow-[0_12px_32px_rgba(33,52,47,0.10)]">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9aa1ad]">排序方式</div>
+                <select
+                  value={sortBy}
+                  onChange={(event) => {
+                    setSortBy(event.target.value as (typeof EVENT_SORT_OPTIONS)[number]['value']);
+                    setPage(1);
+                  }}
+                  className="w-full rounded-[12px] border border-[#e8eceb] bg-white px-3 py-2.5 text-sm font-semibold text-[#111827] outline-none"
+                >
+                  {EVENT_SORT_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </details>
           </form>
 
           {/* ③ 统计块 — 扁平横排，用竖线分隔 */}
