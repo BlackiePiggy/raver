@@ -4003,7 +4003,7 @@ export default function EventStudioForm({
       ) : null}
 
       {currentStep === 3 ? (
-        <Section title="时间表" description="按 iOS 的活动日、舞台和演出时段组织，主视图优先展示可视化排期板。">
+        <Section title="时间表">
           <div className={`grid gap-5 ${showTimetableDebugDrawer ? 'xl:grid-cols-[minmax(0,1fr)_420px]' : ''}`}>
             <div className="min-w-0">
               <div className="mb-5">

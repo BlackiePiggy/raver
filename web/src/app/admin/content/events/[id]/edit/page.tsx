@@ -108,7 +108,7 @@ export default function AdminContentEventEditPage() {
           draft={draft}
           setDraft={setDraft}
           onSubmit={handleSubmitResult}
-          submitButtonText="提交活动编辑"
+          submitButtonText="提交"
         />
       )}
     </AdminContentLayout>
