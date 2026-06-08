@@ -27,6 +27,9 @@ struct OrganizerUploadFlowView: View {
     @State private var showExitConfirmation = false
     @State private var showSubmitConfirmation = false
     @State private var isProfileLocalizationExpanded = false
+    @State private var isAddressLocalizationExpanded = false
+    @State private var isManualSetAddressLocalizationExpanded = false
+    @State private var showLocationPicker = false
 
     init(
         mode: OrganizerUploadMode = .create,
@@ -122,6 +125,15 @@ struct OrganizerUploadFlowView: View {
             .photosPicker(isPresented: $isShowingPosterPicker, selection: posterPickerSelection, matching: .images)
             .photosPicker(isPresented: $isShowingProofPicker, selection: proofPickerSelection, maxSelectionCount: 10, matching: .images)
             .photosPicker(isPresented: $isShowingOtherPicker, selection: otherPickerSelection, maxSelectionCount: 10, matching: .images)
+            .sheet(isPresented: $showLocationPicker) {
+                EventLocationPickerSheet(
+                    initialLatitude: viewModel.draft.latitude,
+                    initialLongitude: viewModel.draft.longitude,
+                    initialAddress: viewModel.draft.pickedMapAddress
+                ) { result in
+                    viewModel.applyLocationPickerResult(result)
+                }
+            }
     }
 
     private var lifecycleContent: some View {
@@ -410,6 +422,134 @@ struct OrganizerUploadFlowView: View {
                         labeledField(LT("举办频率", "Frequency", "開催頻度"), text: stringBinding(\.frequency))
                     }
                     labeledField(LT("一句话定位", "Tagline", "タグライン"), text: stringBinding(\.tagline))
+                }
+            }
+
+            sectionCard(
+                title: LT("地点与地图", "Location & Map", "場所と地図"),
+                body: LT(
+                    "这部分与 event 地址模型对齐，但对主办方来说全部是可选项。你可以只填手动地址、只绑地图点位，或者两者都填写。",
+                    "This aligns with the event address model, but everything is optional for organizers. You can fill a manual address, bind only a map point, or use both.",
+                    "この部分は event の住所モデルに合わせていますが、主催者ではすべて任意です。手入力住所のみ、地図ポイントのみ、または両方を入力できます。"
+                )
+            )
+
+            formCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    OrganizerLocalizedExpandableFieldSection(
+                        title: LT("详细地址", "Detailed Address", "詳細住所"),
+                        expanded: $isAddressLocalizationExpanded,
+                        zhBinding: localizedAddressBinding(.zh),
+                        enBinding: localizedAddressBinding(.en),
+                        jaBinding: localizedAddressBinding(.ja),
+                        extraCount: viewModel.draft.detailAddress.secondaryValueCount(excluding: viewModel.draft.preferredLanguage)
+                    )
+
+                    OrganizerLocalizedExpandableFieldSection(
+                        title: LT("场地展示地址（可选）", "Venue Display Address (Optional)", "会場表示住所（任意）"),
+                        expanded: $isManualSetAddressLocalizationExpanded,
+                        zhBinding: localizedManualSetAddressBinding(.zh),
+                        enBinding: localizedManualSetAddressBinding(.en),
+                        jaBinding: localizedManualSetAddressBinding(.ja),
+                        extraCount: viewModel.draft.manualSetAddress.secondaryValueCount(excluding: viewModel.draft.preferredLanguage)
+                    )
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(LT("只读结果预览", "Read-only Output Preview", "読み取り専用プレビュー"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+
+                        organizerReadonlyAddressPreviewCard(
+                            title: LT("最终手填地址", "Final Manual Address", "最終手入力住所"),
+                            value: viewModel.manualLocationFormattedAddressSummary,
+                            emptyText: LT(
+                                "填写详细地址、城市、国家后，这里会展示 manualLocation.formattedAddressI18n。",
+                                "manualLocation.formattedAddressI18n appears here after detailed address, city, and country are filled.",
+                                "詳細住所・都市・国を入力すると、ここに manualLocation.formattedAddressI18n が表示されます。"
+                            )
+                        )
+
+                        organizerReadonlyAddressPreviewCard(
+                            title: LT("最终地图格式化地址", "Final Map Formatted Address", "最終地図整形住所"),
+                            value: viewModel.locationPointFormattedAddressSummary,
+                            emptyText: LT(
+                                "完成地图选点后，这里会展示 locationPoint.formattedAddressI18n。",
+                                "locationPoint.formattedAddressI18n appears here after map selection.",
+                                "地図選択後、ここに locationPoint.formattedAddressI18n が表示されます。"
+                            )
+                        )
+
+                        organizerReadonlyAddressPreviewCard(
+                            title: LT("最终场地展示地址", "Final Venue Display Address", "最終会場表示住所"),
+                            value: viewModel.locationPointManualSetAddressSummary,
+                            emptyText: LT(
+                                "未填写时不会写入 manualSetAddressI18n，展示层会回退到地图格式化地址。",
+                                "When empty, manualSetAddressI18n is not written and display falls back to the map formatted address.",
+                                "未入力時は manualSetAddressI18n は保存されず、表示は地図の整形住所にフォールバックします。"
+                            )
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(LT("地图选点", "Map Location", "地図選択"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.secondaryText)
+
+                        HStack(spacing: 10) {
+                            Button {
+                                showLocationPicker = true
+                            } label: {
+                                Label(
+                                    viewModel.coordinateSummary == nil ? LT("选择位置", "Choose", "選択") : LT("重新选择", "Change", "変更"),
+                                    systemImage: "map"
+                                )
+                                .font(.caption.weight(.bold))
+                            }
+                            .buttonStyle(.bordered)
+
+                            if viewModel.coordinateSummary != nil {
+                                Label(LT("已绑定", "Bound", "紐付け済み"), systemImage: "checkmark.seal.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.green)
+                                Button {
+                                    viewModel.clearLocationBinding()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Spacer()
+                        }
+
+                        if let coordinateSummary = viewModel.coordinateSummary {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if !viewModel.draft.pickedPlaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(viewModel.draft.pickedPlaceName)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                }
+                                if let venueDisplaySummary = viewModel.venueDisplaySummary {
+                                    Text(venueDisplaySummary)
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                } else if !viewModel.draft.pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(viewModel.draft.pickedMapAddress)
+                                        .font(.caption)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Text(coordinateSummary)
+                                    .font(.caption2)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                    }
                 }
             }
         }
@@ -1102,6 +1242,28 @@ struct OrganizerUploadFlowView: View {
         )
     }
 
+    private func localizedAddressBinding(_ language: EventUploadPreferredLanguage) -> Binding<String> {
+        Binding(
+            get: { viewModel.draft.detailAddress.value(for: language) },
+            set: { newValue in
+                viewModel.draft.detailAddress.setValue(newValue, for: language)
+                viewModel.markDirty()
+                viewModel.saveDraft(immediate: false)
+            }
+        )
+    }
+
+    private func localizedManualSetAddressBinding(_ language: EventUploadPreferredLanguage) -> Binding<String> {
+        Binding(
+            get: { viewModel.draft.manualSetAddress.value(for: language) },
+            set: { newValue in
+                viewModel.draft.manualSetAddress.setValue(newValue, for: language)
+                viewModel.markDirty()
+                viewModel.saveDraft(immediate: false)
+            }
+        )
+    }
+
     private var aliasesBinding: Binding<String> {
         Binding(
             get: { viewModel.draft.aliases.joined(separator: ", ") },
@@ -1448,6 +1610,26 @@ struct OrganizerUploadFlowView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func organizerReadonlyAddressPreviewCard(title: String, value: String?, emptyText: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(RaverTheme.secondaryText)
+            Text((value?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank) ?? emptyText)
+                .font(.subheadline)
+                .foregroundStyle((value?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank) == nil ? RaverTheme.secondaryText : RaverTheme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RaverTheme.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
     }
 
     private func organizerEventMetaText(for event: WebEvent) -> String {

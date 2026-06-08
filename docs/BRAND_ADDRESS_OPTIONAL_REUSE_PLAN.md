@@ -1,9 +1,9 @@
 # Brand 地址模型与 Event 复用改造方案
 
 > Status: Draft
-> Owner: Backend / Web Admin
+> Owner: Backend / Web Admin / iOS
 > Last Updated: 2026-06-08
-> Scope: `server/`, `web/`, `server/prisma/`, `docs/`
+> Scope: `server/`, `web/`, `mobile/ios/`, `server/prisma/`, `docs/`
 
 ---
 
@@ -21,10 +21,16 @@
 - event 创建 / 编辑流中，如果已绑定 brand，可一键使用该 brand 的地址信息
 - event 仍然可以不使用 brand 地址，也可以使用后再继续改
 
-当前阶段 **不要求 iOS 展示 brand 地址**，brand 地址仅作为：
+当前阶段 brand 地址仍然主要作为：
 
 - brand 自身的后台属性
 - event 编辑流中的一个快捷复用来源
+
+新增要求：
+
+- iOS `brand` 创建 / 编辑流也需要补齐这套地址编辑能力
+- iOS `event` 创建 / 编辑流也需要补齐“使用主办方地址”能力
+- 仍然不要求 iOS 前台 brand 详情页展示 brand 地址
 
 ---
 
@@ -70,7 +76,8 @@
   - [x] 只读结果块
   - [x] 主办方绑定 `wikiFestivalId`
 - [x] event 当前搜索主办方只拿到 organizer 基础信息，不含 organizer 地址
-- [x] iOS 当前不需要消费 brand 地址
+- [x] iOS 前台品牌展示当前仍不需要消费 brand 地址
+- [x] iOS brand/upload 与 event/upload 目前尚未对齐 brand 地址编辑 / 复用能力
 
 ---
 
@@ -83,12 +90,13 @@
 - [x] content submission brand 链路对齐新字段
 - [x] web Organizer Studio 创建 / 编辑页增加可选地址编辑能力
 - [x] web event 编辑流增加“一键使用主办方地址”
+- [x] iOS OrganizerUploadFlow 增加可选 brand 地址编辑能力
+- [x] iOS EventUploadFlow 增加“一键使用主办方地址”
 - [x] 必要的 migration / script / regression / QA 文档
 
 ### Out Of Scope
 
 - [ ] iOS brand 详情页展示地址
-- [ ] iOS brand 编辑流地址能力
 - [ ] brand 前台公开页面地址展示
 - [ ] 基于 brand 地址的地图搜索、筛选、推荐
 - [ ] event 自动持续跟随 brand 地址变化
@@ -535,6 +543,59 @@ event 编辑流能从已绑定 brand 快速复制地址。
   - [x] `locationPoint` 派生的只读结果块
 - [x] 主线所需 brand 地图-only / 手填+地图 roundtrip 已有自动化覆盖
 - [ ] 如需最终上线前体验确认，可再补一轮页面手工走查，但不再阻塞主线完成
+
+## Phase 7. iOS 对齐执行清单
+
+### 目标
+
+让 iOS 端与已经完成的 web 主线保持一致，但仍只围绕：
+
+- brand 地址编辑
+- event 复用主办方地址
+
+不扩散到 brand 前台展示。
+
+### iOS Brand Upload
+
+- [x] `OrganizerUploadDraft` 增加与 web 对齐的地址草稿字段：
+  - [x] `detailAddress`
+  - [x] `manualSetAddress`
+  - [x] `locationPoint`
+  - [x] `pickedPlaceName`
+  - [x] `pickedMapAddress`
+  - [x] `latitude / longitude`
+- [x] `OrganizerUploadDraft.edit(from:)` 支持从 brand 地址回填
+- [x] `OrganizerUploadMappers.createInput(from:)` 写出 `manualLocation / locationPoint`
+- [x] `OrganizerUploadMappers.updateInput(from:)` 写出 `manualLocation / locationPoint`
+- [x] `OrganizerUploadFlowView` 新增 brand 地址编辑 UI
+- [x] iOS brand 地址区保持可选，不设必填
+- [x] iOS brand 端展示 3 个只读地址结果块：
+  - [x] `manualLocation.formattedAddressI18n`
+  - [x] `locationPoint.formattedAddressI18n`
+  - [x] `locationPoint.manualSetAddressI18n`
+
+### iOS Event Upload
+
+- [x] 在 `EventUploadFlowView` 的地点区增加 `使用主办方地址` 入口
+- [x] 在 `EventUploadFlowViewModel` 中，当已绑定 `organizerFestivalID` 时可拉取 organizer 详情
+- [x] 增加把 organizer 地址拷贝到 event draft 的 helper
+- [x] 复制字段与 web 对齐：
+  - [x] `country / city`
+  - [x] `detailAddress`
+  - [x] `manualSetAddress`
+  - [x] `locationPoint`
+  - [x] `latitude / longitude`
+  - [x] `pickedPlaceName / pickedMapAddress`
+- [x] organizer 无地址时给出明确提示
+- [x] 复制后 event 仍然可继续手改，不建立联动
+
+### iOS QA / 修复顺带项
+
+- [x] 修复 EventUpload 第二页官网链接下方字段标题乱码问题
+- [x] 确认该字段 placeholder 与 title 都恢复正常
+- [ ] iOS brand 地址编辑提交流程可成功入库并重新回显
+- [ ] iOS event 使用主办方地址后，草稿字段正确回填
+- [x] `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -sdk iphonesimulator -configuration Debug build`
 - [x] 已新增自动化补强：
   - [x] `web/tests/contracts/brand-address-parity.ts` 已覆盖 map-only brand 地址路径
   - [x] `server/src/scripts/brand-address-payload-guardrails.ts` 已覆盖 map-only / 手填+地图的服务端地址语义

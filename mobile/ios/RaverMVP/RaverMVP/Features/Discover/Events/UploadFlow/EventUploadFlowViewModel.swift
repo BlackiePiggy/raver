@@ -54,6 +54,7 @@ final class EventUploadFlowViewModel: ObservableObject {
     @Published var aiImportDJSearchFeedbacks: [String: InlineSearchFeedback] = [:]
     @Published var isSearchingTimeZones = false
     @Published var isSearchingOrganizers = false
+    @Published var isApplyingOrganizerAddress = false
     @Published var timeZoneSearchFeedback: InlineSearchFeedback = .idle
     @Published var organizerSearchFeedback: InlineSearchFeedback = .idle
     @Published var djSearchFeedbacks: [String: InlineSearchFeedback] = [:]
@@ -788,6 +789,34 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.dirty = true
         saveDraft()
         EventUploadAnalytics.track("event_upload_v2_organizer_bound", properties: ["festivalID": festival.id])
+    }
+
+    func applyBoundOrganizerAddress() async {
+        guard let organizerID = draft.organizerFestivalID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank else {
+            statusMessage = LT("请先绑定主办方。", "Bind an organizer first.", "先に主催者を紐付けてください。")
+            return
+        }
+
+        isApplyingOrganizerAddress = true
+        defer { isApplyingOrganizerAddress = false }
+
+        do {
+            let organizer = try await webService.fetchLearnFestival(id: organizerID)
+            let hasAddress =
+                organizer.manualLocation != nil
+                || organizer.locationPoint != nil
+                || !organizer.country.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !organizer.city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard hasAddress else {
+                statusMessage = LT("这个主办方还没有配置地址。", "This organizer does not have an address yet.", "この主催者にはまだ住所が設定されていません。")
+                return
+            }
+
+            applyOrganizerAddressSnapshot(organizer)
+            statusMessage = LT("已将主办方地址复制到当前活动草稿。", "The organizer address was copied into this event draft.", "主催者住所を現在のイベント下書きにコピーしました。")
+        } catch {
+            statusMessage = error.userFacingMessage ?? LT("读取主办方地址失败，请稍后重试。", "Failed to load the organizer address. Please try again.", "主催者住所の読み込みに失敗しました。もう一度お試しください。")
+        }
     }
 
     func clearOrganizerBinding() {
@@ -1699,6 +1728,38 @@ final class EventUploadFlowViewModel: ObservableObject {
         draft.pickedMapAddress = ""
         draft.pickedPlaceName = ""
         draft.locationPoint = nil
+        draft.dirty = true
+        saveDraft()
+    }
+
+    private func applyOrganizerAddressSnapshot(_ organizer: WebLearnFestival) {
+        draft.country = localizedFields(
+            from: organizer.countryI18n
+                ?? WebBiText(en: organizer.country, zh: organizer.country, ja: nil, enFull: nil)
+        )
+        draft.city = localizedFields(
+            from: organizer.cityI18n
+                ?? WebBiText(en: organizer.city, zh: organizer.city, ja: nil, enFull: nil)
+        )
+        draft.detailAddress = EventUploadLocalizedFields(
+            zh: organizer.manualLocation?.detailAddressI18n?.zh ?? "",
+            en: organizer.manualLocation?.detailAddressI18n?.en ?? "",
+            ja: organizer.manualLocation?.detailAddressI18n?.ja ?? "",
+            enFull: organizer.manualLocation?.detailAddressI18n?.enFull ?? ""
+        )
+        draft.manualSetAddress = EventUploadLocalizedFields(
+            zh: organizer.locationPoint?.manualSetAddressI18n?.zh ?? "",
+            en: organizer.locationPoint?.manualSetAddressI18n?.en ?? "",
+            ja: organizer.locationPoint?.manualSetAddressI18n?.ja ?? "",
+            enFull: organizer.locationPoint?.manualSetAddressI18n?.enFull ?? ""
+        )
+        draft.locationPoint = organizer.locationPoint
+        draft.latitude = organizer.locationPoint?.location?.lat
+        draft.longitude = organizer.locationPoint?.location?.lng
+        draft.pickedMapAddress = organizer.locationPoint?.formattedAddressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? organizer.locationPoint?.addressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? ""
+        draft.pickedPlaceName = organizer.locationPoint?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? ""
         draft.dirty = true
         saveDraft()
     }

@@ -12,12 +12,22 @@ enum OrganizerUploadMappers {
             abbreviation: normalizedString(draft.abbreviation),
             aliases: normalizedList(draft.aliases),
             country: normalizedString(draft.country),
+            countryI18n: localizedSingleText(
+                draft.country.trimmingCharacters(in: .whitespacesAndNewlines),
+                language: draft.preferredLanguage
+            ),
             city: normalizedString(draft.city),
+            cityI18n: localizedSingleText(
+                draft.city.trimmingCharacters(in: .whitespacesAndNewlines),
+                language: draft.preferredLanguage
+            ),
             foundedYear: normalizedString(draft.foundedYear),
             frequency: normalizedString(draft.frequency),
             tagline: normalizedString(draft.tagline),
             introduction: normalizedString(draft.primaryIntroduction),
             descriptionI18n: webBiText(from: draft.descriptionI18n, preferredLanguage: draft.preferredLanguage),
+            manualLocation: manualLocation(from: draft),
+            locationPoint: locationPoint(from: draft),
             officialWebsite: normalizedString(draft.officialWebsite),
             facebookUrl: normalizedString(draft.facebook),
             instagramUrl: normalizedString(draft.instagram),
@@ -44,12 +54,22 @@ enum OrganizerUploadMappers {
             abbreviation: draft.abbreviation.trimmingCharacters(in: .whitespacesAndNewlines),
             aliases: normalizedList(draft.aliases) ?? [],
             country: draft.country.trimmingCharacters(in: .whitespacesAndNewlines),
+            countryI18n: localizedSingleText(
+                draft.country.trimmingCharacters(in: .whitespacesAndNewlines),
+                language: draft.preferredLanguage
+            ),
             city: draft.city.trimmingCharacters(in: .whitespacesAndNewlines),
+            cityI18n: localizedSingleText(
+                draft.city.trimmingCharacters(in: .whitespacesAndNewlines),
+                language: draft.preferredLanguage
+            ),
             foundedYear: draft.foundedYear.trimmingCharacters(in: .whitespacesAndNewlines),
             frequency: draft.frequency.trimmingCharacters(in: .whitespacesAndNewlines),
             tagline: draft.tagline.trimmingCharacters(in: .whitespacesAndNewlines),
             introduction: draft.primaryIntroduction,
             descriptionI18n: webBiText(from: draft.descriptionI18n, preferredLanguage: draft.preferredLanguage, includeEmptyForEdit: true),
+            manualLocation: manualLocation(from: draft),
+            locationPoint: locationPoint(from: draft),
             officialWebsite: draft.officialWebsite.trimmingCharacters(in: .whitespacesAndNewlines),
             facebookUrl: draft.facebook.trimmingCharacters(in: .whitespacesAndNewlines),
             instagramUrl: draft.instagram.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -132,6 +152,64 @@ enum OrganizerUploadMappers {
         return remoteURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
     }
 
+    private static func manualLocation(from draft: OrganizerUploadDraft) -> WebEventManualLocation? {
+        let detail = webBiText(from: draft.detailAddress, preferredLanguage: draft.preferredLanguage)
+        guard let detail else { return nil }
+        return WebEventManualLocation(
+            detailAddressI18n: detail,
+            formattedAddressI18n: formattedAddress(
+                detailAddressI18n: detail,
+                cityI18n: localizedSingleText(
+                    draft.city.trimmingCharacters(in: .whitespacesAndNewlines),
+                    language: draft.preferredLanguage
+                ),
+                countryI18n: localizedSingleText(
+                    draft.country.trimmingCharacters(in: .whitespacesAndNewlines),
+                    language: draft.preferredLanguage
+                )
+            ),
+            selectedAt: Date()
+        )
+    }
+
+    private static func locationPoint(from draft: OrganizerUploadDraft) -> WebEventLocationPoint? {
+        guard let latitude = draft.latitude,
+              let longitude = draft.longitude else { return nil }
+        var next = draft.locationPoint ?? WebEventLocationPoint(
+            provider: "mapkit",
+            sourceMode: "pin_drag",
+            providerPlaceId: nil,
+            poiId: nil,
+            adcode: nil,
+            location: WebEventLocationCoordinate(lng: longitude, lat: latitude),
+            nameI18n: nil,
+            addressI18n: nil,
+            formattedAddressI18n: nil,
+            manualSetAddressI18n: nil,
+            city: nil,
+            district: nil,
+            province: nil,
+            countryCode: nil,
+            providerMeta: nil
+        )
+        next.location = WebEventLocationCoordinate(lng: longitude, lat: latitude)
+        if let placeName = draft.pickedPlaceName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank {
+            next.nameI18n = localizedSingleText(placeName, language: draft.preferredLanguage)
+        }
+        if let mapAddress = draft.pickedMapAddress.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank {
+            let localized = localizedSingleText(mapAddress, language: draft.preferredLanguage)
+            if next.addressI18n == nil {
+                next.addressI18n = localized
+            }
+            if next.formattedAddressI18n == nil {
+                next.formattedAddressI18n = localized
+            }
+        }
+        next.manualSetAddressI18n = webBiText(from: draft.manualSetAddress, preferredLanguage: draft.preferredLanguage)
+        next.city = draft.city.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+        return next
+    }
+
     private static func webBiText(
         from fields: EventUploadLocalizedFields,
         preferredLanguage: EventUploadPreferredLanguage,
@@ -144,6 +222,40 @@ enum OrganizerUploadMappers {
             zh: fields.zh.nilIfBlank ?? primary,
             ja: fields.ja.nilIfBlank,
             enFull: fields.enFull.nilIfBlank
+        )
+    }
+
+    private static func localizedSingleText(
+        _ value: String,
+        language: EventUploadPreferredLanguage
+    ) -> WebBiText? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        switch language {
+        case .zh:
+            return WebBiText(en: trimmed, zh: trimmed, ja: nil, enFull: nil)
+        case .en:
+            return WebBiText(en: trimmed, zh: trimmed, ja: nil, enFull: nil)
+        case .ja:
+            return WebBiText(en: trimmed, zh: trimmed, ja: trimmed, enFull: nil)
+        }
+    }
+
+    private static func formattedAddress(
+        detailAddressI18n: WebBiText,
+        cityI18n: WebBiText?,
+        countryI18n: WebBiText?
+    ) -> WebBiText {
+        func join(_ parts: [String?]) -> String {
+            parts
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank }
+                .joined(separator: " · ")
+        }
+        return WebBiText(
+            en: join([countryI18n?.enFull ?? countryI18n?.en ?? countryI18n?.zh, cityI18n?.en ?? cityI18n?.zh, detailAddressI18n.en.nilIfBlank ?? detailAddressI18n.zh]),
+            zh: join([countryI18n?.zh ?? countryI18n?.en, cityI18n?.zh ?? cityI18n?.en, detailAddressI18n.zh.nilIfBlank ?? detailAddressI18n.en]),
+            ja: join([countryI18n?.ja ?? countryI18n?.en ?? countryI18n?.zh, cityI18n?.ja ?? cityI18n?.en ?? cityI18n?.zh, detailAddressI18n.ja ?? detailAddressI18n.en ?? detailAddressI18n.zh]),
+            enFull: detailAddressI18n.enFull
         )
     }
 

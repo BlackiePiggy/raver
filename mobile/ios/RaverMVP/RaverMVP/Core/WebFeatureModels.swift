@@ -354,6 +354,8 @@ struct WebLearnFestival: Codable, Identifiable, Hashable {
     var tagline: String
     var introduction: String
     var descriptionI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var officialWebsite: String? = nil
     var facebookUrl: String? = nil
     var instagramUrl: String? = nil
@@ -390,6 +392,8 @@ struct UpdateLearnFestivalInput: Codable {
     var tagline: String?
     var introduction: String?
     var descriptionI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var officialWebsite: String? = nil
     var facebookUrl: String? = nil
     var instagramUrl: String? = nil
@@ -422,6 +426,8 @@ struct CreateLearnFestivalInput: Codable {
     var tagline: String?
     var introduction: String?
     var descriptionI18n: WebBiText? = nil
+    var manualLocation: WebEventManualLocation? = nil
+    var locationPoint: WebEventLocationPoint? = nil
     var officialWebsite: String? = nil
     var facebookUrl: String? = nil
     var instagramUrl: String? = nil

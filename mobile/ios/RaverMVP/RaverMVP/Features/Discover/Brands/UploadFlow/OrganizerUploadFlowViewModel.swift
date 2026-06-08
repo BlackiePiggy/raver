@@ -39,6 +39,42 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
     @Published var isSearchingSimilarBrands = false
     @Published var similarBrandFeedback: InlineSearchFeedback = .idle
 
+    var manualLocationFormattedAddressSummary: String? {
+        let input = OrganizerUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(input.manualLocation?.formattedAddressI18n)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? nil : localized
+    }
+
+    var locationPointFormattedAddressSummary: String? {
+        let input = OrganizerUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(input.locationPoint?.formattedAddressI18n)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? nil : localized
+    }
+
+    var locationPointManualSetAddressSummary: String? {
+        let input = OrganizerUploadMappers.createInput(from: draft)
+        let localized = localizedUploadAddressText(input.locationPoint?.manualSetAddressI18n)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return localized.isEmpty ? nil : localized
+    }
+
+    var coordinateSummary: String? {
+        guard let latitude = draft.latitude, let longitude = draft.longitude else { return nil }
+        return String(format: "%.6f, %.6f", latitude, longitude)
+    }
+
+    var venueDisplaySummary: String? {
+        let input = OrganizerUploadMappers.createInput(from: draft)
+        let venue = resolveEventVenueDisplayAddressText(
+            language: AppLanguagePreference.current.effectiveLanguage,
+            manualLocation: nil,
+            locationPoint: input.locationPoint
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return venue.isEmpty ? nil : venue
+    }
+
     var validationIssues: [OrganizerUploadValidationIssue] {
         OrganizerUploadValidation.issues(for: draft)
     }
@@ -122,6 +158,36 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
         draft.dirty = true
         saveDraft(immediate: false)
         scheduleSimilarBrandSearch(for: value)
+    }
+
+    func applyLocationPickerResult(_ result: EventLocationPickerResult) {
+        draft.latitude = result.latitude
+        draft.longitude = result.longitude
+        draft.pickedMapAddress = result.displayAddress
+        draft.pickedPlaceName = result.placeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        draft.locationPoint = nil
+
+        if let city = result.city?.trimmingCharacters(in: .whitespacesAndNewlines), !city.isEmpty,
+           draft.city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.city = city
+        }
+        if let country = result.country?.trimmingCharacters(in: .whitespacesAndNewlines), !country.isEmpty,
+           draft.country.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.country = country
+        }
+
+        draft.dirty = true
+        saveDraft()
+    }
+
+    func clearLocationBinding() {
+        draft.latitude = nil
+        draft.longitude = nil
+        draft.pickedMapAddress = ""
+        draft.pickedPlaceName = ""
+        draft.locationPoint = nil
+        draft.dirty = true
+        saveDraft()
     }
 
     func saveDraft(immediate: Bool = true) {
@@ -779,6 +845,16 @@ final class OrganizerUploadFlowViewModel: ObservableObject {
 
     private func stepIndex(for step: OrganizerUploadStep) -> Int {
         OrganizerUploadStep.allCases.firstIndex(of: step) ?? 0
+    }
+
+    private func localizedUploadAddressText(_ text: WebBiText?) -> String {
+        let language = AppLanguagePreference.current.effectiveLanguage
+        let localized = text?.text(for: language).trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !localized.isEmpty { return localized }
+        let zh = text?.zh.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !zh.isEmpty { return zh }
+        let en = text?.en.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return en
     }
 }
 

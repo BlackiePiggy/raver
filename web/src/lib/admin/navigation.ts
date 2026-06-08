@@ -3,6 +3,7 @@ import {
   Activity,
   Bell,
   BookCheck,
+  BrainCircuit,
   CircleUserRound,
   Disc3,
   FileWarning,
@@ -207,6 +208,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: 'Coze 与环境替换',
         icon: SlidersHorizontal,
         visible: notificationVisible,
+        matchMode: 'prefix',
+      },
+      {
+        href: '/admin/quiz',
+        label: '答题系统',
+        description: '题库、配置与次数覆盖',
+        icon: BrainCircuit,
+        visible: opsVisible,
         matchMode: 'prefix',
       },
       {

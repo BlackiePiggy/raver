@@ -96,6 +96,13 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
     var aliases: [String] = []
     var country: String = ""
     var city: String = ""
+    var detailAddress: EventUploadLocalizedFields = EventUploadLocalizedFields()
+    var manualSetAddress: EventUploadLocalizedFields = EventUploadLocalizedFields()
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var pickedMapAddress: String = ""
+    var pickedPlaceName: String = ""
+    var locationPoint: WebEventLocationPoint? = nil
     var foundedYear: String = ""
     var frequency: String = ""
     var tagline: String = ""
@@ -291,6 +298,26 @@ struct OrganizerUploadDraft: Identifiable, Hashable, Codable {
         draft.aliases = brand.aliases
         draft.country = brand.country
         draft.city = brand.city
+        let detailAddressText = brand.manualLocation?.detailAddressI18n ?? brand.manualLocation?.formattedAddressI18n
+        draft.detailAddress = EventUploadLocalizedFields(
+            zh: detailAddressText?.zh ?? "",
+            en: detailAddressText?.en ?? "",
+            ja: detailAddressText?.ja ?? "",
+            enFull: detailAddressText?.enFull ?? ""
+        )
+        draft.manualSetAddress = EventUploadLocalizedFields(
+            zh: brand.locationPoint?.manualSetAddressI18n?.zh ?? "",
+            en: brand.locationPoint?.manualSetAddressI18n?.en ?? "",
+            ja: brand.locationPoint?.manualSetAddressI18n?.ja ?? "",
+            enFull: brand.locationPoint?.manualSetAddressI18n?.enFull ?? ""
+        )
+        draft.latitude = brand.locationPoint?.location?.lat
+        draft.longitude = brand.locationPoint?.location?.lng
+        draft.pickedMapAddress = brand.locationPoint?.formattedAddressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? brand.locationPoint?.addressI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            ?? ""
+        draft.pickedPlaceName = brand.locationPoint?.nameI18n?.text(for: AppLanguagePreference.current.effectiveLanguage) ?? ""
+        draft.locationPoint = brand.locationPoint
         draft.foundedYear = brand.foundedYear
         draft.frequency = brand.frequency
         draft.tagline = brand.tagline

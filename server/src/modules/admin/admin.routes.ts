@@ -1,4 +1,5 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
+import multer from 'multer';
 import { authenticate, AuthRequest } from '../../middleware/auth';
 import checkinsV2Routes from '../../routes/checkins-v2.routes';
 import notificationCenterRoutes from '../../routes/notification-center.routes';
@@ -9,13 +10,23 @@ import accountEnforcementRoutes from '../../routes/account-enforcement.routes';
 import { adminAuditService } from './admin-audit.service';
 import { requireAdmin, requireAdminOrOperator } from './admin-auth.policy';
 import { adminMediaAssetsService } from './admin-media-assets.service';
+import { adminQuizService, AdminQuizError } from './admin-quiz.service';
 import { adminStatusService } from './admin-status.service';
 import { accountEnforcementService } from '../../services/account-enforcement.service';
 import { accountDeletionService } from '../../services/account-deletion.service';
 import { authAuditService, type AuthAuditOutcome } from '../../services/auth-audit.service';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, QuizAttemptMode, QuizQuestionStatus, QuizQuestionType } from '@prisma/client';
 import crypto from 'crypto';
+import path from 'path';
 import { notificationCenterService } from '../../modules/notifications';
+import { mediaAssetService } from '../../services/media-asset.service';
+import {
+  buildMediaObjectKey,
+  isObjectStorageConfigured,
+  saveBufferToLocalUploads,
+  shouldAllowLocalUploadFallback,
+  uploadBufferToObjectStorage,
+} from '../../services/media-storage.service';
 import { verifyReauthProof } from '../../utils/auth';
 import { normalizeTriTextPayload, resolveLocalizedText } from '../../utils/i18n';
 import { EventVisibility } from '../../utils/event-status';
@@ -27,6 +38,17 @@ import {
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+const quizImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('Only image files are allowed'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 const forwardToLegacyRouter = (legacyPrefix: string, legacyRouter: RequestHandler): RequestHandler => {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -226,6 +248,24 @@ const normalizeStringArray = (value: unknown, maxItems: number): string[] => {
 const maskIdentifier = (value: string): string => {
   if (value.length <= 6) return `${value.slice(0, 1)}***`;
   return `${value.slice(0, 3)}***${value.slice(-3)}`;
+};
+
+const normalizeQuizAttemptMode = (value: unknown): QuizAttemptMode => {
+  if (value === QuizAttemptMode.custom_limit) return QuizAttemptMode.custom_limit;
+  if (value === QuizAttemptMode.unlimited) return QuizAttemptMode.unlimited;
+  return QuizAttemptMode.default;
+};
+
+const normalizeQuizQuestionStatus = (value: unknown): QuizQuestionStatus | null => {
+  if (value === QuizQuestionStatus.draft) return QuizQuestionStatus.draft;
+  if (value === QuizQuestionStatus.active) return QuizQuestionStatus.active;
+  if (value === QuizQuestionStatus.archived) return QuizQuestionStatus.archived;
+  return null;
+};
+
+const normalizeQuizQuestionType = (value: unknown): QuizQuestionType | null => {
+  if (value === QuizQuestionType.single_choice) return QuizQuestionType.single_choice;
+  return null;
 };
 
 const mapAdminUser = (user: {
@@ -1467,6 +1507,301 @@ router.get('/status', authenticate, requireAdminOrOperator, async (req: AuthRequ
     res.status(500).json({ error: 'Failed to fetch admin status' });
   }
 });
+
+router.get('/quiz/config', authenticate, requireAdminOrOperator, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const config = await adminQuizService.getConfig();
+    res.json({ success: true, config });
+  } catch (error) {
+    console.error('Fetch admin quiz config error:', error);
+    res.status(500).json({ error: 'Failed to fetch quiz config' });
+  }
+});
+
+router.patch('/quiz/config', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const config = await adminQuizService.updateConfig({
+      isEnabled: typeof body.isEnabled === 'boolean' ? body.isEnabled : undefined,
+      questionCount: typeof body.questionCount === 'number' ? body.questionCount : undefined,
+      passCorrectCount: typeof body.passCorrectCount === 'number' ? body.passCorrectCount : undefined,
+      dailyAttemptLimit: typeof body.dailyAttemptLimit === 'number' ? body.dailyAttemptLimit : undefined,
+      defaultTimeLimitSec: typeof body.defaultTimeLimitSec === 'number' ? body.defaultTimeLimitSec : undefined,
+      dailyLimitTimeZone: typeof body.dailyLimitTimeZone === 'string' ? body.dailyLimitTimeZone : undefined,
+      allowRetakeAfterPass:
+        typeof body.allowRetakeAfterPass === 'boolean' ? body.allowRetakeAfterPass : undefined,
+      allowRestartDuringSession:
+        typeof body.allowRestartDuringSession === 'boolean' ? body.allowRestartDuringSession : undefined,
+    });
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.config.update',
+      targetType: 'quiz_config',
+      targetId: config.id,
+      detail: config,
+    });
+    res.json({ success: true, config });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Update admin quiz config error:', error);
+    res.status(500).json({ error: 'Failed to update quiz config' });
+  }
+});
+
+router.get('/quiz/questions', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const result = await adminQuizService.listQuestions({
+      q: firstQueryValue(query.q),
+      status: firstQueryValue(query.status),
+      page: Number(firstQueryValue(query.page) || 1),
+      limit: Number(firstQueryValue(query.limit) || 20),
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('List admin quiz questions error:', error);
+    res.status(500).json({ error: 'Failed to fetch quiz questions' });
+  }
+});
+
+router.post('/quiz/questions', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const item = await adminQuizService.createQuestion({
+      status: normalizeQuizQuestionStatus(body.status),
+      type: normalizeQuizQuestionType(body.type),
+      stemText: body.stemText as string | null | undefined,
+      stemImageUrl: body.stemImageUrl as string | null | undefined,
+      correctOptionId: body.correctOptionId as string | null | undefined,
+      timeLimitSec: typeof body.timeLimitSec === 'number' ? body.timeLimitSec : null,
+      sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : null,
+      tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
+      difficulty: body.difficulty as string | null | undefined,
+      explanation: body.explanation as string | null | undefined,
+      options: Array.isArray(body.options) ? (body.options as any[]) : [],
+    });
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.question.create',
+      targetType: 'quiz_question',
+      targetId: item.id,
+      detail: { status: item.status, type: item.type },
+    });
+    res.status(201).json({ success: true, item });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Create admin quiz question error:', error);
+    res.status(500).json({ error: 'Failed to create quiz question' });
+  }
+});
+
+router.get('/quiz/questions/:id', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const item = await adminQuizService.getQuestion(String(req.params.id || '').trim());
+    res.json({ success: true, item });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Fetch admin quiz question error:', error);
+    res.status(500).json({ error: 'Failed to fetch quiz question' });
+  }
+});
+
+router.patch('/quiz/questions/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const item = await adminQuizService.updateQuestion(String(req.params.id || '').trim(), {
+      status: normalizeQuizQuestionStatus(body.status),
+      type: normalizeQuizQuestionType(body.type),
+      stemText: body.stemText as string | null | undefined,
+      stemImageUrl: body.stemImageUrl as string | null | undefined,
+      correctOptionId: body.correctOptionId as string | null | undefined,
+      timeLimitSec: typeof body.timeLimitSec === 'number' ? body.timeLimitSec : null,
+      sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : null,
+      tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
+      difficulty: body.difficulty as string | null | undefined,
+      explanation: body.explanation as string | null | undefined,
+      options: Array.isArray(body.options) ? (body.options as any[]) : [],
+    });
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.question.update',
+      targetType: 'quiz_question',
+      targetId: item.id,
+      detail: { status: item.status, type: item.type },
+    });
+    res.json({ success: true, item });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Update admin quiz question error:', error);
+    res.status(500).json({ error: 'Failed to update quiz question' });
+  }
+});
+
+router.post('/quiz/questions/:id/archive', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const item = await adminQuizService.archiveQuestion(String(req.params.id || '').trim());
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.question.archive',
+      targetType: 'quiz_question',
+      targetId: item.id,
+      detail: { status: item.status },
+    });
+    res.json({ success: true, item });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Archive admin quiz question error:', error);
+    res.status(500).json({ error: 'Failed to archive quiz question' });
+  }
+});
+
+router.get('/quiz/user-overrides', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const query = req.query as Request['query'];
+    const result = await adminQuizService.listUserOverrides({
+      q: firstQueryValue(query.q),
+      page: Number(firstQueryValue(query.page) || 1),
+      limit: Number(firstQueryValue(query.limit) || 20),
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('List admin quiz user overrides error:', error);
+    res.status(500).json({ error: 'Failed to fetch quiz user overrides' });
+  }
+});
+
+router.patch('/quiz/users/:userId/override', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const item = await adminQuizService.updateUserOverride({
+      userId: String(req.params.userId || '').trim(),
+      attemptMode: normalizeQuizAttemptMode(body.attemptMode),
+      dailyAttemptLimitOverride:
+        typeof body.dailyAttemptLimitOverride === 'number' ? body.dailyAttemptLimitOverride : null,
+      note: body.note as string | null | undefined,
+      updatedBy: req.user?.userId ?? null,
+    });
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.user_override.update',
+      targetType: 'quiz_user_policy_override',
+      targetId: item.id,
+      detail: {
+        userId: item.userId,
+        attemptMode: item.attemptMode,
+        dailyAttemptLimitOverride: item.dailyAttemptLimitOverride,
+      },
+    });
+    res.json({ success: true, item });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Update admin quiz user override error:', error);
+    res.status(500).json({ error: 'Failed to update quiz user override' });
+  }
+});
+
+router.post(
+  '/quiz/upload-image',
+  authenticate,
+  requireAdmin,
+  quizImageUpload.single('image'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file) {
+        res.status(400).json({ error: 'No file uploaded' });
+        return;
+      }
+      if (!file.buffer) {
+        res.status(400).json({ error: 'Invalid upload payload' });
+        return;
+      }
+      if (!isObjectStorageConfigured() && !shouldAllowLocalUploadFallback()) {
+        res.status(503).json({ error: 'Object storage is not configured for uploads' });
+        return;
+      }
+
+      const ownerKey = req.user?.userId || 'admin-quiz';
+      const uploaded = isObjectStorageConfigured()
+        ? await uploadBufferToObjectStorage({
+            buffer: file.buffer,
+            mimeType: file.mimetype || 'image/jpeg',
+            objectKey: buildMediaObjectKey(
+              process.env.OSS_LEARN_RANKINGS_PREFIX || 'wen-jasonlee/quiz',
+              ownerKey,
+              'question-image',
+              file.originalname || 'quiz-image.jpg',
+              file.mimetype || 'image/jpeg'
+            ),
+          })
+        : await saveBufferToLocalUploads({
+            buffer: file.buffer,
+            localDir: path.join(process.cwd(), 'uploads', 'quiz'),
+            publicSubdir: 'quiz',
+            originalName: file.originalname || 'quiz-image.jpg',
+            mimeType: file.mimetype || 'image/jpeg',
+          });
+
+      const asset = await mediaAssetService.register({
+        ownerType: 'quiz',
+        ownerId: null,
+        purpose: 'question_image',
+        provider: 'objectKey' in uploaded ? 'oss' : 'local',
+        objectKey: 'objectKey' in uploaded ? uploaded.objectKey : null,
+        url: uploaded.url,
+        mimeType: file.mimetype || 'image/jpeg',
+        sizeBytes: file.size,
+        uploadedById: req.user?.userId || null,
+        metadata: {
+          originalName: file.originalname,
+          source: 'api/admin/v1/quiz/upload-image',
+        },
+      });
+
+      res.status(201).json({
+        assetId: asset.id,
+        url: uploaded.url,
+        fileName:
+          'fileName' in uploaded
+            ? uploaded.fileName
+            : uploaded.objectKey.split('/').pop() || file.originalname || 'quiz-image.jpg',
+        originalUrl: uploaded.url,
+        originalName: file.originalname,
+        size: file.size,
+        mimeType: file.mimetype || 'image/jpeg',
+      });
+    } catch (error) {
+      console.error('Upload admin quiz image error:', error);
+      res.status(500).json({ error: 'Failed to upload quiz image' });
+    }
+  }
+);
 
 router.get('/media-assets/summary', authenticate, requireAdminOrOperator, async (_req: AuthRequest, res: Response): Promise<void> => {
   try {

@@ -660,7 +660,7 @@ struct EventUploadFlowView: View {
             )
 
             uploadTextField(
-                title: LT("鏉ユ簮骞冲彴", "Source Provider", "鏉ユ簮骞冲彴"),
+                title: LT("来源平台", "Source Provider", "ソース元"),
                 text: sourceProviderBinding
             )
 
@@ -2749,6 +2749,37 @@ struct EventUploadFlowView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button {
+                    Task { await viewModel.applyBoundOrganizerAddress() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if viewModel.isApplyingOrganizerAddress {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.caption.weight(.bold))
+                        }
+                        Text(LT("使用主办方地址", "Use Organizer Address", "主催者住所を使う"))
+                            .font(.caption.weight(.semibold))
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        LinearGradient(
+                            colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.78)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isApplyingOrganizerAddress)
             }
 
             if !viewModel.organizerSearchResults.isEmpty {
