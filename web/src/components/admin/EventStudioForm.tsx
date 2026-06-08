@@ -3564,6 +3564,53 @@ export default function EventStudioForm({
                   {errors.socialLinks && <div className="mt-1 text-xs text-red-600">{errors.socialLinks}</div>}
                 </div>
               </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <div className="mb-1 text-[10px] text-gray-400">当前状态</div>
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${derivedStatusMeta.toneClassName}`}>
+                    {derivedStatusMeta.label}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <div className="mb-1.5 text-[10px] text-gray-400">取消状态</div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateDraft('isCancelled', false)}
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${!isCancelledDraft ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                    >
+                      正常
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateDraft('isCancelled', true)}
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${isCancelledDraft ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <div className="mb-1.5 text-[10px] text-gray-400">可见性</div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateDraft('visibility', 'visible')}
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${visibilityDraft === 'visible' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                    >
+                      可见
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateDraft('visibility', 'hidden')}
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${visibilityDraft === 'hidden' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+                    >
+                      隐藏
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3649,56 +3696,6 @@ export default function EventStudioForm({
                   </div>
                 )}
 
-                {/* Status / cancel / visibility cards – condensed inline */}
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {/* Derived status */}
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
-                    <div className="text-[10px] text-gray-400 mb-1">当前状态</div>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${derivedStatusMeta.toneClassName}`}>
-                      {derivedStatusMeta.label}
-                    </span>
-                  </div>
-                  {/* Cancel */}
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
-                    <div className="text-[10px] text-gray-400 mb-1.5">取消状态</div>
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => updateDraft('isCancelled', false)}
-                        className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${!isCancelledDraft ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-                      >
-                        正常
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateDraft('isCancelled', true)}
-                        className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${isCancelledDraft ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                  {/* Visibility */}
-                  <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
-                    <div className="text-[10px] text-gray-400 mb-1.5">可见性</div>
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => updateDraft('visibility', 'visible')}
-                        className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${visibilityDraft === 'visible' ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-                      >
-                        可见
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateDraft('visibility', 'hidden')}
-                        className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${visibilityDraft === 'hidden' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-                      >
-                        隐藏
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
           </div>
 
@@ -3732,6 +3729,11 @@ export default function EventStudioForm({
                             Provider: {draft.locationPoint.provider} · sourceMode: {draft.locationPoint.sourceMode || 'pin_drag'}
                           </div>
                         ) : null}
+                        {draft.latitude || draft.longitude ? (
+                          <div className="mt-2 text-xs text-gray-400 font-mono">
+                            {draft.latitude || '—'}, {draft.longitude || '—'}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 flex-col gap-2">
                         <button
@@ -3755,31 +3757,6 @@ export default function EventStudioForm({
                             清除地图绑定
                           </button>
                         ) : null}
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <div className="mb-1.5 text-xs text-gray-500">地图地点名</div>
-                        <AdminCountedControl count={countText(draft.pickedPlaceName)} maxLength={200}>
-                          <input
-                            value={draft.pickedPlaceName}
-                            onChange={(e) => updateDraft('pickedPlaceName', e.target.value)}
-                            className={compactInputClassName}
-                            placeholder="自动回填"
-                          />
-                        </AdminCountedControl>
-                      </div>
-                      <div>
-                        <div className="mb-1.5 text-xs text-gray-500">地图地址</div>
-                        <AdminCountedControl count={countText(draft.pickedMapAddress)} maxLength={INPUT_LIMITS.event.detailAddress}>
-                          <input
-                            value={draft.pickedMapAddress}
-                            readOnly
-                            className={`${compactInputClassName} bg-black/[0.02] text-black/60 cursor-default`}
-                            placeholder="地图选点后自动回填"
-                          />
-                        </AdminCountedControl>
                       </div>
                     </div>
 
@@ -3810,28 +3787,28 @@ export default function EventStudioForm({
 
                 <div className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div className="md:col-span-2">
-                      <div className="mb-1.5 text-xs text-gray-500">详细地址</div>
+                    <div>
+                      <div className="mb-1.5 text-xs text-gray-500">国家</div>
                       <div className="admin-localized-field-shell">
-                        <AdminCountedControl count={countText(draft.detailAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                        <AdminCountedControl count={countText(draft.country.zh)} maxLength={INPUT_LIMITS.event.country}>
                           <input
-                            value={draft.detailAddress.zh}
-                            onChange={(e) => updateLocalizedField('detailAddress', 'zh', e.target.value)}
+                            value={draft.country.zh}
+                            onChange={(e) => updateLocalizedField('country', 'zh', e.target.value)}
                             className={compactInputClassName}
-                            placeholder="活动详细地址"
-                            maxLength={INPUT_LIMITS.event.detailAddress}
+                            placeholder="中国"
+                            maxLength={INPUT_LIMITS.event.country}
                           />
                         </AdminCountedControl>
                         <button
                           type="button"
-                          onClick={() => setActiveLocalizedField({ key: 'detailAddress', label: '详细地址', kind: 'textarea' })}
+                          onClick={() => setActiveLocalizedField({ key: 'country', label: '国家', kind: 'input', clearable: true })}
                           className="admin-localized-field-trigger"
                           title="多语言编辑"
                         >
                           <Languages className="h-4 w-4" strokeWidth={2.2} />
                         </button>
                       </div>
-                      {errors.detailAddress ? <div className="mt-1 text-xs text-red-600">{errors.detailAddress}</div> : null}
+                      {errors.country ? <div className="mt-1 text-xs text-red-600">{errors.country}</div> : null}
                     </div>
 
                     <div>
@@ -3858,28 +3835,28 @@ export default function EventStudioForm({
                       {errors.city ? <div className="mt-1 text-xs text-red-600">{errors.city}</div> : null}
                     </div>
 
-                    <div>
-                      <div className="mb-1.5 text-xs text-gray-500">国家</div>
+                    <div className="md:col-span-2">
+                      <div className="mb-1.5 text-xs text-gray-500">详细地址</div>
                       <div className="admin-localized-field-shell">
-                        <AdminCountedControl count={countText(draft.country.zh)} maxLength={INPUT_LIMITS.event.country}>
+                        <AdminCountedControl count={countText(draft.detailAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
                           <input
-                            value={draft.country.zh}
-                            onChange={(e) => updateLocalizedField('country', 'zh', e.target.value)}
+                            value={draft.detailAddress.zh}
+                            onChange={(e) => updateLocalizedField('detailAddress', 'zh', e.target.value)}
                             className={compactInputClassName}
-                            placeholder="中国"
-                            maxLength={INPUT_LIMITS.event.country}
+                            placeholder="活动详细地址"
+                            maxLength={INPUT_LIMITS.event.detailAddress}
                           />
                         </AdminCountedControl>
                         <button
                           type="button"
-                          onClick={() => setActiveLocalizedField({ key: 'country', label: '国家', kind: 'input', clearable: true })}
+                          onClick={() => setActiveLocalizedField({ key: 'detailAddress', label: '详细地址', kind: 'textarea' })}
                           className="admin-localized-field-trigger"
                           title="多语言编辑"
                         >
                           <Languages className="h-4 w-4" strokeWidth={2.2} />
                         </button>
                       </div>
-                      {errors.country ? <div className="mt-1 text-xs text-red-600">{errors.country}</div> : null}
+                      {errors.detailAddress ? <div className="mt-1 text-xs text-red-600">{errors.detailAddress}</div> : null}
                     </div>
 
                     <div className="md:col-span-2 relative">
@@ -3943,7 +3920,7 @@ export default function EventStudioForm({
                 </div>
               </div>
 
-              <div className="grid gap-3 xl:grid-cols-[1.2fr_1.2fr_1fr_0.7fr_0.7fr]">
+              <div className="grid gap-3 xl:grid-cols-[1.3fr_1.3fr_1fr]">
                 <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终活动地址</div>
                   {firstFilledText(manualLocationFormattedAddress.zh, manualLocationFormattedAddress.en) || '—'}
@@ -3964,26 +3941,6 @@ export default function EventStudioForm({
                 <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终场地展示地址</div>
                   {firstFilledText(draft.manualSetAddress.zh, draft.manualSetAddress.en, draft.manualSetAddress.ja, draft.manualSetAddress.enFull) || '未填写时回退到地图地址'}
-                </div>
-
-                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">纬度（可选）</div>
-                  <input
-                    value={draft.latitude}
-                    onChange={(e) => updateDraft('latitude', e.target.value)}
-                    className={compactInputClassName}
-                    placeholder="7.9913"
-                  />
-                </div>
-
-                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">经度（可选）</div>
-                  <input
-                    value={draft.longitude}
-                    onChange={(e) => updateDraft('longitude', e.target.value)}
-                    className={compactInputClassName}
-                    placeholder="98.3064"
-                  />
                 </div>
               </div>
             </div>
