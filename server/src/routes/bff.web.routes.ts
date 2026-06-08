@@ -1890,6 +1890,7 @@ const normalizeEventLocationPointPayload = (
     src.formattedAddressI18n ?? src.formattedAddress ?? src.addressI18n ?? src.address,
     ''
   );
+  const manualSetAddressI18n = normalizeEventBiText(src.manualSetAddressI18n, '');
 
   const countryCodeRaw = normalizeEventText(src.countryCode).toUpperCase();
   const countryCode = countryCodeRaw.replace(/[^A-Z]/g, '').slice(0, 3);
@@ -1922,6 +1923,7 @@ const normalizeEventLocationPointPayload = (
     nameI18n: nameI18n ?? { zh: '', en: '' },
     addressI18n: addressI18n ?? { zh: '', en: '' },
     formattedAddressI18n: formattedAddressI18n ?? { zh: '', en: '' },
+    manualSetAddressI18n: manualSetAddressI18n ?? null,
     city: normalizeEventText(src.city),
     district: normalizeEventText(src.district),
     province: normalizeEventText(src.province),
