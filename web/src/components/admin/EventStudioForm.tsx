@@ -121,6 +121,8 @@ const IMAGE_ZONE_CONFIG: Array<{
 const textInputClassName = 'admin-studio-input';
 const selectInputClassName = 'admin-studio-select';
 const textAreaClassName = 'admin-studio-textarea min-h-28';
+const compactInputClassName = `${textInputClassName} h-11`;
+const compactTextAreaClassName = 'admin-studio-textarea min-h-[104px]';
 
 const EVENT_DERIVED_STATUS_META: Record<
   EventStudioDraft['derivedStatus'],
@@ -3520,7 +3522,21 @@ export default function EventStudioForm({
                 </div>
               </div>
 
-              {/* Row 3: 参考链接 textarea (left) + 社交链接 JSON textarea (right) */}
+              {/* Row 3: 活动描述 */}
+              <div>
+                <div className="mb-1.5 text-xs text-gray-500">活动描述</div>
+                <AdminCountedControl count={countText(draft.description, true)} maxLength={INPUT_LIMITS.event.description} multiline>
+                  <textarea
+                    value={draft.description}
+                    onChange={(e) => updateDraft('description', e.target.value)}
+                    className={compactTextAreaClassName}
+                    placeholder="填写活动简介、风格或亮点说明"
+                    maxLength={INPUT_LIMITS.event.description}
+                  />
+                </AdminCountedControl>
+              </div>
+
+              {/* Row 4: 参考链接 textarea (left) + 社交链接 JSON textarea (right) */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="mb-1.5 text-xs text-gray-500">参考链接（每行一个，可选）</div>
@@ -3528,7 +3544,7 @@ export default function EventStudioForm({
                     <textarea
                       value={draft.referenceLinksText}
                       onChange={(e) => updateDraft('referenceLinksText', e.target.value)}
-                      className={textAreaClassName}
+                      className={compactTextAreaClassName}
                       placeholder={'https://example.com/page-1\nhttps://example.com/page-2'}
                       maxLength={INPUT_LIMITS.event.referenceLinksText}
                     />
@@ -3540,7 +3556,7 @@ export default function EventStudioForm({
                     <textarea
                       value={draft.socialLinksText}
                       onChange={(e) => updateDraft('socialLinksText', e.target.value)}
-                      className={textAreaClassName}
+                      className={compactTextAreaClassName}
                       placeholder='[{"type":"instagram","url":"https://instagram.com/example"}]'
                       maxLength={INPUT_LIMITS.event.socialLinksText}
                     />
@@ -3551,10 +3567,8 @@ export default function EventStudioForm({
             </div>
           </div>
 
-          {/* ══ Section 2: 主办方绑定 + 活动描述 ══════════════════════════════ */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Left: 主办方绑定 */}
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          {/* ══ Section 2: 主办方绑定 ════════════════════════════════════════ */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
               <div className="flex items-center gap-2.5 border-b border-gray-100 px-6 py-4">
                 <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-300 text-xs font-bold text-gray-500">
                   ②
@@ -3686,29 +3700,6 @@ export default function EventStudioForm({
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Right: 活动描述 */}
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center gap-2.5 border-b border-gray-100 px-6 py-4">
-                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-300 text-xs font-bold text-gray-500">
-                  ③
-                </div>
-                <h3 className="text-sm font-bold text-gray-900">活动描述</h3>
-              </div>
-              <div className="px-6 py-5 h-[calc(100%-57px)]">
-                <AdminCountedControl count={countText(draft.description, true)} maxLength={INPUT_LIMITS.event.description} multiline>
-                  <textarea
-                    value={draft.description}
-                    onChange={(e) => updateDraft('description', e.target.value)}
-                    className="admin-studio-textarea w-full"
-                    style={{ minHeight: '220px' }}
-                    placeholder="填写活动简介、风格或亮点说明"
-                    maxLength={INPUT_LIMITS.event.description}
-                  />
-                </AdminCountedControl>
-              </div>
-            </div>
           </div>
 
           {/* ══ Section 3: 地点与时区 ══════════════════════════════════════════ */}
@@ -3723,287 +3714,276 @@ export default function EventStudioForm({
               <span className="ml-2 text-xs text-gray-400">这里完成地图选点、城市国家回填和时区确认。搜索时区后必须从候选列表中点选确认。</span>
             </div>
 
-            {/* 4-column grid */}
-            <div className="grid grid-cols-4 gap-0 divide-x divide-gray-100">
+            <div className="space-y-5 px-6 py-5">
+              <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-gray-700">活动地点</div>
+                        <div className="mt-2 text-sm leading-relaxed text-gray-600">
+                          {detailAddressDisplay || '还没有地点地址'}
+                        </div>
+                        <div className="mt-2 text-xs text-gray-400">
+                          地图选点将通过当前页内的 legacy 浮窗完成，确认后自动回填当前表单。
+                        </div>
+                        {draft.locationPoint?.provider ? (
+                          <div className="mt-2 text-[10px] text-gray-400">
+                            Provider: {draft.locationPoint.provider} · sourceMode: {draft.locationPoint.sourceMode || 'pin_drag'}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowLocationPicker(true)}
+                          className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-colors"
+                        >
+                          {draft.latitude && draft.longitude ? '重新地图选点' : '地图选点'}
+                        </button>
+                        {(draft.latitude || draft.longitude || draft.pickedMapAddress || draft.pickedPlaceName) ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDraftState(
+                                (cur) => ({ ...cur, latitude: '', longitude: '', locationPoint: null, pickedPlaceName: '', pickedMapAddress: '' }),
+                                { clearErrorKeys: ['detailAddress', 'city'] }
+                              )
+                            }
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            清除地图绑定
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
 
-              {/* Col 1: 活动地点 */}
-              <div className="px-5 py-5 space-y-3">
-                <div className="text-xs font-semibold text-gray-700">活动地点</div>
-                <div className="text-sm leading-relaxed text-gray-600">
-                  {detailAddressDisplay || '还没有地点地址'}
-                </div>
-                {draft.latitude && draft.longitude && (
-                  <div className="text-xs text-gray-400 font-mono">
-                    {draft.latitude}, {draft.longitude}
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <div className="mb-1.5 text-xs text-gray-500">地图地点名</div>
+                        <AdminCountedControl count={countText(draft.pickedPlaceName)} maxLength={200}>
+                          <input
+                            value={draft.pickedPlaceName}
+                            onChange={(e) => updateDraft('pickedPlaceName', e.target.value)}
+                            className={compactInputClassName}
+                            placeholder="自动回填"
+                          />
+                        </AdminCountedControl>
+                      </div>
+                      <div>
+                        <div className="mb-1.5 text-xs text-gray-500">地图地址</div>
+                        <AdminCountedControl count={countText(draft.pickedMapAddress)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                          <input
+                            value={draft.pickedMapAddress}
+                            readOnly
+                            className={`${compactInputClassName} bg-black/[0.02] text-black/60 cursor-default`}
+                            placeholder="地图选点后自动回填"
+                          />
+                        </AdminCountedControl>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-1.5 text-xs text-gray-500">场地展示地址（可选）</div>
+                      <div className="admin-localized-field-shell">
+                        <AdminCountedControl count={countText(draft.manualSetAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                          <input
+                            value={draft.manualSetAddress.zh}
+                            onChange={(e) => updateLocalizedField('manualSetAddress', 'zh', e.target.value)}
+                            className={compactInputClassName}
+                            placeholder="未填写时回退到地图地址"
+                            maxLength={INPUT_LIMITS.event.detailAddress}
+                          />
+                        </AdminCountedControl>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLocalizedField({ key: 'manualSetAddress', label: '场地展示地址', kind: 'textarea' })}
+                          className="admin-localized-field-trigger"
+                          title="多语言编辑"
+                        >
+                          <Languages className="h-4 w-4" strokeWidth={2.2} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                )}
-                {draft.locationPoint?.provider && (
-                  <div className="text-[10px] text-gray-400">
-                    Provider: {draft.locationPoint.provider} · sourceMode: {draft.locationPoint.sourceMode || 'pin_drag'}
-                  </div>
-                )}
-                <div className="text-xs text-gray-400">
-                  地图选点将通过当前页内的 legacy 浮窗完成，确认后自动回填当前表单。
                 </div>
-                <div className="flex flex-col gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowLocationPicker(true)}
-                    className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-800 transition-colors"
-                  >
-                    {draft.latitude && draft.longitude ? '重新地图选点' : '地图选点'}
-                  </button>
-                  {(draft.latitude || draft.longitude || draft.pickedMapAddress || draft.pickedPlaceName) && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateDraftState(
-                          (cur) => ({ ...cur, latitude: '', longitude: '', locationPoint: null, pickedPlaceName: '', pickedMapAddress: '' }),
-                          { clearErrorKeys: ['detailAddress', 'city'] }
-                        )
-                      }
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      清除地图绑定
-                    </button>
-                  )}
+
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <div className="mb-1.5 text-xs text-gray-500">详细地址</div>
+                      <div className="admin-localized-field-shell">
+                        <AdminCountedControl count={countText(draft.detailAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
+                          <input
+                            value={draft.detailAddress.zh}
+                            onChange={(e) => updateLocalizedField('detailAddress', 'zh', e.target.value)}
+                            className={compactInputClassName}
+                            placeholder="活动详细地址"
+                            maxLength={INPUT_LIMITS.event.detailAddress}
+                          />
+                        </AdminCountedControl>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLocalizedField({ key: 'detailAddress', label: '详细地址', kind: 'textarea' })}
+                          className="admin-localized-field-trigger"
+                          title="多语言编辑"
+                        >
+                          <Languages className="h-4 w-4" strokeWidth={2.2} />
+                        </button>
+                      </div>
+                      {errors.detailAddress ? <div className="mt-1 text-xs text-red-600">{errors.detailAddress}</div> : null}
+                    </div>
+
+                    <div>
+                      <div className="mb-1.5 text-xs text-gray-500">城市</div>
+                      <div className="admin-localized-field-shell">
+                        <AdminCountedControl count={countText(draft.city.zh)} maxLength={INPUT_LIMITS.event.city}>
+                          <input
+                            value={draft.city.zh}
+                            onChange={(e) => updateLocalizedField('city', 'zh', e.target.value)}
+                            className={compactInputClassName}
+                            placeholder="Shanghai"
+                            maxLength={INPUT_LIMITS.event.city}
+                          />
+                        </AdminCountedControl>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLocalizedField({ key: 'city', label: '城市', kind: 'input', clearable: true })}
+                          className="admin-localized-field-trigger"
+                          title="多语言编辑"
+                        >
+                          <Languages className="h-4 w-4" strokeWidth={2.2} />
+                        </button>
+                      </div>
+                      {errors.city ? <div className="mt-1 text-xs text-red-600">{errors.city}</div> : null}
+                    </div>
+
+                    <div>
+                      <div className="mb-1.5 text-xs text-gray-500">国家</div>
+                      <div className="admin-localized-field-shell">
+                        <AdminCountedControl count={countText(draft.country.zh)} maxLength={INPUT_LIMITS.event.country}>
+                          <input
+                            value={draft.country.zh}
+                            onChange={(e) => updateLocalizedField('country', 'zh', e.target.value)}
+                            className={compactInputClassName}
+                            placeholder="中国"
+                            maxLength={INPUT_LIMITS.event.country}
+                          />
+                        </AdminCountedControl>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLocalizedField({ key: 'country', label: '国家', kind: 'input', clearable: true })}
+                          className="admin-localized-field-trigger"
+                          title="多语言编辑"
+                        >
+                          <Languages className="h-4 w-4" strokeWidth={2.2} />
+                        </button>
+                      </div>
+                      {errors.country ? <div className="mt-1 text-xs text-red-600">{errors.country}</div> : null}
+                    </div>
+
+                    <div className="md:col-span-2 relative">
+                      <div className="mb-1.5 flex items-center justify-between gap-3">
+                        <div className="text-xs font-semibold text-gray-700">活动时区搜索</div>
+                        <div className={`text-xs ${draft.timeZoneSelection ? 'text-emerald-700' : 'text-gray-400'}`}>
+                          {draft.timeZoneSelection ? draft.timeZoneSelection.label : '还没有确认活动时区'}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          value={draft.timeZoneQuery}
+                          onChange={(e) => {
+                            updateDraft('timeZoneQuery', e.target.value);
+                            if (
+                              draft.timeZoneSelection &&
+                              e.target.value.trim() !== (draft.timeZoneSelection.cityAscii || draft.timeZoneSelection.city)
+                            ) {
+                              updateDraft('timeZoneSelection', null);
+                            }
+                          }}
+                          className={compactInputClassName}
+                          placeholder="输入城市，例如 Phuket"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void searchTimezones()}
+                          className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          {timezoneLoading ? '搜索中…' : '搜索时区'}
+                        </button>
+                      </div>
+                      {timezoneItems.length > 0 ? (
+                        <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-56 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 shadow-[0_14px_28px_rgba(15,23,42,0.10)]">
+                          <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">候选时区</div>
+                          <div className="space-y-1">
+                            {timezoneItems.map((item) => (
+                              <button
+                                key={`${item.city}-${item.exactProvince}-${item.country}-${item.timezone}`}
+                                type="button"
+                                onClick={() => {
+                                  updateDraftState(
+                                    (cur) => ({ ...rebaseEventStudioDatesPreservingWallDate(cur), timeZoneSelection: item, timeZoneQuery: item.cityAscii || item.city }),
+                                    { clearErrorKeys: ['timeZone'] }
+                                  );
+                                  setTimezoneItems([]);
+                                  setTimezoneError('');
+                                }}
+                                className="w-full rounded-lg border border-gray-100 bg-white px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {timezoneError ? <div className="mt-2 text-xs text-red-600">{timezoneError}</div> : null}
+                      {errors.timeZone ? <div className="mt-2 text-xs text-red-600">{errors.timeZone}</div> : null}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Col 2: 地点名称/详细地址/地图地址/城市/国家 */}
-              <div className="px-5 py-5 space-y-3">
-                {/* 地图地点名 */}
-                <div>
-                  <div className="mb-1.5 text-xs text-gray-500">地图地点名</div>
-                  <AdminCountedControl count={countText(draft.pickedPlaceName)} maxLength={200}>
-                    <input
-                      value={draft.pickedPlaceName}
-                      onChange={(e) => updateDraft('pickedPlaceName', e.target.value)}
-                      className={textInputClassName}
-                      placeholder="自动回填"
-                    />
-                  </AdminCountedControl>
-                </div>
-
-                {/* 详细地址 */}
-                <div>
-                  <div className="mb-1.5 text-xs text-gray-500">详细地址</div>
-                  <div className="admin-localized-field-shell">
-                    <AdminCountedControl count={countText(draft.detailAddress.zh)} maxLength={INPUT_LIMITS.event.detailAddress}>
-                      <input
-                        value={draft.detailAddress.zh}
-                        onChange={(e) => updateLocalizedField('detailAddress', 'zh', e.target.value)}
-                        className={textInputClassName}
-                        placeholder="活动详细地址"
-                        maxLength={INPUT_LIMITS.event.detailAddress}
-                      />
-                    </AdminCountedControl>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLocalizedField({ key: 'detailAddress', label: '详细地址', kind: 'textarea' })}
-                      className="admin-localized-field-trigger"
-                      title="多语言编辑"
-                    >
-                      <Languages className="h-4 w-4" strokeWidth={2.2} />
-                    </button>
-                  </div>
-                  {errors.detailAddress && <div className="mt-1 text-xs text-red-600">{errors.detailAddress}</div>}
-                </div>
-
-                {/* 地图地址（只读） */}
-                <div>
-                  <div className="mb-1.5 text-xs text-gray-500">地图地址</div>
-                  <AdminCountedControl count={countText(draft.pickedMapAddress)} maxLength={INPUT_LIMITS.event.detailAddress}>
-                    <input
-                      value={draft.pickedMapAddress}
-                      readOnly
-                      className={`${textInputClassName} bg-black/[0.02] text-black/60 cursor-default`}
-                      placeholder="地图选点后自动回填"
-                    />
-                  </AdminCountedControl>
-                </div>
-
-                {/* 城市 */}
-                <div>
-                  <div className="mb-1.5 text-xs text-gray-500">城市</div>
-                  <div className="admin-localized-field-shell">
-                    <AdminCountedControl count={countText(draft.city.zh)} maxLength={INPUT_LIMITS.event.city}>
-                      <input
-                        value={draft.city.zh}
-                        onChange={(e) => updateLocalizedField('city', 'zh', e.target.value)}
-                        className={textInputClassName}
-                        placeholder="Shanghai"
-                        maxLength={INPUT_LIMITS.event.city}
-                      />
-                    </AdminCountedControl>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLocalizedField({ key: 'city', label: '城市', kind: 'input', clearable: true })}
-                      className="admin-localized-field-trigger"
-                      title="多语言编辑"
-                    >
-                      <Languages className="h-4 w-4" strokeWidth={2.2} />
-                    </button>
-                  </div>
-                  {errors.city && <div className="mt-1 text-xs text-red-600">{errors.city}</div>}
-                </div>
-
-                {/* 国家 */}
-                <div>
-                  <div className="mb-1.5 text-xs text-gray-500">国家</div>
-                  <div className="admin-localized-field-shell">
-                    <AdminCountedControl count={countText(draft.country.zh)} maxLength={INPUT_LIMITS.event.country}>
-                      <input
-                        value={draft.country.zh}
-                        onChange={(e) => updateLocalizedField('country', 'zh', e.target.value)}
-                        className={textInputClassName}
-                        placeholder="中国"
-                        maxLength={INPUT_LIMITS.event.country}
-                      />
-                    </AdminCountedControl>
-                    <button
-                      type="button"
-                      onClick={() => setActiveLocalizedField({ key: 'country', label: '国家', kind: 'input', clearable: true })}
-                      className="admin-localized-field-trigger"
-                      title="多语言编辑"
-                    >
-                      <Languages className="h-4 w-4" strokeWidth={2.2} />
-                    </button>
-                  </div>
-                  {errors.country && <div className="mt-1 text-xs text-red-600">{errors.country}</div>}
-                </div>
-              </div>
-
-              {/* Col 3: 时区搜索 */}
-              <div className="px-5 py-5 space-y-3">
-                <div className="text-xs font-semibold text-gray-700">活动时区搜索</div>
-                <input
-                  value={draft.timeZoneQuery}
-                  onChange={(e) => {
-                    updateDraft('timeZoneQuery', e.target.value);
-                    if (
-                      draft.timeZoneSelection &&
-                      e.target.value.trim() !== (draft.timeZoneSelection.cityAscii || draft.timeZoneSelection.city)
-                    ) {
-                      updateDraft('timeZoneSelection', null);
-                    }
-                  }}
-                  className={textInputClassName}
-                  placeholder="输入城市，例如 Phuket"
-                />
-                <button
-                  type="button"
-                  onClick={() => void searchTimezones()}
-                  className="w-full rounded-lg border border-gray-200 bg-white py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  {timezoneLoading ? '搜索中…' : '搜索时区'}
-                </button>
-
-                {/* Selected timezone */}
-                <div
-                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium ${
-                    draft.timeZoneSelection
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                      : 'border-gray-200 bg-gray-50 text-gray-400'
-                  }`}
-                >
-                  {draft.timeZoneSelection ? draft.timeZoneSelection.label : '还没有确认活动时区'}
-                </div>
-
-                {/* Candidate list */}
-                {timezoneItems.length > 0 && (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {timezoneItems.map((item) => (
-                      <button
-                        key={`${item.city}-${item.exactProvince}-${item.country}-${item.timezone}`}
-                        type="button"
-                        onClick={() => {
-                          updateDraftState(
-                            (cur) => ({ ...rebaseEventStudioDatesPreservingWallDate(cur), timeZoneSelection: item, timeZoneQuery: item.cityAscii || item.city }),
-                            { clearErrorKeys: ['timeZone'] }
-                          );
-                          setTimezoneItems([]);
-                          setTimezoneError('');
-                        }}
-                        className="w-full rounded-lg border border-gray-100 bg-white px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {timezoneError && <div className="text-xs text-red-600">{timezoneError}</div>}
-                {errors.timeZone && <div className="text-xs text-red-600">{errors.timeZone}</div>}
-              </div>
-
-              {/* Col 4: 只读地址预览 + 纬经度 */}
-              <div className="px-5 py-5 space-y-3">
-                {/* 最终活动地址 */}
-                <div>
+              <div className="grid gap-3 xl:grid-cols-[1.2fr_1.2fr_1fr_0.7fr_0.7fr]">
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终活动地址</div>
-                  <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
-                    {firstFilledText(manualLocationFormattedAddress.zh, manualLocationFormattedAddress.en) || '—'}
-                    {manualLocationFormattedAddress.en && manualLocationFormattedAddress.en !== manualLocationFormattedAddress.zh && (
-                      <div className="mt-1 text-gray-400">EN: {manualLocationFormattedAddress.en}</div>
-                    )}
-                    {manualLocationFormattedAddress.ja && (
-                      <div className="mt-0.5 text-gray-400">JA: {manualLocationFormattedAddress.ja}</div>
-                    )}
-                  </div>
+                  {firstFilledText(manualLocationFormattedAddress.zh, manualLocationFormattedAddress.en) || '—'}
+                  {manualLocationFormattedAddress.en && manualLocationFormattedAddress.en !== manualLocationFormattedAddress.zh ? (
+                    <div className="mt-1 text-gray-400">EN: {manualLocationFormattedAddress.en}</div>
+                  ) : null}
+                  {manualLocationFormattedAddress.ja ? <div className="mt-0.5 text-gray-400">JA: {manualLocationFormattedAddress.ja}</div> : null}
                 </div>
 
-                {/* 最终地图格式化地址 */}
-                <div>
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终地图格式化地址</div>
-                  <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
-                    {firstFilledText(locationPointFormattedAddress.zh, locationPointFormattedAddress.en) || '—'}
-                    {locationPointFormattedAddress.en && locationPointFormattedAddress.en !== locationPointFormattedAddress.zh && (
-                      <div className="mt-1 text-gray-400">EN: {locationPointFormattedAddress.en}</div>
-                    )}
-                  </div>
+                  {firstFilledText(locationPointFormattedAddress.zh, locationPointFormattedAddress.en) || '—'}
+                  {locationPointFormattedAddress.en && locationPointFormattedAddress.en !== locationPointFormattedAddress.zh ? (
+                    <div className="mt-1 text-gray-400">EN: {locationPointFormattedAddress.en}</div>
+                  ) : null}
                 </div>
 
-                {/* 最终场地展示地址 */}
-                <div>
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">最终场地展示地址</div>
-                  <div className="admin-localized-field-shell">
-                    <input
-                      value={draft.manualSetAddress.zh}
-                      onChange={(e) => updateLocalizedField('manualSetAddress', 'zh', e.target.value)}
-                      className={textInputClassName}
-                      placeholder="未填写时回退到地图地址"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setActiveLocalizedField({ key: 'manualSetAddress', label: '场地展示地址', kind: 'textarea' })}
-                      className="admin-localized-field-trigger"
-                      title="多语言编辑"
-                    >
-                      <Languages className="h-4 w-4" strokeWidth={2.2} />
-                    </button>
-                  </div>
+                  {firstFilledText(draft.manualSetAddress.zh, draft.manualSetAddress.en, draft.manualSetAddress.ja, draft.manualSetAddress.enFull) || '未填写时回退到地图地址'}
                 </div>
 
-                {/* 纬度 / 经度 */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <div className="mb-1 text-xs text-gray-500">纬度（可选）</div>
-                    <input
-                      value={draft.latitude}
-                      onChange={(e) => updateDraft('latitude', e.target.value)}
-                      className={textInputClassName}
-                      placeholder="7.9913"
-                    />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs text-gray-500">经度（可选）</div>
-                    <input
-                      value={draft.longitude}
-                      onChange={(e) => updateDraft('longitude', e.target.value)}
-                      className={textInputClassName}
-                      placeholder="98.3064"
-                    />
-                  </div>
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">纬度（可选）</div>
+                  <input
+                    value={draft.latitude}
+                    onChange={(e) => updateDraft('latitude', e.target.value)}
+                    className={compactInputClassName}
+                    placeholder="7.9913"
+                  />
+                </div>
+
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">经度（可选）</div>
+                  <input
+                    value={draft.longitude}
+                    onChange={(e) => updateDraft('longitude', e.target.value)}
+                    className={compactInputClassName}
+                    placeholder="98.3064"
+                  />
                 </div>
               </div>
             </div>
