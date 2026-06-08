@@ -751,8 +751,16 @@ export default function EventLocationPickerModal({
                         <span>搜索候选</span>
                         <small>最多展示 10 条</small>
                       </div>
-                      <div className="event-location-picker-candidates" id="event-location-picker-candidates" />
+                      <div className="event-location-picker-candidates-wrap">
+                        <div className="event-location-picker-candidates" id="event-location-picker-candidates" />
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="event-location-picker-feedback">
+                    <span id="event-location-picker-status" className="event-location-picker-status">
+                      {runtimeError || (runtimeReady ? summaryText : '正在加载原生地图能力与 provider 配置...')}
+                    </span>
                   </div>
 
                   <div className="event-location-picker-bottom">
@@ -772,27 +780,18 @@ export default function EventLocationPickerModal({
                         <div>
                           <strong>{pointTitle(selectedPoint)}</strong>
                           <span>{pointAddress(selectedPoint)}</span>
+                          <em>{pointCoord(selectedPoint)}</em>
                         </div>
                       </div>
-                      {[
-                        ['坐标（经纬度）', pointCoord(selectedPoint)],
-                        ['标准地址', pointAddress(selectedPoint)],
-                        ['城市 / 区域', pointArea(selectedPoint)],
-                        ['国家 / 地区', selectedPoint?.countryCode || '-'],
-                        ['数据来源', providerLabel(selectedPoint?.provider || provider)],
-                        ['更新时间', pointUpdatedAt(selectedPoint)],
-                      ].map(([label, value]) => (
-                        <div className="event-location-selected-field" key={label}>
-                          <span>{label}</span>
-                          <strong>{value}</strong>
-                        </div>
-                      ))}
+                      <div className="event-location-selected-meta">
+                        <span>{pointArea(selectedPoint)}</span>
+                        <span>{selectedPoint?.countryCode || '-'}</span>
+                        <span>{providerLabel(selectedPoint?.provider || provider)}</span>
+                        <span>{pointUpdatedAt(selectedPoint)}</span>
+                      </div>
                     </div>
 
                     <div className="event-location-picker-footer">
-                      <span id="event-location-picker-status" className="event-location-picker-status">
-                        {runtimeError || (runtimeReady ? summaryText : '正在加载原生地图能力与 provider 配置...')}
-                      </span>
                       <button id="event-location-picker-cancel-btn" className="event-location-picker-btn" type="button">
                         取消
                       </button>
@@ -1038,7 +1037,7 @@ export default function EventLocationPickerModal({
           min-height: 0;
           display: flex;
           flex-direction: column;
-          overflow: hidden;
+          align-self: start;
           border-radius: 18px;
           background: rgba(255, 255, 255, 0.94);
           box-shadow: 0 12px 30px rgba(7, 17, 16, 0.08);
@@ -1060,8 +1059,13 @@ export default function EventLocationPickerModal({
           font-weight: 650;
         }
 
+        .event-location-picker-stage .event-location-picker-candidates-wrap {
+          max-height: min(560px, calc(88vh - 320px));
+          overflow: auto;
+        }
+
         .event-location-picker-stage #event-location-picker-candidates {
-          flex: 1 1 auto;
+          flex: 0 0 auto;
           min-height: 0;
           max-height: none;
           padding: 0 18px 18px;
@@ -1154,6 +1158,11 @@ export default function EventLocationPickerModal({
           text-align: center;
         }
 
+        .event-location-picker-stage .event-location-picker-feedback {
+          padding: 8px 14px 0;
+          background: #fff;
+        }
+
         .event-location-picker-stage .event-location-picker-bottom {
           display: grid;
           grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) auto;
@@ -1228,24 +1237,20 @@ export default function EventLocationPickerModal({
 
         .event-location-picker-stage .event-location-selected-summary {
           min-width: 0;
-          display: grid;
-          grid-template-columns: minmax(230px, 1.25fr) repeat(6, minmax(120px, 1fr));
-          align-items: stretch;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
           overflow: hidden;
           border: 1px solid rgba(7, 17, 16, 0.08);
           border-radius: 16px;
           background: #fff;
-        }
-
-        .event-location-picker-stage .event-location-selected-main,
-        .event-location-picker-stage .event-location-selected-field {
-          min-width: 0;
           padding: 12px 16px;
-          border-right: 1px solid rgba(7, 17, 16, 0.08);
         }
 
         .event-location-picker-stage .event-location-selected-main {
           display: flex;
+          min-width: 0;
           gap: 12px;
           align-items: center;
         }
@@ -1264,7 +1269,7 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-selected-main strong,
-        .event-location-picker-stage .event-location-selected-field strong {
+        .event-location-picker-stage .event-location-selected-main em {
           display: block;
           overflow: hidden;
           color: #071110;
@@ -1275,8 +1280,7 @@ export default function EventLocationPickerModal({
           white-space: nowrap;
         }
 
-        .event-location-picker-stage .event-location-selected-main span:not(.event-location-selected-icon),
-        .event-location-picker-stage .event-location-selected-field span {
+        .event-location-picker-stage .event-location-selected-main span:not(.event-location-selected-icon) {
           display: block;
           overflow: hidden;
           color: rgba(7, 17, 16, 0.45);
@@ -1286,12 +1290,26 @@ export default function EventLocationPickerModal({
           white-space: nowrap;
         }
 
-        .event-location-picker-stage .event-location-selected-field {
+        .event-location-picker-stage .event-location-selected-main em {
+          margin-top: 2px;
+          color: rgba(7, 17, 16, 0.72);
+          font-size: 11px;
+          font-style: normal;
+        }
+
+        .event-location-picker-stage .event-location-selected-meta {
           display: flex;
           min-width: 0;
-          flex-direction: column;
-          justify-content: center;
-          gap: 4px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 8px 16px;
+        }
+
+        .event-location-picker-stage .event-location-selected-meta span {
+          color: rgba(7, 17, 16, 0.58);
+          font-size: 11px;
+          line-height: 1.3;
+          white-space: nowrap;
         }
 
         .event-location-picker-stage .event-location-picker-footer {
@@ -1310,7 +1328,12 @@ export default function EventLocationPickerModal({
         }
 
         .event-location-picker-stage .event-location-picker-status {
-          display: none;
+          display: inline-flex;
+          align-items: center;
+          min-height: 18px;
+          color: rgba(7, 17, 16, 0.56);
+          font-size: 12px;
+          line-height: 1.3;
         }
 
         @media (max-width: 1279px) {
@@ -1333,9 +1356,8 @@ export default function EventLocationPickerModal({
           }
 
           .event-location-picker-stage .event-location-selected-summary {
-            grid-template-columns: minmax(220px, 1fr);
-            max-height: 180px;
-            overflow: auto;
+            flex-direction: column;
+            align-items: flex-start;
           }
 
           .event-location-picker-stage .event-location-picker-bottom {
