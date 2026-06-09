@@ -188,6 +188,16 @@ const previewOptionLabel = (text: string, imageUrl: string): string => {
   return imageUrl.trim() ? '图片选项' : '未填写内容';
 };
 
+const normalizedPreviewOptionText = (text: string): string | null => {
+  const normalized = text.trim();
+  return normalized ? normalized : null;
+};
+
+const hasPreviewOptionImage = (imageUrl: string): boolean => imageUrl.trim().length > 0;
+
+const usesImageGridPreview = (options: QuestionDraftOption[]): boolean =>
+  options.length === 4 && options.every((option) => !normalizedPreviewOptionText(option.text) && hasPreviewOptionImage(option.imageUrl));
+
 /* ─── shared input style ─── */
 const inputCls = (multiline = false) =>
   `w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-gray-900 focus:ring-0 ${
@@ -1560,45 +1570,75 @@ export default function AdminQuizPage() {
                 </div>
 
                 <div className="p-4 space-y-3">
-                  <div className="text-sm font-semibold leading-6 text-gray-900">
+                  <div className="text-[15px] font-semibold leading-6 text-gray-900">
                     {questionDraft.stemText.trim() || '题干预览将在这里显示'}
                   </div>
 
                   {questionDraft.stemImageUrl.trim() ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={questionDraft.stemImageUrl.trim()}
-                      alt="题干预览"
-                      className="w-full max-h-48 rounded-xl object-contain border border-gray-100 bg-gray-50"
-                    />
+                    <div className="flex">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={questionDraft.stemImageUrl.trim()}
+                        alt="题干预览"
+                        className="max-h-56 w-[70%] rounded-[14px] border border-gray-100 bg-gray-50 object-contain"
+                      />
+                    </div>
                   ) : null}
 
-                  <div className="space-y-2">
-                    {questionDraft.options.map((option, index) => {
-                      const letter = OPTION_LETTERS[index] || String(index + 1);
-                      return (
-                        <div
-                          key={`preview-${option.id}`}
-                          className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5"
-                        >
-                          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-xs font-bold text-gray-600">
-                            {letter}
+                  {usesImageGridPreview(questionDraft.options) ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {questionDraft.options.map((option, index) => {
+                        const letter = OPTION_LETTERS[index] || String(index + 1);
+                        return (
+                          <div
+                            key={`preview-${option.id}`}
+                            className="relative overflow-hidden rounded-[16px] border border-gray-200 bg-gray-50"
+                          >
+                            {option.imageUrl.trim() ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={option.imageUrl.trim()}
+                                alt={`选项 ${letter}`}
+                                className="h-40 w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-40 items-center justify-center text-xs text-gray-400">图片缺失</div>
+                            )}
+                            <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold text-white">
+                              {letter}
+                            </div>
                           </div>
-                          <span className="text-sm text-gray-700">
-                            {previewOptionLabel(option.text, option.imageUrl)}
-                          </span>
-                          {option.imageUrl.trim() ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={option.imageUrl.trim()}
-                              alt={previewOptionLabel(option.text, option.imageUrl)}
-                              className="ml-auto h-10 w-10 rounded-lg object-cover border border-gray-200"
-                            />
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {questionDraft.options.map((option, index) => {
+                        const letter = OPTION_LETTERS[index] || String(index + 1);
+                        return (
+                          <div
+                            key={`preview-${option.id}`}
+                            className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5"
+                          >
+                            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-xs font-bold text-gray-600">
+                              {letter}
+                            </div>
+                            <span className="text-[13px] text-gray-700">
+                              {previewOptionLabel(option.text, option.imageUrl)}
+                            </span>
+                            {option.imageUrl.trim() ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={option.imageUrl.trim()}
+                                alt={previewOptionLabel(option.text, option.imageUrl)}
+                                className="ml-auto h-10 w-10 rounded-lg border border-gray-200 object-cover"
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

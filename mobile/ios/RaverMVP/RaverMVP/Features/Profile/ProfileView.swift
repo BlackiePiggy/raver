@@ -4312,6 +4312,7 @@ final class QuizFlowViewModel: ObservableObject {
     @Published private(set) var preparationAttempt = 0
     @Published private(set) var preparationMessage: String?
     @Published private(set) var secondsRemaining = 0
+    @Published private(set) var countdownProgress = 0.0
     @Published var feedbackMessage: String?
     @Published var activeAlert: QuizAlert?
 
@@ -4350,7 +4351,7 @@ final class QuizFlowViewModel: ObservableObject {
 
     var progressText: String {
         guard let session else { return "0/0" }
-        return "\(min(currentQuestionIndex + 1, session.questions.count))/\(session.questions.count)"
+        return "第\(min(currentQuestionIndex + 1, session.questions.count))/\(session.questions.count)题"
     }
 
     var isSessionLocked: Bool {
@@ -4416,6 +4417,12 @@ final class QuizFlowViewModel: ObservableObject {
             await startQuiz()
         case .abandon:
             await abandonCurrentSessionSilently()
+            feedbackMessage = nil
+            if let summary {
+                phase = .ready(summary)
+            } else {
+                phase = .loading
+            }
             await load()
         }
     }
@@ -4455,7 +4462,9 @@ final class QuizFlowViewModel: ObservableObject {
         cancelQuestionTasks()
         let token = UUID()
         questionRunToken = token
-        currentQuestionIndex = index
+        withAnimation(.easeInOut(duration: 0.24)) {
+            currentQuestionIndex = index
+        }
         isPreparingQuestion = true
         preparationAttempt = 0
         preparationMessage = LT("正在准备本题资源…", "Preparing question media…", "問題のメディアを準備中…")
@@ -4511,7 +4520,12 @@ final class QuizFlowViewModel: ObservableObject {
 
     private func startCountdown(for question: QuizQuestionPayload, token: UUID) {
         countdownTask?.cancel()
-        secondsRemaining = max(1, question.timeLimitSec)
+        let totalSeconds = max(1, question.timeLimitSec)
+        secondsRemaining = totalSeconds
+        countdownProgress = 1
+        withAnimation(.linear(duration: Double(totalSeconds))) {
+            countdownProgress = 0
+        }
         countdownTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: countdownTickNanoseconds)
@@ -4528,12 +4542,13 @@ final class QuizFlowViewModel: ObservableObject {
         }
 
         secondsRemaining = 0
-        feedbackMessage = LT(
-            "本题已超时，系统已自动判错并进入下一题。",
-            "Time is up for this question. It was marked wrong automatically.",
-            "この問題は時間切れとなり、自動で不正解として次へ進みました。"
-        )
-        await advanceFromCurrentQuestion()
+        feedbackMessage = nil
+        countdownTask?.cancel()
+        countdownTask = nil
+        questionRunToken = UUID()
+        Task {
+            await advanceFromCurrentQuestion()
+        }
     }
 
     private func advanceFromCurrentQuestion(afterMediaFailure: Bool = false) async {
@@ -4584,6 +4599,7 @@ final class QuizFlowViewModel: ObservableObject {
         self.preparationAttempt = 0
         self.preparationMessage = nil
         self.secondsRemaining = 0
+        self.countdownProgress = 0
     }
 
     private func cancelQuestionTasks() {
@@ -4592,6 +4608,7 @@ final class QuizFlowViewModel: ObservableObject {
         prefetchTask?.cancel()
         prefetchTask = nil
         secondsRemaining = 0
+        countdownProgress = 0
     }
 
     private func startPrefetchingUpcomingQuestions(from index: Int, token: UUID) {
@@ -4676,9 +4693,232 @@ struct QuizFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: QuizFlowViewModel
+    private let optionLetters = ["A", "B", "C", "D", "E", "F"]
 
     init(service: WebFeatureService) {
         _viewModel = StateObject(wrappedValue: QuizFlowViewModel(service: service))
+    }
+
+    private var canAdvanceToNextQuestion: Bool {
+        !viewModel.isSubmitting
+    }
+
+    private func bottomActionBar(
+        secondaryTitle: String,
+        primaryTitle: String,
+        isPrimaryBusy: Bool = false,
+        isPrimaryDisabled: Bool = false,
+        onSecondary: @escaping () -> Void,
+        onPrimary: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 12) {
+            Button(action: onSecondary) {
+                Text(secondaryTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(RaverTheme.background)
+            )
+            .foregroundStyle(RaverTheme.secondaryText)
+
+            Button(action: onPrimary) {
+                if isPrimaryBusy {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                } else {
+                    Text(primaryTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+            }
+            .background(
+                LinearGradient(
+                    colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .foregroundStyle(.white)
+            .disabled(isPrimaryDisabled)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(
+            RaverTheme.card
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private func countdownBadge(for question: QuizQuestionPayload) -> some View {
+        let remainingSeconds = max(0, viewModel.secondsRemaining)
+        let progress = CGFloat(max(0, min(1, viewModel.countdownProgress)))
+
+        return ZStack {
+            Circle()
+                .stroke(RaverTheme.cardBorder, lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    RaverTheme.accent,
+                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            Text("\(remainingSeconds)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+        .frame(width: 40, height: 40)
+    }
+
+    private func normalizedOptionText(_ option: QuizQuestionOptionPayload) -> String? {
+        let trimmed = option.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func hasOptionImage(_ option: QuizQuestionOptionPayload) -> Bool {
+        let trimmed = option.imageUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !trimmed.isEmpty
+    }
+
+    private func usesImageGridLayout(for question: QuizQuestionPayload) -> Bool {
+        question.options.count == 4 && question.options.allSatisfy { normalizedOptionText($0) == nil && hasOptionImage($0) }
+    }
+
+    private func optionSelectionBorder(
+        questionId: String,
+        optionId: String
+    ) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(
+                viewModel.answers[questionId] == optionId ? RaverTheme.accent : RaverTheme.cardBorder,
+                lineWidth: viewModel.answers[questionId] == optionId ? 2 : 1
+            )
+    }
+
+    private func imageOptionGrid(question: QuizQuestionPayload) -> some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12)
+        ], spacing: 12) {
+            ForEach(Array(question.options.enumerated()), id: \.element.id) { index, option in
+                Button {
+                    viewModel.selectOption(option.optionId)
+                } label: {
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(RaverTheme.card)
+
+                        if let imageUrl = option.imageUrl,
+                           !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            AsyncImage(url: URL(string: imageUrl)) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity, minHeight: 156)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(maxWidth: .infinity, minHeight: 156, maxHeight: 156)
+                                        .clipped()
+                                case .failure:
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(RaverTheme.background)
+                                        .frame(maxWidth: .infinity, minHeight: 156)
+                                        .overlay(
+                                            Text(LT("图片加载失败", "Image failed to load", "画像を読み込めませんでした"))
+                                                .font(.caption2)
+                                                .foregroundStyle(RaverTheme.secondaryText)
+                                                .padding(.horizontal, 10)
+                                        )
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+
+                        Text(optionLetters.indices.contains(index) ? optionLetters[index] : "\(index + 1)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color.black.opacity(0.52))
+                            )
+                            .padding(10)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 156)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(optionSelectionBorder(questionId: question.questionId, optionId: option.optionId))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func listOptionCard(question: QuizQuestionPayload, option: QuizQuestionOptionPayload) -> some View {
+        Button {
+            viewModel.selectOption(option.optionId)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Circle()
+                        .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.secondaryText, lineWidth: 2)
+                        .frame(width: 18, height: 18)
+                        .overlay {
+                            if viewModel.answers[question.questionId] == option.optionId {
+                                Circle()
+                                    .fill(RaverTheme.accent)
+                                    .frame(width: 8, height: 8)
+                            }
+                        }
+                    Text(normalizedOptionText(option) ?? LT("图片选项", "Image Option", "画像オプション"))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer()
+                }
+                if let imageUrl = option.imageUrl,
+                   !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    AsyncImage(url: URL(string: imageUrl)) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(maxWidth: .infinity, minHeight: 140)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        case .failure:
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(RaverTheme.card)
+                                .frame(maxWidth: .infinity, minHeight: 140)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(RaverTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     var body: some View {
@@ -4816,73 +5056,62 @@ struct QuizFlowView: View {
     private var quizQuestionView: some View {
         VStack(spacing: 0) {
             if viewModel.isPreparingQuestion {
-                VStack(spacing: 18) {
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.large)
-                    Text(LT("正在准备题目", "Preparing Question", "問題を準備中"))
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(RaverTheme.primaryText)
-                    Text(viewModel.progressText)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RaverTheme.accent)
-                    if let preparationMessage = viewModel.preparationMessage {
-                        Text(preparationMessage)
-                            .font(.subheadline)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                            .multilineTextAlignment(.center)
-                    }
-                    if viewModel.preparationAttempt > 0 {
-                        Text(
-                            LT(
-                                "媒体加载重试：\(viewModel.preparationAttempt)/3",
-                                "Media retry: \(viewModel.preparationAttempt)/3",
-                                "メディア再試行：\(viewModel.preparationAttempt)/3"
+                VStack(spacing: 0) {
+                    VStack(spacing: 18) {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.large)
+                        Text(LT("正在准备题目", "Preparing Question", "問題を準備中"))
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(viewModel.progressText)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.accent)
+                        if let preparationMessage = viewModel.preparationMessage {
+                            Text(preparationMessage)
+                                .font(.subheadline)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .multilineTextAlignment(.center)
+                        }
+                        if viewModel.preparationAttempt > 0 {
+                            Text(
+                                LT(
+                                    "媒体加载重试：\(viewModel.preparationAttempt)/3",
+                                    "Media retry: \(viewModel.preparationAttempt)/3",
+                                    "メディア再試行：\(viewModel.preparationAttempt)/3"
+                                )
                             )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(RaverTheme.secondaryText)
-                    }
-
-                    HStack(spacing: 10) {
-                        Button(LT("放弃", "Abandon", "放棄")) {
-                            viewModel.requestAbandon()
+                            .font(.caption)
+                            .foregroundStyle(RaverTheme.secondaryText)
                         }
-                        .buttonStyle(.bordered)
-
-                        Button(LT("重新开始", "Restart", "再開始")) {
-                            viewModel.requestRestart()
-                        }
-                        .buttonStyle(.bordered)
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(16)
+
+                    bottomActionBar(
+                        secondaryTitle: LT("放弃", "Abandon", "放棄"),
+                        primaryTitle: LT("重新开始", "Restart", "再開始"),
+                        onSecondary: { viewModel.requestAbandon() },
+                        onPrimary: { viewModel.requestRestart() }
+                    )
                 }
-                .padding(16)
             } else if let question = viewModel.currentQuestion {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text(viewModel.progressText)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(RaverTheme.accent)
-                                    Spacer()
-                                    Text(
-                                        LT(
-                                            "剩余 \(viewModel.secondsRemaining) 秒",
-                                            "\(viewModel.secondsRemaining)s left",
-                                            "残り \(viewModel.secondsRemaining) 秒"
-                                        )
-                                    )
-                                    .font(.caption)
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                }
-                                Text(question.stemText)
-                                    .font(.title3.weight(.semibold))
-                                    .foregroundStyle(RaverTheme.primaryText)
-                                if let imageUrl = question.stemImageUrl,
-                                   !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text(viewModel.progressText)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                Spacer()
+                                countdownBadge(for: question)
+                            }
+                            Text(question.stemText)
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            if let imageUrl = question.stemImageUrl,
+                               !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                HStack(alignment: .top, spacing: 0) {
                                     AsyncImage(url: URL(string: imageUrl)) { phase in
                                         switch phase {
                                         case .empty:
@@ -4893,9 +5122,8 @@ struct QuizFlowView: View {
                                                 .resizable()
                                                 .scaledToFit()
                                                 .frame(maxWidth: .infinity)
-                                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                                         case .failure:
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                                 .fill(RaverTheme.card)
                                                 .frame(maxWidth: .infinity, minHeight: 180)
                                                 .overlay(
@@ -4907,67 +5135,22 @@ struct QuizFlowView: View {
                                             EmptyView()
                                         }
                                     }
+                                    .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    Spacer(minLength: 0)
                                 }
                             }
                         }
 
-                        VStack(spacing: 12) {
-                            ForEach(question.options) { option in
-                                Button {
-                                    viewModel.selectOption(option.optionId)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 10) {
-                                        HStack(alignment: .top, spacing: 12) {
-                                            Circle()
-                                                .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.secondaryText, lineWidth: 2)
-                                                .frame(width: 18, height: 18)
-                                                .overlay {
-                                                    if viewModel.answers[question.questionId] == option.optionId {
-                                                        Circle()
-                                                            .fill(RaverTheme.accent)
-                                                            .frame(width: 8, height: 8)
-                                                    }
-                                                }
-                                            Text(option.text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? option.text! : LT("图片选项", "Image Option", "画像オプション"))
-                                                .font(.body.weight(.medium))
-                                                .foregroundStyle(RaverTheme.primaryText)
-                                            Spacer()
-                                        }
-                                        if let imageUrl = option.imageUrl,
-                                           !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            AsyncImage(url: URL(string: imageUrl)) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    ProgressView()
-                                                        .frame(maxWidth: .infinity, minHeight: 140)
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFit()
-                                                        .frame(maxWidth: .infinity)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                                case .failure:
-                                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                        .fill(RaverTheme.card)
-                                                        .frame(maxWidth: .infinity, minHeight: 140)
-                                                @unknown default:
-                                                    EmptyView()
-                                                }
-                                            }
-                                        }
+                        Group {
+                            if usesImageGridLayout(for: question) {
+                                imageOptionGrid(question: question)
+                            } else {
+                                VStack(spacing: 12) {
+                                    ForEach(question.options) { option in
+                                        listOptionCard(question: question, option: option)
                                     }
-                                    .padding(16)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                            .fill(RaverTheme.card)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                            .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: 1)
-                                    )
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
 
@@ -4976,86 +5159,56 @@ struct QuizFlowView: View {
                         }
                     }
                     .padding(16)
+                    .id(question.questionId)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
                 }
+                .animation(.easeInOut(duration: 0.24), value: viewModel.currentQuestionIndex)
 
-                VStack(spacing: 10) {
-                    HStack(spacing: 10) {
-                        Button(LT("放弃", "Abandon", "放棄")) {
-                            viewModel.requestAbandon()
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button(LT("重新开始", "Restart", "再開始")) {
-                            viewModel.requestRestart()
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
-                            viewModel.goNext()
-                        } label: {
-                            Text(viewModel.currentQuestionIndex + 1 >= (viewModel.session?.questions.count ?? 0)
-                                 ? LT("提交答题", "Submit", "提出")
-                                 : LT("下一题", "Next", "次へ"))
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(RaverTheme.accent)
-                        .disabled(viewModel.isSubmitting)
-                    }
-                }
-                .padding(16)
-                .background(RaverTheme.background)
+                bottomActionBar(
+                    secondaryTitle: LT("放弃", "Abandon", "放棄"),
+                    primaryTitle: LT("下一步", "Next", "次へ"),
+                    isPrimaryBusy: viewModel.isSubmitting,
+                    isPrimaryDisabled: !canAdvanceToNextQuestion,
+                    onSecondary: { viewModel.requestAbandon() },
+                    onPrimary: { viewModel.goNext() }
+                )
             }
         }
         .background(RaverTheme.background)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(LT("退出", "Exit", "終了")) {
-                    viewModel.requestAbandon()
-                }
-            }
-        }
     }
 
     private func quizResultView(_ result: QuizSessionSubmitResponse) -> some View {
-        VStack(spacing: 18) {
-            Spacer()
-            Image(systemName: result.passed ? "checkmark.seal.fill" : "xmark.seal")
-                .font(.system(size: 58, weight: .semibold))
-                .foregroundStyle(result.passed ? RaverTheme.accent : Color.red)
-            Text(result.passed ? LT("答题通过", "Passed", "合格") : LT("未通过", "Not Passed", "不合格"))
-                .font(.largeTitle.weight(.bold))
-                .foregroundStyle(RaverTheme.primaryText)
-            Text(
-                LT(
-                    "本次答对 \(result.correctCount) / \(result.totalCount) 题",
-                    "You answered \(result.correctCount) / \(result.totalCount) correctly",
-                    "\(result.totalCount)問中 \(result.correctCount) 問正解"
+        VStack(spacing: 0) {
+            VStack(spacing: 18) {
+                Spacer()
+                Image(systemName: result.passed ? "checkmark.seal.fill" : "xmark.seal")
+                    .font(.system(size: 58, weight: .semibold))
+                    .foregroundStyle(result.passed ? RaverTheme.accent : Color.red)
+                Text(result.passed ? LT("答题通过", "Passed", "合格") : LT("未通过", "Not Passed", "不合格"))
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                Text(
+                    LT(
+                        "本次答对 \(result.correctCount) / \(result.totalCount) 题",
+                        "You answered \(result.correctCount) / \(result.totalCount) correctly",
+                        "\(result.totalCount)問中 \(result.correctCount) 問正解"
+                    )
                 )
+                .font(.title3)
+                .foregroundStyle(RaverTheme.secondaryText)
+                Spacer()
+            }
+            .padding(16)
+
+            bottomActionBar(
+                secondaryTitle: LT("完成", "Done", "完了"),
+                primaryTitle: LT("返回答题首页", "Back to Quiz Home", "クイズホームへ戻る"),
+                onSecondary: { dismiss() },
+                onPrimary: {
+                    Task { await viewModel.load() }
+                }
             )
-            .font(.title3)
-            .foregroundStyle(RaverTheme.secondaryText)
-
-            Button {
-                Task { await viewModel.load() }
-            } label: {
-                Text(LT("返回答题首页", "Back to Quiz Home", "クイズホームへ戻る"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(RaverTheme.accent)
-
-            Button {
-                dismiss()
-            } label: {
-                Text(LT("完成", "Done", "完了"))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            Spacer()
         }
-        .padding(16)
         .background(RaverTheme.background)
     }
 
