@@ -68,7 +68,7 @@ const QUIZ_IMPORT_RULE_SECTIONS: Array<{
       '`status` 可选，允许 `draft`、`active`、`archived`；如果不填或填了无效值，会自动按 `draft` 导入。',
       '`stemImageUrl` 可选；如果填写，必须是字符串，系统会 trim，最大长度 2000。',
       '`timeLimitSec` 可选；只有正整数才会生效，非正数、小数会被归一化，不合法时等同于不填。',
-      '`sortOrder` 可选；会被取整，不填时默认是 `0`。',
+      '`sortOrder` 可选；会被取整，不填时系统会自动接在当前题库末尾。',
       '`tags` 可选；必须是字符串数组，系统会 trim、去重，最多保留 20 个标签，每个标签最大 64 字符。',
       '`difficulty` 可选；字符串，trim 后最大长度 64。',
       '`explanation` 可选；字符串，trim 后最大长度 5000。',
@@ -120,7 +120,6 @@ type QuestionDraft = {
   stemImageUrl: string;
   correctOptionId: string;
   timeLimitSec: string;
-  sortOrder: string;
   tags: string;
   difficulty: string;
   explanation: string;
@@ -133,6 +132,13 @@ type UploadCompressionSummary = {
   compressed: boolean;
 };
 
+const resolveDraftTimeLimit = (defaultTimeLimitSec?: number | null): string => {
+  if (typeof defaultTimeLimitSec !== 'number' || !Number.isFinite(defaultTimeLimitSec) || defaultTimeLimitSec <= 0) {
+    return '';
+  }
+  return String(Math.floor(defaultTimeLimitSec));
+};
+
 const buildDraftOption = (sortOrder: number, seed?: Partial<QuestionDraftOption>): QuestionDraftOption => ({
   id: seed?.id || `opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   text: seed?.text || '',
@@ -140,18 +146,20 @@ const buildDraftOption = (sortOrder: number, seed?: Partial<QuestionDraftOption>
   sortOrder,
 });
 
-const createDefaultQuestionDraft = (): QuestionDraft => ({
-  status: 'draft',
-  stemText: '',
-  stemImageUrl: '',
-  correctOptionId: '',
-  timeLimitSec: '',
-  sortOrder: '0',
-  tags: '',
-  difficulty: '',
-  explanation: '',
-  options: [buildDraftOption(0), buildDraftOption(1)],
-});
+const createDefaultQuestionDraft = (defaultTimeLimitSec?: number | null): QuestionDraft => {
+  const options = [buildDraftOption(0), buildDraftOption(1)];
+  return {
+    status: 'draft',
+    stemText: '',
+    stemImageUrl: '',
+    correctOptionId: options[0]?.id || '',
+    timeLimitSec: resolveDraftTimeLimit(defaultTimeLimitSec),
+    tags: '',
+    difficulty: '',
+    explanation: '',
+    options,
+  };
+};
 
 const createDraftFromQuestion = (item: AdminQuizQuestion): QuestionDraft => ({
   status: item.status,
@@ -159,7 +167,6 @@ const createDraftFromQuestion = (item: AdminQuizQuestion): QuestionDraft => ({
   stemImageUrl: item.stemImageUrl || '',
   correctOptionId: item.correctOptionId || item.options[0]?.id || '',
   timeLimitSec: item.timeLimitSec ? String(item.timeLimitSec) : '',
-  sortOrder: String(item.sortOrder ?? 0),
   tags: item.tags.join(', '),
   difficulty: item.difficulty || '',
   explanation: item.explanation || '',
@@ -232,6 +239,9 @@ const inputCls = (multiline = false) =>
 
 const selectCls = () =>
   `w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-900`;
+
+const readOnlyInputCls = () =>
+  `w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 outline-none`;
 
 /* ─── Field label wrapper ─── */
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -660,6 +670,11 @@ export default function AdminQuizPage() {
     [questions, selectedQuestionId]
   );
 
+  const createFreshQuestionDraft = useCallback(
+    () => createDefaultQuestionDraft(configDraft.defaultTimeLimitSec),
+    [configDraft.defaultTimeLimitSec]
+  );
+
   /* ── loaders ── */
   const loadConfig = useCallback(async () => {
     if (!canOperate) return;
@@ -791,7 +806,6 @@ export default function AdminQuizPage() {
     stemImageUrl: questionDraft.stemImageUrl.trim() || null,
     correctOptionId: questionDraft.correctOptionId,
     timeLimitSec: questionDraft.timeLimitSec.trim() ? Number(questionDraft.timeLimitSec) : null,
-    sortOrder: questionDraft.sortOrder.trim() ? Number(questionDraft.sortOrder) : 0,
     tags: questionDraft.tags.split(',').map((t) => t.trim()).filter(Boolean),
     difficulty: questionDraft.difficulty.trim() || null,
     explanation: questionDraft.explanation.trim() || null,
@@ -1501,7 +1515,7 @@ export default function AdminQuizPage() {
                     onClick={() => {
                       setEditorMode('create');
                       setSelectedQuestionId(null);
-                      setQuestionDraft(createDefaultQuestionDraft());
+                      setQuestionDraft(createFreshQuestionDraft());
                       setUploadCompressionByTarget({});
                     }}
                     className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
@@ -1713,7 +1727,7 @@ export default function AdminQuizPage() {
                   <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">
                     {editorMode === 'edit' ? 'Question Editor' : 'Create Question'}
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-400">当前版本只支持单选题。题干和选项都可以上传图片。</p>
+                  <p className="mt-0.5 text-xs text-gray-400">当前版本只支持单选题。正确答案从右侧选项列表点击设置，排序值由系统自动维护。</p>
                 </div>
                 {editorMode === 'edit' && selectedQuestionId ? (
                   <button
@@ -1741,12 +1755,11 @@ export default function AdminQuizPage() {
                     </select>
                   </Field>
 
-                  <Field label="正确答案 optionId" hint="必须对应某个选项 id">
+                  <Field label="正确答案 optionId" hint="通过右侧选项列表点击设置">
                     <input
                       value={questionDraft.correctOptionId}
-                      onChange={(e) => setQuestionDraft((c) => ({ ...c, correctOptionId: e.target.value }))}
-                      placeholder="请填入某个选项 id"
-                      className={inputCls()}
+                      readOnly
+                      className={readOnlyInputCls()}
                     />
                   </Field>
 
@@ -1755,15 +1768,11 @@ export default function AdminQuizPage() {
                       type="number"
                       value={questionDraft.timeLimitSec}
                       onChange={(e) => setQuestionDraft((c) => ({ ...c, timeLimitSec: e.target.value }))}
-                      className={inputCls()}
-                    />
-                  </Field>
-
-                  <Field label="排序值">
-                    <input
-                      type="number"
-                      value={questionDraft.sortOrder}
-                      onChange={(e) => setQuestionDraft((c) => ({ ...c, sortOrder: e.target.value }))}
+                      placeholder={
+                        configDraft.defaultTimeLimitSec
+                          ? `默认 ${configDraft.defaultTimeLimitSec} 秒`
+                          : undefined
+                      }
                       className={inputCls()}
                     />
                   </Field>

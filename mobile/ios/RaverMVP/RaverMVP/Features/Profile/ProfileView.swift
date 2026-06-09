@@ -4442,8 +4442,7 @@ final class QuizFlowViewModel: ObservableObject {
         activeAlert = .abandon
     }
 
-    func confirmAlert() async {
-        guard let alert = activeAlert else { return }
+    func confirmAlert(_ alert: QuizAlert) async {
         activeAlert = nil
         switch alert {
         case .restart:
@@ -5165,7 +5164,7 @@ struct QuizFlowView: View {
                     title: Text(LT("重新开始答题", "Restart Quiz", "クイズを再開始")),
                     message: Text(LT("当前答题会被放弃，并立即重新抽取一套新题。", "The current session will be abandoned and a new set of questions will be created immediately.", "現在のセッションは破棄され、新しい問題セットがすぐに生成されます。")),
                     primaryButton: .destructive(Text(LT("确认重启", "Restart", "再開始"))) {
-                        Task { await viewModel.confirmAlert() }
+                        Task { await viewModel.confirmAlert(.restart) }
                     },
                     secondaryButton: .cancel()
                 )
@@ -5174,7 +5173,7 @@ struct QuizFlowView: View {
                     title: Text(LT("放弃本次答题", "Abandon Quiz", "今回のクイズを放棄")),
                     message: Text(LT("退出后不会保留进度，需要重新开始整场答题。", "Progress will not be preserved. You will need to restart the whole quiz next time.", "進捗は保存されず、次回は最初からやり直しになります。")),
                     primaryButton: .destructive(Text(LT("确认放弃", "Abandon", "放棄する"))) {
-                        Task { await viewModel.confirmAlert() }
+                        Task { await viewModel.confirmAlert(.abandon) }
                     },
                     secondaryButton: .cancel()
                 )
@@ -5345,34 +5344,31 @@ struct QuizFlowView: View {
                                 .foregroundStyle(RaverTheme.primaryText)
                             if let imageUrl = question.stemImageUrl,
                                !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                HStack(alignment: .top, spacing: 0) {
-                                    AsyncImage(url: URL(string: imageUrl)) { phase in
-                                        switch phase {
-                                        case .empty:
-                                            ProgressView()
-                                                .frame(maxWidth: .infinity, minHeight: 180)
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(maxWidth: .infinity)
-                                        case .failure:
-                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                                .fill(RaverTheme.card)
-                                                .frame(maxWidth: .infinity, minHeight: 180)
-                                                .overlay(
-                                                    Text(LT("题干图片加载失败", "Failed to load image", "画像を読み込めませんでした"))
-                                                        .font(.footnote)
-                                                        .foregroundStyle(RaverTheme.secondaryText)
-                                                )
-                                        @unknown default:
-                                            EmptyView()
-                                        }
+                                AsyncImage(url: URL(string: imageUrl)) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(maxWidth: .infinity, minHeight: 180)
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(maxWidth: .infinity)
+                                    case .failure:
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(RaverTheme.card)
+                                            .frame(maxWidth: .infinity, minHeight: 180)
+                                            .overlay(
+                                                Text(LT("题干图片加载失败", "Failed to load image", "画像を読み込めませんでした"))
+                                                    .font(.footnote)
+                                                    .foregroundStyle(RaverTheme.secondaryText)
+                                            )
+                                    @unknown default:
+                                        EmptyView()
                                     }
-                                    .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                    Spacer(minLength: 0)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
                         }
 

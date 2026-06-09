@@ -218,6 +218,74 @@ final class QuizFlowViewModelTests: XCTestCase {
         ))
     }
 
+    func testConfirmAbandonReturnsToReadyAndReportsSession() async throws {
+        let service = MockWebFeatureService()
+        let abandonedSession = LockedBox<[String]>([])
+
+        await service.setQuizScenario(
+            .init(
+                status: Self.defaultSummary(),
+                sessionFactory: {
+                    QuizSessionCreateResponse(
+                        sessionId: "quiz-session-manual-abandon",
+                        questionCount: 1,
+                        passCorrectCount: 1,
+                        dailyAttemptLimit: 3,
+                        dailyRemainingAttemptsAfterStart: 2,
+                        timeZone: "Asia/Shanghai",
+                        questions: [
+                            QuizQuestionPayload(
+                                questionId: "q-manual-abandon",
+                                stemText: "manual abandon question",
+                                stemImageUrl: nil,
+                                options: [
+                                    QuizQuestionOptionPayload(optionId: "opt-a", text: "A", imageUrl: nil, sortOrder: 0),
+                                    QuizQuestionOptionPayload(optionId: "opt-b", text: "B", imageUrl: nil, sortOrder: 1),
+                                ],
+                                timeLimitSec: 5
+                            )
+                        ],
+                        startedAt: ISO8601DateFormatter().string(from: Date()),
+                        expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
+                    )
+                },
+                submitHandler: { sessionId, _ in
+                    QuizSessionSubmitResponse(
+                        sessionId: sessionId,
+                        totalCount: 1,
+                        correctCount: 0,
+                        passCorrectCount: 1,
+                        passed: false,
+                        passedAt: nil
+                    )
+                },
+                abandonHandler: { sessionId in
+                    abandonedSession.mutate { $0.append(sessionId) }
+                    return QuizSessionAbandonResponse(sessionId: sessionId, status: "abandoned")
+                }
+            )
+        )
+
+        let viewModel = QuizFlowViewModel(
+            service: service,
+            countdownTickNanoseconds: 20_000_000,
+            mediaRetryDelayNanoseconds: 1_000_000
+        )
+
+        await viewModel.startQuiz()
+        XCTAssertNotNil(viewModel.session)
+
+        await viewModel.confirmAlert(.abandon)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertNil(viewModel.session)
+        guard case .ready = viewModel.phase else {
+            return XCTFail("expected ready phase after manual abandon")
+        }
+        XCTAssertEqual(abandonedSession.value, ["quiz-session-manual-abandon"])
+        XCTAssertNil(viewModel.feedbackMessage)
+    }
+
     func testManualSubmitOnLastQuestionDoesNotLeaveTimeoutBanner() async throws {
         let service = MockWebFeatureService()
 

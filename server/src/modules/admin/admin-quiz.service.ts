@@ -153,7 +153,7 @@ const validateQuestionPayload = (input: AdminQuizQuestionUpsertInput): {
   stemImageUrl: string | null;
   correctOptionId: string;
   timeLimitSec: number | null;
-  sortOrder: number;
+  sortOrder: number | null;
   tags: string[];
   difficulty: string | null;
   explanation: string | null;
@@ -171,7 +171,7 @@ const validateQuestionPayload = (input: AdminQuizQuestionUpsertInput): {
   const correctOptionId = normalizeText(input.correctOptionId, 128);
   const timeLimitSec = normalizeOptionalPositiveInt(input.timeLimitSec);
   const sortOrder =
-    typeof input.sortOrder === 'number' && Number.isFinite(input.sortOrder) ? Math.floor(input.sortOrder) : 0;
+    typeof input.sortOrder === 'number' && Number.isFinite(input.sortOrder) ? Math.floor(input.sortOrder) : null;
   const tags = normalizeStringList(input.tags, 20);
   const difficulty = normalizeText(input.difficulty, 64);
   const explanation = normalizeText(input.explanation, 5000);
@@ -300,6 +300,12 @@ const createQuestionRecord = async (
     throw new AdminQuizError(400, 'QUIZ_CORRECT_OPTION_INVALID', 'correctOptionId must match one option id');
   }
 
+  const resolvedSortOrder =
+    normalized.sortOrder ??
+    (((await tx.quizQuestion.aggregate({
+      _max: { sortOrder: true },
+    }))._max.sortOrder ?? -1) + 1);
+
   return tx.quizQuestion.create({
     data: {
       status: normalized.status,
@@ -308,7 +314,7 @@ const createQuestionRecord = async (
       stemImageUrl: normalized.stemImageUrl,
       correctOptionId: mappedCorrectOptionId,
       timeLimitSec: normalized.timeLimitSec,
-      sortOrder: normalized.sortOrder,
+      sortOrder: resolvedSortOrder,
       tags: normalized.tags,
       difficulty: normalized.difficulty,
       explanation: normalized.explanation,
@@ -695,7 +701,7 @@ export const adminQuizService = {
           stemText: normalized.stemText,
           stemImageUrl: normalized.stemImageUrl,
           timeLimitSec: normalized.timeLimitSec,
-          sortOrder: normalized.sortOrder,
+          sortOrder: normalized.sortOrder ?? existing.sortOrder,
           tags: normalized.tags,
           difficulty: normalized.difficulty,
           explanation: normalized.explanation,
