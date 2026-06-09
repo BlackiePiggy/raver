@@ -4,9 +4,9 @@ import RaverEventAdminContract
 actor MockWebFeatureService: WebFeatureService {
     struct QuizScenario {
         var status: QuizConfigSummary
-        var sessionFactory: @Sendable () -> QuizSessionCreateResponse
-        var submitHandler: @Sendable (_ sessionId: String, _ answers: [QuizSubmitAnswerPayload]) -> QuizSessionSubmitResponse
-        var abandonHandler: @Sendable (_ sessionId: String) -> QuizSessionAbandonResponse
+        var sessionFactory: @Sendable (_ mode: QuizSessionMode) -> QuizSessionCreateResponse
+        var submitHandler: @Sendable (_ sessionId: String, _ answers: [QuizSubmitAnswerPayload], _ presentedQuestionIds: [String]?) -> QuizSessionSubmitResponse
+        var abandonHandler: @Sendable (_ sessionId: String, _ reason: QuizSessionAbandonReason?) -> QuizSessionAbandonResponse
 
         static func `default`() -> QuizScenario {
             QuizScenario(
@@ -28,10 +28,15 @@ actor MockWebFeatureService: WebFeatureService {
                     passedAt: nil,
                     canStart: true,
                     activeSessionId: nil,
-                    disabledReason: nil
+                    disabledReason: nil,
+                    canUseDebugQuestionSet: true,
+                    debugQuestionSetCount: 4,
+                    canStartDebugQuestionSet: true
                 ),
-                sessionFactory: {
-                    let questions: [QuizQuestionPayload] = (1...20).map { index in
+                sessionFactory: { mode in
+                    let questionCount = mode == .debugSet ? 4 : 20
+                    let passCorrectCount = mode == .debugSet ? 4 : 16
+                    let questions: [QuizQuestionPayload] = (1...questionCount).map { index in
                         QuizQuestionPayload(
                             questionId: "mock-quiz-question-\(index)",
                             stemText: "第 \(index) 题：以下哪一项更符合当前 mock quiz 场景？",
@@ -45,29 +50,33 @@ actor MockWebFeatureService: WebFeatureService {
                         )
                     }
                     return QuizSessionCreateResponse(
+                        mode: mode,
                         sessionId: "mock-quiz-session-\(UUID().uuidString)",
-                        questionCount: 20,
-                        passCorrectCount: 16,
+                        questionCount: questionCount,
+                        passCorrectCount: passCorrectCount,
                         dailyAttemptLimit: 3,
-                        dailyRemainingAttemptsAfterStart: 2,
+                        dailyRemainingAttemptsAfterStart: mode == .debugSet ? 3 : 2,
                         timeZone: "Asia/Shanghai",
                         questions: questions,
+                        reserveQuestions: mode == .debugSet ? [] : [],
                         startedAt: ISO8601DateFormatter().string(from: Date()),
                         expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(60 * 60))
                     )
                 },
-                submitHandler: { sessionId, answers in
-                    let correctCount = min(answers.count / 2, 20)
+                submitHandler: { sessionId, answers, presentedQuestionIds in
+                    let totalCount = max(presentedQuestionIds?.count ?? answers.count, 1)
+                    let correctCount = min(totalCount / 2, 20)
                     return QuizSessionSubmitResponse(
+                        mode: totalCount <= 4 ? .debugSet : .standard,
                         sessionId: sessionId,
-                        totalCount: 20,
+                        totalCount: totalCount,
                         correctCount: correctCount,
-                        passCorrectCount: 16,
-                        passed: correctCount >= 16,
+                        passCorrectCount: totalCount <= 4 ? 4 : 16,
+                        passed: totalCount <= 4 ? correctCount >= 4 : correctCount >= 16,
                         passedAt: correctCount >= 16 ? ISO8601DateFormatter().string(from: Date()) : nil
                     )
                 },
-                abandonHandler: { sessionId in
+                abandonHandler: { sessionId, _ in
                     QuizSessionAbandonResponse(sessionId: sessionId, status: "abandoned")
                 }
             )
@@ -786,16 +795,20 @@ actor MockWebFeatureService: WebFeatureService {
         try await fetchQuizConfigSummary()
     }
 
-    func createQuizSession() async throws -> QuizSessionCreateResponse {
-        quizScenario.sessionFactory()
+    func createQuizSession(mode: QuizSessionMode) async throws -> QuizSessionCreateResponse {
+        quizScenario.sessionFactory(mode)
     }
 
-    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse {
-        quizScenario.submitHandler(sessionId, answers)
+    func submitQuizSession(
+        sessionId: String,
+        answers: [QuizSubmitAnswerPayload],
+        presentedQuestionIds: [String]?
+    ) async throws -> QuizSessionSubmitResponse {
+        quizScenario.submitHandler(sessionId, answers, presentedQuestionIds)
     }
 
-    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse {
-        quizScenario.abandonHandler(sessionId)
+    func abandonQuizSession(sessionId: String, reason: QuizSessionAbandonReason?) async throws -> QuizSessionAbandonResponse {
+        quizScenario.abandonHandler(sessionId, reason)
     }
 
     func setQuizScenario(_ scenario: QuizScenario) {

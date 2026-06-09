@@ -6,6 +6,8 @@ import {
   createQuizSession,
   getQuizConfigSummary,
   getQuizStatus,
+  type QuizSessionAbandonReason,
+  type QuizSessionMode,
   submitQuizSession,
   type QuizSessionSubmitAnswer,
 } from '../services/quiz.service';
@@ -41,7 +43,9 @@ router.get('/config', authenticate, async (req: AuthRequest, res: Response): Pro
     return;
   }
   try {
-    const summary = await getQuizConfigSummary(userId);
+    const summary = await getQuizConfigSummary(userId, {
+      userRole: req.user?.role ?? null,
+    });
     res.json(summary);
   } catch (error) {
     handleQuizError(res, error);
@@ -55,7 +59,9 @@ router.get('/status', authenticate, async (req: AuthRequest, res: Response): Pro
     return;
   }
   try {
-    const summary = await getQuizStatus(userId);
+    const summary = await getQuizStatus(userId, {
+      userRole: req.user?.role ?? null,
+    });
     res.json(summary);
   } catch (error) {
     handleQuizError(res, error);
@@ -69,7 +75,12 @@ router.post('/sessions', authenticate, async (req: AuthRequest, res: Response): 
     return;
   }
   try {
-    const session = await createQuizSession(userId);
+    const modeInput = typeof req.body?.mode === 'string' ? req.body.mode.trim() : '';
+    const mode: QuizSessionMode = modeInput === 'debug_set' ? 'debug_set' : 'standard';
+    const session = await createQuizSession(userId, {
+      mode,
+      userRole: req.user?.role ?? null,
+    });
     res.status(201).json(session);
   } catch (error) {
     handleQuizError(res, error);
@@ -96,6 +107,11 @@ router.post('/sessions/:id/submit', authenticate, async (req: AuthRequest, res: 
     questionId: typeof item?.questionId === 'string' ? item.questionId.trim() : '',
     optionId: typeof item?.optionId === 'string' && item.optionId.trim() ? item.optionId.trim() : null,
   }));
+  const presentedQuestionIds = Array.isArray(req.body?.presentedQuestionIds)
+    ? req.body.presentedQuestionIds
+        .map((value: unknown) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value: string) => value.length > 0)
+    : undefined;
 
   if (answers.some((item) => !item.questionId)) {
     res.status(400).json({
@@ -106,7 +122,9 @@ router.post('/sessions/:id/submit', authenticate, async (req: AuthRequest, res: 
   }
 
   try {
-    const result = await submitQuizSession(userId, normalizeRouteId(req.params.id), answers);
+    const result = await submitQuizSession(userId, normalizeRouteId(req.params.id), answers, {
+      presentedQuestionIds,
+    });
     res.json(result);
   } catch (error) {
     handleQuizError(res, error);
@@ -120,7 +138,10 @@ router.post('/sessions/:id/abandon', authenticate, async (req: AuthRequest, res:
     return;
   }
   try {
-    const result = await abandonQuizSession(userId, normalizeRouteId(req.params.id));
+    const reasonInput = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    const reason: QuizSessionAbandonReason | undefined =
+      reasonInput === 'preflight_failed' ? 'preflight_failed' : reasonInput === 'user_abandon' ? 'user_abandon' : undefined;
+    const result = await abandonQuizSession(userId, normalizeRouteId(req.params.id), { reason });
     res.json(result);
   } catch (error) {
     handleQuizError(res, error);

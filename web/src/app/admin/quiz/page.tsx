@@ -18,7 +18,7 @@ import {
   type QuizQuestionStatus,
 } from '@/lib/api/admin-quiz';
 
-type TabKey = 'config' | 'questions' | 'overrides';
+type TabKey = 'config' | 'debug_set' | 'questions' | 'overrides';
 type EditorMode = 'create' | 'edit';
 
 const QUESTION_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
@@ -638,6 +638,10 @@ export default function AdminQuizPage() {
   const [imagePreviewAssets, setImagePreviewAssets] = useState<OverlayImageViewerAsset[]>([]);
   const [imagePreviewIndex, setImagePreviewIndex] = useState<number | null>(null);
   const [uploadCompressionByTarget, setUploadCompressionByTarget] = useState<Record<string, UploadCompressionSummary>>({});
+  const [debugSetQuestionIds, setDebugSetQuestionIds] = useState<string[]>([]);
+  const [debugSetItems, setDebugSetItems] = useState<AdminQuizQuestion[]>([]);
+  const [debugSetLoading, setDebugSetLoading] = useState(false);
+  const [debugSetSaving, setDebugSetSaving] = useState(false);
 
   /* overrides */
   const [overrideQueryInput, setOverrideQueryInput] = useState('');
@@ -723,9 +727,24 @@ export default function AdminQuizPage() {
     }
   }, [canOperate, overridePage, overrideQuery]);
 
+  const loadDebugSet = useCallback(async () => {
+    if (!canOperate) return;
+    try {
+      setDebugSetLoading(true);
+      const result = await adminQuizApi.getDebugSet();
+      setDebugSetQuestionIds(result.questionIds);
+      setDebugSetItems(result.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载调试套题失败');
+    } finally {
+      setDebugSetLoading(false);
+    }
+  }, [canOperate]);
+
   useEffect(() => { void loadConfig(); }, [loadConfig]);
   useEffect(() => { void loadQuestions(); }, [loadQuestions]);
   useEffect(() => { void loadOverrides(); }, [loadOverrides]);
+  useEffect(() => { void loadDebugSet(); }, [loadDebugSet]);
 
   useEffect(() => {
     if (selectedQuestion && editorMode === 'edit') {
@@ -979,6 +998,55 @@ export default function AdminQuizPage() {
     }
   };
 
+  const addQuestionToDebugSet = (question: AdminQuizQuestion) => {
+    setDebugSetQuestionIds((current) => (current.includes(question.id) ? current : [...current, question.id]));
+    setDebugSetItems((current) => (current.some((item) => item.id === question.id) ? current : [...current, question]));
+  };
+
+  const removeQuestionFromDebugSet = (questionId: string) => {
+    setDebugSetQuestionIds((current) => current.filter((id) => id !== questionId));
+    setDebugSetItems((current) => current.filter((item) => item.id !== questionId));
+  };
+
+  const moveDebugSetQuestion = (questionId: string, direction: 'up' | 'down') => {
+    setDebugSetQuestionIds((current) => {
+      const index = current.indexOf(questionId);
+      if (index < 0) return current;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = current.slice();
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+    setDebugSetItems((current) => {
+      const index = current.findIndex((item) => item.id === questionId);
+      if (index < 0) return current;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = current.slice();
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  };
+
+  const saveDebugSet = async () => {
+    if (!canWrite) return;
+    try {
+      setDebugSetSaving(true);
+      setError(null);
+      setNotice(null);
+      const result = await adminQuizApi.updateDebugSet(debugSetQuestionIds);
+      setDebugSetQuestionIds(result.questionIds);
+      setDebugSetItems(result.items);
+      await loadConfig();
+      setNotice(`调试套题已保存，共 ${result.questionIds.length} 题`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存调试套题失败');
+    } finally {
+      setDebugSetSaving(false);
+    }
+  };
+
   /* ── gate states ── */
   if (isLoading) {
     return (
@@ -1021,7 +1089,7 @@ export default function AdminQuizPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => { void loadConfig(); void loadQuestions(); void loadOverrides(); }}
+              onClick={() => { void loadConfig(); void loadQuestions(); void loadOverrides(); void loadDebugSet(); }}
               className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
             >
               <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1055,6 +1123,16 @@ export default function AdminQuizPage() {
                 {configSaving ? '保存中...' : '保存配置'}
               </button>
             ) : null}
+            {tab === 'debug_set' ? (
+              <button
+                type="button"
+                onClick={() => { void saveDebugSet(); }}
+                disabled={!canWrite || debugSetSaving}
+                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+              >
+                {debugSetSaving ? '保存中...' : '保存调试套题'}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -1062,6 +1140,7 @@ export default function AdminQuizPage() {
         <div className="flex items-center gap-1 border-b border-gray-200 bg-white px-6 pt-3">
           {([
             ['config', '配置'],
+            ['debug_set', '调试套题'],
             ['questions', '题库'],
             ['overrides', '用户次数覆盖'],
           ] as Array<[TabKey, string]>).map(([key, label]) => (
@@ -1210,6 +1289,197 @@ export default function AdminQuizPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ══ DEBUG SET TAB ══ */}
+        {tab === 'debug_set' ? (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">Debug Question Picker</div>
+                  <p className="mt-0.5 text-sm text-gray-500">从现有题库中挑选题目组成 admin-only 调试套题，用于排版验证。</p>
+                </div>
+                <div className="text-xs text-gray-400">
+                  已选 {debugSetQuestionIds.length} 题
+                </div>
+              </div>
+
+              <div className="border-b border-gray-100 px-5 py-4">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setQuestionPage(1);
+                    setQuestionQuery(questionQueryInput);
+                  }}
+                  className="flex flex-wrap gap-2"
+                >
+                  <input
+                    value={questionQueryInput}
+                    onChange={(e) => setQuestionQueryInput(e.target.value)}
+                    placeholder="搜索题干 / 难度 / 题目 ID"
+                    className={inputCls() + ' min-w-[220px] flex-1'}
+                  />
+                  <select
+                    value={questionStatus}
+                    onChange={(e) => {
+                      setQuestionPage(1);
+                      setQuestionStatus(e.target.value as QuizQuestionStatus | '');
+                    }}
+                    className={selectCls() + ' max-w-[160px]'}
+                  >
+                    <option value="">全部状态</option>
+                    <option value="draft">draft</option>
+                    <option value="active">active</option>
+                    <option value="archived">archived</option>
+                  </select>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
+                  >
+                    搜索
+                  </button>
+                </form>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {questionLoading ? (
+                  <div className="px-5 py-8 text-center text-sm text-gray-400">加载题库中...</div>
+                ) : questions.length === 0 ? (
+                  <div className="px-5 py-8 text-center text-sm text-gray-400">当前筛选条件下没有题目</div>
+                ) : (
+                  questions.map((item) => {
+                    const inDebugSet = debugSetQuestionIds.includes(item.id);
+                    return (
+                      <div key={`debug-library-${item.id}`} className="flex items-start justify-between gap-4 px-5 py-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadgeClass(item.status)}`}>
+                              {item.status}
+                            </span>
+                            <span className="font-mono text-[10px] text-gray-400">{item.id}</span>
+                          </div>
+                          <div className="mt-2 line-clamp-2 text-sm font-medium text-gray-900">
+                            {item.stemText || '未填写题干'}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-400">
+                            <span>{item.options.length} 个选项</span>
+                            <span>•</span>
+                            <span>时长 {item.timeLimitSec ?? '-'} 秒</span>
+                            <span>•</span>
+                            <span>难度 {item.difficulty || '-'}</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!canWrite || inDebugSet}
+                          onClick={() => addQuestionToDebugSet(item)}
+                          className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                            inDebugSet
+                              ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-600'
+                              : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {inDebugSet ? '已加入' : '加入调试套题'}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
+                <span>
+                  第 {questionPage} / {totalQuestionPages} 页，共 {questionTotal} 题
+                </span>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={questionPage <= 1}
+                    onClick={() => setQuestionPage((page) => Math.max(1, page - 1))}
+                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    上一页
+                  </button>
+                  <button
+                    type="button"
+                    disabled={questionPage >= totalQuestionPages}
+                    onClick={() => setQuestionPage((page) => Math.min(totalQuestionPages, page + 1))}
+                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-100 px-5 py-4">
+                <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">Current Debug Set</div>
+                <p className="mt-0.5 text-sm text-gray-500">iOS admin 开始页会读取这一套题，按这里保存的顺序出题。</p>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {debugSetLoading ? (
+                  <div className="px-5 py-8 text-center text-sm text-gray-400">加载调试套题中...</div>
+                ) : debugSetItems.length === 0 ? (
+                  <div className="px-5 py-8 text-center text-sm text-gray-400">还没有加入任何调试题目</div>
+                ) : (
+                  debugSetItems.map((item, index) => (
+                    <div key={`debug-selected-${item.id}`} className="px-5 py-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-[11px] font-semibold text-white">
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="line-clamp-2 text-sm font-medium text-gray-900">{item.stemText || '未填写题干'}</div>
+                          <div className="mt-1 font-mono text-[10px] text-gray-400">{item.id}</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={!canWrite || index === 0}
+                          onClick={() => moveDebugSetQuestion(item.id, 'up')}
+                          className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                        >
+                          上移
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canWrite || index === debugSetItems.length - 1}
+                          onClick={() => moveDebugSetQuestion(item.id, 'down')}
+                          className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                        >
+                          下移
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canWrite}
+                          onClick={() => removeQuestionFromDebugSet(item.id)}
+                          className="rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                        >
+                          移除
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
+                <span>共 {debugSetQuestionIds.length} 题</span>
+                <button
+                  type="button"
+                  disabled={!canWrite || debugSetSaving}
+                  onClick={() => void saveDebugSet()}
+                  className="rounded-full bg-gray-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                >
+                  {debugSetSaving ? '保存中...' : '保存调试套题'}
+                </button>
+              </div>
             </div>
           </div>
         ) : null}

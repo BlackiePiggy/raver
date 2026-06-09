@@ -442,6 +442,7 @@ export const adminQuizService = {
       dailyLimitTimeZone: config.dailyLimitTimeZone,
       allowRetakeAfterPass: config.allowRetakeAfterPass,
       allowRestartDuringSession: config.allowRestartDuringSession,
+      debugQuestionIds: config.debugQuestionIds,
       createdAt: config.createdAt.toISOString(),
       updatedAt: config.updatedAt.toISOString(),
     };
@@ -451,12 +452,13 @@ export const adminQuizService = {
     isEnabled: boolean;
     questionCount: number;
     passCorrectCount: number;
-    dailyAttemptLimit: number;
-    defaultTimeLimitSec: number;
-    dailyLimitTimeZone: string;
-    allowRetakeAfterPass: boolean;
-    allowRestartDuringSession: boolean;
-  }>) {
+      dailyAttemptLimit: number;
+      defaultTimeLimitSec: number;
+      dailyLimitTimeZone: string;
+      allowRetakeAfterPass: boolean;
+      allowRestartDuringSession: boolean;
+      debugQuestionIds: string[];
+    }>) {
     const current = await ensureQuizConfig();
     const questionCount =
       typeof input.questionCount === 'number' && Number.isFinite(input.questionCount)
@@ -491,6 +493,7 @@ export const adminQuizService = {
           typeof input.allowRestartDuringSession === 'boolean'
             ? input.allowRestartDuringSession
             : current.allowRestartDuringSession,
+        debugQuestionIds: Array.isArray(input.debugQuestionIds) ? input.debugQuestionIds : current.debugQuestionIds,
       },
     });
 
@@ -504,9 +507,68 @@ export const adminQuizService = {
       dailyLimitTimeZone: updated.dailyLimitTimeZone,
       allowRetakeAfterPass: updated.allowRetakeAfterPass,
       allowRestartDuringSession: updated.allowRestartDuringSession,
+      debugQuestionIds: updated.debugQuestionIds,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     }));
+  },
+
+  async getDebugSet() {
+    const config = await ensureQuizConfig();
+    const ids = Array.from(new Set(config.debugQuestionIds.map((value) => normalizeText(value, 128)).filter((value): value is string => Boolean(value))));
+    if (ids.length === 0) {
+      return {
+        questionIds: [] as string[],
+        items: [] as ReturnType<typeof mapQuestion>[],
+      };
+    }
+
+    const rows = await prisma.quizQuestion.findMany({
+      where: {
+        id: { in: ids },
+      },
+      include: {
+        options: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+      },
+    });
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+
+    return {
+      questionIds: ids,
+      items: ids
+        .map((id) => rowById.get(id))
+        .filter((row): row is typeof rows[number] => Boolean(row))
+        .map(mapQuestion),
+    };
+  },
+
+  async updateDebugSet(questionIds: string[]) {
+    const ids = Array.from(
+      new Set(
+        questionIds
+          .map((value) => normalizeText(value, 128))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    if (ids.length > 0) {
+      const existingRows = await prisma.quizQuestion.findMany({
+        where: { id: { in: ids } },
+        select: { id: true },
+      });
+      if (existingRows.length !== ids.length) {
+        throw new AdminQuizError(404, 'QUIZ_DEBUG_SET_QUESTION_NOT_FOUND', 'One or more debug-set questions were not found');
+      }
+    }
+
+    await prisma.quizConfig.update({
+      where: { id: QUIZ_CONFIG_ID },
+      data: {
+        debugQuestionIds: ids,
+      },
+    });
+
+    return this.getDebugSet();
   },
 
   async listQuestions(params: {

@@ -5,6 +5,15 @@ final class LiveWebFeatureService: WebFeatureService {
     private static let userActionRefreshLeadTime: TimeInterval = 300
     private static let eventMutationTimeout: TimeInterval = 120
 
+    private struct SubmitQuizSessionRequest: Encodable {
+        let answers: [QuizSubmitAnswerPayload]
+        let presentedQuestionIds: [String]?
+    }
+
+    private struct AbandonQuizSessionRequest: Encodable {
+        let reason: String?
+    }
+
     private struct DeleteEventImagesRequest: Encodable {
         let eventId: String?
         let draftId: String?
@@ -73,20 +82,31 @@ final class LiveWebFeatureService: WebFeatureService {
         try await request(path: "/v1/quiz/status", method: "GET")
     }
 
-    func createQuizSession() async throws -> QuizSessionCreateResponse {
-        try await request(path: "/v1/quiz/sessions", method: "POST")
+    func createQuizSession(mode: QuizSessionMode) async throws -> QuizSessionCreateResponse {
+        try await request(path: "/v1/quiz/sessions", method: "POST", body: ["mode": mode.rawValue])
     }
 
-    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse {
+    func submitQuizSession(
+        sessionId: String,
+        answers: [QuizSubmitAnswerPayload],
+        presentedQuestionIds: [String]?
+    ) async throws -> QuizSessionSubmitResponse {
         try await request(
             path: "/v1/quiz/sessions/\(sessionId)/submit",
             method: "POST",
-            body: ["answers": answers]
+            body: SubmitQuizSessionRequest(
+                answers: answers,
+                presentedQuestionIds: presentedQuestionIds
+            )
         )
     }
 
-    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse {
-        try await request(path: "/v1/quiz/sessions/\(sessionId)/abandon", method: "POST")
+    func abandonQuizSession(sessionId: String, reason: QuizSessionAbandonReason?) async throws -> QuizSessionAbandonResponse {
+        try await request(
+            path: "/v1/quiz/sessions/\(sessionId)/abandon",
+            method: "POST",
+            body: AbandonQuizSessionRequest(reason: reason?.rawValue)
+        )
     }
 
     func prepareAuthenticatedRequestForUserAction(source: String) async throws {

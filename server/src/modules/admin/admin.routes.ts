@@ -1530,6 +1530,7 @@ router.patch('/quiz/config', authenticate, requireAdmin, async (req: AuthRequest
         typeof body.allowRetakeAfterPass === 'boolean' ? body.allowRetakeAfterPass : undefined,
       allowRestartDuringSession:
         typeof body.allowRestartDuringSession === 'boolean' ? body.allowRestartDuringSession : undefined,
+      debugQuestionIds: Array.isArray(body.debugQuestionIds) ? (body.debugQuestionIds as string[]) : undefined,
     });
     await adminAuditService.createAction({
       actorId: req.user?.userId || 'unknown',
@@ -1546,6 +1547,49 @@ router.patch('/quiz/config', authenticate, requireAdmin, async (req: AuthRequest
     }
     console.error('Update admin quiz config error:', error);
     res.status(500).json({ error: 'Failed to update quiz config' });
+  }
+});
+
+router.get('/quiz/debug-set', authenticate, requireAdminOrOperator, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const result = await adminQuizService.getDebugSet();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Fetch admin quiz debug set error:', error);
+    res.status(500).json({ error: 'Failed to fetch quiz debug set' });
+  }
+});
+
+router.patch('/quiz/debug-set', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const questionIds = Array.isArray(body.questionIds) ? (body.questionIds as string[]) : null;
+    if (!questionIds) {
+      res.status(400).json({ error: 'questionIds is required', code: 'QUIZ_DEBUG_SET_IDS_REQUIRED' });
+      return;
+    }
+    const result = await adminQuizService.updateDebugSet(questionIds);
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.debug_set.update',
+      targetType: 'quiz_debug_set',
+      targetId: 'default',
+      detail: {
+        questionIds: result.questionIds,
+      },
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Update admin quiz debug set error:', error);
+    res.status(500).json({ error: 'Failed to update quiz debug set' });
   }
 });
 

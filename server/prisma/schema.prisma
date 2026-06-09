@@ -3123,6 +3123,7 @@ model QuizConfig {
   dailyLimitTimeZone        String   @default("Asia/Shanghai") @map("daily_limit_time_zone")
   allowRetakeAfterPass      Boolean  @default(true) @map("allow_retake_after_pass")
   allowRestartDuringSession Boolean  @default(true) @map("allow_restart_during_session")
+  debugQuestionIds          String[] @default([]) @map("debug_question_ids")
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 

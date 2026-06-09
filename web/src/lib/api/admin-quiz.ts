@@ -21,6 +21,7 @@ export type AdminQuizConfig = {
   dailyLimitTimeZone: string;
   allowRetakeAfterPass: boolean;
   allowRestartDuringSession: boolean;
+  debugQuestionIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -125,6 +126,11 @@ export type AdminQuizUploadedImage = {
   compression: Pick<QuizImageCompressionResult, 'originalBytes' | 'uploadedBytes' | 'compressed'>;
 };
 
+export type AdminQuizDebugSet = {
+  questionIds: string[];
+  items: AdminQuizQuestion[];
+};
+
 const buildQuery = (params?: Record<string, string | number | boolean | undefined>): string => {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params || {})) {
@@ -155,6 +161,22 @@ export const adminQuizApi = {
   }): Promise<{ success: true; items: AdminQuizQuestion[]; pagination: AdminQuizPagination }> {
     return authenticatedJsonFetch<{ success: true; items: AdminQuizQuestion[]; pagination: AdminQuizPagination }>(
       `/api/admin/v1/quiz/questions${buildQuery(params)}`
+    );
+  },
+
+  async getDebugSet(): Promise<{ success: true; questionIds: string[]; items: AdminQuizQuestion[] }> {
+    return authenticatedJsonFetch<{ success: true; questionIds: string[]; items: AdminQuizQuestion[] }>(
+      '/api/admin/v1/quiz/debug-set'
+    );
+  },
+
+  async updateDebugSet(questionIds: string[]): Promise<{ success: true; questionIds: string[]; items: AdminQuizQuestion[] }> {
+    return authenticatedJsonFetch<{ success: true; questionIds: string[]; items: AdminQuizQuestion[] }>(
+      '/api/admin/v1/quiz/debug-set',
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ questionIds }),
+      }
     );
   },
 

@@ -5,9 +5,13 @@ protocol WebFeatureService {
     func prepareAuthenticatedRequestForUserAction(source: String) async throws
     func fetchQuizConfigSummary() async throws -> QuizConfigSummary
     func fetchQuizStatus() async throws -> QuizConfigSummary
-    func createQuizSession() async throws -> QuizSessionCreateResponse
-    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse
-    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse
+    func createQuizSession(mode: QuizSessionMode) async throws -> QuizSessionCreateResponse
+    func submitQuizSession(
+        sessionId: String,
+        answers: [QuizSubmitAnswerPayload],
+        presentedQuestionIds: [String]?
+    ) async throws -> QuizSessionSubmitResponse
+    func abandonQuizSession(sessionId: String, reason: QuizSessionAbandonReason?) async throws -> QuizSessionAbandonResponse
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String?) async throws -> EventListPage
     func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
@@ -251,6 +255,16 @@ extension WebFeatureService {
     }
 }
 
+enum QuizSessionMode: String, Codable, Hashable {
+    case standard = "standard"
+    case debugSet = "debug_set"
+}
+
+enum QuizSessionAbandonReason: String, Codable, Hashable {
+    case userAbandon = "user_abandon"
+    case preflightFailed = "preflight_failed"
+}
+
 struct QuizConfigSummary: Decodable {
     let isEnabled: Bool
     let questionCount: Int
@@ -270,6 +284,9 @@ struct QuizConfigSummary: Decodable {
     let canStart: Bool
     let activeSessionId: String?
     let disabledReason: String?
+    let canUseDebugQuestionSet: Bool
+    let debugQuestionSetCount: Int
+    let canStartDebugQuestionSet: Bool
 }
 
 struct QuizQuestionOptionPayload: Decodable, Identifiable, Hashable {
@@ -292,6 +309,7 @@ struct QuizQuestionPayload: Decodable, Identifiable, Hashable {
 }
 
 struct QuizSessionCreateResponse: Decodable {
+    let mode: QuizSessionMode
     let sessionId: String
     let questionCount: Int
     let passCorrectCount: Int
@@ -299,6 +317,7 @@ struct QuizSessionCreateResponse: Decodable {
     let dailyRemainingAttemptsAfterStart: Int
     let timeZone: String
     let questions: [QuizQuestionPayload]
+    let reserveQuestions: [QuizQuestionPayload]
     let startedAt: String
     let expiresAt: String
 }
@@ -309,6 +328,7 @@ struct QuizSubmitAnswerPayload: Encodable {
 }
 
 struct QuizSessionSubmitResponse: Decodable {
+    let mode: QuizSessionMode
     let sessionId: String
     let totalCount: Int
     let correctCount: Int
@@ -320,4 +340,14 @@ struct QuizSessionSubmitResponse: Decodable {
 struct QuizSessionAbandonResponse: Decodable {
     let sessionId: String
     let status: String
+}
+
+extension WebFeatureService {
+    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse {
+        try await submitQuizSession(sessionId: sessionId, answers: answers, presentedQuestionIds: nil)
+    }
+
+    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse {
+        try await abandonQuizSession(sessionId: sessionId, reason: nil)
+    }
 }

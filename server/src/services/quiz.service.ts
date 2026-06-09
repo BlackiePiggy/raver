@@ -11,6 +11,10 @@ const QUIZ_CONFIG_ID = 'default';
 const QUIZ_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const MIN_OPTION_COUNT = 2;
 const MAX_OPTION_COUNT = 6;
+const QUIZ_DEBUG_ADMIN_ROLE = 'admin';
+const QUIZ_STANDARD_RESERVE_QUESTION_COUNT = 10;
+
+export type QuizSessionMode = 'standard' | 'debug_set';
 
 type QuizConfigRecord = Awaited<ReturnType<typeof prisma.quizConfig.upsert>>;
 
@@ -34,6 +38,7 @@ type QuizQuestionServerSnapshot = QuizQuestionClientPayload & {
 };
 
 type QuizConfigSnapshot = {
+  sessionMode: QuizSessionMode;
   questionCount: number;
   passCorrectCount: number;
   dailyAttemptLimit: number;
@@ -41,6 +46,8 @@ type QuizConfigSnapshot = {
   dailyLimitTimeZone: string;
   allowRetakeAfterPass: boolean;
   allowRestartDuringSession: boolean;
+  consumesAttempt: boolean;
+  writesQualification: boolean;
 };
 
 type QuizQuestionSnapshotEnvelope = {
@@ -82,9 +89,13 @@ export type QuizStatusSummary = {
   canStart: boolean;
   activeSessionId: string | null;
   disabledReason: string | null;
+  canUseDebugQuestionSet: boolean;
+  debugQuestionSetCount: number;
+  canStartDebugQuestionSet: boolean;
 };
 
 export type QuizSessionCreateResult = {
+  mode: QuizSessionMode;
   sessionId: string;
   questionCount: number;
   passCorrectCount: number;
@@ -92,6 +103,7 @@ export type QuizSessionCreateResult = {
   dailyRemainingAttemptsAfterStart: number;
   timeZone: string;
   questions: QuizQuestionClientPayload[];
+  reserveQuestions: QuizQuestionClientPayload[];
   startedAt: string;
   expiresAt: string;
 };
@@ -101,7 +113,14 @@ export type QuizSessionSubmitAnswer = {
   optionId: string | null;
 };
 
+export type QuizSessionSubmitOptions = {
+  presentedQuestionIds?: string[] | null;
+};
+
+export type QuizSessionAbandonReason = 'user_abandon' | 'preflight_failed';
+
 export type QuizSessionSubmitResult = {
+  mode: QuizSessionMode;
   sessionId: string;
   totalCount: number;
   correctCount: number;
@@ -144,10 +163,26 @@ const shuffle = <T>(items: T[]): T[] => {
   return next;
 };
 
+const uniqueQuestionIds = (ids: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  ids.forEach((id) => {
+    if (!seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
+  });
+  return result;
+};
+
 const normalizePositiveInt = (value: number | null | undefined, fallback: number): number => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : fallback;
+};
+
+const isQuizDebugAdmin = (role: string | null | undefined): boolean => {
+  return String(role || '').trim().toLowerCase() == QUIZ_DEBUG_ADMIN_ROLE;
 };
 
 const ensureQuizConfig = async (
@@ -252,10 +287,62 @@ const createDisabledReason = (input: {
   return null;
 };
 
-export const getQuizStatus = async (userId: string): Promise<QuizStatusSummary> => {
+const toClientQuestionPayload = (
+  question: QuizQuestionServerSnapshot
+): QuizQuestionClientPayload => {
+  const { correctOptionId: _correctOptionId, ...clientPayload } = question;
+  return clientPayload;
+};
+
+const isEligibleQuizQuestionRow = (question: {
+  correctOptionId: string | null;
+  options: Array<{ id: string }>;
+}): boolean => {
+  const optionCount = question.options.length;
+  if (optionCount < MIN_OPTION_COUNT || optionCount > MAX_OPTION_COUNT) return false;
+  return question.options.some((option) => option.id === question.correctOptionId);
+};
+
+const buildQuestionSnapshot = (
+  question: {
+    id: string;
+    stemText: string;
+    stemImageUrl: string | null;
+    timeLimitSec: number | null;
+    correctOptionId: string | null;
+    options: Array<{
+      id: string;
+      text: string | null;
+      imageUrl: string | null;
+      sortOrder: number;
+    }>;
+  },
+  defaultTimeLimitSec: number
+): QuizQuestionServerSnapshot => {
+  return {
+    questionId: question.id,
+    stemText: question.stemText,
+    stemImageUrl: question.stemImageUrl ?? null,
+    options: question.options.map((option) => ({
+      optionId: option.id,
+      text: option.text ?? null,
+      imageUrl: option.imageUrl ?? null,
+      sortOrder: option.sortOrder,
+    })),
+    timeLimitSec: normalizePositiveInt(question.timeLimitSec, defaultTimeLimitSec),
+    correctOptionId: question.correctOptionId as string,
+  };
+};
+
+export const getQuizStatus = async (
+  userId: string,
+  options?: {
+    userRole?: string | null;
+  }
+): Promise<QuizStatusSummary> => {
   const config = await ensureQuizConfig();
   const todayDateKey = formatDateKeyInTimeZone(new Date(), config.dailyLimitTimeZone);
-  const [todayLedger, permanentPass, activeSession, policyOverride] = await Promise.all([
+  const [todayLedger, permanentPass, activeSession, policyOverride, debugQuestionCount] = await Promise.all([
     prisma.quizAttemptLedger.findUnique({
       where: {
         userId_attemptDateKey: {
@@ -272,6 +359,14 @@ export const getQuizStatus = async (userId: string): Promise<QuizStatusSummary> 
       select: { id: true },
     }),
     readQuizUserPolicyOverride(prisma, userId),
+    config.debugQuestionIds.length > 0
+      ? prisma.quizQuestion.count({
+          where: {
+            id: { in: config.debugQuestionIds },
+            correctOptionId: { not: null },
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   const effectivePolicy = resolveEffectiveAttemptPolicy(config, policyOverride);
@@ -286,6 +381,8 @@ export const getQuizStatus = async (userId: string): Promise<QuizStatusSummary> 
     activeSessionId: activeSession?.id ?? null,
     isUnlimitedAttempts: effectivePolicy.isUnlimited,
   });
+  const canUseDebugQuestionSet = isQuizDebugAdmin(options?.userRole);
+  const canStartDebugQuestionSet = canUseDebugQuestionSet && debugQuestionCount > 0;
 
   return {
     isEnabled: config.isEnabled,
@@ -306,18 +403,34 @@ export const getQuizStatus = async (userId: string): Promise<QuizStatusSummary> 
     canStart: disabledReason === null,
     activeSessionId: activeSession?.id ?? null,
     disabledReason,
+    canUseDebugQuestionSet,
+    debugQuestionSetCount: debugQuestionCount,
+    canStartDebugQuestionSet,
   };
 };
 
-export const getQuizConfigSummary = async (userId: string): Promise<QuizStatusSummary> => {
-  return getQuizStatus(userId);
+export const getQuizConfigSummary = async (
+  userId: string,
+  options?: {
+    userRole?: string | null;
+  }
+): Promise<QuizStatusSummary> => {
+  return getQuizStatus(userId, options);
 };
 
-export const createQuizSession = async (userId: string): Promise<QuizSessionCreateResult> => {
+export const createQuizSession = async (
+  userId: string,
+  options?: {
+    mode?: QuizSessionMode;
+    userRole?: string | null;
+  }
+): Promise<QuizSessionCreateResult> => {
   return prisma.$transaction(async (tx) => {
     const config = await ensureQuizConfig(tx);
     const now = new Date();
     const todayDateKey = formatDateKeyInTimeZone(now, config.dailyLimitTimeZone);
+    const sessionMode: QuizSessionMode = options?.mode === 'debug_set' ? 'debug_set' : 'standard';
+    const isDebugSession = sessionMode === 'debug_set';
 
     const [permanentPass, todayLedger, activeSessions, policyOverride, questionRows] = await Promise.all([
       readPermanentPassRecord(tx, userId),
@@ -336,62 +449,74 @@ export const createQuizSession = async (userId: string): Promise<QuizSessionCrea
       readQuizUserPolicyOverride(tx, userId),
       tx.quizQuestion.findMany({
         where: {
-          status: QuizQuestionStatus.active,
-          type: QuizQuestionType.single_choice,
-          correctOptionId: { not: null },
+          ...(isDebugSession
+            ? {
+                id: { in: config.debugQuestionIds },
+                correctOptionId: { not: null },
+              }
+            : {
+                status: QuizQuestionStatus.active,
+                type: QuizQuestionType.single_choice,
+                correctOptionId: { not: null },
+              }),
         },
         include: {
           options: {
             orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           },
         },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        orderBy: isDebugSession ? undefined : [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       }),
     ]);
 
-    if (!config.isEnabled) {
+    if (!isDebugSession && !config.isEnabled) {
       throw new QuizServiceError(403, 'QUIZ_DISABLED', 'Quiz system is currently disabled');
     }
-    if (permanentPass.passed && !config.allowRetakeAfterPass) {
+    if (!isDebugSession && permanentPass.passed && !config.allowRetakeAfterPass) {
       throw new QuizServiceError(409, 'QUIZ_ALREADY_PASSED', 'You have already passed this quiz');
+    }
+    if (isDebugSession && !isQuizDebugAdmin(options?.userRole)) {
+      throw new QuizServiceError(403, 'QUIZ_DEBUG_FORBIDDEN', 'Only admin can start debug quiz sessions');
     }
     const effectivePolicy = resolveEffectiveAttemptPolicy(config, policyOverride);
     const effectiveDailyAttemptLimit = effectivePolicy.dailyAttemptLimit ?? config.dailyAttemptLimit;
 
-    if (!effectivePolicy.isUnlimited && (todayLedger?.attemptCount ?? 0) >= effectiveDailyAttemptLimit) {
+    if (
+      !isDebugSession &&
+      !effectivePolicy.isUnlimited &&
+      (todayLedger?.attemptCount ?? 0) >= effectiveDailyAttemptLimit
+    ) {
       throw new QuizServiceError(409, 'QUIZ_DAILY_LIMIT_REACHED', 'Daily quiz attempt limit reached');
     }
     if (activeSessions.length > 0 && !config.allowRestartDuringSession) {
       throw new QuizServiceError(409, 'QUIZ_SESSION_IN_PROGRESS', 'A quiz session is already in progress');
     }
 
-    const eligibleQuestions = questionRows.filter((question) => {
-      const optionCount = question.options.length;
-      if (optionCount < MIN_OPTION_COUNT || optionCount > MAX_OPTION_COUNT) return false;
-      return question.options.some((option) => option.id === question.correctOptionId);
-    });
+    const eligibleQuestionRows = questionRows.filter(isEligibleQuizQuestionRow);
+    const selectedQuestions = isDebugSession
+      ? config.debugQuestionIds
+          .map((id) => eligibleQuestionRows.find((question) => question.id === id) ?? null)
+          .filter((question): question is (typeof eligibleQuestionRows)[number] => Boolean(question))
+      : shuffle(eligibleQuestionRows).slice(0, config.questionCount);
+    const reserveQuestions = !isDebugSession
+      ? shuffle(eligibleQuestionRows)
+          .filter((question) => !selectedQuestions.some((selected) => selected.id === question.id))
+          .slice(0, QUIZ_STANDARD_RESERVE_QUESTION_COUNT)
+      : [];
 
-    if (eligibleQuestions.length < config.questionCount) {
+    if (isDebugSession) {
+      if (selectedQuestions.length === 0) {
+        throw new QuizServiceError(409, 'QUIZ_DEBUG_SET_EMPTY', 'Debug quiz question set is empty');
+      }
+    } else if (selectedQuestions.length < config.questionCount) {
       throw new QuizServiceError(409, 'QUIZ_QUESTION_POOL_INSUFFICIENT', 'Not enough active quiz questions');
     }
 
-    const selectedQuestions = shuffle(eligibleQuestions).slice(0, config.questionCount);
-    const questionSnapshots: QuizQuestionServerSnapshot[] = selectedQuestions.map((question) => {
-      const options = question.options.map((option) => ({
-        optionId: option.id,
-        text: option.text ?? null,
-        imageUrl: option.imageUrl ?? null,
-        sortOrder: option.sortOrder,
-      }));
-      return {
-        questionId: question.id,
-        stemText: question.stemText,
-        stemImageUrl: question.stemImageUrl ?? null,
-        options,
-        timeLimitSec: normalizePositiveInt(question.timeLimitSec, config.defaultTimeLimitSec),
-        correctOptionId: question.correctOptionId as string,
-      };
-    });
+    const resolvedQuestionCount = isDebugSession ? selectedQuestions.length : config.questionCount;
+    const resolvedPassCorrectCount = Math.max(1, Math.min(config.passCorrectCount, resolvedQuestionCount));
+    const questionSnapshots: QuizQuestionServerSnapshot[] = [...selectedQuestions, ...reserveQuestions].map((question) =>
+      buildQuestionSnapshot(question, config.defaultTimeLimitSec)
+    );
 
     if (activeSessions.length > 0) {
       await tx.quizSession.updateMany({
@@ -406,13 +531,16 @@ export const createQuizSession = async (userId: string): Promise<QuizSessionCrea
     }
 
     const configSnapshot: QuizConfigSnapshot = {
-      questionCount: config.questionCount,
-      passCorrectCount: config.passCorrectCount,
+      sessionMode,
+      questionCount: resolvedQuestionCount,
+      passCorrectCount: resolvedPassCorrectCount,
       dailyAttemptLimit: effectiveDailyAttemptLimit,
       defaultTimeLimitSec: config.defaultTimeLimitSec,
       dailyLimitTimeZone: config.dailyLimitTimeZone,
       allowRetakeAfterPass: config.allowRetakeAfterPass,
       allowRestartDuringSession: config.allowRestartDuringSession,
+      consumesAttempt: !isDebugSession,
+      writesQualification: !isDebugSession,
     };
 
     const expiresAt = new Date(now.getTime() + QUIZ_SESSION_TTL_MS);
@@ -435,39 +563,49 @@ export const createQuizSession = async (userId: string): Promise<QuizSessionCrea
       },
     });
 
-    await tx.quizAttemptLedger.upsert({
-      where: {
-        userId_attemptDateKey: {
+    if (!isDebugSession) {
+      await tx.quizAttemptLedger.upsert({
+        where: {
+          userId_attemptDateKey: {
+            userId,
+            attemptDateKey: todayDateKey,
+          },
+        },
+        update: {
+          attemptCount: {
+            increment: 1,
+          },
+          lastSessionId: session.id,
+        },
+        create: {
           userId,
           attemptDateKey: todayDateKey,
+          attemptCount: 1,
+          passed: permanentPass.passed,
+          passedAt: permanentPass.passedAt,
+          lastSessionId: session.id,
         },
-      },
-      update: {
-        attemptCount: {
-          increment: 1,
-        },
-        lastSessionId: session.id,
-      },
-      create: {
-        userId,
-        attemptDateKey: todayDateKey,
-        attemptCount: 1,
-        passed: permanentPass.passed,
-        passedAt: permanentPass.passedAt,
-        lastSessionId: session.id,
-      },
-    });
+      });
+    }
 
     return {
+      mode: sessionMode,
       sessionId: session.id,
-      questionCount: config.questionCount,
-      passCorrectCount: config.passCorrectCount,
+      questionCount: resolvedQuestionCount,
+      passCorrectCount: resolvedPassCorrectCount,
       dailyAttemptLimit: effectiveDailyAttemptLimit,
-      dailyRemainingAttemptsAfterStart: effectivePolicy.isUnlimited
+      dailyRemainingAttemptsAfterStart: isDebugSession
+        ? (effectivePolicy.isUnlimited ? -1 : Math.max(0, effectiveDailyAttemptLimit - (todayLedger?.attemptCount ?? 0)))
+        : effectivePolicy.isUnlimited
         ? -1
         : Math.max(0, effectiveDailyAttemptLimit - ((todayLedger?.attemptCount ?? 0) + 1)),
       timeZone: config.dailyLimitTimeZone,
-      questions: questionSnapshots.map(({ correctOptionId: _correctOptionId, ...question }) => question),
+      questions: selectedQuestions.map((question) =>
+        toClientQuestionPayload(buildQuestionSnapshot(question, config.defaultTimeLimitSec))
+      ),
+      reserveQuestions: reserveQuestions.map((question) =>
+        toClientQuestionPayload(buildQuestionSnapshot(question, config.defaultTimeLimitSec))
+      ),
       startedAt: session.startedAt.toISOString(),
       expiresAt: (session.expiresAt ?? expiresAt).toISOString(),
     };
@@ -477,7 +615,8 @@ export const createQuizSession = async (userId: string): Promise<QuizSessionCrea
 export const submitQuizSession = async (
   userId: string,
   sessionId: string,
-  answers: QuizSessionSubmitAnswer[]
+  answers: QuizSessionSubmitAnswer[],
+  options?: QuizSessionSubmitOptions
 ): Promise<QuizSessionSubmitResult> => {
   return prisma.$transaction(async (tx) => {
     const session = await tx.quizSession.findFirst({
@@ -508,16 +647,44 @@ export const submitQuizSession = async (
 
     const snapshotEnvelope = readQuizSnapshotEnvelope(session.questionSnapshot);
     const configSnapshot = session.configSnapshot as unknown as QuizConfigSnapshot;
+    const expectedQuestionCount = normalizePositiveInt(configSnapshot.questionCount, 1);
+    const snapshotById = new Map(snapshotEnvelope.questions.map((question) => [question.questionId, question]));
+    const presentedQuestionIds = Array.isArray(options?.presentedQuestionIds) && options?.presentedQuestionIds.length
+      ? uniqueQuestionIds(options.presentedQuestionIds)
+      : snapshotEnvelope.questions.slice(0, expectedQuestionCount).map((question) => question.questionId);
+
+    if (presentedQuestionIds.length !== expectedQuestionCount) {
+      throw new QuizServiceError(
+        400,
+        'QUIZ_SUBMIT_PRESENTED_QUESTION_COUNT_INVALID',
+        'Presented question count does not match this session'
+      );
+    }
+
+    const presentedQuestions = presentedQuestionIds.map((id) => snapshotById.get(id) ?? null);
+    if (presentedQuestions.some((question) => !question)) {
+      throw new QuizServiceError(
+        400,
+        'QUIZ_SUBMIT_PRESENTED_QUESTION_INVALID',
+        'Presented question list contains unknown question ids'
+      );
+    }
+
     const answerMap = new Map<string, string | null>();
     answers.forEach((item) => {
       if (!item.questionId) return;
       answerMap.set(item.questionId, item.optionId ?? null);
     });
 
-    const correctCount = snapshotEnvelope.questions.reduce((count, question) => {
+    const correctCount = presentedQuestions.reduce((count, question) => {
+      if (!question) return count;
       return answerMap.get(question.questionId) === question.correctOptionId ? count + 1 : count;
     }, 0);
-    const passed = correctCount >= normalizePositiveInt(configSnapshot.passCorrectCount, 1);
+    const resolvedPassCorrectCount = Math.max(
+      1,
+      Math.min(normalizePositiveInt(configSnapshot.passCorrectCount, 1), presentedQuestions.length)
+    );
+    const passed = correctCount >= resolvedPassCorrectCount;
     const submittedAt = new Date();
 
     await tx.quizSession.update({
@@ -530,57 +697,64 @@ export const submitQuizSession = async (
       },
     });
 
-    const attemptDateKey = formatDateKeyInTimeZone(
-      session.startedAt,
-      configSnapshot.dailyLimitTimeZone || 'Asia/Shanghai'
-    );
-    const existingLedger = await tx.quizAttemptLedger.findUnique({
-      where: {
-        userId_attemptDateKey: {
-          userId,
-          attemptDateKey,
+    if (configSnapshot.writesQualification !== false) {
+      const attemptDateKey = formatDateKeyInTimeZone(
+        session.startedAt,
+        configSnapshot.dailyLimitTimeZone || 'Asia/Shanghai'
+      );
+      const existingLedger = await tx.quizAttemptLedger.findUnique({
+        where: {
+          userId_attemptDateKey: {
+            userId,
+            attemptDateKey,
+          },
         },
-      },
-    });
+      });
 
-    if (existingLedger) {
-      await tx.quizAttemptLedger.update({
-        where: { id: existingLedger.id },
-        data: {
-          passed: existingLedger.passed || passed,
-          passedAt: existingLedger.passedAt ?? (passed ? submittedAt : null),
-          lastSessionId: session.id,
-        },
-      });
-    } else {
-      await tx.quizAttemptLedger.create({
-        data: {
-          userId,
-          attemptDateKey,
-          attemptCount: 1,
-          passed,
-          passedAt: passed ? submittedAt : null,
-          lastSessionId: session.id,
-        },
-      });
+      if (existingLedger) {
+        await tx.quizAttemptLedger.update({
+          where: { id: existingLedger.id },
+          data: {
+            passed: existingLedger.passed || passed,
+            passedAt: existingLedger.passedAt ?? (passed ? submittedAt : null),
+            lastSessionId: session.id,
+          },
+        });
+      } else {
+        await tx.quizAttemptLedger.create({
+          data: {
+            userId,
+            attemptDateKey,
+            attemptCount: 1,
+            passed,
+            passedAt: passed ? submittedAt : null,
+            lastSessionId: session.id,
+          },
+        });
+      }
     }
 
     const permanentPass = await readPermanentPassRecord(tx, userId);
     return {
+      mode: configSnapshot.sessionMode || 'standard',
       sessionId: session.id,
-      totalCount: snapshotEnvelope.questions.length,
+      totalCount: presentedQuestions.length,
       correctCount,
-      passCorrectCount: normalizePositiveInt(configSnapshot.passCorrectCount, 1),
+      passCorrectCount: resolvedPassCorrectCount,
       passed,
       passedAt: permanentPass.passedAt ? permanentPass.passedAt.toISOString() : null,
     };
   });
 };
 
-export const abandonQuizSession = async (userId: string, sessionId: string): Promise<{ sessionId: string; status: 'abandoned' }> => {
+export const abandonQuizSession = async (
+  userId: string,
+  sessionId: string,
+  options?: { reason?: QuizSessionAbandonReason | null }
+): Promise<{ sessionId: string; status: 'abandoned' }> => {
   const session = await prisma.quizSession.findFirst({
     where: { id: sessionId, userId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, startedAt: true, configSnapshot: true },
   });
   if (!session) {
     throw new QuizServiceError(404, 'QUIZ_SESSION_NOT_FOUND', 'Quiz session not found');
@@ -588,8 +762,41 @@ export const abandonQuizSession = async (userId: string, sessionId: string): Pro
   if (session.status === QuizSessionStatus.in_progress) {
     await prisma.quizSession.update({
       where: { id: session.id },
-      data: { status: QuizSessionStatus.abandoned },
-    });
+        data: { status: QuizSessionStatus.abandoned },
+      });
+  }
+  if (options?.reason === 'preflight_failed') {
+    const configSnapshot = session.configSnapshot as unknown as QuizConfigSnapshot;
+    if (configSnapshot.consumesAttempt !== false) {
+      const attemptDateKey = formatDateKeyInTimeZone(
+        session.startedAt,
+        configSnapshot.dailyLimitTimeZone || 'Asia/Shanghai'
+      );
+      const ledger = await prisma.quizAttemptLedger.findUnique({
+        where: {
+          userId_attemptDateKey: {
+            userId,
+            attemptDateKey,
+          },
+        },
+      });
+      if (ledger && ledger.lastSessionId === session.id && ledger.attemptCount > 0) {
+        const nextAttemptCount = Math.max(0, ledger.attemptCount - 1);
+        if (nextAttemptCount === 0 && !ledger.passed && !ledger.passedAt) {
+          await prisma.quizAttemptLedger.delete({
+            where: { id: ledger.id },
+          });
+        } else {
+          await prisma.quizAttemptLedger.update({
+            where: { id: ledger.id },
+            data: {
+              attemptCount: nextAttemptCount,
+              lastSessionId: null,
+            },
+          });
+        }
+      }
+    }
   }
   return { sessionId: session.id, status: 'abandoned' };
 };

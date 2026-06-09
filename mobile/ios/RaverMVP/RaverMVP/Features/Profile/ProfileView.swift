@@ -4308,9 +4308,14 @@ final class QuizFlowViewModel: ObservableObject {
     @Published var answers: [String: String] = [:]
     @Published var currentQuestionIndex: Int = 0
     @Published var isSubmitting = false
+    @Published private(set) var isPreparingSession = false
+    @Published private(set) var sessionPreparationCompletedCount = 0
+    @Published private(set) var sessionPreparationTargetCount = 0
+    @Published private(set) var sessionPreparationMessage: String?
     @Published private(set) var isPreparingQuestion = false
     @Published private(set) var preparationAttempt = 0
     @Published private(set) var preparationMessage: String?
+    @Published private(set) var mediaLoadFailedQuestionIndex: Int?
     @Published private(set) var secondsRemaining = 0
     @Published private(set) var countdownProgress = 0.0
     @Published var feedbackMessage: String?
@@ -4358,9 +4363,16 @@ final class QuizFlowViewModel: ObservableObject {
         session != nil && !isSubmitting
     }
 
+    var sessionPreparationProgressText: String {
+        guard sessionPreparationTargetCount > 0 else { return "0/0" }
+        return "第\(min(sessionPreparationCompletedCount, sessionPreparationTargetCount))/\(sessionPreparationTargetCount)题"
+    }
+
     func load() async {
         cancelQuestionTasks()
         feedbackMessage = nil
+        mediaLoadFailedQuestionIndex = nil
+        resetSessionPreparationState()
         do {
             phase = .loading
             let summary = try await service.fetchQuizStatus()
@@ -4371,19 +4383,34 @@ final class QuizFlowViewModel: ObservableObject {
         }
     }
 
-    func startQuiz() async {
+    func startQuiz(mode: QuizSessionMode = .standard) async {
         do {
             cancelQuestionTasks()
-            let session = try await service.createQuizSession()
-            self.session = session
+            mediaLoadFailedQuestionIndex = nil
+            resetSessionPreparationState()
+            let createdSession = try await service.createQuizSession(mode: mode)
+            self.session = createdSession
             self.answers = [:]
             self.currentQuestionIndex = 0
             self.feedbackMessage = nil
             self.preloadedMediaURLs = []
             phase = .inSession
+            let preparedSession = try await prepareSessionForPlayback(createdSession)
+            self.session = preparedSession
             await prepareQuestion(at: 0)
         } catch {
+            if let currentSession = session {
+                await abandonSessionForPreflightFailure(currentSession.sessionId)
+            }
             feedbackMessage = error.userFacingMessage ?? LT("开始答题失败，请稍后重试。", "Failed to start quiz. Please try again later.", "クイズを開始できませんでした。時間をおいて再試行してください。")
+            if let summary = try? await service.fetchQuizStatus() {
+                self.summary = summary
+                phase = .ready(summary)
+            } else if let summary {
+                phase = .ready(summary)
+            } else {
+                phase = .failure(error.userFacingMessage ?? LT("答题信息加载失败，请稍后重试。", "Failed to load quiz info. Please try again later.", "クイズ情報を読み込めませんでした。時間をおいて再試行してください。"))
+            }
         }
     }
 
@@ -4393,7 +4420,14 @@ final class QuizFlowViewModel: ObservableObject {
     }
 
     func goNext() {
-        guard session != nil, !isPreparingQuestion, !isSubmitting else { return }
+        guard session != nil, !isPreparingSession, !isPreparingQuestion, !isSubmitting else { return }
+        if mediaLoadFailedQuestionIndex == currentQuestionIndex {
+            questionRunToken = UUID()
+            Task {
+                await prepareQuestion(at: currentQuestionIndex)
+            }
+            return
+        }
         questionRunToken = UUID()
         Task {
             await advanceFromCurrentQuestion()
@@ -4413,11 +4447,14 @@ final class QuizFlowViewModel: ObservableObject {
         activeAlert = nil
         switch alert {
         case .restart:
+            let restartMode = session?.mode ?? .standard
             await abandonCurrentSessionSilently()
-            await startQuiz()
+            await startQuiz(mode: restartMode)
         case .abandon:
             abandonCurrentSessionLocallyAndReportInBackground()
             feedbackMessage = nil
+            mediaLoadFailedQuestionIndex = nil
+            resetSessionPreparationState()
             if let summary {
                 phase = .ready(summary)
             } else {
@@ -4437,9 +4474,15 @@ final class QuizFlowViewModel: ObservableObject {
             let payload = session.questions.map { question in
                 QuizSubmitAnswerPayload(questionId: question.questionId, optionId: answers[question.questionId])
             }
-            let result = try await service.submitQuizSession(sessionId: session.sessionId, answers: payload)
+            let result = try await service.submitQuizSession(
+                sessionId: session.sessionId,
+                answers: payload,
+                presentedQuestionIds: session.questions.map(\.questionId)
+            )
             self.session = nil
             self.feedbackMessage = nil
+            self.mediaLoadFailedQuestionIndex = nil
+            self.resetSessionPreparationState()
             self.isPreparingQuestion = false
             self.preparationAttempt = 0
             self.preparationMessage = nil
@@ -4462,6 +4505,7 @@ final class QuizFlowViewModel: ObservableObject {
         cancelQuestionTasks()
         let token = UUID()
         questionRunToken = token
+        mediaLoadFailedQuestionIndex = nil
         withAnimation(.easeInOut(duration: 0.24)) {
             currentQuestionIndex = index
         }
@@ -4497,14 +4541,117 @@ final class QuizFlowViewModel: ObservableObject {
             } catch {
                 guard questionRunToken == token else { return }
                 if attempt == maxMediaRetryCount {
+                    isPreparingQuestion = false
+                    mediaLoadFailedQuestionIndex = index
+                    preparationMessage = nil
                     feedbackMessage = LT(
-                        "第 \(index + 1) 题媒体资源连续加载失败，系统已自动判错并跳过。",
-                        "Question \(index + 1) media failed to load repeatedly and was marked wrong automatically.",
-                        "第 \(index + 1) 問のメディア読み込みに失敗したため、自動で不正解としてスキップしました。"
+                        "第 \(index + 1) 题媒体资源连续加载失败，请重试当前题目或重新开始。",
+                        "Question \(index + 1) media failed to load repeatedly. Please retry the current question or restart.",
+                        "第 \(index + 1) 問のメディア読み込みに連続で失敗しました。現在の問題を再試行するか、再開始してください。"
                     )
-                    await advanceFromCurrentQuestion(afterMediaFailure: true)
                     return
                 }
+                try? await Task.sleep(nanoseconds: mediaRetryDelayNanoseconds)
+            }
+        }
+    }
+
+    private func prepareSessionForPlayback(_ session: QuizSessionCreateResponse) async throws -> QuizSessionCreateResponse {
+        isPreparingSession = true
+        sessionPreparationCompletedCount = 0
+        sessionPreparationTargetCount = session.questions.count
+        sessionPreparationMessage = LT("正在准备本场题目资源…", "Preparing quiz media…", "今回の問題メディアを準備中…")
+
+        var resolvedQuestions: [QuizQuestionPayload] = []
+        var reserveQuestions = session.reserveQuestions
+
+        defer {
+            isPreparingSession = false
+            sessionPreparationMessage = nil
+        }
+
+        for (index, primaryQuestion) in session.questions.enumerated() {
+            let playableQuestion = try await resolvePlayableQuestionForSlot(
+                slotIndex: index,
+                primaryQuestion: primaryQuestion,
+                reserveQuestions: &reserveQuestions,
+                mode: session.mode
+            )
+            resolvedQuestions.append(playableQuestion)
+            sessionPreparationCompletedCount = resolvedQuestions.count
+        }
+
+        return QuizSessionCreateResponse(
+            mode: session.mode,
+            sessionId: session.sessionId,
+            questionCount: session.questionCount,
+            passCorrectCount: session.passCorrectCount,
+            dailyAttemptLimit: session.dailyAttemptLimit,
+            dailyRemainingAttemptsAfterStart: session.dailyRemainingAttemptsAfterStart,
+            timeZone: session.timeZone,
+            questions: resolvedQuestions,
+            reserveQuestions: [],
+            startedAt: session.startedAt,
+            expiresAt: session.expiresAt
+        )
+    }
+
+    private func resolvePlayableQuestionForSlot(
+        slotIndex: Int,
+        primaryQuestion: QuizQuestionPayload,
+        reserveQuestions: inout [QuizQuestionPayload],
+        mode: QuizSessionMode
+    ) async throws -> QuizQuestionPayload {
+        var candidate = primaryQuestion
+        var replacementAttempt = 0
+
+        while true {
+            let isReplacement = replacementAttempt > 0
+            sessionPreparationMessage = isReplacement
+                ? LT(
+                    "第 \(slotIndex + 1) 题资源异常，正在替换候补题…",
+                    "Question \(slotIndex + 1) media failed. Replacing with a reserve question…",
+                    "第 \(slotIndex + 1) 問のメディアに失敗したため、予備問題へ差し替えています…"
+                )
+                : LT(
+                    "正在出第 \(slotIndex + 1) 题…",
+                    "Preparing question \(slotIndex + 1)…",
+                    "第 \(slotIndex + 1) 問を準備中…"
+                )
+
+            do {
+                try await preloadQuestionMedia(candidate, displayIndex: slotIndex)
+                return candidate
+            } catch {
+                guard mode == .standard, !reserveQuestions.isEmpty else {
+                    throw QuizSessionPreparationError.insufficientPlayableQuestions
+                }
+                candidate = reserveQuestions.removeFirst()
+                replacementAttempt += 1
+            }
+        }
+    }
+
+    private func preloadQuestionMedia(_ question: QuizQuestionPayload, displayIndex: Int) async throws {
+        let mediaURLs = questionMediaURLs(question)
+        guard !mediaURLs.isEmpty else { return }
+
+        for attempt in 1...maxMediaRetryCount {
+            preparationAttempt = attempt
+            do {
+                try await preloadMediaAssets(mediaURLs)
+                preparationAttempt = 0
+                return
+            } catch {
+                if attempt == maxMediaRetryCount {
+                    preparationAttempt = 0
+                    throw QuizSessionPreparationError.questionMediaFailed(index: displayIndex)
+                }
+                sessionPreparationMessage = LT(
+                    "第 \(displayIndex + 1) 题媒体加载重试（\(attempt)/\(maxMediaRetryCount)）",
+                    "Retrying media for question \(displayIndex + 1) (\(attempt)/\(maxMediaRetryCount))",
+                    "第 \(displayIndex + 1) 問のメディアを再試行中（\(attempt)/\(maxMediaRetryCount)）"
+                )
                 try? await Task.sleep(nanoseconds: mediaRetryDelayNanoseconds)
             }
         }
@@ -4515,6 +4662,7 @@ final class QuizFlowViewModel: ObservableObject {
         isPreparingQuestion = false
         preparationAttempt = 0
         preparationMessage = nil
+        mediaLoadFailedQuestionIndex = nil
         startCountdown(for: question, token: token)
     }
 
@@ -4594,9 +4742,14 @@ final class QuizFlowViewModel: ObservableObject {
         let sessionId = session?.sessionId
         cancelQuestionTasks()
         session = nil
+        isPreparingSession = false
+        sessionPreparationCompletedCount = 0
+        sessionPreparationTargetCount = 0
+        sessionPreparationMessage = nil
         isPreparingQuestion = false
         preparationAttempt = 0
         preparationMessage = nil
+        mediaLoadFailedQuestionIndex = nil
         secondsRemaining = 0
         countdownProgress = 0
         return sessionId
@@ -4612,6 +4765,19 @@ final class QuizFlowViewModel: ObservableObject {
         Task {
             _ = try? await service.abandonQuizSession(sessionId: sessionId)
         }
+    }
+
+    private func abandonSessionForPreflightFailure(_ sessionId: String) async {
+        _ = clearLocalSessionState()
+        _ = try? await service.abandonQuizSession(sessionId: sessionId, reason: .preflightFailed)
+    }
+
+    private func resetSessionPreparationState() {
+        isPreparingSession = false
+        sessionPreparationCompletedCount = 0
+        sessionPreparationTargetCount = 0
+        sessionPreparationMessage = nil
+        preparationAttempt = 0
     }
 
     private func cancelQuestionTasks() {
@@ -4685,6 +4851,28 @@ final class QuizFlowViewModel: ObservableObject {
         return candidates.compactMap { raw in
             guard seen.insert(raw).inserted else { return nil }
             return URL(string: raw)
+        }
+    }
+}
+
+private enum QuizSessionPreparationError: LocalizedError {
+    case questionMediaFailed(index: Int)
+    case insufficientPlayableQuestions
+
+    var errorDescription: String? {
+        switch self {
+        case .questionMediaFailed(let index):
+            return LT(
+                "第 \(index + 1) 题媒体资源加载失败，请稍后重试。",
+                "Question \(index + 1) media failed to load. Please try again later.",
+                "第 \(index + 1) 問のメディア読み込みに失敗しました。時間をおいて再試行してください。"
+            )
+        case .insufficientPlayableQuestions:
+            return LT(
+                "题目资源准备失败，本次未开始作答，请稍后重试。",
+                "Quiz media preparation failed before the session started. Please try again later.",
+                "セッション開始前のメディア準備に失敗しました。時間をおいて再試行してください。"
+            )
         }
     }
 }
@@ -5019,6 +5207,12 @@ struct QuizFlowView: View {
                                 summary.todayRemainingAttempts < 0 ? LT("无限次", "Unlimited", "無制限") : "\(summary.todayRemainingAttempts)"
                             )
                             summaryRow(LT("当前状态", "Current Status", "現在の状態"), statusText(summary))
+                            if summary.canUseDebugQuestionSet {
+                                summaryRow(
+                                    LT("调试套题题数", "Debug Set Count", "デバッグ問題数"),
+                                    "\(summary.debugQuestionSetCount)"
+                                )
+                            }
                         }
                     }
                 }
@@ -5042,7 +5236,7 @@ struct QuizFlowView: View {
                 }
 
                 Button {
-                    Task { await viewModel.startQuiz() }
+                    Task { await viewModel.startQuiz(mode: .standard) }
                 } label: {
                     Text(LT("开始答题", "Start Quiz", "クイズを開始"))
                         .font(.headline)
@@ -5053,8 +5247,28 @@ struct QuizFlowView: View {
                 .tint(RaverTheme.accent)
                 .disabled(!summary.canStart)
 
+                if summary.canUseDebugQuestionSet {
+                    Button {
+                        Task { await viewModel.startQuiz(mode: .debugSet) }
+                    } label: {
+                        Text(LT("进入调试套题", "Open Debug Set", "デバッグ問題を開始"))
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(RaverTheme.accent)
+                    .disabled(!summary.canStartDebugQuestionSet)
+                }
+
                 if !summary.canStart {
                     Text(disabledReasonText(summary.disabledReason))
+                        .font(.footnote)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
+                if summary.canUseDebugQuestionSet && !summary.canStartDebugQuestionSet {
+                    Text(LT("当前还没有可用的调试套题。请先在 Web 后台配置。", "No debug question set is configured yet. Please configure it in web admin first.", "利用可能なデバッグ問題セットがまだありません。先に Web 管理画面で設定してください。"))
                         .font(.footnote)
                         .foregroundStyle(RaverTheme.secondaryText)
                         .multilineTextAlignment(.center)
@@ -5067,19 +5281,25 @@ struct QuizFlowView: View {
 
     private var quizQuestionView: some View {
         VStack(spacing: 0) {
-            if viewModel.isPreparingQuestion {
+            if viewModel.isPreparingSession || viewModel.isPreparingQuestion {
                 VStack(spacing: 0) {
                     VStack(spacing: 18) {
                         Spacer()
                         ProgressView()
                             .controlSize(.large)
-                        Text(LT("正在准备题目", "Preparing Question", "問題を準備中"))
+                        Text(
+                            viewModel.isPreparingSession
+                                ? LT("正在出题", "Preparing Quiz", "出題を準備中")
+                                : LT("正在准备题目", "Preparing Question", "問題を準備中")
+                        )
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text(viewModel.progressText)
+                        Text(viewModel.isPreparingSession ? viewModel.sessionPreparationProgressText : viewModel.progressText)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.accent)
-                        if let preparationMessage = viewModel.preparationMessage {
+                        if let preparationMessage = viewModel.isPreparingSession
+                            ? viewModel.sessionPreparationMessage
+                            : viewModel.preparationMessage {
                             Text(preparationMessage)
                                 .font(.subheadline)
                                 .foregroundStyle(RaverTheme.secondaryText)
@@ -5102,7 +5322,9 @@ struct QuizFlowView: View {
 
                     bottomActionBar(
                         secondaryTitle: LT("放弃", "Abandon", "放棄"),
-                        primaryTitle: LT("重新开始", "Restart", "再開始"),
+                        primaryTitle: viewModel.isPreparingSession
+                            ? LT("重新出题", "Restart", "再開始")
+                            : LT("重新开始", "Restart", "再開始"),
                         onSecondary: { viewModel.requestAbandon() },
                         onPrimary: { viewModel.requestRestart() }
                     )
@@ -5176,9 +5398,13 @@ struct QuizFlowView: View {
                 }
                 .animation(.easeInOut(duration: 0.24), value: viewModel.currentQuestionIndex)
 
+                let primaryTitle = viewModel.mediaLoadFailedQuestionIndex == viewModel.currentQuestionIndex
+                    ? LT("重试", "Retry", "再試行")
+                    : LT("下一步", "Next", "次へ")
+
                 bottomActionBar(
                     secondaryTitle: LT("放弃", "Abandon", "放棄"),
-                    primaryTitle: LT("下一步", "Next", "次へ"),
+                    primaryTitle: primaryTitle,
                     isPrimaryBusy: viewModel.isSubmitting,
                     isPrimaryDisabled: !canAdvanceToNextQuestion,
                     onSecondary: { viewModel.requestAbandon() },
