@@ -1631,7 +1631,7 @@ router.post('/quiz/questions/import', authenticate, requireAdmin, async (req: Au
       return;
     }
     console.error('Import admin quiz questions error:', error);
-    res.status(500).json({ error: 'Failed to import quiz questions' });
+    res.status(500).json({ error: error instanceof Error && error.message ? error.message : 'Failed to import quiz questions' });
   }
 });
 

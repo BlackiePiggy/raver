@@ -229,6 +229,7 @@ function QuizImportOverlay({
   open,
   value,
   importing,
+  feedback,
   onOpenRules,
   onChange,
   onClose,
@@ -238,6 +239,7 @@ function QuizImportOverlay({
   open: boolean;
   value: string;
   importing: boolean;
+  feedback: { type: 'error' | 'notice'; message: string } | null;
   onOpenRules: () => void;
   onChange: (value: string) => void;
   onClose: () => void;
@@ -280,6 +282,7 @@ function QuizImportOverlay({
         </div>
 
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+          {feedback ? <Banner type={feedback.type} message={feedback.message} /> : null}
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -508,6 +511,7 @@ export default function AdminQuizPage() {
   const [showImportRulesOverlay, setShowImportRulesOverlay] = useState(false);
   const [importText, setImportText] = useState(QUIZ_IMPORT_EXAMPLE);
   const [importingQuestions, setImportingQuestions] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<{ type: 'error' | 'notice'; message: string } | null>(null);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [bulkDeletingQuestions, setBulkDeletingQuestions] = useState(false);
@@ -751,18 +755,16 @@ export default function AdminQuizPage() {
     if (!canWrite) return;
     try {
       setImportingQuestions(true);
-      setError(null);
-      setNotice(null);
+      setImportFeedback(null);
       const parsed = JSON.parse(importText) as unknown;
       if (!Array.isArray(parsed)) throw new Error('导入内容必须是 JSON 数组');
       const result = await adminQuizApi.importQuestions({ questions: parsed as AdminQuizQuestionImportInput[] });
-      setNotice(`成功导入 ${result.count} 道题目`);
-      setShowImportOverlay(false);
+      setImportFeedback({ type: 'notice', message: `成功导入 ${result.count} 道题目` });
       setQuestionPage(1);
       await loadQuestions();
     } catch (e) {
-      if (e instanceof SyntaxError) setError(`JSON 格式错误：${e.message}`);
-      else setError(e instanceof Error ? e.message : '批量导入题目失败');
+      if (e instanceof SyntaxError) setImportFeedback({ type: 'error', message: `JSON 格式错误：${e.message}` });
+      else setImportFeedback({ type: 'error', message: e instanceof Error ? e.message : '批量导入题目失败' });
     } finally {
       setImportingQuestions(false);
     }
@@ -1073,7 +1075,10 @@ export default function AdminQuizPage() {
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowImportOverlay(true)}
+                      onClick={() => {
+                        setImportFeedback(null);
+                        setShowImportOverlay(true);
+                      }}
                       className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:border-gray-400 hover:text-gray-700"
                     >
                       ＋ 批量导入
@@ -1749,9 +1754,13 @@ export default function AdminQuizPage() {
         open={showImportOverlay}
         value={importText}
         importing={importingQuestions}
+        feedback={importFeedback}
         onOpenRules={() => setShowImportRulesOverlay(true)}
         onChange={setImportText}
-        onClose={() => setShowImportOverlay(false)}
+        onClose={() => {
+          setShowImportOverlay(false);
+          setImportFeedback(null);
+        }}
         onFillExample={() => setImportText(QUIZ_IMPORT_EXAMPLE)}
         onSubmit={submitImportQuestions}
       />
