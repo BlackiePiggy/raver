@@ -5,6 +5,7 @@ import {
   QuizQuestionType,
   type QuizConfig,
 } from '@prisma/client';
+import crypto from 'crypto';
 import { prisma } from '../../lib/prisma';
 
 const QUIZ_CONFIG_ID = 'default';
@@ -227,45 +228,39 @@ const createQuestionRecord = async (
   tx: Prisma.TransactionClient,
   normalized: ValidatedQuizQuestionInput
 ) => {
-  const question = await tx.quizQuestion.create({
-    data: {
-      status: normalized.status,
-      type: normalized.type,
-      stemText: normalized.stemText,
-      stemImageUrl: normalized.stemImageUrl,
-      timeLimitSec: normalized.timeLimitSec,
-      sortOrder: normalized.sortOrder,
-      tags: normalized.tags,
-      difficulty: normalized.difficulty,
-      explanation: normalized.explanation,
-    },
-  });
-
   const optionIdMap = new Map<string, string>();
-  for (const option of normalized.options) {
-    const createdOption = await tx.quizQuestionOption.create({
-      data: {
-        questionId: question.id,
-        text: option.text,
-        imageUrl: option.imageUrl,
-        sortOrder: option.sortOrder,
-      },
-    });
-    if (option.id) optionIdMap.set(option.id, createdOption.id);
-  }
+  const optionRows = normalized.options.map((option) => {
+    const id = crypto.randomUUID();
+    if (option.id) optionIdMap.set(option.id, id);
+    return {
+      id,
+      text: option.text,
+      imageUrl: option.imageUrl,
+      sortOrder: option.sortOrder,
+    };
+  });
 
   const mappedCorrectOptionId = optionIdMap.get(normalized.correctOptionId);
   if (!mappedCorrectOptionId) {
     throw new AdminQuizError(400, 'QUIZ_CORRECT_OPTION_INVALID', 'correctOptionId must match one option id');
   }
 
-  await tx.quizQuestion.update({
-    where: { id: question.id },
-    data: { correctOptionId: mappedCorrectOptionId },
-  });
-
-  return tx.quizQuestion.findUniqueOrThrow({
-    where: { id: question.id },
+  return tx.quizQuestion.create({
+    data: {
+      status: normalized.status,
+      type: normalized.type,
+      stemText: normalized.stemText,
+      stemImageUrl: normalized.stemImageUrl,
+      correctOptionId: mappedCorrectOptionId,
+      timeLimitSec: normalized.timeLimitSec,
+      sortOrder: normalized.sortOrder,
+      tags: normalized.tags,
+      difficulty: normalized.difficulty,
+      explanation: normalized.explanation,
+      options: {
+        create: optionRows,
+      },
+    },
     include: {
       options: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
     },
@@ -528,7 +523,10 @@ export const adminQuizService = {
 
   async createQuestion(input: AdminQuizQuestionUpsertInput) {
     const normalized = validateQuestionPayload(input);
-    const created = await prisma.$transaction(async (tx) => createQuestionRecord(tx, normalized));
+    const created = await prisma.$transaction(async (tx) => createQuestionRecord(tx, normalized), {
+      maxWait: 10_000,
+      timeout: 30_000,
+    });
 
     return mapQuestion(created);
   },
@@ -545,6 +543,9 @@ export const adminQuizService = {
         items.push(await createQuestionRecord(tx, normalized));
       }
       return items;
+    }, {
+      maxWait: 10_000,
+      timeout: 60_000,
     });
 
     return {
